@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	query2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -272,7 +271,7 @@ func TestValidate(t *testing.T) {
 	})
 
 	t.Run("Query Key Index", func(t *testing.T) {
-		keyIndex := &query2.ResponseKeyPageIndex{}
+		keyIndex := &api.ResponseKeyPageIndex{}
 		queryRecordAs(t, japi, "query-key-index", &api.KeyPageIndexQuery{
 			UrlQuery: api.UrlQuery{
 				Url: keyPageUrl,

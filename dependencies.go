@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,7 +11,6 @@ package accumulate
 
 // Force `go mod tidy` to include tool dependencies
 import (
-	_ "github.com/golang/mock/mockgen"
 	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
 	_ "github.com/rinchsan/gosimports/cmd/gosimports"
 	_ "github.com/vektra/mockery/v2"

@@ -96,7 +96,11 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 
 	case *api.ChainQuery:
 		if query.Name == "" {
-			return s.queryChains(ctx, batch.Account(scope))
+			if txid, err := scope.AsTxID(); err == nil {
+				h := txid.Hash()
+				return s.queryTransactionChains(ctx, batch, batch.Transaction(h[:]), query.IncludeReceipt)
+			}
+			return s.queryAccountChains(ctx, batch.Account(scope))
 		}
 
 		record, err := batch.Account(scope).ChainByName(query.Name)
@@ -120,11 +124,11 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 
 	case *api.DataQuery:
 		if query.Index != nil {
-			return s.queryDataEntryByIndex(ctx, batch, indexing.Data(batch, scope), *query.Index)
+			return s.queryDataEntryByIndex(ctx, batch, indexing.Data(batch, scope), *query.Index, true)
 		}
 
 		if query.Entry != nil {
-			return s.queryDataEntryByHash(ctx, batch, indexing.Data(batch, scope), query.Entry)
+			return s.queryDataEntryByHash(ctx, batch, indexing.Data(batch, scope), query.Entry, true)
 		}
 
 		if query.Range != nil {
@@ -176,7 +180,7 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 			return s.EntryByDelegate(query.Delegate)
 		})
 
-	case *api.TransactionHashSearchQuery:
+	case *api.MessageHashSearchQuery:
 		return s.searchForTransactionHash(ctx, batch, query.Hash)
 
 	default:
@@ -260,7 +264,7 @@ func (s *Querier) querySignature(ctx context.Context, batch *database.Batch, rec
 	return loadSignature(batch, state.Signature, state.Txid)
 }
 
-func (s *Querier) queryChains(ctx context.Context, record *database.Account) (*api.RecordRange[*api.ChainRecord], error) {
+func (s *Querier) queryAccountChains(ctx context.Context, record *database.Account) (*api.RecordRange[*api.ChainRecord], error) {
 	chains, err := record.Chains().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load chains index: %w", err)
@@ -278,6 +282,28 @@ func (s *Querier) queryChains(ctx context.Context, record *database.Account) (*a
 		r.Records[i] = cr
 	}
 	return r, nil
+}
+
+func (s *Querier) queryTransactionChains(ctx context.Context, batch *database.Batch, record *database.Transaction, wantReceipt bool) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+	entries, err := record.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load transaction chains: %w", err)
+	}
+
+	return api.MakeRange(entries, 0, 0, func(e *database.TransactionChainEntry) (*api.ChainEntryRecord[api.Record], error) {
+		c, err := batch.Account(e.Account).ChainByName(e.Chain)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load %v %s chain: %w", e.Account, e.Chain, err)
+		}
+
+		r, err := s.queryChainEntryByIndex(ctx, batch, c, e.ChainIndex, false, wantReceipt)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		r.Account = e.Account
+		return r, nil
+	})
 }
 
 func (s *Querier) queryChainByName(ctx context.Context, record *database.Account, name string) (*api.ChainRecord, error) {
@@ -325,6 +351,12 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	r.Type = record.Type()
 	r.Index = index
 	r.Entry = *(*[32]byte)(value)
+
+	ms, err := record.Inner().GetAnyState(int64(index))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load state: %w", err)
+	}
+	r.State = ms.Pending
 
 	if expand {
 		switch r.Type {
@@ -383,13 +415,13 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	return r, nil
 }
 
-func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
 	entryHash, err := record.Entry(index)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get entry hash: %w", err)
 	}
 
-	return s.queryDataEntry(ctx, batch, record, index, entryHash)
+	return s.queryDataEntry(ctx, batch, record, index, entryHash, expand)
 }
 
 func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
@@ -400,15 +432,15 @@ func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch,
 	if count == 0 {
 		return nil, errors.NotFound.WithFormat("account has no data entries")
 	}
-	return s.queryDataEntryByIndex(ctx, batch, record, count-1)
+	return s.queryDataEntryByIndex(ctx, batch, record, count-1, true)
 }
 
-func (s *Querier) queryDataEntryByHash(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, entryHash []byte) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntryByHash(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
 	// TODO: Find a way to get the index without scanning the entire set
-	return s.queryDataEntry(ctx, batch, record, 0, entryHash)
+	return s.queryDataEntry(ctx, batch, record, 0, entryHash, expand)
 }
 
-func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, entryHash []byte) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
 	txnHash, err := record.Transaction(entryHash)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get transaction hash: %w", err)
@@ -420,9 +452,11 @@ func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, rec
 	r.Index = index
 	r.Entry = *(*[32]byte)(entryHash)
 
-	r.Value, err = s.queryTransaction(ctx, batch, batch.Transaction(txnHash))
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+	if expand {
+		r.Value, err = s.queryTransaction(ctx, batch, batch.Transaction(txnHash))
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+		}
 	}
 
 	return r, nil
@@ -439,7 +473,11 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 	allocRange(r, opts, zeroBased)
 
 	for i := range r.Records {
-		r.Records[i], err = s.queryChainEntryByIndex(ctx, batch, record, r.Start+uint64(i), opts.Expand, false)
+		var expand bool
+		if opts.Expand != nil {
+			expand = *opts.Expand
+		}
+		r.Records[i], err = s.queryChainEntryByIndex(ctx, batch, record, r.Start+uint64(i), expand, false)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("get entry %d: %w", r.Start+uint64(i), err)
 		}
@@ -457,8 +495,12 @@ func (s *Querier) queryDataEntryRange(ctx context.Context, batch *database.Batch
 	r.Total = total
 	allocRange(r, opts, zeroBased)
 
+	expand := true
+	if opts.Expand != nil {
+		expand = *opts.Expand
+	}
 	for i := range r.Records {
-		r.Records[i], err = s.queryDataEntryByIndex(ctx, batch, record, r.Start+uint64(i))
+		r.Records[i], err = s.queryDataEntryByIndex(ctx, batch, record, r.Start+uint64(i), expand)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("get entry %d: %w", r.Start+uint64(i), err)
 		}
@@ -472,7 +514,7 @@ func (s *Querier) queryDirectoryRange(ctx context.Context, batch *database.Batch
 		return nil, errors.UnknownError.WithFormat("load directory: %w", err)
 	}
 	r, err := api.MakeRange(directory, opts.Start, *opts.Count, func(v *url.URL) (api.Record, error) {
-		if !opts.Expand {
+		if opts.Expand == nil || !*opts.Expand {
 			return &api.UrlRecord{Value: v}, nil
 		}
 
@@ -491,7 +533,7 @@ func (s *Querier) queryPendingRange(ctx context.Context, batch *database.Batch, 
 		return nil, errors.UnknownError.WithFormat("load pending: %w", err)
 	}
 	r, err := api.MakeRange(pending, opts.Start, *opts.Count, func(v *url.TxID) (api.Record, error) {
-		if !opts.Expand {
+		if opts.Expand == nil || !*opts.Expand {
 			return &api.TxIDRecord{Value: v}, nil
 		}
 
@@ -520,7 +562,7 @@ func (s *Querier) queryMinorBlock(ctx context.Context, batch *database.Batch, mi
 
 	r := new(api.MinorBlockRecord)
 	r.Index = ledger.Index
-	r.Time = ledger.Time
+	r.Time = &ledger.Time
 	r.Entries = new(api.RecordRange[*api.ChainEntryRecord[api.Record]])
 	r.Entries.Total = uint64(len(ledger.Entries))
 
@@ -688,11 +730,11 @@ func (s *Querier) queryMinorBlockRange2(ctx context.Context, batch *database.Bat
 		}
 
 		if errors.Is(err, errors.NotFound) {
-			blockIndex++
 			if !omitEmpty {
 				blocks[i] = &api.MinorBlockRecord{Index: blockIndex}
 				i++
 			}
+			blockIndex++
 			continue
 		}
 
@@ -796,16 +838,27 @@ func (s *Querier) searchForTransactionHash(ctx context.Context, batch *database.
 	switch {
 	case errors.Is(err, errors.NotFound):
 		return new(api.RecordRange[*api.TxIDRecord]), nil
+
 	case err != nil:
 		return nil, errors.UnknownError.Wrap(err)
-	case state.Transaction == nil:
-		return nil, errors.UnknownError.Wrap(err)
-	default:
+
+	case state.Transaction != nil:
 		// TODO Replace with principal or signer as appropriate
 		txid := s.partition.WithTxID(*(*[32]byte)(state.Transaction.GetHash()))
 		r := new(api.RecordRange[*api.TxIDRecord])
 		r.Total = 1
 		r.Records = []*api.TxIDRecord{{Value: txid}}
 		return r, nil
+
+	case state.Signature != nil:
+		// TODO Replace with principal or signer as appropriate
+		txid := s.partition.WithTxID(*(*[32]byte)(state.Signature.Hash()))
+		r := new(api.RecordRange[*api.TxIDRecord])
+		r.Total = 1
+		r.Records = []*api.TxIDRecord{{Value: txid}}
+		return r, nil
+
+	default:
+		return new(api.RecordRange[*api.TxIDRecord]), nil
 	}
 }

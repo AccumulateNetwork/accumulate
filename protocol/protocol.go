@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -91,6 +91,11 @@ const DelegationDepthLimit = 20
 // AcmeUrl returns `acc://ACME`.
 func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}
+}
+
+// UnknownUrl returns `acc://unknown`.
+func UnknownUrl() *url.URL {
+	return &url.URL{Authority: Unknown}
 }
 
 // PriceOracle returns acc://dn/oracle

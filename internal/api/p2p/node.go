@@ -107,6 +107,8 @@ func New(opts Options) (_ *Node, err error) {
 	return n, nil
 }
 
+func (n *Node) ID() peer.ID { return n.host.ID() }
+
 // Addrs lists the node's addresses.
 func (n *Node) Addrs() []multiaddr.Multiaddr {
 	// Wrap the TCP/IP address with /p2p/{id}

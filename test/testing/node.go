@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -163,6 +163,7 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 
 func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumulated.Daemon) {
 	t.Helper()
+	var all []*accumulated.Daemon
 	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
@@ -170,6 +171,7 @@ func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumul
 				t.Helper()
 				require.NoError(t, err)
 			})
+			all = append(all, daemon)
 		}
 	}
 	t.Cleanup(func() {
@@ -184,6 +186,13 @@ func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumul
 		}
 		assert.NoError(t, errg.Wait())
 	})
+
+	// Directly connect every node
+	for i, a := range all {
+		for _, b := range all[i+1:] {
+			require.NoError(t, a.ConnectDirectly(b))
+		}
+	}
 }
 
 func BvnIdForTest(t testing.TB) string {
