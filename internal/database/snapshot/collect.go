@@ -303,7 +303,7 @@ func (s *HashSet) CollectFromChain(a *database.Account, c *database.Chain2) erro
 		return errors.UnknownError.WithFormat("load chains index: %w", err)
 	}
 
-	snap, err := c.Inner().CollectSnapshot()
+	snap, err := CollectChain(c.Inner())
 	if err != nil {
 		return errors.UnknownError.WithFormat("collect %s chain: %w", c.Name(), err)
 	}

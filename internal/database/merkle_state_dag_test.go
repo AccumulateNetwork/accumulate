@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package managed
+package database
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ func TestDAGRoot(t *testing.T) {
 			for len(ms.Pending) > len(result) {
 				result = append(result, nil)
 			}
-			require.Equal(t, result, ms.Pending)
+			require.Equal(t, [][]byte(result), ms.Pending)
 			require.Equal(t, Hash(c.Root), ms.GetMDRoot())
 		})
 	}

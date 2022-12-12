@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -557,7 +557,7 @@ type PartitionAnchorReceipt struct {
 	fieldsSet []bool
 	Anchor    *PartitionAnchor `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	// RootChainReceipt is a receipt for the anchored root chain entry.
-	RootChainReceipt *managed.Receipt `json:"rootChainReceipt,omitempty" form:"rootChainReceipt" query:"rootChainReceipt" validate:"required"`
+	RootChainReceipt *merkle.Receipt `json:"rootChainReceipt,omitempty" form:"rootChainReceipt" query:"rootChainReceipt" validate:"required"`
 	extraData        []byte
 }
 
@@ -618,9 +618,9 @@ type Rational struct {
 type ReceiptSignature struct {
 	fieldsSet []bool
 	// SourceNetwork is the network that produced the transaction.
-	SourceNetwork   *url.URL        `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
-	Proof           managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
-	TransactionHash [32]byte        `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	SourceNetwork   *url.URL       `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
+	Proof           merkle.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	TransactionHash [32]byte       `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	extraData       []byte
 }
 
@@ -817,8 +817,8 @@ type TokenIssuer struct {
 
 type TokenIssuerProof struct {
 	fieldsSet   []bool
-	Transaction *CreateToken     `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	Receipt     *managed.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Transaction *CreateToken    `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Receipt     *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	extraData   []byte
 }
 
@@ -873,7 +873,7 @@ type TransactionStatus struct {
 	// GotDirectoryReceipt indicates if a receipt has been received from the DN.
 	GotDirectoryReceipt bool `json:"gotDirectoryReceipt,omitempty" form:"gotDirectoryReceipt" query:"gotDirectoryReceipt" validate:"required"`
 	// Proof is the proof of the transaction.
-	Proof *managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	Proof *merkle.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	// AnchorSigners is the list of validators that have signed the anchor.
 	AnchorSigners [][]byte `json:"anchorSigners,omitempty" form:"anchorSigners" query:"anchorSigners" validate:"required"`
 	extraData     []byte
@@ -8628,7 +8628,7 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 	if !(v.SourceNetwork == nil) {
 		writer.WriteUrl(2, v.SourceNetwork)
 	}
-	if !((v.Proof).Equal(new(managed.Receipt))) {
+	if !((v.Proof).Equal(new(merkle.Receipt))) {
 		writer.WriteValue(3, v.Proof.MarshalBinary)
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
@@ -8656,7 +8656,7 @@ func (v *ReceiptSignature) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Proof is missing")
-	} else if (v.Proof).Equal(new(managed.Receipt)) {
+	} else if (v.Proof).Equal(new(merkle.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
 
@@ -13256,7 +13256,7 @@ func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(PartitionAnchor); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.Anchor = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+	if x := new(merkle.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.RootChainReceipt = x
 	}
 
@@ -13482,7 +13482,7 @@ func (v *ReceiptSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.SourceNetwork = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+	if x := new(merkle.Receipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Proof = *x
 	}
 	if x, ok := reader.ReadHash(4); ok {
@@ -14439,7 +14439,7 @@ func (v *TokenIssuerProof) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(CreateToken); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+	if x := new(merkle.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Receipt = x
 	}
 
@@ -14623,7 +14623,7 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(11); ok {
 		v.GotDirectoryReceipt = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(12, x.UnmarshalBinaryFrom) {
+	if x := new(merkle.Receipt); reader.ReadValue(12, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
 	for {
@@ -15946,10 +15946,10 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 
 func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            SignatureType   `json:"type"`
-		SourceNetwork   *url.URL        `json:"sourceNetwork,omitempty"`
-		Proof           managed.Receipt `json:"proof,omitempty"`
-		TransactionHash string          `json:"transactionHash,omitempty"`
+		Type            SignatureType  `json:"type"`
+		SourceNetwork   *url.URL       `json:"sourceNetwork,omitempty"`
+		Proof           merkle.Receipt `json:"proof,omitempty"`
+		TransactionHash string         `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.SourceNetwork = v.SourceNetwork
@@ -16321,7 +16321,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		DestinationNetwork  *url.URL                                      `json:"destinationNetwork,omitempty"`
 		SequenceNumber      uint64                                        `json:"sequenceNumber,omitempty"`
 		GotDirectoryReceipt bool                                          `json:"gotDirectoryReceipt,omitempty"`
-		Proof               *managed.Receipt                              `json:"proof,omitempty"`
+		Proof               *merkle.Receipt                               `json:"proof,omitempty"`
 		AnchorSigners       encoding.JsonList[*string]                    `json:"anchorSigners,omitempty"`
 	}{}
 	u.TxID = v.TxID
@@ -17989,10 +17989,10 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 
 func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            SignatureType   `json:"type"`
-		SourceNetwork   *url.URL        `json:"sourceNetwork,omitempty"`
-		Proof           managed.Receipt `json:"proof,omitempty"`
-		TransactionHash string          `json:"transactionHash,omitempty"`
+		Type            SignatureType  `json:"type"`
+		SourceNetwork   *url.URL       `json:"sourceNetwork,omitempty"`
+		Proof           merkle.Receipt `json:"proof,omitempty"`
+		TransactionHash string         `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.SourceNetwork = v.SourceNetwork
@@ -18651,7 +18651,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		DestinationNetwork  *url.URL                                      `json:"destinationNetwork,omitempty"`
 		SequenceNumber      uint64                                        `json:"sequenceNumber,omitempty"`
 		GotDirectoryReceipt bool                                          `json:"gotDirectoryReceipt,omitempty"`
-		Proof               *managed.Receipt                              `json:"proof,omitempty"`
+		Proof               *merkle.Receipt                               `json:"proof,omitempty"`
 		AnchorSigners       encoding.JsonList[*string]                    `json:"anchorSigners,omitempty"`
 	}{}
 	u.TxID = v.TxID

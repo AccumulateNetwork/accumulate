@@ -13,7 +13,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -88,7 +87,7 @@ func export(_ *cobra.Command, args []string) {
 				return nil
 			}
 
-			chains := map[string]*managed.Snapshot{}
+			chains := map[string]*snapshot.Chain{}
 			for _, c := range acct.Chains {
 				chains[c.Name] = c
 			}
