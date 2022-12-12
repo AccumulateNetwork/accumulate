@@ -145,7 +145,7 @@ ReceiptSignature:
       type: url
       pointer: true
     - name: Proof
-      type: managed.Receipt
+      type: merkle.Receipt
       marshal-as: reference
     - name: TransactionHash
       type: hash

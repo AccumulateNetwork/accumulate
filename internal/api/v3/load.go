@@ -3,9 +3,9 @@ package api
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -135,13 +135,13 @@ func loadBlockEntry(batch *database.Batch, entry *protocol.BlockEntry) (*api.Cha
 	r.Entry = *(*[32]byte)(value)
 
 	switch chain.Type() {
-	case managed.ChainTypeIndex:
+	case merkle.ChainTypeIndex:
 		v := new(protocol.IndexEntry)
 		if v.UnmarshalBinary(value) == nil {
 			r.Value = &api.IndexEntryRecord{Value: v}
 		}
 
-	case managed.ChainTypeTransaction:
+	case merkle.ChainTypeTransaction:
 		r.Value, err = loadTransactionOrSignature(batch, batch.Transaction(value))
 		if err != nil {
 			return r, errors.UnknownError.WithFormat("load %s chain entry %d transaction: %w", entry.Chain, entry.Index, err)
