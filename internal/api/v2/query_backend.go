@@ -18,10 +18,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -56,7 +56,7 @@ func (m *queryBackend) queryAccount(batch *database.Batch, account *database.Acc
 		state.Name = c.Name
 		state.Type = c.Type
 		state.Height = uint64(ms.Count)
-		state.Roots = ms.Pending.Copy()
+		state.Roots = database.SparseHashList(ms.Pending).Copy()
 
 		resp.ChainState = append(resp.ChainState, state)
 	}
@@ -186,7 +186,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			if err == nil {
 				res.Type = md.Type
 			} else {
-				res.Type = managed.ChainTypeUnknown
+				res.Type = merkle.ChainTypeUnknown
 			}
 
 			return []byte("chain-range"), res, nil
@@ -205,13 +205,13 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			res := new(query.ResponseChainEntry)
 			res.Height = uint64(height)
 			res.Entry = entry
-			res.State = state.Pending.Copy()
+			res.State = database.SparseHashList(state.Pending).Copy()
 
 			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
 			if err == nil {
 				res.Type = md.Type
 			} else {
-				res.Type = managed.ChainTypeUnknown
+				res.Type = merkle.ChainTypeUnknown
 			}
 
 			return []byte("chain-entry"), res, nil
@@ -254,7 +254,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			}
 
 			res.Height = uint64(height)
-			res.ChainState = state.Pending.Copy()
+			res.ChainState = database.SparseHashList(state.Pending).Copy()
 
 			return []byte("tx"), res, nil
 		}
@@ -328,7 +328,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 				}
 
 				res.Height = uint64(height)
-				res.ChainState = state.Pending.Copy()
+				res.ChainState = database.SparseHashList(state.Pending).Copy()
 
 				return []byte("tx"), res, nil
 			}

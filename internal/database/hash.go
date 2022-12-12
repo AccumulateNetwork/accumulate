@@ -14,7 +14,7 @@
 //
 // This allows us to put the raw directory block at DBlockBucket+L_raw, and meta data
 // about the directory block at DBlockBucket+MetaLabel
-package managed
+package database
 
 import (
 	"bytes"
@@ -150,12 +150,12 @@ func (l *SparseHashList) UnmarshalBinary(height int64, data []byte) error {
 	return nil
 }
 
-type HashList []Hash
+type HashList [][]byte
 
 func (l HashList) BinarySize() int {
 	s := len(encoding.MarshalUint(uint64(len(l))))
 	for _, h := range l {
-		s += h.BinarySize()
+		s += Hash(h).BinarySize()
 	}
 	return s
 }
@@ -163,7 +163,7 @@ func (l HashList) BinarySize() int {
 func (l HashList) MarshalBinary() ([]byte, error) {
 	b := encoding.MarshalUint(uint64(len(l)))
 	for _, h := range l {
-		c, _ := h.MarshalBinary()
+		c, _ := Hash(h).MarshalBinary()
 		b = append(b, c...)
 	}
 	return b, nil
@@ -178,11 +178,11 @@ func (l *HashList) UnmarhsalBinary(b []byte) error {
 
 	*l = make(HashList, n)
 	for i := range *l {
-		err = (*l)[i].UnmarhsalBinary(b)
+		err = (*Hash)(&(*l)[i]).UnmarhsalBinary(b)
 		if err != nil {
 			return err
 		}
-		b = b[(*l)[i].BinarySize():]
+		b = b[(*Hash)(&(*l)[i]).BinarySize():]
 	}
 
 	return nil
