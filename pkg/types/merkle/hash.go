@@ -9,6 +9,9 @@ import (
 )
 
 func copyHash(v []byte) []byte {
+	if v == nil {
+		return nil
+	}
 	u := make([]byte, len(v))
 	copy(u, v)
 	return u
