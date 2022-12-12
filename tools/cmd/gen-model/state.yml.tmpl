@@ -11,7 +11,7 @@ full{{.FullName}}State:
     pointer: true
   {{- else if .Type.IsChain}}
   - name: {{.Name}}
-    type: managed.MerkleState
+    type: database.MerkleState
     marshal-as: reference
     pointer: true
   {{- else if .Type.IsOther}}

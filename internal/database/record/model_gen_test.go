@@ -12,7 +12,6 @@ package record_test
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -99,20 +98,6 @@ func (c *changeSet) IsDirty() bool {
 	return false
 }
 
-func (c *changeSet) dirtyChains() []*managed.Chain {
-	if c == nil {
-		return nil
-	}
-
-	var chains []*managed.Chain
-
-	for _, v := range c.entity {
-		chains = append(chains, v.dirtyChains()...)
-	}
-
-	return chains
-}
-
 func (c *changeSet) Commit() error {
 	if c == nil {
 		return nil
@@ -131,7 +116,6 @@ type Entity interface {
 	record.Record
 	Union() record.Value[protocol.Account]
 	Set() record.Set[*url.TxID]
-	Chain() *managed.Chain
 	CountableRefType() record.Counted[*protocol.Transaction]
 	CountableUnion() record.Counted[protocol.Account]
 }
@@ -145,7 +129,6 @@ type entity struct {
 
 	union            record.Value[protocol.Account]
 	set              record.Set[*url.TxID]
-	chain            *managed.Chain
 	countableRefType record.Counted[*protocol.Transaction]
 	countableUnion   record.Counted[protocol.Account]
 }
@@ -159,12 +142,6 @@ func (c *entity) Union() record.Value[protocol.Account] {
 func (c *entity) Set() record.Set[*url.TxID] {
 	return getOrCreateField(&c.set, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Set"), c.label+" "+"set", record.Wrapped(record.TxidWrapper), record.CompareTxid)
-	})
-}
-
-func (c *entity) Chain() *managed.Chain {
-	return getOrCreateField(&c.chain, func() *managed.Chain {
-		return managed.NewChain(c.logger.L, c.store, c.key.Append("Chain"), markPower, managed.ChainTypeTransaction, "entity(%[2]v)-", c.label+" "+"chain")
 	})
 }
 
@@ -190,8 +167,6 @@ func (c *entity) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return c.Union(), key[1:], nil
 	case "Set":
 		return c.Set(), key[1:], nil
-	case "Chain":
-		return c.Chain(), key[1:], nil
 	case "CountableRefType":
 		return c.CountableRefType(), key[1:], nil
 	case "CountableUnion":
@@ -212,9 +187,6 @@ func (c *entity) IsDirty() bool {
 	if fieldIsDirty(c.set) {
 		return true
 	}
-	if fieldIsDirty(c.chain) {
-		return true
-	}
 	if fieldIsDirty(c.countableRefType) {
 		return true
 	}
@@ -225,27 +197,6 @@ func (c *entity) IsDirty() bool {
 	return false
 }
 
-func (c *entity) resolveChain(name string) (chain *managed.Chain, ok bool) {
-	if name == "" {
-		return c.Chain(), true
-	}
-	return
-}
-
-func (c *entity) dirtyChains() []*managed.Chain {
-	if c == nil {
-		return nil
-	}
-
-	var chains []*managed.Chain
-
-	if fieldIsDirty(c.chain) {
-		chains = append(chains, c.chain)
-	}
-
-	return chains
-}
-
 func (c *entity) baseCommit() error {
 	if c == nil {
 		return nil
@@ -254,7 +205,6 @@ func (c *entity) baseCommit() error {
 	var err error
 	commitField(&err, c.union)
 	commitField(&err, c.set)
-	commitField(&err, c.chain)
 	commitField(&err, c.countableRefType)
 	commitField(&err, c.countableUnion)
 

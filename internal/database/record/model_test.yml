@@ -20,9 +20,9 @@
       dataType: txid
       pointer: true
       collection: set
-    - name: Chain
-      type: chain
-      chainType: transaction
+    # - name: Chain
+    #   type: chain
+    #   chainType: transaction
     - name: CountableRefType
       type: state
       dataType: protocol.Transaction
