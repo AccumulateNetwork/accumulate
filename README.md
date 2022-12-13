@@ -44,7 +44,7 @@ Accumulate is broken into the following components:
   implementation
 - `internal/api`- JSON-RPC v1; **Deprecated**: use `internal/api/v2`
 - `internal/api/v2`- JSON-RPC v2
-- `internal/core/chain` - Transaction validation and processing (aka chain
+- `internal/core/v1/chain` - Transaction validation and processing (aka chain
   validators)
 - `internal/cmd/gentypes` - Type generator for `internal/api` and `protocol`
 - `pkg/types/encoding` - Shared code used by generated types in `internal/api`

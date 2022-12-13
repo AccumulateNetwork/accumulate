@@ -1,7 +1,7 @@
 package api
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"

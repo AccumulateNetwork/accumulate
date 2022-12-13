@@ -12,8 +12,8 @@ import (
 	"crypto/sha256"
 
 	"github.com/tendermint/tendermint/libs/log"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/core/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
