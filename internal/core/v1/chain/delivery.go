@@ -83,28 +83,23 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 			return nil, fmt.Errorf("multi-transaction envelope: signature %d: missing hash", i)
 		}
 
-		// Get the existing delivery
-		delivery, ok := txnMap[hash]
-		if !ok {
-			// Or create a new remote transaction
-			body := new(protocol.RemoteTransaction)
-			body.Hash = hash
-			txn := new(protocol.Transaction)
-			txn.Body = body
-			delivery = new(Delivery)
-			delivery.Transaction = txn
-			txnMap[hash] = delivery
-			txnList = append(txnList, delivery)
+		// Add the signature to the existing delivery
+		delivery := txnMap[hash]
+		if delivery != nil {
+			delivery.Signatures = append(delivery.Signatures, sig)
+			continue
 		}
 
-		// Add the signature to the delivery
-		delivery.Signatures = append(delivery.Signatures, sig)
-
-		if sig, ok := sig.(*protocol.PartitionSignature); ok {
-			delivery.SequenceNumber = sig.SequenceNumber
-			delivery.SourceNetwork = sig.SourceNetwork
-			delivery.DestinationNetwork = sig.DestinationNetwork
-		}
+		// Or create a new remote transaction
+		body := new(protocol.RemoteTransaction)
+		body.Hash = hash
+		txn := new(protocol.Transaction)
+		txn.Body = body
+		delivery = new(Delivery)
+		delivery.Transaction = txn
+		delivery.Signatures = []protocol.Signature{sig}
+		txnMap[hash] = delivery
+		txnList = append(txnList, delivery)
 	}
 
 	for _, delivery := range txnList {
@@ -119,7 +114,7 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 
 type Delivery struct {
 	core.Delivery
-	State       ProcessTransactionState
+	State ProcessTransactionState
 }
 
 func (d *Delivery) NewChild(transaction *protocol.Transaction, signatures []protocol.Signature) *Delivery {
