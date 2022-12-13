@@ -507,9 +507,7 @@ type NetworkGlobals struct {
 	AnchorEmptyBlocks bool           `json:"anchorEmptyBlocks,omitempty" form:"anchorEmptyBlocks" query:"anchorEmptyBlocks" validate:"required"`
 	FeeSchedule       *FeeSchedule   `json:"feeSchedule,omitempty" form:"feeSchedule" query:"feeSchedule" validate:"required"`
 	Limits            *NetworkLimits `json:"limits,omitempty" form:"limits" query:"limits" validate:"required"`
-	// ExecutorVersion is the active executor version.
-	ExecutorVersion uint64 `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
-	extraData       []byte
+	extraData         []byte
 }
 
 type NetworkLimits struct {
@@ -784,8 +782,10 @@ type SystemLedger struct {
 	AcmeBurnt      big.Int                `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	PendingUpdates []NetworkAccountUpdate `json:"pendingUpdates,omitempty" form:"pendingUpdates" query:"pendingUpdates" validate:"required"`
 	// Anchor is the block anchor that should be sent for the last block.
-	Anchor    AnchorBody `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
-	extraData []byte
+	Anchor AnchorBody `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	// ExecutorVersion is the active executor version.
+	ExecutorVersion uint64 `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
+	extraData       []byte
 }
 
 type SystemWriteData struct {
@@ -1966,7 +1966,6 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	if v.Limits != nil {
 		u.Limits = (v.Limits).Copy()
 	}
-	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -2415,6 +2414,7 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	if v.Anchor != nil {
 		u.Anchor = CopyAnchorBody(v.Anchor)
 	}
+	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -3855,9 +3855,6 @@ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 	case !((v.Limits).Equal(u.Limits)):
 		return false
 	}
-	if !(v.ExecutorVersion == u.ExecutorVersion) {
-		return false
-	}
 
 	return true
 }
@@ -4431,6 +4428,9 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 		}
 	}
 	if !(EqualAnchorBody(v.Anchor, u.Anchor)) {
+		return false
+	}
+	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
 	}
 
@@ -7954,7 +7954,6 @@ var fieldNames_NetworkGlobals = []string{
 	4: "AnchorEmptyBlocks",
 	5: "FeeSchedule",
 	6: "Limits",
-	7: "ExecutorVersion",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -7978,9 +7977,6 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Limits == nil) {
 		writer.WriteValue(6, v.Limits.MarshalBinary)
-	}
-	if !(v.ExecutorVersion == 0) {
-		writer.WriteUint(7, v.ExecutorVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -9704,6 +9700,7 @@ var fieldNames_SystemLedger = []string{
 	5: "AcmeBurnt",
 	6: "PendingUpdates",
 	7: "Anchor",
+	8: "ExecutorVersion",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -9730,6 +9727,9 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(EqualAnchorBody(v.Anchor, nil)) {
 		writer.WriteValue(7, v.Anchor.MarshalBinary)
+	}
+	if !(v.ExecutorVersion == 0) {
+		writer.WriteUint(8, v.ExecutorVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemLedger)
@@ -13137,9 +13137,6 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(NetworkLimits); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Limits = x
 	}
-	if x, ok := reader.ReadUint(7); ok {
-		v.ExecutorVersion = x
-	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
 	if err != nil {
@@ -14294,6 +14291,9 @@ func (v *SystemLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		}
 		return err
 	})
+	if x, ok := reader.ReadUint(8); ok {
+		v.ExecutorVersion = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SystemLedger)
 	if err != nil {
@@ -16206,13 +16206,14 @@ func (v *SystemGenesis) MarshalJSON() ([]byte, error) {
 
 func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                             `json:"type"`
-		Url            *url.URL                                `json:"url,omitempty"`
-		Index          uint64                                  `json:"index,omitempty"`
-		Timestamp      time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
-		Anchor         encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
+		Type            AccountType                             `json:"type"`
+		Url             *url.URL                                `json:"url,omitempty"`
+		Index           uint64                                  `json:"index,omitempty"`
+		Timestamp       time.Time                               `json:"timestamp,omitempty"`
+		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates  encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		Anchor          encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
+		ExecutorVersion uint64                                  `json:"executorVersion,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -16221,6 +16222,7 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
 	u.Anchor = encoding.JsonUnmarshalWith[AnchorBody]{Value: v.Anchor, Func: UnmarshalAnchorBodyJSON}
+	u.ExecutorVersion = v.ExecutorVersion
 	return json.Marshal(&u)
 }
 
@@ -18441,13 +18443,14 @@ func (v *SystemGenesis) UnmarshalJSON(data []byte) error {
 
 func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                             `json:"type"`
-		Url            *url.URL                                `json:"url,omitempty"`
-		Index          uint64                                  `json:"index,omitempty"`
-		Timestamp      time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
-		Anchor         encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
+		Type            AccountType                             `json:"type"`
+		Url             *url.URL                                `json:"url,omitempty"`
+		Index           uint64                                  `json:"index,omitempty"`
+		Timestamp       time.Time                               `json:"timestamp,omitempty"`
+		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates  encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		Anchor          encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
+		ExecutorVersion uint64                                  `json:"executorVersion,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -18456,6 +18459,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
 	u.Anchor = encoding.JsonUnmarshalWith[AnchorBody]{Value: v.Anchor, Func: UnmarshalAnchorBodyJSON}
+	u.ExecutorVersion = v.ExecutorVersion
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -18473,6 +18477,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	v.PendingUpdates = u.PendingUpdates
 	v.Anchor = u.Anchor.Value
 
+	v.ExecutorVersion = u.ExecutorVersion
 	return nil
 }
 
