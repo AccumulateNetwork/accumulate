@@ -507,7 +507,9 @@ type NetworkGlobals struct {
 	AnchorEmptyBlocks bool           `json:"anchorEmptyBlocks,omitempty" form:"anchorEmptyBlocks" query:"anchorEmptyBlocks" validate:"required"`
 	FeeSchedule       *FeeSchedule   `json:"feeSchedule,omitempty" form:"feeSchedule" query:"feeSchedule" validate:"required"`
 	Limits            *NetworkLimits `json:"limits,omitempty" form:"limits" query:"limits" validate:"required"`
-	extraData         []byte
+	// ExecutorVersion is the active executor version.
+	ExecutorVersion uint64 `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
+	extraData       []byte
 }
 
 type NetworkLimits struct {
@@ -1964,6 +1966,7 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	if v.Limits != nil {
 		u.Limits = (v.Limits).Copy()
 	}
+	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -3850,6 +3853,9 @@ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 	case v.Limits == nil || u.Limits == nil:
 		return false
 	case !((v.Limits).Equal(u.Limits)):
+		return false
+	}
+	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
 	}
 
@@ -7948,6 +7954,7 @@ var fieldNames_NetworkGlobals = []string{
 	4: "AnchorEmptyBlocks",
 	5: "FeeSchedule",
 	6: "Limits",
+	7: "ExecutorVersion",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -7971,6 +7978,9 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Limits == nil) {
 		writer.WriteValue(6, v.Limits.MarshalBinary)
+	}
+	if !(v.ExecutorVersion == 0) {
+		writer.WriteUint(7, v.ExecutorVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -13126,6 +13136,9 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x := new(NetworkLimits); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Limits = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.ExecutorVersion = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)

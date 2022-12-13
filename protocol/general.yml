@@ -180,6 +180,10 @@ NetworkGlobals:
       type: NetworkLimits
       marshal-as: reference
       pointer: true
+    - name: ExecutorVersion
+      description: is the active executor version
+      type: uint
+      optional: true
 
 FeeSchedule:
   fields:

@@ -8,3 +8,13 @@
 package core
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package core types.yml
+
+// ExecutorV1 represents the executor system used at activation.
+const ExecutorV1 = 0
+
+// ExecutorV1V2Transition represents the transition from the original executor
+// system to the v2 system.
+const ExecutorV1V2Transition = 1
+
+// ExecutorV2 represents the second version of the executor system.
+const ExecutorV2 = 2
