@@ -15,6 +15,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 )
 
 type Bus struct {
@@ -23,6 +24,8 @@ type Bus struct {
 	logger      logging.OptionalLogger
 }
 
+type Unsubscribe func()
+
 func NewBus(logger log.Logger) *Bus {
 	b := new(Bus)
 	b.mu = new(sync.Mutex)
@@ -30,10 +33,17 @@ func NewBus(logger log.Logger) *Bus {
 	return b
 }
 
-func (b *Bus) subscribe(sub func(Event) error) {
+func (b *Bus) subscribe(sub func(Event) error) Unsubscribe {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	i := len(b.subscribers)
 	b.subscribers = append(b.subscribers, sub)
+
+	return func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		sortutil.RemoveAt(&b.subscribers, i)
+	}
 }
 
 func (b *Bus) Publish(event Event) error {
@@ -64,8 +74,8 @@ func (b *Bus) Publish(event Event) error {
 	return errors.New(strings.Join(s, "; "))
 }
 
-func SubscribeSync[T Event](b *Bus, sub func(T) error) {
-	b.subscribe(func(e Event) (err error) {
+func SubscribeSync[T Event](b *Bus, sub func(T) error) Unsubscribe {
+	return b.subscribe(func(e Event) (err error) {
 		et, ok := e.(T)
 		if !ok {
 			return nil
@@ -89,8 +99,8 @@ func SubscribeSync[T Event](b *Bus, sub func(T) error) {
 	})
 }
 
-func SubscribeAsync[T Event](b *Bus, sub func(T)) {
-	b.subscribe(func(e Event) (err error) {
+func SubscribeAsync[T Event](b *Bus, sub func(T)) Unsubscribe {
+	return b.subscribe(func(e Event) (err error) {
 		et, ok := e.(T)
 		if !ok {
 			return nil

@@ -16,10 +16,11 @@ type Event interface {
 	isEvent()
 }
 
-func (DidCommitBlock) isEvent()    {}
-func (DidSaveSnapshot) isEvent()   {}
-func (WillChangeGlobals) isEvent() {}
-func (FatalError) isEvent()        {}
+func (DidCommitBlock) isEvent()           {}
+func (DidSaveSnapshot) isEvent()          {}
+func (WillChangeGlobals) isEvent()        {}
+func (FatalError) isEvent()               {}
+func (DidChangeExecutorVersion) isEvent() {}
 
 type DidCommitBlock struct {
 	Index uint64
@@ -33,6 +34,10 @@ type DidSaveSnapshot struct {
 
 type WillChangeGlobals struct {
 	New, Old *core.GlobalValues
+}
+
+type DidChangeExecutorVersion struct {
+	New, Old uint64
 }
 
 type FatalError struct {
