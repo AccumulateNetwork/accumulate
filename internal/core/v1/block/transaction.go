@@ -9,6 +9,7 @@ package block
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -93,7 +94,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	r2 := x.BlockTimers.Start(executor.Type())
-	result, err := executor.Execute(st, &chain.Delivery{Transaction: delivery.Transaction})
+	result, err := executor.Execute(st, &chain.Delivery{Delivery: core.Delivery{Transaction: delivery.Transaction}})
 	x.BlockTimers.Stop(r2)
 	if err != nil {
 		err = errors.UnknownError.Wrap(err)

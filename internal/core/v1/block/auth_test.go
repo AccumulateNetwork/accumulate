@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -559,7 +560,7 @@ func forwardSignature(txn *protocol.Transaction, sig protocol.Signature) *chain.
 			},
 		}},
 	}
-	parent := &chain.Delivery{Transaction: &protocol.Transaction{Body: body}}
+	parent := &chain.Delivery{Delivery: core.Delivery{Transaction: &protocol.Transaction{Body: body}}}
 	return parent.NewForwarded(body)
 }
 

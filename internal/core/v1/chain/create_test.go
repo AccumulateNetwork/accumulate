@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -51,7 +52,7 @@ func TestCreateAccountWithinNonAdi(t *testing.T) {
 			st := NewStateManagerForTest(t, db, txn)
 			defer st.Discard()
 
-			_, err := GetExecutor(t, c.Body.Type()).Validate(st, &Delivery{Transaction: txn})
+			_, err := GetExecutor(t, c.Body.Type()).Validate(st, &Delivery{Delivery: core.Delivery{Transaction: txn}})
 			require.EqualError(t, err, c.Error)
 		})
 	}
@@ -92,7 +93,7 @@ func TestCreateAccountWithinOtherAdi(t *testing.T) {
 			st := NewStateManagerForTest(t, db, txn)
 			defer st.Discard()
 
-			_, err := GetExecutor(t, c.Body.Type()).Validate(st, &Delivery{Transaction: txn})
+			_, err := GetExecutor(t, c.Body.Type()).Validate(st, &Delivery{Delivery: core.Delivery{Transaction: txn}})
 			require.EqualError(t, err, c.Error)
 		})
 	}

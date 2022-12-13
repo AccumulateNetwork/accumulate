@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -539,7 +540,7 @@ func validateTransactionDb(t *testing.T, db *database.Database, txn *Transaction
 		require.NoError(t, err)
 	}
 
-	_, err = executor.Execute(st, &chain.Delivery{Transaction: txn})
+	_, err = executor.Execute(st, &chain.Delivery{Delivery: core.Delivery{Transaction: txn}})
 	if requireSuccess {
 		require.NoError(t, err)
 	}
