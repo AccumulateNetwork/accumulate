@@ -8,6 +8,8 @@ package core
 
 import (
 	"fmt"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 )
 
 type ValidatorUpdate int
@@ -53,4 +55,9 @@ func (g *GlobalValues) DiffValidators(h *GlobalValues, partitionID string) (map[
 	}
 
 	return updates, nil
+}
+
+type ValidatorPower struct {
+	Key   address.Address
+	Power int64
 }
