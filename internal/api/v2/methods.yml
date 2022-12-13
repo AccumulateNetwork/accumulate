@@ -83,7 +83,7 @@ QueryDataSet:
   input: DataEntrySetQuery
   output: MultiResponse
   route-param: Url
-  call-params: [Url, QueryPagination, QueryOptions]
+  call-params: [Url, QueryPagination, QueryOptions, SearchQuery]
 
 QueryKeyPageIndex:
   description: queries the location of a key within an account's key book(s)

@@ -95,6 +95,7 @@ type RequestDataEntrySet struct {
 	Start        uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
 	Count        uint64   `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	ExpandChains bool     `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
+	SearchQuery  []byte   `json:"searchQuery,omitempty" form:"searchQuery" query:"searchQuery"`
 	extraData    []byte
 }
 
@@ -422,6 +423,7 @@ func (v *RequestDataEntrySet) Copy() *RequestDataEntrySet {
 	u.Start = v.Start
 	u.Count = v.Count
 	u.ExpandChains = v.ExpandChains
+	u.SearchQuery = encoding.BytesCopy(v.SearchQuery)
 
 	return u
 }
@@ -947,6 +949,9 @@ func (v *RequestDataEntrySet) Equal(u *RequestDataEntrySet) bool {
 		return false
 	}
 	if !(v.ExpandChains == u.ExpandChains) {
+		return false
+	}
+	if !(bytes.Equal(v.SearchQuery, u.SearchQuery)) {
 		return false
 	}
 
@@ -1914,6 +1919,7 @@ var fieldNames_RequestDataEntrySet = []string{
 	3: "Start",
 	4: "Count",
 	5: "ExpandChains",
+	6: "SearchQuery",
 }
 
 func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
@@ -1932,6 +1938,9 @@ func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
 	}
 	if !(!v.ExpandChains) {
 		writer.WriteBool(5, v.ExpandChains)
+	}
+	if !(len(v.SearchQuery) == 0) {
+		writer.WriteBytes(6, v.SearchQuery)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestDataEntrySet)
@@ -3606,6 +3615,9 @@ func (v *RequestDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(5); ok {
 		v.ExpandChains = x
 	}
+	if x, ok := reader.ReadBytes(6); ok {
+		v.SearchQuery = x
+	}
 
 	seen, err := reader.Reset(fieldNames_RequestDataEntrySet)
 	if err != nil {
@@ -4527,12 +4539,14 @@ func (v *RequestDataEntrySet) MarshalJSON() ([]byte, error) {
 		Start        uint64    `json:"start,omitempty"`
 		Count        uint64    `json:"count,omitempty"`
 		ExpandChains bool      `json:"expandChains,omitempty"`
+		SearchQuery  *string   `json:"searchQuery,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Start = v.Start
 	u.Count = v.Count
 	u.ExpandChains = v.ExpandChains
+	u.SearchQuery = encoding.BytesToJSON(v.SearchQuery)
 	return json.Marshal(&u)
 }
 
@@ -5066,12 +5080,14 @@ func (v *RequestDataEntrySet) UnmarshalJSON(data []byte) error {
 		Start        uint64    `json:"start,omitempty"`
 		Count        uint64    `json:"count,omitempty"`
 		ExpandChains bool      `json:"expandChains,omitempty"`
+		SearchQuery  *string   `json:"searchQuery,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Start = v.Start
 	u.Count = v.Count
 	u.ExpandChains = v.ExpandChains
+	u.SearchQuery = encoding.BytesToJSON(v.SearchQuery)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5082,6 +5098,11 @@ func (v *RequestDataEntrySet) UnmarshalJSON(data []byte) error {
 	v.Start = u.Start
 	v.Count = u.Count
 	v.ExpandChains = u.ExpandChains
+	if x, err := encoding.BytesFromJSON(u.SearchQuery); err != nil {
+		return fmt.Errorf("error decoding SearchQuery: %w", err)
+	} else {
+		v.SearchQuery = x
+	}
 	return nil
 }
 

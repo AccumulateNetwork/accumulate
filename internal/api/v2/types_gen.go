@@ -69,6 +69,7 @@ type DataEntrySetQuery struct {
 	UrlQuery
 	QueryPagination
 	QueryOptions
+	SearchQuery []byte `json:"searchQuery,omitempty" form:"searchQuery" query:"searchQuery"`
 }
 
 type DescriptionResponse struct {
@@ -628,6 +629,7 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 		Scratch       bool     `json:"scratch,omitempty"`
 		Prove         bool     `json:"prove,omitempty"`
 		IncludeRemote bool     `json:"includeRemote,omitempty"`
+		SearchQuery   *string  `json:"searchQuery,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
@@ -638,6 +640,7 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.IncludeRemote = v.QueryOptions.IncludeRemote
+	u.SearchQuery = encoding.BytesToJSON(v.SearchQuery)
 	return json.Marshal(&u)
 }
 
@@ -1228,6 +1231,7 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 		Scratch       bool     `json:"scratch,omitempty"`
 		Prove         bool     `json:"prove,omitempty"`
 		IncludeRemote bool     `json:"includeRemote,omitempty"`
+		SearchQuery   *string  `json:"searchQuery,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
@@ -1238,6 +1242,7 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.IncludeRemote = v.QueryOptions.IncludeRemote
+	u.SearchQuery = encoding.BytesToJSON(v.SearchQuery)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1253,6 +1258,11 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 	v.QueryOptions.Scratch = u.Scratch
 	v.QueryOptions.Prove = u.Prove
 	v.QueryOptions.IncludeRemote = u.IncludeRemote
+	if x, err := encoding.BytesFromJSON(u.SearchQuery); err != nil {
+		return fmt.Errorf("error decoding SearchQuery: %w", err)
+	} else {
+		v.SearchQuery = x
+	}
 	return nil
 }
 

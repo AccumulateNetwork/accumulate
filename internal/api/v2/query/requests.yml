@@ -74,6 +74,9 @@ RequestDataEntrySet:
     - name: ExpandChains
       type: bool
       optional: true
+    - name: SearchQuery
+      type: bytes
+      optional: true
 
 RequestKeyPageIndex:
   union: { name: request, type: query, value: KeyPageIndex }

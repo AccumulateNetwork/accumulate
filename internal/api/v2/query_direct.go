@@ -357,7 +357,7 @@ func (q *queryFrontend) QueryData(url *url.URL, entryHash [32]byte) (*ChainQuery
 	return qr, nil
 }
 
-func (q *queryFrontend) QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
+func (q *queryFrontend) QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions, searchQuery []byte) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
@@ -367,7 +367,8 @@ func (q *queryFrontend) QueryDataSet(url *url.URL, pagination QueryPagination, o
 	req.Url = url
 	req.Start = pagination.Start
 	req.Count = pagination.Count
-	req.ExpandChains = opts.Expand
+	req.ExpandChains = opts.Expand || searchQuery != nil
+	req.SearchQuery = searchQuery
 
 	k, v, err := q.query(req, opts)
 	if err != nil {

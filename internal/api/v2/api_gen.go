@@ -232,7 +232,7 @@ func (m *JrpcMethods) QueryDataSet(ctx context.Context, params json.RawMessage) 
 	}
 
 	if subnet == m.Options.Describe.PartitionId {
-		return jrpcFormatResponse(m.querier.QueryDataSet(req.Url, req.QueryPagination, req.QueryOptions))
+		return jrpcFormatResponse(m.querier.QueryDataSet(req.Url, req.QueryPagination, req.QueryOptions, req.SearchQuery))
 	}
 
 	var result interface{}

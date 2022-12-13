@@ -7,6 +7,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/hex"
 	"fmt"
@@ -353,7 +354,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 				if err != nil {
 					return nil, nil, err
 				}
-				res, err := m.queryDataSet(batch, u, int64(start), int64(end-start), true)
+				res, err := m.queryDataSet(batch, u, int64(start), int64(end-start), true, nil)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -831,7 +832,7 @@ func (m *queryBackend) queryDataByEntryHash(batch *database.Batch, u *url.URL, e
 	return &qr, nil
 }
 
-func (m *queryBackend) queryDataSet(batch *database.Batch, u *url.URL, start int64, limit int64, expand bool) (*query.ResponseDataEntrySet, error) {
+func (m *queryBackend) queryDataSet(batch *database.Batch, u *url.URL, start int64, limit int64, expand bool, searchQuery []byte) (*query.ResponseDataEntrySet, error) {
 	data := indexing.Data(batch, u)
 	count, err := data.Count()
 	if err != nil {
@@ -859,6 +860,20 @@ func (m *queryBackend) queryDataSet(batch *database.Batch, u *url.URL, start int
 			er.Entry, er.TxId, er.CauseTxId, err = indexing.GetDataEntry(batch, txnHash)
 			if err != nil {
 				return nil, err
+			}
+		}
+
+		// Exclude results that don't match the search query
+		if searchQuery != nil {
+			var found bool
+			for _, b := range er.Entry.GetData() {
+				if bytes.Equal(b, searchQuery) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
 			}
 		}
 
@@ -972,7 +987,7 @@ func (m *queryBackend) Query(batch *database.Batch, q query.Request, opts QueryO
 	case *query.RequestDataEntrySet:
 		chr := q
 		u := chr.Url
-		ret, err := m.queryDataSet(batch, u, int64(chr.Start), int64(chr.Count), chr.ExpandChains)
+		ret, err := m.queryDataSet(batch, u, int64(chr.Start), int64(chr.Count), chr.ExpandChains, chr.SearchQuery)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}

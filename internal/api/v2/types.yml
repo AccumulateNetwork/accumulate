@@ -473,6 +473,10 @@ DataEntrySetQuery:
     - UrlQuery
     - QueryPagination
     - QueryOptions
+  fields:
+    - name: SearchQuery
+      type: bytes
+      optional: true
 
 DataEntryQueryResponse:
   fields:
