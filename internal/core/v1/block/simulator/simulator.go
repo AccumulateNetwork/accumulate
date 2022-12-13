@@ -419,15 +419,20 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		x := s.Partition(partition)
 
 		// Normalize - use a copy to avoid weird issues caused by modifying values
-		deliveries, err := chain.NormalizeEnvelope(envelope.Copy())
+		deliveries, err := core.NormalizeEnvelope(envelope.Copy())
 		if err != nil {
 			return nil, err
+		}
+
+		wrapped := make([]*chain.Delivery, len(deliveries))
+		for i, d := range deliveries {
+			wrapped[i] = &chain.Delivery{Delivery: *d}
 		}
 
 		// Check
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		x.Executor.ValidateEnvelopeSet(batch, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+		x.Executor.ValidateEnvelopeSet(batch, wrapped, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
 			err = e
 		})
 		if err != nil {
@@ -615,15 +620,19 @@ func (x *ExecEntry) View(fn func(*database.Batch) error) error   { return x.Data
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
 func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*chain.Delivery {
-	var deliveries []*chain.Delivery
+	var deliveries []*core.Delivery
 	for _, env := range envelopes {
-		normalized, err := chain.NormalizeEnvelope(env)
+		normalized, err := core.NormalizeEnvelope(env)
 		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Describe.PartitionId)
 		deliveries = append(deliveries, normalized...)
 	}
 
-	x.Submit2(pretend, deliveries)
-	return deliveries
+	wrapped := make([]*chain.Delivery, len(deliveries))
+	for i, d := range deliveries {
+		wrapped[i] = &chain.Delivery{Delivery: *d}
+	}
+	x.Submit2(pretend, wrapped)
+	return wrapped
 }
 
 func (x *ExecEntry) Submit2(pretend bool, deliveries []*chain.Delivery) {

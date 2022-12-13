@@ -218,14 +218,14 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	return root, nil
 }
 
-func (n *Node) checkTx(delivery *chain.Delivery, typ abci.CheckTxType) (*protocol.TransactionStatus, error) {
+func (n *Node) checkTx(delivery *core.Delivery, typ abci.CheckTxType) (*protocol.TransactionStatus, error) {
 	// TODO: Maintain a shared batch if typ is not recheck. I tried to do this
 	// but it lead to "attempted to use a commited or discarded batch" panics.
 
 	batch := n.database.Begin(false)
 	defer batch.Discard()
 
-	r, err := n.executor.ValidateEnvelope(batch, delivery)
+	r, err := n.executor.ValidateEnvelope(batch, &chain.Delivery{Delivery: *delivery})
 	s := new(protocol.TransactionStatus)
 	s.TxID = delivery.Transaction.ID()
 	s.Result = r
@@ -244,8 +244,8 @@ func (n *Node) beginBlock(block *block.Block) error {
 	return nil
 }
 
-func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	s, err := n.executor.ExecuteEnvelope(block, delivery)
+func (n *Node) deliverTx(block *block.Block, delivery *core.Delivery) (*protocol.TransactionStatus, error) {
+	s, err := n.executor.ExecuteEnvelope(block, &chain.Delivery{Delivery: *delivery})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
 	}
@@ -371,7 +371,7 @@ func (s *nodeService) Validate(ctx context.Context, envelope *protocol.Envelope,
 
 func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.Submission, error) {
 	// Convert the envelope to deliveries
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	deliveries, err := core.NormalizeEnvelope(envelope)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

@@ -13,8 +13,8 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -117,7 +117,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	deliveries, err := core.NormalizeEnvelope(envelope)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("submit: %w", err)
 	}

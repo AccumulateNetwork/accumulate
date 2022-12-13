@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -58,7 +58,7 @@ func TestDnStall(t *testing.T) {
 
 	// Drop all transactions from the DN
 	for _, p := range sim.Partitions() {
-		sim.SetSubmitHook(p.ID, func(delivery *chain.Delivery) (dropTx bool, keepHook bool) {
+		sim.SetSubmitHook(p.ID, func(delivery *core.Delivery) (dropTx bool, keepHook bool) {
 			for _, sig := range delivery.Signatures {
 				sig, ok := sig.(*PartitionSignature)
 				if !ok {

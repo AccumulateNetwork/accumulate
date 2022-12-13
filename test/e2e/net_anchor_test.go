@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -50,8 +50,8 @@ func TestAnchorThreshold(t *testing.T) {
 			BuildDelivery())
 
 	// Capture the BVN's anchors and verify they're the same
-	var anchors []*chain.Delivery
-	sim.SetSubmitHook("Directory", func(delivery *chain.Delivery) (dropTx bool, keepHook bool) {
+	var anchors []*core.Delivery
+	sim.SetSubmitHook("Directory", func(delivery *core.Delivery) (dropTx bool, keepHook bool) {
 		if delivery.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
 			return false, true
 		}

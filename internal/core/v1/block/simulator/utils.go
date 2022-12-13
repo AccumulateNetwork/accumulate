@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -33,7 +34,12 @@ func InitFromSnapshot(t TB, db database.Beginner, exec *Executor, filename strin
 func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
 	t.Helper()
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	deliveries, err := core.NormalizeEnvelope(envelope)
 	require.NoError(tb{t}, err)
-	return deliveries
+
+	wrapped := make([]*chain.Delivery, len(deliveries))
+	for i, d := range deliveries {
+		wrapped[i] = &chain.Delivery{Delivery: *d}
+	}
+	return wrapped
 }

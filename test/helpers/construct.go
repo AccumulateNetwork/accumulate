@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -21,11 +21,11 @@ import (
 
 func MustBuild(t testing.TB, b interface {
 	Done() (*protocol.Envelope, error)
-}) *chain.Delivery {
+}) *core.Delivery {
 	t.Helper()
 	env, err := b.Done()
 	require.NoError(t, err)
-	delivery, err := chain.NormalizeEnvelope(env)
+	delivery, err := core.NormalizeEnvelope(env)
 	require.NoError(t, err)
 	require.Len(t, delivery, 1)
 	return delivery[0]

@@ -8,6 +8,112 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// NormalizeEnvelope normalizes the envelope into one or more deliveries.
+func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
+	// Validate the envelope's TxHash
+	var envTxHash *[32]byte
+	switch len(envelope.TxHash) {
+	case 32:
+		envTxHash = (*[32]byte)(envelope.TxHash)
+	case 0:
+		// Ok
+	default:
+		// TODO CONSENSUS this change may have affected consensus
+		return nil, errors.BadRequest.WithFormat("invalid hash length: want 32, got %d", len(envelope.TxHash))
+	}
+
+	// Create a map (and an ordered list) of all transactions
+	txnMap := make(map[[32]byte]*Delivery, len(envelope.Transaction))
+	txnList := make([]*Delivery, 0, len(envelope.Transaction))
+	for i, txn := range envelope.Transaction {
+		if txn.Body == nil {
+			// TODO CONSENSUS this change may have affected consensus
+			return nil, errors.BadRequest.WithFormat("transaction %d: nil body", i)
+		}
+
+		hash := txn.GetHash()
+		switch {
+		case len(hash) == 32:
+			// Normal transaction or a remote transaction that includes a hash
+
+		case envTxHash != nil:
+			// Envelope specifies the transaction hash
+			hash = (*envTxHash)[:]
+
+			// Set the remote transaction's hash
+			if remote, ok := txn.Body.(*protocol.RemoteTransaction); ok {
+				remote.Hash = *(*[32]byte)(hash)
+			}
+
+		default:
+			// No hash
+			// TODO CONSENSUS this change may have affected consensus
+			return nil, errors.BadRequest.WithFormat("transaction %d: remote transaction: missing hash", i)
+		}
+
+		delivery := new(Delivery)
+		delivery.Transaction = txn
+		txnMap[*(*[32]byte)(hash)] = delivery
+		txnList = append(txnList, delivery)
+	}
+
+	// Map signatures to transactions
+	for i, sig := range envelope.Signatures {
+		hash := sig.GetTransactionHash()
+		switch {
+		case hash != [32]byte{}:
+			// Signature specifies the transaction hash
+
+		case envTxHash != nil:
+			// Envelope specifies the transaction hash
+			hash = *envTxHash
+
+		case len(txnMap) == 1:
+			// There's only one transaction
+			for hash = range txnMap {
+				break
+			}
+
+		default:
+			// TODO CONSENSUS this change may have affected consensus
+			return nil, errors.BadRequest.WithFormat("multi-transaction envelope: signature %d: missing hash", i)
+		}
+
+		// Get the existing delivery
+		delivery, ok := txnMap[hash]
+		if !ok {
+			// Or create a new remote transaction
+			body := new(protocol.RemoteTransaction)
+			body.Hash = hash
+			txn := new(protocol.Transaction)
+			txn.Body = body
+			delivery = new(Delivery)
+			delivery.Transaction = txn
+			txnMap[hash] = delivery
+			txnList = append(txnList, delivery)
+		}
+
+		// Add the signature to the delivery
+		delivery.Signatures = append(delivery.Signatures, sig)
+
+		// TODO CONSENSUS this change may have affected consensus
+		if sig, ok := sig.(*protocol.PartitionSignature); ok {
+			delivery.SequenceNumber = sig.SequenceNumber
+			delivery.SourceNetwork = sig.SourceNetwork
+			delivery.DestinationNetwork = sig.DestinationNetwork
+		}
+	}
+
+	for _, delivery := range txnList {
+		// A transaction with no signatures is invalid
+		if len(delivery.Signatures) == 0 {
+			return nil, errors.BadRequest.WithFormat("the envelope does not contain any signatures matching transaction %X (%v)", delivery.Transaction.GetHash()[:8], delivery.Transaction.Body.Type())
+		}
+	}
+
+	return txnList, nil
+}
+
 type Delivery struct {
 	parent   *Delivery
 	internal bool

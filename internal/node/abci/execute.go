@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -20,9 +21,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type executeFunc func([]*chain.Delivery) []*protocol.TransactionStatus
+type executeFunc func([]*core.Delivery) []*protocol.TransactionStatus
 
-func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*chain.Delivery, []*protocol.TransactionStatus, []byte, error) {
+func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*core.Delivery, []*protocol.TransactionStatus, []byte, error) {
 	hash := sha256.Sum256(raw)
 	envelope := new(protocol.Envelope)
 	err := envelope.UnmarshalBinary(raw)
@@ -31,7 +32,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		return nil, nil, nil, errors.UnknownError.WithFormat("decoding envelopes: %w", err)
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	deliveries, err := core.NormalizeEnvelope(envelope)
 	if err != nil {
 		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
 		return nil, nil, nil, errors.UnknownError.Wrap(err)
@@ -51,13 +52,21 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 }
 
 func checkTx(exec *Executor, batch *database.Batch) executeFunc {
-	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ValidateEnvelopeSet(batch, deliveries, nil)
+	return func(deliveries []*core.Delivery) []*protocol.TransactionStatus {
+		wrapped := make([]*chain.Delivery, len(deliveries))
+		for i, d := range deliveries {
+			wrapped[i] = &chain.Delivery{Delivery: *d}
+		}
+		return exec.ValidateEnvelopeSet(batch, wrapped, nil)
 	}
 }
 
 func deliverTx(exec *Executor, block *Block) executeFunc {
-	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ExecuteEnvelopeSet(block, deliveries, nil)
+	return func(deliveries []*core.Delivery) []*protocol.TransactionStatus {
+		wrapped := make([]*chain.Delivery, len(deliveries))
+		for i, d := range deliveries {
+			wrapped[i] = &chain.Delivery{Delivery: *d}
+		}
+		return exec.ExecuteEnvelopeSet(block, wrapped, nil)
 	}
 }

@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -197,7 +197,7 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 		}).
 		Initiate(SignatureTypeED25519, aliceKey).
 		Build()
-	deliveries, err := chain.NormalizeEnvelope(env)
+	deliveries, err := core.NormalizeEnvelope(env)
 	require.NoError(t, err)
 	require.Len(t, deliveries, 1)
 

@@ -9,7 +9,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -112,7 +111,7 @@ func (s *Simulator) ExecuteBlocks(n int) {
 
 func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelope, error) {
 	for _, env := range envelopes {
-		deliveries, err := chain.NormalizeEnvelope(env)
+		deliveries, err := core.NormalizeEnvelope(env)
 		require.NoError(s.TB, err)
 		for _, d := range deliveries {
 			st, err := s.S.Submit(d)
@@ -145,7 +144,7 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 
 	ids := map[[32]byte]bool{}
 	for _, env := range envelopes {
-		deliveries, err := chain.NormalizeEnvelope(env)
+		deliveries, err := core.NormalizeEnvelope(env)
 		require.NoError(s.TB, err)
 		for _, d := range deliveries {
 			ids[*(*[32]byte)(d.Transaction.GetHash())] = true
@@ -157,7 +156,7 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 
 	status := make([]*protocol.TransactionStatus, 0, len(envelopes))
 	for _, env := range envelopes {
-		deliveries, err := chain.NormalizeEnvelope(env)
+		deliveries, err := core.NormalizeEnvelope(env)
 		require.NoError(s.TB, err)
 		for _, d := range deliveries {
 			helpers.View(s.TB, s.S.DatabaseFor(d.Transaction.Header.Principal), func(batch *database.Batch) {
@@ -259,7 +258,7 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 	var statuses []*protocol.TransactionStatus
 	var transactions []*protocol.Transaction
 	for _, envelope := range envelopes {
-		deliveries, err := chain.NormalizeEnvelope(envelope)
+		deliveries, err := core.NormalizeEnvelope(envelope)
 		require.NoError(s.TB, err)
 		for _, delivery := range deliveries {
 			st, txn := s.WaitForTransactionFlow(status, delivery.Transaction.GetHash())

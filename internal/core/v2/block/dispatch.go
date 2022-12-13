@@ -16,7 +16,7 @@ import (
 	"github.com/tendermint/tendermint/mempool"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -41,7 +41,7 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 }
 
 func (d *dispatcher) push(partition string, env *protocol.Envelope) error {
-	deliveries, err := chain.NormalizeEnvelope(env)
+	deliveries, err := core.NormalizeEnvelope(env)
 	if err != nil {
 		return err
 	}

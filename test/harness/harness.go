@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -99,7 +99,7 @@ func (h *Harness) StepUntil(conditions ...Condition) {
 }
 
 // Submit submits a delivery and returns the status.
-func (h *Harness) Submit(delivery *chain.Delivery) *protocol.TransactionStatus {
+func (h *Harness) Submit(delivery *core.Delivery) *protocol.TransactionStatus {
 	h.TB.Helper()
 	subs, err := h.services.Submit(context.Background(), &protocol.Envelope{Transaction: []*protocol.Transaction{delivery.Transaction}, Signatures: delivery.Signatures}, api.SubmitOptions{})
 	require.NoError(h.TB, err)
@@ -109,7 +109,7 @@ func (h *Harness) Submit(delivery *chain.Delivery) *protocol.TransactionStatus {
 
 // SubmitSuccessfully submits a delivery and returns the status.
 // SubmitSuccessfully fails if the transaction failed.
-func (h *Harness) SubmitSuccessfully(delivery *chain.Delivery) *protocol.TransactionStatus {
+func (h *Harness) SubmitSuccessfully(delivery *core.Delivery) *protocol.TransactionStatus {
 	h.TB.Helper()
 	status := h.Submit(delivery)
 	if status.Error != nil {

@@ -21,7 +21,7 @@ import (
 
 func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *protocol.Envelope) (*StateManager, *Delivery) {
 	t.Helper()
-	delivery, err := NormalizeEnvelope(envelope)
+	delivery, err := core.NormalizeEnvelope(envelope)
 	require.NoError(t, err)
 	require.Len(t, delivery, 1)
 	batch := db.Begin(false)
@@ -29,7 +29,7 @@ func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *proto
 	_, err = delivery[0].LoadTransaction(batch)
 	require.NoError(t, err)
 
-	return NewStateManagerForTest(t, db, delivery[0].Transaction), delivery[0]
+	return NewStateManagerForTest(t, db, delivery[0].Transaction), &Delivery{Delivery: *delivery[0]}
 }
 
 func NewStateManagerForTest(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {

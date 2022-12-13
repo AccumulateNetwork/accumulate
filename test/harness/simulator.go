@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -74,6 +74,6 @@ func (s *Sim) SignWithNode(partition string, i int) signing.Signer {
 	return s.s.SignWithNode(partition, i)
 }
 
-func (s *Sim) SubmitTo(partition string, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func (s *Sim) SubmitTo(partition string, delivery *core.Delivery) (*protocol.TransactionStatus, error) {
 	return s.s.SubmitTo(partition, delivery)
 }

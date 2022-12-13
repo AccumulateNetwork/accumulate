@@ -16,7 +16,6 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -33,8 +32,8 @@ type Partition struct {
 	validators [][32]byte
 
 	mu         *sync.Mutex
-	mempool    []*chain.Delivery
-	deliver    []*chain.Delivery
+	mempool    []*core.Delivery
+	deliver    []*core.Delivery
 	blockIndex uint64
 	blockTime  time.Time
 
@@ -42,8 +41,8 @@ type Partition struct {
 	routerSubmitHook RouterSubmitHookFunc
 }
 
-type SubmitHookFunc func(*chain.Delivery) (dropTx, keepHook bool)
-type RouterSubmitHookFunc func([]*chain.Delivery) (_ []*chain.Delivery, keepHook bool)
+type SubmitHookFunc func(*core.Delivery) (dropTx, keepHook bool)
+type RouterSubmitHookFunc func([]*core.Delivery) (_ []*core.Delivery, keepHook bool)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -151,8 +150,8 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	return nil
 }
 
-func copyDelivery(d *chain.Delivery) *chain.Delivery {
-	e := new(chain.Delivery)
+func copyDelivery(d *core.Delivery) *core.Delivery {
+	e := new(core.Delivery)
 	e.Transaction = d.Transaction.Copy()
 	e.Signatures = make([]protocol.Signature, len(d.Signatures))
 	for i, s := range d.Signatures {
@@ -161,7 +160,7 @@ func copyDelivery(d *chain.Delivery) *chain.Delivery {
 	return e
 }
 
-func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.TransactionStatus, error) {
+func (p *Partition) Submit(delivery *core.Delivery, pretend bool) (*protocol.TransactionStatus, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

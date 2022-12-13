@@ -339,7 +339,7 @@ func TestAddAuthority(tt *testing.T) {
 	defer t.Discard()
 
 	t.Run("UpdateAccountAuthority.Add", func(t BatchTest) {
-		tx := NewTransaction().
+		tx := &chain.Delivery{Delivery: *NewTransaction().
 			WithPrincipal(alice.JoinPath("tokens")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
 			WithTimestamp(1).
@@ -349,7 +349,7 @@ func TestAddAuthority(tt *testing.T) {
 			Initiate(protocol.SignatureTypeED25519, aliceKey).
 			WithSigner(bob.JoinPath("book", "1"), 1).
 			Sign(protocol.SignatureTypeED25519, bobKey).
-			BuildDelivery()
+			BuildDelivery()}
 
 		// First signature is accepted
 		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])
@@ -378,7 +378,7 @@ func TestAddAuthority(tt *testing.T) {
 	})
 
 	t.Run("UpdateKeyPage.Add w/Owner", func(t BatchTest) {
-		tx := NewTransaction().
+		tx := &chain.Delivery{Delivery: *NewTransaction().
 			WithPrincipal(alice.JoinPath("book", "1")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
 			WithTimestamp(1).
@@ -388,7 +388,7 @@ func TestAddAuthority(tt *testing.T) {
 			Initiate(protocol.SignatureTypeED25519, aliceKey).
 			WithSigner(bob.JoinPath("book", "1"), 1).
 			Sign(protocol.SignatureTypeED25519, bobKey).
-			BuildDelivery()
+			BuildDelivery()}
 
 		// First signature is accepted
 		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])
@@ -417,7 +417,7 @@ func TestAddAuthority(tt *testing.T) {
 	})
 
 	t.Run("Create Account", func(t BatchTest) {
-		tx := NewTransaction().
+		tx := &chain.Delivery{Delivery: *NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
 			WithTimestamp(1).
@@ -428,7 +428,7 @@ func TestAddAuthority(tt *testing.T) {
 			Initiate(protocol.SignatureTypeED25519, aliceKey).
 			WithSigner(bob.JoinPath("book", "1"), 1).
 			Sign(protocol.SignatureTypeED25519, bobKey).
-			BuildDelivery()
+			BuildDelivery()}
 
 		// First signature is accepted
 		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])

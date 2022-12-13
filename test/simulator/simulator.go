@@ -260,7 +260,7 @@ func (s *Simulator) SetExecutor(exec chain.TransactionExecutor) {
 	}
 }
 
-func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func (s *Simulator) Submit(delivery *core.Delivery) (*protocol.TransactionStatus, error) {
 	partition, err := s.router.Route(&protocol.Envelope{
 		Transaction: []*protocol.Transaction{delivery.Transaction},
 		Signatures:  delivery.Signatures,
@@ -272,7 +272,7 @@ func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatu
 	return s.SubmitTo(partition, delivery)
 }
 
-func (s *Simulator) SubmitTo(partition string, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitTo(partition string, delivery *core.Delivery) (*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)

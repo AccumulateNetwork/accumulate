@@ -24,10 +24,9 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	rpc "github.com/tendermint/tendermint/rpc/client"
-	core "github.com/tendermint/tendermint/rpc/core/types"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	"github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -58,11 +57,11 @@ type FakeTendermint struct {
 	txActive int
 	isEvil   bool
 
-	syncInfo core.SyncInfo
+	syncInfo ctypes.SyncInfo
 }
 
 type txStatus struct {
-	Envelopes     []*chain.Delivery
+	Envelopes     []*core.Delivery
 	Tx            []byte
 	Hash          [32]byte
 	Height        int64
@@ -159,7 +158,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 		return nil
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(env)
+	deliveries, err := core.NormalizeEnvelope(env)
 	if err != nil {
 		c.onError(err)
 		c.logger.Error("Rejecting invalid transaction", "error", err)
@@ -434,13 +433,13 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 	}, nil
 }
 
-func (c *FakeTendermint) Status(context.Context) (*core.ResultStatus, error) {
-	s := new(core.ResultStatus)
+func (c *FakeTendermint) Status(context.Context) (*ctypes.ResultStatus, error) {
+	s := new(ctypes.ResultStatus)
 	s.SyncInfo = c.syncInfo
-	return new(core.ResultStatus), nil
+	return new(ctypes.ResultStatus), nil
 }
 
-func (c *FakeTendermint) logTxns(msg string, env ...*chain.Delivery) {
+func (c *FakeTendermint) logTxns(msg string, env ...*core.Delivery) {
 	for _, env := range env {
 		txnType := env.Transaction.Body.Type()
 		if !txnType.IsSystem() {

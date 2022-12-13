@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
@@ -59,7 +60,7 @@ func BenchmarkPerformance(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 		defer batch.Discard()
-		_, err := sim.PartitionFor(aliceUrl).Executor.ProcessSignature(batch, delivery, delivery.Signatures[0])
+		_, err := sim.PartitionFor(aliceUrl).Executor.ProcessSignature(batch, &chain.Delivery{Delivery: *delivery}, delivery.Signatures[0])
 		require.NoError(b, err)
 	}
 }
@@ -86,18 +87,18 @@ func BenchmarkBlockTimes(b *testing.B) {
 
 	// Pre-populate the block with 500 transactions
 	for i := 0; i < 500; i++ {
-		env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
+		env, err := core.NormalizeEnvelope(acctesting.NewTransaction().
 			WithPrincipal(protocol.FaucetUrl).
 			WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
 			Faucet())
 		require.NoError(b, err)
 		_, err = env[0].LoadTransaction(block.Batch)
 		require.NoError(b, err)
-		_, err = x.Executor.ExecuteEnvelope(block, env[0])
+		_, err = x.Executor.ExecuteEnvelope(block, &chain.Delivery{Delivery: *env[0]})
 		require.NoError(b, err)
 	}
 	// Construct a new transaction
-	env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
+	env, err := core.NormalizeEnvelope(acctesting.NewTransaction().
 		WithPrincipal(protocol.FaucetUrl).
 		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
 		Faucet())
@@ -127,7 +128,7 @@ func BenchmarkBlockTimes(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		block2 := *block // Copy the block
 		block2.Batch = block.Batch.Begin(true)
-		_, err = x.Executor.ExecuteEnvelope(&block2, env[0])
+		_, err = x.Executor.ExecuteEnvelope(&block2, &chain.Delivery{Delivery: *env[0]})
 		block2.Batch.Discard()
 		require.NoError(b, err)
 		if ds != nil {

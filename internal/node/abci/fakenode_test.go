@@ -24,10 +24,10 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	blockscheduler "gitlab.com/accumulatenetwork/accumulate/internal/core/scheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -302,7 +302,7 @@ func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, t
 
 	bulk := new(protocol.Envelope)
 	inBlock(func(tx *protocol.Envelope) {
-		deliveries, err := chain.NormalizeEnvelope(tx)
+		deliveries, err := core.NormalizeEnvelope(tx)
 		require.NoError(n.t, err)
 		for _, d := range deliveries {
 			bulk.Signatures = append(bulk.Signatures, d.Signatures...)
