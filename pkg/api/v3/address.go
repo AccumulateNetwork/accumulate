@@ -11,11 +11,7 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"golang.org/x/text/collate"
-	"golang.org/x/text/language"
 )
-
-var enUsIgnoreCase = collate.New(language.AmericanEnglish, collate.IgnoreCase)
 
 // N_ACC is the multicodec name for the acc protocol.
 const N_ACC = "acc"
@@ -104,7 +100,9 @@ func (s *ServiceAddress) Compare(r *ServiceAddress) int {
 	if s.Type != r.Type {
 		return int(s.Type - r.Type)
 	}
-	return enUsIgnoreCase.CompareString(s.Partition, r.Partition)
+
+	// https://github.com/golang/go/issues/57314
+	return strings.Compare(strings.ToLower(s.Partition), strings.ToLower(r.Partition))
 }
 
 // Equal returns true if the addresses are the same.

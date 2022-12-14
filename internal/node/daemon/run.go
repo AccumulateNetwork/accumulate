@@ -231,13 +231,17 @@ func (d *Daemon) Start() (err error) {
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
+	dialer := &dialer{ready: make(chan struct{})}
+	client := &message.Client{Dialer: dialer, Router: routing.MessageRouter{Router: router}}
 	execOpts := block.ExecutorOptions{
-		Logger:           d.Logger,
-		Key:              d.Key().Bytes(),
-		Describe:         d.Config.Accumulate.Describe,
-		Router:           router,
-		EventBus:         d.eventBus,
-		BatchReplayLimit: d.Config.Accumulate.BatchReplayLimit,
+		Logger:        d.Logger,
+		Key:           d.Key().Bytes(),
+		Describe:      d.Config.Accumulate.Describe,
+		Router:        router,
+		EventBus:      d.eventBus,
+		NewDispatcher: func() block.Dispatcher { return newDispatcher(router, client.Dialer) },
+		Sequencer:     client.Private(),
+		Querier:       client,
 	}
 
 	// On DNs initialize the major block scheduler
@@ -409,6 +413,8 @@ func (d *Daemon) Start() (err error) {
 			Partition: d.Config.Accumulate.PartitionId,
 		}, messageHandler.Handle)
 	}
+	dialer.dialer = d.p2pnode.Dialer()
+	close(dialer.ready)
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
 		Logger: d.Logger.With("module", "acc-rpc"),

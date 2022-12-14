@@ -112,11 +112,14 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
-		Logger:   n.logger,
-		Key:      init.PrivValKey,
-		Describe: network,
-		Router:   s.router,
-		EventBus: n.eventBus,
+		Logger:        n.logger,
+		Key:           init.PrivValKey,
+		Describe:      network,
+		Router:        s.router,
+		EventBus:      n.eventBus,
+		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: s, envelopes: map[string][]*chain.Delivery{}} },
+		Sequencer:     s.Services(),
+		Querier:       s.Services(),
 	}
 
 	// Initialize the major block scheduler
