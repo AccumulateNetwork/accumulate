@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -88,6 +89,27 @@ func (m *Executor) EndBlock(block *Block) error {
 	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
+	}
+
+	if m.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+		// Overwrite the state's chain update list with one derived directly
+		// from the database
+		block.State.ChainUpdates.Entries = nil
+		for _, account := range block.Batch.UpdatedAccounts() {
+			for _, e := range account.UpdatedChains() {
+				_, ok := protocol.ParsePartitionUrl(e.Account)
+				if ok && e.Account.PathEqual(protocol.Synthetic) {
+					// Anchoring the synthetic transaction ledger causes sadness
+					// and despair (it breaks things but I don't know why)
+					continue
+				}
+				block.State.ChainUpdates.Entries = append(block.State.ChainUpdates.Entries, e)
+			}
+		}
+
+		// Sort to ensure consistent ordering
+		e := block.State.ChainUpdates.Entries
+		sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
 	}
 
 	// Process chain updates
