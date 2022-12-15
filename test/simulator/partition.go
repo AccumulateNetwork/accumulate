@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 	"time"
 
@@ -205,6 +206,11 @@ func (p *Partition) execute() error {
 	p.deliver = p.mempool
 	p.mempool = nil
 	p.mu.Unlock()
+
+	// Order transactions to ensure the simulator is deterministic
+	sort.Slice(deliveries, func(i, j int) bool {
+		return deliveries[i].Transaction.ID().Compare(deliveries[j].Transaction.ID()) < 0
+	})
 
 	// Initialize block index
 	if p.blockIndex > 0 {

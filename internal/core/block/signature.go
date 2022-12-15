@@ -43,6 +43,9 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 type sigExecMetadata = chain.SignatureValidationMetadata
 
 func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer2, error) {
+	if delivery.Transaction.Body.Type().IsUser() {
+		print("")
+	}
 	var signer protocol.Signer2
 	var delegate protocol.Signer
 	var err error

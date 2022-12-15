@@ -180,9 +180,9 @@ func SnapshotFromDirectory(dir string) SnapshotFunc {
 	}
 }
 
-func SnapshotMap(snapshots map[string]ioutil2.SectionReader) SnapshotFunc {
+func SnapshotMap(snapshots map[string][]byte) SnapshotFunc {
 	return func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
-		return snapshots[partition], nil
+		return ioutil2.NewBuffer(snapshots[partition]), nil
 	}
 }
 
@@ -217,6 +217,10 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 
 func (s *Simulator) Router() routing.Router { return s.router }
 func (s *Simulator) EventBus() *events.Bus  { return s.partitions[protocol.Directory].nodes[0].eventBus }
+
+func (s *Simulator) BlockIndex(partition string) uint64 {
+	return s.partitions[partition].blockIndex
+}
 
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
@@ -365,6 +369,10 @@ func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, ht
 
 func (s *Simulator) SignWithNode(partition string, i int) nodeSigner {
 	return nodeSigner{s.partitions[partition].nodes[i]}
+}
+
+func (s *Simulator) API() *client.Client {
+	return s.partitions[protocol.Directory].nodes[0].clientV2
 }
 
 type nodeSigner struct {

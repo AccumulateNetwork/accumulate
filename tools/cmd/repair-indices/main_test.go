@@ -74,13 +74,13 @@ func TestRepairIndices(t *testing.T) {
 
 	// Save to and restore from snapshot
 	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
-	snapshots := map[string]ioutil2.SectionReader{}
+	snapshots := map[string][]byte{}
 	for _, p := range sim.Partitions() {
 		View(t, sim.Database(p.ID), func(batch *database.Batch) {
 			buf := new(ioutil2.Buffer)
 			err := snapshot.FullCollect(batch, buf, config.NetworkUrl{URL: PartitionUrl(p.ID)}, logger, true)
 			require.NoError(t, err)
-			snapshots[p.ID] = buf
+			snapshots[p.ID] = buf.Bytes()
 		})
 	}
 
