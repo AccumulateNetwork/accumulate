@@ -53,17 +53,20 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
 
-	// Return ACME burnt by buying credits to the supply
-	var issuerState *protocol.TokenIssuer
-	err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
-	if err != nil {
-		return nil, fmt.Errorf("unable to load acme ledger")
-	}
+	// Return ACME burnt by buying credits to the supply - but only if the
+	// amount is non-zero.
+	if !st.Globals.ExecutorVersion.SignatureAnchoringEnabled() || body.AcmeBurnt.Sign() > 0 {
+		var issuerState *protocol.TokenIssuer
+		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
+		if err != nil {
+			return nil, fmt.Errorf("unable to load acme ledger")
+		}
 
-	issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
-	err = st.Update(issuerState)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update issuer state: %v", err)
+		issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
+		err = st.Update(issuerState)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update issuer state: %v", err)
+		}
 	}
 
 	// Add the anchor to the chain - use the partition name as the chain name
