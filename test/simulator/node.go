@@ -51,6 +51,12 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.eventBus = events.NewBus(n.logger)
 	n.database = s.database(p.ID, node, n.logger)
 
+	// This is hacky, but 🤷 I don't see another choice that wouldn't be
+	// significantly less readable
+	if p.Type == config.Directory && node == 0 {
+		events.SubscribeSync(n.eventBus, s.router.willChangeGlobals)
+	}
+
 	network := config.Describe{
 		NetworkType:  p.Type,
 		PartitionId:  p.ID,

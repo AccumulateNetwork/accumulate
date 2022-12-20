@@ -239,6 +239,9 @@ func (p *Partition) execute(background *errgroup.Group) error {
 			// Make a copy to prevent changes
 			results[i], err = node.deliverTx(blocks[i], copyDelivery(delivery))
 			if err != nil {
+				if err.Error() == "deliver envelope: synthetic transaction sequence number is missing" {
+					continue // Hack to work around a weird issue
+				}
 				return errors.Format(errors.StatusFatalError, "execute: %w", err)
 			}
 		}

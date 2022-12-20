@@ -92,8 +92,6 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 		}
 	}
 
-	events.SubscribeSync(s.partitions[protocol.Directory].nodes[0].eventBus, s.router.willChangeGlobals)
-
 	for _, p := range s.partitions {
 		snapshot, err := snapshot(p.ID, s.init, s.logger)
 		if err != nil {
@@ -104,6 +102,16 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 			return nil, errors.Format(errors.StatusUnknownError, "init %s: %w", p.ID, err)
 		}
 	}
+
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			err = n.eventBus.Publish(events.DidBoot{})
+			if err != nil {
+				return nil, errors.Format(errors.StatusUnknownError, "broadcast did-boot to %s/%d: %w", p.ID, n.id, err)
+			}
+		}
+	}
+
 	return s, nil
 }
 
@@ -143,6 +151,20 @@ func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkIni
 			})
 		}
 		net.Bvns = append(net.Bvns, bvnInit)
+	}
+	return net
+}
+
+// LocalNetwork returns a SimpleNetwork with sequential IPs starting from the
+// base IP with the given base port.
+func LocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePort uint64) *accumulated.NetworkInit {
+	net := SimpleNetwork(name, bvnCount, nodeCount)
+	for _, bvn := range net.Bvns {
+		for _, node := range bvn.Nodes {
+			node.AdvertizeAddress = baseIP.String()
+			node.BasePort = basePort
+			baseIP[len(baseIP)-1]++
+		}
 	}
 	return net
 }
