@@ -8,6 +8,7 @@ package database
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
@@ -23,6 +24,7 @@ type Chain2 struct {
 	key      record.Key
 	inner    *managed.Chain
 	index    *Chain2
+	index_mu sync.RWMutex
 	labelfmt string
 }
 
@@ -55,7 +57,7 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Ke
 	}
 
 	c := managed.NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt, labelfmt)
-	return &Chain2{account, key, c, nil, labelfmt}
+	return &Chain2{account, key, c, nil, sync.RWMutex{}, labelfmt}
 }
 
 // Account returns the URL of the account.
@@ -125,11 +127,11 @@ func (c *Chain2) Index() *Chain2 {
 	if c.Type() == managed.ChainTypeIndex {
 		panic("cannot index an index chain")
 	}
-	return getOrCreateField(&c.index, func() *Chain2 {
+	return getOrCreateField(&c.index, &c.index_mu, func() *Chain2 {
 		key := c.key.Append("Index")
 		label := c.labelfmt + " index"
 		m := managed.NewChain(c.account.logger.L, c.account.store, key, markPower, managed.ChainTypeIndex, c.Name()+"-index", label)
-		return &Chain2{c.account, key, m, nil, label}
+		return &Chain2{c.account, key, m, nil, sync.RWMutex{}, label}
 	})
 }
 

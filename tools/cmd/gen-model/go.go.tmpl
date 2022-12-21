@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -108,6 +109,7 @@ type {{.FullName}} struct {
 	{{- end}}
 	{{  range .Attributes}}
 	{{lower .Name}} {{fieldType .}}
+	{{lower .Name}}_mu sync.RWMutex
 	{{- end}}
 }
 
@@ -130,9 +132,9 @@ func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType
 {{if not .OmitAccessor}}
 func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) *{{recordType .}} {
 	{{- if parameterized .}}
-	return getOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}),
+	return getOrCreateMap(&c.{{lower .Name}}, &c.{{lower .Name}}_mu, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}),
 	{{- else}}
-	return getOrCreateField(&c.{{lower .Name}},
+	return getOrCreateField(&c.{{lower .Name}}, &c.{{lower .Name}}_mu,
 	{{- end -}}
 
 	func() *{{recordType .}} {
@@ -303,7 +305,7 @@ func (c *{{.FullName}}) {{if .CustomCommit}}base{{end}}Commit() error {
 {{template "entity" .}}
 {{end}}
 
-func getOrCreateField[T any](ptr **T, create func() *T) *T {
+func getOrCreateField[T any](ptr **T, mu *sync.RWMutex, create func() *T) *T {
 	if *ptr != nil {
 		return *ptr
 	}
@@ -312,7 +314,7 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
+func getOrCreateMap[T any, K comparable](ptr *map[K]T, mu *sync.RWMutex, key K, create func() T) T {
 	if *ptr == nil {
 		*ptr = map[K]T{}
 	}
