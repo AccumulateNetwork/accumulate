@@ -67,6 +67,13 @@ var BytesWrapper = &wrapperFuncs[[]byte]{
 	unmarshal: encoding.UnmarshalBytes,
 }
 
+// RawWrapper defines un/marshalling functions for raw byte slice fields.
+var RawWrapper = &wrapperFuncs[[]byte]{
+	copy:      func(v []byte) []byte { u := make([]byte, len(v)); copy(u, v); return u },
+	marshal:   func(value []byte) ([]byte, error) { return value, nil },
+	unmarshal: func(data []byte) ([]byte, error) { return data, nil },
+}
+
 // HashWrapper defines un/marshalling functions for hash fields.
 var HashWrapper = &wrapperFuncs[[32]byte]{
 	copy:      copyValue[[32]byte],

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -284,9 +284,9 @@ func TestUpdateValue(t *testing.T) {
 
 func TestMarshalByteBlock(t *testing.T) {
 	bpt1 := LoadBptCnt(1, 100000) // Get a loaded Bpt
-	rootData1 := bpt1.Marshal()
+	rootData1, _ := bpt1.MarshalBinary()
 	bpt2 := NewBPTManager(nil).Bpt // Get an empty Bpt
-	bpt2.UnMarshal(rootData1)
+	_ = bpt2.UnmarshalBinary(rootData1)
 	data1 := bpt1.MarshalByteBlock(bpt1.GetRoot())
 	bpt2.UnMarshalByteBlock(bpt2.GetRoot(), data1)
 	data2 := bpt2.MarshalByteBlock(bpt2.GetRoot())
@@ -329,13 +329,13 @@ var size, count []int
 var blockSize []int
 var blockCnt []int
 var total int64
-var highest int
+var highest uint64
 
 // Find a given node in the Merkle Tree
 func walk(bpt *BPT, node *BptNode) {
 	if node.Height >= highest {
 		highest = node.Height
-		if highest >= len(size) {
+		if highest >= uint64(len(size)) {
 			size = append(size, 0)
 			count = append(count, 0)
 			blockSize = append(blockSize, 0)
@@ -447,7 +447,7 @@ func BenchmarkBPT_Update2(b *testing.B) {
 func TestNodeKey(t *testing.T) {
 	r := common.RandHash{}
 	h := r.NextA()
-	for i := 0; i < 254; i++ {
+	for i := uint64(0); i < 254; i++ {
 		nh, ok := GetNodeKey(i, h)
 		//fmt.Printf("%08b %08b %08b\n",nh[0],nh[1],nh[2])
 		require.True(t, ok, "should have a NodeKey")

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -24,7 +24,7 @@ func (b *BPT) Print(entry Entry) {
 		node := entry.(*BptNode)
 		fmt.Print("L ")
 		b.Print(node.Left)
-		for i := 0; i < node.Height; i++ {
+		for i := uint64(0); i < node.Height; i++ {
 			fmt.Print("  ")
 		}
 		fmt.Print("R ")

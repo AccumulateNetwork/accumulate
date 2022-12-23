@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -35,7 +35,7 @@ package pmt
 // to create a node.  In other words, not too much of an issue.
 
 type BptNode struct {
-	Height  int      // Root is 0. above root is 1. Above above root is 2, etc.
+	Height  uint64   // Root is 0. above root is 1. Above above root is 2, etc.
 	NodeKey [32]byte // Byte Block Key.
 	Hash    [32]byte // This is the summary hash for the tree
 	Left    Entry    // The hash of the child Left and up the tree, bit is zero
@@ -110,7 +110,7 @@ func (n *BptNode) Marshal() (data []byte) {
 func (n *BptNode) UnMarshal(data []byte) []byte {
 	keySlice, data := data[:32], data[32:]
 	copy(n.NodeKey[:], keySlice)
-	n.Height, data = int(data[0]), data[1:]
+	n.Height, data = uint64(data[0]), data[1:]
 	hashSlice, data := data[:32], data[32:]
 	copy(n.Hash[:], hashSlice)
 	return data

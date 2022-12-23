@@ -47,16 +47,17 @@ c.key
 .Append({{template "keyArgs" .}})
 {{- end}}
 
-{{  define "keyArgs"}}
+{{  define "keyArgs" -}}
+{{- if not .OmitKey -}}
+"{{if .Key}}{{.Key}}{{else}}{{.Name}}{{end}}",
+{{- end}}
 {{- if parameterized . -}}
-"{{.Name}}", {{range .GetParameters}}{{lower .Name}}, {{end}}
-{{- else -}}
-"{{.Name}}"
+{{range .GetParameters}}{{lower .Name}}, {{end}}
 {{- end}}
 {{- end}}
 
 {{  define "encoder" -}}
-{{- if .Wrapped -}}
+{{- if wrapped . -}}
 record.Wrapped(record.{{title .DataType.String}}Wrapper)
 {{- else if .Union -}}
 record.Union({{unionMethod . "Unmarshal"}})
@@ -68,7 +69,7 @@ record.Struct[{{stateType . true}}]()
 {{  define "newValue"}}
 {{- if .IsSet}}
 return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}},
-	{{- if .Wrapped -}}
+	{{- if wrapped . -}}
 	record.Compare{{title .DataType.String}}
 	{{- else if .Comparator -}}
 	{{.Comparator}}
@@ -84,7 +85,7 @@ return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "va
 {{- end}}
 
 {{define "newCounted"}}
-{{- if .Wrapped}}
+{{- if wrapped .}}
 return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, record.WrappedFactory(record.{{title .DataType.String}}Wrapper))
 {{- else if .Union}}
 return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, record.UnionFactory({{unionMethod . "Unmarshal"}}))
@@ -170,6 +171,12 @@ func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 {{end}}
 {{end}}
 
+{{if not .OmitResolve}}
+{{range .Attributes}}
+	{{if .OmitKey}}
+		{{error "%s.omitResolve is false but %[1]s.%s.omitKey is true" (fullName $c) .Name}}
+	{{end}}
+{{end}}
 func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 0 {
 		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
@@ -177,7 +184,7 @@ func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key)
 
 	switch key[0] {
 	{{- range .Attributes}}
-	case "{{.Name}}":
+	case "{{if .Key}}{{.Key}}{{else}}{{.Name}}{{end}}":
 		{{- if parameterized .}}
 		if len(key) < {{add 1 (parameterCount .)}} {
 			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
@@ -198,7 +205,9 @@ func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key)
 		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
 	}
 }
+{{end}}
 
+{{if not .OmitIsDirty}}
 func (c *{{fullName .}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 	if c == nil {
 		return false
@@ -220,6 +229,7 @@ func (c *{{fullName .}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 
 	return false
 }
+{{end}}
 
 {{if hasChains .}}
 {{/*if not .Root}}
@@ -305,6 +315,7 @@ func (c *{{fullName .}}) WalkChanges(fn record.WalkFunc) error {
 	return err
 }
 
+{{if not .OmitCommit}}
 func (c *{{fullName .}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	if c == nil {
 		return nil
@@ -323,6 +334,7 @@ func (c *{{fullName .}}) {{if .CustomCommit}}base{{end}}Commit() error {
 
 	return err
 }
+{{end}}
 
 {{range .Attributes}}
 {{if .Type.IsEntity}}

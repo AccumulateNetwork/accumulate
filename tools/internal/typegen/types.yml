@@ -1,8 +1,9 @@
-EntityRecord:
+RecordFields:
   non-binary: true
   incomparable: true
-  union: { type: record }
   fields:
+    - name: Name
+      type: string
     - name: Parent
       type: EntityRecord
       pointer: true
@@ -12,7 +13,24 @@ EntityRecord:
       type: bool
     - name: Private
       type: bool
-    - name: Name
+    - name: Parameters
+      type: Field
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+    - name: Key
+      type: string
+    - name: OmitKey
+      type: bool
+
+EntityRecord:
+  non-binary: true
+  incomparable: true
+  union: { type: record }
+  fields:
+    - type: RecordFields
+      marshal-as: reference
+    - name: CustomFullName
       type: string
     - name: Fields
       type: Field
@@ -25,11 +43,12 @@ EntityRecord:
       type: bool
     - name: CustomIsDirty
       type: bool
-    - name: Parameters
-      type: Field
-      pointer: true
-      marshal-as: reference
-      repeatable: true
+    - name: OmitCommit
+      type: bool
+    - name: OmitResolve
+      type: bool
+    - name: OmitIsDirty
+      type: bool
     - name: Root
       type: bool
     - name: Interface
@@ -44,22 +63,8 @@ ChainRecord:
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
-    - name: Parameters
-      type: Field
-      pointer: true
+    - type: RecordFields
       marshal-as: reference
-      repeatable: true
     - name: ChainType
       type: string
 
@@ -68,22 +73,8 @@ StateRecord:
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
-    - name: Parameters
-      type: Field
-      pointer: true
+    - type: RecordFields
       marshal-as: reference
-      repeatable: true
     - name: DataType
       type: FieldType
       marshal-as: reference
@@ -104,22 +95,8 @@ IndexRecord:
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
-    - name: Parameters
-      type: Field
-      pointer: true
+    - type: RecordFields
       marshal-as: reference
-      repeatable: true
     - name: DataType
       type: FieldType
       marshal-as: reference
@@ -140,24 +117,10 @@ OtherRecord:
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
+    - type: RecordFields
+      marshal-as: reference
     - name: DataType
       type: string
-    - name: Parameters
-      type: Field
-      pointer: true
-      marshal-as: reference
-      repeatable: true
     - name: Pointer
       type: bool
     - name: HasChains
