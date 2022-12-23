@@ -1,0 +1,22 @@
+- name: BPT
+  type: entity
+  omitResolve: true
+  customCommit: true
+  fields:
+  - name: power
+    type: uint
+  - name: mask
+    type: uint
+  attributes:
+  - name: State
+    type: state
+    key: Root
+    private: true
+    emptyIfMissing: true
+    dataType: RootState
+    pointer: true
+  - name: RootNode
+    type: other
+    dataType: Node
+    private: true
+    omitAccessor: true

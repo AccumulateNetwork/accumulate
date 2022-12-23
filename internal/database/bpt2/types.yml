@@ -1,0 +1,38 @@
+RootState:
+  non-binary: true
+  fields:
+    - name: RootHash
+      type: hash
+    - name: MaxHeight
+      type: uint
+    - name: Power
+      type: uint
+    - name: Mask
+      type: uint
+
+NilEntry:
+  union: { type: entry }
+  non-binary: true
+  fields:
+    - name: parent
+      type: Node
+      pointer: true
+      marshal-as: none
+
+Value:
+  union: { type: entry }
+  non-binary: true
+  fields:
+    - name: Key
+      type: hash
+    - name: Hash
+      type: hash
+    - name: parent
+      type: Node
+      pointer: true
+      marshal-as: none
+
+NotLoaded:
+  union: { type: entry }
+  non-binary: true
+  fields: ~

@@ -1,0 +1,13 @@
+EntryType:
+  Nil:
+    value: 1
+    description: is the type of a nil entry
+  Node:
+    value: 2
+    description: is the type of a [Node]
+  Value:
+    value: 3
+    description: is the type of a [Value]
+  NotLoaded:
+    value: 4
+    description: indicates an [Entry] not yet loaded

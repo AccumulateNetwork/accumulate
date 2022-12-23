@@ -38,6 +38,9 @@ var goFuncs = template.FuncMap{
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
+	"error": func(format string, args ...any) (string, error) {
+		return "", fmt.Errorf(format, args...)
+	},
 }
 
 func fullName(r typegen.Record) string {

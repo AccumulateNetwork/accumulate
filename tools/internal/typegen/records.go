@@ -36,25 +36,14 @@ func (t RecordType) IsState() bool  { return t == RecordTypeState }
 func (t RecordType) IsIndex() bool  { return t == RecordTypeIndex }
 func (t RecordType) IsOther() bool  { return t == RecordTypeOther }
 
-func (r *EntityRecord) GetName() string { return r.Name }
-func (r *ChainRecord) GetName() string  { return r.Name }
-func (r *StateRecord) GetName() string  { return r.Name }
-func (r *IndexRecord) GetName() string  { return r.Name }
-func (r *OtherRecord) GetName() string  { return r.Name }
-
-func (r *EntityRecord) GetParameters() []*Field { return r.Parameters }
-func (r *ChainRecord) GetParameters() []*Field  { return r.Parameters }
-func (r *StateRecord) GetParameters() []*Field  { return r.Parameters }
-func (r *IndexRecord) GetParameters() []*Field  { return r.Parameters }
-func (r *OtherRecord) GetParameters() []*Field  { return r.Parameters }
-
-func (r *EntityRecord) GetParent() *EntityRecord { return r.Parent }
-func (r *ChainRecord) GetParent() *EntityRecord  { return r.Parent }
-func (r *StateRecord) GetParent() *EntityRecord  { return r.Parent }
-func (r *IndexRecord) GetParent() *EntityRecord  { return r.Parent }
-func (r *OtherRecord) GetParent() *EntityRecord  { return r.Parent }
+func (r *RecordFields) GetName() string          { return r.Name }
+func (r *RecordFields) GetParameters() []*Field  { return r.Parameters }
+func (r *RecordFields) GetParent() *EntityRecord { return r.Parent }
 
 func (r *EntityRecord) FullName() string {
+	if r.CustomFullName != "" {
+		return r.CustomFullName
+	}
 	if r.Root {
 		return r.Name
 	}
