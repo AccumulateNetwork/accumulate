@@ -38,6 +38,7 @@ import (
 )
 
 {{range .Types}}
+{{  if not .Undeclared}}
 {{-   if .Description}}
 // {{.Name}} {{.Description}}.
 {{-   end}}
@@ -57,6 +58,7 @@ type {{.FullName true true}} struct {
 	{{- end}}
 	{{  if .IsBinary}}extraData []byte{{end}}
 }
+{{  end}}
 {{end}}
 
 {{ $lud := .LongUnionDiscriminator }}

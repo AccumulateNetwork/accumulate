@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -49,10 +49,11 @@ func TestSaveState(t *testing.T) {
 	}
 	err = bptManager.Bpt.Update()
 	require.NoError(t, err, "fail")
-	err = bptManager.DBManager.Commit()
+	err = storeTx.Commit()
 	require.NoError(t, err, "fail")
 	storeTx = BDB.Begin(true)
-	bpt.Manager.DBManager = storeTx
+	bptManager = NewBPTManager(storeTx)
+	bpt = bptManager.Bpt
 
 	f, err := os.Create(filepath.Join(DirName, "SnapShot"))
 	require.NoError(t, err)

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -52,8 +52,8 @@ var _ = PrintNode // Avoids highlighting that PrintNode isn't used.  It is usefu
 // PrintNode
 // Debugging aid that dumps the BPT tree to allow inspection of the BPT by the
 // developer.  Too foamy to use all the time.
-func PrintNode(h int, e Entry) {
-	for i := 0; i < h; i++ {
+func PrintNode(h uint64, e Entry) {
+	for i := uint64(0); i < h; i++ {
 		print("_")
 	}
 	switch {

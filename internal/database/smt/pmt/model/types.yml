@@ -1,0 +1,11 @@
+RootState:
+  non-binary: true
+  fields:
+    - name: RootHash
+      type: hash
+    - name: MaxHeight
+      type: uint
+    - name: Power
+      type: uint
+    - name: Mask
+      type: uint

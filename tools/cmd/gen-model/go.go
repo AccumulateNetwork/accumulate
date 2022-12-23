@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -34,10 +34,26 @@ var goFuncs = template.FuncMap{
 	"keyToString":     keyToString,
 	"unionMethod":     unionMethod,
 	"chainName":       chainName,
+	"wrapped":         wrapped,
 	"chainNameFormat": func(r typegen.Record) string { s, _ := chainNameFormat(r); return s },
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
+	"error": func(format string, args ...any) (string, error) {
+		return "", fmt.Errorf(format, args...)
+	},
+}
+
+func wrapped(r typegen.Record) bool {
+	vr, ok := r.(typegen.ValueRecord)
+	if !ok {
+		return false
+	}
+	if vr.Wrapped() {
+		return true
+	}
+	typ := vr.GetDataType()
+	return typ.Code == typegen.TypeCodeUnknown && typ.Name == "raw"
 }
 
 func fullName(r typegen.Record) string {
@@ -110,11 +126,15 @@ func unionMethod(r typegen.ValueRecord, name string) string {
 }
 
 func stateType(r typegen.ValueRecord, forNew bool) string {
-	typ := r.GetDataType().GoType()
-	if !forNew && r.IsPointer() {
-		typ = "*" + typ
+	typ := r.GetDataType()
+	s := typ.GoType()
+	if typ.Code == typegen.TypeCodeUnknown && typ.Name == "raw" {
+		s = "[]byte"
 	}
-	return typ
+	if !forNew && r.IsPointer() {
+		s = "*" + s
+	}
+	return s
 }
 
 func parameterType(p *typegen.Field) string {

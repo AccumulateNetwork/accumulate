@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"sort"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt/model"
 )
 
 // BPT
@@ -23,13 +25,13 @@ import (
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
-	RootHash  [32]byte              // Root hash of the BPT
-	Root      *BptNode              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
-	DirtyMap  map[[32]byte]*BptNode // Map of dirty nodes.
-	MaxHeight int                   // Highest height of any node in the BPT
-	Power     int                   // Power
-	Mask      int                   // Mask used to detect Byte Block boundaries
-	Manager   *Manager              // Pointer to the manager for access to the database
+	model.RootState //                Root hash of the BPT
+	//                                Highest height of any node in the BPT
+	//                                Power
+	//                                Mask used to detect Byte Block boundaries
+	Root     *BptNode              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
+	DirtyMap map[[32]byte]*BptNode // Map of dirty nodes.
+	Manager  *Manager              // Pointer to the manager for access to the database
 }
 
 // GetRoot
@@ -39,7 +41,7 @@ func (b *BPT) GetRoot() (root *BptNode) {
 		rootNodeKey, _ := GetNodeKey(0, [32]byte{}) // Get the root Node Key
 		b.Root = new(BptNode)                       // Allocate a Root Node
 		if b.Manager != nil {                       // If we have a manager, pull from the DB
-			if data, err := b.Manager.DBManager.Get(kBpt.Append(rootNodeKey)); err == nil {
+			if data, err := b.Manager.model.Block(rootNodeKey).Get(); err == nil {
 				b.Root.UnMarshal(data) //              Unmarshal what we get from the DB
 			}
 		}
@@ -67,7 +69,12 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 	return true
 }
 
-// Marshal
+func (b *BPT) load(s *model.RootState) {
+	b.DirtyMap = make(map[[32]byte]*BptNode)
+	b.RootState = *s
+}
+
+/*// Marshal
 // Must have the MaxNodeID at the very least to be able to add nodes
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
@@ -89,7 +96,7 @@ func (b *BPT) UnMarshal(data []byte) (newData []byte) {
 	copy(b.RootHash[:], data[:32])
 	data = data[:32]
 	return data
-}
+}*/
 
 // NewNode
 // Allocate a new Node for use with this BPT.  Note that various bookkeeping
@@ -312,6 +319,10 @@ func (b *BPT) Update() error {
 		if err != nil {
 			return err
 		}
+		err = b.Manager.model.Commit()
+		if err != nil {
+			return err
+		}
 	} //
 	b.RootHash = b.GetRoot().Hash //                        Set the root hash (so we don't have to load Root)
 	return nil
@@ -436,7 +447,7 @@ func (b *BPT) UnMarshalEntry(parent *BptNode, data []byte) (Entry, []byte) { //
 // for debugging purposes.
 // We return the key with height number of bits followed by a one end bit followed by all bits clear
 // Heights greater than 255 (0-254) bits are not supported.
-func GetNodeKey(height int, key [32]byte) (nodeKey [32]byte, ok bool) {
+func GetNodeKey(height uint64, key [32]byte) (nodeKey [32]byte, ok bool) {
 	if height > 254 { //                         Limit is 254 because one bit marks the end of the nodeKey
 		return nodeKey, false //                Return a blank nodeKey and flag it didn't work
 	} //
@@ -455,9 +466,9 @@ func GetNodeKey(height int, key [32]byte) (nodeKey [32]byte, ok bool) {
 // GetHtKey
 // Extract the height and Key fragment from a nodeKey.  The reverse operation of GetNodeKey
 // Mostly useful for debugging and testing
-func GetHtKey(nodeKey [32]byte) (height int, key [32]byte, ok bool) {
+func GetHtKey(nodeKey [32]byte) (height uint64, key [32]byte, ok bool) {
 	copy(key[:], nodeKey[:])
-	byteIdx := 0                             // Calculate the trailing bytes of zero
+	var byteIdx uint64 = 0                   // Calculate the trailing bytes of zero
 	for i := 31; i > 0 && key[i] == 0; i-- { // Look at byte 31 back to 0
 		byteIdx++
 	}
@@ -467,7 +478,7 @@ func GetHtKey(nodeKey [32]byte) (height int, key [32]byte, ok bool) {
 	if lastByte == 0 {
 		return height, key, false
 	}
-	bit := 1
+	var bit uint64 = 1
 	bitMask := byte(1)
 	for lastByte&bitMask == 0 {
 		bit++
@@ -482,7 +493,7 @@ func GetHtKey(nodeKey [32]byte) (height int, key [32]byte, ok bool) {
 func GetChildrenNodeKeys(nodeKey [32]byte) (left, right [32]byte, ok bool) {
 	copy(left[:], nodeKey[:])           // left is the same as nodeKey with the last bit set
 	copy(right[:], nodeKey[:])          // right is the same as nodeKey with the last bit clear
-	byteIdx := 0                        // Calculate the trailing bytes of zero
+	var byteIdx uint64 = 0              // Calculate the trailing bytes of zero
 	for i := 31; nodeKey[i] == 0; i-- { // Look at byte 31 back to 0
 		byteIdx++ //                       Count how many trailing bytes are zero
 	}
@@ -492,7 +503,7 @@ func GetChildrenNodeKeys(nodeKey [32]byte) (left, right [32]byte, ok bool) {
 	if lastByte == 0 {           //        If that is zero (i.e. no byte has a bit set)
 		return left, right, false //         this is an invalid nodeKey
 	}
-	bit := 1                    //         Find the last bit set
+	var bit uint64 = 1          //         Find the last bit set
 	bitMask := byte(1)          //
 	for lastByte&bitMask == 0 { //         For every zero low order bit
 		bit++         //                   Increment count of bits clear

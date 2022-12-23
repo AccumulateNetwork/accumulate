@@ -228,6 +228,8 @@ type Type struct {
 	CustomIsValid bool `yaml:"custom-is-valid"`
 	// CustomEqual specifies the type defines a custom Equal() error method.
 	CustomEqual bool `yaml:"custom-equal"`
+	// Undeclared specifies the type uses a custom type declaration.
+	Undeclared bool
 	// Fields is a list of fields.
 	Fields []*Field
 	// Embeddings is a list of embedded types.

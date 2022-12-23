@@ -1,0 +1,16 @@
+- name: BPT
+  type: entity
+  omitResolve: true
+  attributes:
+  - name: State
+    type: state
+    key: Root
+    dataType: RootState
+    pointer: true
+  - name: Block
+    parameters:
+    - name: Key
+      type: hash
+    omitKey: true
+    type: state
+    dataType: raw
