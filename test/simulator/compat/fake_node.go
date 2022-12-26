@@ -202,7 +202,10 @@ func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, t
 
 	var cond []harness.Condition
 	for _, delivery := range deliveries {
-		status := n.H.Submit(delivery)
+		status := n.H.Submit(&protocol.Envelope{
+			Transaction: []*protocol.Transaction{delivery.Transaction},
+			Signatures:  delivery.Signatures,
+		})
 		if status.Error == nil {
 			cond = append(cond, n.conditionFor(status.TxID))
 		} else {

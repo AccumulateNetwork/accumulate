@@ -42,7 +42,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	}
 
 	errs := x.mainDispatcher.Send(context.Background())
-	x.Background(func() {
+	x.BackgroundTaskLauncher(func() {
 		for err := range errs {
 			switch err := err.(type) {
 			case *protocol.TransactionStatusError:

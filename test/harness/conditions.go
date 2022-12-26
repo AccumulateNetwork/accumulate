@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -48,6 +48,12 @@ func (c condTxn) Succeeds() Condition { return c.status(succeeds) }
 // transaction failed (and fails otherwise).
 func (c condTxn) Fails() Condition { return c.status(fails) }
 
+// Fails waits until the transaction has been delivered and succeeds if the
+// transaction failed with the given code (and fails otherwise).
+func (c condTxn) FailsWithCode(code errors.Status) Condition {
+	return c.status(failsWithCode(code))
+}
+
 // IsDelivered waits until the produced transaction(s) have been delivered
 // (executed, whether success or failure).
 func (c condProduced) IsDelivered() Condition { return c.status(isDelivered) }
@@ -65,6 +71,13 @@ func (c condProduced) Succeeds() Condition { return c.status(succeeds) }
 // succeeds if the transaction(s) failed (and fails otherwise).
 func (c condProduced) Fails() Condition { return c.status(fails) }
 
+// Fails waits until the produced transaction(s) have been delivered and
+// succeeds if the transaction(s) failed with the given code (and fails
+// otherwise).
+func (c condProduced) FailsWithCode(code errors.Status) Condition {
+	return c.status(failsWithCode(code))
+}
+
 // IsDelivered waits until the refund transaction(s) have been delivered
 // (executed, whether success or failure).
 func (c condRefund) IsDelivered() Condition { return c.status(isDelivered) }
@@ -81,6 +94,12 @@ func (c condRefund) Succeeds() Condition { return c.status(succeeds) }
 // Fails waits until the refund transaction(s) have been delivered and succeeds
 // if the transaction(s) failed (and fails otherwise).
 func (c condRefund) Fails() Condition { return c.status(fails) }
+
+// Fails waits until the refund transaction(s) have been delivered and succeeds
+// if the transaction(s) failed with the given code (and fails otherwise).
+func (c condRefund) FailsWithCode(code errors.Status) Condition {
+	return c.status(failsWithCode(code))
+}
 
 type condTxn struct{ id *url.TxID }
 type condProduced struct{ id *url.TxID }
@@ -328,4 +347,34 @@ func fails(h *Harness, c any, status *protocol.TransactionStatus) bool {
 		}
 	}
 	return true
+}
+
+func failsWithCode(code errors.Status) func(h *Harness, c any, status *protocol.TransactionStatus) bool {
+	return func(h *Harness, c any, status *protocol.TransactionStatus) bool {
+		h.TB.Helper()
+
+		if status.Code != 0 {
+			print("")
+		}
+
+		// Wait for delivery
+		if !status.Delivered() {
+			return false
+		}
+
+		// Must be failure
+		if !status.Failed() {
+			switch c.(type) {
+			case condProduced:
+				h.TB.Fatal("Expected produced transaction to fail")
+			default:
+				h.TB.Fatal("Expected transaction to fail")
+			}
+		}
+
+		if status.Code != code {
+			h.TB.Fatalf("Expected code %v, got %v", code, status.Code)
+		}
+		return true
+	}
 }

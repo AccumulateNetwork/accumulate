@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,17 +12,17 @@ import (
 	"crypto/sha256"
 
 	"github.com/tendermint/tendermint/libs/log"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/core/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type executeFunc func([]*chain.Delivery) []*protocol.TransactionStatus
+type executeFunc func([]messaging.Message) []*protocol.TransactionStatus
 
-func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*chain.Delivery, []*protocol.TransactionStatus, []byte, error) {
+func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]messaging.Message, []*protocol.TransactionStatus, []byte, error) {
 	hash := sha256.Sum256(raw)
 	envelope := new(protocol.Envelope)
 	err := envelope.UnmarshalBinary(raw)
@@ -31,7 +31,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		return nil, nil, nil, errors.UnknownError.WithFormat("decoding envelopes: %w", err)
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	deliveries, err := messaging.NormalizeLegacy(envelope)
 	if err != nil {
 		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
 		return nil, nil, nil, errors.UnknownError.Wrap(err)
@@ -50,14 +50,14 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	return deliveries, results, rset, nil
 }
 
-func checkTx(exec *Executor, batch *database.Batch) executeFunc {
-	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ValidateEnvelopeSet(batch, deliveries, nil)
+func checkTx(exec execute.Executor, batch *database.Batch) executeFunc {
+	return func(deliveries []messaging.Message) []*protocol.TransactionStatus {
+		return ValidateEnvelopeSet(exec, batch, deliveries)
 	}
 }
 
-func deliverTx(exec *Executor, block *Block) executeFunc {
-	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ExecuteEnvelopeSet(block, deliveries, nil)
+func deliverTx(exec execute.Executor, block execute.Block) executeFunc {
+	return func(deliveries []messaging.Message) []*protocol.TransactionStatus {
+		return ExecuteEnvelopeSet(block, deliveries)
 	}
 }
