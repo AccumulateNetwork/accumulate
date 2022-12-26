@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	"io"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
@@ -1022,4 +1023,16 @@ func (s *InternalSignature) Initiator() (hash.Hasher, error) {
 // GetVote returns VoteTypeAccept.
 func (s *InternalSignature) GetVote() VoteType {
 	return VoteTypeAccept
+}
+
+func UnmarshalKeySignatureFrom(rd io.Reader) (KeySignature, error) {
+	s, err := UnmarshalSignatureFrom(rd)
+	if err != nil {
+		return nil, err
+	}
+	ks, ok := s.(KeySignature)
+	if !ok {
+		return nil, errors.Conflict.WithFormat("%v is not a key signature", s.Type())
+	}
+	return ks, nil
 }

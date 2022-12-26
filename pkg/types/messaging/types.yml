@@ -1,0 +1,54 @@
+LegacyMessage:
+  union: { type: message }
+  fields:
+    - name: Signatures
+      type: protocol.Signature
+      marshal-as: union
+      repeatable: true
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+
+UserTransaction:
+  union: { type: message }
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+
+SyntheticTransaction:
+  union: { type: message }
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Proof
+      type: merkle.Receipt
+      marshal-as: reference
+
+UserSignature:
+  union: { type: message }
+  fields:
+    - name: Signature
+      type: protocol.KeySignature
+      marshal-as: union
+
+ValidatorSignature:
+  union: { type: message }
+  fields:
+    - name: Signature
+      type: protocol.KeySignature
+      marshal-as: union
+
+AuthoritySignature:
+  union: { type: message }
+  fields:
+    - name: Signature
+      type: protocol.Signature
+      marshal-as: union
+    - name: Proof
+      type: merkle.Receipt
+      marshal-as: reference

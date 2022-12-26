@@ -29,6 +29,17 @@ TransactionHeader:
     - name: Metadata
       type: bytes
       optional: true
+    - name: Source
+      type: url
+      pointer: true
+      optional: true
+    - name: Destination
+      type: url
+      pointer: true
+      optional: true
+    - name: SequenceNumber
+      type: uint
+      optional: true
 
 Transaction:
   fields:
