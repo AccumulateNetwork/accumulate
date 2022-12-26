@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,10 +13,10 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -117,7 +117,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	messages, err := messaging.NormalizeLegacy(envelope)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("submit: %w", err)
 	}
@@ -125,7 +125,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 	p.mu.Lock()
 	if p.routerSubmitHook != nil {
 		var keep bool
-		deliveries, keep = p.routerSubmitHook(deliveries)
+		messages, keep = p.routerSubmitHook(messages)
 		if !keep {
 			p.routerSubmitHook = nil
 		}
@@ -133,15 +133,15 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 	p.mu.Unlock()
 
 	resp := new(routing.ResponseSubmit)
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, delivery := range deliveries {
-		results[i], err = p.Submit(delivery, pretend)
+	results := make([]*protocol.TransactionStatus, len(messages))
+	for i, message := range messages {
+		results[i], err = p.Submit(message, pretend)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 
 		// If a user transaction fails, the batch fails
-		if results[i].Failed() && deliveries[i].Transaction.Body.Type().IsUser() {
+		if results[i].Failed() && message.(*messaging.LegacyMessage).Transaction.Body.Type().IsUser() {
 			resp.Code = uint32(protocol.ErrorCodeUnknownError)
 			resp.Log = "One or more user transactions failed"
 		}

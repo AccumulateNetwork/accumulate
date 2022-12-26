@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -104,20 +103,20 @@ func (h *Harness) StepUntil(conditions ...Condition) {
 	}
 }
 
-// Submit submits a delivery and returns the status.
-func (h *Harness) Submit(delivery *chain.Delivery) *protocol.TransactionStatus {
+// Submit submits an envelope and returns the status.
+func (h *Harness) Submit(envelope *protocol.Envelope) *protocol.TransactionStatus {
 	h.TB.Helper()
-	subs, err := h.services.Submit(context.Background(), &protocol.Envelope{Transaction: []*protocol.Transaction{delivery.Transaction}, Signatures: delivery.Signatures}, api.SubmitOptions{})
+	subs, err := h.services.Submit(context.Background(), envelope, api.SubmitOptions{})
 	require.NoError(h.TB, err)
 	require.Len(h.TB, subs, 1)
 	return subs[0].Status
 }
 
-// SubmitSuccessfully submits a delivery and returns the status.
+// SubmitSuccessfully submits an envelope and returns the status.
 // SubmitSuccessfully fails if the transaction failed.
-func (h *Harness) SubmitSuccessfully(delivery *chain.Delivery) *protocol.TransactionStatus {
+func (h *Harness) SubmitSuccessfully(envelope *protocol.Envelope) *protocol.TransactionStatus {
 	h.TB.Helper()
-	status := h.Submit(delivery)
+	status := h.Submit(envelope)
 	if status.Error != nil {
 		require.NoError(h.TB, status.Error)
 	}

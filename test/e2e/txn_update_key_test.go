@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -112,7 +112,7 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 			WithTimestampVar(&timestamp).
 			WithBody(&UpdateKey{NewKeyHash: hash(newKey[32:])}).
 			Initiate(SignatureTypeED25519, otherKey).
-			BuildDelivery())
+			Build())
 	sim.H.StepUntil(Txn(st.TxID).Fails())
 	st = sim.H.QueryTransaction(st.TxID, nil).Status
 	require.NotNil(t, st.Error)

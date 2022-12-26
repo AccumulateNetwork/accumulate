@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,6 +21,7 @@ func SignatureForHash(hash []byte) SignatureBuilder {
 
 func SignatureForTxID(txid *url.TxID) SignatureBuilder {
 	txn := new(protocol.Transaction)
+	txn.Header.Principal = txid.Account()
 	txn.Body = &protocol.RemoteTransaction{Hash: txid.Hash()}
 	return SignatureBuilder{transaction: txn}
 }
