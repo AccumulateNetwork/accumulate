@@ -51,8 +51,8 @@ type NetworkService_NetworkStatus_Call struct {
 }
 
 // NetworkStatus is a helper method to define mock.On call
-//  - ctx context.Context
-//  - opts api.NetworkStatusOptions
+//   - ctx context.Context
+//   - opts api.NetworkStatusOptions
 func (_e *NetworkService_Expecter) NetworkStatus(ctx interface{}, opts interface{}) *NetworkService_NetworkStatus_Call {
 	return &NetworkService_NetworkStatus_Call{Call: _e.mock.On("NetworkStatus", ctx, opts)}
 }

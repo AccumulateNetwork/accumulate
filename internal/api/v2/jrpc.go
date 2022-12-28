@@ -176,7 +176,7 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 		status.BvnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
 	}
 	status.BvnRootHash = *rootAnchor
-	status.LastDirectoryAnchorHeight = uint64(dnAnchorHeight)
+	status.LastDirectoryAnchorHeight = dnAnchorHeight
 	return status
 }
 

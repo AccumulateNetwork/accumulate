@@ -265,7 +265,7 @@ func (m *JrpcMethods) submit(ctx context.Context, partition string, env *protoco
 		res.Message = resp.Info
 		return res
 	case resp.Code != 0:
-		res.Message = "An unknown error occured"
+		res.Message = "An unknown error occurred"
 		return res
 	default:
 		return res
