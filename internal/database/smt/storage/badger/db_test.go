@@ -8,7 +8,6 @@ package badger
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -17,7 +16,7 @@ import (
 )
 
 func TestDatabase(t *testing.T) {
-	dname, e := ioutil.TempDir("", "sampledir")
+	dname, e := os.MkdirTemp("", "sampledir")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -61,7 +60,7 @@ func TestDatabase(t *testing.T) {
 }
 
 func TestDatabase2(t *testing.T) {
-	dname, e := ioutil.TempDir("", "sampledir")
+	dname, e := os.MkdirTemp("", "sampledir")
 	if e != nil {
 		t.Fatal(e)
 	}
