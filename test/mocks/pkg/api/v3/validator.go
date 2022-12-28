@@ -52,9 +52,9 @@ type Validator_Validate_Call struct {
 }
 
 // Validate is a helper method to define mock.On call
-//  - ctx context.Context
-//  - envelope *protocol.Envelope
-//  - opts api.ValidateOptions
+//   - ctx context.Context
+//   - envelope *protocol.Envelope
+//   - opts api.ValidateOptions
 func (_e *Validator_Expecter) Validate(ctx interface{}, envelope interface{}, opts interface{}) *Validator_Validate_Call {
 	return &Validator_Validate_Call{Call: _e.mock.On("Validate", ctx, envelope, opts)}
 }

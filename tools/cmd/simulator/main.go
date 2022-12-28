@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -152,7 +151,7 @@ func onWaitHook(sim *simulator.Simulator, h http.Handler) http.Handler {
 		}
 
 		// Copy the body
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		check(err)
 		r2 := *r
 		r = &r2

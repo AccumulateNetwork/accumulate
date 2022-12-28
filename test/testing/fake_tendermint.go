@@ -420,7 +420,7 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 		h := sha256.Sum256(tx)
 		return &ctypes.ResultBroadcastTx{
 			Code: uint32(protocol.ErrorCodeUnknownError),
-			Log:  "An unknown error occured",
+			Log:  "An unknown error occurred",
 			Hash: h[:],
 		}, nil
 	}
