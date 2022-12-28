@@ -61,7 +61,7 @@ func (a *KeyBook) GetAuth() *AccountAuth      { return &a.AccountAuth }
 func (a *TokenAccount) GetAuth() *AccountAuth { return &a.AccountAuth }
 func (a *TokenIssuer) GetAuth() *AccountAuth  { return &a.AccountAuth }
 
-// KeyBook is a backwards compatability shim for the API
+// KeyBook is a backwards compatibility shim for the API
 func (a *KeyPage) KeyBook() *url.URL {
 	if a.Url == nil {
 		return nil

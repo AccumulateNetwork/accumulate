@@ -51,8 +51,8 @@ type EventService_Subscribe_Call struct {
 }
 
 // Subscribe is a helper method to define mock.On call
-//  - ctx context.Context
-//  - opts api.SubscribeOptions
+//   - ctx context.Context
+//   - opts api.SubscribeOptions
 func (_e *EventService_Expecter) Subscribe(ctx interface{}, opts interface{}) *EventService_Subscribe_Call {
 	return &EventService_Subscribe_Call{Call: _e.mock.On("Subscribe", ctx, opts)}
 }

@@ -52,9 +52,9 @@ type Submitter_Submit_Call struct {
 }
 
 // Submit is a helper method to define mock.On call
-//  - ctx context.Context
-//  - envelope *protocol.Envelope
-//  - opts api.SubmitOptions
+//   - ctx context.Context
+//   - envelope *protocol.Envelope
+//   - opts api.SubmitOptions
 func (_e *Submitter_Expecter) Submit(ctx interface{}, envelope interface{}, opts interface{}) *Submitter_Submit_Call {
 	return &Submitter_Submit_Call{Call: _e.mock.On("Submit", ctx, envelope, opts)}
 }

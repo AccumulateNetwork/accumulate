@@ -31,8 +31,8 @@ type mockDialerPeers_adjustPriority_Call struct {
 }
 
 // adjustPriority is a helper method to define mock.On call
-//  - _a0 *peerState
-//  - delta int
+//   - _a0 *peerState
+//   - delta int
 func (_e *mockDialerPeers_Expecter) adjustPriority(_a0 interface{}, delta interface{}) *mockDialerPeers_adjustPriority_Call {
 	return &mockDialerPeers_adjustPriority_Call{Call: _e.mock.On("adjustPriority", _a0, delta)}
 }
@@ -78,7 +78,7 @@ type mockDialerPeers_getPeer_Call struct {
 }
 
 // getPeer is a helper method to define mock.On call
-//  - id peer.ID
+//   - id peer.ID
 func (_e *mockDialerPeers_Expecter) getPeer(id interface{}) *mockDialerPeers_getPeer_Call {
 	return &mockDialerPeers_getPeer_Call{Call: _e.mock.On("getPeer", id)}
 }
@@ -117,7 +117,7 @@ type mockDialerPeers_getPeers_Call struct {
 }
 
 // getPeers is a helper method to define mock.On call
-//  - part string
+//   - part string
 func (_e *mockDialerPeers_Expecter) getPeers(part interface{}) *mockDialerPeers_getPeers_Call {
 	return &mockDialerPeers_getPeers_Call{Call: _e.mock.On("getPeers", part)}
 }

@@ -45,7 +45,7 @@ type mockDialerHost_getSelf_Call struct {
 }
 
 // getSelf is a helper method to define mock.On call
-//  - part string
+//   - part string
 func (_e *mockDialerHost_Expecter) getSelf(part interface{}) *mockDialerHost_getSelf_Call {
 	return &mockDialerHost_getSelf_Call{Call: _e.mock.On("getSelf", part)}
 }
@@ -91,9 +91,9 @@ type mockDialerHost_newRpcStream_Call struct {
 }
 
 // newRpcStream is a helper method to define mock.On call
-//  - ctx context.Context
-//  - _a1 peer.ID
-//  - partition string
+//   - ctx context.Context
+//   - _a1 peer.ID
+//   - partition string
 func (_e *mockDialerHost_Expecter) newRpcStream(ctx interface{}, _a1 interface{}, partition interface{}) *mockDialerHost_newRpcStream_Call {
 	return &mockDialerHost_newRpcStream_Call{Call: _e.mock.On("newRpcStream", ctx, _a1, partition)}
 }

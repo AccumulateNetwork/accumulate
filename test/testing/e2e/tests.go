@@ -20,7 +20,7 @@ func (s *Suite) TestGenesis() {
 		acme := new(protocol.TokenIssuer)
 		s.dut.GetRecordAs(protocol.AcmeUrl().String(), acme)
 		s.Assert().Equal(protocol.AcmeUrl(), acme.Url)
-		s.Assert().Equal(protocol.ACME, string(acme.Symbol))
+		s.Assert().Equal(protocol.ACME, acme.Symbol)
 	})
 }
 
@@ -95,5 +95,5 @@ func (s *Suite) TestCreateLiteAccount() {
 
 	account = new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
-	s.Require().Equal(int64(3e5*protocol.AcmePrecision-total), account.Balance.Int64())
+	s.Require().Equal(3e5*protocol.AcmePrecision-total, account.Balance.Int64())
 }

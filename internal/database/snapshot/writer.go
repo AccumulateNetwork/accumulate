@@ -105,7 +105,7 @@ func (w *Writer) closeSection(s *SectionWriter) error {
 	}
 
 	// Seek to the header
-	_, err = w.file.Seek(int64(s.offset), io.SeekStart)
+	_, err = w.file.Seek(s.offset, io.SeekStart)
 	if err != nil {
 		return errors.UnknownError.WithFormat("seek to section header: %w", err)
 	}
