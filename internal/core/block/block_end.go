@@ -170,7 +170,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Index the root chain
 	rootIndexIndex, err := addIndexChainEntry(ledger.RootChain().Index(), &protocol.IndexEntry{
 		Source:     uint64(rootChain.Height() - 1),
-		BlockIndex: uint64(block.Index),
+		BlockIndex: block.Index,
 		BlockTime:  &block.Time,
 	})
 	if err != nil {
@@ -708,7 +708,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	// cannot be populated until the next block starts.
 	anchor := new(protocol.DirectoryAnchor)
 	anchor.Source = x.Describe.NodeUrl()
-	anchor.MinorBlockIndex = uint64(block.Index)
+	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 	anchor.Updates = systemLedger.PendingUpdates
 	if block.State.Anchor.ShouldOpenMajorBlock {
@@ -770,7 +770,7 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	// cannot be populated until the next block starts.
 	anchor := new(protocol.BlockValidatorAnchor)
 	anchor.Source = x.Describe.NodeUrl()
-	anchor.MinorBlockIndex = uint64(block.Index)
+	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 	anchor.AcmeBurnt = ledger.AcmeBurnt
 	return anchor, nil

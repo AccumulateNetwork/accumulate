@@ -60,7 +60,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
-		if uint64(ledgerState.Index) >= block.Index {
+		if ledgerState.Index >= block.Index {
 			panic(fmt.Errorf("current height is %d but the next block height is %d", ledgerState.Index, block.Index))
 		}
 
@@ -162,7 +162,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Did anything happen last block?
-	if uint64(ledger.Index) < block.Index-1 {
+	if ledger.Index < block.Index-1 {
 		x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
 		return nil
 	}

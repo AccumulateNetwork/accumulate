@@ -18,7 +18,7 @@ func TestHash(t *testing.T) {
 	hf := func(data []byte) Hash {
 		return Sha256(data)
 	}
-	h = hf([]byte(data))
+	h = hf(data)
 	h2 := h.Copy()
 	if !bytes.Equal(h[:], h2[:]) {
 		t.Error("copy failed")

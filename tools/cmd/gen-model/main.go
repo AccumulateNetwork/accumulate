@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -52,7 +51,7 @@ func check(err error) {
 }
 
 func run(_ *cobra.Command, args []string) {
-	data, err := ioutil.ReadFile(args[0])
+	data, err := os.ReadFile(args[0])
 	check(err)
 	var raw interface{}
 	check(yaml.Unmarshal(data, &raw))
