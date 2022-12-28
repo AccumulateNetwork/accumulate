@@ -68,7 +68,7 @@ func (q *queryFrontend) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, er
 		//nolint:staticcheck // legacy code
 		if res.Height >= 0 || len(res.ChainState) > 0 {
 			ms = new(MerkleState)
-			ms.Height = uint64(res.Height)
+			ms.Height = res.Height
 			ms.Roots = res.ChainState
 		}
 
@@ -84,11 +84,12 @@ func (q *queryFrontend) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, er
 		res := new(MultiResponse)
 		res.Type = "txHistory"
 		res.Items = make([]interface{}, len(txh.Transactions))
-		res.Start = uint64(txh.Start)
-		res.Count = uint64(txh.End - txh.Start)
-		res.Total = uint64(txh.Total)
+		res.Start = txh.Start
+		res.Count = txh.End - txh.Start
+		res.Total = txh.Total
 		for i, tx := range txh.Transactions {
-			queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status) //nolint:rangevarref
+			tx := tx // gosec G601
+			queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
 			if err != nil {
 				return nil, err
 			}
@@ -312,9 +313,10 @@ func (q *queryFrontend) QueryTxHistory(u *url.URL, pagination QueryPagination, s
 	res.Items = make([]interface{}, len(txh.Transactions))
 	res.Start = pagination.Start
 	res.Count = pagination.Count
-	res.Total = uint64(txh.Total)
+	res.Total = txh.Total
 	for i, tx := range txh.Transactions {
-		queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status) //nolint:rangevarref
+		tx := tx // gosec G601
+		queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
 		if err != nil {
 			return nil, err
 		}

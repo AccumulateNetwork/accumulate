@@ -328,7 +328,7 @@ func ParseLiteTokenAddress(u *url.URL) ([]byte, *url.URL, error) {
 	}
 	if err != nil || len(b) != 20 {
 		// Hostname is not hex or is the wrong length, therefore the URL is not lite
-		return nil, nil, nil
+		return nil, nil, nil //nolint:nilerr
 	}
 
 	i := strings.IndexRune(u.Path[1:], '/')
@@ -366,7 +366,7 @@ func AccountUrl(rootIdentity string, path ...string) *url.URL {
 // 3) Must have a (non-empty) hostname.
 // 4) Hostname must not include dots (cannot be a domain).
 // 5) Hostname must not be a number.
-// 6) Hostname must not be 48 hexidecimal digits.
+// 6) Hostname must not be 48 hexadecimal digits.
 // 7) Must not have a path, query, or fragment.
 // 8) Must not be a reserved URL, such as ACME, DN, or BVN-*
 func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
