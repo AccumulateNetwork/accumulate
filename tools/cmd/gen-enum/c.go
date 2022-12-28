@@ -10,7 +10,8 @@ import (
 	_ "embed"
 )
 
-//the c template will include source + header with a ACME_HEADER guard between source and header.
+// the c template will include source + header with a ACME_HEADER guard between source and header.
+//
 //go:embed c.tmpl
 var cHeader string
 var _ = Templates.Register(cHeader, "c", nil, "c-header")

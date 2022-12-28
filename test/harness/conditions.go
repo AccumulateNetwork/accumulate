@@ -302,9 +302,9 @@ func succeeds(h *Harness, c any, status *protocol.TransactionStatus) bool {
 	if status.Failed() {
 		switch c.(type) {
 		case condProduced:
-			h.TB.Fatal("Expected produced transaction to succeeed")
+			h.TB.Fatal("Expected produced transaction to succeed")
 		default:
-			h.TB.Fatal("Expected transaction to succeeed")
+			h.TB.Fatal("Expected transaction to succeed")
 		}
 	}
 	return true

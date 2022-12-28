@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"strings"
 	"text/template"
@@ -142,7 +142,7 @@ func (lib *TemplateLibrary) Execute(w io.Writer, name string, data interface{}) 
 		return execute(tmpl, names, w, data)
 	}
 
-	b, err := ioutil.ReadFile(name)
+	b, err := os.ReadFile(name)
 	switch {
 	case err == nil:
 		// Ok

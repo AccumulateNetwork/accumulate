@@ -8,7 +8,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/FactomProject/factomd/common/adminBlock"
 	"github.com/FactomProject/factomd/common/directoryBlock"
@@ -32,7 +32,7 @@ func init() {
 
 func list(_ *cobra.Command, args []string) {
 	for _, filename := range args {
-		input, err := ioutil.ReadFile(filename)
+		input, err := os.ReadFile(filename)
 		checkf(err, "read %s", filename)
 
 		err = factom.ReadObjectFile(input, nil, func(_ *factom.Header, object interface{}) {
