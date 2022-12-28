@@ -95,7 +95,7 @@ func GetFactoidAddressFromRCDHash(rcd []byte) (string, error) {
 	return FA, nil
 }
 
-//this function takes in the Factoid Private Key Fs and returns Factoid Address FA, RCDHash ,privatekey(64bits),error
+// this function takes in the Factoid Private Key Fs and returns Factoid Address FA, RCDHash ,privatekey(64bits),error
 func GetFactoidAddressRcdHashPkeyFromPrivateFs(Fs string) (string, []byte, []byte, error) {
 	if len(Fs) != 52 {
 		return "", nil, nil, fmt.Errorf("invalid factoid address length")

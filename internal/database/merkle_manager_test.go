@@ -258,9 +258,9 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 				factor := int64(math.Pow(2, float64(row)))
 				fmt.Printf("Row %d Col %d Left %x + Right %x == %x == Result %x\n",
 					row, col, left[:4], right[:4],
-					Hash(left).Combine(Sha256, right)[:4],
+					left.Combine(Sha256, right)[:4],
 					hashes[row][col/factor][:4])
-				require.True(t, bytes.Equal(Hash(left).Combine(Sha256, right), hashes[row][col/factor]), "should be equal")
+				require.True(t, bytes.Equal(left.Combine(Sha256, right), hashes[row][col/factor]), "should be equal")
 			}
 		}
 	}

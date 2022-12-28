@@ -114,7 +114,7 @@ func (t *Transaction) ReadSignaturesForSigner(signer protocol.Signer2) (*Signatu
 	return set, nil
 }
 
-// AddSignature loads the appropriate siganture set and adds the signature to
+// AddSignature loads the appropriate signature set and adds the signature to
 // it.
 func (t *Transaction) AddSignature(keyEntryIndex uint64, newSignature protocol.Signature) (int, error) {
 	set, err := t.newSigSet(newSignature.GetSigner(), true)
