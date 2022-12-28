@@ -1,11 +1,27 @@
 linters:
   enable:
-  - noprint
+  # Custom
+  - noprint # Use forbidigo instead?
   - nodebug
   - rangevarref
 
-  disable:
-  - structcheck # https://github.com/golangci/golangci-lint/issues/2649
+  # Standard
+  - asasalint     # Bugs (variadic functions taking any)
+  - bidichk       # Check for questionable Unicode
+  - exportloopref # Smarter version of rangevarref?
+  - goheader      # Enforce the copyright header
+  - gosec         # Security
+  - maintidx      # Maintainability
+  - misspell      # Spelling
+  - nakedret      # Not really sure what this one does
+  - nilerr        # Bugs (error checking)
+  - unconvert     # Lint (unnecessary conversions)
+
+  # - nestif # I'd like to enable this but I don't want to deal with the issues yet
+  # - godox # Enable to find TODO/BUG/FIXME
+
+  # disable:
+  # - structcheck # https://github.com/golangci/golangci-lint/issues/2649
 
 issues:
   max-same-issues: 0
@@ -15,10 +31,34 @@ issues:
     linters:
     - noprint
 
-  - path: .*_test\.go
+  - path: ^test/|.*_test\.go
     linters:
     - noprint
+    - gosec
 
   - path: smt/.*/RandHash\.go
     linters:
     - noprint
+
+  # TODO Reduce the complexity of these functions so they pass
+  - { source: func \(m \*Executor\) EndBlock,            linters: [maintidx]}
+  - { source: func \(x \*Executor\) executeEnvelope,     linters: [maintidx]}
+  - { source: func \(x \*Executor\) processSignature,    linters: [maintidx]}
+  - { source: func \(d \*Daemon\) Start,                 linters: [maintidx]}
+  - { source: func \(m \*queryBackend\) queryByUrl,      linters: [maintidx]}
+  - { source: func \(m \*queryBackend\) queryByTxId,     linters: [maintidx]}
+  - { source: func \(m \*queryBackend\) Query,           linters: [maintidx]}
+  - { source: func TestTransactionIsReady,               linters: [maintidx]}
+  - { source: func \(s \*ValidationTestSuite\) TestMain, linters: [maintidx]}
+
+linters-settings:
+  goheader:
+    values:
+      const:
+        AUTHOR: The Accumulate Authors
+    template: |-
+      Copyright {{ YEAR }} {{ AUTHOR }}
+
+      Use of this source code is governed by an MIT-style
+      license that can be found in the LICENSE file or at
+      https://opensource.org/licenses/MIT.

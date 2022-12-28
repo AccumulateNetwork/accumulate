@@ -21,5 +21,5 @@ const (
 	TNil       = iota + 1 // When persisting, this is the type for nils
 	TNode                 // Type for Nodes
 	TValue                // Type for values
-	TNotLoaded            // When transisioning into a new Byte Block, the NotLoaded indicates a need to load from disk
+	TNotLoaded            // When transitioning into a new Byte Block, the NotLoaded indicates a need to load from disk
 )

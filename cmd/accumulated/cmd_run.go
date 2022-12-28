@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"strings"
 	"sync"
@@ -75,7 +75,7 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 		badger.TruncateBadger = flagRun.Truncate
 
 		if flagRun.PprofListen != "" {
-			go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }()
+			go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }() //nolint:gosec
 		}
 
 		if flagRun.Debug {

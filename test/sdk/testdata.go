@@ -8,7 +8,6 @@ package sdktest
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -30,7 +29,7 @@ type TestCase struct {
 }
 
 func Load(file string) (*TestSuite, error) {
-	b, err := ioutil.ReadFile(file)
+	b, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}

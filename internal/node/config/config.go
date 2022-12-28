@@ -100,7 +100,7 @@ func (l LogLevel) SetModule(module, level string) LogLevel {
 	return l
 }
 
-// String convers the log level into a string, for example
+// String converts the log level into a string, for example
 // "error;accumulate=debug".
 func (l LogLevel) String() string {
 	s := new(strings.Builder)

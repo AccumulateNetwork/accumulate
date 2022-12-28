@@ -219,7 +219,7 @@ func (r *RouterInstance) RequestAPIv2(ctx context.Context, partitionId, method s
 
 		err = client.RequestAPIv2(ctx, method, params, result)
 		if err == nil {
-			return err
+			return nil
 		}
 
 		// The API call failed, let's report that and try again, we get a client to another node within the partition if available
