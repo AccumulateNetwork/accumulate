@@ -347,7 +347,6 @@ func (m *JrpcMethods) QueryMinorBlocks(ctx context.Context, params json.RawMessa
 	return result
 }
 
-//
 // WARNING: EXPERIMENTAL!
 func (m *JrpcMethods) QuerySynth(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(SyntheticTransactionRequest)

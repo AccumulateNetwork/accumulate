@@ -157,9 +157,9 @@ func ReadSnapshot(file ioutil2.SectionReader, storeState func(key storage.Key, h
 	}
 	numNodes, _ := common.BytesFixedUint64(vBuff) //          Convert entry count to number of BPT nodes
 
-	fOff := uint64(8 + numNodes*(nLen)) //                    File offset to values in snapshot
-	fileIndex := int64(8)               //                    Used to track progress through the file
-	toRead := window                    //                    Assume a window's worth to read
+	fOff := 8 + numNodes*(nLen) //                    File offset to values in snapshot
+	fileIndex := int64(8)       //                    Used to track progress through the file
+	toRead := window            //                    Assume a window's worth to read
 	for toRead > 0 {
 
 		if numNodes < toRead { //                             If not a window's worth of nodes left
