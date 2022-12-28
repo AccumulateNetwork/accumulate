@@ -51,8 +51,8 @@ type NodeService_NodeStatus_Call struct {
 }
 
 // NodeStatus is a helper method to define mock.On call
-//  - ctx context.Context
-//  - opts api.NodeStatusOptions
+//   - ctx context.Context
+//   - opts api.NodeStatusOptions
 func (_e *NodeService_Expecter) NodeStatus(ctx interface{}, opts interface{}) *NodeService_NodeStatus_Call {
 	return &NodeService_NodeStatus_Call{Call: _e.mock.On("NodeStatus", ctx, opts)}
 }
