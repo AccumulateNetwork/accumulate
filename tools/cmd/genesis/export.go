@@ -24,21 +24,27 @@ import (
 )
 
 var cmdExport = &cobra.Command{
-	Use:   "export [node] [network id] [exported genesis]",
+	Use:   "export [node] [exported genesis]",
 	Short: "Export the network state to a new genesis document",
 	Run:   export,
+	Args:  cobra.ExactArgs(2),
 }
 
 var flagExport = struct {
-	FactomLDAs string
+	FactomLDAs  string
+	NetworkName string
+	Validators  []string
 }{}
 
 func init() {
 	cmd.AddCommand(cmdExport)
 	cmdExport.Flags().StringVar(&flagExport.FactomLDAs, "factom-ldas", "", "A snapshot containing the transaction history of Factom LDAs, for repairing the database")
+	cmdExport.Flags().StringVar(&flagExport.NetworkName, "network", "", "Change the name of the network")
+	cmdExport.Flags().StringSliceVar(&flagExport.Validators, "validators", nil, "Overwrite the network definition's validator set (JSON)")
 }
 
 func export(_ *cobra.Command, args []string) {
+	// Build a map of Factom LDAs from the given snapshot
 	factom := ldaCollector{}
 	if flagExport.FactomLDAs != "" {
 		f, err := os.Open(flagExport.FactomLDAs)
@@ -47,33 +53,56 @@ func export(_ *cobra.Command, args []string) {
 		check(f.Close())
 	}
 
-	nodeDir, netID, outPath := args[0], args[1], args[2]
+	// Load the node
+	nodeDir, outPath := args[0], args[1]
 	daemon, err := accumulated.Load(nodeDir, func(c *config.Config) (io.Writer, error) {
 		return logging.NewConsoleWriter(c.LogFormat)
 	})
 	check(err)
 
+	// Load the old genesis document
 	oldDoc, err := types.GenesisDocFromFile(daemon.Config.GenesisFile())
 	check(err)
 
+	// Open the database
 	db, err := database.Open(daemon.Config, daemon.Logger)
 	check(err)
-
 	batch := db.Begin(false)
 	defer batch.Discard()
 
+	// Load the system ledger
 	var ledger *protocol.SystemLedger
 	partUrl := config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.PartitionId)}
 	check(batch.Account(partUrl.Ledger()).Main().GetAs(&ledger))
 
+	// Get the hash of the genesis transaction
 	genesisTx, err := batch.Account(partUrl.Ledger()).MainChain().Inner().Get(0)
 	check(err)
 
+	// Load the global variables
 	globals := new(core.GlobalValues)
 	check(globals.Load(partUrl, func(account *url.URL, target interface{}) error {
 		return batch.Account(account).Main().GetAs(target)
 	}))
 
+	// Change the name of the network
+	if flagExport.NetworkName != "" {
+		globals.Network.NetworkName = flagExport.NetworkName
+	}
+
+	// Overwrite the validator set
+	if flagExport.Validators != nil {
+		globals.Network.Validators = nil
+		for _, str := range flagExport.Validators {
+			val := new(protocol.ValidatorInfo)
+			check(json.Unmarshal([]byte(str), val))
+			for _, part := range val.Partitions {
+				globals.Network.AddValidator(val.PublicKey, part.ID, part.Active)
+			}
+		}
+	}
+
+	// Take a snapshot
 	header := new(snapshot.Header)
 	header.Height = ledger.Index
 	header.Timestamp = ledger.Timestamp
@@ -82,6 +111,7 @@ func export(_ *cobra.Command, args []string) {
 	w, err := snapshot.Collect(batch, header, buf, snapshot.CollectOptions{
 		Logger: daemon.Logger.With("module", "snapshot"),
 		VisitAccount: func(acct *snapshot.Account) error {
+			// Fix Factom LDAs
 			factom := factom[acct.Url.AccountID32()]
 			if factom == nil {
 				return nil
@@ -116,15 +146,22 @@ func export(_ *cobra.Command, args []string) {
 	check(err)
 	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.PartitionUrl()))
 
+	// Build a new genesis doc
 	doc := new(types.GenesisDoc)
 	doc.InitialHeight = int64(ledger.Index) + 1
 	doc.GenesisTime = ledger.Timestamp
-	doc.ChainID = netID + "-" + daemon.Config.Accumulate.PartitionId
+	doc.ChainID = oldDoc.ChainID
 	doc.ConsensusParams = oldDoc.ConsensusParams
 	doc.AppHash = batch.BptRoot()
 	doc.AppState, err = json.Marshal(buf.Bytes())
 	check(err)
 
+	// Apply the network ID prefix
+	if flagExport.NetworkName != "" {
+		doc.ChainID = flagExport.NetworkName + "-" + daemon.Config.Accumulate.PartitionId
+	}
+
+	// Build the validator list
 	for _, val := range globals.Network.Validators {
 		if !val.IsActiveOn(daemon.Config.Accumulate.PartitionId) {
 			continue
@@ -139,6 +176,7 @@ func export(_ *cobra.Command, args []string) {
 		doc.Validators = append(doc.Validators, *genval)
 	}
 
+	// Write the new genesis doc
 	outFile, err := os.Create(outPath)
 	check(err)
 	defer outFile.Close()
