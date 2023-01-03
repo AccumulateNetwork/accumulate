@@ -9,6 +9,7 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"github.com/gobeam/stringy"
 	"path"
 	"strings"
 	"text/template"
@@ -190,7 +191,7 @@ type SingleTypeFile struct {
 	*Type
 }
 
-func (f *SingleTypeFile) IsUnion() bool { return false }
+func (f *SingleTypeFile) IsUnion() bool { return f.Union.Type != "" }
 
 type SingleUnionFile struct {
 	Package string
@@ -198,6 +199,13 @@ type SingleUnionFile struct {
 }
 
 func (f *SingleUnionFile) IsUnion() bool { return true }
+
+//
+//func (f *SingleUnionFile) UnionType() string { return f.Type }
+//
+//func (f *SingleUnionFile) Embeddings() []string { return []string{} }
+//
+//func (f *SingleUnionFile) IsBinary() bool { return true }
 
 type UnionSpec struct {
 	Name       string
@@ -293,4 +301,9 @@ var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"natural":             typegen.Natural,
 	"hasSuffix":           strings.HasSuffix,
 	"debug":               fmt.Printf,
+	"snake": func(s string) string {
+		str := stringy.New(s)
+		snakeStr := str.SnakeCase()
+		return snakeStr.ToLower()
+	},
 })
