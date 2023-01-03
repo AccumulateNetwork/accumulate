@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,7 +12,7 @@ import (
 	"crypto/sha256"
 
 	"github.com/tendermint/tendermint/libs/log"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/core/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -50,13 +50,13 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	return deliveries, results, rset, nil
 }
 
-func checkTx(exec *Executor, batch *database.Batch) executeFunc {
+func checkTx(exec Executor, batch *database.Batch) executeFunc {
 	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
 		return exec.ValidateEnvelopeSet(batch, deliveries, nil)
 	}
 }
 
-func deliverTx(exec *Executor, block *Block) executeFunc {
+func deliverTx(exec Executor, block *block.Block) executeFunc {
 	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
 		return exec.ExecuteEnvelopeSet(block, deliveries, nil)
 	}

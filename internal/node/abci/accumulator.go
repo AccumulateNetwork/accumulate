@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -65,7 +65,7 @@ type Accumulator struct {
 type AccumulatorOptions struct {
 	*config.Config
 	Tracer   trace.Tracer
-	Executor *block.Executor
+	Executor Executor
 	EventBus *events.Bus
 	DB       *database.Database
 	Logger   log.Logger
@@ -547,7 +547,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		if ds != nil {
 			ds.Save("height", app.block.Index, 10, true)
 			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-			app.Executor.BlockTimers.Store(ds)
+			app.Executor.StoreBlockTimers(ds)
 		}
 
 		go app.Accumulate.AnalysisLog.Flush()
@@ -643,7 +643,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	if ds != nil {
 		ds.Save("height", app.block.Index, 10, true)
 		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-		app.Executor.BlockTimers.Store(ds)
+		app.Executor.StoreBlockTimers(ds)
 	}
 
 	go app.Accumulate.AnalysisLog.Flush()

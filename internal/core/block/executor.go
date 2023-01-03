@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -191,6 +191,10 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 
 func (m *Executor) EnableTimers() {
 	m.BlockTimers.Initialize(&m.executors)
+}
+
+func (m *Executor) StoreBlockTimers(ds *logging.DataSet) {
+	m.BlockTimers.Store(ds)
 }
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
