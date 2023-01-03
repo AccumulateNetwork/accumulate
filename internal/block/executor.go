@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"go.uber.org/atomic"
 )
 
 type Executor struct {
@@ -35,6 +36,7 @@ type Executor struct {
 	logger      logging.OptionalLogger
 	db          database.Beginner
 	isValidator bool
+	didBoot     atomic.Bool
 
 	// oldBlockMeta blockMetadata
 }
@@ -164,6 +166,11 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 		_, v, _ := e.New.Network.ValidatorByKey(m.Key[32:])
 		m.isValidator = v.IsActiveOn(m.Describe.PartitionId)
 		return nil
+	})
+
+	// Listen for the bootup event
+	events.SubscribeAsync(m.EventBus, func(events.DidBoot) {
+		m.didBoot.Store(true)
 	})
 
 	// Load globals if the database has been initialized

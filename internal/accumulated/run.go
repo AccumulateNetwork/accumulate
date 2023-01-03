@@ -377,7 +377,7 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
-	return nil
+	return d.eventBus.Publish(events.DidBoot{})
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {

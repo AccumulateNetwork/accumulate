@@ -231,6 +231,11 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		require.NoError(sim, err)
 		x.API = acctesting.DirectJrpcClient(jrpc)
 	}
+
+	for _, x := range sim.Executors {
+		err := x.Executor.EventBus.Publish(events.DidBoot{})
+		require.NoError(sim, err)
+	}
 }
 
 // willChangeGlobals is called when global values are about to change.

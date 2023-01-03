@@ -104,6 +104,15 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 			return nil, errors.Format(errors.StatusUnknownError, "init %s: %w", p.ID, err)
 		}
 	}
+
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			err = n.eventBus.Publish(events.DidBoot{})
+			if err != nil {
+				return nil, errors.Wrap(errors.StatusUnknownError, err)
+			}
+		}
+	}
 	return s, nil
 }
 

@@ -20,6 +20,9 @@ func (DidCommitBlock) isEvent()    {}
 func (DidSaveSnapshot) isEvent()   {}
 func (WillChangeGlobals) isEvent() {}
 func (FatalError) isEvent()        {}
+func (DidBoot) isEvent()           {}
+
+type DidBoot struct{}
 
 type DidCommitBlock struct {
 	Index uint64
