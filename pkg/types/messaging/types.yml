@@ -26,8 +26,9 @@ SyntheticTransaction:
       marshal-as: reference
       pointer: true
     - name: Proof
-      type: merkle.Receipt
+      type: protocol.AnnotatedReceipt
       marshal-as: reference
+      pointer: true
 
 UserSignature:
   union: { type: message }
@@ -50,5 +51,6 @@ AuthoritySignature:
       type: protocol.Signature
       marshal-as: union
     - name: Proof
-      type: merkle.Receipt
+      type: protocol.AnnotatedReceipt
       marshal-as: reference
+      pointer: true

@@ -113,6 +113,13 @@ type AnchorMetadata struct {
 	extraData   []byte
 }
 
+type AnnotatedReceipt struct {
+	fieldsSet []bool
+	Receipt   *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Anchor    *AnchorMetadata `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	extraData []byte
+}
+
 type AuthorityEntry struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -838,12 +845,15 @@ type Transaction struct {
 }
 
 type TransactionHeader struct {
-	fieldsSet []bool
-	Principal *url.URL `json:"principal,omitempty" form:"principal" query:"principal" validate:"required"`
-	Initiator [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
-	Memo      string   `json:"memo,omitempty" form:"memo" query:"memo"`
-	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
-	extraData []byte
+	fieldsSet      []bool
+	Principal      *url.URL `json:"principal,omitempty" form:"principal" query:"principal" validate:"required"`
+	Initiator      [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
+	Memo           string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata       []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	Source         *url.URL `json:"source,omitempty" form:"source" query:"source"`
+	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination"`
+	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber"`
+	extraData      []byte
 }
 
 type TransactionResultSet struct {
@@ -1276,6 +1286,21 @@ func (v *AnchorMetadata) Copy() *AnchorMetadata {
 }
 
 func (v *AnchorMetadata) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnnotatedReceipt) Copy() *AnnotatedReceipt {
+	u := new(AnnotatedReceipt)
+
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+	if v.Anchor != nil {
+		u.Anchor = (v.Anchor).Copy()
+	}
+
+	return u
+}
+
+func (v *AnnotatedReceipt) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AuthorityEntry) Copy() *AuthorityEntry {
 	u := new(AuthorityEntry)
@@ -2520,6 +2545,13 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	u.Initiator = v.Initiator
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesCopy(v.Metadata)
+	if v.Source != nil {
+		u.Source = v.Source
+	}
+	if v.Destination != nil {
+		u.Destination = v.Destination
+	}
+	u.SequenceNumber = v.SequenceNumber
 
 	return u
 }
@@ -2944,6 +2976,27 @@ func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Entry, u.Entry)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AnnotatedReceipt) Equal(u *AnnotatedReceipt) bool {
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
+		return false
+	}
+	switch {
+	case v.Anchor == u.Anchor:
+		// equal
+	case v.Anchor == nil || u.Anchor == nil:
+		return false
+	case !((v.Anchor).Equal(u.Anchor)):
 		return false
 	}
 
@@ -4576,6 +4629,25 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 	if !(bytes.Equal(v.Metadata, u.Metadata)) {
 		return false
 	}
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	switch {
+	case v.Destination == u.Destination:
+		// equal
+	case v.Destination == nil || u.Destination == nil:
+		return false
+	case !((v.Destination).Equal(u.Destination)):
+		return false
+	}
+	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
 
 	return true
 }
@@ -5459,6 +5531,54 @@ func (v *AnchorMetadata) IsValid() error {
 		errs = append(errs, "field Entry is missing")
 	} else if len(v.Entry) == 0 {
 		errs = append(errs, "field Entry is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AnnotatedReceipt = []string{
+	1: "Receipt",
+	2: "Anchor",
+}
+
+func (v *AnnotatedReceipt) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Receipt == nil) {
+		writer.WriteValue(1, v.Receipt.MarshalBinary)
+	}
+	if !(v.Anchor == nil) {
+		writer.WriteValue(2, v.Anchor.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AnnotatedReceipt)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *AnnotatedReceipt) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Receipt is missing")
+	} else if v.Receipt == nil {
+		errs = append(errs, "field Receipt is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == nil {
+		errs = append(errs, "field Anchor is not set")
 	}
 
 	switch len(errs) {
@@ -10130,6 +10250,9 @@ var fieldNames_TransactionHeader = []string{
 	2: "Initiator",
 	3: "Memo",
 	4: "Metadata",
+	5: "Source",
+	6: "Destination",
+	7: "SequenceNumber",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -10147,6 +10270,15 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Metadata) == 0) {
 		writer.WriteBytes(4, v.Metadata)
+	}
+	if !(v.Source == nil) {
+		writer.WriteUrl(5, v.Source)
+	}
+	if !(v.Destination == nil) {
+		writer.WriteUrl(6, v.Destination)
+	}
+	if !(v.SequenceNumber == 0) {
+		writer.WriteUint(7, v.SequenceNumber)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -11421,6 +11553,32 @@ func (v *AnchorMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AnchorMetadata)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AnnotatedReceipt) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AnnotatedReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(merkle.Receipt); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
+	if x := new(AnchorMetadata); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Anchor = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AnnotatedReceipt)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -14530,6 +14688,15 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(4); ok {
 		v.Metadata = x
 	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUrl(6); ok {
+		v.Destination = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.SequenceNumber = x
+	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
 	if err != nil {
@@ -16283,15 +16450,21 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Principal *url.URL `json:"principal,omitempty"`
-		Initiator string   `json:"initiator,omitempty"`
-		Memo      string   `json:"memo,omitempty"`
-		Metadata  *string  `json:"metadata,omitempty"`
+		Principal      *url.URL `json:"principal,omitempty"`
+		Initiator      string   `json:"initiator,omitempty"`
+		Memo           string   `json:"memo,omitempty"`
+		Metadata       *string  `json:"metadata,omitempty"`
+		Source         *url.URL `json:"source,omitempty"`
+		Destination    *url.URL `json:"destination,omitempty"`
+		SequenceNumber uint64   `json:"sequenceNumber,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
+	u.Source = v.Source
+	u.Destination = v.Destination
+	u.SequenceNumber = v.SequenceNumber
 	return json.Marshal(&u)
 }
 
@@ -18594,15 +18767,21 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Principal *url.URL `json:"principal,omitempty"`
-		Initiator string   `json:"initiator,omitempty"`
-		Memo      string   `json:"memo,omitempty"`
-		Metadata  *string  `json:"metadata,omitempty"`
+		Principal      *url.URL `json:"principal,omitempty"`
+		Initiator      string   `json:"initiator,omitempty"`
+		Memo           string   `json:"memo,omitempty"`
+		Metadata       *string  `json:"metadata,omitempty"`
+		Source         *url.URL `json:"source,omitempty"`
+		Destination    *url.URL `json:"destination,omitempty"`
+		SequenceNumber uint64   `json:"sequenceNumber,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
+	u.Source = v.Source
+	u.Destination = v.Destination
+	u.SequenceNumber = v.SequenceNumber
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -18618,6 +18797,9 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Metadata = x
 	}
+	v.Source = u.Source
+	v.Destination = u.Destination
+	v.SequenceNumber = u.SequenceNumber
 	return nil
 }
 

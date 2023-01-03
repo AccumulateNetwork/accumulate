@@ -19,14 +19,13 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type AuthoritySignature struct {
 	fieldsSet []bool
-	Signature protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	Proof     merkle.Receipt     `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	Signature protocol.Signature         `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	extraData []byte
 }
 
@@ -39,8 +38,8 @@ type LegacyMessage struct {
 
 type SyntheticTransaction struct {
 	fieldsSet   []bool
-	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	Proof       merkle.Receipt        `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	Transaction *protocol.Transaction      `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	extraData   []byte
 }
 
@@ -80,7 +79,9 @@ func (v *AuthoritySignature) Copy() *AuthoritySignature {
 	if v.Signature != nil {
 		u.Signature = protocol.CopySignature(v.Signature)
 	}
-	u.Proof = *(&v.Proof).Copy()
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
 
 	return u
 }
@@ -111,7 +112,9 @@ func (v *SyntheticTransaction) Copy() *SyntheticTransaction {
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
 	}
-	u.Proof = *(&v.Proof).Copy()
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
 
 	return u
 }
@@ -158,7 +161,12 @@ func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
 	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
 		return false
 	}
-	if !((&v.Proof).Equal(&u.Proof)) {
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
 		return false
 	}
 
@@ -195,7 +203,12 @@ func (v *SyntheticTransaction) Equal(u *SyntheticTransaction) bool {
 	case !((v.Transaction).Equal(u.Transaction)):
 		return false
 	}
-	if !((&v.Proof).Equal(&u.Proof)) {
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
 		return false
 	}
 
@@ -245,7 +258,7 @@ func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
 	if !(protocol.EqualSignature(v.Signature, nil)) {
 		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
-	if !((v.Proof).Equal(new(merkle.Receipt))) {
+	if !(v.Proof == nil) {
 		writer.WriteValue(3, v.Proof.MarshalBinary)
 	}
 
@@ -270,7 +283,7 @@ func (v *AuthoritySignature) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Proof is missing")
-	} else if (v.Proof).Equal(new(merkle.Receipt)) {
+	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
 	}
 
@@ -353,7 +366,7 @@ func (v *SyntheticTransaction) MarshalBinary() ([]byte, error) {
 	if !(v.Transaction == nil) {
 		writer.WriteValue(2, v.Transaction.MarshalBinary)
 	}
-	if !((v.Proof).Equal(new(merkle.Receipt))) {
+	if !(v.Proof == nil) {
 		writer.WriteValue(3, v.Proof.MarshalBinary)
 	}
 
@@ -378,7 +391,7 @@ func (v *SyntheticTransaction) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Proof is missing")
-	} else if (v.Proof).Equal(new(merkle.Receipt)) {
+	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
 	}
 
@@ -550,8 +563,8 @@ func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 		}
 		return err
 	})
-	if x := new(merkle.Receipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
-		v.Proof = *x
+	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Proof = x
 	}
 
 	seen, err := reader.Reset(fieldNames_AuthoritySignature)
@@ -635,8 +648,8 @@ func (v *SyntheticTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) erro
 	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
-	if x := new(merkle.Receipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
-		v.Proof = *x
+	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Proof = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticTransaction)
@@ -768,7 +781,7 @@ func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      MessageType                                    `json:"type"`
 		Signature encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Proof     merkle.Receipt                                 `json:"proof,omitempty"`
+		Proof     *protocol.AnnotatedReceipt                     `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
@@ -790,9 +803,9 @@ func (v *LegacyMessage) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticTransaction) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        MessageType           `json:"type"`
-		Transaction *protocol.Transaction `json:"transaction,omitempty"`
-		Proof       merkle.Receipt        `json:"proof,omitempty"`
+		Type        MessageType                `json:"type"`
+		Transaction *protocol.Transaction      `json:"transaction,omitempty"`
+		Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Transaction = v.Transaction
@@ -834,7 +847,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      MessageType                                    `json:"type"`
 		Signature encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Proof     merkle.Receipt                                 `json:"proof,omitempty"`
+		Proof     *protocol.AnnotatedReceipt                     `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
@@ -876,9 +889,9 @@ func (v *LegacyMessage) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticTransaction) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        MessageType           `json:"type"`
-		Transaction *protocol.Transaction `json:"transaction,omitempty"`
-		Proof       merkle.Receipt        `json:"proof,omitempty"`
+		Type        MessageType                `json:"type"`
+		Transaction *protocol.Transaction      `json:"transaction,omitempty"`
+		Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Transaction = v.Transaction

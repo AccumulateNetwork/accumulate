@@ -302,3 +302,14 @@ TokenIssuerProof:
       type: merkle.Receipt
       marshal-as: reference
       pointer: true
+
+AnnotatedReceipt:
+  fields:
+    - name: Receipt
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+    - name: Anchor
+      type: AnchorMetadata
+      marshal-as: reference
+      pointer: true
