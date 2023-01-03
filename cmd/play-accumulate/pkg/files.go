@@ -12,7 +12,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -32,7 +31,7 @@ var reYamlDoc = regexp.MustCompile("(?m)^---$")
 var reCodeFence = regexp.MustCompile(`^([^\s\{]*)(\{[^\n]*\})?`)
 
 func ExecuteFile(ctx context.Context, filename string, simBvns int, client *client.Client) error {
-	contents, err := ioutil.ReadFile(filename)
+	contents, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading %q: %v\n", filename, err)
 		os.Exit(1)

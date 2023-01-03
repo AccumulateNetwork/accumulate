@@ -1,4 +1,4 @@
-build validation image:
+.build validation image:
   stage: pre test
   extends: .rules all
   image: docker:20
@@ -9,7 +9,7 @@ build validation image:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker push ${VALIDATION_IMAGE}
 
-go test:
+.go test:
   stage: test
   extends: [ .rules all, .go ]
   needs: []
@@ -19,11 +19,22 @@ go test:
     when: always
     reports:
       junit: report.xml
+
+go test 1/2:
+  # Main tests
+  extends: .go test
   script:
   - go build -v ./...
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
 
-playbooks:
+go test 2/2:
+  # Full devnet validation test
+  extends: .go test
+  script:
+  - go build -v ./...
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./test/validate -test.validate.full
+
+.playbooks:
   stage: test
   extends: [ .rules all, .go ]
   needs: []
@@ -31,7 +42,7 @@ playbooks:
   - go build ./cmd/play-accumulate
   - find playbooks -name '*.play' -exec ./play-accumulate {} \;
 
-validate simple:
+.validate simple:
   stage: test
   extends: [ .rules all, .go ]
   needs: []
@@ -49,7 +60,7 @@ validate simple:
   - apt-get -y update && apt-get -y install jq xxd
   - go run ./test/cmd/devnet/ -X -v=1,-b=1,--reset play playbooks/validate/*.play
 
-validate docker:
+.validate docker:
   stage: test
   extends: .rules all
   needs: [ build validation image ]

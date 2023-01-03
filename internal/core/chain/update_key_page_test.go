@@ -14,11 +14,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"golang.org/x/exp/rand"
 )

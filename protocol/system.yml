@@ -175,7 +175,7 @@ PartitionAnchorReceipt:
       pointer: true
     - name: RootChainReceipt
       description: is a receipt for the anchored root chain entry
-      type: managed.Receipt
+      type: merkle.Receipt
       marshal-as: reference
       pointer: true
     # - name: SequenceNumber

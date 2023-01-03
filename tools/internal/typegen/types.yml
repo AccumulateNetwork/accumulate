@@ -30,6 +30,8 @@ EntityRecord:
       repeatable: true
     - name: Root
       type: bool
+    - name: Interface
+      type: bool
     - name: Attributes
       type: Record
       marshal-as: union

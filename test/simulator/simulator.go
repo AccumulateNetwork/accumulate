@@ -17,8 +17,11 @@ import (
 	"time"
 
 	btc "github.com/btcsuite/btcd/btcec"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
@@ -28,6 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -44,6 +48,8 @@ type Simulator struct {
 	partitions map[string]*Partition
 	router     *Router
 	netcfg     *config.Network
+
+	blockErrGroup *errgroup.Group
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) database.Beginner
@@ -74,8 +80,8 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 			s.netcfg.Partitions[0].Nodes = append(s.netcfg.Partitions[0].Nodes, dnn)
 
 			if node.BasePort != 0 {
-				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Address(accumulated.AdvertizeAddress, "http", config.PortOffsetBlockValidator)
-				s.netcfg.Partitions[0].Nodes[j].Address = node.Address(accumulated.AdvertizeAddress, "http", config.PortOffsetDirectory)
+				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Advertize().Scheme("http").BlockValidator().String()
+				s.netcfg.Partitions[0].Nodes[j].Address = node.Advertize().Scheme("http").Directory().String()
 			}
 		}
 	}
@@ -92,8 +98,6 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
-
-	events.SubscribeSync(s.partitions[protocol.Directory].nodes[0].eventBus, s.router.willChangeGlobals)
 
 	for _, p := range s.partitions {
 		snapshot, err := snapshot(p.ID, s.init, s.logger)
@@ -130,6 +134,8 @@ func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc
 	}
 }
 
+// SimpleNetwork creates a basic network with the given name, number of BVNs,
+// and number of nodes per BVN.
 func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkInit {
 	net := new(accumulated.NetworkInit)
 	net.Id = name
@@ -141,10 +147,25 @@ func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkIni
 				DnnType:    config.Validator,
 				BvnnType:   config.Validator,
 				PrivValKey: testing.GenerateKey(name, bvnInit.Id, j, "val"),
-				NodeKey:    testing.GenerateKey(name, bvnInit.Id, j, "node"),
+				DnNodeKey:  testing.GenerateKey(name, bvnInit.Id, j, "dn"),
+				BvnNodeKey: testing.GenerateKey(name, bvnInit.Id, j, "bvn"),
 			})
 		}
 		net.Bvns = append(net.Bvns, bvnInit)
+	}
+	return net
+}
+
+// LocalNetwork returns a SimpleNetwork with sequential IPs starting from the
+// base IP with the given base port.
+func LocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePort uint64) *accumulated.NetworkInit {
+	net := SimpleNetwork(name, bvnCount, nodeCount)
+	for _, bvn := range net.Bvns {
+		for _, node := range bvn.Nodes {
+			node.AdvertizeAddress = baseIP.String()
+			node.BasePort = basePort
+			baseIP[len(baseIP)-1]++
+		}
 	}
 	return net
 }
@@ -195,19 +216,48 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 }
 
 func (s *Simulator) Router() routing.Router { return s.router }
+func (s *Simulator) EventBus() *events.Bus  { return s.partitions[protocol.Directory].nodes[0].eventBus }
 
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
-	errg := new(errgroup.Group)
+	s.blockErrGroup = new(errgroup.Group)
 	for _, p := range s.partitions {
 		p := p // Don't capture loop variables
-		errg.Go(func() error { return p.execute(errg) })
+		s.blockErrGroup.Go(p.execute)
 	}
-	return errg.Wait()
+	return s.blockErrGroup.Wait()
+}
+
+func (s *Simulator) SetSubmitHookFor(account *url.URL, fn SubmitHookFunc) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	s.partitions[partition].SetSubmitHook(fn)
 }
 
 func (s *Simulator) SetSubmitHook(partition string, fn SubmitHookFunc) {
 	s.partitions[partition].SetSubmitHook(fn)
+}
+
+func (s *Simulator) SetRouterSubmitHookFor(account *url.URL, fn RouterSubmitHookFunc) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	s.partitions[partition].SetRouterSubmitHook(fn)
+}
+
+func (s *Simulator) SetRouterSubmitHook(partition string, fn RouterSubmitHookFunc) {
+	s.partitions[partition].SetRouterSubmitHook(fn)
+}
+
+func (s *Simulator) SetExecutor(exec chain.TransactionExecutor) {
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			n.executor.SetExecutor_TESTONLY(exec)
+		}
+	}
 }
 
 func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
@@ -219,6 +269,10 @@ func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatu
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	return s.SubmitTo(partition, delivery)
+}
+
+func (s *Simulator) SubmitTo(partition string, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
@@ -239,8 +293,9 @@ type errDb struct{ err error }
 
 func (e errDb) View(func(*database.Batch) error) error   { return e.err }
 func (e errDb) Update(func(*database.Batch) error) error { return e.err }
+func (e errDb) Begin(bool) *database.Batch               { panic(e.err) }
 
-func (s *Simulator) Database(partition string) database.Updater {
+func (s *Simulator) Database(partition string) database.Beginner {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return errDb{errors.BadRequest.WithFormat("%s is not a partition", partition)}
@@ -256,6 +311,10 @@ func (s *Simulator) DatabaseFor(account *url.URL) database.Updater {
 	return s.Database(partition)
 }
 
+func (s *Simulator) ClientV2(part string) *client.Client {
+	return s.partitions[part].nodes[0].clientV2
+}
+
 func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 	for _, p := range s.partitions {
 		err := p.View(fn)
@@ -267,7 +326,7 @@ func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 }
 
 func (s *Simulator) NewDirectClient() *client.Client {
-	return testing.DirectJrpcClient(s.partitions[protocol.Directory].nodes[0].api)
+	return testing.DirectJrpcClient(s.partitions[protocol.Directory].nodes[0].apiV2)
 }
 
 func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, http.Handler) http.Handler) error {
@@ -279,9 +338,9 @@ func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, ht
 		for _, node := range part.nodes {
 			var addr string
 			if part.Type == config.Directory {
-				addr = node.init.Address(accumulated.ListenAddress, "", config.PortOffsetDirectory, config.PortOffsetAccumulateApi)
+				addr = node.init.Listen().Directory().AccumulateAPI().String()
 			} else {
-				addr = node.init.Address(accumulated.ListenAddress, "", config.PortOffsetBlockValidator, config.PortOffsetAccumulateApi)
+				addr = node.init.Listen().BlockValidator().AccumulateAPI().String()
 			}
 
 			ln, err := net.Listen("tcp", addr)
@@ -290,7 +349,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, ht
 			}
 			defer func() { _ = ln.Close() }()
 
-			srv := http.Server{Handler: node.api.NewMux()}
+			srv := http.Server{Handler: node.apiV2.NewMux()}
 			if hook != nil {
 				srv.Handler = hook(s, srv.Handler)
 			}
@@ -298,7 +357,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, ht
 			go func() { <-ctx.Done(); _ = srv.Shutdown(context.Background()) }()
 			errg.Go(func() error { return srv.Serve(ln) })
 
-			s.logger.Info("Node up", "partition", part.ID, "node", node.id, "address", "http://"+addr)
+			s.logger.Info("Node API up", "partition", part.ID, "node", node.id, "address", "http://"+addr)
 		}
 	}
 	return errg.Wait()
@@ -372,4 +431,86 @@ func (n nodeSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 		return fmt.Errorf("cannot sign %T with a key", sig)
 	}
 	return nil
+}
+
+// Services returns the simulator's API v3 implementation.
+func (s *Simulator) Services() *simService { return (*simService)(s) }
+
+// simService implements API v3.
+type simService Simulator
+
+// Private returns the private sequencer service.
+func (s *simService) Private() private.Sequencer { return s }
+
+// NodeStatus finds the specified node and returns its NodeStatus.
+func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
+	if opts.NodeID == "" {
+		return nil, errors.BadRequest.WithFormat("node ID is missing")
+	}
+	id, err := peer.Decode(opts.NodeID)
+	if err != nil {
+		return nil, errors.BadRequest.WithFormat("invalid peer ID: %w", err)
+	}
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			sk, err := crypto.UnmarshalEd25519PrivateKey(n.nodeKey)
+			if err != nil {
+				continue
+			}
+			if id.MatchesPrivateKey(sk) {
+				return (*nodeService)(n).NodeStatus(ctx, opts)
+			}
+		}
+	}
+	return nil, errors.NotFound.WithFormat("node %s not found", id)
+}
+
+// NetworkStatus implements pkg/api/v3.NetworkService.
+func (s *simService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
+	return (*nodeService)(s.partitions[protocol.Directory].nodes[0]).NetworkStatus(ctx, opts)
+}
+
+// Metrics implements pkg/api/v3.MetricsService.
+func (s *simService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
+	return nil, errors.NotAllowed
+}
+
+// Query routes the scope to a partition and calls Query on the first node of
+// that partition, returning the result.
+func (s *simService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	part, err := s.router.RouteAccount(scope)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return (*nodeService)(s.partitions[part].nodes[0]).Query(ctx, scope, query)
+}
+
+// Submit routes the envelope to a partition and calls Submit on the first node
+// of that partition, returning the result.
+func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	part, err := s.router.Route(envelope)
+	if err != nil {
+		return nil, err
+	}
+	return (*nodeService)(s.partitions[part].nodes[0]).Submit(ctx, envelope, opts)
+}
+
+// Validate routes the envelope to a partition and calls Validate on the first
+// node of that partition, returning the result.
+func (s *simService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+	part, err := s.router.Route(envelope)
+	if err != nil {
+		return nil, err
+	}
+	return (*nodeService)(s.partitions[part].nodes[0]).Validate(ctx, envelope, opts)
+}
+
+// Sequence routes the source to a partition and calls Sequence on the first
+// node of that partition, returning the result.
+func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+	part, err := s.router.RouteAccount(src)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return (*nodeService)(s.partitions[part].nodes[0]).Private().Sequence(ctx, src, dst, num)
 }

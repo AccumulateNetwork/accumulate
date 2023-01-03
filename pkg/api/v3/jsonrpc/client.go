@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package jsonrpc
 
 import (
@@ -8,6 +14,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,35 +41,30 @@ func NewClient(server string) *Client {
 }
 
 func (c *Client) NodeStatus(ctx context.Context, opts NodeStatusOptions) (*api.NodeStatus, error) {
-	return sendRequestUnmarshalAs[*api.NodeStatus](c, ctx, "node-status", &NodeStatusRequest{NodeStatusOptions: opts})
+	return sendRequestUnmarshalAs[*api.NodeStatus](c, ctx, "node-status", &message.NodeStatusRequest{NodeStatusOptions: opts})
 }
 
 func (c *Client) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
-	return sendRequestUnmarshalAs[*api.NetworkStatus](c, ctx, "network-status", &NetworkStatusRequest{NetworkStatusOptions: opts})
+	return sendRequestUnmarshalAs[*api.NetworkStatus](c, ctx, "network-status", &message.NetworkStatusRequest{NetworkStatusOptions: opts})
 }
 
 func (c *Client) Metrics(ctx context.Context, opts MetricsOptions) (*api.Metrics, error) {
-	return sendRequestUnmarshalAs[*api.Metrics](c, ctx, "metrics", &MetricsRequest{MetricsOptions: opts})
+	return sendRequestUnmarshalAs[*api.Metrics](c, ctx, "metrics", &message.MetricsRequest{MetricsOptions: opts})
 }
 
 func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
-	req := &QueryRequest{Scope: scope, Query: query}
+	req := &message.QueryRequest{Scope: scope, Query: query}
 	return sendRequestUnmarshalWith(c, ctx, "query", req, api.UnmarshalRecordJSON)
 }
 
 func (c *Client) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
-	req := &SubmitRequest{Envelope: envelope, SubmitOptions: opts}
+	req := &message.SubmitRequest{Envelope: envelope, SubmitOptions: opts}
 	return sendRequestUnmarshalAs[[]*api.Submission](c, ctx, "submit", req)
 }
 
 func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
-	req := &ValidateRequest{Envelope: envelope, ValidateOptions: opts}
+	req := &message.ValidateRequest{Envelope: envelope, ValidateOptions: opts}
 	return sendRequestUnmarshalAs[[]*api.Submission](c, ctx, "validate", req)
-}
-
-func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.SubmitOptions) (*api.Submission, error) {
-	req := &FaucetRequest{Account: account, SubmitOptions: opts}
-	return sendRequestUnmarshalAs[*api.Submission](c, ctx, "submit", req)
 }
 
 func (c *Client) sendRequest(ctx context.Context, method string, req, resp interface{}) error {
@@ -72,7 +74,7 @@ func (c *Client) sendRequest(ctx context.Context, method string, req, resp inter
 		return nil
 	}
 
-	var jerr *jsonrpc2.Error
+	var jerr jsonrpc2.Error
 	if !errors.As(err, &jerr) || jerr.Code > ErrCodeProtocol {
 		return err
 	}

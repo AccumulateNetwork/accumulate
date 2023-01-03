@@ -1,4 +1,10 @@
-package api
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package api_test
 
 import (
 	"context"
@@ -6,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -13,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"

@@ -10,9 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -102,7 +103,7 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 	updateAccount(sim, alice.JoinPath("book3", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 
 	// Update the key
-	st, err := sim.SubmitAndExecuteBlock(
+	st := sim.H.SubmitSuccessfully(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book", "1")).
 			WithSigner(alice.JoinPath("book3", "1"), 1).
@@ -111,9 +112,9 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 			WithTimestampVar(&timestamp).
 			WithBody(&UpdateKey{NewKeyHash: hash(newKey[32:])}).
 			Initiate(SignatureTypeED25519, otherKey).
-			Build(),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, st[0].Error)
-	require.EqualError(t, st[0].Error, "cannot UpdateKey with a multi-level delegated signature")
+			BuildDelivery())
+	sim.H.StepUntil(Txn(st.TxID).Fails())
+	st = sim.H.QueryTransaction(st.TxID, nil).Status
+	require.NotNil(t, st.Error)
+	require.EqualError(t, st.Error, "cannot UpdateKey with a multi-level delegated signature")
 }

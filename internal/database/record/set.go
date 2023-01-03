@@ -19,33 +19,32 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
-// Set records an ordered list of values as a single record.
-type Set[T any] struct {
-	Value[[]T]
+type set[T any] struct {
+	value[[]T]
 	compare func(u, v T) int
 }
 
-// NewSet returns a new Set using the given encoder and comparison.
-func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *Set[T] {
-	s := &Set[T]{}
-	s.Value = *NewValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
+// NewSet returns a new set using the given encoder and comparison.
+func newSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
+	s := &set[T]{}
+	s.value = *newValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
 	s.compare = cmp
 	return s
 }
 
 // Put stores the value, sorted.
-func (s *Set[T]) Put(u []T) error {
+func (s *set[T]) Put(u []T) error {
 	// Sort it
 	sort.Slice(u, func(i, j int) bool {
 		return s.compare(u[i], u[j]) < 0
 	})
 
-	err := s.Value.Put(u)
+	err := s.value.Put(u)
 	return errors.UnknownError.Wrap(err)
 }
 
 // Add inserts values into the set, sorted.
-func (s *Set[T]) Add(v ...T) error {
+func (s *set[T]) Add(v ...T) error {
 	l, err := s.Get()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -56,12 +55,12 @@ func (s *Set[T]) Add(v ...T) error {
 		*ptr = v
 	}
 
-	err = s.Value.Put(l)
+	err = s.value.Put(l)
 	return errors.UnknownError.Wrap(err)
 }
 
 // Remove removes a value from the set.
-func (s *Set[T]) Remove(v T) error {
+func (s *set[T]) Remove(v T) error {
 	l, err := s.Get()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -73,12 +72,12 @@ func (s *Set[T]) Remove(v T) error {
 	}
 	l = append(l[:i], l[i+1:]...)
 
-	err = s.Value.Put(l)
+	err = s.value.Put(l)
 	return errors.UnknownError.Wrap(err)
 }
 
 // Index returns the index of the value.
-func (s *Set[T]) Index(v T) (int, error) {
+func (s *set[T]) Index(v T) (int, error) {
 	l, err := s.Get()
 	if err != nil {
 		return 0, errors.UnknownError.Wrap(err)
@@ -93,7 +92,7 @@ func (s *Set[T]) Index(v T) (int, error) {
 }
 
 // Find returns the matching value.
-func (s *Set[T]) Find(v T) (T, error) {
+func (s *set[T]) Find(v T) (T, error) {
 	l, err := s.Get()
 	if err != nil {
 		return zero[T](), errors.UnknownError.Wrap(err)
@@ -108,19 +107,19 @@ func (s *Set[T]) Find(v T) (T, error) {
 }
 
 // IsDirty implements Record.IsDirty.
-func (s *Set[T]) IsDirty() bool {
+func (s *set[T]) IsDirty() bool {
 	if s == nil {
 		return false
 	}
-	return s.Value.IsDirty()
+	return s.value.IsDirty()
 }
 
 // Commit implements Record.Commit.
-func (s *Set[T]) Commit() error {
+func (s *set[T]) Commit() error {
 	if s == nil {
 		return nil
 	}
-	err := s.Value.Commit()
+	err := s.value.Commit()
 	return errors.UnknownError.Wrap(err)
 }
 

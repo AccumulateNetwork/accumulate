@@ -1,4 +1,10 @@
-package jsonrpc
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package jsonrpc_test
 
 import (
 	"context"
@@ -8,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	. "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	mocks "gitlab.com/accumulatenetwork/accumulate/test/mocks/pkg/api/v3"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"

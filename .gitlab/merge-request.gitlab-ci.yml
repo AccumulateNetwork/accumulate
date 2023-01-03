@@ -1,20 +1,3 @@
-merge request target:
-  stage: test
-  needs: []
-  rules:
-
-  # Skip if the MR is labeled 'allow branch merge'
-  - if: $CI_MERGE_REQUEST_LABELS =~ /(^|,)allow branch merge(,|$)/
-    when: never
-
-  # Only run for MR events
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-
-  script:
-  # Merge requests can only be merged into develop
-  # See https://gitlab.com/gitlab-org/gitlab/-/merge_requests/52532
-  - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH"
-
 mr bott:
   stage: test
   needs: []

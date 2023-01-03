@@ -10,17 +10,17 @@ import (
 	"encoding"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 // Chain manages a Merkle tree (chain).
 type Chain struct {
-	merkle *managed.MerkleManager
-	head   *managed.MerkleState
+	merkle *MerkleManager
+	head   *MerkleState
 }
 
-func wrapChain(merkle *managed.Chain) (*Chain, error) {
+func wrapChain(merkle *MerkleManager) (*Chain, error) {
 	m := new(Chain)
 	m.merkle = merkle
 
@@ -82,12 +82,12 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 }
 
 // State returns the state of the chain at the given height.
-func (c *Chain) State(height int64) (*managed.MerkleState, error) {
+func (c *Chain) State(height int64) (*MerkleState, error) {
 	return c.merkle.GetAnyState(height)
 }
 
 // CurrentState returns the current state of the chain.
-func (c *Chain) CurrentState() *managed.MerkleState {
+func (c *Chain) CurrentState() *MerkleState {
 	return c.head
 }
 
@@ -138,7 +138,7 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 }
 
 // Receipt builds a receipt from one index to another
-func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
+func (c *Chain) Receipt(from, to int64) (*merkle.Receipt, error) {
 	if from < 0 {
 		return nil, fmt.Errorf("invalid range: from (%d) < 0", from)
 	}
@@ -156,7 +156,7 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 	}
 
 	var err error
-	r := managed.NewReceipt(c.merkle)
+	r := new(merkle.Receipt)
 	r.StartIndex = from
 	r.EndIndex = to
 	r.Start, err = c.Entry(from)
@@ -174,7 +174,7 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 		return r, nil
 	}
 
-	err = r.BuildReceipt()
+	err = c.merkle.BuildReceipt(r)
 	if err != nil {
 		return nil, err
 	}

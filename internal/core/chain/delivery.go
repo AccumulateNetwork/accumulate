@@ -10,8 +10,8 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -83,23 +83,28 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 			return nil, fmt.Errorf("multi-transaction envelope: signature %d: missing hash", i)
 		}
 
-		// Add the signature to the existing delivery
-		delivery := txnMap[hash]
-		if delivery != nil {
-			delivery.Signatures = append(delivery.Signatures, sig)
-			continue
+		// Get the existing delivery
+		delivery, ok := txnMap[hash]
+		if !ok {
+			// Or create a new remote transaction
+			body := new(protocol.RemoteTransaction)
+			body.Hash = hash
+			txn := new(protocol.Transaction)
+			txn.Body = body
+			delivery = new(Delivery)
+			delivery.Transaction = txn
+			txnMap[hash] = delivery
+			txnList = append(txnList, delivery)
 		}
 
-		// Or create a new remote transaction
-		body := new(protocol.RemoteTransaction)
-		body.Hash = hash
-		txn := new(protocol.Transaction)
-		txn.Body = body
-		delivery = new(Delivery)
-		delivery.Transaction = txn
-		delivery.Signatures = []protocol.Signature{sig}
-		txnMap[hash] = delivery
-		txnList = append(txnList, delivery)
+		// Add the signature to the delivery
+		delivery.Signatures = append(delivery.Signatures, sig)
+
+		if sig, ok := sig.(*protocol.PartitionSignature); ok {
+			delivery.SequenceNumber = sig.SequenceNumber
+			delivery.SourceNetwork = sig.SourceNetwork
+			delivery.DestinationNetwork = sig.DestinationNetwork
+		}
 	}
 
 	for _, delivery := range txnList {
@@ -121,8 +126,9 @@ type Delivery struct {
 	State       ProcessTransactionState
 
 	// For synthetic transactions
-	SequenceNumber uint64
-	SourceNetwork  *url.URL
+	SequenceNumber     uint64
+	SourceNetwork      *url.URL
+	DestinationNetwork *url.URL
 }
 
 func (d *Delivery) NewChild(transaction *protocol.Transaction, signatures []protocol.Signature) *Delivery {
@@ -162,7 +168,7 @@ func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Deli
 	return d.NewChild(fwd.Transaction, signatures)
 }
 
-func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *managed.Receipt) *Delivery {
+func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *merkle.Receipt) *Delivery {
 	return d.NewChild(&protocol.Transaction{
 		Body: &protocol.RemoteTransaction{
 			Hash: hash,

@@ -1,0 +1,134 @@
+Addressed:
+  union: { type: message }
+  fields:
+    - name: Message
+      type: Message
+      marshal-as: union
+      elide-union-methods: true
+    - name: Address
+      type: p2p.Multiaddr
+      marshal-as: union
+
+NodeStatusRequest:
+  union: { type: message }
+  fields:
+    - type: NodeStatusOptions
+      marshal-as: reference
+
+NetworkStatusRequest:
+  union: { type: message }
+  fields:
+    - type: NetworkStatusOptions
+      marshal-as: reference
+
+MetricsRequest:
+  union: { type: message }
+  fields:
+    - type: MetricsOptions
+      marshal-as: reference
+
+QueryRequest:
+  union: { type: message }
+  fields:
+    - name: Scope
+      type: url
+      pointer: true
+    - name: Query
+      type: api.Query
+      marshal-as: union
+      optional: true
+
+SubmitRequest:
+  union: { type: message }
+  fields:
+    - name: Envelope
+      type: protocol.Envelope
+      marshal-as: reference
+      pointer: true
+    - type: SubmitOptions
+      marshal-as: reference
+
+ValidateRequest:
+  union: { type: message }
+  fields:
+    - name: Envelope
+      type: protocol.Envelope
+      marshal-as: reference
+      pointer: true
+    - type: ValidateOptions
+      marshal-as: reference
+
+SubscribeRequest:
+  union: { type: message }
+  fields:
+    - type: SubscribeOptions
+      marshal-as: reference
+
+ErrorResponse:
+  union: { type: message }
+  fields:
+    - name: Error
+      type: errors2.Error
+      marshal-as: reference
+      pointer: true
+
+NodeStatusResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.NodeStatus
+      marshal-as: reference
+      pointer: true
+
+NetworkStatusResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.NetworkStatus
+      marshal-as: reference
+      pointer: true
+
+MetricsResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.Metrics
+      marshal-as: reference
+      pointer: true
+
+RecordResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.Record
+      marshal-as: union
+
+SubmitResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.Submission
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+ValidateResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.Submission
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+SubscribeResponse:
+  union: { type: message }
+  fields: ~
+
+EventMessage:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.Event
+      marshal-as: union
+      repeatable: true

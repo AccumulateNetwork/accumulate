@@ -17,6 +17,19 @@ Describe:
     type: Network
     marshal-as: reference
 
+P2P:
+  fields:
+    - name: Listen
+      type: p2p.Multiaddr
+      toml: listen
+      marshal-as: union
+      repeatable: true
+    - name: BootstrapPeers
+      type: p2p.Multiaddr
+      toml: bootstrap-peers
+      marshal-as: union
+      repeatable: true
+
 Network:
   fields:
     - name: Id
@@ -56,4 +69,3 @@ Node:
       toml: type
       type: NodeType
       marshal-as: enum
-

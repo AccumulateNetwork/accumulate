@@ -225,14 +225,20 @@ func TestMissingAnchorTxn(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	sim.CreateIdentity(alice, aliceKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+	updateAccountOld(sim, alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+
+	faucetKey := acctesting.GenerateKey("Faucet")
+	faucet := sim.CreateLiteTokenAccount(faucetKey, AcmeUrl(), 1e9, 1e15)
 
 	// Cause a synthetic transaction
 	envs := sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(FaucetUrl).
-			WithBody(&AcmeFaucet{Url: lite}).
-			Faucet())
+			WithPrincipal(faucet).
+			WithBody(&SendTokens{To: []*TokenRecipient{{Url: lite, Amount: *big.NewInt(1e15)}}}).
+			WithTimestamp(1).
+			WithSigner(faucet, 1).
+			Initiate(SignatureTypeED25519, faucetKey).
+			Build())
 
 	// Get the local anchor of the produced transaction
 	var anchor, synth [32]byte

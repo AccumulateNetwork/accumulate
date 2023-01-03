@@ -1,4 +1,10 @@
-package tm
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package tm_test
 
 import (
 	"context"
@@ -9,10 +15,11 @@ import (
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/p2p"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -35,7 +42,7 @@ func TestNodeStatus(t *testing.T) {
 		PartitionID:      protocol.Directory,
 		PartitionType:    protocol.PartitionTypeDirectory,
 		EventBus:         events.NewBus(logger),
-		NodeKeyHash:      sha256.Sum256(net.Bvns[0].Nodes[0].NodeKey[32:]),
+		NodeKeyHash:      sha256.Sum256(net.Bvns[0].Nodes[0].DnNodeKey[32:]),
 		ValidatorKeyHash: sha256.Sum256(net.Bvns[0].Nodes[0].PrivValKey[32:]),
 	})
 

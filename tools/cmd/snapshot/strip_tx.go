@@ -102,7 +102,7 @@ func stripSnapshot(_ *cobra.Command, args []string) {
 					// Restore the chain
 					c2, err := account.RestoreChainHead(batch, c)
 					check(err)
-					check(c2.Inner().RestoreMarkPointRange(c, 0, len(c.MarkPoints)))
+					check(c.RestoreMarkPointRange(c2.Inner(), 0, len(c.MarkPoints)))
 				}
 
 				i++

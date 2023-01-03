@@ -72,7 +72,7 @@ func UnmarshalTransactionResultFrom(rd io.Reader) (TransactionResult, error) {
 	}
 
 	// Create a new transaction result
-	tx, err := NewTransactionResult(TransactionType(typ))
+	tx, err := NewTransactionResult(typ)
 	if err != nil {
 		return nil, err
 	}

@@ -64,6 +64,11 @@ func (f *FieldType) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 
+	if strings.HasSuffix(s, "!") {
+		f.SetNamed(s[:len(s)-1])
+		return nil
+	}
+
 	code, ok := TypeCodeByName(s)
 	if ok {
 		f.SetKnown(code)
@@ -190,6 +195,8 @@ type Type struct {
 	IgnoreSizeLimit bool `yaml:"ignore-size-limit"`
 	// CustomIsValid specifies the type defines a custom IsValid() error method.
 	CustomIsValid bool `yaml:"custom-is-valid"`
+	// CustomEqual specifies the type defines a custom Equal() error method.
+	CustomEqual bool `yaml:"custom-equal"`
 	// Fields is a list of fields.
 	Fields []*Field
 	// Embeddings is a list of embedded types.
@@ -286,6 +293,8 @@ type Field struct {
 	Alternative string
 	// ZeroValue specifies the zero value of the field.
 	ZeroValue interface{} `yaml:"zero-value"`
+	// ElideUnionMethods specifies whether the union type name should be elided from method names.
+	ElideUnionMethods bool `yaml:"elide-union-methods"`
 	// Virtual specifies whether the field is implemented as a method instead of an actual field.
 	Virtual bool
 	// NonBinary specifies whether the field is binary marshallable.

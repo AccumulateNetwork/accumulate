@@ -9,6 +9,8 @@ PortOffset:
     value: 0
   TendermintRpc:
     value: 1
+  AccumulateP2P:
+    value: 2
   Prometheus:
     value: 3
   AccumulateApi:

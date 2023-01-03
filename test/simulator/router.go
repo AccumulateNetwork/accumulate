@@ -88,7 +88,7 @@ func (r *Router) RequestAPIv2(ctx context.Context, partition, method string, par
 	r.lastUsedMu.Lock()
 	last := r.lastUsed[partition]
 	r.lastUsed[partition] = (last + 1) % len(p.nodes)
-	c := p.nodes[last].client
+	c := p.nodes[last].clientV2
 	r.lastUsedMu.Unlock()
 
 	return c.RequestAPIv2(ctx, method, params, result)
@@ -121,6 +121,16 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("submit: %w", err)
 	}
+
+	p.mu.Lock()
+	if p.routerSubmitHook != nil {
+		var keep bool
+		deliveries, keep = p.routerSubmitHook(deliveries)
+		if !keep {
+			p.routerSubmitHook = nil
+		}
+	}
+	p.mu.Unlock()
 
 	resp := new(routing.ResponseSubmit)
 	results := make([]*protocol.TransactionStatus, len(deliveries))

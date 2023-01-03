@@ -21,6 +21,8 @@ NodeStatusOptions:
   fields:
     - name: NodeID
       type: string
+    - name: Partition
+      type: string
 
 NetworkStatusOptions:
   fields:
@@ -58,4 +60,6 @@ ValidateOptions:
       optional: true
 
 SubscribeOptions:
-  fields: ~
+  fields:
+    - name: Partition
+      type: string

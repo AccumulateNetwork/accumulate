@@ -17,7 +17,7 @@ type DevnetOptions struct {
 	ValidatorCount int
 	FollowerCount  int
 	BasePort       int
-	GenerateKeys   func() (privVal, node []byte)
+	GenerateKeys   func() (privVal, dnn, bvnn []byte)
 	HostName       func(bvnNum, nodeNum int) (host, listen string)
 }
 
@@ -42,9 +42,10 @@ func NewDevnet(opts DevnetOptions) *NetworkInit {
 			bvnInit.Nodes = append(bvnInit.Nodes, nodeInit)
 
 			if opts.GenerateKeys != nil {
-				privVal, node := opts.GenerateKeys()
+				privVal, dnn, bvnn := opts.GenerateKeys()
 				nodeInit.PrivValKey = privVal
-				nodeInit.NodeKey = node
+				nodeInit.DnNodeKey = dnn
+				nodeInit.BvnNodeKey = bvnn
 			}
 
 			if opts.HostName != nil {

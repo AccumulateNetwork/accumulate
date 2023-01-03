@@ -44,5 +44,7 @@ NodeInit:
     type: string
   - name: PrivValKey
     type: bytes
-  - name: NodeKey
+  - name: DnNodeKey
+    type: bytes
+  - name: BvnNodeKey
     type: bytes

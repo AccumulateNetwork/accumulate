@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -21,11 +21,9 @@ func TestAddCredits_BurnsAcme(t *testing.T) {
 	var timestamp uint64
 	const issued = 1000.00
 	const balance = 100.00
-	const spend = 0.0001
 	const oracle = InitialAcmeOracleValue
-
-	// The (testnet) oracle is $5000/ACME so spending 0.0001 ACME buys 50 credits ($0.50)
 	const expectedCredits = 50
+	const spend = expectedCredits / oracle * CreditPrecision
 
 	// Initialize
 	sim := simulator.New(t, 3)
@@ -79,12 +77,13 @@ func TestAddCredits_RefundsAcme(t *testing.T) {
 	var timestamp uint64
 	const issued = 1000.00
 	const balance = 100.00
-	const spend = 0.0001
 	const oracle = InitialAcmeOracleValue
+	const expectedCredits = 50
+	const spend = expectedCredits / oracle * CreditPrecision
 
 	// The oracle is $5000/ACME and the minimum spend/fee is $0.01 so the
 	// minimum debit is 0.000002 ACME
-	const minSpend = 0.000002
+	const minSpend = 100 / oracle
 
 	// Initialize
 	sim := simulator.New(t, 3)

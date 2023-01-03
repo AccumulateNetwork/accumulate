@@ -20,9 +20,9 @@ func NewFactomDataEntry() *FactomDataEntry {
 	return new(FactomDataEntry)
 }
 
-//ComputeFactomEntryHashForAccount will compute the entry hash from an entry.
-//If accountId is nil, then entry will be used to construct an account id,
-//and it assumes the entry will be the first entry in the chain
+// ComputeFactomEntryHashForAccount will compute the entry hash from an entry.
+// If accountId is nil, then entry will be used to construct an account id,
+// and it assumes the entry will be the first entry in the chain
 func ComputeFactomEntryHashForAccount(accountId []byte, entry [][]byte) ([]byte, error) {
 	lde := FactomDataEntry{}
 	if entry == nil {

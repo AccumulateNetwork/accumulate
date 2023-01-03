@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -26,8 +26,8 @@ func TestOracleDistribution(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Partition(Directory)
-	bvn0 := sim.Partition(sim.Partitions[1].Id)
-	bvn1 := sim.Partition(sim.Partitions[2].Id)
+	bvn0 := sim.Partition("BVN0")
+	bvn1 := sim.Partition("BVN1")
 
 	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.OperatorsPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
@@ -59,7 +59,7 @@ func TestOracleDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	bvn := sim.Partition(sim.Partitions[1].Id)
+	bvn := sim.Partition("BVN0")
 	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Describe.NodeUrl(Oracle))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, oracleEntry.GetData(), account.Entry.GetData())
@@ -67,8 +67,8 @@ func TestOracleDistribution(t *testing.T) {
 
 	// Verify globals variable
 	expected := uint64(price * AcmeOraclePrecision)
-	require.Equal(t, int(expected), int(dn.Executor.ActiveGlobals_TESTONLY().Oracle.Price))
-	require.Equal(t, int(expected), int(bvn.Executor.ActiveGlobals_TESTONLY().Oracle.Price))
+	require.Equal(t, int(expected), int(dn.Globals().Oracle.Price))
+	require.Equal(t, int(expected), int(bvn.Globals().Oracle.Price))
 }
 
 func TestRoutingDistribution(t *testing.T) {
@@ -88,7 +88,7 @@ func TestRoutingDistribution(t *testing.T) {
 	timestamp = keyEntry.GetLastUsedOn()
 
 	// Update
-	g = dn.Executor.ActiveGlobals_TESTONLY().Copy()
+	g = dn.Globals().Copy()
 	g.Routing.Overrides = append(g.Routing.Overrides, RouteOverride{
 		Account:   AccountUrl("staking"),
 		Partition: Directory,
@@ -111,12 +111,12 @@ func TestRoutingDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	bvn := sim.Partition(sim.Partitions[1].Id)
+	bvn := sim.Partition("BVN0")
 	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Describe.NodeUrl(Routing))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, entry.GetData(), account.Entry.GetData())
 	require.Len(t, account.Entry.GetData(), 1)
 
 	// Verify globals variable
-	require.True(t, g.Routing.Equal(bvn.Executor.ActiveGlobals_TESTONLY().Routing))
+	require.True(t, g.Routing.Equal(bvn.Globals().Routing))
 }

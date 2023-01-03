@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package jsonrpc
 
 import (
@@ -6,6 +12,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -29,8 +36,9 @@ func formatResponse(res interface{}, err error) interface{} {
 	}
 
 	// Ensure the error is an Error
+	type Error errors.Error
 	err2 := errors.UnknownError.Wrap(err).(*errors.Error)
-	return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Code.String(), err2)
+	return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Error(), (*Error)(err2))
 }
 
 type NodeService struct{ api.NodeService }
@@ -42,7 +50,7 @@ func (s NodeService) methods() jsonrpc2.MethodMap {
 }
 
 func (s NodeService) NodeStatus(ctx context.Context, params json.RawMessage) interface{} {
-	req, err := parseRequest[*NodeStatusRequest](params)
+	req, err := parseRequest[*message.NodeStatusRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
 	}
@@ -58,7 +66,7 @@ func (s NetworkService) methods() jsonrpc2.MethodMap {
 }
 
 func (s NetworkService) NetworkStatus(ctx context.Context, params json.RawMessage) interface{} {
-	req, err := parseRequest[*NetworkStatusRequest](params)
+	req, err := parseRequest[*message.NetworkStatusRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
 	}
@@ -74,7 +82,7 @@ func (s MetricsService) methods() jsonrpc2.MethodMap {
 }
 
 func (s MetricsService) Metrics(ctx context.Context, params json.RawMessage) interface{} {
-	req, err := parseRequest[*MetricsRequest](params)
+	req, err := parseRequest[*message.MetricsRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
 	}
@@ -90,7 +98,7 @@ func (s Querier) methods() jsonrpc2.MethodMap {
 }
 
 func (s Querier) Query(ctx context.Context, params json.RawMessage) interface{} {
-	req, err := parseRequest[*QueryRequest](params)
+	req, err := parseRequest[*message.QueryRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
 	}
@@ -106,7 +114,7 @@ func (s Submitter) methods() jsonrpc2.MethodMap {
 }
 
 func (s Submitter) Submit(ctx context.Context, params json.RawMessage) interface{} {
-	req, err := parseRequest[*SubmitRequest](params)
+	req, err := parseRequest[*message.SubmitRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
 	}
@@ -122,7 +130,7 @@ func (s Validator) methods() jsonrpc2.MethodMap {
 }
 
 func (s Validator) Validate(ctx context.Context, params json.RawMessage) interface{} {
-	req, err := parseRequest[*ValidateRequest](params)
+	req, err := parseRequest[*message.ValidateRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
 	}

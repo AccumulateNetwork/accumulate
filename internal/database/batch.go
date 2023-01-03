@@ -8,6 +8,7 @@ package database
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -35,10 +36,10 @@ var _ Beginner = (*Batch)(nil)
 
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
-	d.nextBatchId++
+	id := atomic.AddInt64(&d.nextBatchId, 1)
 
 	b := new(Batch)
-	b.id = fmt.Sprint(d.nextBatchId)
+	b.id = fmt.Sprint(id)
 	b.writable = writable
 	b.logger.L = d.logger
 	b.kvstore = d.store.Begin(writable)
@@ -115,7 +116,7 @@ func (b *Batch) Update(fn func(batch *Batch) error) error {
 // panic.
 func (b *Batch) Commit() error {
 	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
+		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
 	}
 	defer func() { b.done = true }()
 
@@ -189,7 +190,7 @@ func (b *Batch) AccountByID(id []byte) (*Account, error) {
 // GetValue implements record.Store.
 func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
+		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
 	}
 
 	v, err := resolveValue[record.ValueReader](b, key)
@@ -204,7 +205,7 @@ func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 // PutValue implements record.Store.
 func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
+		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
 	}
 
 	v, err := resolveValue[record.ValueWriter](b, key)

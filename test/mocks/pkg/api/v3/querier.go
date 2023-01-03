@@ -52,9 +52,9 @@ type Querier_Query_Call struct {
 }
 
 // Query is a helper method to define mock.On call
-//  - ctx context.Context
-//  - scope *url.URL
-//  - query api.Query
+//   - ctx context.Context
+//   - scope *url.URL
+//   - query api.Query
 func (_e *Querier_Expecter) Query(ctx interface{}, scope interface{}, query interface{}) *Querier_Query_Call {
 	return &Querier_Query_Call{Call: _e.mock.On("Query", ctx, scope, query)}
 }

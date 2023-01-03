@@ -1,8 +1,12 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package jsonrpc
 
 import "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-
-//go:generate go run ../../../../tools/cmd/gen-types --package jsonrpc requests.yml --reference ../options.yml
 
 type RangeOptions = api.RangeOptions
 type NodeStatusOptions = api.NodeStatusOptions

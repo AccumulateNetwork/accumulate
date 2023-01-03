@@ -93,14 +93,24 @@ return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "
 
 {{define "entity"}}
 {{$c := .}}
-type {{.FullName}} struct {
+
+{{if .Interface}}
+type {{.FullName}} interface {
+	record.Record
+	{{- range .Attributes}}
+	{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}}
+	{{- end}}
+}
+{{end}}
+
+type {{fullName .}} struct {
 	logger logging.OptionalLogger
 	store record.Store
 	{{- if not .Root}}
 	key record.Key
 	label string
 	{{- if .GetParent}}
-	parent *{{.GetParent.FullName}}
+	parent *{{fullName .GetParent}}
 	{{- end}}
 	{{- end}}
 	{{- range .Fields}}
@@ -128,16 +138,16 @@ func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType
 
 {{range .Attributes}}
 {{if not .OmitAccessor}}
-func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) *{{recordType .}} {
+func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}} {
 	{{- if parameterized .}}
 	return getOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}),
 	{{- else}}
 	return getOrCreateField(&c.{{lower .Name}},
 	{{- end -}}
 
-	func() *{{recordType .}} {
+	func() {{recordType . true}} {
 		{{- if .Type.IsEntity}}
-		v := new({{.FullName}})
+		v := new({{fullName .}})
 		v.logger = c.logger
 		v.store = c.store
 		v.key = {{template "key" .}}
@@ -145,7 +155,7 @@ func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 		v.label = {{template "valueLabel" .}}
 		return v
 		{{- else if .Type.IsChain}}
-		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+		return database.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
 		{{- else if .Type.IsOther}}
 		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
 		{{- else if .IsCounted}}
@@ -158,7 +168,7 @@ func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 {{end}}
 {{end}}
 
-func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 0 {
 		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
 	}
@@ -187,7 +197,7 @@ func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) 
 	}
 }
 
-func (c *{{.FullName}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
+func (c *{{fullName .}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -211,7 +221,7 @@ func (c *{{.FullName}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 
 {{if hasChains .}}
 {{if not .Root}}
-func (c *{{.FullName}}) resolveChain(name string) (chain *managed.Chain, ok bool) {
+func (c *{{fullName .}}) resolveChain(name string) (chain *database.Chain, ok bool) {
 	{{- range .Attributes}}
 	{{- if and (.Type.IsChain) (not (parameterized .))}}
 	if name == "{{chainName .}}"{
@@ -222,7 +232,7 @@ func (c *{{.FullName}}) resolveChain(name string) (chain *managed.Chain, ok bool
 
 	{{- range .Attributes}}
 	{{- if and (parameterized .) (hasChains .)}}
-	tryResolveChainParam(&chain, &ok, name, "{{chainName .}}(", {{parameterCount .}}, func(params []string, name string) (*managed.Chain, bool) {
+	tryResolveChainParam(&chain, &ok, name, "{{chainName .}}(", {{parameterCount .}}, func(params []string, name string) (*database.Chain, bool) {
 		ok := true
 		{{- range $i, $p := .Parameters}}
 		param{{$p.Name}} := parseChainParam(&ok, params[{{$i}}], record.Parse{{title $p.Type.String}})
@@ -241,12 +251,12 @@ func (c *{{.FullName}}) resolveChain(name string) (chain *managed.Chain, ok bool
 }
 {{end}}
 
-func (c *{{.FullName}}) dirtyChains() []*managed.Chain {
+func (c *{{fullName .}}) dirtyChains() []*database.Chain {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*managed.Chain
+	var chains []*database.Chain
 	{{  range .Attributes}}
 	{{- if parameterized .}}
 	{{- if .Type.IsChain}}
@@ -273,7 +283,7 @@ func (c *{{.FullName}}) dirtyChains() []*managed.Chain {
 }
 {{end}}
 
-func (c *{{.FullName}}) {{if .CustomCommit}}base{{end}}Commit() error {
+func (c *{{fullName .}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	if c == nil {
 		return nil
 	}
@@ -303,8 +313,9 @@ func (c *{{.FullName}}) {{if .CustomCommit}}base{{end}}Commit() error {
 {{template "entity" .}}
 {{end}}
 
-func getOrCreateField[T any](ptr **T, create func() *T) *T {
-	if *ptr != nil {
+func getOrCreateField[T any](ptr *T, create func() T) T {
+	var z T
+	if any(*ptr) != any(z) {
 		return *ptr
 	}
 
@@ -326,14 +337,16 @@ func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T
 	return v
 }
 
-func commitField[T any, PT record.RecordPtr[T]](lastErr *error, field PT) {
-	if *lastErr != nil || field == nil {
+func commitField[T record.Record](lastErr *error, field T) {
+	var z T
+	if *lastErr != nil || any(field) == any(z) {
 		return
 	}
 
 	*lastErr = field.Commit()
 }
 
-func fieldIsDirty[T any, PT record.RecordPtr[T]](field PT) bool {
-	return field != nil && field.IsDirty()
+func fieldIsDirty[T record.Record](field T) bool {
+	var z T
+	return any(field) != any(z) && field.IsDirty()
 }

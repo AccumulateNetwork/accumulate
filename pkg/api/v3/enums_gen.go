@@ -14,6 +14,15 @@ import (
 	"strings"
 )
 
+// EventTypeError .
+const EventTypeError EventType = 1
+
+// EventTypeBlock .
+const EventTypeBlock EventType = 2
+
+// EventTypeGlobals .
+const EventTypeGlobals EventType = 3
+
 // QueryTypeDefault .
 const QueryTypeDefault QueryType = 0
 
@@ -82,6 +91,70 @@ const RecordTypeTxID RecordType = 130
 
 // RecordTypeIndexEntry .
 const RecordTypeIndexEntry RecordType = 131
+
+// GetEnumValue returns the value of the Event Type
+func (v EventType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *EventType) SetEnumValue(id uint64) bool {
+	u := EventType(id)
+	switch u {
+	case EventTypeError, EventTypeBlock, EventTypeGlobals:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Event Type.
+func (v EventType) String() string {
+	switch v {
+	case EventTypeError:
+		return "error"
+	case EventTypeBlock:
+		return "block"
+	case EventTypeGlobals:
+		return "globals"
+	default:
+		return fmt.Sprintf("EventType:%d", v)
+	}
+}
+
+// EventTypeByName returns the named Event Type.
+func EventTypeByName(name string) (EventType, bool) {
+	switch strings.ToLower(name) {
+	case "error":
+		return EventTypeError, true
+	case "block":
+		return EventTypeBlock, true
+	case "globals":
+		return EventTypeGlobals, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Event Type to JSON as a string.
+func (v EventType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Event Type from JSON as a string.
+func (v *EventType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = EventTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Event Type %q", s)
+	}
+	return nil
+}
 
 // GetEnumValue returns the value of the Query Type
 func (v QueryType) GetEnumValue() uint64 { return uint64(v) }

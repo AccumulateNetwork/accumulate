@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -189,11 +190,11 @@ type Account struct {
 	label  string
 	parent *Batch
 
-	url                    *record.Value[*url.URL]
-	main                   *record.Value[protocol.Account]
-	pending                *record.Set[*url.TxID]
-	syntheticForAnchor     map[accountSyntheticForAnchorKey]*record.Set[*url.TxID]
-	directory              *record.Set[*url.URL]
+	url                    record.Value[*url.URL]
+	main                   record.Value[protocol.Account]
+	pending                record.Set[*url.TxID]
+	syntheticForAnchor     map[accountSyntheticForAnchorKey]record.Set[*url.TxID]
+	directory              record.Set[*url.URL]
 	mainChain              *Chain2
 	scratchChain           *Chain2
 	signatureChain         *Chain2
@@ -202,8 +203,8 @@ type Account struct {
 	majorBlockChain        *Chain2
 	syntheticSequenceChain map[accountSyntheticSequenceChainKey]*Chain2
 	anchorChain            map[accountAnchorChainKey]*AccountAnchorChain
-	chains                 *record.Set[*protocol.ChainMetadata]
-	syntheticAnchors       *record.Set[[32]byte]
+	chains                 record.Set[*protocol.ChainMetadata]
+	syntheticAnchors       record.Set[[32]byte]
 	data                   *AccountData
 }
 
@@ -231,32 +232,32 @@ func keyForAccountAnchorChain(partition string) accountAnchorChainKey {
 	return accountAnchorChainKey{partition}
 }
 
-func (c *Account) getUrl() *record.Value[*url.URL] {
-	return getOrCreateField(&c.url, func() *record.Value[*url.URL] {
+func (c *Account) getUrl() record.Value[*url.URL] {
+	return getOrCreateField(&c.url, func() record.Value[*url.URL] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Url"), c.label+" "+"url", false, record.Wrapped(record.UrlWrapper))
 	})
 }
 
-func (c *Account) Main() *record.Value[protocol.Account] {
-	return getOrCreateField(&c.main, func() *record.Value[protocol.Account] {
+func (c *Account) Main() record.Value[protocol.Account] {
+	return getOrCreateField(&c.main, func() record.Value[protocol.Account] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Union(protocol.UnmarshalAccount))
 	})
 }
 
-func (c *Account) Pending() *record.Set[*url.TxID] {
-	return getOrCreateField(&c.pending, func() *record.Set[*url.TxID] {
+func (c *Account) Pending() record.Set[*url.TxID] {
+	return getOrCreateField(&c.pending, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Pending"), c.label+" "+"pending", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
-func (c *Account) SyntheticForAnchor(anchor [32]byte) *record.Set[*url.TxID] {
-	return getOrCreateMap(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), func() *record.Set[*url.TxID] {
+func (c *Account) SyntheticForAnchor(anchor [32]byte) record.Set[*url.TxID] {
+	return getOrCreateMap(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", anchor), c.label+" "+"synthetic for anchor"+" "+hex.EncodeToString(anchor[:]), record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
-func (c *Account) Directory() *record.Set[*url.URL] {
-	return getOrCreateField(&c.directory, func() *record.Set[*url.URL] {
+func (c *Account) Directory() record.Set[*url.URL] {
+	return getOrCreateField(&c.directory, func() record.Set[*url.URL] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" "+"directory", record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
@@ -315,14 +316,14 @@ func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
 	})
 }
 
-func (c *Account) Chains() *record.Set[*protocol.ChainMetadata] {
-	return getOrCreateField(&c.chains, func() *record.Set[*protocol.ChainMetadata] {
+func (c *Account) Chains() record.Set[*protocol.ChainMetadata] {
+	return getOrCreateField(&c.chains, func() record.Set[*protocol.ChainMetadata] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" "+"chains", record.Struct[protocol.ChainMetadata](), func(u, v *protocol.ChainMetadata) int { return u.Compare(v) })
 	})
 }
 
-func (c *Account) SyntheticAnchors() *record.Set[[32]byte] {
-	return getOrCreateField(&c.syntheticAnchors, func() *record.Set[[32]byte] {
+func (c *Account) SyntheticAnchors() record.Set[[32]byte] {
+	return getOrCreateField(&c.syntheticAnchors, func() record.Set[[32]byte] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), c.label+" "+"synthetic anchors", record.Wrapped(record.HashWrapper), record.CompareHash)
 	})
 }
@@ -573,8 +574,8 @@ type AccountData struct {
 	label  string
 	parent *Account
 
-	entry       *record.Counted[[32]byte]
-	transaction map[accountDataTransactionKey]*record.Value[[32]byte]
+	entry       record.Counted[[32]byte]
+	transaction map[accountDataTransactionKey]record.Value[[32]byte]
 }
 
 type accountDataTransactionKey struct {
@@ -585,14 +586,14 @@ func keyForAccountDataTransaction(entryHash [32]byte) accountDataTransactionKey 
 	return accountDataTransactionKey{entryHash}
 }
 
-func (c *AccountData) Entry() *record.Counted[[32]byte] {
-	return getOrCreateField(&c.entry, func() *record.Counted[[32]byte] {
+func (c *AccountData) Entry() record.Counted[[32]byte] {
+	return getOrCreateField(&c.entry, func() record.Counted[[32]byte] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), c.label+" "+"entry", record.WrappedFactory(record.HashWrapper))
 	})
 }
 
-func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
-	return getOrCreateMap(&c.transaction, keyForAccountDataTransaction(entryHash), func() *record.Value[[32]byte] {
+func (c *AccountData) Transaction(entryHash [32]byte) record.Value[[32]byte] {
+	return getOrCreateMap(&c.transaction, keyForAccountDataTransaction(entryHash), func() record.Value[[32]byte] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), c.label+" "+"transaction"+" "+hex.EncodeToString(entryHash[:]), false, record.Wrapped(record.HashWrapper))
 	})
 }
@@ -658,11 +659,11 @@ type Transaction struct {
 	label  string
 	parent *Batch
 
-	main       *record.Value[*SigOrTxn]
-	status     *record.Value[*protocol.TransactionStatus]
-	produced   *record.Set[*url.TxID]
-	signatures map[transactionSignaturesKey]*record.Value[*sigSetData]
-	chains     *record.Set[*TransactionChainEntry]
+	main       record.Value[*SigOrTxn]
+	status     record.Value[*protocol.TransactionStatus]
+	produced   record.Set[*url.TxID]
+	signatures map[transactionSignaturesKey]record.Value[*sigSetData]
+	chains     record.Set[*TransactionChainEntry]
 }
 
 type transactionSignaturesKey struct {
@@ -673,32 +674,32 @@ func keyForTransactionSignatures(signer *url.URL) transactionSignaturesKey {
 	return transactionSignaturesKey{record.MapKeyUrl(signer)}
 }
 
-func (c *Transaction) Main() *record.Value[*SigOrTxn] {
-	return getOrCreateField(&c.main, func() *record.Value[*SigOrTxn] {
+func (c *Transaction) Main() record.Value[*SigOrTxn] {
+	return getOrCreateField(&c.main, func() record.Value[*SigOrTxn] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Struct[SigOrTxn]())
 	})
 }
 
-func (c *Transaction) Status() *record.Value[*protocol.TransactionStatus] {
-	return getOrCreateField(&c.status, func() *record.Value[*protocol.TransactionStatus] {
+func (c *Transaction) Status() record.Value[*protocol.TransactionStatus] {
+	return getOrCreateField(&c.status, func() record.Value[*protocol.TransactionStatus] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" "+"status", true, record.Struct[protocol.TransactionStatus]())
 	})
 }
 
-func (c *Transaction) Produced() *record.Set[*url.TxID] {
-	return getOrCreateField(&c.produced, func() *record.Set[*url.TxID] {
+func (c *Transaction) Produced() record.Set[*url.TxID] {
+	return getOrCreateField(&c.produced, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" "+"produced", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
-func (c *Transaction) getSignatures(signer *url.URL) *record.Value[*sigSetData] {
-	return getOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() *record.Value[*sigSetData] {
+func (c *Transaction) getSignatures(signer *url.URL) record.Value[*sigSetData] {
+	return getOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() record.Value[*sigSetData] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" "+"signatures"+" "+signer.RawString(), true, record.Struct[sigSetData]())
 	})
 }
 
-func (c *Transaction) Chains() *record.Set[*TransactionChainEntry] {
-	return getOrCreateField(&c.chains, func() *record.Set[*TransactionChainEntry] {
+func (c *Transaction) Chains() record.Set[*TransactionChainEntry] {
+	return getOrCreateField(&c.chains, func() record.Set[*TransactionChainEntry] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" "+"chains", record.Struct[TransactionChainEntry](), func(u, v *TransactionChainEntry) int { return u.Compare(v) })
 	})
 }
@@ -782,7 +783,7 @@ type SystemData struct {
 	label  string
 	parent *Batch
 
-	syntheticIndexIndex map[systemDataSyntheticIndexIndexKey]*record.Value[uint64]
+	syntheticIndexIndex map[systemDataSyntheticIndexIndexKey]record.Value[uint64]
 }
 
 type systemDataSyntheticIndexIndexKey struct {
@@ -793,8 +794,8 @@ func keyForSystemDataSyntheticIndexIndex(block uint64) systemDataSyntheticIndexI
 	return systemDataSyntheticIndexIndexKey{block}
 }
 
-func (c *SystemData) SyntheticIndexIndex(block uint64) *record.Value[uint64] {
-	return getOrCreateMap(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), func() *record.Value[uint64] {
+func (c *SystemData) SyntheticIndexIndex(block uint64) record.Value[uint64] {
+	return getOrCreateMap(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), func() record.Value[uint64] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("SyntheticIndexIndex", block), c.label+" "+"synthetic index index"+" "+strconv.FormatUint(block, 10), false, record.Wrapped(record.UintWrapper))
 	})
 }
@@ -847,8 +848,164 @@ func (c *SystemData) Commit() error {
 	return err
 }
 
-func getOrCreateField[T any](ptr **T, create func() *T) *T {
-	if *ptr != nil {
+type MerkleManager struct {
+	logger    logging.OptionalLogger
+	store     record.Store
+	key       record.Key
+	label     string
+	typ       merkle.ChainType
+	name      string
+	markPower int64
+	markFreq  int64
+	markMask  int64
+
+	head         record.Value[*MerkleState]
+	states       map[merkleManagerStatesKey]record.Value[*MerkleState]
+	elementIndex map[merkleManagerElementIndexKey]record.Value[uint64]
+	element      map[merkleManagerElementKey]record.Value[[]byte]
+}
+
+type merkleManagerStatesKey struct {
+	Index uint64
+}
+
+func keyForMerkleManagerStates(index uint64) merkleManagerStatesKey {
+	return merkleManagerStatesKey{index}
+}
+
+type merkleManagerElementIndexKey struct {
+	Hash [32]byte
+}
+
+func keyForMerkleManagerElementIndex(hash []byte) merkleManagerElementIndexKey {
+	return merkleManagerElementIndexKey{record.MapKeyBytes(hash)}
+}
+
+type merkleManagerElementKey struct {
+	Index uint64
+}
+
+func keyForMerkleManagerElement(index uint64) merkleManagerElementKey {
+	return merkleManagerElementKey{index}
+}
+
+func (c *MerkleManager) Head() record.Value[*MerkleState] {
+	return getOrCreateField(&c.head, func() record.Value[*MerkleState] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" "+"head", true, record.Struct[MerkleState]())
+	})
+}
+
+func (c *MerkleManager) States(index uint64) record.Value[*MerkleState] {
+	return getOrCreateMap(&c.states, keyForMerkleManagerStates(index), func() record.Value[*MerkleState] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" "+"states"+" "+strconv.FormatUint(index, 10), false, record.Struct[MerkleState]())
+	})
+}
+
+func (c *MerkleManager) ElementIndex(hash []byte) record.Value[uint64] {
+	return getOrCreateMap(&c.elementIndex, keyForMerkleManagerElementIndex(hash), func() record.Value[uint64] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" "+"element index"+" "+hex.EncodeToString(hash), false, record.Wrapped(record.UintWrapper))
+	})
+}
+
+func (c *MerkleManager) Element(index uint64) record.Value[[]byte] {
+	return getOrCreateMap(&c.element, keyForMerkleManagerElement(index), func() record.Value[[]byte] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" "+"element"+" "+strconv.FormatUint(index, 10), false, record.Wrapped(record.BytesWrapper))
+	})
+}
+
+func (c *MerkleManager) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.InternalError.With("bad key for merkle manager")
+	}
+
+	switch key[0] {
+	case "Head":
+		return c.Head(), key[1:], nil
+	case "States":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		index, okIndex := key[1].(uint64)
+		if !okIndex {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		v := c.States(index)
+		return v, key[2:], nil
+	case "ElementIndex":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		hash, okHash := key[1].([]byte)
+		if !okHash {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		v := c.ElementIndex(hash)
+		return v, key[2:], nil
+	case "Element":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		index, okIndex := key[1].(uint64)
+		if !okIndex {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		v := c.Element(index)
+		return v, key[2:], nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for merkle manager")
+	}
+}
+
+func (c *MerkleManager) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.head) {
+		return true
+	}
+	for _, v := range c.states {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.elementIndex {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.element {
+		if v.IsDirty() {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *MerkleManager) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.head)
+	for _, v := range c.states {
+		commitField(&err, v)
+	}
+	for _, v := range c.elementIndex {
+		commitField(&err, v)
+	}
+	for _, v := range c.element {
+		commitField(&err, v)
+	}
+
+	return err
+}
+
+func getOrCreateField[T any](ptr *T, create func() T) T {
+	var z T
+	if any(*ptr) != any(z) {
 		return *ptr
 	}
 
@@ -870,14 +1027,16 @@ func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T
 	return v
 }
 
-func commitField[T any, PT record.RecordPtr[T]](lastErr *error, field PT) {
-	if *lastErr != nil || field == nil {
+func commitField[T record.Record](lastErr *error, field T) {
+	var z T
+	if *lastErr != nil || any(field) == any(z) {
 		return
 	}
 
 	*lastErr = field.Commit()
 }
 
-func fieldIsDirty[T any, PT record.RecordPtr[T]](field PT) bool {
-	return field != nil && field.IsDirty()
+func fieldIsDirty[T record.Record](field T) bool {
+	var z T
+	return any(field) != any(z) && field.IsDirty()
 }

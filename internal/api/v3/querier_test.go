@@ -1,4 +1,10 @@
-package api
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package api_test
 
 import (
 	"context"
@@ -9,14 +15,16 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -59,7 +67,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		simulator.GenesisWith(GenesisTime, g),
 	)
 	s.Require().NoError(err)
-	sim := &Sim{T: s.T(), Simulator: s.sim}
+	sim := NewSimWith(s.T(), s.sim)
 
 	faucetKey := acctesting.GenerateKey("faucet")
 	s.faucet = acctesting.AcmeLiteAddressStdPriv(faucetKey)
@@ -153,7 +161,7 @@ func (s *QuerierTestSuite) TestQueryChains() {
 	s.Require().NoError(err)
 	_ = s.Len(r.Records, 3) &&
 		s.Equal("main", r.Records[0].Name) &&
-		s.Equal(managed.ChainTypeTransaction, r.Records[0].Type) &&
+		s.Equal(merkle.ChainTypeTransaction, r.Records[0].Type) &&
 		s.Equal(2, int(r.Records[0].Count))
 }
 
@@ -161,7 +169,7 @@ func (s *QuerierTestSuite) TestQueryChain() {
 	r, err := s.QuerierFor(s.alice).QueryChain(context.Background(), s.alice, &api.ChainQuery{Name: "main"})
 	s.Require().NoError(err)
 	_ = s.Equal("main", r.Name) &&
-		s.Equal(managed.ChainTypeTransaction, r.Type) &&
+		s.Equal(merkle.ChainTypeTransaction, r.Type) &&
 		s.Equal(2, int(r.Count))
 }
 

@@ -22,7 +22,12 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
+	{{- if not (isPkg "pkg/types/merkle")}}
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	{{- end}}
 	{{- if not (isPkg "pkg/errors")}}
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	{{- end}}
@@ -82,7 +87,7 @@ func (v *{{.FullName true false}}) Copy() *{{.FullName true false}} {
 func (v *{{.FullName true false}}) CopyAsInterface() interface{} { return v.Copy() }
 {{end}}{{end}}
 
-{{range .Types}}{{if .IsComparable}}
+{{range .Types}}{{if and .IsComparable (not .CustomEqual)}}
 func (v *{{.FullName true false}}) Equal(u *{{.FullName true false}}) bool {
 	{{- range .Fields}}
 	{{- if and .IsMarshalled (not .Virtual)}}
