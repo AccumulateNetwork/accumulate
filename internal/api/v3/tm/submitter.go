@@ -13,10 +13,10 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	"github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -47,7 +47,7 @@ func NewSubmitter(params SubmitterParams) *Submitter {
 func (s *Submitter) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	// Verify the envelope is well-formed
 	if opts.Verify == nil || *opts.Verify {
-		_, err := chain.NormalizeEnvelope(envelope)
+		_, err := messaging.NormalizeLegacy(envelope)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("verify: %w", err)
 		}
