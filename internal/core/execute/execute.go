@@ -36,7 +36,7 @@ type Executor interface {
 	Validate(*database.Batch, messaging.Message) (*protocol.TransactionStatus, error)
 
 	// Begin begins a block.
-	Begin(*database.Batch, BlockParams) (Block, error)
+	Begin(BlockParams) (Block, error)
 }
 
 type Options struct {

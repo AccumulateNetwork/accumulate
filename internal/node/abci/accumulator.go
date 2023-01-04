@@ -335,8 +335,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	isLeader := bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
 
 	var err error
-	batch := app.DB.Begin(true)
-	app.block, err = app.Executor.Begin(batch, execute.BlockParams{
+	app.block, err = app.Executor.Begin(execute.BlockParams{
 		Context:    ctx,
 		IsLeader:   isLeader,
 		Index:      uint64(req.Header.Height),
@@ -345,7 +344,6 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 		Evidence:   req.ByzantineValidators,
 	})
 	if err != nil {
-		batch.Discard()
 		app.fatal(err)
 		return ret
 	}

@@ -237,10 +237,8 @@ func (n *Node) checkTx(message messaging.Message, typ abcitypes.CheckTxType) (*p
 }
 
 func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
-	batch := n.Begin(true)
-	block, err := n.executor.Begin(batch, params)
+	block, err := n.executor.Begin(params)
 	if err != nil {
-		batch.Discard()
 		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
 	}
 	return block, nil

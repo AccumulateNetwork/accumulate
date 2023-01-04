@@ -63,13 +63,16 @@ func (x *ExecutorV1) Validate(batch *database.Batch, message messaging.Message) 
 	return status, err
 }
 
-func (x *ExecutorV1) Begin(batch *database.Batch, params execute.BlockParams) (execute.Block, error) {
+func (x *ExecutorV1) Begin(params execute.BlockParams) (execute.Block, error) {
 	b := new(BlockV1)
 	b.Executor = (*block.Executor)(x)
 	b.Block = new(block.Block)
-	b.Block.Batch = batch
+	b.Block.Batch = x.Database.Begin(true)
 	b.Block.BlockMeta = params
 	err := b.Executor.BeginBlock(b.Block)
+	if err != nil {
+		b.Block.Batch.Discard()
+	}
 	return b, err
 }
 
