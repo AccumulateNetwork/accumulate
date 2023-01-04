@@ -16,9 +16,9 @@ import (
 
 	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -226,10 +226,10 @@ func (p *Partition) execute() error {
 
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)
-	blocks := make([]abci.Block, len(p.nodes))
+	blocks := make([]execute.Block, len(p.nodes))
 	for i, n := range p.nodes {
 		var err error
-		blocks[i], err = n.beginBlock(abci.BlockParams{
+		blocks[i], err = n.beginBlock(execute.BlockParams{
 			Context:  context.Background(),
 			Index:    p.blockIndex,
 			Time:     p.blockTime,
@@ -260,7 +260,7 @@ func (p *Partition) execute() error {
 	}
 
 	// End block
-	blockState := make([]abci.BlockState, len(p.nodes))
+	blockState := make([]execute.BlockState, len(p.nodes))
 	endBlock := make([][]*validatorUpdate, len(p.nodes))
 	for i, n := range p.nodes {
 		blockState[i], endBlock[i], err = n.endBlock(blocks[i])

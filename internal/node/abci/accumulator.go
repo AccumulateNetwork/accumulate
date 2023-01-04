@@ -26,6 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -47,8 +48,8 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block          Block
-	blockState     BlockState
+	block          execute.Block
+	blockState     execute.BlockState
 	blockSpan      trace.Span
 	txct           int64
 	timer          time.Time
@@ -66,7 +67,7 @@ type Accumulator struct {
 type AccumulatorOptions struct {
 	*config.Config
 	Tracer   trace.Tracer
-	Executor Executor
+	Executor execute.Executor
 	EventBus *events.Bus
 	DB       *database.Database
 	Logger   log.Logger
@@ -335,7 +336,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	var err error
 	batch := app.DB.Begin(true)
-	app.block, err = app.Executor.Begin(batch, BlockParams{
+	app.block, err = app.Executor.Begin(batch, execute.BlockParams{
 		Context:    ctx,
 		IsLeader:   isLeader,
 		Index:      uint64(req.Header.Height),

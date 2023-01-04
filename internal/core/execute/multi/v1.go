@@ -12,9 +12,9 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -63,7 +63,7 @@ func (x *ExecutorV1) Validate(batch *database.Batch, message messaging.Message) 
 	return status, err
 }
 
-func (x *ExecutorV1) Begin(batch *database.Batch, params abci.BlockParams) (abci.Block, error) {
+func (x *ExecutorV1) Begin(batch *database.Batch, params execute.BlockParams) (execute.Block, error) {
 	b := new(BlockV1)
 	b.Executor = (*block.Executor)(x)
 	b.Block = new(block.Block)
@@ -78,7 +78,7 @@ type BlockV1 struct {
 	Executor *block.Executor
 }
 
-func (b *BlockV1) Params() abci.BlockParams { return b.Block.BlockMeta }
+func (b *BlockV1) Params() execute.BlockParams { return b.Block.BlockMeta }
 
 func (b *BlockV1) Process(message messaging.Message) (*protocol.TransactionStatus, error) {
 	legacy, ok := message.(*messaging.LegacyMessage)
@@ -97,14 +97,14 @@ func (b *BlockV1) Process(message messaging.Message) (*protocol.TransactionStatu
 	return status, err
 }
 
-func (b *BlockV1) Close() (abci.BlockState, error) {
+func (b *BlockV1) Close() (execute.BlockState, error) {
 	err := b.Executor.EndBlock(b.Block)
 	return (*BlockStateV1)(b.Block), err
 }
 
 type BlockStateV1 block.Block
 
-func (b *BlockStateV1) Params() abci.BlockParams { return b.BlockMeta }
+func (b *BlockStateV1) Params() execute.BlockParams { return b.BlockMeta }
 
 func (s *BlockStateV1) IsEmpty() bool {
 	return s.State.Empty()

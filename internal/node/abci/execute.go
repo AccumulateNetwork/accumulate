@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -49,13 +50,13 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	return deliveries, results, rset, nil
 }
 
-func checkTx(exec Executor, batch *database.Batch) executeFunc {
+func checkTx(exec execute.Executor, batch *database.Batch) executeFunc {
 	return func(deliveries []messaging.Message) []*protocol.TransactionStatus {
 		return ValidateEnvelopeSet(exec, batch, deliveries)
 	}
 }
 
-func deliverTx(exec Executor, block Block) executeFunc {
+func deliverTx(exec execute.Executor, block execute.Block) executeFunc {
 	return func(deliveries []messaging.Message) []*protocol.TransactionStatus {
 		return ExecuteEnvelopeSet(block, deliveries)
 	}

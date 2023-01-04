@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // BlockMeta is metadata about a block.
-type BlockMeta = abci.BlockParams
+type BlockMeta = execute.BlockParams
 
 // BlockState tracks various metrics of a block of transactions as they are
 // executed.

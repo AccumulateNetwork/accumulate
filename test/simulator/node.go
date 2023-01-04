@@ -22,10 +22,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -49,7 +48,7 @@ type Node struct {
 	privValKey []byte
 
 	globals  atomic.Value
-	executor abci.Executor
+	executor execute.Executor
 	apiV2    *apiv2.JrpcMethods
 	clientV2 *client.Client
 	querySvc api.Querier
@@ -237,7 +236,7 @@ func (n *Node) checkTx(message messaging.Message, typ abcitypes.CheckTxType) (*p
 	return s, nil
 }
 
-func (n *Node) beginBlock(params abci.BlockParams) (abci.Block, error) {
+func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
 	batch := n.Begin(true)
 	block, err := n.executor.Begin(batch, params)
 	if err != nil {
@@ -247,7 +246,7 @@ func (n *Node) beginBlock(params abci.BlockParams) (abci.Block, error) {
 	return block, nil
 }
 
-func (n *Node) deliverTx(block abci.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
+func (n *Node) deliverTx(block execute.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
 	s, err := block.Process(message)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
@@ -255,7 +254,7 @@ func (n *Node) deliverTx(block abci.Block, message messaging.Message) (*protocol
 	return s, nil
 }
 
-func (n *Node) endBlock(block abci.Block) (abci.BlockState, []*validatorUpdate, error) {
+func (n *Node) endBlock(block execute.Block) (execute.BlockState, []*validatorUpdate, error) {
 	state, err := block.Close()
 	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("end block: %w", err)
@@ -270,7 +269,7 @@ func (n *Node) endBlock(block abci.Block) (abci.BlockState, []*validatorUpdate, 
 	return state, u, nil
 }
 
-func (n *Node) commit(state abci.BlockState) ([]byte, error) {
+func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 	if state.IsEmpty() {
 		// Discard changes
 		state.Discard()
