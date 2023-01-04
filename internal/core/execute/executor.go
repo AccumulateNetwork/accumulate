@@ -9,10 +9,10 @@ package execute
 import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -25,13 +25,13 @@ type Executor interface {
 	RestoreSnapshot(database.Beginner, ioutil2.SectionReader) error
 	InitChainValidators(initVal []abci.ValidatorUpdate) (additional [][]byte, err error)
 
-	ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, error)
-	BeginBlock(block *block.Block) error
-	ExecuteEnvelope(block *block.Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error)
-	EndBlock(block *block.Block) error
+	ValidateEnvelope(*database.Batch, messaging.Message) (*protocol.TransactionStatus, error)
+	BeginBlock(*block.Block) error
+	ExecuteEnvelope(*block.Block, messaging.Message) (*protocol.TransactionStatus, error)
+	EndBlock(*block.Block) error
 }
 
-func ValidateEnvelopeSet(x Executor, batch *database.Batch, deliveries []*chain.Delivery) []*protocol.TransactionStatus {
+func ValidateEnvelopeSet(x Executor, batch *database.Batch, deliveries []messaging.Message) []*protocol.TransactionStatus {
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
 		status, err := x.ValidateEnvelope(batch, delivery)
@@ -39,10 +39,6 @@ func ValidateEnvelopeSet(x Executor, batch *database.Batch, deliveries []*chain.
 			status = new(protocol.TransactionStatus)
 		}
 		results[i] = status
-
-		// Wait until after ValidateEnvelope, because the transaction may get
-		// loaded by LoadTransaction
-		status.TxID = delivery.Transaction.ID()
 
 		if err != nil {
 			status.Set(err)
@@ -52,7 +48,7 @@ func ValidateEnvelopeSet(x Executor, batch *database.Batch, deliveries []*chain.
 	return results
 }
 
-func ExecuteEnvelopeSet(x Executor, b *block.Block, deliveries []*chain.Delivery) []*protocol.TransactionStatus {
+func ExecuteEnvelopeSet(x Executor, b *block.Block, deliveries []messaging.Message) []*protocol.TransactionStatus {
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
 		status, err := x.ExecuteEnvelope(b, delivery)
@@ -60,10 +56,6 @@ func ExecuteEnvelopeSet(x Executor, b *block.Block, deliveries []*chain.Delivery
 			status = new(protocol.TransactionStatus)
 		}
 		results[i] = status
-
-		// Wait until after ExecuteEnvelope, because the transaction may get
-		// loaded by LoadTransaction
-		status.TxID = delivery.Transaction.ID()
 
 		if err != nil {
 			status.Set(err)

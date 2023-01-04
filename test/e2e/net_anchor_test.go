@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -51,11 +52,12 @@ func TestAnchorThreshold(t *testing.T) {
 
 	// Capture the BVN's anchors and verify they're the same
 	var anchors []*chain.Delivery
-	sim.SetSubmitHook("Directory", func(delivery *chain.Delivery) (dropTx bool, keepHook bool) {
+	sim.SetSubmitHook("Directory", func(message messaging.Message) (dropTx bool, keepHook bool) {
+		delivery := message.(*messaging.LegacyMessage)
 		if delivery.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
 			return false, true
 		}
-		anchors = append(anchors, delivery)
+		anchors = append(anchors, chain.DeliveryFromMessage(delivery))
 		return true, len(anchors) < valCount
 	})
 

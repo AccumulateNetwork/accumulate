@@ -35,6 +35,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -401,7 +402,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		defer batch.Discard()
 	}
 
-	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)
+	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)
 	if err != nil {
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseCheckTx
@@ -416,8 +417,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	const maxPriority = (1 << 32) - 1
 
 	seq := map[[32]byte]uint64{}
-	for _, env := range envelopes {
-		for _, sig := range env.Signatures {
+	for _, message := range messages {
+		message := message.(*messaging.LegacyMessage)
+		for _, sig := range message.Signatures {
 			sig, ok := sig.(*protocol.PartitionSignature)
 			if ok {
 				seq[sig.TransactionHash] = sig.SequenceNumber
@@ -428,11 +430,12 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
 		var priority int64
-		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() {
+		message := messages[i].(*messaging.LegacyMessage)
+		if typ := message.Transaction.Body.Type(); typ.IsSystem() {
 			priority = maxPriority
 		} else if typ.IsSynthetic() {
 			// Set the priority based on the sequence number to try to keep them in order
-			seq := seq[*(*[32]byte)(envelopes[i].Transaction.GetHash())]
+			seq := seq[*(*[32]byte)(message.Transaction.GetHash())]
 			priority = maxPriority - 1 - int64(seq)
 		}
 		if resp.Priority < priority {
@@ -441,7 +444,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if result.Error == nil {
 			continue
 		}
-		if !result.Code.Success() && !envelopes[i].Transaction.Body.Type().IsUser() {
+		if !result.Code.Success() && !message.Transaction.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)

@@ -21,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -32,6 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -219,14 +219,14 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	return root, nil
 }
 
-func (n *Node) checkTx(delivery *chain.Delivery, typ abcitypes.CheckTxType) (*protocol.TransactionStatus, error) {
+func (n *Node) checkTx(message messaging.Message, typ abcitypes.CheckTxType) (*protocol.TransactionStatus, error) {
 	// TODO: Maintain a shared batch if typ is not recheck. I tried to do this
 	// but it lead to "attempted to use a committed or discarded batch" panics.
 
 	batch := n.database.Begin(false)
 	defer batch.Discard()
 
-	s, err := n.executor.ValidateEnvelope(batch, delivery)
+	s, err := n.executor.ValidateEnvelope(batch, message)
 	if s == nil {
 		s = new(protocol.TransactionStatus)
 	}
@@ -245,8 +245,8 @@ func (n *Node) beginBlock(block *block.Block) error {
 	return nil
 }
 
-func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	s, err := n.executor.ExecuteEnvelope(block, delivery)
+func (n *Node) deliverTx(block *block.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
+	s, err := n.executor.ExecuteEnvelope(block, message)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
 	}
@@ -372,7 +372,7 @@ func (s *nodeService) Validate(ctx context.Context, envelope *protocol.Envelope,
 
 func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.Submission, error) {
 	// Convert the envelope to deliveries
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	deliveries, err := messaging.NormalizeLegacy(envelope)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

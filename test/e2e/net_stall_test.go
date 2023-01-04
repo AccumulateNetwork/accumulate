@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -58,7 +58,8 @@ func TestDnStall(t *testing.T) {
 
 	// Drop all transactions from the DN
 	for _, p := range sim.Partitions() {
-		sim.SetSubmitHook(p.ID, func(delivery *chain.Delivery) (dropTx bool, keepHook bool) {
+		sim.SetSubmitHook(p.ID, func(message messaging.Message) (dropTx bool, keepHook bool) {
+			delivery := message.(*messaging.LegacyMessage)
 			for _, sig := range delivery.Signatures {
 				sig, ok := sig.(*PartitionSignature)
 				if !ok {

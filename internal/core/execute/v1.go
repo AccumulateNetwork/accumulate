@@ -13,6 +13,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -42,10 +44,19 @@ func (x *ExecutorV1) InitChainValidators(initVal []abci.ValidatorUpdate) (additi
 	return (*block.Executor)(x).InitChainValidators(initVal)
 }
 
-func (x *ExecutorV1) ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func (x *ExecutorV1) ValidateEnvelope(batch *database.Batch, message messaging.Message) (*protocol.TransactionStatus, error) {
+	legacy, ok := message.(*messaging.LegacyMessage)
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
+	}
+
 	status := new(protocol.TransactionStatus)
 	var err error
-	status.Result, err = (*block.Executor)(x).ValidateEnvelope(batch, delivery)
+	status.Result, err = (*block.Executor)(x).ValidateEnvelope(batch, chain.DeliveryFromMessage(legacy))
+
+	// Wait until after ValidateEnvelope, because the transaction may get
+	// loaded by LoadTransaction
+	status.TxID = legacy.Transaction.ID()
 	return status, err
 }
 
@@ -53,8 +64,21 @@ func (x *ExecutorV1) BeginBlock(b *block.Block) error {
 	return (*block.Executor)(x).BeginBlock(b)
 }
 
-func (x *ExecutorV1) ExecuteEnvelope(b *block.Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	return (*block.Executor)(x).ExecuteEnvelope(b, delivery)
+func (x *ExecutorV1) ExecuteEnvelope(b *block.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
+	legacy, ok := message.(*messaging.LegacyMessage)
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
+	}
+
+	status, err := (*block.Executor)(x).ExecuteEnvelope(b, chain.DeliveryFromMessage(legacy))
+	if status == nil {
+		status = new(protocol.TransactionStatus)
+	}
+
+	// Wait until after ValidateEnvelope, because the transaction may get
+	// loaded by LoadTransaction
+	status.TxID = legacy.Transaction.ID()
+	return status, err
 }
 
 func (x *ExecutorV1) EndBlock(b *block.Block) error {

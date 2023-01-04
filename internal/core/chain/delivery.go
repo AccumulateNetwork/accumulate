@@ -24,7 +24,7 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 
 	deliveries := make([]*Delivery, len(messages))
 	for i, message := range messages {
-		deliveries[i] = DeliveryFromMessage(message)
+		deliveries[i] = DeliveryFromMessage(message.(*messaging.LegacyMessage))
 	}
 	return deliveries, nil
 }

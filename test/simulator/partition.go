@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,13 +16,13 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -33,8 +33,8 @@ type Partition struct {
 	validators [][32]byte
 
 	mu         *sync.Mutex
-	mempool    []*chain.Delivery
-	deliver    []*chain.Delivery
+	mempool    []messaging.Message
+	deliver    []messaging.Message
 	blockIndex uint64
 	blockTime  time.Time
 
@@ -42,8 +42,8 @@ type Partition struct {
 	routerSubmitHook RouterSubmitHookFunc
 }
 
-type SubmitHookFunc func(*chain.Delivery) (dropTx, keepHook bool)
-type RouterSubmitHookFunc func([]*chain.Delivery) (_ []*chain.Delivery, keepHook bool)
+type SubmitHookFunc func(messaging.Message) (dropTx, keepHook bool)
+type RouterSubmitHookFunc func([]messaging.Message) (_ []messaging.Message, keepHook bool)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -151,28 +151,18 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	return nil
 }
 
-func copyDelivery(d *chain.Delivery) *chain.Delivery {
-	e := new(chain.Delivery)
-	e.Transaction = d.Transaction.Copy()
-	e.Signatures = make([]protocol.Signature, len(d.Signatures))
-	for i, s := range d.Signatures {
-		e.Signatures[i] = s.CopyAsInterface().(protocol.Signature)
-	}
-	return e
-}
-
-func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.TransactionStatus, error) {
+func (p *Partition) Submit(message messaging.Message, pretend bool) (*protocol.TransactionStatus, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.submitHook != nil {
-		drop, keep := p.submitHook(delivery)
+		drop, keep := p.submitHook(message)
 		if !keep {
 			p.submitHook = nil
 		}
 		if drop {
 			s := new(protocol.TransactionStatus)
-			s.TxID = delivery.Transaction.ID()
+			s.TxID = message.(*messaging.LegacyMessage).Transaction.ID()
 			return s, nil
 		}
 	}
@@ -181,19 +171,20 @@ func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.Tr
 	result := make([]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
 		// Make a copy to prevent changes
-		result[i], err = node.checkTx(copyDelivery(delivery), types.CheckTxType_New)
+		result[i], err = node.checkTx(messaging.CopyMessage(message), types.CheckTxType_New)
 		if err != nil {
 			return nil, errors.FatalError.Wrap(err)
 		}
 	}
 	for _, r := range result[1:] {
 		if !result[0].Equal(r) {
-			return nil, errors.FatalError.WithFormat("consensus failure: check tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
+			message := message.(*messaging.LegacyMessage)
+			return nil, errors.FatalError.WithFormat("consensus failure: check tx: transaction %x (%v)", message.Transaction.GetHash()[:4], message.Transaction.Body.Type())
 		}
 	}
 
 	if !pretend && result[0].Code.Success() {
-		p.mempool = append(p.mempool, delivery)
+		p.mempool = append(p.mempool, message)
 	}
 	return result[0], nil
 }
@@ -251,17 +242,18 @@ func (p *Partition) execute() error {
 	// Deliver Tx
 	var err error
 	results := make([]*protocol.TransactionStatus, len(p.nodes))
-	for _, delivery := range deliveries {
+	for _, message := range deliveries {
 		for i, node := range p.nodes {
 			// Make a copy to prevent changes
-			results[i], err = node.deliverTx(blocks[i], copyDelivery(delivery))
+			results[i], err = node.deliverTx(blocks[i], messaging.CopyMessage(message))
 			if err != nil {
 				return errors.FatalError.WithFormat("execute: %w", err)
 			}
 		}
 		for _, r := range results[1:] {
 			if !results[0].Equal(r) {
-				return errors.FatalError.WithFormat("consensus failure: deliver tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
+				message := message.(*messaging.LegacyMessage)
+				return errors.FatalError.WithFormat("consensus failure: deliver tx: transaction %x (%v)", message.Transaction.GetHash()[:4], message.Transaction.Body.Type())
 			}
 		}
 	}

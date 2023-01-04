@@ -35,6 +35,7 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -270,7 +271,10 @@ func (s *Simulator) SubmitTo(partition string, delivery *chain.Delivery) (*proto
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	return p.Submit(delivery, false)
+	return p.Submit(&messaging.LegacyMessage{
+		Transaction: delivery.Transaction,
+		Signatures:  delivery.Signatures,
+	}, false)
 }
 
 func (s *Simulator) Partitions() []*protocol.PartitionInfo {

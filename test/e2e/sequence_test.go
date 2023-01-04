@@ -22,6 +22,7 @@ import (
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -377,9 +378,16 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	})
 
 	// Resubmit the original, valid signature
+	messages := make([]messaging.Message, 0, len(original))
+	for i, delivery := range original {
+		messages[i] = &messaging.LegacyMessage{
+			Transaction: delivery.Transaction,
+			Signatures:  delivery.Signatures,
+		}
+	}
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	results := execute.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, original)
+	results := execute.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, messages)
 	for _, result := range results {
 		if result.Error != nil {
 			require.NoError(t, result.Error)

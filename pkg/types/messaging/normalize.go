@@ -15,7 +15,7 @@ import (
 
 // NormalizeLegacy normalizes the envelope into one or more legacy delivery
 // messages.
-func NormalizeLegacy(envelope *protocol.Envelope) ([]*LegacyMessage, error) {
+func NormalizeLegacy(envelope *protocol.Envelope) ([]Message, error) {
 	// Validate the envelope's TxHash
 	var envTxHash *[32]byte
 	switch len(envelope.TxHash) {
@@ -29,7 +29,7 @@ func NormalizeLegacy(envelope *protocol.Envelope) ([]*LegacyMessage, error) {
 
 	// Create a map (and an ordered list) of all transactions
 	txnMap := make(map[[32]byte]*LegacyMessage, len(envelope.Transaction))
-	txnList := make([]*LegacyMessage, 0, len(envelope.Transaction))
+	txnList := make([]Message, 0, len(envelope.Transaction))
 	for i, txn := range envelope.Transaction {
 		if txn.Body == nil {
 			return nil, fmt.Errorf("transaction %d: nil body", i)
@@ -99,7 +99,7 @@ func NormalizeLegacy(envelope *protocol.Envelope) ([]*LegacyMessage, error) {
 		delivery.Signatures = append(delivery.Signatures, sig)
 	}
 
-	for _, delivery := range txnList {
+	for _, delivery := range txnMap {
 		// A transaction with no signatures is invalid
 		if len(delivery.Signatures) == 0 {
 			return nil, errors.BadRequest.WithFormat("the envelope does not contain any signatures matching transaction %X (%v)", delivery.Transaction.GetHash()[:8], delivery.Transaction.Body.Type())

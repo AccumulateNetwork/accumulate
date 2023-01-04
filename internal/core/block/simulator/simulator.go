@@ -37,6 +37,7 @@ import (
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -420,7 +421,7 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		x := s.Partition(partition)
 
 		// Normalize - use a copy to avoid weird issues caused by modifying values
-		deliveries, err := chain.NormalizeEnvelope(envelope.Copy())
+		deliveries, err := messaging.NormalizeLegacy(envelope.Copy())
 		if err != nil {
 			return nil, err
 		}
@@ -692,9 +693,14 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		err := x.Executor.BeginBlock(block)
 		require.NoError(x, err)
 
+		messages := make([]messaging.Message, 0, len(deliveries))
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
+				messages = append(messages, &messaging.LegacyMessage{
+					Transaction: deliveries[i].Transaction,
+					Signatures:  deliveries[i].Signatures,
+				})
 				continue
 			}
 			if !errors.Is(err, errors.Delivered) {
@@ -708,7 +714,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results := execute.ExecuteEnvelopeSet((*execute.ExecutorV1)(x.Executor), block, deliveries)
+		results := execute.ExecuteEnvelopeSet((*execute.ExecutorV1)(x.Executor), block, messages)
 		for _, result := range results {
 			if result.Error != nil {
 				return errors.UnknownError.Wrap(result.Error)
