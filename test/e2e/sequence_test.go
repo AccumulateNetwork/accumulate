@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -387,7 +388,7 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	}
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	results := execute.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, messages)
+	results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, messages)
 	for _, result := range results {
 		if result.Error != nil {
 			require.NoError(t, result.Error)

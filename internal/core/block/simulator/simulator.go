@@ -31,6 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -429,7 +430,7 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		// Check
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		results := execute.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, deliveries)
+		results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, deliveries)
 		for _, result := range results {
 			if result.Error != nil {
 				return nil, errors.UnknownError.Wrap(result.Error)
@@ -714,7 +715,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results := execute.ExecuteEnvelopeSet((*execute.ExecutorV1)(x.Executor), block, messages)
+		results := abci.ExecuteEnvelopeSet(&execute.BlockV1{Block: block, Executor: x.Executor}, messages)
 		for _, result := range results {
 			if result.Error != nil {
 				return errors.UnknownError.Wrap(result.Error)

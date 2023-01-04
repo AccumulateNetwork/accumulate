@@ -25,9 +25,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -49,7 +47,7 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block          *block.Block
+	block          Block
 	blockSpan      trace.Span
 	txct           int64
 	timer          time.Time
@@ -67,7 +65,7 @@ type Accumulator struct {
 type AccumulatorOptions struct {
 	*config.Config
 	Tracer   trace.Tracer
-	Executor execute.Executor
+	Executor Executor
 	EventBus *events.Bus
 	DB       *database.Database
 	Logger   log.Logger
@@ -283,12 +281,9 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	}
 
 	// Notify the world of the committed block
-	block := new(block.Block)
-	block.Index = protocol.GenesisBlock
-	block.Time = req.Time
 	err = app.EventBus.Publish(events.DidCommitBlock{
-		Index: block.Index,
-		Time:  block.Time,
+		Index: protocol.GenesisBlock,
+		Time:  req.Time,
 	})
 	if err != nil {
 		panic(fmt.Errorf("failed to publish block notification: %v", err))
@@ -334,18 +329,18 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	var ret abci.ResponseBeginBlock
 
-	app.block = new(block.Block)
-	app.block.Context = ctx
-	app.block.IsLeader = bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
-	app.block.Index = uint64(req.Header.Height)
-	app.block.Time = req.Header.Time
-	app.block.CommitInfo = &req.LastCommitInfo
-	app.block.Evidence = req.ByzantineValidators
-	app.block.Batch = app.DB.Begin(true)
-
-	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	err := app.Executor.BeginBlock(app.block)
+	var err error
+	batch := app.DB.Begin(true)
+	app.block, err = app.Executor.BeginBlock(ctx, batch, BlockParams{
+		//Identify the leader for this block, if we are the proposer... then we are the leader.
+		IsLeader:   bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
+		Index:      uint64(req.Header.Height),
+		Time:       req.Header.Time,
+		CommitInfo: &req.LastCommitInfo,
+		Evidence:   req.ByzantineValidators,
+	})
 	if err != nil {
+		batch.Discard()
 		app.fatal(err)
 		return ret
 	}
@@ -460,7 +455,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
 	defer app.recover(&rdt.Code)
 
-	_, span := app.Tracer.Start(app.block.Context, "DeliverTx")
+	_, span := app.Tracer.Start(app.block.Context(), "DeliverTx")
 	defer span.End()
 
 	// Is the node borked?
@@ -489,16 +484,16 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	defer app.recover(nil)
 
-	_, span := app.Tracer.Start(app.block.Context, "EndBlock")
+	_, span := app.Tracer.Start(app.block.Context(), "EndBlock")
 	defer span.End()
 
-	err := app.Executor.EndBlock(app.block)
+	err := app.block.End()
 	if err != nil {
 		app.fatal(err)
 		return abci.ResponseEndBlock{}
 	}
 
-	if app.block.State.Empty() {
+	if app.block.Empty() {
 		return abci.ResponseEndBlock{}
 	}
 
@@ -516,12 +511,12 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	defer func() { app.block = nil }()
 	defer app.blockSpan.End()
 
-	_, span := app.Tracer.Start(app.block.Context, "Commit")
+	_, span := app.Tracer.Start(app.block.Context(), "Commit")
 	defer span.End()
 
 	tick := time.Now()
 	// Is the block empty?
-	if app.block.State.Empty() {
+	if app.block.Empty() {
 		timeSinceAppStart := time.Since(app.startTime).Seconds()
 		ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
 		if ds != nil {
@@ -532,7 +527,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 				aveBlockTime = blockTime / float64(app.txct)
 				estTps = 1.0 / aveBlockTime
 			}
-			ds.Save("height", app.block.Index, 10, true)
+			ds.Save("height", app.block.Params().Index, 10, true)
 			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 			ds.Save("block_time", blockTime, 6, false)
 			ds.Save("ave_block_time", aveBlockTime, 10, false)
@@ -549,7 +544,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 		ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
 		if ds != nil {
-			ds.Save("height", app.block.Index, 10, true)
+			ds.Save("height", app.block.Params().Index, 10, true)
 			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 			app.Executor.StoreBlockTimers(ds)
 		}
@@ -557,7 +552,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		go app.Accumulate.AnalysisLog.Flush()
 
 		// Discard changes
-		app.block.Batch.Discard()
+		app.block.Batch().Discard()
 
 		// Get the old root
 		batch := app.DB.Begin(false)
@@ -569,7 +564,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	// Commit the batch
-	err := app.block.Batch.Commit()
+	err := app.block.Batch().Commit()
 
 	commitTime := time.Since(tick).Seconds()
 	tick = time.Now()
@@ -581,9 +576,9 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	// Notify the world of the committed block
 	err = app.EventBus.Publish(events.DidCommitBlock{
-		Index: app.block.Index,
-		Time:  app.block.Time,
-		Major: app.block.State.MakeMajorBlock,
+		Index: app.block.Params().Index,
+		Time:  app.block.Params().Time,
+		Major: app.block.MajorBlock(),
 	})
 	if err != nil {
 		app.fatal(err)
@@ -623,7 +618,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 			aveBlockTime = blockTime / float64(app.txct)
 			estTps = 1.0 / aveBlockTime
 		}
-		ds.Save("height", app.block.Index, 10, true)
+		ds.Save("height", app.block.Params().Index, 10, true)
 		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 		ds.Save("block_time", blockTime, 6, false)
 		ds.Save("commit_time", commitTime, 6, false)
@@ -645,13 +640,13 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
 	if ds != nil {
-		ds.Save("height", app.block.Index, 10, true)
+		ds.Save("height", app.block.Params().Index, 10, true)
 		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 		app.Executor.StoreBlockTimers(ds)
 	}
 
 	go app.Accumulate.AnalysisLog.Flush()
 	duration := time.Since(app.timer)
-	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock, "duration", duration, "count", app.txct)
+	app.logger.Debug("Committed", "minor", app.block.Params().Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.MajorBlock(), "duration", duration, "count", app.txct)
 	return resp
 }

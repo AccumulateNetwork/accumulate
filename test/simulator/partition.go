@@ -15,9 +15,9 @@ import (
 
 	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -225,15 +225,14 @@ func (p *Partition) execute() error {
 
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)
-	blocks := make([]*block.Block, len(p.nodes))
+	blocks := make([]abci.Block, len(p.nodes))
 	for i, n := range p.nodes {
-		b := new(block.Block)
-		b.Index = p.blockIndex
-		b.Time = p.blockTime
-		b.IsLeader = i == leader
-		blocks[i] = b
-
-		err := n.beginBlock(b)
+		var err error
+		blocks[i], err = n.beginBlock(abci.BlockParams{
+			Index:    p.blockIndex,
+			Time:     p.blockTime,
+			IsLeader: i == leader,
+		})
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}

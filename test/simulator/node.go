@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -48,7 +49,7 @@ type Node struct {
 	privValKey []byte
 
 	globals  atomic.Value
-	executor execute.Executor
+	executor abci.Executor
 	apiV2    *apiv2.JrpcMethods
 	clientV2 *client.Client
 	querySvc api.Querier
@@ -236,30 +237,31 @@ func (n *Node) checkTx(message messaging.Message, typ abcitypes.CheckTxType) (*p
 	return s, nil
 }
 
-func (n *Node) beginBlock(block *block.Block) error {
-	block.Batch = n.Begin(true)
-	err := n.executor.BeginBlock(block)
+func (n *Node) beginBlock(params abci.BlockParams) (abci.Block, error) {
+	batch := n.Begin(true)
+	block, err := n.executor.BeginBlock(context.Background(), batch, params)
 	if err != nil {
-		return errors.UnknownError.WithFormat("begin block: %w", err)
+		batch.Discard()
+		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
 	}
-	return nil
+	return block, nil
 }
 
-func (n *Node) deliverTx(block *block.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
-	s, err := n.executor.ExecuteEnvelope(block, message)
+func (n *Node) deliverTx(block abci.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
+	s, err := block.ExecuteEnvelope(message)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
 	}
 	return s, nil
 }
 
-func (n *Node) endBlock(block *block.Block) ([]*validatorUpdate, error) {
-	err := n.executor.EndBlock(block)
+func (n *Node) endBlock(block abci.Block) ([]*validatorUpdate, error) {
+	err := block.End()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("end block: %w", err)
 	}
 
-	if block.State.Empty() {
+	if block.Empty() {
 		return nil, nil
 	}
 
@@ -268,10 +270,10 @@ func (n *Node) endBlock(block *block.Block) ([]*validatorUpdate, error) {
 	return u, nil
 }
 
-func (n *Node) commit(block *block.Block) ([]byte, error) {
-	if block.State.Empty() {
+func (n *Node) commit(block abci.Block) ([]byte, error) {
+	if block.Empty() {
 		// Discard changes
-		block.Batch.Discard()
+		block.Batch().Discard()
 
 		// Get the old root
 		batch := n.database.Begin(false)
@@ -280,16 +282,16 @@ func (n *Node) commit(block *block.Block) ([]byte, error) {
 	}
 
 	// Commit
-	err := block.Batch.Commit()
+	err := block.Batch().Commit()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("commit: %w", err)
 	}
 
 	// Notify
 	err = n.eventBus.Publish(events.DidCommitBlock{
-		Index: block.Index,
-		Time:  block.Time,
-		Major: block.State.MakeMajorBlock,
+		Index: block.Params().Index,
+		Time:  block.Params().Time,
+		Major: block.MajorBlock(),
 	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("notify of commit: %w", err)

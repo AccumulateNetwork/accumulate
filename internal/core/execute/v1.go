@@ -7,11 +7,14 @@
 package execute
 
 import (
-	abci "github.com/tendermint/tendermint/abci/types"
+	"context"
+
+	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -40,7 +43,7 @@ func (x *ExecutorV1) RestoreSnapshot(batch database.Beginner, snapshot ioutil2.S
 	return (*block.Executor)(x).RestoreSnapshot(batch, snapshot)
 }
 
-func (x *ExecutorV1) InitChainValidators(initVal []abci.ValidatorUpdate) (additional [][]byte, err error) {
+func (x *ExecutorV1) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
 	return (*block.Executor)(x).InitChainValidators(initVal)
 }
 
@@ -60,17 +63,35 @@ func (x *ExecutorV1) ValidateEnvelope(batch *database.Batch, message messaging.M
 	return status, err
 }
 
-func (x *ExecutorV1) BeginBlock(b *block.Block) error {
-	return (*block.Executor)(x).BeginBlock(b)
+func (x *ExecutorV1) BeginBlock(ctx context.Context, batch *database.Batch, params abci.BlockParams) (abci.Block, error) {
+	b := new(BlockV1)
+	b.Executor = (*block.Executor)(x)
+	b.Block = new(block.Block)
+	b.Block.Context = ctx
+	b.Block.Batch = batch
+	b.Block.BlockMeta = params
+	err := b.Executor.BeginBlock(b.Block)
+	return b, err
 }
 
-func (x *ExecutorV1) ExecuteEnvelope(b *block.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
+type BlockV1 struct {
+	Block    *block.Block
+	Executor *block.Executor
+}
+
+func (b *BlockV1) Params() abci.BlockParams { return b.Block.BlockMeta }
+func (b *BlockV1) Context() context.Context { return b.Block.Context }
+func (b *BlockV1) Batch() *database.Batch   { return b.Block.Batch }
+func (b *BlockV1) Empty() bool              { return b.Block.State.Empty() }
+func (b *BlockV1) MajorBlock() uint64       { return b.Block.State.MakeMajorBlock }
+
+func (b *BlockV1) ExecuteEnvelope(message messaging.Message) (*protocol.TransactionStatus, error) {
 	legacy, ok := message.(*messaging.LegacyMessage)
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
 	}
 
-	status, err := (*block.Executor)(x).ExecuteEnvelope(b, chain.DeliveryFromMessage(legacy))
+	status, err := b.Executor.ExecuteEnvelope(b.Block, chain.DeliveryFromMessage(legacy))
 	if status == nil {
 		status = new(protocol.TransactionStatus)
 	}
@@ -81,6 +102,6 @@ func (x *ExecutorV1) ExecuteEnvelope(b *block.Block, message messaging.Message) 
 	return status, err
 }
 
-func (x *ExecutorV1) EndBlock(b *block.Block) error {
-	return (*block.Executor)(x).EndBlock(b)
+func (b *BlockV1) End() error {
+	return b.Executor.EndBlock(b.Block)
 }

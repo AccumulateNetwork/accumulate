@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -55,7 +56,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	results := execute.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, messages)
+	results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, messages)
 	for _, s := range results {
 		if !s.Failed() {
 			continue
