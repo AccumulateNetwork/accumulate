@@ -21,6 +21,7 @@ func SignatureForHash(hash []byte) SignatureBuilder {
 
 func SignatureForTxID(txid *url.TxID) SignatureBuilder {
 	txn := new(protocol.Transaction)
+	txn.Header.Principal = txid.Account()
 	txn.Body = &protocol.RemoteTransaction{Hash: txid.Hash()}
 	return SignatureBuilder{transaction: txn}
 }
