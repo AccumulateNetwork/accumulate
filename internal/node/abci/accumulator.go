@@ -48,6 +48,7 @@ type Accumulator struct {
 	logger log.Logger
 
 	block          Block
+	blockState     BlockState
 	blockSpan      trace.Span
 	txct           int64
 	timer          time.Time
@@ -329,11 +330,14 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	var ret abci.ResponseBeginBlock
 
+	//Identify the leader for this block, if we are the proposer... then we are the leader.
+	isLeader := bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
+
 	var err error
 	batch := app.DB.Begin(true)
-	app.block, err = app.Executor.Begin(ctx, batch, BlockParams{
-		//Identify the leader for this block, if we are the proposer... then we are the leader.
-		IsLeader:   bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
+	app.block, err = app.Executor.Begin(batch, BlockParams{
+		Context:    ctx,
+		IsLeader:   isLeader,
 		Index:      uint64(req.Header.Height),
 		Time:       req.Header.Time,
 		CommitInfo: &req.LastCommitInfo,
@@ -455,7 +459,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
 	defer app.recover(&rdt.Code)
 
-	_, span := app.Tracer.Start(app.block.Context(), "DeliverTx")
+	_, span := app.Tracer.Start(app.block.Params().Context, "DeliverTx")
 	defer span.End()
 
 	// Is the node borked?
@@ -484,16 +488,17 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	defer app.recover(nil)
 
-	_, span := app.Tracer.Start(app.block.Context(), "EndBlock")
+	_, span := app.Tracer.Start(app.block.Params().Context, "EndBlock")
 	defer span.End()
 
-	err := app.block.Close()
+	var err error
+	app.blockState, err = app.block.Close()
 	if err != nil {
 		app.fatal(err)
 		return abci.ResponseEndBlock{}
 	}
 
-	if app.block.Empty() {
+	if app.blockState.IsEmpty() {
 		return abci.ResponseEndBlock{}
 	}
 
@@ -508,15 +513,15 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit() abci.ResponseCommit {
 	defer app.recover(nil)
-	defer func() { app.block = nil }()
+	defer func() { app.block, app.blockState = nil, nil }()
 	defer app.blockSpan.End()
 
-	_, span := app.Tracer.Start(app.block.Context(), "Commit")
+	_, span := app.Tracer.Start(app.block.Params().Context, "Commit")
 	defer span.End()
 
 	tick := time.Now()
 	// Is the block empty?
-	if app.block.Empty() {
+	if app.blockState.IsEmpty() {
 		timeSinceAppStart := time.Since(app.startTime).Seconds()
 		ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
 		if ds != nil {
@@ -552,7 +557,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		go app.Accumulate.AnalysisLog.Flush()
 
 		// Discard changes
-		app.block.Batch().Discard()
+		app.blockState.Discard()
 
 		// Get the old root
 		batch := app.DB.Begin(false)
@@ -564,7 +569,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	// Commit the batch
-	err := app.block.Batch().Commit()
+	err := app.blockState.Commit()
 
 	commitTime := time.Since(tick).Seconds()
 	tick = time.Now()
@@ -575,10 +580,11 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	// Notify the world of the committed block
+	major, _, _ := app.blockState.DidCompleteMajorBlock()
 	err = app.EventBus.Publish(events.DidCommitBlock{
 		Index: app.block.Params().Index,
 		Time:  app.block.Params().Time,
-		Major: app.block.MajorBlock(),
+		Major: major,
 	})
 	if err != nil {
 		app.fatal(err)
@@ -647,6 +653,6 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	go app.Accumulate.AnalysisLog.Flush()
 	duration := time.Since(app.timer)
-	app.logger.Debug("Committed", "minor", app.block.Params().Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.MajorBlock(), "duration", duration, "count", app.txct)
+	app.logger.Debug("Committed", "minor", app.block.Params().Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", major, "duration", duration, "count", app.txct)
 	return resp
 }

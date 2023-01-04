@@ -45,10 +45,11 @@ type Executor interface {
 	Validate(*database.Batch, messaging.Message) (*protocol.TransactionStatus, error)
 
 	// Begin begins a block.
-	Begin(context.Context, *database.Batch, BlockParams) (Block, error)
+	Begin(*database.Batch, BlockParams) (Block, error)
 }
 
 type BlockParams struct {
+	Context    context.Context
 	IsLeader   bool
 	Index      uint64
 	Time       time.Time
@@ -60,24 +61,28 @@ type Block interface {
 	// Params returns the parameters the block was created with.
 	Params() BlockParams
 
-	// Context returns the context the block was created with.
-	Context() context.Context
-
-	// Batch returns the database batch the block was created with.
-	Batch() *database.Batch
-
-	// Empty returns true if the block recorded nothing.
-	Empty() bool
-
-	// MajorBlock returns the index of the major block if one was started, or
-	// zero.
-	MajorBlock() uint64
-
 	// Process processes a message.
 	Process(messaging.Message) (*protocol.TransactionStatus, error)
 
-	// Close closes the block.
-	Close() error
+	// Close closes the block and returns the end state of the block.
+	Close() (BlockState, error)
+}
+
+type BlockState interface {
+	// Params returns the parameters the block was created with.
+	Params() BlockParams
+	
+	// IsEmpty indicates that nothing happened in this block.
+	IsEmpty() bool
+
+	// DidCompleteMajorBlock indicates that this block completed a major block.
+	DidCompleteMajorBlock() (uint64, time.Time, bool)
+
+	// Commit commits changes made by this block.
+	Commit() error
+
+	// Discard discards changes made by this block.
+	Discard()
 }
 
 func ValidateEnvelopeSet(x Executor, batch *database.Batch, deliveries []messaging.Message) []*protocol.TransactionStatus {

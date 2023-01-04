@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"sync"
@@ -229,6 +230,7 @@ func (p *Partition) execute() error {
 	for i, n := range p.nodes {
 		var err error
 		blocks[i], err = n.beginBlock(abci.BlockParams{
+			Context:  context.Background(),
 			Index:    p.blockIndex,
 			Time:     p.blockTime,
 			IsLeader: i == leader,
@@ -258,9 +260,10 @@ func (p *Partition) execute() error {
 	}
 
 	// End block
+	blockState := make([]abci.BlockState, len(p.nodes))
 	endBlock := make([][]*validatorUpdate, len(p.nodes))
 	for i, n := range p.nodes {
-		endBlock[i], err = n.endBlock(blocks[i])
+		blockState[i], endBlock[i], err = n.endBlock(blocks[i])
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
@@ -299,7 +302,7 @@ func (p *Partition) execute() error {
 	// Commit
 	commit := make([][]byte, len(p.nodes))
 	for i, n := range p.nodes {
-		commit[i], err = n.commit(blocks[i])
+		commit[i], err = n.commit(blockState[i])
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}

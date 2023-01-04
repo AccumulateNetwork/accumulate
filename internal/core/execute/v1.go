@@ -7,7 +7,7 @@
 package execute
 
 import (
-	"context"
+	"time"
 
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
@@ -63,11 +63,10 @@ func (x *ExecutorV1) Validate(batch *database.Batch, message messaging.Message) 
 	return status, err
 }
 
-func (x *ExecutorV1) Begin(ctx context.Context, batch *database.Batch, params abci.BlockParams) (abci.Block, error) {
+func (x *ExecutorV1) Begin(batch *database.Batch, params abci.BlockParams) (abci.Block, error) {
 	b := new(BlockV1)
 	b.Executor = (*block.Executor)(x)
 	b.Block = new(block.Block)
-	b.Block.Context = ctx
 	b.Block.Batch = batch
 	b.Block.BlockMeta = params
 	err := b.Executor.BeginBlock(b.Block)
@@ -80,10 +79,6 @@ type BlockV1 struct {
 }
 
 func (b *BlockV1) Params() abci.BlockParams { return b.Block.BlockMeta }
-func (b *BlockV1) Context() context.Context { return b.Block.Context }
-func (b *BlockV1) Batch() *database.Batch   { return b.Block.Batch }
-func (b *BlockV1) Empty() bool              { return b.Block.State.Empty() }
-func (b *BlockV1) MajorBlock() uint64       { return b.Block.State.MakeMajorBlock }
 
 func (b *BlockV1) Process(message messaging.Message) (*protocol.TransactionStatus, error) {
 	legacy, ok := message.(*messaging.LegacyMessage)
@@ -102,6 +97,29 @@ func (b *BlockV1) Process(message messaging.Message) (*protocol.TransactionStatu
 	return status, err
 }
 
-func (b *BlockV1) Close() error {
-	return b.Executor.EndBlock(b.Block)
+func (b *BlockV1) Close() (abci.BlockState, error) {
+	err := b.Executor.EndBlock(b.Block)
+	return (*BlockStateV1)(b.Block), err
+}
+
+type BlockStateV1 block.Block
+
+func (b *BlockStateV1) Params() abci.BlockParams { return b.BlockMeta }
+
+func (s *BlockStateV1) IsEmpty() bool {
+	return s.State.Empty()
+}
+
+func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {
+	return s.State.MakeMajorBlock,
+		s.State.MakeMajorBlockTime,
+		s.State.MakeMajorBlock > 0
+}
+
+func (s *BlockStateV1) Commit() error {
+	return s.Batch.Commit()
+}
+
+func (s *BlockStateV1) Discard() {
+	s.Batch.Discard()
 }

@@ -239,7 +239,7 @@ func (n *Node) checkTx(message messaging.Message, typ abcitypes.CheckTxType) (*p
 
 func (n *Node) beginBlock(params abci.BlockParams) (abci.Block, error) {
 	batch := n.Begin(true)
-	block, err := n.executor.Begin(context.Background(), batch, params)
+	block, err := n.executor.Begin(batch, params)
 	if err != nil {
 		batch.Discard()
 		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
@@ -255,25 +255,25 @@ func (n *Node) deliverTx(block abci.Block, message messaging.Message) (*protocol
 	return s, nil
 }
 
-func (n *Node) endBlock(block abci.Block) ([]*validatorUpdate, error) {
-	err := block.Close()
+func (n *Node) endBlock(block abci.Block) (abci.BlockState, []*validatorUpdate, error) {
+	state, err := block.Close()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("end block: %w", err)
+		return nil, nil, errors.UnknownError.WithFormat("end block: %w", err)
 	}
 
-	if block.Empty() {
-		return nil, nil
+	if state.IsEmpty() {
+		return state, nil, nil
 	}
 
 	u := n.validatorUpdates
 	n.validatorUpdates = nil
-	return u, nil
+	return state, u, nil
 }
 
-func (n *Node) commit(block abci.Block) ([]byte, error) {
-	if block.Empty() {
+func (n *Node) commit(state abci.BlockState) ([]byte, error) {
+	if state.IsEmpty() {
 		// Discard changes
-		block.Batch().Discard()
+		state.Discard()
 
 		// Get the old root
 		batch := n.database.Begin(false)
@@ -282,16 +282,17 @@ func (n *Node) commit(block abci.Block) ([]byte, error) {
 	}
 
 	// Commit
-	err := block.Batch().Commit()
+	err := state.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("commit: %w", err)
 	}
 
 	// Notify
+	major, _, _ := state.DidCompleteMajorBlock()
 	err = n.eventBus.Publish(events.DidCommitBlock{
-		Index: block.Params().Index,
-		Time:  block.Params().Time,
-		Major: block.MajorBlock(),
+		Index: state.Params().Index,
+		Time:  state.Params().Time,
+		Major: major,
 	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("notify of commit: %w", err)
