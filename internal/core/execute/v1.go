@@ -47,7 +47,7 @@ func (x *ExecutorV1) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (a
 	return (*block.Executor)(x).InitChainValidators(initVal)
 }
 
-func (x *ExecutorV1) ValidateEnvelope(batch *database.Batch, message messaging.Message) (*protocol.TransactionStatus, error) {
+func (x *ExecutorV1) Validate(batch *database.Batch, message messaging.Message) (*protocol.TransactionStatus, error) {
 	legacy, ok := message.(*messaging.LegacyMessage)
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
@@ -63,7 +63,7 @@ func (x *ExecutorV1) ValidateEnvelope(batch *database.Batch, message messaging.M
 	return status, err
 }
 
-func (x *ExecutorV1) BeginBlock(ctx context.Context, batch *database.Batch, params abci.BlockParams) (abci.Block, error) {
+func (x *ExecutorV1) Begin(ctx context.Context, batch *database.Batch, params abci.BlockParams) (abci.Block, error) {
 	b := new(BlockV1)
 	b.Executor = (*block.Executor)(x)
 	b.Block = new(block.Block)
@@ -85,7 +85,7 @@ func (b *BlockV1) Batch() *database.Batch   { return b.Block.Batch }
 func (b *BlockV1) Empty() bool              { return b.Block.State.Empty() }
 func (b *BlockV1) MajorBlock() uint64       { return b.Block.State.MakeMajorBlock }
 
-func (b *BlockV1) ExecuteEnvelope(message messaging.Message) (*protocol.TransactionStatus, error) {
+func (b *BlockV1) Process(message messaging.Message) (*protocol.TransactionStatus, error) {
 	legacy, ok := message.(*messaging.LegacyMessage)
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
@@ -102,6 +102,6 @@ func (b *BlockV1) ExecuteEnvelope(message messaging.Message) (*protocol.Transact
 	return status, err
 }
 
-func (b *BlockV1) End() error {
+func (b *BlockV1) Close() error {
 	return b.Executor.EndBlock(b.Block)
 }

@@ -331,7 +331,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	var err error
 	batch := app.DB.Begin(true)
-	app.block, err = app.Executor.BeginBlock(ctx, batch, BlockParams{
+	app.block, err = app.Executor.Begin(ctx, batch, BlockParams{
 		//Identify the leader for this block, if we are the proposer... then we are the leader.
 		IsLeader:   bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
 		Index:      uint64(req.Header.Height),
@@ -487,7 +487,7 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 	_, span := app.Tracer.Start(app.block.Context(), "EndBlock")
 	defer span.End()
 
-	err := app.block.End()
+	err := app.block.Close()
 	if err != nil {
 		app.fatal(err)
 		return abci.ResponseEndBlock{}

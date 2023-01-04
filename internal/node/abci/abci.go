@@ -41,8 +41,11 @@ type Executor interface {
 	RestoreSnapshot(database.Beginner, ioutil2.SectionReader) error
 	InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error)
 
-	ValidateEnvelope(*database.Batch, messaging.Message) (*protocol.TransactionStatus, error)
-	BeginBlock(context.Context, *database.Batch, BlockParams) (Block, error)
+	// Validate validates a message.
+	Validate(*database.Batch, messaging.Message) (*protocol.TransactionStatus, error)
+
+	// Begin begins a block.
+	Begin(context.Context, *database.Batch, BlockParams) (Block, error)
 }
 
 type BlockParams struct {
@@ -70,17 +73,17 @@ type Block interface {
 	// zero.
 	MajorBlock() uint64
 
-	// ExecuteEnvelope processes a message.
-	ExecuteEnvelope(messaging.Message) (*protocol.TransactionStatus, error)
+	// Process processes a message.
+	Process(messaging.Message) (*protocol.TransactionStatus, error)
 
-	// End finalizes the block.
-	End() error
+	// Close closes the block.
+	Close() error
 }
 
 func ValidateEnvelopeSet(x Executor, batch *database.Batch, deliveries []messaging.Message) []*protocol.TransactionStatus {
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
-		status, err := x.ValidateEnvelope(batch, delivery)
+		status, err := x.Validate(batch, delivery)
 		if status == nil {
 			status = new(protocol.TransactionStatus)
 		}
@@ -97,7 +100,7 @@ func ValidateEnvelopeSet(x Executor, batch *database.Batch, deliveries []messagi
 func ExecuteEnvelopeSet(block Block, deliveries []messaging.Message) []*protocol.TransactionStatus {
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
-		status, err := block.ExecuteEnvelope(delivery)
+		status, err := block.Process(delivery)
 		if status == nil {
 			status = new(protocol.TransactionStatus)
 		}

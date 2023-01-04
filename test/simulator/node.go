@@ -227,7 +227,7 @@ func (n *Node) checkTx(message messaging.Message, typ abcitypes.CheckTxType) (*p
 	batch := n.database.Begin(false)
 	defer batch.Discard()
 
-	s, err := n.executor.ValidateEnvelope(batch, message)
+	s, err := n.executor.Validate(batch, message)
 	if s == nil {
 		s = new(protocol.TransactionStatus)
 	}
@@ -239,7 +239,7 @@ func (n *Node) checkTx(message messaging.Message, typ abcitypes.CheckTxType) (*p
 
 func (n *Node) beginBlock(params abci.BlockParams) (abci.Block, error) {
 	batch := n.Begin(true)
-	block, err := n.executor.BeginBlock(context.Background(), batch, params)
+	block, err := n.executor.Begin(context.Background(), batch, params)
 	if err != nil {
 		batch.Discard()
 		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
@@ -248,7 +248,7 @@ func (n *Node) beginBlock(params abci.BlockParams) (abci.Block, error) {
 }
 
 func (n *Node) deliverTx(block abci.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
-	s, err := block.ExecuteEnvelope(message)
+	s, err := block.Process(message)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
 	}
@@ -256,7 +256,7 @@ func (n *Node) deliverTx(block abci.Block, message messaging.Message) (*protocol
 }
 
 func (n *Node) endBlock(block abci.Block) ([]*validatorUpdate, error) {
-	err := block.End()
+	err := block.Close()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("end block: %w", err)
 	}
