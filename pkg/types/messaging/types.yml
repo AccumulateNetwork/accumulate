@@ -10,47 +10,47 @@ LegacyMessage:
       marshal-as: reference
       pointer: true
 
-UserTransaction:
-  union: { type: message }
-  fields:
-    - name: Transaction
-      type: protocol.Transaction
-      marshal-as: reference
-      pointer: true
+# UserTransaction:
+#   union: { type: message }
+#   fields:
+#     - name: Transaction
+#       type: protocol.Transaction
+#       marshal-as: reference
+#       pointer: true
 
-SyntheticTransaction:
-  union: { type: message }
-  fields:
-    - name: Transaction
-      type: protocol.Transaction
-      marshal-as: reference
-      pointer: true
-    - name: Proof
-      type: protocol.AnnotatedReceipt
-      marshal-as: reference
-      pointer: true
+# SyntheticTransaction:
+#   union: { type: message }
+#   fields:
+#     - name: Transaction
+#       type: protocol.Transaction
+#       marshal-as: reference
+#       pointer: true
+#     - name: Proof
+#       type: protocol.AnnotatedReceipt
+#       marshal-as: reference
+#       pointer: true
 
-UserSignature:
-  union: { type: message }
-  fields:
-    - name: Signature
-      type: protocol.KeySignature
-      marshal-as: union
+# UserSignature:
+#   union: { type: message }
+#   fields:
+#     - name: Signature
+#       type: protocol.KeySignature
+#       marshal-as: union
 
-ValidatorSignature:
-  union: { type: message }
-  fields:
-    - name: Signature
-      type: protocol.KeySignature
-      marshal-as: union
+# ValidatorSignature:
+#   union: { type: message }
+#   fields:
+#     - name: Signature
+#       type: protocol.KeySignature
+#       marshal-as: union
 
-AuthoritySignature:
-  union: { type: message }
-  fields:
-    - name: Signature
-      type: protocol.Signature
-      marshal-as: union
-    - name: Proof
-      type: protocol.AnnotatedReceipt
-      marshal-as: reference
-      pointer: true
+# AuthoritySignature:
+#   union: { type: message }
+#   fields:
+#     - name: Signature
+#       type: protocol.Signature
+#       marshal-as: union
+#     - name: Proof
+#       type: protocol.AnnotatedReceipt
+#       marshal-as: reference
+#       pointer: true

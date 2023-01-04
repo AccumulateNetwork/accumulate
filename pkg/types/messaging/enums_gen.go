@@ -17,21 +17,6 @@ import (
 // MessageTypeLegacy is used for the V1 executor.
 const MessageTypeLegacy MessageType = 1
 
-// MessageTypeUserTransaction is a transaction from a user.
-const MessageTypeUserTransaction MessageType = 2
-
-// MessageTypeSyntheticTransaction is a transaction produced by the protocol.
-const MessageTypeSyntheticTransaction MessageType = 3
-
-// MessageTypeUserSignature is a key signature from a user.
-const MessageTypeUserSignature MessageType = 4
-
-// MessageTypeValidatorSignature is a key signature from a core protocol validator.
-const MessageTypeValidatorSignature MessageType = 5
-
-// MessageTypeAuthoritySignature is a signature from an authority who's signing requirements have been met.
-const MessageTypeAuthoritySignature MessageType = 6
-
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -39,7 +24,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeLegacy, MessageTypeUserTransaction, MessageTypeSyntheticTransaction, MessageTypeUserSignature, MessageTypeValidatorSignature, MessageTypeAuthoritySignature:
+	case MessageTypeLegacy:
 		*v = u
 		return true
 	default:
@@ -52,16 +37,6 @@ func (v MessageType) String() string {
 	switch v {
 	case MessageTypeLegacy:
 		return "legacy"
-	case MessageTypeUserTransaction:
-		return "userTransaction"
-	case MessageTypeSyntheticTransaction:
-		return "syntheticTransaction"
-	case MessageTypeUserSignature:
-		return "userSignature"
-	case MessageTypeValidatorSignature:
-		return "validatorSignature"
-	case MessageTypeAuthoritySignature:
-		return "authoritySignature"
 	default:
 		return fmt.Sprintf("MessageType:%d", v)
 	}
@@ -72,16 +47,6 @@ func MessageTypeByName(name string) (MessageType, bool) {
 	switch strings.ToLower(name) {
 	case "legacy":
 		return MessageTypeLegacy, true
-	case "usertransaction":
-		return MessageTypeUserTransaction, true
-	case "synthetictransaction":
-		return MessageTypeSyntheticTransaction, true
-	case "usersignature":
-		return MessageTypeUserSignature, true
-	case "validatorsignature":
-		return MessageTypeValidatorSignature, true
-	case "authoritysignature":
-		return MessageTypeAuthoritySignature, true
 	default:
 		return 0, false
 	}
