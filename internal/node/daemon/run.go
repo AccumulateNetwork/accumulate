@@ -233,6 +233,7 @@ func (d *Daemon) Start() (err error) {
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
 	execOpts := execute.Options{
 		Logger:           d.Logger,
+		Database:         d.db,
 		Key:              d.Key().Bytes(),
 		Describe:         d.Config.Accumulate.Describe,
 		Router:           router,
@@ -245,7 +246,7 @@ func (d *Daemon) Start() (err error) {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
-	exec, err := execute.NewExecutor(execOpts, d.db)
+	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}

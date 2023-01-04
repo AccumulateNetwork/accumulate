@@ -104,6 +104,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	// Set up the executor options
 	execOpts := execute.Options{
 		Logger:   n.logger,
+		Database: n,
 		Key:      init.PrivValKey,
 		Describe: network,
 		Router:   s.router,
@@ -126,7 +127,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 
 	// Create an executor
 	var err error
-	n.executor, err = execute.NewExecutor(execOpts, n)
+	n.executor, err = execute.NewExecutor(execOpts)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

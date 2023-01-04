@@ -167,6 +167,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 
 		execOpts := block.ExecutorOptions{
 			Logger:   logger,
+			Database: x,
 			Key:      bvn.Nodes[0].PrivValKey,
 			Describe: network,
 			Router:   sim.Router(),
@@ -176,7 +177,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			execOpts.MajorBlockScheduler = blockscheduler.Init(mainEventBus)
 		}
 		var err error
-		x.Executor, err = block.NewNodeExecutor(execOpts, x)
+		x.Executor, err = block.NewNodeExecutor(execOpts)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -214,13 +215,14 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 
 		execOpts := block.ExecutorOptions{
 			Logger:   logger,
+			Database: x,
 			Key:      bvnInit.Nodes[0].PrivValKey,
 			Describe: network,
 			Router:   sim.Router(),
 			EventBus: events.NewBus(logger),
 		}
 		var err error
-		x.Executor, err = block.NewNodeExecutor(execOpts, x)
+		x.Executor, err = block.NewNodeExecutor(execOpts)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{

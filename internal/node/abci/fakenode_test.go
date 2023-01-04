@@ -178,6 +178,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	var err error
 	execOpts := block.ExecutorOptions{
 		Logger:   n.logger,
+		Database: n.db,
 		Key:      n.key.Bytes(),
 		Describe: *n.network,
 		Router:   n.router,
@@ -188,7 +189,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
-	n.exec, err = block.NewNodeExecutor(execOpts, n.db)
+	n.exec, err = block.NewNodeExecutor(execOpts)
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{

@@ -41,6 +41,7 @@ type Executor interface {
 
 type Options struct {
 	Logger                 log.Logger                         //
+	Database               database.Beginner                  //
 	Key                    ed25519.PrivateKey                 // Private validator key
 	Router                 routing.Router                     //
 	Describe               config.Describe                    // Network description

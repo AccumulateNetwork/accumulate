@@ -155,6 +155,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	router := routing.NewRouter(eventBus, nil, d.Logger)
 	execOpts := execute.Options{
 		Logger:   d.Logger,
+		Database: db,
 		Key:      pv.Key.PrivKey.Bytes(),
 		Describe: d.Config.Accumulate.Describe,
 		Router:   router,
@@ -166,7 +167,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
-	exec, err := execute.NewExecutor(execOpts, db)
+	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}

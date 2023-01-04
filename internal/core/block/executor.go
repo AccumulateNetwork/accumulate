@@ -34,7 +34,6 @@ type Executor struct {
 	executors   map[protocol.TransactionType]chain.TransactionExecutor
 	dispatcher  *dispatcher
 	logger      logging.OptionalLogger
-	db          database.Beginner
 	isValidator bool
 	isGenesis   bool
 }
@@ -42,7 +41,7 @@ type Executor struct {
 type ExecutorOptions = execute.Options
 
 // NewNodeExecutor creates a new Executor for a node.
-func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, error) {
+func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	executors := []chain.TransactionExecutor{
 		// User transactions
 		chain.AddCredits{},
@@ -93,7 +92,7 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 	// This is a no-op in dev
 	executors = addTestnetExecutors(executors)
 
-	return newExecutor(opts, db, false, executors...)
+	return newExecutor(opts, false, executors...)
 }
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
@@ -101,12 +100,12 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
 	exec, err := newExecutor(
 		ExecutorOptions{
+			Database: db,
 			Describe: *network,
 			Logger:   logger,
 			Router:   router,
 			EventBus: events.NewBus(logger),
 		},
-		db,
 		true,
 		chain.SystemWriteData{},
 	)
@@ -119,7 +118,7 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 	return exec, nil
 }
 
-func newExecutor(opts ExecutorOptions, db database.Beginner, isGenesis bool, executors ...chain.TransactionExecutor) (*Executor, error) {
+func newExecutor(opts ExecutorOptions, isGenesis bool, executors ...chain.TransactionExecutor) (*Executor, error) {
 	if opts.BackgroundTaskLauncher == nil {
 		opts.BackgroundTaskLauncher = func(f func()) { go f() }
 	}
@@ -128,7 +127,6 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, isGenesis bool, exe
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
-	m.db = db
 	m.isGenesis = isGenesis
 
 	if opts.Logger != nil {
@@ -142,7 +140,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, isGenesis bool, exe
 		m.executors[x.Type()] = x
 	}
 
-	batch := db.Begin(false)
+	batch := opts.Database.Begin(false)
 	defer batch.Discard()
 
 	// Listen to our own event (DRY)
@@ -161,7 +159,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, isGenesis bool, exe
 		// m.logger.Debug("Loaded", "height", ledger.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 		// Load globals
-		err = m.loadGlobals(db.View)
+		err = m.loadGlobals(opts.Database.View)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
