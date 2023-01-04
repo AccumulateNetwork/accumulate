@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -42,7 +42,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	}
 
 	errs := x.dispatcher.Send(context.Background())
-	x.Background(func() {
+	x.BackgroundTaskLauncher(func() {
 		for err := range errs {
 			switch err := err.(type) {
 			case *txnDispatchError:

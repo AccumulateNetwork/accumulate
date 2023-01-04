@@ -19,7 +19,6 @@ import (
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -103,12 +102,21 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	}
 
 	// Set up the executor options
-	execOpts := block.ExecutorOptions{
+	execOpts := execute.Options{
 		Logger:   n.logger,
 		Key:      init.PrivValKey,
 		Describe: network,
 		Router:   s.router,
 		EventBus: n.eventBus,
+	}
+
+	// Add background tasks to the block's error group. The simulator must call
+	// Group.Wait before changing the group, to ensure no race conditions.
+	execOpts.BackgroundTaskLauncher = func(f func()) {
+		s.blockErrGroup.Go(func() error {
+			f()
+			return nil
+		})
 	}
 
 	// Initialize the major block scheduler
@@ -117,20 +125,11 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	}
 
 	// Create an executor
-	exec, err := block.NewNodeExecutor(execOpts, n)
+	var err error
+	n.executor, err = execute.NewExecutor(execOpts, n)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	n.executor = (*execute.ExecutorV1)(exec)
-
-	// Add background tasks to the block's error group. The simulator must call
-	// Group.Wait before changing the group, to ensure no race conditions.
-	n.executor.SetBackgroundTaskManager(func(f func()) {
-		s.blockErrGroup.Go(func() error {
-			f()
-			return nil
-		})
-	})
 
 	// Set up the API
 	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{

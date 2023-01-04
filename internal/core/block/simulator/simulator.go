@@ -685,7 +685,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	block.Batch = x.Database.Begin(true)
 
 	// Run background tasks in the error group to ensure they complete before the next block begins
-	x.Executor.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
+	x.Executor.BackgroundTaskLauncher = func(f func()) { errg.Go(func() error { f(); return nil }) }
 
 	deliveries := x.takeSubmitted()
 	errg.Go(func() error {

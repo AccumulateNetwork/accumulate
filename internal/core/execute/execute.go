@@ -8,11 +8,17 @@ package execute
 
 import (
 	"context"
+	"crypto/ed25519"
 	"time"
 
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -21,7 +27,6 @@ import (
 type Executor interface {
 	EnableTimers()
 	StoreBlockTimers(ds *logging.DataSet)
-	SetBackgroundTaskManager(f func(func()))
 
 	LoadStateRoot(*database.Batch) ([]byte, error)
 	RestoreSnapshot(database.Beginner, ioutil2.SectionReader) error
@@ -32,6 +37,17 @@ type Executor interface {
 
 	// Begin begins a block.
 	Begin(*database.Batch, BlockParams) (Block, error)
+}
+
+type Options struct {
+	Logger                 log.Logger                         //
+	Key                    ed25519.PrivateKey                 // Private validator key
+	Router                 routing.Router                     //
+	Describe               config.Describe                    // Network description
+	EventBus               *events.Bus                        //
+	MajorBlockScheduler    blockscheduler.MajorBlockScheduler //
+	BackgroundTaskLauncher func(func())                       // Background task launcher
+	BatchReplayLimit       int                                //
 }
 
 type BlockParams struct {

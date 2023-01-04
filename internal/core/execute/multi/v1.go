@@ -24,7 +24,7 @@ import (
 type ExecutorV1 block.Executor
 
 func (x *ExecutorV1) SetBackgroundTaskManager(f func(func())) {
-	x.Background = f
+	x.BackgroundTaskLauncher = f
 }
 
 func (x *ExecutorV1) EnableTimers() {

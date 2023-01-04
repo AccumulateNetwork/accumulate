@@ -13,9 +13,9 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -28,6 +28,7 @@ import (
 
 type Executor struct {
 	ExecutorOptions
+	BlockTimers TimerSet
 
 	globals     *Globals
 	executors   map[protocol.TransactionType]chain.TransactionExecutor
@@ -35,24 +36,10 @@ type Executor struct {
 	logger      logging.OptionalLogger
 	db          database.Beginner
 	isValidator bool
-
-	// oldBlockMeta blockMetadata
+	isGenesis   bool
 }
 
-type ExecutorOptions struct {
-	Logger              log.Logger                         //
-	Key                 ed25519.PrivateKey                 // Private validator key
-	Router              routing.Router                     //
-	Describe            config.Describe                    // Network description
-	EventBus            *events.Bus                        //
-	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
-	Background          func(func())                       // Background task launcher
-	BatchReplayLimit    int                                //
-
-	isGenesis bool
-
-	BlockTimers TimerSet
-}
+type ExecutorOptions = execute.Options
 
 // NewNodeExecutor creates a new Executor for a node.
 func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, error) {
@@ -106,7 +93,7 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 	// This is a no-op in dev
 	executors = addTestnetExecutors(executors)
 
-	return newExecutor(opts, db, executors...)
+	return newExecutor(opts, db, false, executors...)
 }
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
@@ -114,13 +101,13 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
 	exec, err := newExecutor(
 		ExecutorOptions{
-			Describe:  *network,
-			Logger:    logger,
-			Router:    router,
-			EventBus:  events.NewBus(logger),
-			isGenesis: true,
+			Describe: *network,
+			Logger:   logger,
+			Router:   router,
+			EventBus: events.NewBus(logger),
 		},
 		db,
+		true,
 		chain.SystemWriteData{},
 	)
 	if err != nil {
@@ -132,9 +119,9 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 	return exec, nil
 }
 
-func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.TransactionExecutor) (*Executor, error) {
-	if opts.Background == nil {
-		opts.Background = func(f func()) { go f() }
+func newExecutor(opts ExecutorOptions, db database.Beginner, isGenesis bool, executors ...chain.TransactionExecutor) (*Executor, error) {
+	if opts.BackgroundTaskLauncher == nil {
+		opts.BackgroundTaskLauncher = func(f func()) { go f() }
 	}
 
 	m := new(Executor)
@@ -142,6 +129,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
 	m.db = db
+	m.isGenesis = isGenesis
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")

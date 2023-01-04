@@ -231,7 +231,7 @@ func (d *Daemon) Start() (err error) {
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
-	execOpts := block.ExecutorOptions{
+	execOpts := execute.Options{
 		Logger:           d.Logger,
 		Key:              d.Key().Bytes(),
 		Describe:         d.Config.Accumulate.Describe,
@@ -245,7 +245,7 @@ func (d *Daemon) Start() (err error) {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
-	exec, err := block.NewNodeExecutor(execOpts, d.db)
+	exec, err := execute.NewExecutor(execOpts, d.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
@@ -253,7 +253,7 @@ func (d *Daemon) Start() (err error) {
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		DB:       d.db,
 		Address:  d.Key().PubKey().Address(),
-		Executor: (*execute.ExecutorV1)(exec),
+		Executor: exec,
 		Logger:   d.Logger,
 		EventBus: d.eventBus,
 		Config:   d.Config,
@@ -361,7 +361,7 @@ func (d *Daemon) Start() (err error) {
 	netSvc := api.NewNetworkService(api.NetworkServiceParams{
 		Logger:   d.Logger.With("module", "acc-rpc"),
 		EventBus: d.eventBus,
-		Globals:  exec.ActiveGlobals_TESTONLY(),
+		Globals:  (*block.Executor)(exec.(*execute.ExecutorV1)).ActiveGlobals_TESTONLY(),
 	})
 	querySvc := api.NewQuerier(api.QuerierParams{
 		Logger:    d.Logger.With("module", "acc-rpc"),
