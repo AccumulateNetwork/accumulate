@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -378,9 +379,12 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	// Resubmit the original, valid signature
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	x.Executor.ValidateEnvelopeSet(batch, original, func(err error, _ *chain.Delivery, _ *TransactionStatus) {
-		require.NoError(t, err)
-	})
+	results := execute.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, original)
+	for _, result := range results {
+		if result.Error != nil {
+			require.NoError(t, result.Error)
+		}
+	}
 	x.Submit2(false, original)
 
 	// Verify it is delivered

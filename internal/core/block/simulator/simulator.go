@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -427,11 +428,11 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		// Check
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		x.Executor.ValidateEnvelopeSet(batch, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-			err = e
-		})
-		if err != nil {
-			return nil, err
+		results := execute.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, deliveries)
+		for _, result := range results {
+			if result.Error != nil {
+				return nil, errors.UnknownError.Wrap(result.Error)
+			}
 		}
 
 		// Enqueue
@@ -707,11 +708,11 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results := x.Executor.ExecuteEnvelopeSet(block, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-			err = e
-		})
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
+		results := execute.ExecuteEnvelopeSet((*execute.ExecutorV1)(x.Executor), block, deliveries)
+		for _, result := range results {
+			if result.Error != nil {
+				return errors.UnknownError.Wrap(result.Error)
+			}
 		}
 		if statusChan != nil {
 			for _, result := range results {

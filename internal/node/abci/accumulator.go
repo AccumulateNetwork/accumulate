@@ -27,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -65,7 +66,7 @@ type Accumulator struct {
 type AccumulatorOptions struct {
 	*config.Config
 	Tracer   trace.Tracer
-	Executor Executor
+	Executor execute.Executor
 	EventBus *events.Bus
 	DB       *database.Database
 	Logger   log.Logger

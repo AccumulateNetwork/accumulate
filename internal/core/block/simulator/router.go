@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,8 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -47,18 +46,20 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	results := x.Executor.ValidateEnvelopeSet(batch, deliveries, func(err error, d *chain.Delivery, s *protocol.TransactionStatus) {
+	results := execute.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, deliveries)
+	for _, s := range results {
 		if !s.Failed() {
-			return
+			continue
 		}
 
 		r.Logger.Info("Transaction failed to check",
-			"err", err,
-			"type", d.Transaction.Body.Type(),
-			"txn-hash", logging.AsHex(d.Transaction.GetHash()).Slice(0, 4),
+			"err", s.Error,
+			// "type", d.Transaction.Body.Type(),
+			// "txn-hash", logging.AsHex(d.Transaction.GetHash()).Slice(0, 4),
 			"code", s.Code,
-			"principal", d.Transaction.Header.Principal)
-	})
+			// "principal", d.Transaction.Header.Principal,
+		)
+	}
 
 	var err error
 	resp := new(routing.ResponseSubmit)

@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -50,14 +51,14 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	return deliveries, results, rset, nil
 }
 
-func checkTx(exec Executor, batch *database.Batch) executeFunc {
+func checkTx(exec execute.Executor, batch *database.Batch) executeFunc {
 	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ValidateEnvelopeSet(batch, deliveries, nil)
+		return execute.ValidateEnvelopeSet(exec, batch, deliveries)
 	}
 }
 
-func deliverTx(exec Executor, block *block.Block) executeFunc {
+func deliverTx(exec execute.Executor, block *block.Block) executeFunc {
 	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ExecuteEnvelopeSet(block, deliveries, nil)
+		return execute.ExecuteEnvelopeSet(exec, block, deliveries)
 	}
 }

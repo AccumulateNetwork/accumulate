@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	abci "github.com/tendermint/tendermint/abci/types"
+	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -47,7 +48,7 @@ type Node struct {
 	privValKey []byte
 
 	globals  atomic.Value
-	executor *block.Executor
+	executor execute.Executor
 	apiV2    *apiv2.JrpcMethods
 	clientV2 *client.Client
 	querySvc api.Querier
@@ -116,20 +117,20 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	}
 
 	// Create an executor
-	var err error
-	n.executor, err = block.NewNodeExecutor(execOpts, n)
+	exec, err := block.NewNodeExecutor(execOpts, n)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	n.executor = (*execute.ExecutorV1)(exec)
 
 	// Add background tasks to the block's error group. The simulator must call
 	// Group.Wait before changing the group, to ensure no race conditions.
-	n.executor.Background = func(f func()) {
+	n.executor.SetBackgroundTaskManager(func(f func()) {
 		s.blockErrGroup.Go(func() error {
 			f()
 			return nil
 		})
-	}
+	})
 
 	// Set up the API
 	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{
@@ -218,17 +219,17 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	return root, nil
 }
 
-func (n *Node) checkTx(delivery *chain.Delivery, typ abci.CheckTxType) (*protocol.TransactionStatus, error) {
+func (n *Node) checkTx(delivery *chain.Delivery, typ abcitypes.CheckTxType) (*protocol.TransactionStatus, error) {
 	// TODO: Maintain a shared batch if typ is not recheck. I tried to do this
 	// but it lead to "attempted to use a committed or discarded batch" panics.
 
 	batch := n.database.Begin(false)
 	defer batch.Discard()
 
-	r, err := n.executor.ValidateEnvelope(batch, delivery)
-	s := new(protocol.TransactionStatus)
-	s.TxID = delivery.Transaction.ID()
-	s.Result = r
+	s, err := n.executor.ValidateEnvelope(batch, delivery)
+	if s == nil {
+		s = new(protocol.TransactionStatus)
+	}
 	if err != nil {
 		s.Set(err)
 	}

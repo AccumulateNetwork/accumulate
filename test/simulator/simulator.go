@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -252,14 +252,6 @@ func (s *Simulator) SetRouterSubmitHook(partition string, fn RouterSubmitHookFun
 	s.partitions[partition].SetRouterSubmitHook(fn)
 }
 
-func (s *Simulator) SetExecutor(exec chain.TransactionExecutor) {
-	for _, p := range s.partitions {
-		for _, n := range p.nodes {
-			n.executor.SetExecutor_TESTONLY(exec)
-		}
-	}
-}
-
 func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	partition, err := s.router.Route(&protocol.Envelope{
 		Transaction: []*protocol.Transaction{delivery.Transaction},
@@ -373,10 +365,10 @@ type nodeSigner struct {
 
 var _ signing.Signer = nodeSigner{}
 
-func (n nodeSigner) Key() []byte { return n.executor.Key }
+func (n nodeSigner) Key() []byte { return n.init.PrivValKey }
 
 func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
-	k := n.executor.Key
+	k := n.init.PrivValKey
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.PublicKey = k[32:]
@@ -407,7 +399,7 @@ func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
 }
 
 func (n nodeSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) error {
-	k := n.executor.Key
+	k := n.init.PrivValKey
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		protocol.SignLegacyED25519(sig, k, sigMdHash, message)

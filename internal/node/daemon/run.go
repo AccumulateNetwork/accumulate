@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -44,6 +44,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
@@ -252,7 +253,7 @@ func (d *Daemon) Start() (err error) {
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		DB:       d.db,
 		Address:  d.Key().PubKey().Address(),
-		Executor: exec,
+		Executor: (*execute.ExecutorV1)(exec),
 		Logger:   d.Logger,
 		EventBus: d.eventBus,
 		Config:   d.Config,

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,30 +21,6 @@ type Block struct {
 	Context context.Context
 	State   BlockState
 	Batch   *database.Batch
-}
-
-func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, delivery := range deliveries {
-		status, err := x.ExecuteEnvelope(block, delivery)
-		if status == nil {
-			status = new(protocol.TransactionStatus)
-		}
-		results[i] = status
-
-		// Wait until after ExecuteEnvelope, because the transaction may get
-		// loaded by LoadTransaction
-		status.TxID = delivery.Transaction.ID()
-
-		if err != nil {
-			status.Set(err)
-			if captureError != nil {
-				captureError(err, delivery, status)
-			}
-		}
-	}
-
-	return results
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
