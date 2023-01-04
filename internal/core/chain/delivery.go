@@ -47,7 +47,7 @@ func DeliveryFromMessage(msg *messaging.LegacyMessage) *Delivery {
 		}
 	}
 
-	return nil
+	return d
 }
 
 type Delivery struct {
