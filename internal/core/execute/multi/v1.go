@@ -53,13 +53,14 @@ func (x *ExecutorV1) Validate(batch *database.Batch, message messaging.Message) 
 		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
 	}
 
+	delivery := chain.DeliveryFromMessage(legacy)
 	status := new(protocol.TransactionStatus)
 	var err error
-	status.Result, err = (*block.Executor)(x).ValidateEnvelope(batch, chain.DeliveryFromMessage(legacy))
+	status.Result, err = (*block.Executor)(x).ValidateEnvelope(batch, delivery)
 
 	// Wait until after ValidateEnvelope, because the transaction may get
 	// loaded by LoadTransaction
-	status.TxID = legacy.Transaction.ID()
+	status.TxID = delivery.Transaction.ID()
 	return status, err
 }
 
@@ -89,14 +90,15 @@ func (b *BlockV1) Process(message messaging.Message) (*protocol.TransactionStatu
 		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
 	}
 
-	status, err := b.Executor.ExecuteEnvelope(b.Block, chain.DeliveryFromMessage(legacy))
+	delivery := chain.DeliveryFromMessage(legacy)
+	status, err := b.Executor.ExecuteEnvelope(b.Block, delivery)
 	if status == nil {
 		status = new(protocol.TransactionStatus)
 	}
 
 	// Wait until after ValidateEnvelope, because the transaction may get
 	// loaded by LoadTransaction
-	status.TxID = legacy.Transaction.ID()
+	status.TxID = delivery.Transaction.ID()
 	return status, err
 }
 
