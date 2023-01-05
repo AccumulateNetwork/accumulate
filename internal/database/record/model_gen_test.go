@@ -210,13 +210,6 @@ func (c *Entity) IsDirty() bool {
 	return false
 }
 
-func (c *Entity) resolveChain(name string) (chain *managed.Chain, ok bool) {
-	if name == "" {
-		return c.Chain(), true
-	}
-	return
-}
-
 func (c *Entity) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
