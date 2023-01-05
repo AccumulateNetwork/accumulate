@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -161,6 +162,20 @@ func (c *Batch) IsDirty() bool {
 	}
 
 	return false
+}
+
+func (c *Batch) dirtyChains() []*managed.Chain {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*managed.Chain
+
+	for _, v := range c.account {
+		chains = append(chains, v.dirtyChains()...)
+	}
+
+	return chains
 }
 
 func (c *Batch) baseCommit() error {
@@ -469,6 +484,29 @@ func (c *Account) IsDirty() bool {
 	return false
 }
 
+func (c *Account) dirtyChains() []*managed.Chain {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*managed.Chain
+
+	chains = append(chains, c.mainChain.dirtyChains()...)
+	chains = append(chains, c.scratchChain.dirtyChains()...)
+	chains = append(chains, c.signatureChain.dirtyChains()...)
+	chains = append(chains, c.rootChain.dirtyChains()...)
+	chains = append(chains, c.anchorSequenceChain.dirtyChains()...)
+	chains = append(chains, c.majorBlockChain.dirtyChains()...)
+	for _, v := range c.syntheticSequenceChain {
+		chains = append(chains, v.dirtyChains()...)
+	}
+	for _, v := range c.anchorChain {
+		chains = append(chains, v.dirtyChains()...)
+	}
+
+	return chains
+}
+
 func (c *Account) baseCommit() error {
 	if c == nil {
 		return nil
@@ -552,6 +590,19 @@ func (c *AccountAnchorChain) IsDirty() bool {
 	}
 
 	return false
+}
+
+func (c *AccountAnchorChain) dirtyChains() []*managed.Chain {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*managed.Chain
+
+	chains = append(chains, c.root.dirtyChains()...)
+	chains = append(chains, c.bpt.dirtyChains()...)
+
+	return chains
 }
 
 func (c *AccountAnchorChain) Commit() error {
