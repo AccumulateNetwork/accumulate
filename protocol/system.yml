@@ -23,6 +23,11 @@ SystemLedger:
       description: is the block anchor that should be sent for the last block
       type: AnchorBody
       marshal-as: union
+    - name: ExecutorVersion
+      description: is the active executor version
+      type: ExecutorVersion
+      marshal-as: enum
+      optional: true
 
 SyntheticLedger:
   union: { type: account }
