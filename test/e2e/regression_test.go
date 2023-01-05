@@ -17,6 +17,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
@@ -266,8 +267,10 @@ func TestSynthTxnToDirectory(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(values)
 
 	alice := acctesting.GenerateKey(t.Name(), "alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
@@ -304,8 +307,10 @@ func TestSynthTxnFromDirectory(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(values)
 
 	alice := acctesting.GenerateKey(t.Name(), "alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
