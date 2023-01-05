@@ -20,6 +20,8 @@ type GlobalValues struct {
 	Globals *protocol.NetworkGlobals    `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
 	Network *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Routing *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
+	// ExecutorVersion is the active executor version.
+	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
 }
 
 func (v *GlobalValues) Copy() *GlobalValues {
@@ -37,6 +39,7 @@ func (v *GlobalValues) Copy() *GlobalValues {
 	if v.Routing != nil {
 		u.Routing = (v.Routing).Copy()
 	}
+	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -74,6 +77,9 @@ func (v *GlobalValues) Equal(u *GlobalValues) bool {
 	case v.Routing == nil || u.Routing == nil:
 		return false
 	case !((v.Routing).Equal(u.Routing)):
+		return false
+	}
+	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
 	}
 
