@@ -27,6 +27,12 @@ func (ActivateProtocolVersion) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, errors.Format(errors.BadRequest, "invalid principal: want %v, got %v", st.NodeUrl(), st.OriginUrl)
 	}
 
+	// Verify the version number is a recognized version
+	var x protocol.ExecutorVersion
+	if !x.SetEnumValue(body.Version.GetEnumValue()) {
+		return nil, errors.Format(errors.BadRequest, "%d is not a recognized version number", body.Version)
+	}
+
 	// Load the system ledger
 	var ledger *protocol.SystemLedger
 	err := st.batch.Account(st.Ledger()).Main().GetAs(&ledger)
