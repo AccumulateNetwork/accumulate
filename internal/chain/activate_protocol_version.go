@@ -16,25 +16,30 @@ func (ActivateProtocolVersion) Execute(st *StateManager, tx *Delivery) (protocol
 }
 
 func (ActivateProtocolVersion) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	// Verify the body
 	body, ok := tx.Transaction.Body.(*protocol.ActivateProtocolVersion)
 	if !ok {
 		return nil, errors.Format(errors.BadRequest, "invalid payload: want %v, got %v", protocol.TransactionTypeActivateProtocolVersion, tx.Transaction.Body.Type())
 	}
 
+	// Verify the principal
 	if !st.NodeUrl().Equal(st.OriginUrl) {
 		return nil, errors.Format(errors.BadRequest, "invalid principal: want %v, got %v", st.NodeUrl(), st.OriginUrl)
 	}
 
+	// Load the system ledger
 	var ledger *protocol.SystemLedger
 	err := st.batch.Account(st.Ledger()).Main().GetAs(&ledger)
 	if err != nil {
 		return nil, errors.Format(errors.UnknownError, "load ledger: %w", err)
 	}
 
+	// Verify the version number is higher than the current number
 	if body.Version <= ledger.ExecutorVersion {
 		return nil, errors.Format(errors.BadRequest, "new version (%d) <= old version (%d)", body.Version, ledger.ExecutorVersion)
 	}
 
+	// Update the version number
 	ledger.ExecutorVersion = body.Version
 	err = st.Update(ledger)
 	if err != nil {
