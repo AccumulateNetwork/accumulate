@@ -340,6 +340,7 @@ func (s *Simulator) InitFromGenesis() {
 	values := new(core.GlobalValues)
 	values.Globals = new(protocol.NetworkGlobals)
 	values.Globals.FeeSchedule = new(protocol.FeeSchedule)
+	values.ExecutorVersion = protocol.ExecutorVersionV1SignatureAnchoring
 
 	s.InitFromGenesisWith(values)
 }

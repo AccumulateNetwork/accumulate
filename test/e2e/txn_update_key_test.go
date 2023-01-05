@@ -114,6 +114,8 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 			Build(),
 	)
 	require.NoError(t, err)
+	h := st[0].TxID.Hash()
+	sim.WaitForTransactionFlow(delivered, h[:])
 	require.NotNil(t, st[0].Error)
 	require.EqualError(t, st[0].Error, "cannot UpdateKey with a multi-level delegated signature")
 }

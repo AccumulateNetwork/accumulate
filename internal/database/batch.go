@@ -238,3 +238,14 @@ func resolveValue[T any](c *Batch, key record.Key) (T, error) {
 
 	return v, nil
 }
+
+// UpdatedAccounts returns every account updated in this database batch.
+func (b *Batch) UpdatedAccounts() []*Account {
+	accounts := make([]*Account, 0, len(b.account))
+	for _, a := range b.account {
+		if a.IsDirty() {
+			accounts = append(accounts, a)
+		}
+	}
+	return accounts
+}
