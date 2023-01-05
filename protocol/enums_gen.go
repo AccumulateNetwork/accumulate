@@ -113,6 +113,9 @@ const ErrorCodeDidPanic ErrorCode = 3
 // ErrorCodeUnknownError indicates the request failed due to an unknown error.
 const ErrorCodeUnknownError ErrorCode = 4
 
+// ExecutorVersionV1 is the initial version of the executor at activation.
+const ExecutorVersionV1 ExecutorVersion = 1
+
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -250,6 +253,9 @@ const TransactionTypeUpdateAccountAuth TransactionType = 21
 
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
+
+// TransactionTypeActivateProtocolVersion activates a new version of the protocol.
+const TransactionTypeActivateProtocolVersion TransactionType = 47
 
 // TransactionTypeRemote is used to sign a remote transaction.
 const TransactionTypeRemote TransactionType = 48
@@ -742,6 +748,62 @@ func (v *ErrorCode) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetEnumValue returns the value of the Executor Version
+func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
+	u := ExecutorVersion(id)
+	switch u {
+	case ExecutorVersionV1:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Executor Version.
+func (v ExecutorVersion) String() string {
+	switch v {
+	case ExecutorVersionV1:
+		return "v1"
+	default:
+		return fmt.Sprintf("ExecutorVersion:%d", v)
+	}
+}
+
+// ExecutorVersionByName returns the named Executor Version.
+func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
+	switch strings.ToLower(name) {
+	case "v1":
+		return ExecutorVersionV1, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Executor Version to JSON as a string.
+func (v ExecutorVersion) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Executor Version from JSON as a string.
+func (v *ExecutorVersion) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = ExecutorVersionByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Executor Version %q", s)
+	}
+	return nil
+}
+
 // GetEnumValue returns the value of the Key Page Operation Type
 func (v KeyPageOperationType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -1121,7 +1183,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	default:
@@ -1170,6 +1232,8 @@ func (v TransactionType) String() string {
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
+	case TransactionTypeActivateProtocolVersion:
+		return "activateProtocolVersion"
 	case TransactionTypeRemote:
 		return "remote"
 	case TransactionTypeSyntheticCreateIdentity:
@@ -1238,6 +1302,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
 		return TransactionTypeUpdateKey, true
+	case "activateprotocolversion":
+		return TransactionTypeActivateProtocolVersion, true
 	case "remote":
 		return TransactionTypeRemote, true
 	case "signPending":
