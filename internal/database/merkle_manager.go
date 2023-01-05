@@ -1,10 +1,10 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package managed
+package database
 
 import (
 	"fmt"
@@ -15,12 +15,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-type MerkleManager = Chain
-
-func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64, typ ChainType, namefmt, labelfmt string) *Chain {
-	c := new(Chain)
+func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64, typ merkle.ChainType, namefmt, labelfmt string) *MerkleManager {
+	c := new(MerkleManager)
 	c.logger.L = logger
 	c.store = store
 	c.key = key
@@ -47,8 +46,11 @@ func NewChain(logger log.Logger, store record.Store, key record.Key, markPower i
 	return c
 }
 
-func (c *Chain) Name() string    { return c.name }
-func (c *Chain) Type() ChainType { return c.typ }
+func (c *MerkleManager) Name() string           { return c.name }
+func (c *MerkleManager) Type() merkle.ChainType { return c.typ }
+func (c *MerkleManager) MarkPower() int64       { return c.markPower }
+func (c *MerkleManager) MarkMask() int64        { return c.markMask }
+func (c *MerkleManager) MarkFreq() int64        { return c.markFreq }
 
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.

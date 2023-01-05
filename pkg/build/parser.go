@@ -187,7 +187,7 @@ func (p *parser) parseAmount(v any, precision uint64) *big.Int {
 	case int32:
 		return intexp(big.NewInt(int64(v)), precision)
 	case int64:
-		return intexp(big.NewInt(int64(v)), precision)
+		return intexp(big.NewInt(int64(v)), precision) //nolint:unconvert
 	case uint:
 		return intexp(big.NewInt(int64(v)), precision)
 	case uint8:
@@ -202,7 +202,7 @@ func (p *parser) parseAmount(v any, precision uint64) *big.Int {
 	case float32:
 		return bigfloat(float64(v), precision)
 	case float64:
-		return bigfloat(float64(v), precision)
+		return bigfloat(float64(v), precision) //nolint:unconvert
 
 	case string:
 		parts := strings.Split(v, ".")
@@ -298,7 +298,7 @@ func (p *parser) parseUint(v any) uint64 {
 	case uint32:
 		return uint64(v)
 	case uint64:
-		return uint64(v)
+		return uint64(v) //nolint:unconvert
 
 	case float32:
 		return uint64(v)

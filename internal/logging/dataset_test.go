@@ -10,7 +10,6 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -20,7 +19,7 @@ import (
 
 func TestDataSetLog(t *testing.T) {
 	dsl := DataSetLog{}
-	path, err := ioutil.TempDir("", "DataSetTest")
+	path, err := os.MkdirTemp("", "DataSetTest")
 	if err != nil {
 		t.Fatal(err)
 	}

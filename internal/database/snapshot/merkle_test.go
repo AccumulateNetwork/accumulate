@@ -13,10 +13,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -72,7 +72,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	key := record.Key{"Account", foo, "MainChain"}
 	storetx := store.Begin(false)
 	defer storetx.Discard()
-	c := managed.NewChain(nil, record.KvStore{Store: storetx}, key, 8, managed.ChainTypeTransaction, "main", "main")
+	c := database.NewChain(nil, record.KvStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
 
 	entriesShouldFailOrReturnCorrectNumber(t, c, 0, 300)
 	entriesShouldFailOrReturnCorrectNumber(t, c, 100, 300)
@@ -124,7 +124,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 		key := record.Key{"Account", foo, "MainChain"}
 		storetx := store.Begin(false)
 		defer storetx.Discard()
-		c := managed.NewChain(nil, record.KvStore{Store: storetx}, key, 8, managed.ChainTypeTransaction, "main", "main")
+		c := database.NewChain(nil, record.KvStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
 
 		for i := 0; i < n; i++ {
 			hash, err := c.Get(int64(i))
@@ -134,7 +134,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 	}
 }
 
-func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *managed.Chain, start, end int64) {
+func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *database.MerkleManager, start, end int64) {
 	t.Helper()
 	hashes, err := chain.GetRange(start, end)
 	if err != nil {

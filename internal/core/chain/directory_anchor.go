@@ -12,10 +12,10 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -126,7 +126,7 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 	return nil
 }
 
-func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.URL, receipt *managed.Receipt, sequence map[*Delivery]int) ([]*Delivery, error) {
+func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.URL, receipt *merkle.Receipt, sequence map[*Delivery]int) ([]*Delivery, error) {
 	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(anchor))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", anchor[:4], err)

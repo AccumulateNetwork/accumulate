@@ -1,10 +1,10 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package managed
+package database
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ func TestHash(t *testing.T) {
 	hf := func(data []byte) Hash {
 		return Sha256(data)
 	}
-	h = hf([]byte(data))
+	h = hf(data)
 	h2 := h.Copy()
 	if !bytes.Equal(h[:], h2[:]) {
 		t.Error("copy failed")

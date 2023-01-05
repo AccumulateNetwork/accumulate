@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -29,6 +30,16 @@ type BlockStateSynthTxnEntry struct {
 	Transaction []byte   `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	ChainEntry  uint64   `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
 	extraData   []byte
+}
+
+type ReceiptList struct {
+	fieldsSet []bool
+	// MerkleState MerkleState at the beginning of the list.
+	MerkleState      *MerkleState    `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
+	Elements         [][]byte        `json:"elements,omitempty" form:"elements" query:"elements" validate:"required"`
+	Receipt          *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	ContinuedReceipt *merkle.Receipt `json:"continuedReceipt,omitempty" form:"continuedReceipt" query:"continuedReceipt" validate:"required"`
+	extraData        []byte
 }
 
 type SigOrTxn struct {
@@ -80,6 +91,28 @@ func (v *BlockStateSynthTxnEntry) Copy() *BlockStateSynthTxnEntry {
 }
 
 func (v *BlockStateSynthTxnEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ReceiptList) Copy() *ReceiptList {
+	u := new(ReceiptList)
+
+	if v.MerkleState != nil {
+		u.MerkleState = (v.MerkleState).Copy()
+	}
+	u.Elements = make([][]byte, len(v.Elements))
+	for i, v := range v.Elements {
+		u.Elements[i] = encoding.BytesCopy(v)
+	}
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+	if v.ContinuedReceipt != nil {
+		u.ContinuedReceipt = (v.ContinuedReceipt).Copy()
+	}
+
+	return u
+}
+
+func (v *ReceiptList) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SigOrTxn) Copy() *SigOrTxn {
 	u := new(SigOrTxn)
@@ -157,6 +190,43 @@ func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
 		return false
 	}
 	if !(v.ChainEntry == u.ChainEntry) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ReceiptList) Equal(u *ReceiptList) bool {
+	switch {
+	case v.MerkleState == u.MerkleState:
+		// equal
+	case v.MerkleState == nil || u.MerkleState == nil:
+		return false
+	case !((v.MerkleState).Equal(u.MerkleState)):
+		return false
+	}
+	if len(v.Elements) != len(u.Elements) {
+		return false
+	}
+	for i := range v.Elements {
+		if !(bytes.Equal(v.Elements[i], u.Elements[i])) {
+			return false
+		}
+	}
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
+		return false
+	}
+	switch {
+	case v.ContinuedReceipt == u.ContinuedReceipt:
+		// equal
+	case v.ContinuedReceipt == nil || u.ContinuedReceipt == nil:
+		return false
+	case !((v.ContinuedReceipt).Equal(u.ContinuedReceipt)):
 		return false
 	}
 
@@ -292,6 +362,74 @@ func (v *BlockStateSynthTxnEntry) IsValid() error {
 		errs = append(errs, "field ChainEntry is missing")
 	} else if v.ChainEntry == 0 {
 		errs = append(errs, "field ChainEntry is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ReceiptList = []string{
+	1: "MerkleState",
+	2: "Elements",
+	3: "Receipt",
+	4: "ContinuedReceipt",
+}
+
+func (v *ReceiptList) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.MerkleState == nil) {
+		writer.WriteValue(1, v.MerkleState.MarshalBinary)
+	}
+	if !(len(v.Elements) == 0) {
+		for _, v := range v.Elements {
+			writer.WriteBytes(2, v)
+		}
+	}
+	if !(v.Receipt == nil) {
+		writer.WriteValue(3, v.Receipt.MarshalBinary)
+	}
+	if !(v.ContinuedReceipt == nil) {
+		writer.WriteValue(4, v.ContinuedReceipt.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ReceiptList)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ReceiptList) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field MerkleState is missing")
+	} else if v.MerkleState == nil {
+		errs = append(errs, "field MerkleState is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Elements is missing")
+	} else if len(v.Elements) == 0 {
+		errs = append(errs, "field Elements is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Receipt is missing")
+	} else if v.Receipt == nil {
+		errs = append(errs, "field Receipt is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field ContinuedReceipt is missing")
+	} else if v.ContinuedReceipt == nil {
+		errs = append(errs, "field ContinuedReceipt is not set")
 	}
 
 	switch len(errs) {
@@ -572,6 +710,42 @@ func (v *BlockStateSynthTxnEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *ReceiptList) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ReceiptList) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(MerkleState); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.MerkleState = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(2); ok {
+			v.Elements = append(v.Elements, x)
+		} else {
+			break
+		}
+	}
+	if x := new(merkle.Receipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
+	if x := new(merkle.Receipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+		v.ContinuedReceipt = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ReceiptList)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SigOrTxn) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -711,6 +885,23 @@ func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ReceiptList) MarshalJSON() ([]byte, error) {
+	u := struct {
+		MerkleState      *MerkleState               `json:"merkleState,omitempty"`
+		Elements         encoding.JsonList[*string] `json:"elements,omitempty"`
+		Receipt          *merkle.Receipt            `json:"receipt,omitempty"`
+		ContinuedReceipt *merkle.Receipt            `json:"continuedReceipt,omitempty"`
+	}{}
+	u.MerkleState = v.MerkleState
+	u.Elements = make(encoding.JsonList[*string], len(v.Elements))
+	for i, x := range v.Elements {
+		u.Elements[i] = encoding.BytesToJSON(x)
+	}
+	u.Receipt = v.Receipt
+	u.ContinuedReceipt = v.ContinuedReceipt
+	return json.Marshal(&u)
+}
+
 func (v *SigOrTxn) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
@@ -768,6 +959,37 @@ func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
 		v.Transaction = x
 	}
 	v.ChainEntry = u.ChainEntry
+	return nil
+}
+
+func (v *ReceiptList) UnmarshalJSON(data []byte) error {
+	u := struct {
+		MerkleState      *MerkleState               `json:"merkleState,omitempty"`
+		Elements         encoding.JsonList[*string] `json:"elements,omitempty"`
+		Receipt          *merkle.Receipt            `json:"receipt,omitempty"`
+		ContinuedReceipt *merkle.Receipt            `json:"continuedReceipt,omitempty"`
+	}{}
+	u.MerkleState = v.MerkleState
+	u.Elements = make(encoding.JsonList[*string], len(v.Elements))
+	for i, x := range v.Elements {
+		u.Elements[i] = encoding.BytesToJSON(x)
+	}
+	u.Receipt = v.Receipt
+	u.ContinuedReceipt = v.ContinuedReceipt
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.MerkleState = u.MerkleState
+	v.Elements = make([][]byte, len(u.Elements))
+	for i, x := range u.Elements {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Elements: %w", err)
+		} else {
+			v.Elements[i] = x
+		}
+	}
+	v.Receipt = u.Receipt
+	v.ContinuedReceipt = u.ContinuedReceipt
 	return nil
 }
 

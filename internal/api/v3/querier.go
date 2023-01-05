@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
@@ -7,11 +13,11 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -322,13 +328,13 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 
 	if expand {
 		switch r.Type {
-		case managed.ChainTypeIndex:
+		case merkle.ChainTypeIndex:
 			v := new(protocol.IndexEntry)
 			if v.UnmarshalBinary(value) == nil {
 				r.Value = &api.IndexEntryRecord{Value: v}
 			}
 
-		case managed.ChainTypeTransaction:
+		case merkle.ChainTypeTransaction:
 			record := batch.Transaction(value)
 			var typ string
 			var err error
@@ -378,12 +384,12 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 }
 
 func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
-	entryHash, err := record.Entry(uint64(index))
+	entryHash, err := record.Entry(index)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get entry hash: %w", err)
 	}
 
-	return s.queryDataEntry(ctx, batch, record, uint64(index), entryHash)
+	return s.queryDataEntry(ctx, batch, record, index, entryHash)
 }
 
 func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
@@ -709,7 +715,7 @@ func (s *Querier) searchForAnchor(ctx context.Context, batch *database.Batch, re
 
 	rr := new(api.RecordRange[*api.ChainEntryRecord[api.Record]])
 	for _, c := range chains {
-		if c.Type != managed.ChainTypeAnchor {
+		if c.Type != merkle.ChainTypeAnchor {
 			continue
 		}
 

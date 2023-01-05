@@ -31,7 +31,7 @@ type MockMessageStreamHandler_Execute_Call struct {
 }
 
 // Execute is a helper method to define mock.On call
-//  - _a0 message.StreamOf[message.Message]
+//   - _a0 message.StreamOf[message.Message]
 func (_e *MockMessageStreamHandler_Expecter) Execute(_a0 interface{}) *MockMessageStreamHandler_Execute_Call {
 	return &MockMessageStreamHandler_Execute_Call{Call: _e.mock.On("Execute", _a0)}
 }

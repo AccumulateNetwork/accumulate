@@ -15,9 +15,11 @@ import (
 // BPT
 // Binary Patricia Tree.
 // Two types of Entry in the Tree:
-//    Node - a node in a binary tree that ends in Values (Left and Right)
-//    Value - a key / value pair where the key is a ChainID and the value
-//            is the hash of the state of the chain
+//
+//	Node - a node in a binary tree that ends in Values (Left and Right)
+//	Value - a key / value pair where the key is a ChainID and the value
+//	        is the hash of the state of the chain
+//
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
@@ -395,7 +397,6 @@ func (b *BPT) MarshalEntry(entry Entry, data []byte) []byte { //
 }
 
 // UnMarshalByteBlock
-//
 func (b *BPT) UnMarshalByteBlock(borderNode *BptNode, data []byte) []byte {
 	if borderNode.Height&b.Mask != 0 {
 		panic("cannot call UnMarshalByteBlock on non-boarder nodes")

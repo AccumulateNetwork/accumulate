@@ -233,7 +233,7 @@ func LaunchFakeProxy(t *testing.T) (*proxy.Client, *client.Client, *url.URL, *ur
 		}
 		jsonrpc2.DebugMethodFunc = true
 		handler := jsonrpc2.HTTPRequestHandler(methods, stdlog.New(os.Stdout, "", 0))
-		require.NoError(t, http.ListenAndServe(":18888", handler))
+		require.NoError(t, http.ListenAndServe(":18888", handler)) //nolint:gosec
 	}()
 
 	proxyClient, err := proxy.New(Endpoint)
@@ -259,7 +259,7 @@ func ProveNetworkToFakeProxy(t *testing.T, client *client.Client) {
 	require.NoError(t, err)
 
 	d := config.Describe{}
-	require.NoError(t, d.UnmarshalJSON([]byte(str)))
+	require.NoError(t, d.UnmarshalJSON(str))
 
 	//now query the acc://dn.acme/network account with prove flag enabled to get the network names and anchor hash
 	networkUrl := protocol.DnUrl().JoinPath("network")

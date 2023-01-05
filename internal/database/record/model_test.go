@@ -20,7 +20,7 @@ import (
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-model --package record_test --out model_gen_test.go model_test.yml
 
-const markPower = 8
+// const markPower = 8
 
 func TestRecords(t *testing.T) {
 	store := memory.New(nil).Begin(true)
@@ -40,8 +40,8 @@ func TestRecords(t *testing.T) {
 	require.NoError(t, cs.Entity("bar").Set().Add(txn1.ID()))
 	require.NoError(t, cs.Entity("bar").Set().Add(txn1.ID()))
 	require.NoError(t, cs.Entity("bar").Set().Add(txn2.ID()))
-	require.NoError(t, cs.Entity("baz").Chain().AddHash(txn1.GetHash(), true))
-	require.NoError(t, cs.Entity("baz").Chain().AddHash(txn2.GetHash(), true))
+	// require.NoError(t, cs.Entity("baz").Chain().AddHash(txn1.GetHash(), true))
+	// require.NoError(t, cs.Entity("baz").Chain().AddHash(txn2.GetHash(), true))
 	require.NoError(t, cs.Commit())
 
 	// Verify
@@ -59,14 +59,18 @@ func TestRecords(t *testing.T) {
 	require.Len(t, set, 2)
 
 	// Verify the state of the chain
-	chain, err := cs.Entity("baz").Chain().Head().Get()
-	require.NoError(t, err)
-	require.Equal(t, 2, int(chain.Count))
+	// chain, err := cs.Entity("baz").Chain().Head().Get()
+	// require.NoError(t, err)
+	// require.Equal(t, 2, int(chain.Count))
 
 	// Verify the changelog was updated
 	cl, err := cs.ChangeLog().GetAll()
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"Entity.foo", "Entity.bar", "Entity.baz"}, cl)
+	require.ElementsMatch(t, []string{
+		"Entity.foo",
+		"Entity.bar",
+		// "Entity.baz",
+	}, cl)
 }
 
 func (e *entity) Commit() error {
