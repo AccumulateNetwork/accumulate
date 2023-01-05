@@ -50,12 +50,36 @@ func NewChain(logger log.Logger, store record.Store, key record.Key, markPower i
 func (c *Chain) Name() string    { return c.name }
 func (c *Chain) Type() ChainType { return c.typ }
 
+// DidAddHashes returns the index range of hashes added, or 0, 0.
+func (m *MerkleManager) DidAddHashes() (first, last int64) {
+	if !m.head.IsDirty() {
+		return 0, 0
+	}
+
+	head, err := m.head.Get()
+	if err != nil {
+		// If the head is dirty, Get must not fail
+		panic("head is dirty but failed to get the head")
+	}
+
+	if m.initialHeight >= head.Count {
+		// Nothing changed
+		return 0, 0
+	}
+
+	return m.initialHeight, head.Count
+}
+
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
 func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 	head, err := m.Head().Get() // Get the current state
 	if err != nil {
 		return err
+	}
+
+	if !m.Head().IsDirty() {
+		m.initialHeight = head.Count
 	}
 
 	hash = hash.Copy()                       // Just to make sure hash doesn't get changed

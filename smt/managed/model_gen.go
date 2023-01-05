@@ -20,15 +20,16 @@ import (
 )
 
 type Chain struct {
-	logger    logging.OptionalLogger
-	store     record.Store
-	key       record.Key
-	label     string
-	typ       ChainType
-	name      string
-	markPower int64
-	markFreq  int64
-	markMask  int64
+	logger        logging.OptionalLogger
+	store         record.Store
+	key           record.Key
+	label         string
+	typ           ChainType
+	name          string
+	markPower     int64
+	markFreq      int64
+	markMask      int64
+	initialHeight int64
 
 	head         *record.Value[*MerkleState]
 	states       map[chainStatesKey]*record.Value[*MerkleState]
