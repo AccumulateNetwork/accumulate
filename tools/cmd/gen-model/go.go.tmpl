@@ -210,7 +210,7 @@ func (c *{{.FullName}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 }
 
 {{if hasChains .}}
-{{if not .Root}}
+{{/*{{if not .Root}}
 func (c *{{.FullName}}) resolveChain(name string) (chain *managed.Chain, ok bool) {
 	{{- range .Attributes}}
 	{{- if and (.Type.IsChain) (not (parameterized .))}}
@@ -234,12 +234,12 @@ func (c *{{.FullName}}) resolveChain(name string) (chain *managed.Chain, ok bool
 		return c.{{template "accessor" .}}({{range .Parameters}}param{{.Name}},{{end}}){{if .Type.IsChain}}, true{{else}}.resolveChain(name){{end}}
 	})
 	{{- else if and (not .Type.IsChain) (hasChains .)}}
-	tryResolveChain(&chain, &ok, name, "{{chainName .}}-", c.{{template "accessor" .}})
+	tryResolveChain(&chain, &ok, name, "{{chainName .}}", c.{{template "accessor" .}})
 	{{- end}}
 	{{- end}}
 	return
 }
-{{end}}
+{{end}}*/}}
 
 func (c *{{.FullName}}) dirtyChains() []*managed.Chain {
 	if c == nil {
