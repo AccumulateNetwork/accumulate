@@ -95,19 +95,38 @@ func (m *Executor) EndBlock(block *Block) error {
 		// Overwrite the state's chain update list with one derived directly
 		// from the database
 		block.State.ChainUpdates.Entries = nil
+
+		// For each modified account
 		for _, account := range block.Batch.UpdatedAccounts() {
+			// For each modified chain
 			for _, e := range account.UpdatedChains() {
+				// Anchoring the synthetic transaction ledger causes sadness and
+				// despair (it breaks things but I don't know why)
 				_, ok := protocol.ParsePartitionUrl(e.Account)
 				if ok && e.Account.PathEqual(protocol.Synthetic) {
-					// Anchoring the synthetic transaction ledger causes sadness
-					// and despair (it breaks things but I don't know why)
 					continue
 				}
+
+				// Add a block entry
 				block.State.ChainUpdates.Entries = append(block.State.ChainUpdates.Entries, e)
 			}
 		}
 
-		// Sort to ensure consistent ordering
+		// [database.Batch.UpdatedAccounts] iterates over a map and thus returns
+		// the accounts in a random order. Since randomness and distributed
+		// consensus do not mix, the entries are sorted to ensure a consistent
+		// ordering.
+		//
+		// Modified chains are anchored into the root chain later in this
+		// function. This combined with the fact that the entries are sorted
+		// here means that the anchors in the root chain and entries in the
+		// block ledger will be recorded in a well-defined sort order.
+		//
+		// Another side effect of sorting is that information about the ordering
+		// of transactions is lost. That could be viewed as a problem; however,
+		// we intend on parallelizing transaction processing in the future.
+		// Declaring that the protocol does not preserve transaction ordering
+		// will make it easier to parallelize transaction processing.
 		e := block.State.ChainUpdates.Entries
 		sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
 	}

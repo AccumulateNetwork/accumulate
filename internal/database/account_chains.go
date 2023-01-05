@@ -73,8 +73,12 @@ func (c *Chain2) dirtyChains() []*managed.Chain {
 // database batch.
 func (a *Account) UpdatedChains() []*protocol.BlockEntry {
 	var entries []*protocol.BlockEntry
+
+	// For each modified chain
 	for _, c := range a.dirtyChains() {
+		// For each entry added
 		for i, last := c.DidAddHashes(); i < last; i++ {
+			// Return a block entry
 			entries = append(entries, &protocol.BlockEntry{
 				Account: a.Url(),
 				Chain:   c.Name(),
