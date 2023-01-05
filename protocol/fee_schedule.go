@@ -202,7 +202,8 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	case *WriteDataTo:
 		fee = FeeData * Fee(count)
 
-	case *AddCredits,
+	case *ActivateProtocolVersion,
+		*AddCredits,
 		*AcmeFaucet:
 		fee = 0
 

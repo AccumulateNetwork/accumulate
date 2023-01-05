@@ -526,3 +526,22 @@ func (b UpdateKeyBuilder) Done() (*protocol.Transaction, error) {
 func (b UpdateKeyBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
+
+type ActivateProtocolVersionBuilder struct {
+	t    TransactionBuilder
+	body protocol.ActivateProtocolVersion
+}
+
+func (b TransactionBuilder) ActivateProtocolVersion(version protocol.ExecutorVersion) ActivateProtocolVersionBuilder {
+	c := ActivateProtocolVersionBuilder{t: b}
+	c.body.Version = version
+	return c
+}
+
+func (b ActivateProtocolVersionBuilder) Done() (*protocol.Transaction, error) {
+	return b.t.Body(&b.body).Done()
+}
+
+func (b ActivateProtocolVersionBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.t.Body(&b.body).SignWith(signer, path...)
+}

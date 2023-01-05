@@ -19,7 +19,7 @@ import (
 )
 
 // debug is a bit field for enabling debug log messages
-//nolint
+// nolint
 const debug = 0 |
 	// debugGet |
 	// debugGetValue |
@@ -64,6 +64,7 @@ type Value[T any] struct {
 	status       valueStatus
 	value        encodableValue[T]
 	allowMissing bool
+	version      int
 }
 
 var _ ValueReader = (*Value[*wrappedValue[uint64]])(nil)
@@ -87,7 +88,8 @@ func (v *Value[T]) Key(i int) interface{} {
 	return v.key[i]
 }
 
-// Get loads the value, unmarshalling it if necessary.
+// Get loads the value, unmarshalling it if necessary. If IsDirty returns true,
+// Get is guaranteed to succeed.
 func (v *Value[T]) Get() (u T, err error) {
 	// Do we already have the value?
 	switch v.status {
@@ -168,8 +170,17 @@ func (v *Value[T]) Put(u T) error {
 		v.logger.Debug("Put", "value", u)
 	}
 
+	// Required for proper versioning
+	if v.status == valueUndefined {
+		_, err := v.Get()
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+
 	v.value.setValue(u)
 	v.status = valueDirty
+	v.version++
 	return nil
 }
 
@@ -204,21 +215,28 @@ func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 }
 
 // GetValue loads the value.
-func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
+func (v *Value[T]) GetValue() (encoding.BinaryValue, int, error) {
 	_, err := v.Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	return v.value, nil
+	return v.value, v.version, nil
 }
 
 // LoadValue sets the value from the reader. If put is false, the value will be
 // copied. If put is true, the value will be marked dirty.
 func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
-	uv, err := value.GetValue()
+	uv, version, err := value.GetValue()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
+
+	if put && version <= v.version {
+		// TODO Is it safe to make this an error?
+		v.logger.Error("Conflicting values written from concurrent batches", "key", v.key)
+		// return errors.Format(errors.StatusConflict, "conflicting values written to %v from concurrent batches", v.key)
+	}
+	v.version = version
 
 	u, ok := uv.(encodableValue[T])
 	if !ok {
