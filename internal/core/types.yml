@@ -20,3 +20,8 @@ GlobalValues:
       type: protocol.RoutingTable
       marshal-as: reference
       pointer: true
+    - name: ExecutorVersion
+      description: is the active executor version
+      type: protocol.ExecutorVersion
+      marshal-as: enum
+      optional: true

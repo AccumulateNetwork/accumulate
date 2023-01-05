@@ -74,3 +74,47 @@ func TestState(t *testing.T) {
 	}))
 
 }
+
+func TestVersion(t *testing.T) {
+	logger := acctesting.NewTestLogger(t)
+	db := database.OpenInMemory(logger)
+
+	foo := protocol.AccountUrl("foo")
+	get := func(batch *database.Batch) (a *protocol.UnknownSigner) {
+		require.NoError(t, batch.Account(foo).Main().GetAs(&a))
+		return a
+	}
+
+	set := func(batch *database.Batch, a *protocol.UnknownSigner, version uint64) {
+		a.Version = version
+		require.NoError(t, batch.Account(foo).Main().Put(a))
+	}
+
+	root := db.Begin(true)
+	set(root, &protocol.UnknownSigner{Url: foo}, 0)
+
+	// Safe
+	batch := root.Begin(true)
+	set(batch, &protocol.UnknownSigner{Url: foo}, 1)
+	a := get(batch)
+	set(batch, a, 2)
+	require.NoError(t, batch.Commit())
+
+	// Safe
+	batch = root.Begin(true)
+	set(batch, get(batch), 3)
+	sub := batch.Begin(true)
+	set(sub, get(sub), 4)
+	require.NoError(t, sub.Commit())
+	require.NoError(t, batch.Commit())
+
+	// Unsafe
+	batch = root.Begin(true)
+	sub = batch.Begin(true)
+	a = get(batch)
+	b := get(sub)
+	set(batch, a, 5)
+	set(sub, b, 6)
+	require.NoError(t, sub.Commit())
+	require.NoError(t, batch.Commit())
+}
