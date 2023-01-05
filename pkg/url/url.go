@@ -159,6 +159,14 @@ func (u *URL) URL() *url.URL {
 // Compare returns an integer comparing two URLs as lower case strings. The
 // result will be 0 if u == v, -1 if u < v, and +1 if u > v.
 func (u *URL) Compare(v *URL) int {
+	switch {
+	case u == v:
+		return 0
+	case u == nil:
+		return -1
+	case v == nil:
+		return +1
+	}
 	uStr := strings.ToLower(u.String())
 	vStr := strings.ToLower(v.String())
 	switch {

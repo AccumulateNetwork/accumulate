@@ -116,6 +116,9 @@ const ErrorCodeUnknownError ErrorCode = 4
 // ExecutorVersionV1 is the initial version of the executor at activation.
 const ExecutorVersionV1 ExecutorVersion = 1
 
+// ExecutorVersionV1SignatureAnchoring introduces anchoring of signature chains into the root chain.
+const ExecutorVersionV1SignatureAnchoring ExecutorVersion = 2
+
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -755,7 +758,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring:
 		*v = u
 		return true
 	default:
@@ -768,6 +771,8 @@ func (v ExecutorVersion) String() string {
 	switch v {
 	case ExecutorVersionV1:
 		return "v1"
+	case ExecutorVersionV1SignatureAnchoring:
+		return "v1-signatureAnchoring"
 	default:
 		return fmt.Sprintf("ExecutorVersion:%d", v)
 	}
@@ -778,6 +783,10 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 	switch strings.ToLower(name) {
 	case "v1":
 		return ExecutorVersionV1, true
+	case "v1signatureanchoring":
+		return ExecutorVersionV1SignatureAnchoring, true
+	case "v1-signatureanchoring":
+		return ExecutorVersionV1SignatureAnchoring, true
 	default:
 		return 0, false
 	}
