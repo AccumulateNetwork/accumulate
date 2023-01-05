@@ -183,6 +183,9 @@ func ReceiptForChainIndex(net *config.Describe, batch *database.Batch, c *databa
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to load %s index chain: %w", c.Name(), err)
 	}
+	if indexChain.Height() == 0 {
+		return nil, nil, fmt.Errorf("cannot create receipt for entry %d of %s chain: index chain is empty", index, c.Name())
+	}
 
 	_, entry, err := SearchIndexChain(indexChain, uint64(indexChain.Height())-1, MatchAfter, SearchIndexChainBySource(uint64(index)))
 	if err != nil {
