@@ -92,6 +92,33 @@ const RecordTypeTxID RecordType = 130
 // RecordTypeIndexEntry .
 const RecordTypeIndexEntry RecordType = 131
 
+// ServiceTypeUnknown .
+const ServiceTypeUnknown ServiceType = 0
+
+// ServiceTypeNode .
+const ServiceTypeNode ServiceType = 1
+
+// ServiceTypeNetwork .
+const ServiceTypeNetwork ServiceType = 2
+
+// ServiceTypeMetrics .
+const ServiceTypeMetrics ServiceType = 3
+
+// ServiceTypeQuery .
+const ServiceTypeQuery ServiceType = 4
+
+// ServiceTypeEvent .
+const ServiceTypeEvent ServiceType = 5
+
+// ServiceTypeSubmit .
+const ServiceTypeSubmit ServiceType = 6
+
+// ServiceTypeValidate .
+const ServiceTypeValidate ServiceType = 7
+
+// ServiceTypeFaucet .
+const ServiceTypeFaucet ServiceType = 8
+
 // GetEnumValue returns the value of the Event Type
 func (v EventType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -348,6 +375,94 @@ func (v *RecordType) UnmarshalJSON(data []byte) error {
 	*v, ok = RecordTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Record Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Service Type
+func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ServiceType) SetEnumValue(id uint64) bool {
+	u := ServiceType(id)
+	switch u {
+	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Service Type.
+func (v ServiceType) String() string {
+	switch v {
+	case ServiceTypeUnknown:
+		return "unknown"
+	case ServiceTypeNode:
+		return "node"
+	case ServiceTypeNetwork:
+		return "network"
+	case ServiceTypeMetrics:
+		return "metrics"
+	case ServiceTypeQuery:
+		return "query"
+	case ServiceTypeEvent:
+		return "event"
+	case ServiceTypeSubmit:
+		return "submit"
+	case ServiceTypeValidate:
+		return "validate"
+	case ServiceTypeFaucet:
+		return "faucet"
+	default:
+		return fmt.Sprintf("ServiceType:%d", v)
+	}
+}
+
+// ServiceTypeByName returns the named Service Type.
+func ServiceTypeByName(name string) (ServiceType, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return ServiceTypeUnknown, true
+	case "node":
+		return ServiceTypeNode, true
+	case "network":
+		return ServiceTypeNetwork, true
+	case "metrics":
+		return ServiceTypeMetrics, true
+	case "query":
+		return ServiceTypeQuery, true
+	case "event":
+		return ServiceTypeEvent, true
+	case "submit":
+		return ServiceTypeSubmit, true
+	case "validate":
+		return ServiceTypeValidate, true
+	case "faucet":
+		return ServiceTypeFaucet, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Service Type to JSON as a string.
+func (v ServiceType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Service Type from JSON as a string.
+func (v *ServiceType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = ServiceTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Service Type %q", s)
 	}
 	return nil
 }

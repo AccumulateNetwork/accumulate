@@ -45,6 +45,19 @@ type EventMessage struct {
 	extraData []byte
 }
 
+type FaucetRequest struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	FaucetOptions
+	extraData []byte
+}
+
+type FaucetResponse struct {
+	fieldsSet []bool
+	Value     *api.Submission `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type MetricsRequest struct {
 	fieldsSet []bool
 	MetricsOptions
@@ -151,6 +164,10 @@ func (*ErrorResponse) Type() Type { return TypeErrorResponse }
 
 func (*EventMessage) Type() Type { return TypeEvent }
 
+func (*FaucetRequest) Type() Type { return TypeFaucetRequest }
+
+func (*FaucetResponse) Type() Type { return TypeFaucetResponse }
+
 func (*MetricsRequest) Type() Type { return TypeMetricsRequest }
 
 func (*MetricsResponse) Type() Type { return TypeMetricsResponse }
@@ -224,6 +241,31 @@ func (v *EventMessage) Copy() *EventMessage {
 }
 
 func (v *EventMessage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FaucetRequest) Copy() *FaucetRequest {
+	u := new(FaucetRequest)
+
+	if v.Account != nil {
+		u.Account = v.Account
+	}
+	u.FaucetOptions = *v.FaucetOptions.Copy()
+
+	return u
+}
+
+func (v *FaucetRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FaucetResponse) Copy() *FaucetResponse {
+	u := new(FaucetResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+
+	return u
+}
+
+func (v *FaucetResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
@@ -452,6 +494,35 @@ func (v *EventMessage) Equal(u *EventMessage) bool {
 		if !(api.EqualEvent(v.Value[i], u.Value[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *FaucetRequest) Equal(u *FaucetRequest) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !v.FaucetOptions.Equal(&u.FaucetOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *FaucetResponse) Equal(u *FaucetResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
 	}
 
 	return true
@@ -782,6 +853,99 @@ func (v *EventMessage) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
 	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FaucetRequest = []string{
+	1: "Type",
+	2: "Account",
+	3: "FaucetOptions",
+}
+
+func (v *FaucetRequest) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Account == nil) {
+		writer.WriteUrl(2, v.Account)
+	}
+	writer.WriteValue(3, v.FaucetOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_FaucetRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FaucetRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if err := v.FaucetOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FaucetResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *FaucetResponse) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_FaucetResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FaucetResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
 		errs = append(errs, "field Value is not set")
 	}
 
@@ -1635,6 +1799,77 @@ func (v *EventMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *FaucetRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FaucetRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *FaucetRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Account = x
+	}
+	reader.ReadValue(3, v.FaucetOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_FaucetRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *FaucetResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FaucetResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *FaucetResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.Submission); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_FaucetResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2243,6 +2478,26 @@ func (v *EventMessage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *FaucetRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    Type     `json:"type"`
+		Account *url.URL `json:"account,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	return json.Marshal(&u)
+}
+
+func (v *FaucetResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  Type            `json:"type"`
+		Value *api.Submission `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	return json.Marshal(&u)
+}
+
 func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      Type   `json:"type"`
@@ -2379,11 +2634,13 @@ func (v *SubmitResponse) MarshalJSON() ([]byte, error) {
 
 func (v *SubscribeRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      Type   `json:"type"`
-		Partition string `json:"partition,omitempty"`
+		Type      Type     `json:"type"`
+		Partition string   `json:"partition,omitempty"`
+		Account   *url.URL `json:"account,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.SubscribeOptions.Partition
+	u.Account = v.SubscribeOptions.Account
 	return json.Marshal(&u)
 }
 
@@ -2473,6 +2730,40 @@ func (v *EventMessage) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Value.Value {
 		v.Value[i] = x
 	}
+	return nil
+}
+
+func (v *FaucetRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    Type     `json:"type"`
+		Account *url.URL `json:"account,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Account = u.Account
+	return nil
+}
+
+func (v *FaucetResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  Type            `json:"type"`
+		Value *api.Submission `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
 	return nil
 }
 
@@ -2705,11 +2996,13 @@ func (v *SubmitResponse) UnmarshalJSON(data []byte) error {
 
 func (v *SubscribeRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      Type   `json:"type"`
-		Partition string `json:"partition,omitempty"`
+		Type      Type     `json:"type"`
+		Partition string   `json:"partition,omitempty"`
+		Account   *url.URL `json:"account,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.SubscribeOptions.Partition
+	u.Account = v.SubscribeOptions.Account
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2717,6 +3010,7 @@ func (v *SubscribeRequest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.SubscribeOptions.Partition = u.Partition
+	v.SubscribeOptions.Account = u.Account
 	return nil
 }
 
