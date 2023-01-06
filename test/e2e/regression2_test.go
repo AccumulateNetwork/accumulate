@@ -10,14 +10,18 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -206,4 +210,96 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, st.Error)
 	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvn, goodBvn), st.Error.Message)
+}
+
+func TestSignatureChainAnchoring(t *testing.T) {
+	// Tests #3149
+
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Start with executor version 0
+	values := new(core.GlobalValues)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, values),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// Execute
+	st := sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(alice).
+			CreateDataAccount(alice, "foo").
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	includesChain := func(block *BlockLedger, account *url.URL, name string) bool {
+		for _, entry := range block.Entries {
+			if entry.Account.Equal(account) && strings.EqualFold(name, entry.Chain) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Verify that the buggy behavior is retained
+	alicePage := alice.JoinPath("book", "1")
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		var ledger *SystemLedger
+		require.NoError(t, batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).Main().GetAs(&ledger))
+
+		var block *BlockLedger
+		require.NoError(t, batch.Account(PartitionUrl("BVN0").JoinPath(Ledger, strconv.FormatUint(ledger.Index, 10))).Main().GetAs(&block))
+
+		require.False(t, includesChain(block, alicePage, "signature"), "%v#chain/signature was anchored", alicePage)
+		c, err := batch.Account(alicePage).SignatureChain().Index().Get()
+		require.NoError(t, err)
+		require.Zero(t, c.Height(), "%v#chain/signature was indexed", alicePage)
+		_, _, _, err = indexing.ReceiptForChainIndex(config.NetworkUrl{URL: PartitionUrl("BVN0")}, batch, batch.Account(alicePage).SignatureChain(), 0)
+		require.EqualError(t, err, "cannot create receipt for entry 0 of signature chain: index chain is empty")
+	})
+
+	// Activate the new behavior
+	st = sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV1SignatureAnchoring).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Give the anchor a few blocks to propagate
+	sim.StepN(10)
+
+	// Execute
+	st = sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(alice).
+			CreateDataAccount(alice, "bar").
+			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey)))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Verify the new behavior
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		var ledger *SystemLedger
+		require.NoError(t, batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).Main().GetAs(&ledger))
+
+		var block *BlockLedger
+		require.NoError(t, batch.Account(PartitionUrl("BVN0").JoinPath(Ledger, strconv.FormatUint(ledger.Index, 10))).Main().GetAs(&block))
+
+		require.True(t, includesChain(block, alicePage, "signature"), "%v#chain/signature was not anchored", alicePage)
+		c, err := batch.Account(alicePage).SignatureChain().Index().Get()
+		require.NoError(t, err)
+		require.NotZero(t, c.Height(), "%v#chain/signature was not indexed", alicePage)
+		_, _, _, err = indexing.ReceiptForChainIndex(config.NetworkUrl{URL: PartitionUrl("BVN0")}, batch, batch.Account(alicePage).SignatureChain(), 0)
+		require.NoError(t, err)
+	})
 }

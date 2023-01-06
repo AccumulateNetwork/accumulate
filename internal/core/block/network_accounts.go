@@ -21,8 +21,19 @@ import (
 func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
 	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
 	defer x.BlockTimers.Stop(r)
-	// Only process updates to network accounts
-	if principal == nil || !x.Describe.NodeUrl().PrefixOf(principal.GetUrl()) {
+
+	// Only process updates to network accounts. To prevent potential issues
+	// replaying history, this condition must reject everything that was
+	// rejected by v0 except ActivateProtocolVersion.
+	switch {
+	case principal == nil:
+		return nil
+	case x.Describe.NodeUrl().PrefixOf(principal.GetUrl()):
+		// Ok
+	case delivery.Transaction.Body.Type() == protocol.TransactionTypeActivateProtocolVersion:
+		// Ok - no other condition is necessary because ActivateProtocolVersion
+		// will fail if the principal is not the partition ADI
+	default:
 		return nil
 	}
 
@@ -33,6 +44,10 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 	targetName := strings.ToLower(strings.Trim(principal.GetUrl().Path, "/"))
 	switch body := delivery.Transaction.Body.(type) {
+	case *protocol.ActivateProtocolVersion:
+		// Add the version change to the pending globals
+		x.globals.Pending.ExecutorVersion = body.Version
+
 	case *protocol.UpdateKeyPage:
 		switch targetName {
 		case protocol.Operators + "/1":

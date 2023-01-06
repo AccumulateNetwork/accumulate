@@ -33,6 +33,7 @@ func TestCreateKeyPage_LimitBookPages(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.BookPages = 1
@@ -65,6 +66,7 @@ func TestCreateKeyPage_LimitPageEntries(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.PageEntries = 1
@@ -97,6 +99,7 @@ func TestUpdateKeyPage_LimitPageEntries(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.PageEntries = 1
@@ -131,6 +134,7 @@ func TestUpdateAccountAuth_LimitAccountAuthorities(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.AccountAuthorities = 1
@@ -169,6 +173,7 @@ func TestWriteData_LimitDataEntryParts(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.DataEntryParts = 1
@@ -204,6 +209,7 @@ func TestCreateIdentity_LimitIdentityAccounts(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.IdentityAccounts = 1
@@ -312,6 +318,7 @@ func TestCreateTokenAccount_LimitIdentityAccounts(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.IdentityAccounts = 1
@@ -344,6 +351,7 @@ func TestCreateDataAccount_LimitIdentityAccounts(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.IdentityAccounts = 1
@@ -376,6 +384,7 @@ func TestCreateToken_LimitIdentityAccounts(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.IdentityAccounts = 1
@@ -408,6 +417,7 @@ func TestCreateKeyBook_LimitIdentityAccounts(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
 	globals.Globals.Limits.IdentityAccounts = 1

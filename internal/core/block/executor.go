@@ -85,6 +85,9 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 
 		// Forwarding
 		chain.SyntheticForwardTransaction{},
+
+		// Operator transactions
+		chain.ActivateProtocolVersion{},
 	}
 
 	switch opts.Describe.NetworkType {

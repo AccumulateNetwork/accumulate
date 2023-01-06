@@ -328,5 +328,6 @@ type Enum map[string]*EnumValue
 type EnumValue struct {
 	Value       interface{}
 	Description string
+	Label       string
 	Aliases     []string
 }

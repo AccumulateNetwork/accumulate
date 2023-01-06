@@ -16,6 +16,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -270,8 +271,10 @@ func TestSynthTxnToDirectory(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(values)
 
 	alice := acctesting.GenerateKey(t.Name(), "alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
@@ -308,8 +311,10 @@ func TestSynthTxnFromDirectory(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(values)
 
 	alice := acctesting.GenerateKey(t.Name(), "alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)

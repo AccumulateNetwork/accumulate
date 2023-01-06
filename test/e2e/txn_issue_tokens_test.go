@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -21,8 +22,10 @@ func TestIssueTokens_Good(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(values)
 
 	// Setup accounts
 	alice := url.MustParse("alice")

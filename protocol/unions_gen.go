@@ -311,6 +311,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	switch typ {
 	case TransactionTypeAcmeFaucet:
 		return new(AcmeFaucet), nil
+	case TransactionTypeActivateProtocolVersion:
+		return new(ActivateProtocolVersion), nil
 	case TransactionTypeAddCredits:
 		return new(AddCredits), nil
 	case TransactionTypeBlockValidatorAnchor:
@@ -383,6 +385,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	switch a := a.(type) {
 	case *AcmeFaucet:
 		b, ok := b.(*AcmeFaucet)
+		return ok && a.Equal(b)
+	case *ActivateProtocolVersion:
+		b, ok := b.(*ActivateProtocolVersion)
 		return ok && a.Equal(b)
 	case *AddCredits:
 		b, ok := b.(*AddCredits)
@@ -477,6 +482,8 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 func CopyTransactionBody(v TransactionBody) TransactionBody {
 	switch v := v.(type) {
 	case *AcmeFaucet:
+		return v.Copy()
+	case *ActivateProtocolVersion:
 		return v.Copy()
 	case *AddCredits:
 		return v.Copy()

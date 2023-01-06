@@ -868,11 +868,12 @@ func (m *queryBackend) queryDataSet(batch *database.Batch, u *url.URL, start int
 	return &qr, nil
 }
 
-func (m *queryBackend) Query(batch *database.Batch, q query.Request, _ int64, prove bool) (k, v []byte, _ error) {
+func (m *queryBackend) Query(batch *database.Batch, q query.Request, opts QueryOptions) (k, v []byte, _ error) {
+	prove := opts.Prove
 	switch q := q.(type) {
 	case *query.RequestByTxId:
 		txr := q
-		qr, err := m.queryByTxId(batch, txr.TxId[:], true, prove, false, false, nil)
+		qr, err := m.queryByTxId(batch, txr.TxId[:], true, prove, opts.IncludeRemote, false, nil)
 		if err != nil {
 			return nil, nil, errors.UnknownError.Wrap(err)
 		}

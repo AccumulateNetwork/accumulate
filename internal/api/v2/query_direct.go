@@ -31,7 +31,7 @@ func (q *queryFrontend) query(req query.Request, opts QueryOptions) (string, []b
 	defer batch.Discard()
 
 	// Query the backend
-	k, v, err := q.backend.Query(batch, req, int64(opts.Height), opts.Prove)
+	k, v, err := q.backend.Query(batch, req, opts)
 	if err != nil {
 		return "", nil, err
 	}

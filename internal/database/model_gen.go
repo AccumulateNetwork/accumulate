@@ -164,6 +164,20 @@ func (c *Batch) IsDirty() bool {
 	return false
 }
 
+func (c *Batch) dirtyChains() []*MerkleManager {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*MerkleManager
+
+	for _, v := range c.account {
+		chains = append(chains, v.dirtyChains()...)
+	}
+
+	return chains
+}
+
 func (c *Batch) baseCommit() error {
 	if c == nil {
 		return nil
@@ -470,6 +484,29 @@ func (c *Account) IsDirty() bool {
 	return false
 }
 
+func (c *Account) dirtyChains() []*MerkleManager {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*MerkleManager
+
+	chains = append(chains, c.mainChain.dirtyChains()...)
+	chains = append(chains, c.scratchChain.dirtyChains()...)
+	chains = append(chains, c.signatureChain.dirtyChains()...)
+	chains = append(chains, c.rootChain.dirtyChains()...)
+	chains = append(chains, c.anchorSequenceChain.dirtyChains()...)
+	chains = append(chains, c.majorBlockChain.dirtyChains()...)
+	for _, v := range c.syntheticSequenceChain {
+		chains = append(chains, v.dirtyChains()...)
+	}
+	for _, v := range c.anchorChain {
+		chains = append(chains, v.dirtyChains()...)
+	}
+
+	return chains
+}
+
 func (c *Account) baseCommit() error {
 	if c == nil {
 		return nil
@@ -553,6 +590,19 @@ func (c *AccountAnchorChain) IsDirty() bool {
 	}
 
 	return false
+}
+
+func (c *AccountAnchorChain) dirtyChains() []*MerkleManager {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*MerkleManager
+
+	chains = append(chains, c.root.dirtyChains()...)
+	chains = append(chains, c.bpt.dirtyChains()...)
+
+	return chains
 }
 
 func (c *AccountAnchorChain) Commit() error {
@@ -849,15 +899,16 @@ func (c *SystemData) Commit() error {
 }
 
 type MerkleManager struct {
-	logger    logging.OptionalLogger
-	store     record.Store
-	key       record.Key
-	label     string
-	typ       merkle.ChainType
-	name      string
-	markPower int64
-	markFreq  int64
-	markMask  int64
+	logger        logging.OptionalLogger
+	store         record.Store
+	key           record.Key
+	label         string
+	typ           merkle.ChainType
+	name          string
+	markPower     int64
+	markFreq      int64
+	markMask      int64
+	initialHeight int64
 
 	head         record.Value[*MerkleState]
 	states       map[merkleManagerStatesKey]record.Value[*MerkleState]

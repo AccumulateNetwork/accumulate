@@ -64,30 +64,37 @@
     - name: MainChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: ScratchChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: SignatureChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: RootChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: AnchorSequenceChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: MajorBlockChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: SyntheticSequenceChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
       private: true
       parameters:
@@ -103,10 +110,12 @@
       - name: Root
         type: other
         dataType: Chain2
+        hasChains: true
         pointer: true
       - name: BPT
         type: other
         dataType: Chain2
+        hasChains: true
         pointer: true
 
     # Indices
@@ -200,6 +209,8 @@
   - name: markFreq
     type: int
   - name: markMask
+    type: int
+  - name: initialHeight
     type: int
   attributes:
   - name: Head
