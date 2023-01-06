@@ -7,6 +7,7 @@
 package abci_test
 
 import (
+	"encoding/json"
 	"math/big"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -168,4 +170,74 @@ func TestCheckTx_SharedBatch(t *testing.T) {
 
 	// The second transaction should fail due to insufficient credits
 	require.NotZero(t, resp.Code)
+}
+
+func TestInvalidDeposit(t *testing.T) {
+	// The lite address ends with `foo/tokens` but the token is `foo2/tokens` so
+	// the synthetic transaction will fail. This test verifies that the
+	// transaction fails, but more importantly it verifies that
+	// `Executor.Commit()` does *not* break if DeliverTx fails with a
+	// non-existent origin. This is motivated by a bug that has been fixed. This
+	// bug could have been triggered by a failing SyntheticCreateChains,
+	// SyntheticDepositTokens, or SyntheticDepositCredits.
+
+	t.Skip("TODO Fix - generate a receipt")
+
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
+
+	liteKey := generateKey()
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
+	require.NoError(t, err)
+
+	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.SyntheticDepositTokens)
+		body.Cause = n.network.NodeUrl().WithTxID([32]byte{1})
+		body.Token = protocol.AccountUrl("foo2", "tokens")
+		body.Amount.SetUint64(123)
+
+		send(newTxn(liteAddr.String()).
+			WithBody(body).
+			InitiateSynthetic(n.network.NodeUrl()).
+			Sign(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Build())
+	})[0]
+
+	tx := n.GetTx(id[:])
+	require.NotZero(t, tx.Status.Code)
+}
+
+func TestEvilNode(t *testing.T) {
+
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	//tell the TestNet that we have an evil node in the midst
+	dns := partitions[0]
+	bvn := partitions[1]
+	partitions[0] = "evil-" + partitions[0]
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+
+	dn := nodes[dns][0]
+	n := nodes[bvn][0]
+
+	var count = 11
+	credits := 100.0
+	originAddr, balances := testLiteTx(n, count, 1, credits)
+	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
+	for addr, bal := range balances {
+		require.Equal(t, bal, n.GetLiteTokenAccount(addr.String()).Balance.Int64())
+	}
+
+	batch := dn.db.Begin(true)
+	defer batch.Discard()
+	// Check each anchor
+	de, txId, _, err := indexing.Data(batch, dn.network.NodeUrl(protocol.Evidence)).GetLatestEntry()
+	require.NoError(t, err)
+	var ev []types2.Misbehavior
+	require.NotEqual(t, de.GetData(), nil, "no data")
+	err = json.Unmarshal(de.GetData()[0], &ev)
+	require.NoError(t, err)
+	require.Greaterf(t, len(ev), 0, "no evidence data")
+	require.Greater(t, ev[0].Height, int64(0), "no valid evidence available")
+	require.NotNilf(t, txId, "txId not returned")
 }
