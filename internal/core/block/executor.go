@@ -50,8 +50,8 @@ type ExecutorOptions struct {
 	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
 	Background          func(func())                       // Background task launcher
 	NewDispatcher       func() Dispatcher                  // Synthetic transaction dispatcher factory
-	Sequencer           private.Sequencer                  //
-	Querier             api.Querier                        //
+	Sequencer           private.Sequencer                  // Synthetic and anchor sequence API service
+	Querier             api.Querier                        // Query API service
 
 	isGenesis bool
 
