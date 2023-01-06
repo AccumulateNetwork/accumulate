@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	dut "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -46,7 +46,7 @@ type QuerierTestSuite struct {
 func (s *QuerierTestSuite) QuerierFor(u *url.URL) api.Querier2 {
 	part, err := s.sim.Router().RouteAccount(u)
 	s.Require().NoError(err)
-	q := NewQuerier(QuerierParams{
+	q := dut.NewQuerier(dut.QuerierParams{
 		Logger:    acctesting.NewTestLogger(s.T()),
 		Database:  s.sim.Database(part),
 		Partition: part,
