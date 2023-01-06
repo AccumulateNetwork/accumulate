@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -113,11 +113,17 @@ const ErrorCodeDidPanic ErrorCode = 3
 // ErrorCodeUnknownError indicates the request failed due to an unknown error.
 const ErrorCodeUnknownError ErrorCode = 4
 
-// ExecutorVersionV1 is the initial version of the executor at activation.
+// ExecutorVersionV1 is the first version of the executor system.
 const ExecutorVersionV1 ExecutorVersion = 1
 
 // ExecutorVersionV1SignatureAnchoring introduces anchoring of signature chains into the root chain.
 const ExecutorVersionV1SignatureAnchoring ExecutorVersion = 2
+
+// ExecutorVersionV1Halt halts transaction processing in preparation for v2.
+const ExecutorVersionV1Halt ExecutorVersion = 3
+
+// ExecutorVersionV2 is the second version of the execute system.
+const ExecutorVersionV2 ExecutorVersion = 4
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -256,6 +262,9 @@ const TransactionTypeUpdateAccountAuth TransactionType = 21
 
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
+
+// TransactionTypePlaceholder is a placeholder for some observable change in V2 logic.
+const TransactionTypePlaceholder TransactionType = 46
 
 // TransactionTypeActivateProtocolVersion activates a new version of the protocol.
 const TransactionTypeActivateProtocolVersion TransactionType = 47
@@ -758,7 +767,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1Halt, ExecutorVersionV2:
 		*v = u
 		return true
 	default:
@@ -773,6 +782,10 @@ func (v ExecutorVersion) String() string {
 		return "v1"
 	case ExecutorVersionV1SignatureAnchoring:
 		return "v1-signatureAnchoring"
+	case ExecutorVersionV1Halt:
+		return "v1-halt"
+	case ExecutorVersionV2:
+		return "v2"
 	default:
 		return fmt.Sprintf("ExecutorVersion:%d", v)
 	}
@@ -787,6 +800,12 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV1SignatureAnchoring, true
 	case "v1-signatureanchoring":
 		return ExecutorVersionV1SignatureAnchoring, true
+	case "v1halt":
+		return ExecutorVersionV1Halt, true
+	case "v1-halt":
+		return ExecutorVersionV1Halt, true
+	case "v2":
+		return ExecutorVersionV2, true
 	default:
 		return 0, false
 	}
@@ -1192,7 +1211,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypePlaceholder, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	default:
@@ -1241,6 +1260,8 @@ func (v TransactionType) String() string {
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
+	case TransactionTypePlaceholder:
+		return "placeholder"
 	case TransactionTypeActivateProtocolVersion:
 		return "activateProtocolVersion"
 	case TransactionTypeRemote:
@@ -1311,6 +1332,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
 		return TransactionTypeUpdateKey, true
+	case "placeholder":
+		return TransactionTypePlaceholder, true
 	case "activateprotocolversion":
 		return TransactionTypeActivateProtocolVersion, true
 	case "remote":

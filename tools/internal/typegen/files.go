@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,11 +9,21 @@ package typegen
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 )
+
+func GetModifiedDate(file string) (time.Time, error) {
+	b, err := exec.Command("git", "log", "-1", "--pretty=format:%ci", file).Output()
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse("2006-01-02 15:04:05 -0700", strings.TrimSpace(string(b)))
+}
 
 type FileReader struct {
 	Include []string

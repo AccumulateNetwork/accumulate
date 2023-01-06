@@ -9,7 +9,7 @@ package simulator
 import (
 	"context"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -22,7 +22,7 @@ type dispatcher struct {
 	envelopes map[string][]messaging.Message
 }
 
-var _ block.Dispatcher = (*dispatcher)(nil)
+var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // Submit routes the envelope and adds it to the queue for a partition.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envelope) error {

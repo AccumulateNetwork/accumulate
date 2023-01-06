@@ -1,0 +1,27 @@
+BlockTimerType:
+  ExecuteEnvelope:
+    value: 0x0
+  ProcessSignature:
+    value: 0x01
+  BeginBlock:
+    value: 0x02
+  CheckTx:
+    value: 0x03
+  DeliverTx:
+    value: 0x04
+  EndBlock:
+    value: 0x05
+  Commit:
+    value: 0x06
+  Signing:
+    value: 0x07
+  NetworkAccountUpdates:
+    value: 0x08
+  ProcessRemoteSignatures:
+    value: 0x09
+  ProcessTransaction:
+    value: 0x0a
+  TransactionOffset:
+    value: 0xF0
+
+

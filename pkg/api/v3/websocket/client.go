@@ -9,6 +9,7 @@ package websocket
 import (
 	"context"
 	"io"
+	"runtime/debug"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -235,7 +236,7 @@ func (c *clientDialer) Dial(ctx context.Context, _ multiaddr.Multiaddr) (message
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				c.logger.Error("Panicked while handling stream", "error", r)
+				c.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
 			}
 		}()
 		defer cancel()

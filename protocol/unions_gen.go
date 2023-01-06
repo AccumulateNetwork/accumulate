@@ -384,6 +384,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeLockAccount:
 		return new(LockAccount), nil
+	case TransactionTypePlaceholder:
+		return new(PlaceholderTransaction), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -515,6 +517,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*LockAccount)
 		return ok && a.Equal(b)
+	case *PlaceholderTransaction:
+		b, ok := b.(*PlaceholderTransaction)
+		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		if a == nil {
 			return b == nil
@@ -642,6 +647,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *IssueTokens:
 		return v.Copy()
 	case *LockAccount:
+		return v.Copy()
+	case *PlaceholderTransaction:
 		return v.Copy()
 	case *RemoteTransaction:
 		return v.Copy()

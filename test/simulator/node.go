@@ -19,10 +19,10 @@ import (
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -119,7 +119,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Describe:      network,
 		Router:        s.router,
 		EventBus:      n.eventBus,
-		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: s, envelopes: map[string][]messaging.Message{}} },
+		NewDispatcher: func() execute.Dispatcher { return &dispatcher{sim: s, envelopes: map[string][]messaging.Message{}} },
 		Sequencer:     s.Services(),
 		Querier:       s.Services(),
 	}
