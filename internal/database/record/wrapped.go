@@ -30,6 +30,10 @@ func WrappedFactory[T any](funcs *wrapperFuncs[T]) func() encodableValue[T] {
 	return func() encodableValue[T] { return &wrappedValue[T]{wrapperFuncs: funcs} }
 }
 
+func (v *wrappedValue[T]) new() encodableValue[T] {
+	return Wrapped(v.wrapperFuncs)
+}
+
 func (v *wrappedValue[T]) getValue() T  { return v.value }
 func (v *wrappedValue[T]) setValue(u T) { v.value = u }
 func (v *wrappedValue[T]) setNew()      { v.value = zero[T]() }

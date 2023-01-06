@@ -71,13 +71,18 @@ func (c *Chain2) dirtyChains() []*managed.Chain {
 
 // UpdatedChains returns a block entry for every chain updated in the current
 // database batch.
-func (a *Account) UpdatedChains() []*protocol.BlockEntry {
+func (a *Account) UpdatedChains() ([]*protocol.BlockEntry, error) {
 	var entries []*protocol.BlockEntry
 
 	// For each modified chain
 	for _, c := range a.dirtyChains() {
+		i, last, err := c.DidAddHashes()
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "chain %s: %w", c.Name(), err)
+		}
+
 		// For each entry added
-		for i, last := c.DidAddHashes(); i < last; i++ {
+		for ; i < last; i++ {
 			// Return a block entry
 			entries = append(entries, &protocol.BlockEntry{
 				Account: a.Url(),
@@ -86,7 +91,7 @@ func (a *Account) UpdatedChains() []*protocol.BlockEntry {
 			})
 		}
 	}
-	return entries
+	return entries, nil
 }
 
 // Account returns the URL of the account.

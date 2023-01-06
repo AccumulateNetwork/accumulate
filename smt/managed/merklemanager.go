@@ -51,23 +51,26 @@ func (c *Chain) Name() string    { return c.name }
 func (c *Chain) Type() ChainType { return c.typ }
 
 // DidAddHashes returns the index range of hashes added, or 0, 0.
-func (m *MerkleManager) DidAddHashes() (first, last int64) {
+func (m *MerkleManager) DidAddHashes() (first, last int64, err error) {
 	if !m.head.IsDirty() {
-		return 0, 0
+		return 0, 0, nil
 	}
 
+	// Get the current head
 	head, err := m.head.Get()
 	if err != nil {
-		// If the head is dirty, Get must not fail
-		panic("head is dirty but failed to get the head")
+		// Should never happen
+		return 0, 0, errors.Format(errors.StatusUnknownError, "get head: %w", err)
 	}
 
-	if m.initialHeight >= head.Count {
-		// Nothing changed
-		return 0, 0
+	// Get the previous version of the head
+	oldHead, err := m.head.GetOriginal()
+	if err != nil {
+		// Should never happen
+		return 0, 0, errors.Format(errors.StatusUnknownError, "get previous head: %w", err)
 	}
 
-	return m.initialHeight, head.Count
+	return oldHead.Count, head.Count, nil
 }
 
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
@@ -76,10 +79,6 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 	head, err := m.Head().Get() // Get the current state
 	if err != nil {
 		return err
-	}
-
-	if !m.Head().IsDirty() {
-		m.initialHeight = head.Count
 	}
 
 	hash = hash.Copy()                       // Just to make sure hash doesn't get changed

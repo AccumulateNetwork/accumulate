@@ -44,6 +44,8 @@ type encodableValue[T any] interface {
 	setValue(T)
 	setNew()
 	copyValue() T
+
+	new() encodableValue[T]
 }
 
 type valueStatus int
@@ -264,6 +266,50 @@ func (v *Value[T]) LoadBytes(data []byte) error {
 	return nil
 }
 
+// GetOriginal gets the original, unchanged value. If the value is not dirty,
+// GetOriginal is the same as Get, except that GetOriginal does not cache the
+// value.
+func (v *Value[T]) GetOriginal() (T, error) {
+	// Make a new Value[T] with its own encodableValue[T] to store the value in
+	u := &simpleValueLoader[T]{name: v.name, value: v.value.new()}
+	err := v.store.GetValue(v.key, u)
+	switch {
+	case err == nil:
+		return u.value.getValue(), nil
+	case v.allowMissing && errors.Is(err, storage.ErrNotFound):
+		u.value.setNew()
+		return u.value.getValue(), nil
+	default:
+		return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+	}
+}
+
+// simpleValueLoader implements [ValueWriter].
+type simpleValueLoader[T any] struct {
+	name  string
+	value encodableValue[T]
+}
+
+func (v *simpleValueLoader[T]) LoadValue(value ValueReader, put bool) error {
+	uv, _, err := value.GetValue()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	u, ok := uv.(encodableValue[T])
+	if !ok {
+		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, (encodableValue[T])(nil), uv)
+	}
+
+	v.value.setValue(u.getValue())
+	return nil
+}
+
+func (v *simpleValueLoader[T]) LoadBytes(data []byte) error {
+	err := v.value.UnmarshalBinary(data)
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
 type ptrBinaryValue[T any] interface {
 	*T
 	encoding.BinaryValue
@@ -276,6 +322,10 @@ type structValue[T any, PT ptrBinaryValue[T]] struct {
 // Struct returns an encodable value for the given encodable struct-type.
 func Struct[T any, PT ptrBinaryValue[T]]() encodableValue[PT] {
 	return new(structValue[T, PT])
+}
+
+func (v *structValue[T, PT]) new() encodableValue[PT] {
+	return Struct[T, PT]()
 }
 
 func (v *structValue[T, PT]) getValue() PT  { return v.value }
@@ -331,6 +381,10 @@ func Union[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) encodableV
 // UnionFactory curries Union.
 func UnionFactory[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) func() encodableValue[T] {
 	return func() encodableValue[T] { return &unionValue[T]{unmarshal: unmarshal} }
+}
+
+func (v *unionValue[T]) new() encodableValue[T] {
+	return Union(v.unmarshal)
 }
 
 func (v *unionValue[T]) getValue() T  { return v.value }

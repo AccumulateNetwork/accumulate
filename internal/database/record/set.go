@@ -132,6 +132,10 @@ type sliceValue[T any] struct {
 
 var _ encodableValue[[]string] = (*sliceValue[string])(nil)
 
+func (v *sliceValue[T]) new() encodableValue[[]T] {
+	return &sliceValue[T]{encoder: v.encoder}
+}
+
 func (v *sliceValue[T]) getValue() []T  { return v.value }
 func (v *sliceValue[T]) setValue(u []T) { v.value = u }
 func (v *sliceValue[T]) setNew()        { v.value = nil }
