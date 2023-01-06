@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -200,6 +201,8 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 				continue
 			}
 
+			b, _ := json.Marshal(e)
+			fmt.Printf("%d %s\n", i, b)
 			record(e.Account, &Entry{
 				Entry: *(*[32]byte)(entryHash),
 				Txn:   *(*[32]byte)(txnHash),
