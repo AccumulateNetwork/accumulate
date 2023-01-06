@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -40,6 +40,8 @@ func NewValidator(params ValidatorParams) *Validator {
 	s.local = params.Local
 	return s
 }
+
+func (s *Validator) Type() api.ServiceType { return api.ServiceTypeValidate }
 
 func (s *Validator) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	// if opts.Full == nil || *opts.Full {

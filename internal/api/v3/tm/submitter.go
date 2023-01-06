@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -43,6 +43,8 @@ func NewSubmitter(params SubmitterParams) *Submitter {
 	s.local = params.Local
 	return s
 }
+
+func (s *Submitter) Type() api.ServiceType { return api.ServiceTypeSubmit }
 
 func (s *Submitter) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	// Verify the envelope is well-formed
