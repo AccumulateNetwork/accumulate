@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -46,6 +46,8 @@ func NewQuerier(params QuerierParams) *Querier {
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	return s
 }
+
+func (s *Querier) Type() api.ServiceType { return api.ServiceTypeQuery }
 
 func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	// Ensure the query parameters are valid
@@ -773,6 +775,7 @@ func (s *Querier) searchForKeyEntry(ctx context.Context, batch *database.Batch, 
 			rec := new(api.KeyRecord)
 			rec.Authority = entry.Url
 			rec.Signer = signerUrl
+			rec.Version = signer.GetVersion()
 			rec.Index = uint64(i)
 
 			if ks, ok := e.(*protocol.KeySpec); ok {

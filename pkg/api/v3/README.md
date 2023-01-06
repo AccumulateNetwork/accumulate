@@ -4,6 +4,13 @@ The API has been broken up both along lines of call type and transport
 mechanism. The specification defines services which implement methods, and
 transport mechanisms for exchanging remote method calls.
 
+## Motivation
+
+- Take lessons learned and make a cleaner, more polished API
+- Nodes hard-code the IP/domain of other nodes
+- We currently require Tendermint RPC and Accumulate API
+- Splitting functionality across multiple servers
+
 ## Links
 
 ### Packages

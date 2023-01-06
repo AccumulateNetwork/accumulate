@@ -58,6 +58,15 @@ ValidateRequest:
     - type: ValidateOptions
       marshal-as: reference
 
+FaucetRequest:
+  union: { type: message }
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - type: FaucetOptions
+      marshal-as: reference
+
 SubscribeRequest:
   union: { type: message }
   fields:
@@ -120,6 +129,14 @@ ValidateResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+
+FaucetResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.Submission
+      marshal-as: reference
+      pointer: true
 
 SubscribeResponse:
   union: { type: message }
