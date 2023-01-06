@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -120,7 +120,7 @@ func setupTest(t testing.TB, services ...Service) *Client {
 	logger := logging.ConsoleLoggerForTest(t, "info")
 	handler, err := NewHandler(logger, services...)
 	require.NoError(t, err)
-	addr, err := multiaddr.NewComponent("acc", "foo")
+	addr, err := multiaddr.NewComponent(api.N_ACC, "unknown:foo")
 	require.NoError(t, err)
 	return &Client{
 		Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil }),

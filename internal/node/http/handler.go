@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -22,19 +22,15 @@ import (
 
 // Handler processes API requests.
 type Handler struct {
-	logger    logging.OptionalLogger
-	mux       *http.ServeMux
-	router    routing.Router
-	node      *p2p.Node
-	partition string
+	logger logging.OptionalLogger
+	mux    *http.ServeMux
 }
 
 // Options are the options for a [Handler].
 type Options struct {
-	Logger    log.Logger
-	Node      *p2p.Node
-	Router    routing.Router
-	Partition string
+	Logger log.Logger
+	Node   *p2p.Node
+	Router routing.Router
 
 	// Deprecated
 	V2 *v2.JrpcMethods
@@ -44,22 +40,15 @@ type Options struct {
 func NewHandler(opts Options) (*Handler, error) {
 	h := new(Handler)
 	h.logger.Set(opts.Logger)
-	h.router = opts.Router
-	h.node = opts.Node
-	h.partition = opts.Partition
-
-	if h.partition == "" {
-		panic("no partition")
-	}
 
 	// Message clients
 	selfClient := &message.Client{
-		Dialer: h.node.SelfDialer(h.partition),
+		Dialer: opts.Node.SelfDialer(),
 	}
 
 	client := &message.Client{
 		Router: routing.MessageRouter{Router: opts.Router},
-		Dialer: h.node.Dialer(),
+		Dialer: opts.Node.Dialer(),
 	}
 
 	// JSON-RPC API v3
@@ -71,6 +60,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		jsonrpc.Querier{Querier: client},
 		jsonrpc.Submitter{Submitter: client},
 		jsonrpc.Validator{Validator: client},
+		jsonrpc.Faucet{Faucet: client},
 	)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize API v3: %w", err)
@@ -85,6 +75,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		message.Querier{Querier: client},
 		message.Submitter{Submitter: client},
 		message.Validator{Validator: client},
+		message.Faucet{Faucet: client},
 		message.EventService{EventService: client},
 	)
 	if err != nil {
