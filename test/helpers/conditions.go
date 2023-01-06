@@ -22,6 +22,7 @@ func (c condTxn) IsDelivered() Condition { return c.status(isDelivered) }
 func (c condTxn) IsPending() Condition   { return c.status(isPending) }
 func (c condTxn) Succeeds() Condition    { return c.status(succeeds) }
 func (c condTxn) Fails() Condition       { return c.status(fails) }
+func (c condTxn) Received() Condition    { return c.status(received) }
 
 func (c condTxn) Produced() condProduced { return condProduced(c) }
 
@@ -124,4 +125,9 @@ func fails(s *Sim, status *protocol.TransactionStatus) bool {
 		s.T.Fatal("Expected transaction to fail")
 	}
 	return true
+}
+
+func received(s *Sim, status *protocol.TransactionStatus) bool {
+	s.T.Helper()
+	return status.Code != 0
 }
