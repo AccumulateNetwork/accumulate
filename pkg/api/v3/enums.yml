@@ -1,3 +1,48 @@
+ServiceType:
+  Unknown:
+    value: 0
+  Node:
+    value: 1
+  Network:
+    value: 2
+  Metrics:
+    value: 3
+  Query:
+    value: 4
+  Event:
+    value: 5
+  Submit:
+    value: 6
+  Validate:
+    value: 7
+  Faucet:
+    value: 8
+
+QueryType:
+  Default:
+    value: 0x00
+  Chain:
+    value: 0x01
+  Data:
+    value: 0x02
+  Directory:
+    value: 0x03
+  Pending:
+    value: 0x04
+  Block:
+    value: 0x05
+
+  AnchorSearch:
+    value: 0x10
+  PublicKeySearch:
+    value: 0x11
+  PublicKeyHashSearch:
+    value: 0x12
+  DelegateSearch:
+    value: 0x13
+  TransactionHashSearch:
+    value: 0x14
+
 RecordType:
   Account:
     value: 0x01
@@ -34,28 +79,3 @@ EventType:
     value: 2
   Globals:
     value: 3
-
-QueryType:
-  Default:
-    value: 0x00
-  Chain:
-    value: 0x01
-  Data:
-    value: 0x02
-  Directory:
-    value: 0x03
-  Pending:
-    value: 0x04
-  Block:
-    value: 0x05
-
-  AnchorSearch:
-    value: 0x10
-  PublicKeySearch:
-    value: 0x11
-  PublicKeyHashSearch:
-    value: 0x12
-  DelegateSearch:
-    value: 0x13
-  TransactionHashSearch:
-    value: 0x14
