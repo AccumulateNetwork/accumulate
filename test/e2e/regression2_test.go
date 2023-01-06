@@ -9,6 +9,7 @@ package e2e
 import (
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -157,6 +158,73 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 	require.NoError(t, err)
 	err = sim.Router().RequestAPIv2(context.Background(), part, "query", req, resp)
 	require.NoError(t, err)
+}
+
+func TestAnchoring(t *testing.T) {
+	// Verifies that the solution to #3149 doesn't create duplicate entries.
+	// Expect one entry per block regardless of how many transactions were
+	// added.
+
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
+
+	// Execute 1
+	st := sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(alice, "data").
+			WriteData([]byte("foo")).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	st = sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(alice, "data").
+			WriteData([]byte("bar")).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Execute 2
+	st = sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(alice, "data").
+			WriteData([]byte("baz")).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	st = sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(alice, "data").
+			WriteData([]byte("bat")).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Verify that the latest block has a single entry for alice.acme/data#chain/main, and that entry has index = 3
+	ledger := GetAccount[*SystemLedger](t, sim.DatabaseFor(alice), PartitionUrl("BVN0").JoinPath(Ledger))
+	block := GetAccount[*BlockLedger](t, sim.DatabaseFor(alice), PartitionUrl("BVN0").JoinPath(Ledger, fmt.Sprint(ledger.Index)))
+
+	var entries []uint64
+	for _, e := range block.Entries {
+		if alice.JoinPath("data").Equal(e.Account) && e.Chain == "main" {
+			entries = append(entries, e.Index)
+		}
+	}
+	require.Equal(t, []uint64{3}, entries)
 }
 
 func TestSignatureChainAnchoring(t *testing.T) {
