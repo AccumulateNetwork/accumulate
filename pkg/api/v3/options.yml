@@ -59,7 +59,15 @@ ValidateOptions:
       pointer: true
       optional: true
 
+FaucetOptions:
+  fields:
+
 SubscribeOptions:
   fields:
     - name: Partition
       type: string
+      optional: true
+    - name: Account
+      type: url
+      pointer: true
+      optional: true
