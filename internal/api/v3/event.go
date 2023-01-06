@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -54,6 +54,8 @@ func NewEventService(params EventServiceParams) *EventService {
 	events.SubscribeSync(params.EventBus, s.didCommitBlock)
 	return s
 }
+
+func (s *EventService) Type() api.ServiceType { return api.ServiceTypeEvent }
 
 func (s *EventService) didCommitBlock(e events.DidCommitBlock) error {
 	event := new(api.BlockEvent)
