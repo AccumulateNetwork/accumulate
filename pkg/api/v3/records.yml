@@ -79,6 +79,8 @@ KeyRecord:
     - name: Signer
       type: url
       pointer: true
+    - name: Version
+      type: uint
     - name: Index
       type: uint
     - name: Entry
