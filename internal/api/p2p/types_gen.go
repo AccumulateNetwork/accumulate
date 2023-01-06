@@ -17,6 +17,7 @@ import (
 	"io"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 )
@@ -29,16 +30,15 @@ type AddrInfo struct {
 }
 
 type Info struct {
-	fieldsSet  []bool
-	ID         p2p.PeerID       `json:"id,omitempty" form:"id" query:"id" validate:"required"`
-	Partitions []*PartitionInfo `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
-	extraData  []byte
+	fieldsSet []bool
+	ID        p2p.PeerID     `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Services  []*ServiceInfo `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+	extraData []byte
 }
 
-type PartitionInfo struct {
+type ServiceInfo struct {
 	fieldsSet []bool
-	ID        string `json:"id,omitempty" form:"id" query:"id" validate:"required"`
-	Moniker   string `json:"moniker,omitempty" form:"moniker" query:"moniker" validate:"required"`
+	Address   *api.ServiceAddress `json:"address,omitempty" form:"address" query:"address" validate:"required"`
 	extraData []byte
 }
 
@@ -71,10 +71,10 @@ func (v *Info) Copy() *Info {
 	if v.ID != "" {
 		u.ID = p2p.CopyPeerID(v.ID)
 	}
-	u.Partitions = make([]*PartitionInfo, len(v.Partitions))
-	for i, v := range v.Partitions {
+	u.Services = make([]*ServiceInfo, len(v.Services))
+	for i, v := range v.Services {
 		if v != nil {
-			u.Partitions[i] = (v).Copy()
+			u.Services[i] = (v).Copy()
 		}
 	}
 
@@ -83,16 +83,17 @@ func (v *Info) Copy() *Info {
 
 func (v *Info) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *PartitionInfo) Copy() *PartitionInfo {
-	u := new(PartitionInfo)
+func (v *ServiceInfo) Copy() *ServiceInfo {
+	u := new(ServiceInfo)
 
-	u.ID = v.ID
-	u.Moniker = v.Moniker
+	if v.Address != nil {
+		u.Address = (v.Address).Copy()
+	}
 
 	return u
 }
 
-func (v *PartitionInfo) CopyAsInterface() interface{} { return v.Copy() }
+func (v *ServiceInfo) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Whoami) Copy() *Whoami {
 	u := new(Whoami)
@@ -132,11 +133,11 @@ func (v *Info) Equal(u *Info) bool {
 	if !(p2p.EqualPeerID(v.ID, u.ID)) {
 		return false
 	}
-	if len(v.Partitions) != len(u.Partitions) {
+	if len(v.Services) != len(u.Services) {
 		return false
 	}
-	for i := range v.Partitions {
-		if !((v.Partitions[i]).Equal(u.Partitions[i])) {
+	for i := range v.Services {
+		if !((v.Services[i]).Equal(u.Services[i])) {
 			return false
 		}
 	}
@@ -144,11 +145,13 @@ func (v *Info) Equal(u *Info) bool {
 	return true
 }
 
-func (v *PartitionInfo) Equal(u *PartitionInfo) bool {
-	if !(v.ID == u.ID) {
+func (v *ServiceInfo) Equal(u *ServiceInfo) bool {
+	switch {
+	case v.Address == u.Address:
+		// equal
+	case v.Address == nil || u.Address == nil:
 		return false
-	}
-	if !(v.Moniker == u.Moniker) {
+	case !((v.Address).Equal(u.Address)):
 		return false
 	}
 
@@ -224,7 +227,7 @@ func (v *AddrInfo) IsValid() error {
 
 var fieldNames_Info = []string{
 	1: "ID",
-	2: "Partitions",
+	2: "Services",
 }
 
 func (v *Info) MarshalBinary() ([]byte, error) {
@@ -234,8 +237,8 @@ func (v *Info) MarshalBinary() ([]byte, error) {
 	if !(v.ID == ("")) {
 		writer.WriteValue(1, v.ID.MarshalBinary)
 	}
-	if !(len(v.Partitions) == 0) {
-		for _, v := range v.Partitions {
+	if !(len(v.Services) == 0) {
+		for _, v := range v.Services {
 			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
@@ -257,9 +260,9 @@ func (v *Info) IsValid() error {
 		errs = append(errs, "field ID is not set")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Partitions is missing")
-	} else if len(v.Partitions) == 0 {
-		errs = append(errs, "field Partitions is not set")
+		errs = append(errs, "field Services is missing")
+	} else if len(v.Services) == 0 {
+		errs = append(errs, "field Services is not set")
 	}
 
 	switch len(errs) {
@@ -272,23 +275,19 @@ func (v *Info) IsValid() error {
 	}
 }
 
-var fieldNames_PartitionInfo = []string{
-	1: "ID",
-	2: "Moniker",
+var fieldNames_ServiceInfo = []string{
+	1: "Address",
 }
 
-func (v *PartitionInfo) MarshalBinary() ([]byte, error) {
+func (v *ServiceInfo) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.ID) == 0) {
-		writer.WriteString(1, v.ID)
-	}
-	if !(len(v.Moniker) == 0) {
-		writer.WriteString(2, v.Moniker)
+	if !(v.Address == nil) {
+		writer.WriteValue(1, v.Address.MarshalBinary)
 	}
 
-	_, _, err := writer.Reset(fieldNames_PartitionInfo)
+	_, _, err := writer.Reset(fieldNames_ServiceInfo)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -296,18 +295,13 @@ func (v *PartitionInfo) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *PartitionInfo) IsValid() error {
+func (v *ServiceInfo) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field ID is missing")
-	} else if len(v.ID) == 0 {
-		errs = append(errs, "field ID is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Moniker is missing")
-	} else if len(v.Moniker) == 0 {
-		errs = append(errs, "field Moniker is not set")
+		errs = append(errs, "field Address is missing")
+	} else if v.Address == nil {
+		errs = append(errs, "field Address is not set")
 	}
 
 	switch len(errs) {
@@ -418,8 +412,8 @@ func (v *Info) UnmarshalBinaryFrom(rd io.Reader) error {
 		return err
 	})
 	for {
-		if x := new(PartitionInfo); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-			v.Partitions = append(v.Partitions, x)
+		if x := new(ServiceInfo); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Services = append(v.Services, x)
 		} else {
 			break
 		}
@@ -437,21 +431,18 @@ func (v *Info) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *PartitionInfo) UnmarshalBinary(data []byte) error {
+func (v *ServiceInfo) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *PartitionInfo) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *ServiceInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
-		v.ID = x
-	}
-	if x, ok := reader.ReadString(2); ok {
-		v.Moniker = x
+	if x := new(api.ServiceAddress); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Address = x
 	}
 
-	seen, err := reader.Reset(fieldNames_PartitionInfo)
+	seen, err := reader.Reset(fieldNames_ServiceInfo)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -495,23 +486,23 @@ func (v *Whoami) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *AddrInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID         encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
-		Partitions encoding.JsonList[*PartitionInfo]             `json:"partitions,omitempty"`
-		Addrs      encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addrs,omitempty"`
+		ID       encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
+		Services encoding.JsonList[*ServiceInfo]               `json:"services,omitempty"`
+		Addrs    encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addrs,omitempty"`
 	}{}
 	u.ID = encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.Info.ID, Func: p2p.UnmarshalPeerIDJSON}
-	u.Partitions = v.Info.Partitions
+	u.Services = v.Info.Services
 	u.Addrs = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addrs, Func: p2p.UnmarshalMultiaddrJSON}
 	return json.Marshal(&u)
 }
 
 func (v *Info) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID         encoding.JsonUnmarshalWith[p2p.PeerID] `json:"id,omitempty"`
-		Partitions encoding.JsonList[*PartitionInfo]      `json:"partitions,omitempty"`
+		ID       encoding.JsonUnmarshalWith[p2p.PeerID] `json:"id,omitempty"`
+		Services encoding.JsonList[*ServiceInfo]        `json:"services,omitempty"`
 	}{}
 	u.ID = encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
-	u.Partitions = v.Partitions
+	u.Services = v.Services
 	return json.Marshal(&u)
 }
 
@@ -527,19 +518,19 @@ func (v *Whoami) MarshalJSON() ([]byte, error) {
 
 func (v *AddrInfo) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID         encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
-		Partitions encoding.JsonList[*PartitionInfo]             `json:"partitions,omitempty"`
-		Addrs      encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addrs,omitempty"`
+		ID       encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
+		Services encoding.JsonList[*ServiceInfo]               `json:"services,omitempty"`
+		Addrs    encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addrs,omitempty"`
 	}{}
 	u.ID = encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.Info.ID, Func: p2p.UnmarshalPeerIDJSON}
-	u.Partitions = v.Info.Partitions
+	u.Services = v.Info.Services
 	u.Addrs = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addrs, Func: p2p.UnmarshalMultiaddrJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Info.ID = u.ID.Value
 
-	v.Info.Partitions = u.Partitions
+	v.Info.Services = u.Services
 	v.Addrs = make([]p2p.Multiaddr, len(u.Addrs.Value))
 	for i, x := range u.Addrs.Value {
 		v.Addrs[i] = x
@@ -549,17 +540,17 @@ func (v *AddrInfo) UnmarshalJSON(data []byte) error {
 
 func (v *Info) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID         encoding.JsonUnmarshalWith[p2p.PeerID] `json:"id,omitempty"`
-		Partitions encoding.JsonList[*PartitionInfo]      `json:"partitions,omitempty"`
+		ID       encoding.JsonUnmarshalWith[p2p.PeerID] `json:"id,omitempty"`
+		Services encoding.JsonList[*ServiceInfo]        `json:"services,omitempty"`
 	}{}
 	u.ID = encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
-	u.Partitions = v.Partitions
+	u.Services = v.Services
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.ID = u.ID.Value
 
-	v.Partitions = u.Partitions
+	v.Services = u.Services
 	return nil
 }
 
