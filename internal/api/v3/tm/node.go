@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -65,6 +65,8 @@ func NewNodeService(params NodeServiceParams) *NodeService {
 	s.valKeyHash = params.ValidatorKeyHash
 	return s
 }
+
+func (s *NodeService) Type() api.ServiceType { return api.ServiceTypeNode }
 
 func (s *NodeService) NodeStatus(ctx context.Context, _ api.NodeStatusOptions) (*api.NodeStatus, error) {
 	// Basic data

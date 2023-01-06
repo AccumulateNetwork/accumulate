@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,14 +8,7 @@ package api
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
-
-type Query interface {
-	encoding.UnionValue
-	QueryType() QueryType
-	IsValid() error
-}
 
 func (q *ChainQuery) IsValid() error {
 	err := q.baseIsValid()

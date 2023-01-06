@@ -26,6 +26,10 @@ func New(typ Type) (Message, error) {
 		return new(ErrorResponse), nil
 	case TypeEvent:
 		return new(EventMessage), nil
+	case TypeFaucetRequest:
+		return new(FaucetRequest), nil
+	case TypeFaucetResponse:
+		return new(FaucetResponse), nil
 	case TypeMetricsRequest:
 		return new(MetricsRequest), nil
 	case TypeMetricsResponse:
@@ -80,6 +84,12 @@ func Equal(a, b Message) bool {
 		return ok && a.Equal(b)
 	case *EventMessage:
 		b, ok := b.(*EventMessage)
+		return ok && a.Equal(b)
+	case *FaucetRequest:
+		b, ok := b.(*FaucetRequest)
+		return ok && a.Equal(b)
+	case *FaucetResponse:
+		b, ok := b.(*FaucetResponse)
 		return ok && a.Equal(b)
 	case *MetricsRequest:
 		b, ok := b.(*MetricsRequest)
@@ -142,6 +152,10 @@ func Copy(v Message) Message {
 	case *ErrorResponse:
 		return v.Copy()
 	case *EventMessage:
+		return v.Copy()
+	case *FaucetRequest:
+		return v.Copy()
+	case *FaucetResponse:
 		return v.Copy()
 	case *MetricsRequest:
 		return v.Copy()
