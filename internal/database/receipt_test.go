@@ -1,10 +1,10 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package managed
+package database
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 func GetHash(i int) Hash {
@@ -72,10 +73,33 @@ func TestReceipt(t *testing.T) {
 	if err1 != nil {
 		t.Fatal("Failed to generate receipt")
 	}
-	fmt.Println(r.String())
+	fmt.Println(PrintReceipt(r))
 	if !r.Validate() {
 		t.Fatal("Receipt fails")
 	}
+}
+
+// String
+// Convert the receipt to a string
+func PrintReceipt(r *merkle.Receipt) string {
+	var b bytes.Buffer
+	b.WriteString(fmt.Sprintf("\nStart      %x\n", r.Start))    // Start of proof
+	b.WriteString(fmt.Sprintf("StartIndex %d\n", r.StartIndex)) // Start of proof
+	b.WriteString(fmt.Sprintf("End        %x\n", r.End))        // End point in the Merkle Tree
+	b.WriteString(fmt.Sprintf("EndIndex   %d\n", r.EndIndex))   // End point in the Merkle Tree
+	b.WriteString(fmt.Sprintf("Anchor     %x\n", r.Anchor))     // Anchor result of evaluating the receipt path
+	working := r.Start                                          // Calculate the receipt path; for debugging print the
+	for i, v := range r.Entries {                               // intermediate hashes
+		r := "L"
+		if v.Right {
+			r = "R"
+			working = Sha256(append(working[:], v.Hash[:]...))
+		} else {
+			working = Sha256(append(v.Hash[:], working[:]...))
+		}
+		b.WriteString(fmt.Sprintf(" %10d Apply %s %x working: %x \n", i, r, v.Hash, working))
+	}
+	return b.String()
 }
 
 func TestReceiptAll(t *testing.T) {

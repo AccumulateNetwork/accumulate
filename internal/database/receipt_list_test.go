@@ -1,10 +1,10 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package managed
+package database
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ const ListLen = 10       // Test lists equal to or less than 10
 const Offset = 0         // Offset the lists starting at this index in the Merkle Tree
 var rh, rh2 common.RandHash
 
-func loadMerkleTrees(t *testing.T) (manager, manager2 *Chain) {
+func loadMerkleTrees(t *testing.T) (manager, manager2 *MerkleManager) {
 
 	rh2.SetSeed([]byte{1, 2, 3})
 

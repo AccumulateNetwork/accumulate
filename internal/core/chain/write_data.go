@@ -29,7 +29,7 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 
 	chainId, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
 	if err != nil {
-		return false, nil // Not a lite data address
+		return false, nil //nolint:nilerr // Not a lite data address
 	}
 
 	account, err := batch.Account(transaction.Header.Principal).GetState()

@@ -17,11 +17,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -60,7 +60,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
-		if uint64(ledgerState.Index) >= block.Index {
+		if ledgerState.Index >= block.Index {
 			panic(fmt.Errorf("current height is %d but the next block height is %d", ledgerState.Index, block.Index))
 		}
 
@@ -162,7 +162,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Did anything happen last block?
-	if uint64(ledger.Index) < block.Index-1 {
+	if ledger.Index < block.Index-1 {
 		x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
 		return nil
 	}
@@ -354,7 +354,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *managed.Receipt) error {
+func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *merkle.Receipt) error {
 	indexIndex, err := batch.SystemData(x.Describe.PartitionId).SyntheticIndexIndex(blockIndex).Get()
 	switch {
 	case err == nil:

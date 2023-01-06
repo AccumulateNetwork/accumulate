@@ -19,7 +19,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -1123,7 +1122,7 @@ func TestIssueTokensRefund(t *testing.T) {
 	n.Update(func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 		require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
-		require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(liteKey), 1e9))
+		require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 1e9))
 	})
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
@@ -1227,7 +1226,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	n.Update(func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 		require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
-		require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(liteKey), 1e9))
+		require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 1e9))
 	})
 
 	var err error
@@ -1258,8 +1257,8 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	liteId := liteAcmeAddr.RootIdentity()
 
 	underLimit := int64(1000 * fooPrecision)
-	atLimit := int64(maxSupply - underLimit)
-	overLimit := int64(maxSupply + 1)
+	atLimit := maxSupply - underLimit
+	overLimit := maxSupply + 1
 	// test under the limit
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)

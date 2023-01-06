@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package encoding
 
 import (
@@ -23,7 +29,7 @@ import (
 )
 
 func TestGenerateDbTestdata(t *testing.T) {
-	// t.Skip("Only run manually")
+	t.Skip("Only run manually")
 
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")

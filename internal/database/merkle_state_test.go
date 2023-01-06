@@ -1,10 +1,10 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package managed
+package database
 
 import (
 	"bytes"
@@ -23,26 +23,26 @@ func TestMerkleState_Equal(t *testing.T) {
 	ms2 := new(MerkleState)
 	ms2.InitSha256()
 	for i := 0; i < 100; i++ {
-		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms1.Pending = append(ms1.Pending, nil)
-		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms2.Pending = append(ms2.Pending, nil, nil)
-		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 
 		ms1.AddToMerkleTree(rh.Next())
 
-		require.Falsef(t, ms1.Equal(ms2), "Should be equal")
+		require.Falsef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms1.Pending = append(ms1.Pending, nil)
-		require.Falsef(t, ms1.Equal(ms2), "Should be equal")
+		require.Falsef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms2.Pending = append(ms2.Pending, nil, nil)
-		require.Falsef(t, ms1.Equal(ms2), "Should be equal")
+		require.Falsef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 
 		ms2.AddToMerkleTree(rh1.Next())
-		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms1.Pending = append(ms1.Pending, nil)
-		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms2.Pending = append(ms2.Pending, nil, nil)
-		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 
 	}
 }

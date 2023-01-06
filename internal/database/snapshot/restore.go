@@ -108,7 +108,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 			if err != nil {
 				return errors.UnknownError.WithFormat("get %s chain: %w", c.Name, err)
 			}
-			err = mgr.Inner().RestoreMarkPointRange(c, start, end)
+			err = c.RestoreMarkPointRange(mgr.Inner(), start, end)
 			if err != nil {
 				return errors.UnknownError.WithFormat("restore %s chain mark points [%d,%d): %w", c.Name, start, end, err)
 			}
@@ -147,7 +147,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 				if err != nil {
 					return errors.UnknownError.WithFormat("get %s chain: %w", c.Name, err)
 				}
-				err = mgr.Inner().RestoreElementIndexFromMarkPoints(c, start, end)
+				err = c.RestoreElementIndexFromMarkPoints(mgr.Inner(), start, end)
 				if err != nil {
 					return errors.UnknownError.WithFormat("restore %s chain element index for mark points [%d,%d): %w", c.Name, start, end, err)
 				}
@@ -166,7 +166,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 				return errors.UnknownError.WithFormat("get %s chain: %w", c.Name, err)
 			}
 
-			err = mgr.Inner().RestoreElementIndexFromHead(c)
+			err = c.RestoreElementIndexFromHead(mgr.Inner())
 			if err != nil {
 				return errors.UnknownError.WithFormat("restore %s chain: %w", c.Name, err)
 			}

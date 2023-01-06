@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -327,7 +326,7 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 
 func LoadOrGenerateTmPrivKey(privFileName string) (tmed25519.PrivKey, error) {
 	//attempt to load the priv validator key, create otherwise.
-	b, err := ioutil.ReadFile(privFileName)
+	b, err := os.ReadFile(privFileName)
 	var privValKey tmed25519.PrivKey
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {

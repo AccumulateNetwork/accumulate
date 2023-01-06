@@ -51,8 +51,8 @@ type MetricsService_Metrics_Call struct {
 }
 
 // Metrics is a helper method to define mock.On call
-//  - ctx context.Context
-//  - opts api.MetricsOptions
+//   - ctx context.Context
+//   - opts api.MetricsOptions
 func (_e *MetricsService_Expecter) Metrics(ctx interface{}, opts interface{}) *MetricsService_Metrics_Call {
 	return &MetricsService_Metrics_Call{Call: _e.mock.On("Metrics", ctx, opts)}
 }

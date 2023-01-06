@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -229,7 +229,7 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 
 func (n *Node) checkTx(delivery *chain.Delivery, typ abci.CheckTxType) (*protocol.TransactionStatus, error) {
 	// TODO: Maintain a shared batch if typ is not recheck. I tried to do this
-	// but it lead to "attempted to use a commited or discarded batch" panics.
+	// but it lead to "attempted to use a committed or discarded batch" panics.
 
 	batch := n.database.Begin(false)
 	defer batch.Discard()

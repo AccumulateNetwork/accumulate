@@ -53,7 +53,7 @@ type mockDialerHost_getOwnService_Call struct {
 }
 
 // getOwnService is a helper method to define mock.On call
-//  - sa *api.ServiceAddress
+//   - sa *api.ServiceAddress
 func (_e *mockDialerHost_Expecter) getOwnService(sa interface{}) *mockDialerHost_getOwnService_Call {
 	return &mockDialerHost_getOwnService_Call{Call: _e.mock.On("getOwnService", sa)}
 }
@@ -99,9 +99,9 @@ type mockDialerHost_getPeerService_Call struct {
 }
 
 // getPeerService is a helper method to define mock.On call
-//  - ctx context.Context
-//  - _a1 peer.ID
-//  - service *api.ServiceAddress
+//   - ctx context.Context
+//   - _a1 peer.ID
+//   - service *api.ServiceAddress
 func (_e *mockDialerHost_Expecter) getPeerService(ctx interface{}, _a1 interface{}, service interface{}) *mockDialerHost_getPeerService_Call {
 	return &mockDialerHost_getPeerService_Call{Call: _e.mock.On("getPeerService", ctx, _a1, service)}
 }
