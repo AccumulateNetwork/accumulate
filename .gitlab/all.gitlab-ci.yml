@@ -9,6 +9,14 @@
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker push ${VALIDATION_IMAGE}
 
+go build:
+  stage: test
+  extends: [ .rules all, .go ]
+  needs: []
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+  script: go build -v ./...
+
 .go test:
   stage: test
   extends: [ .rules all, .go ]
@@ -23,16 +31,12 @@
 go test 1/2:
   # Main tests
   extends: .go test
-  script:
-  - go build -v ./...
-  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
+  script: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
 
 go test 2/2:
   # Full devnet validation test
   extends: .go test
-  script:
-  - go build -v ./...
-  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./test/validate -test.validate.full
+  script: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./test/validate -test.validate.full
 
 .playbooks:
   stage: test
