@@ -98,7 +98,7 @@ func (s *ValidationTestSuite) TestMain() {
 		FinalHeight uint64                   `json:"finalHeight"`
 		Network     *accumulated.NetworkInit `json:"network"`
 		Genesis     map[string][]byte        `json:"genesis"`
-		Roots       map[string][]byte        `json:"snapshots"`
+		Roots       map[string][]byte        `json:"roots"`
 		Submissions []Submission             `json:"submissions"`
 		Cases       []TestCall               `json:"rpcCalls"`
 	}{
