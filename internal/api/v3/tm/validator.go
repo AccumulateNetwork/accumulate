@@ -15,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 )
 
 type ValidateClient interface {
@@ -43,7 +43,7 @@ func NewValidator(params ValidatorParams) *Validator {
 
 func (s *Validator) Type() api.ServiceType { return api.ServiceTypeValidate }
 
-func (s *Validator) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (s *Validator) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	// if opts.Full == nil || *opts.Full {
 	// 	return nil, errors.NotAllowed.WithFormat("full validation has not been implemented")
 	// }

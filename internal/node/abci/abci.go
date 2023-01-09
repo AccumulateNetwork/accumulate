@@ -17,52 +17,5 @@
 //   - Commit
 package abci
 
-import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
-)
-
 // Version is the version of the ABCI applications.
 const Version uint64 = 0x1
-
-// ValidateEnvelopeSet validates a set of messages. ValidateEnvelopeSet returns
-// one status per delivery. If a message fails validation, the error is written
-// to that message's status.
-func ValidateEnvelopeSet(x execute.Executor, batch *database.Batch, messages []messaging.Message) []*protocol.TransactionStatus {
-	results := make([]*protocol.TransactionStatus, len(messages))
-	for i, message := range messages {
-		status, err := x.Validate(batch, message)
-		if status == nil {
-			status = new(protocol.TransactionStatus)
-		}
-		results[i] = status
-
-		if err != nil {
-			status.Set(err)
-		}
-	}
-
-	return results
-}
-
-// ExecuteEnvelopeSet validates a set of messages. ExecuteEnvelopeSet returns
-// one status per delivery. If a message fails validation, the error is written
-// to that message's status.
-func ExecuteEnvelopeSet(block execute.Block, messages []messaging.Message) []*protocol.TransactionStatus {
-	results := make([]*protocol.TransactionStatus, len(messages))
-	for i, message := range messages {
-		status, err := block.Process(message)
-		if status == nil {
-			status = new(protocol.TransactionStatus)
-		}
-		results[i] = status
-
-		if err != nil {
-			status.Set(err)
-		}
-	}
-
-	return results
-}

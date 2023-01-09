@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1
+
+### API
+
+- For certain types, zero-valued fields will be omitted from JSON output instead of being returned as null or zero.
+  - `sendTokens.hash`, `signature.transactionHash`, `tokenIssuer.issued`, `dataAccount.entry`
+
 ## 1.0.2
 
 - Implement versioning of the core executor code (#3152, !684)

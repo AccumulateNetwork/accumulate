@@ -6,11 +6,15 @@
 
 package messaging
 
-import "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package messaging enums.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package messaging types.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package messaging --out unions_gen.go --language go-union types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package messaging messages.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package messaging --out unions_gen.go --language go-union messages.yml
 
 // MessageType is the type of a [Message].
 type MessageType int
@@ -20,6 +24,22 @@ type MessageType int
 type Message interface {
 	encoding.UnionValue
 
-	// Type returns the type of the message.
+	// ID is the ID of the message.
+	ID() *url.TxID
+
+	// Type is the type of the message.
 	Type() MessageType
+}
+
+func (m *UserTransaction) ID() *url.TxID { return m.Transaction.ID() }
+
+func (m *UserSignature) ID() *url.TxID {
+	switch sig := m.Signature.(type) {
+	case *protocol.ReceiptSignature:
+		return sig.SourceNetwork.WithTxID(sig.TransactionHash)
+	case *protocol.InternalSignature:
+		return protocol.UnknownUrl().WithTxID(sig.TransactionHash)
+	default:
+		return sig.RoutingLocation().WithTxID(sig.GetTransactionHash())
+	}
 }

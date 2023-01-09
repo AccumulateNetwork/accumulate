@@ -486,23 +486,35 @@ func (v *Whoami) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *AddrInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID       encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
-		Services encoding.JsonList[*ServiceInfo]               `json:"services,omitempty"`
-		Addrs    encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addrs,omitempty"`
+		ID       *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
+		Services encoding.JsonList[*ServiceInfo]                `json:"services,omitempty"`
+		Addrs    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addrs,omitempty"`
 	}{}
-	u.ID = encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.Info.ID, Func: p2p.UnmarshalPeerIDJSON}
-	u.Services = v.Info.Services
-	u.Addrs = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addrs, Func: p2p.UnmarshalMultiaddrJSON}
+	if !(v.Info.ID == ("")) {
+
+		u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.Info.ID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(len(v.Info.Services) == 0) {
+
+		u.Services = v.Info.Services
+	}
+	if !(len(v.Addrs) == 0) {
+		u.Addrs = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addrs, Func: p2p.UnmarshalMultiaddrJSON}
+	}
 	return json.Marshal(&u)
 }
 
 func (v *Info) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID       encoding.JsonUnmarshalWith[p2p.PeerID] `json:"id,omitempty"`
-		Services encoding.JsonList[*ServiceInfo]        `json:"services,omitempty"`
+		ID       *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"id,omitempty"`
+		Services encoding.JsonList[*ServiceInfo]         `json:"services,omitempty"`
 	}{}
-	u.ID = encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
-	u.Services = v.Services
+	if !(v.ID == ("")) {
+		u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(len(v.Services) == 0) {
+		u.Services = v.Services
+	}
 	return json.Marshal(&u)
 }
 
@@ -511,24 +523,30 @@ func (v *Whoami) MarshalJSON() ([]byte, error) {
 		Self  *Info                        `json:"self,omitempty"`
 		Known encoding.JsonList[*AddrInfo] `json:"known,omitempty"`
 	}{}
-	u.Self = v.Self
-	u.Known = v.Known
+	if !(v.Self == nil) {
+		u.Self = v.Self
+	}
+	if !(len(v.Known) == 0) {
+		u.Known = v.Known
+	}
 	return json.Marshal(&u)
 }
 
 func (v *AddrInfo) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID       encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
-		Services encoding.JsonList[*ServiceInfo]               `json:"services,omitempty"`
-		Addrs    encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addrs,omitempty"`
+		ID       *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
+		Services encoding.JsonList[*ServiceInfo]                `json:"services,omitempty"`
+		Addrs    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addrs,omitempty"`
 	}{}
-	u.ID = encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.Info.ID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.Info.ID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Services = v.Info.Services
-	u.Addrs = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addrs, Func: p2p.UnmarshalMultiaddrJSON}
+	u.Addrs = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addrs, Func: p2p.UnmarshalMultiaddrJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Info.ID = u.ID.Value
+	if u.ID != nil {
+		v.Info.ID = u.ID.Value
+	}
 
 	v.Info.Services = u.Services
 	v.Addrs = make([]p2p.Multiaddr, len(u.Addrs.Value))
@@ -540,15 +558,17 @@ func (v *AddrInfo) UnmarshalJSON(data []byte) error {
 
 func (v *Info) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID       encoding.JsonUnmarshalWith[p2p.PeerID] `json:"id,omitempty"`
-		Services encoding.JsonList[*ServiceInfo]        `json:"services,omitempty"`
+		ID       *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"id,omitempty"`
+		Services encoding.JsonList[*ServiceInfo]         `json:"services,omitempty"`
 	}{}
-	u.ID = encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
+	u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Services = v.Services
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.ID = u.ID.Value
+	if u.ID != nil {
+		v.ID = u.ID.Value
+	}
 
 	v.Services = u.Services
 	return nil

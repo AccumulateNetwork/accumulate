@@ -14,13 +14,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func MustBuild(t testing.TB, b interface {
-	Done() (*protocol.Envelope, error)
-}) *protocol.Envelope {
+	Done() (*messaging.Envelope, error)
+}) *messaging.Envelope {
 	t.Helper()
 	env, err := b.Done()
 	require.NoError(t, err)

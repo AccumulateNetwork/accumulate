@@ -46,10 +46,10 @@ func NewSubmitter(params SubmitterParams) *Submitter {
 
 func (s *Submitter) Type() api.ServiceType { return api.ServiceTypeSubmit }
 
-func (s *Submitter) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (s *Submitter) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	// Verify the envelope is well-formed
 	if opts.Verify == nil || *opts.Verify {
-		_, err := messaging.NormalizeLegacy(envelope)
+		_, err := envelope.Normalize()
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("verify: %w", err)
 		}

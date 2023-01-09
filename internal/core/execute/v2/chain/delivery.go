@@ -16,38 +16,49 @@ import (
 )
 
 // NormalizeEnvelope normalizes the envelope into one or more deliveries.
-func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
-	messages, err := messaging.NormalizeLegacy(envelope)
+func NormalizeEnvelope(envelope *messaging.Envelope) ([]*Delivery, error) {
+	messages, err := envelope.Normalize()
 	if err != nil {
 		return nil, err
 	}
-
-	deliveries := make([]*Delivery, len(messages))
-	for i, message := range messages {
-		deliveries[i] = DeliveryFromMessage(message.(*messaging.LegacyMessage))
-	}
-	return deliveries, nil
+	return DeliveriesFromMessages(messages)
 }
 
-// DeliveryFromMessage constructs a Delivery from a [messaging.LegacyMessage].
-func DeliveryFromMessage(msg *messaging.LegacyMessage) *Delivery {
-	d := new(Delivery)
-	d.Transaction = msg.Transaction
-	d.Signatures = msg.Signatures
+// DeliveriesFromMessages converts a set of messages into a set of deliveries.
+func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
+	var deliveries []*Delivery
+	txnIndex := map[[32]byte]int{}
 
-	// This may be necessary for API v3, but it is a change in behavior that
-	// *might* cause issues when replaying 1.0.0 history
-	if false {
-		for _, sig := range d.Signatures {
-			if sig, ok := sig.(*protocol.PartitionSignature); ok {
-				d.SequenceNumber = sig.SequenceNumber
-				d.SourceNetwork = sig.SourceNetwork
-				d.DestinationNetwork = sig.DestinationNetwork
+	for _, msg := range messages {
+		switch msg := msg.(type) {
+		case *messaging.UserTransaction:
+			hash := *(*[32]byte)(msg.Transaction.GetHash())
+			if i, ok := txnIndex[hash]; ok {
+				deliveries[i].Transaction = msg.Transaction
+			} else {
+				txnIndex[hash] = len(deliveries)
+				deliveries = append(deliveries, &Delivery{Transaction: msg.Transaction})
 			}
+
+		case *messaging.UserSignature:
+			if i, ok := txnIndex[msg.TransactionHash]; ok {
+				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
+			} else {
+				txnIndex[msg.TransactionHash] = len(deliveries)
+				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
+			}
+
+		default:
+			return nil, errors.BadRequest.WithFormat("unsupported message type %v", msg.Type())
 		}
 	}
 
-	return d
+	for _, delivery := range deliveries {
+		if len(delivery.Signatures) == 0 {
+			return nil, errors.BadRequest.WithFormat("transaction %x has no signatures", delivery.Transaction.GetHash()[:4])
+		}
+	}
+	return deliveries, nil
 }
 
 type Delivery struct {

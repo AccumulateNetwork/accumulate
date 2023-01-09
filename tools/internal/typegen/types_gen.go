@@ -99,44 +99,80 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 		ChainType    string                    `json:"chainType,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Parent = v.Parent
-	u.OmitAccessor = v.OmitAccessor
-	u.Private = v.Private
-	u.Name = v.Name
-	u.Parameters = v.Parameters
-	u.ChainType = v.ChainType
+	if !(v.Parent == nil) {
+		u.Parent = v.Parent
+	}
+	if !(!v.OmitAccessor) {
+		u.OmitAccessor = v.OmitAccessor
+	}
+	if !(!v.Private) {
+		u.Private = v.Private
+	}
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(len(v.Parameters) == 0) {
+		u.Parameters = v.Parameters
+	}
+	if !(len(v.ChainType) == 0) {
+		u.ChainType = v.ChainType
+	}
 	return json.Marshal(&u)
 }
 
 func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          RecordType                             `json:"type"`
-		Parent        *EntityRecord                          `json:"parent,omitempty"`
-		OmitAccessor  bool                                   `json:"omitAccessor,omitempty"`
-		Private       bool                                   `json:"private,omitempty"`
-		Name          string                                 `json:"name,omitempty"`
-		Fields        encoding.JsonList[*Field]              `json:"fields,omitempty"`
-		CustomCommit  bool                                   `json:"customCommit,omitempty"`
-		CustomResolve bool                                   `json:"customResolve,omitempty"`
-		CustomIsDirty bool                                   `json:"customIsDirty,omitempty"`
-		Parameters    encoding.JsonList[*Field]              `json:"parameters,omitempty"`
-		Root          bool                                   `json:"root,omitempty"`
-		Interface     bool                                   `json:"interface,omitempty"`
-		Attributes    encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type          RecordType                              `json:"type"`
+		Parent        *EntityRecord                           `json:"parent,omitempty"`
+		OmitAccessor  bool                                    `json:"omitAccessor,omitempty"`
+		Private       bool                                    `json:"private,omitempty"`
+		Name          string                                  `json:"name,omitempty"`
+		Fields        encoding.JsonList[*Field]               `json:"fields,omitempty"`
+		CustomCommit  bool                                    `json:"customCommit,omitempty"`
+		CustomResolve bool                                    `json:"customResolve,omitempty"`
+		CustomIsDirty bool                                    `json:"customIsDirty,omitempty"`
+		Parameters    encoding.JsonList[*Field]               `json:"parameters,omitempty"`
+		Root          bool                                    `json:"root,omitempty"`
+		Interface     bool                                    `json:"interface,omitempty"`
+		Attributes    *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Parent = v.Parent
-	u.OmitAccessor = v.OmitAccessor
-	u.Private = v.Private
-	u.Name = v.Name
-	u.Fields = v.Fields
-	u.CustomCommit = v.CustomCommit
-	u.CustomResolve = v.CustomResolve
-	u.CustomIsDirty = v.CustomIsDirty
-	u.Parameters = v.Parameters
-	u.Root = v.Root
-	u.Interface = v.Interface
-	u.Attributes = encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
+	if !(v.Parent == nil) {
+		u.Parent = v.Parent
+	}
+	if !(!v.OmitAccessor) {
+		u.OmitAccessor = v.OmitAccessor
+	}
+	if !(!v.Private) {
+		u.Private = v.Private
+	}
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(len(v.Fields) == 0) {
+		u.Fields = v.Fields
+	}
+	if !(!v.CustomCommit) {
+		u.CustomCommit = v.CustomCommit
+	}
+	if !(!v.CustomResolve) {
+		u.CustomResolve = v.CustomResolve
+	}
+	if !(!v.CustomIsDirty) {
+		u.CustomIsDirty = v.CustomIsDirty
+	}
+	if !(len(v.Parameters) == 0) {
+		u.Parameters = v.Parameters
+	}
+	if !(!v.Root) {
+		u.Root = v.Root
+	}
+	if !(!v.Interface) {
+		u.Interface = v.Interface
+	}
+	if !(len(v.Attributes) == 0) {
+		u.Attributes = &encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
+	}
 	return json.Marshal(&u)
 }
 
@@ -155,16 +191,36 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 		Collection     CollectionType            `json:"collection,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Parent = v.Parent
-	u.OmitAccessor = v.OmitAccessor
-	u.Private = v.Private
-	u.Name = v.Name
-	u.Parameters = v.Parameters
-	u.DataType = v.DataType
-	u.Pointer = v.Pointer
-	u.EmptyIfMissing = v.EmptyIfMissing
-	u.Union = v.Union
-	u.Collection = v.Collection
+	if !(v.Parent == nil) {
+		u.Parent = v.Parent
+	}
+	if !(!v.OmitAccessor) {
+		u.OmitAccessor = v.OmitAccessor
+	}
+	if !(!v.Private) {
+		u.Private = v.Private
+	}
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(len(v.Parameters) == 0) {
+		u.Parameters = v.Parameters
+	}
+	if !((v.DataType).Equal(new(FieldType))) {
+		u.DataType = v.DataType
+	}
+	if !(!v.Pointer) {
+		u.Pointer = v.Pointer
+	}
+	if !(!v.EmptyIfMissing) {
+		u.EmptyIfMissing = v.EmptyIfMissing
+	}
+	if !(!v.Union) {
+		u.Union = v.Union
+	}
+	if !(v.Collection == 0) {
+		u.Collection = v.Collection
+	}
 	return json.Marshal(&u)
 }
 
@@ -181,14 +237,30 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 		HasChains    bool                      `json:"hasChains,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Parent = v.Parent
-	u.OmitAccessor = v.OmitAccessor
-	u.Private = v.Private
-	u.Name = v.Name
-	u.DataType = v.DataType
-	u.Parameters = v.Parameters
-	u.Pointer = v.Pointer
-	u.HasChains = v.HasChains
+	if !(v.Parent == nil) {
+		u.Parent = v.Parent
+	}
+	if !(!v.OmitAccessor) {
+		u.OmitAccessor = v.OmitAccessor
+	}
+	if !(!v.Private) {
+		u.Private = v.Private
+	}
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(len(v.DataType) == 0) {
+		u.DataType = v.DataType
+	}
+	if !(len(v.Parameters) == 0) {
+		u.Parameters = v.Parameters
+	}
+	if !(!v.Pointer) {
+		u.Pointer = v.Pointer
+	}
+	if !(!v.HasChains) {
+		u.HasChains = v.HasChains
+	}
 	return json.Marshal(&u)
 }
 
@@ -207,16 +279,36 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 		Collection     CollectionType            `json:"collection,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Parent = v.Parent
-	u.OmitAccessor = v.OmitAccessor
-	u.Private = v.Private
-	u.Name = v.Name
-	u.Parameters = v.Parameters
-	u.DataType = v.DataType
-	u.Pointer = v.Pointer
-	u.EmptyIfMissing = v.EmptyIfMissing
-	u.Union = v.Union
-	u.Collection = v.Collection
+	if !(v.Parent == nil) {
+		u.Parent = v.Parent
+	}
+	if !(!v.OmitAccessor) {
+		u.OmitAccessor = v.OmitAccessor
+	}
+	if !(!v.Private) {
+		u.Private = v.Private
+	}
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(len(v.Parameters) == 0) {
+		u.Parameters = v.Parameters
+	}
+	if !((v.DataType).Equal(new(FieldType))) {
+		u.DataType = v.DataType
+	}
+	if !(!v.Pointer) {
+		u.Pointer = v.Pointer
+	}
+	if !(!v.EmptyIfMissing) {
+		u.EmptyIfMissing = v.EmptyIfMissing
+	}
+	if !(!v.Union) {
+		u.Union = v.Union
+	}
+	if !(v.Collection == 0) {
+		u.Collection = v.Collection
+	}
 	return json.Marshal(&u)
 }
 
@@ -254,19 +346,19 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 
 func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          RecordType                             `json:"type"`
-		Parent        *EntityRecord                          `json:"parent,omitempty"`
-		OmitAccessor  bool                                   `json:"omitAccessor,omitempty"`
-		Private       bool                                   `json:"private,omitempty"`
-		Name          string                                 `json:"name,omitempty"`
-		Fields        encoding.JsonList[*Field]              `json:"fields,omitempty"`
-		CustomCommit  bool                                   `json:"customCommit,omitempty"`
-		CustomResolve bool                                   `json:"customResolve,omitempty"`
-		CustomIsDirty bool                                   `json:"customIsDirty,omitempty"`
-		Parameters    encoding.JsonList[*Field]              `json:"parameters,omitempty"`
-		Root          bool                                   `json:"root,omitempty"`
-		Interface     bool                                   `json:"interface,omitempty"`
-		Attributes    encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type          RecordType                              `json:"type"`
+		Parent        *EntityRecord                           `json:"parent,omitempty"`
+		OmitAccessor  bool                                    `json:"omitAccessor,omitempty"`
+		Private       bool                                    `json:"private,omitempty"`
+		Name          string                                  `json:"name,omitempty"`
+		Fields        encoding.JsonList[*Field]               `json:"fields,omitempty"`
+		CustomCommit  bool                                    `json:"customCommit,omitempty"`
+		CustomResolve bool                                    `json:"customResolve,omitempty"`
+		CustomIsDirty bool                                    `json:"customIsDirty,omitempty"`
+		Parameters    encoding.JsonList[*Field]               `json:"parameters,omitempty"`
+		Root          bool                                    `json:"root,omitempty"`
+		Interface     bool                                    `json:"interface,omitempty"`
+		Attributes    *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
@@ -280,7 +372,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u.Parameters = v.Parameters
 	u.Root = v.Root
 	u.Interface = v.Interface
-	u.Attributes = encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
+	u.Attributes = &encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}

@@ -18,6 +18,7 @@ import (
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -83,7 +84,7 @@ func (s *simService) Query(ctx context.Context, scope *url.URL, query api.Query)
 
 // Submit routes the envelope to a partition and calls Submit on the first node
 // of that partition, returning the result.
-func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (s *simService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	part, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, err
@@ -93,7 +94,7 @@ func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, op
 
 // Validate routes the envelope to a partition and calls Validate on the first
 // node of that partition, returning the result.
-func (s *simService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (s *simService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	part, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, err
@@ -188,7 +189,7 @@ func (s *partService) Query(ctx context.Context, scope *url.URL, query api.Query
 }
 
 // Submit submits the envelope.
-func (s *partService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (s *partService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	var r []*api.Submission
 	for _, d := range s.x.Submit(false, envelope) {
 		r = append(r, &api.Submission{
@@ -200,7 +201,7 @@ func (s *partService) Submit(ctx context.Context, envelope *protocol.Envelope, o
 }
 
 // Validate validates the envelope.
-func (s *partService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (s *partService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	var r []*api.Submission
 	for _, d := range s.x.Submit(true, envelope) {
 		r = append(r, &api.Submission{
