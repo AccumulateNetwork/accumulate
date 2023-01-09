@@ -36,6 +36,7 @@ type Partition struct {
 	mu         *sync.Mutex
 	mempool    []*chain.Delivery
 	deliver    []*chain.Delivery
+	mpIndex    map[[32]byte]int
 	blockIndex uint64
 	blockTime  time.Time
 
@@ -56,6 +57,7 @@ func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
 	p.PartitionInfo = partition
 	p.logger.Set(s.logger, "partition", partition.ID)
 	p.mu = new(sync.Mutex)
+	p.mpIndex = map[[32]byte]int{}
 	return p
 }
 
@@ -193,10 +195,59 @@ func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.Tr
 		}
 	}
 
-	if !pretend && result[0].Code.Success() {
-		p.mempool = append(p.mempool, delivery)
+	if pretend || !result[0].Code.Success() {
+		return result[0], nil
 	}
+
+	i, ok := p.mpIndex[delivery.Transaction.ID().Hash()]
+	if !ok {
+		// Append the delivery and record its position
+		p.mpIndex[delivery.Transaction.ID().Hash()] = len(p.mempool)
+		p.mempool = append(p.mempool, delivery)
+		return result[0], nil
+	}
+
+	// Merge with the existing delivery
+	other := p.mempool[i]
+	if other.Transaction.Body.Type() == protocol.TransactionTypeRemote {
+		other.Transaction = delivery.Transaction
+	}
+
+	if !other.Transaction.Body.Type().IsAnchor() {
+		other.Signatures = append(other.Signatures, delivery.Signatures...)
+		return result[0], nil
+	}
+
+	// Order anchor signatures
+	for _, sig := range delivery.Signatures {
+		ptr, new := sortutil.BinaryInsert(&other.Signatures, func(other protocol.Signature) int {
+			// Order partition signatures first
+			a, b := other.Type() == protocol.SignatureTypePartition, sig.Type() == protocol.SignatureTypePartition
+			if a && !b {
+				return -1
+			}
+			if b && !a {
+				return +1
+			}
+
+			return bytes.Compare(other.Hash(), sig.Hash())
+		})
+		if new {
+			*ptr = sig
+		}
+	}
+
 	return result[0], nil
+}
+
+type T []*chain.Delivery
+
+func (t T) String() string {
+	var s []string
+	for _, d := range t {
+		s = append(s, d.Transaction.ID().ShortString())
+	}
+	return fmt.Sprint(s)
 }
 
 func (p *Partition) execute() error {
@@ -205,11 +256,29 @@ func (p *Partition) execute() error {
 	deliveries := p.deliver
 	p.deliver = p.mempool
 	p.mempool = nil
+	// Optimized by the compiler
+	for h := range p.mpIndex {
+		delete(p.mpIndex, h)
+	}
 	p.mu.Unlock()
 
 	// Order transactions to ensure the simulator is deterministic
-	sort.Slice(deliveries, func(i, j int) bool {
-		return deliveries[i].Transaction.ID().Compare(deliveries[j].Transaction.ID()) < 0
+	sort.SliceStable(deliveries, func(i, j int) bool {
+		// User < synthetic < system
+		a, b := deliveries[i], deliveries[j]
+		c := txnOrder(a) - txnOrder(b)
+		if c != 0 {
+			return c < 0
+		}
+
+		// Order anchors by hash
+		if a.Transaction.Body.Type().IsSystem() {
+			return bytes.Compare(a.Transaction.GetHash(), b.Transaction.GetHash()) < 0
+		}
+
+		// Leave user and synthetic transactions in their original order
+		// (requires stable sort)
+		return false
 	})
 
 	// Initialize block index
@@ -326,4 +395,14 @@ func (p *Partition) execute() error {
 	}
 
 	return nil
+}
+
+func txnOrder(delivery *chain.Delivery) int {
+	if delivery.Transaction.Body.Type().IsUser() {
+		return 0
+	}
+	if delivery.Transaction.Body.Type().IsSynthetic() {
+		return 1
+	}
+	return 2
 }
