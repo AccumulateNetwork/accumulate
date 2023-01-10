@@ -24,6 +24,7 @@ type dispatcher struct {
 
 var _ block.Dispatcher = (*dispatcher)(nil)
 
+// Submit routes the envelope and adds it to the queue for a partition.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envelope) error {
 	partition, err := d.sim.router.RouteAccount(u)
 	if err != nil {
@@ -39,6 +40,7 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envel
 	return nil
 }
 
+// Send submits queued envelopes to the respective partitions.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	envelopes := make(map[string][]*chain.Delivery, len(d.envelopes))
 	for p, e := range d.envelopes {
@@ -50,6 +52,8 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		delete(d.envelopes, p)
 	}
 
+	// Run the dispatch asynchronously and return a channel because that's what
+	// the dispatcher interface expects
 	errs := make(chan error)
 	go func() {
 		defer close(errs)

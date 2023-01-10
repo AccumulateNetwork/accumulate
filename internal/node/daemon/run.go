@@ -413,6 +413,8 @@ func (d *Daemon) Start() (err error) {
 			Partition: d.Config.Accumulate.PartitionId,
 		}, messageHandler.Handle)
 	}
+
+	// Unblock the dialer
 	dialer.dialer = d.p2pnode.Dialer()
 	close(dialer.ready)
 

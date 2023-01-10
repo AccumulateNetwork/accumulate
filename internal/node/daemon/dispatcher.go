@@ -44,21 +44,25 @@ func newDispatcher(router routing.Router, dialer message.Dialer) *dispatcher {
 // Submit routes the account URL, constructs a multiaddr, and queues addressed
 // submit requests.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envelope) error {
+	// Route the account
 	partition, err := d.router.RouteAccount(u)
 	if err != nil {
 		return err
 	}
 
+	// Construct the multiaddr, /acc/submit:{partition}
 	addr, err := multiaddr.NewComponent(api.N_ACC, (&api.ServiceAddress{Type: api.ServiceTypeSubmit, Partition: partition}).String())
 	if err != nil {
 		return err
 	}
 
+	// Convert the envelope into deliveries
 	deliveries, err := chain.NormalizeEnvelope(env)
 	if err != nil {
 		return err
 	}
 
+	// Queue a pre-addressed message for each delivery
 	for _, delivery := range deliveries {
 		env := new(protocol.Envelope)
 		env.Signatures = append(env.Signatures, delivery.Signatures...)
@@ -120,29 +124,37 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	messages := d.messages
 	d.messages = nil
 
+	// Run asynchronously
 	errs := make(chan error)
 	go func() {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		defer close(errs)
 
-		// Create a client using a batch dialer, but DO NOT set the router
+		// Create a client using a batch dialer, but DO NOT set the router - all
+		// the messages are already addressed
 		client := new(message.Client)
 		client.Dialer = message.BatchDialer(ctx, d.dialer)
 
+		// Submit all messages over a single stream
 		err := client.RoundTrip(ctx, messages, func(res, req message.Message) error {
 			_ = req // Ignore unused warning
+
 			switch res := res.(type) {
 			case *message.ErrorResponse:
+				// Handle error
 				checkDispatchError(res.Error, errs)
 				return nil
+
 			case *message.SubmitResponse:
+				// Check for failed submissions
 				for _, sub := range res.Value {
 					if sub.Status != nil {
 						checkDispatchError(sub.Status.AsError(), errs)
 					}
 				}
 				return nil
+
 			default:
 				return errors.Conflict.WithFormat("invalid response: want %T, got %T", (*message.SubmitResponse)(nil), res)
 			}
@@ -166,7 +178,7 @@ type dialer struct {
 var _ message.MultiDialer = (*dialer)(nil)
 
 func (d *dialer) d() message.MultiDialer {
-	<-d.ready
+<-d.ready // wait until ready
 	return d.dialer
 }
 
