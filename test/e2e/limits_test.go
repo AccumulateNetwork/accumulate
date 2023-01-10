@@ -56,7 +56,7 @@ func TestCreateKeyPage_LimitBookPages(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateKeyPage{Keys: []*KeySpecParams{{KeyHash: hash([]byte{1})}}}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "book will have too many pages")
 }
@@ -89,7 +89,7 @@ func TestCreateKeyPage_LimitPageEntries(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateKeyPage{Keys: []*KeySpecParams{{KeyHash: hash([]byte{1})}, {KeyHash: hash([]byte{2})}}}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "page will have too many entries")
 }
@@ -124,7 +124,7 @@ func TestUpdateKeyPage_LimitPageEntries(t *testing.T) {
 				&AddKeyOperation{Entry: KeySpecParams{KeyHash: hash([]byte{1})}},
 			}}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "page will have too many entries")
 }
@@ -163,7 +163,7 @@ func TestUpdateAccountAuth_LimitAccountAuthorities(t *testing.T) {
 			Initiate(SignatureTypeED25519, aliceKey).
 			WithSigner(alice.JoinPath("book2", "1"), 1).
 			Sign(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "account will have too many authorities")
 }
@@ -199,7 +199,7 @@ func TestWriteData_LimitDataEntryParts(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&WriteData{Entry: entry}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "data entry contains too many parts")
 }
@@ -232,7 +232,7 @@ func TestCreateIdentity_LimitIdentityAccounts(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateIdentity{Url: alice.JoinPath("account"), KeyHash: make([]byte, 32), KeyBookUrl: alice.JoinPath("account", "book")}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
@@ -264,7 +264,7 @@ func TestCreateIdentity_Directory(t *testing.T) {
 				WithTimestamp(1).
 				WithBody(&CreateIdentity{Url: alice, KeyHash: make([]byte, 32), KeyBookUrl: alice.JoinPath("book")}).
 				Initiate(SignatureTypeED25519, liteKey).
-				BuildDelivery())
+				Build())
 
 		sim.StepUntil(
 			Txn(st.TxID).Succeeds())
@@ -299,7 +299,7 @@ func TestCreateIdentity_Directory(t *testing.T) {
 				WithTimestamp(1).
 				WithBody(&CreateIdentity{Url: alice.JoinPath("account"), KeyHash: make([]byte, 32), KeyBookUrl: alice.JoinPath("account", "book")}).
 				Initiate(SignatureTypeED25519, aliceKey).
-				BuildDelivery())
+				Build())
 
 		sim.StepUntil(
 			Txn(st.TxID).Succeeds())
@@ -341,7 +341,7 @@ func TestCreateTokenAccount_LimitIdentityAccounts(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateTokenAccount{Url: alice.JoinPath("account"), TokenUrl: AcmeUrl()}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
@@ -374,7 +374,7 @@ func TestCreateDataAccount_LimitIdentityAccounts(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateDataAccount{Url: alice.JoinPath("account")}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
@@ -407,7 +407,7 @@ func TestCreateToken_LimitIdentityAccounts(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateToken{Url: alice.JoinPath("account")}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
@@ -440,7 +440,7 @@ func TestCreateKeyBook_LimitIdentityAccounts(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateKeyBook{Url: alice.JoinPath("account"), PublicKeyHash: make([]byte, 32)}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "identity would have too many accounts")
 }

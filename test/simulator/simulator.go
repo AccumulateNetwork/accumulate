@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -35,6 +34,7 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -255,33 +255,26 @@ func (s *Simulator) SetRouterSubmitHook(partition string, fn RouterSubmitHookFun
 	s.partitions[partition].SetRouterSubmitHook(fn)
 }
 
-func (s *Simulator) SetExecutor(exec chain.TransactionExecutor) {
-	for _, p := range s.partitions {
-		for _, n := range p.nodes {
-			n.executor.SetExecutor_TESTONLY(exec)
-		}
-	}
-}
-
-func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func (s *Simulator) Submit(message messaging.Message) (*protocol.TransactionStatus, error) {
+	legacy := message.(*messaging.LegacyMessage)
 	partition, err := s.router.Route(&protocol.Envelope{
-		Transaction: []*protocol.Transaction{delivery.Transaction},
-		Signatures:  delivery.Signatures,
+		Transaction: []*protocol.Transaction{legacy.Transaction},
+		Signatures:  legacy.Signatures,
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return s.SubmitTo(partition, delivery)
+	return s.SubmitTo(partition, message)
 }
 
-func (s *Simulator) SubmitTo(partition string, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitTo(partition string, message messaging.Message) (*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	return p.Submit(delivery, false)
+	return p.Submit(message.(*messaging.LegacyMessage), false)
 }
 
 func (s *Simulator) Partitions() []*protocol.PartitionInfo {
@@ -376,10 +369,10 @@ type nodeSigner struct {
 
 var _ signing.Signer = nodeSigner{}
 
-func (n nodeSigner) Key() []byte { return n.executor.Key }
+func (n nodeSigner) Key() []byte { return n.init.PrivValKey }
 
 func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
-	k := n.executor.Key
+	k := n.init.PrivValKey
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.PublicKey = k[32:]
@@ -410,7 +403,7 @@ func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
 }
 
 func (n nodeSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) error {
-	k := n.executor.Key
+	k := n.init.PrivValKey
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		protocol.SignLegacyED25519(sig, k, sigMdHash, message)

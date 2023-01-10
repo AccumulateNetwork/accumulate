@@ -19,12 +19,12 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -203,7 +203,7 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 		}).
 		Initiate(SignatureTypeED25519, aliceKey).
 		Build()
-	deliveries, err := chain.NormalizeEnvelope(env)
+	deliveries, err := messaging.NormalizeLegacy(env)
 	require.NoError(t, err)
 	require.Len(t, deliveries, 1)
 
@@ -421,7 +421,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 	charlieKey := acctesting.GenerateKey(charlie)
 
-	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *chain.Delivery) {
+	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *Envelope) {
 		// Initialize with V1+sig
 		sim := NewSim(t,
 			simulator.MemoryDatabase,
@@ -460,10 +460,10 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		return sim, delivery
 	}
 
-	outOfOrder := func(sim *Sim, delivery *chain.Delivery) *TransactionStatus {
+	outOfOrder := func(sim *Sim, delivery *Envelope) *TransactionStatus {
 		// Sign and submit the transaction with bob
 		st := sim.SubmitSuccessfully(MustBuild(t,
-			build.SignatureForTransaction(delivery.Transaction).
+			build.SignatureForTransaction(delivery.Transaction[0]).
 				Url(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey)))
 
 		sim.StepUntil(
@@ -475,7 +475,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		return st
 	}
 
-	extraSig := func(sim *Sim, delivery *chain.Delivery) *TransactionStatus {
+	extraSig := func(sim *Sim, delivery *Envelope) *TransactionStatus {
 		// Submit alice's signature
 		st := sim.SubmitSuccessfully(delivery)
 
@@ -484,14 +484,14 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 
 		// Submit with alice's other key
 		sim.SubmitSuccessfully(MustBuild(t,
-			build.SignatureForTransaction(delivery.Transaction).
+			build.SignatureForTransaction(delivery.Transaction[0]).
 				Url(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey2).Delegator(bob, "book", "1")))
 
 		sim.StepN(50)
 
 		// Sign and submit the transaction with bob
 		sim.SubmitSuccessfully(MustBuild(t,
-			build.SignatureForTransaction(delivery.Transaction).
+			build.SignatureForTransaction(delivery.Transaction[0]).
 				Url(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey)))
 
 		return st
@@ -499,7 +499,8 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 
 	captureFwd := func(sim *Sim) func() *url.TxID {
 		var sigId *url.TxID
-		sim.SetSubmitHook("BVN1", func(d *chain.Delivery) (dropTx bool, keepHook bool) {
+		sim.SetSubmitHook("BVN1", func(message messaging.Message) (dropTx bool, keepHook bool) {
+			d := message.(*messaging.LegacyMessage)
 			fwd, ok := d.Transaction.Body.(*SyntheticForwardTransaction)
 			if !ok || len(fwd.Signatures) != 1 || !fwd.Signatures[0].Destination.Equal(charlie.JoinPath("tokens")) {
 				return false, true
@@ -642,7 +643,7 @@ func TestMissingPrincipal(t *testing.T) {
 		Initiate(txn)
 	require.NoError(t, err)
 
-	st := sim.Submit(&chain.Delivery{Transaction: txn, Signatures: []Signature{sig}})
+	st := sim.Submit(&Envelope{Transaction: []*Transaction{txn}, Signatures: []Signature{sig}})
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "missing principal")
 }

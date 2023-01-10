@@ -7,8 +7,6 @@
 package block
 
 import (
-	"context"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -18,33 +16,8 @@ import (
 
 type Block struct {
 	BlockMeta
-	Context context.Context
-	State   BlockState
-	Batch   *database.Batch
-}
-
-func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, delivery := range deliveries {
-		status, err := x.ExecuteEnvelope(block, delivery)
-		if status == nil {
-			status = new(protocol.TransactionStatus)
-		}
-		results[i] = status
-
-		// Wait until after ExecuteEnvelope, because the transaction may get
-		// loaded by LoadTransaction
-		status.TxID = delivery.Transaction.ID()
-
-		if err != nil {
-			status.Set(err)
-			if captureError != nil {
-				captureError(err, delivery, status)
-			}
-		}
-	}
-
-	return results
+	State BlockState
+	Batch *database.Batch
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {

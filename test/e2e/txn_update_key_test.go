@@ -112,7 +112,7 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 			WithTimestampVar(&timestamp).
 			WithBody(&UpdateKey{NewKeyHash: hash(newKey[32:])}).
 			Initiate(SignatureTypeED25519, otherKey).
-			BuildDelivery())
+			Build())
 	sim.H.StepUntil(Txn(st.TxID).Fails())
 	st = sim.H.QueryTransaction(st.TxID, nil).Status
 	require.NotNil(t, st.Error)

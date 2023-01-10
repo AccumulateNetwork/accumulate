@@ -99,7 +99,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	// Capture background tasks
 	errg := new(errgroup.Group)
-	exec.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
+	exec.BackgroundTaskLauncher = func(f func()) { errg.Go(func() error { f(); return nil }) }
 
 	b.block = new(block.Block)
 	b.block.Index = protocol.GenesisBlock

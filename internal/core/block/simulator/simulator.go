@@ -28,14 +28,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -60,7 +63,7 @@ type Simulator struct {
 
 	opts             SimulatorOptions
 	netInit          *accumulated.NetworkInit
-	router           routing.Router
+	router           *router
 	routingOverrides map[[32]byte]string
 }
 
@@ -137,23 +140,12 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 
 	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
-	sim.router = routing.NewRouter(mainEventBus, nil, sim.Logger)
+	sim.router = &router{sim, routing.NewRouter(mainEventBus, nil, sim.Logger)}
 
 	// Initialize each executor
 	for i, bvn := range sim.netInit.Bvns[:1] {
-		// TODO Initialize multiple executors for the DN
 		dn := &sim.Partitions[0]
 		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
-
-		x := new(ExecEntry)
-		x.Partition = dn
-		x.tb = sim.tb
-		x.blockTime = GenesisTime
-		x.Validators = [][]byte{bvn.Nodes[0].PrivValKey[32:]}
-		sim.Executors[protocol.Directory] = x
-
-		logger := sim.newLogger(opts).With("partition", protocol.Directory)
-		x.Database = opts.OpenDB(protocol.Directory, i, logger)
 
 		network := config.Describe{
 			NetworkType:  config.Directory,
@@ -162,45 +154,23 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		execOpts := block.ExecutorOptions{
-			Logger:   logger,
-			Key:      bvn.Nodes[0].PrivValKey,
-			Describe: network,
-			Router:   sim.Router(),
-			EventBus: mainEventBus,
-		}
-		if execOpts.Describe.NetworkType == config.Directory {
-			execOpts.MajorBlockScheduler = blockscheduler.Init(mainEventBus)
-		}
-		var err error
-		x.Executor, err = block.NewNodeExecutor(execOpts, x)
-		require.NoError(sim, err)
-
-		jrpc, err := api.NewJrpc(api.Options{
-			Logger:        logger,
-			Describe:      &network,
-			Router:        sim.Router(),
-			TxMaxWaitTime: time.Hour,
-			Database:      x,
-			Key:           execOpts.Key,
-		})
-		require.NoError(sim, err)
-		x.API = acctesting.DirectJrpcClient(jrpc)
+		logger := sim.newLogger(opts).With("partition", protocol.Directory)
+		x := new(ExecEntry)
+		x.init(
+			sim,
+			logger,
+			dn,
+			bvn.Nodes[0],
+			network,
+			opts.OpenDB(protocol.Directory, i, logger),
+			mainEventBus,
+		)
+		sim.Executors[protocol.Directory] = x
 	}
 
 	for i, bvnInit := range sim.netInit.Bvns {
 		bvn := &sim.Partitions[i+1]
 		bvn.Nodes = []config.Node{{Type: config.Validator, Address: bvn.Id}}
-
-		x := new(ExecEntry)
-		x.Partition = bvn
-		x.tb = sim.tb
-		x.blockTime = GenesisTime
-		x.Validators = [][]byte{bvnInit.Nodes[0].PrivValKey[32:]}
-		sim.Executors[bvn.Id] = x
-
-		logger := sim.newLogger(opts).With("partition", bvn.Id)
-		x.Database = opts.OpenDB(bvn.Id, 0, logger)
 
 		network := config.Describe{
 			NetworkType:  bvn.Type,
@@ -209,27 +179,18 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		execOpts := block.ExecutorOptions{
-			Logger:   logger,
-			Key:      bvnInit.Nodes[0].PrivValKey,
-			Describe: network,
-			Router:   sim.Router(),
-			EventBus: events.NewBus(logger),
-		}
-		var err error
-		x.Executor, err = block.NewNodeExecutor(execOpts, x)
-		require.NoError(sim, err)
-
-		jrpc, err := api.NewJrpc(api.Options{
-			Logger:        logger,
-			Describe:      &network,
-			Router:        sim.Router(),
-			TxMaxWaitTime: time.Hour,
-			Database:      x,
-			Key:           execOpts.Key,
-		})
-		require.NoError(sim, err)
-		x.API = acctesting.DirectJrpcClient(jrpc)
+		logger := sim.newLogger(opts).With("partition", bvn.Id)
+		x := new(ExecEntry)
+		x.init(
+			sim,
+			logger,
+			bvn,
+			bvnInit.Nodes[0],
+			network,
+			opts.OpenDB(bvn.Id, 0, logger),
+			events.NewBus(logger),
+		)
+		sim.Executors[bvn.Id] = x
 	}
 }
 
@@ -288,7 +249,7 @@ func (s *Simulator) SetRouteFor(account *url.URL, partition string) {
 }
 
 func (s *Simulator) Router() routing.Router {
-	return router{s, s.router}
+	return s.router
 }
 
 func (s *Simulator) Partition(id string) *ExecEntry {
@@ -410,6 +371,7 @@ func (s *Simulator) ExecuteBlocks(n int) {
 	}
 }
 
+// Submit routes and submits each envelope.
 func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelope, error) {
 	s.Helper()
 
@@ -417,29 +379,39 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		// Route
 		partition, err := s.Router().Route(envelope)
 		require.NoError(s, err)
-		x := s.Partition(partition)
-
-		// Normalize - use a copy to avoid weird issues caused by modifying values
-		deliveries, err := chain.NormalizeEnvelope(envelope.Copy())
+		err = s.SubmitTo(partition, envelope)
 		if err != nil {
 			return nil, err
 		}
-
-		// Check
-		batch := x.Database.Begin(false)
-		defer batch.Discard()
-		x.Executor.ValidateEnvelopeSet(batch, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-			err = e
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Enqueue
-		x.Submit(false, envelope)
 	}
 
 	return envelopes, nil
+}
+
+// SubmitTo submits the envelope to a specific partition.
+func (s *Simulator) SubmitTo(partition string, envelope *protocol.Envelope) error {
+	x := s.Partition(partition)
+
+	// Normalize - use a copy to avoid weird issues caused by modifying values
+	deliveries, err := messaging.NormalizeLegacy(envelope.Copy())
+	if err != nil {
+		return err
+	}
+
+	// Check
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, deliveries)
+	for _, result := range results {
+		if result.Error != nil {
+			return errors.UnknownError.Wrap(result.Error)
+		}
+	}
+
+	// Enqueue
+	x.Submit(false, envelope)
+	return nil
+
 }
 
 // MustSubmitAndExecuteBlock executes a block with the envelopes and fails the test if
@@ -594,6 +566,8 @@ type ExecEntry struct {
 	BlockIndex              uint64
 	blockTime               time.Time
 	nextBlock, currentBlock []*chain.Delivery
+	nodeKey                 []byte
+	service                 *partService
 
 	Partition  *config.Partition
 	Database   database.Beginner
@@ -605,6 +579,50 @@ type ExecEntry struct {
 	// partition. It is not safe to change SubmitHook concurrently with calls to
 	// Submit.
 	SubmitHook func([]*chain.Delivery) ([]*chain.Delivery, bool)
+}
+
+// init initializes the partition.
+func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Partition, init *accumulated.NodeInit, network config.Describe, db *database.Database, eventBus *events.Bus) {
+	x.blockTime = GenesisTime
+	x.nodeKey = init.DnNodeKey
+	x.Validators = [][]byte{init.PrivValKey[32:]}
+	x.Database = db
+	x.tb = sim.tb
+	x.Partition = partition
+
+	// Initialize the executor
+	execOpts := block.ExecutorOptions{
+		Logger:        logger,
+		Database:      x,
+		Key:           init.PrivValKey,
+		Describe:      network,
+		Router:        sim.Router(),
+		EventBus:      eventBus,
+		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: sim, envelopes: map[string][]*protocol.Envelope{}} },
+		Sequencer:     sim.Services(),
+		Querier:       sim.Services(),
+	}
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(eventBus)
+	}
+	var err error
+	x.Executor, err = block.NewNodeExecutor(execOpts)
+	require.NoError(sim, err)
+
+	// Initialize API v3
+	x.service = newExecService(x, logger)
+
+	// Initialize API v2
+	jrpc, err := api.NewJrpc(api.Options{
+		Logger:        logger,
+		Describe:      &network,
+		Router:        sim.Router(),
+		TxMaxWaitTime: time.Hour,
+		Database:      x,
+		Key:           execOpts.Key,
+	})
+	require.NoError(sim, err)
+	x.API = acctesting.DirectJrpcClient(jrpc)
 }
 
 func (x *ExecEntry) Begin(writable bool) *database.Batch         { return x.Database.Begin(writable) }
@@ -683,7 +701,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	block.Batch = x.Database.Begin(true)
 
 	// Run background tasks in the error group to ensure they complete before the next block begins
-	x.Executor.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
+	x.Executor.BackgroundTaskLauncher = func(f func()) { errg.Go(func() error { f(); return nil }) }
 
 	deliveries := x.takeSubmitted()
 	errg.Go(func() error {
@@ -692,9 +710,14 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		err := x.Executor.BeginBlock(block)
 		require.NoError(x, err)
 
+		messages := make([]messaging.Message, 0, len(deliveries))
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
+				messages = append(messages, &messaging.LegacyMessage{
+					Transaction: deliveries[i].Transaction,
+					Signatures:  deliveries[i].Signatures,
+				})
 				continue
 			}
 			if !errors.Is(err, errors.Delivered) {
@@ -708,11 +731,11 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results := x.Executor.ExecuteEnvelopeSet(block, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-			err = e
-		})
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
+		results := abci.ExecuteEnvelopeSet(&execute.BlockV1{Block: block, Executor: x.Executor}, messages)
+		for _, result := range results {
+			if result.Error != nil {
+				return errors.UnknownError.Wrap(result.Error)
+			}
 		}
 		if statusChan != nil {
 			for _, result := range results {

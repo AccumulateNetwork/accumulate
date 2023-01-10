@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -45,7 +45,7 @@ func TestUpdateKey_Duplicate(t *testing.T) {
 			NewKeyHash: doHash(aliceKey[32:]),
 		}).
 		Initiate(protocol.SignatureTypeED25519, otherKey).
-		BuildDelivery()
+		Build()
 	st := sim.H.SubmitSuccessfully(env)
 	sim.H.StepUntil(
 		Txn(st.TxID).Fails())

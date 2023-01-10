@@ -13,9 +13,9 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -28,34 +28,22 @@ import (
 
 type Executor struct {
 	ExecutorOptions
-
-	globals     *Globals
-	executors   map[protocol.TransactionType]chain.TransactionExecutor
-	dispatcher  *dispatcher
-	logger      logging.OptionalLogger
-	db          database.Beginner
-	isValidator bool
-
-	// oldBlockMeta blockMetadata
-}
-
-type ExecutorOptions struct {
-	Logger              log.Logger                         //
-	Key                 ed25519.PrivateKey                 // Private validator key
-	Router              routing.Router                     //
-	Describe            config.Describe                    // Network description
-	EventBus            *events.Bus                        //
-	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
-	Background          func(func())                       // Background task launcher
-	BatchReplayLimit    int                                //
-
-	isGenesis bool
-
 	BlockTimers TimerSet
+
+	globals        *Globals
+	executors      map[protocol.TransactionType]chain.TransactionExecutor
+	logger         logging.OptionalLogger
+	db             database.Beginner
+	isValidator    bool
+	isGenesis      bool
+	mainDispatcher Dispatcher
 }
+
+type ExecutorOptions = execute.Options
+type Dispatcher = execute.Dispatcher
 
 // NewNodeExecutor creates a new Executor for a node.
-func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, error) {
+func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	executors := []chain.TransactionExecutor{
 		// User transactions
 		chain.AddCredits{},
@@ -109,7 +97,7 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 	// This is a no-op in dev
 	executors = addTestnetExecutors(executors)
 
-	return newExecutor(opts, db, executors...)
+	return newExecutor(opts, false, executors...)
 }
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
@@ -117,13 +105,13 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
 	exec, err := newExecutor(
 		ExecutorOptions{
-			Describe:  *network,
-			Logger:    logger,
-			Router:    router,
-			EventBus:  events.NewBus(logger),
-			isGenesis: true,
+			Database: db,
+			Describe: *network,
+			Logger:   logger,
+			Router:   router,
+			EventBus: events.NewBus(logger),
 		},
-		db,
+		true,
 		chain.SystemWriteData{},
 	)
 	if err != nil {
@@ -135,16 +123,20 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 	return exec, nil
 }
 
-func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.TransactionExecutor) (*Executor, error) {
-	if opts.Background == nil {
-		opts.Background = func(f func()) { go f() }
+func newExecutor(opts ExecutorOptions, isGenesis bool, executors ...chain.TransactionExecutor) (*Executor, error) {
+	if opts.BackgroundTaskLauncher == nil {
+		opts.BackgroundTaskLauncher = func(f func()) { go f() }
+	}
+	if isGenesis {
+		opts.NewDispatcher = func() Dispatcher { return nullDispatcher{} }
 	}
 
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
-	m.dispatcher = newDispatcher(opts)
-	m.db = db
+	m.db = opts.Database
+	m.mainDispatcher = opts.NewDispatcher()
+	m.isGenesis = isGenesis
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -157,7 +149,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 		m.executors[x.Type()] = x
 	}
 
-	batch := db.Begin(false)
+	batch := opts.Database.Begin(false)
 	defer batch.Discard()
 
 	// Listen to our own event (DRY)
@@ -176,7 +168,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 		// m.logger.Debug("Loaded", "height", ledger.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 		// Load globals
-		err = m.loadGlobals(db.View)
+		err = m.loadGlobals(opts.Database.View)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -194,6 +186,10 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 
 func (m *Executor) EnableTimers() {
 	m.BlockTimers.Initialize(&m.executors)
+}
+
+func (m *Executor) StoreBlockTimers(ds *logging.DataSet) {
+	m.BlockTimers.Store(ds)
 }
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
