@@ -31,6 +31,9 @@ func (c condTxn) Produced() condProduced { return condProduced(c) }
 // synthetic transaction(s) produced by a transaction.
 func (c condTxn) Refund() condRefund { return condRefund(c) }
 
+// Received waits until the transaction has been received.
+func (c condTxn) Received() Condition { return c.status(received) }
+
 // IsDelivered waits until the transaction has been delivered (executed, whether
 // success or failure).
 func (c condTxn) IsDelivered() Condition { return c.status(isDelivered) }
@@ -48,6 +51,9 @@ func (c condTxn) Succeeds() Condition { return c.status(succeeds) }
 // transaction failed (and fails otherwise).
 func (c condTxn) Fails() Condition { return c.status(fails) }
 
+// Received waits until the transaction has been received.
+func (c condProduced) Received() Condition { return c.status(received) }
+
 // IsDelivered waits until the produced transaction(s) have been delivered
 // (executed, whether success or failure).
 func (c condProduced) IsDelivered() Condition { return c.status(isDelivered) }
@@ -64,6 +70,9 @@ func (c condProduced) Succeeds() Condition { return c.status(succeeds) }
 // Fails waits until the produced transaction(s) have been delivered and
 // succeeds if the transaction(s) failed (and fails otherwise).
 func (c condProduced) Fails() Condition { return c.status(fails) }
+
+// Received waits until the transaction has been received.
+func (c condRefund) Received() Condition { return c.status(received) }
 
 // IsDelivered waits until the refund transaction(s) have been delivered
 // (executed, whether success or failure).
@@ -263,6 +272,11 @@ func (c condRefund) status(predicate func(h *Harness, c any, status *protocol.Tr
 		// All predicates passed
 		return true
 	}
+}
+
+func received(h *Harness, _ any, status *protocol.TransactionStatus) bool {
+	h.TB.Helper()
+	return status.Code != 0
 }
 
 func isDelivered(h *Harness, _ any, status *protocol.TransactionStatus) bool {

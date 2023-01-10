@@ -183,6 +183,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	sigToStore := signature
+	var delegatedNotReady bool
 	switch signature := signature.(type) {
 	case *protocol.PartitionSignature:
 		// Capture the source, destination, and sequence number in the status
@@ -230,6 +231,10 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			return nil, errors.UnknownError.Wrap(err)
 		}
 		if !ready {
+			if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+				delegatedNotReady = true
+				break
+			}
 			return signer, nil
 		}
 
@@ -249,13 +254,26 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		sigToStore = signature
 	}
 
-	// Record the initiator
-	if md.IsInitiator {
+	// Record the initiator (but only if we're at the final destination)
+	shouldRecordInit := md.IsInitiator
+	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() &&
+		delivery.Transaction.Body.Type().IsUser() {
+		if md.Delegated {
+			shouldRecordInit = false
+		} else if md.Location == nil || !delivery.Transaction.Header.Principal.LocalTo(md.Location) {
+			shouldRecordInit = false
+		}
+	}
+	if shouldRecordInit {
 		var initUrl *url.URL
 		if signature.Type().IsSystem() {
 			initUrl = signer.GetUrl()
 		} else {
-			initUrl = signature.GetSigner()
+			if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+				initUrl = signer.GetUrl()
+			} else {
+				initUrl = signature.GetSigner()
+			}
 			if key, _, _ := protocol.ParseLiteTokenAddress(initUrl); key != nil {
 				initUrl = initUrl.RootIdentity()
 			}
@@ -274,6 +292,10 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
+	}
+
+	if delegatedNotReady {
+		return signer, nil
 	}
 
 	// Persist the signature

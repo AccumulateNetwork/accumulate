@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -210,6 +210,14 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 		if didFail {
 			return nil, nil, nil
+		}
+	}
+
+	// Reload the transaction status to get changes made by processing signatures
+	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+		status, err = block.Batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
+		if err != nil {
+			return nil, nil, errors.UnknownError.WithFormat("load status: %w", err)
 		}
 	}
 

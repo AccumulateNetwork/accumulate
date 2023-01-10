@@ -899,16 +899,15 @@ func (c *SystemData) Commit() error {
 }
 
 type MerkleManager struct {
-	logger        logging.OptionalLogger
-	store         record.Store
-	key           record.Key
-	label         string
-	typ           merkle.ChainType
-	name          string
-	markPower     int64
-	markFreq      int64
-	markMask      int64
-	initialHeight int64
+	logger    logging.OptionalLogger
+	store     record.Store
+	key       record.Key
+	label     string
+	typ       merkle.ChainType
+	name      string
+	markPower int64
+	markFreq  int64
+	markMask  int64
 
 	head         record.Value[*MerkleState]
 	states       map[merkleManagerStatesKey]record.Value[*MerkleState]

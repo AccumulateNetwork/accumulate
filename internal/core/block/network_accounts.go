@@ -42,6 +42,11 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		return nil
 	}
 
+	// Do not forward synthetic transactions
+	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body.Type().IsSynthetic() {
+		return nil
+	}
+
 	targetName := strings.ToLower(strings.Trim(principal.GetUrl().Path, "/"))
 	switch body := delivery.Transaction.Body.(type) {
 	case *protocol.ActivateProtocolVersion:
@@ -67,8 +72,10 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		}
 
 	case *protocol.UpdateAccountAuth:
-		// Prevent authority changes
-		return errors.BadRequest.WithFormat("the authority set of a network account cannot be updated")
+		// Prevent authority changes (prior to v1+signatureAnchoring)
+		if !x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+			return errors.BadRequest.WithFormat("the authority set of a network account cannot be updated")
+		}
 
 	case *protocol.WriteData:
 		var err error
