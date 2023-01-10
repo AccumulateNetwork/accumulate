@@ -178,7 +178,7 @@ type dialer struct {
 var _ message.MultiDialer = (*dialer)(nil)
 
 func (d *dialer) d() message.MultiDialer {
-<-d.ready // wait until ready
+	<-d.ready // wait until ready
 	return d.dialer
 }
 
