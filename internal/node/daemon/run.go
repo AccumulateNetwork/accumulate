@@ -236,7 +236,7 @@ func (d *Daemon) Start() (err error) {
 	client := &message.Client{Dialer: dialer, Router: routing.MessageRouter{Router: router}}
 	execOpts := block.ExecutorOptions{
 		Logger:        d.Logger,
-		Database:         d.db,
+		Database:      d.db,
 		Key:           d.Key().Bytes(),
 		Describe:      d.Config.Accumulate.Describe,
 		Router:        router,
