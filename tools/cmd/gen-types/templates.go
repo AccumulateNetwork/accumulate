@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/gobeam/stringy"
 	"path"
+	"regexp"
 	"strings"
 	"text/template"
 
@@ -18,6 +19,8 @@ import (
 )
 
 var PackagePath string
+
+var reVersion = regexp.MustCompile(`^v\d+$`)
 
 // convert converts typegen.Types to local Types.
 func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types, error) {
@@ -38,7 +41,12 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 				continue
 			}
 			if !strings.ContainsRune(field.Type.Name, '.') {
-				field.Type.Name = path.Base(typ.Package) + "." + field.Type.Name
+				base := path.Base(typ.Package)
+				// If the package is foo/v3, use 'foo' instead of 'v3'
+				if reVersion.MatchString(base) {
+					base = path.Base(typ.Package[:len(typ.Package)-len(base)-1])
+				}
+				field.Type.Name = base + "." + field.Type.Name
 			}
 		}
 	}

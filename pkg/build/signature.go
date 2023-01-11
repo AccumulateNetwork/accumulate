@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -46,8 +46,16 @@ func (b SignatureBuilder) Timestamp(timestamp any) SignatureBuilder {
 	return b
 }
 
-func (b SignatureBuilder) Signer(signer signing.Signer) SignatureBuilder {
-	b.signer.Signer = signer
+func (b SignatureBuilder) Signer(signer any) SignatureBuilder {
+	switch signer := signer.(type) {
+	case signing.Signer:
+		b.signer.Signer = signer
+	case Signer:
+		b.signer.Signer = signerShim{signer}
+		b.signer.Type = signer.Address().GetType()
+	default:
+		b.errorf(errors.BadRequest, "%T is not a supported signer", signer)
+	}
 	return b
 }
 

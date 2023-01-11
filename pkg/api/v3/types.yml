@@ -30,3 +30,13 @@ PeerInfo:
       type: string
     - name: Port
       type: uint
+
+ServiceAddress:
+  incomparable: true
+  fields:
+    - name: Type
+      type: ServiceType
+      marshal-as: enum
+    - name: Partition
+      type: string
+      optional: true

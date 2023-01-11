@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,7 +10,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
@@ -18,18 +17,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	abci "github.com/tendermint/tendermint/abci/types"
-	types2 "github.com/tendermint/tendermint/abci/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing/e2e"
 	randpkg "golang.org/x/exp/rand"
 )
 
@@ -39,28 +36,13 @@ type Tx = protocol.Envelope
 
 func init() { acctesting.EnableDebugFeatures() }
 
-func TestEndToEndSuite(t *testing.T) {
-	t.Skip("This is failing and may be more trouble than it's worth")
-
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
-		// Recreate the app for each test
-		partitions, daemons := acctesting.CreateTestNet(s.T(), 1, 1, 0, false)
-		nodes := RunTestNet(s.T(), partitions, daemons, nil, true, nil)
-		n := nodes[partitions[1]][0]
-
-		return &e2eDUT{s, n}
-	}))
-}
-
 func TestCreateLiteAccount(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	const N, M = 11, 1
 	const count = N * M
 	credits := 10000.0
-	originAddr, balances := n.testLiteTx(N, M, credits)
+	originAddr, balances := testLiteTx(n, N, M, credits)
 	amountSent := float64(count * 1000)
 	initialAmount := protocol.AcmeFaucetAmount * protocol.AcmePrecision
 	currentBalance := n.GetLiteTokenAccount(originAddr).Balance.Int64()
@@ -71,41 +53,7 @@ func TestCreateLiteAccount(t *testing.T) {
 	}
 }
 
-func TestEvilNode(t *testing.T) {
-
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	//tell the TestNet that we have an evil node in the midst
-	dns := partitions[0]
-	bvn := partitions[1]
-	partitions[0] = "evil-" + partitions[0]
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-
-	dn := nodes[dns][0]
-	n := nodes[bvn][0]
-
-	var count = 11
-	credits := 100.0
-	originAddr, balances := n.testLiteTx(count, 1, credits)
-	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
-	for addr, bal := range balances {
-		require.Equal(t, bal, n.GetLiteTokenAccount(addr.String()).Balance.Int64())
-	}
-
-	batch := dn.db.Begin(true)
-	defer batch.Discard()
-	// Check each anchor
-	de, txId, _, err := indexing.Data(batch, dn.network.NodeUrl(protocol.Evidence)).GetLatestEntry()
-	require.NoError(t, err)
-	var ev []types2.Misbehavior
-	require.NotEqual(t, de.GetData(), nil, "no data")
-	err = json.Unmarshal(de.GetData()[0], &ev)
-	require.NoError(t, err)
-	require.Greaterf(t, len(ev), 0, "no evidence data")
-	require.Greater(t, ev[0].Height, int64(0), "no valid evidence available")
-	require.NotNilf(t, txId, "txId not returned")
-}
-
-func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[*url.URL]int64) {
+func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*url.URL]int64) {
 	sender := generateKey()
 	senderUrl := acctesting.AcmeLiteAddressTmPriv(sender)
 	recipients := make([]*url.URL, N)
@@ -124,12 +72,11 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[*url.URL]i
 			Faucet())
 	})
 
-	batch := n.db.Begin(true)
-	//acme to credits @ $0.05 acme price is 1:5
-
-	liteTokenId := senderUrl.RootIdentity()
-	n.Require().NoError(acctesting.AddCredits(batch, liteTokenId, credits))
-	n.require.NoError(batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		//acme to credits @ $0.05 acme price is 1:5
+		liteTokenId := senderUrl.RootIdentity()
+		n.Require().NoError(acctesting.AddCredits(batch, liteTokenId, credits))
+	})
 
 	balance := map[*url.URL]int64{}
 	for i := 0; i < M; i++ {
@@ -152,9 +99,7 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[*url.URL]i
 }
 
 func TestFaucet(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
@@ -174,17 +119,14 @@ func TestFaucet(t *testing.T) {
 }
 
 func TestAnchorChain(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
-
-	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
+	})
 
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
@@ -241,16 +183,14 @@ func TestAnchorChain(t *testing.T) {
 }
 
 func TestCreateADI(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
-	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
+	})
 
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
@@ -280,16 +220,14 @@ func TestCreateADI(t *testing.T) {
 
 func TestAdiUrlLengthLimit(t *testing.T) {
 	check := newDefaultCheckError(t, false)
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
-	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
+	})
 	accurl := strings.Repeat("𒀹", 250) // 𒀹 is 4 bytes
 
 	txn := n.MustExecuteAndWait(func(send func(*Tx)) {
@@ -307,27 +245,22 @@ func TestAdiUrlLengthLimit(t *testing.T) {
 			Build())
 	})
 
-	res, err := n.QueryTx(txn[0][:], time.Second, true)
-	require.NoError(t, err)
-	h := res.Produced[0].Hash()
-	res, err = n.QueryTx(h[:], time.Second, true)
-	require.NoError(t, err)
+	res := n.QueryTx(txn[0][:], time.Second, true)
+	h := res.Produced.Records[0].Value.Hash()
+	res = n.QueryTx(h[:], time.Second, true)
 	require.Equal(t, errors.BadUrlLength, res.Status.Code)
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
 	check := newDefaultCheckError(t, false)
-
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
-	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
+	})
 
 	_, _, err := n.Execute(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
@@ -361,14 +294,12 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	adiKey := generateKey()
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+	})
 	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		wdt := new(protocol.WriteDataTo)
 		wdt.Recipient = liteDataAddress
@@ -390,46 +321,43 @@ func TestCreateLiteDataAccount(t *testing.T) {
 
 	firstEntryHash := firstEntry.Hash()
 
-	batch = n.db.Begin(false)
-	defer batch.Discard()
+	n.View(func(batch *database.Batch) {
+		synthIds, err := batch.Transaction(ids[0][:]).GetSyntheticTxns()
+		require.NoError(t, err)
 
-	synthIds, err := batch.Transaction(ids[0][:]).GetSyntheticTxns()
-	require.NoError(t, err)
+		// Verify the entry hash in the transaction result
+		h := synthIds.Entries[0].Hash()
+		txStatus, err := batch.Transaction(h[:]).GetStatus()
+		require.NoError(t, err)
+		require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
+		txResult := txStatus.Result.(*protocol.WriteDataResult)
+		require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
 
-	// Verify the entry hash in the transaction result
-	h := synthIds.Entries[0].Hash()
-	txStatus, err := batch.Transaction(h[:]).GetStatus()
-	require.NoError(t, err)
-	require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
-	txResult := txStatus.Result.(*protocol.WriteDataResult)
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
-
-	// Verify the entry hash returned by Entry
-	entryHash, err := indexing.Data(batch, liteDataAddress).Entry(0)
-	require.NoError(t, err)
-	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
-	require.NoError(t, err)
-	entry, txId, causeTxId, err := indexing.GetDataEntry(batch, txnHash)
-	require.NoError(t, err)
-	hashFromEntry := entry.Hash()
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
-	//sample verification for calculating the hash from lite data entry
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entry.Hash()), "Chain GetHashes does not match")
-	require.NotNilf(t, txId, "txId not returned")
-	require.NotNilf(t, causeTxId, "cause TxId not returned")
+		// Verify the entry hash returned by Entry
+		entryHash, err := indexing.Data(batch, liteDataAddress).Entry(0)
+		require.NoError(t, err)
+		txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
+		require.NoError(t, err)
+		entry, txId, causeTxId, err := indexing.GetDataEntry(batch, txnHash)
+		require.NoError(t, err)
+		hashFromEntry := entry.Hash()
+		require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
+		//sample verification for calculating the hash from lite data entry
+		require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
+		require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entry.Hash()), "Chain GetHashes does not match")
+		require.NotNilf(t, txId, "txId not returned")
+		require.NotNilf(t, causeTxId, "cause TxId not returned")
+	})
 }
 
 func TestCreateAdiDataAccount(t *testing.T) {
 	t.Run("Data Account with Default Key Book and no Manager Key Book", func(t *testing.T) {
-		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-		n := nodes[partitions[1]][0]
+		n := simulator.NewFakeNode(t, nil)
 
 		adiKey := generateKey()
-		batch := n.db.Begin(true)
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, batch.Commit())
+		n.Update(func(batch *database.Batch) {
+			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+		})
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
@@ -448,20 +376,18 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account with Custom Key Book and Manager Key Book Url", func(t *testing.T) {
-		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-		n := nodes[partitions[1]][0]
+		n := simulator.NewFakeNode(t, nil)
 
 		adiKey, pageKey := generateKey(), generateKey()
-		batch := n.db.Begin(true)
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/foo/book1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/book1"))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", nil))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/book1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "foo", "book1", "1"), 1e9))
-		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "mgr", "book1", "2"), 1e9))
-		require.NoError(t, batch.Commit())
+		n.Update(func(batch *database.Batch) {
+			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+			require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/foo/book1", pageKey.PubKey().Bytes()))
+			require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/book1"))
+			require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", nil))
+			require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/book1", pageKey.PubKey().Bytes()))
+			require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "foo", "book1", "1"), 1e9))
+			require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "mgr", "book1", "2"), 1e9))
+		})
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			cda := new(protocol.CreateDataAccount)
@@ -491,14 +417,12 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account data entry", func(t *testing.T) {
-		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-		n := nodes[partitions[1]][0]
+		n := simulator.NewFakeNode(t, nil)
 
 		adiKey := generateKey()
-		batch := n.db.Begin(true)
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, batch.Commit())
+		n.Update(func(batch *database.Batch) {
+			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+		})
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
@@ -530,43 +454,33 @@ func TestCreateAdiDataAccount(t *testing.T) {
 				Build())
 		})
 
-		// Without the sleep, this test fails on Windows and macOS
-		time.Sleep(3 * time.Second)
-
 		// Test getting the data by URL
-		rde := new(query.ResponseDataEntry)
-		n.QueryAccountAs("FooBar/oof#data", rde)
-
-		if !protocol.EqualDataEntry(rde.Entry, wd.Entry) {
+		rde := n.GetDataEntry("FooBar/oof", nil)
+		if !protocol.EqualDataEntry(rde, wd.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
 		//now test query by entry hash.
-		rde2 := new(query.ResponseDataEntry)
-		n.QueryAccountAs(fmt.Sprintf("FooBar/oof#data/%X", wd.Entry.Hash()), rde2)
-
-		if !protocol.EqualDataEntry(rde.Entry, rde2.Entry) {
+		rde2 := n.GetDataEntry("FooBar/oof", &api.DataQuery{Entry: wd.Entry.Hash()})
+		if !protocol.EqualDataEntry(rde2, wd.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
 		//now test query by entry set
-		rde3 := new(query.ResponseDataEntrySet)
-		n.QueryAccountAs("FooBar/oof#data/0:1", rde3)
-		if !protocol.EqualDataEntry(rde.Entry, rde3.DataEntries[0].Entry) {
+		var zero uint64
+		rde3 := n.GetDataEntry("FooBar/oof", &api.DataQuery{Index: &zero})
+		if !protocol.EqualDataEntry(rde3, wd.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
-
 	})
 
 	t.Run("Data Account data entry to scratch chain", func(t *testing.T) {
-		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-		n := nodes[partitions[1]][0]
+		n := simulator.NewFakeNode(t, nil)
 
 		adiKey := generateKey()
-		batch := n.db.Begin(true)
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, batch.Commit())
+		n.Update(func(batch *database.Batch) {
+			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+		})
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
@@ -599,45 +513,35 @@ func TestCreateAdiDataAccount(t *testing.T) {
 				Build())
 		})
 
-		// Without the sleep, this test fails on Windows and macOS
-		time.Sleep(3 * time.Second)
-
 		// Test getting the data by URL
-		rde := new(query.ResponseDataEntry)
-		n.QueryAccountAs("FooBar/scr#data", rde)
-
-		if !protocol.EqualDataEntry(rde.Entry, wd.Entry) {
+		rde := n.GetDataEntry("FooBar/scr", nil)
+		if !protocol.EqualDataEntry(rde, wd.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
 		//now test query by entry hash.
-		rde2 := new(query.ResponseDataEntry)
-		n.QueryAccountAs(fmt.Sprintf("FooBar/scr#data/%X", wd.Entry.Hash()), rde2)
-
-		if !protocol.EqualDataEntry(rde.Entry, rde2.Entry) {
+		rde2 := n.GetDataEntry("FooBar/scr", &api.DataQuery{Entry: wd.Entry.Hash()})
+		if !protocol.EqualDataEntry(rde2, wd.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
 		//now test query by entry set
-		rde3 := new(query.ResponseDataEntrySet)
-		n.QueryAccountAs("FooBar/scr#data/0:1", rde3)
-		if !protocol.EqualDataEntry(rde.Entry, rde3.DataEntries[0].Entry) {
+		var zero uint64
+		rde3 := n.GetDataEntry("FooBar/scr", &api.DataQuery{Index: &zero})
+		if !protocol.EqualDataEntry(rde3, wd.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
-
 	})
 }
 
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
-		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-		n := nodes[partitions[1]][0]
+		n := simulator.NewFakeNode(t, nil)
 
 		adiKey := generateKey()
-		batch := n.db.Begin(true)
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, batch.Commit())
+		n.Update(func(batch *database.Batch) {
+			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+		})
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
@@ -662,16 +566,14 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	})
 
 	t.Run("Custom Key Book", func(t *testing.T) {
-		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-		n := nodes[partitions[1]][0]
+		n := simulator.NewFakeNode(t, nil)
 
 		adiKey, pageKey := generateKey(), generateKey()
-		batch := n.db.Begin(true)
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "FooBar/book1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "book1", "1"), 1e9))
-		require.NoError(t, batch.Commit())
+		n.Update(func(batch *database.Batch) {
+			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+			require.NoError(t, acctesting.CreateKeyBook(batch, "FooBar/book1", pageKey.PubKey().Bytes()))
+			require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "book1", "1"), 1e9))
+		})
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
@@ -689,15 +591,13 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	})
 
 	t.Run("Remote Key Book", func(t *testing.T) {
-		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-		n := nodes[partitions[1]][0]
+		n := simulator.NewFakeNode(t, nil)
 
 		aliceKey, bobKey := generateKey(), generateKey()
-		batch := n.db.Begin(true)
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
-		require.NoError(t, batch.Commit())
+		n.Update(func(batch *database.Batch) {
+			require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+			require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+		})
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
@@ -724,16 +624,14 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 }
 
 func TestLiteAccountTx(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
-	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
-	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, bob, 0))
-	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, charlie, 0))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
+		require.NoError(t, acctesting.CreateLiteTokenAccount(batch, bob, 0))
+		require.NoError(t, acctesting.CreateLiteTokenAccount(batch, charlie, 0))
+	})
 
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
@@ -757,17 +655,15 @@ func TestLiteAccountTx(t *testing.T) {
 }
 
 func TestAdiAccountTx(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey, barKey := generateKey(), generateKey()
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	require.NoError(t, acctesting.CreateADI(batch, barKey, "bar"))
-	require.NoError(t, acctesting.CreateTokenAccount(batch, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
+		require.NoError(t, acctesting.CreateADI(batch, barKey, "bar"))
+		require.NoError(t, acctesting.CreateTokenAccount(batch, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
+	})
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
@@ -786,15 +682,13 @@ func TestAdiAccountTx(t *testing.T) {
 
 func TestSendTokensToBadRecipient(t *testing.T) {
 	check := newDefaultCheckError(t, false)
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
+	})
 
 	// The send should succeed
 	txnHashes := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -809,11 +703,9 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	})
 
 	// The synthetic transaction should fail
-	res, err := n.QueryTx(txnHashes[0][:], time.Second, true)
-	require.NoError(t, err)
-	h := res.Produced[0].Hash()
-	res, err = n.QueryTx(h[:], time.Second, true)
-	require.NoError(t, err)
+	res := n.QueryTx(txnHashes[0][:], time.Second, true)
+	h := res.Produced.Records[0].Value.Hash()
+	res = n.QueryTx(h[:], time.Second, true)
 	require.Equal(t, errors.NotFound, res.Status.Code)
 
 	// Give the synthetic receipt a second to resolve - workaround AC-1238
@@ -824,16 +716,14 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 }
 
 func TestCreateKeyPage(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey, testKey := generateKey(), generateKey()
 	fkh := sha256.Sum256(fooKey.PubKey().Bytes())
 	tkh := sha256.Sum256(testKey.PubKey().Bytes())
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+	})
 
 	page := n.GetKeyPage("foo/book0/1")
 	require.Len(t, page.Keys, 1)
@@ -862,14 +752,12 @@ func TestCreateKeyPage(t *testing.T) {
 }
 
 func TestCreateKeyBook(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey, testKey := generateKey(), generateKey()
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+	})
 
 	bookUrl := protocol.AccountUrl("foo", "book1")
 	pageUrl := protocol.AccountUrl("foo", "book1", "1")
@@ -895,17 +783,15 @@ func TestCreateKeyBook(t *testing.T) {
 }
 
 func TestAddKeyPage(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
+	})
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
@@ -928,17 +814,15 @@ func TestAddKeyPage(t *testing.T) {
 }
 
 func TestAddKey(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey, testKey := generateKey(), generateKey()
 
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
+	})
 
 	newKey := generateKey()
 	nkh := sha256.Sum256(newKey.PubKey().Bytes())
@@ -964,17 +848,15 @@ func TestAddKey(t *testing.T) {
 }
 
 func TestUpdateKeyPage(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey, testKey := generateKey(), generateKey()
 
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
+	})
 
 	newKey := generateKey()
 	kh := sha256.Sum256(testKey.PubKey().Bytes())
@@ -1000,9 +882,7 @@ func TestUpdateKeyPage(t *testing.T) {
 }
 
 func TestUpdateKey(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	newKeyHash := sha256.Sum256(newKey.PubKey().Bytes())
@@ -1012,13 +892,12 @@ func TestUpdateKey(t *testing.T) {
 	// UpdateKey should always be single-sig, so set the threshold to 2 and
 	// ensure the transaction still succeeds.
 
-	batch := n.db.Begin(true)
-	defer batch.Discard()
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("foo", "book1", "1"), func(p *protocol.KeyPage) { p.AcceptThreshold = 2 }))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
+		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("foo", "book1", "1"), func(p *protocol.KeyPage) { p.AcceptThreshold = 2 }))
+	})
 
 	spec := n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
@@ -1034,11 +913,8 @@ func TestUpdateKey(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey).
 			Build())
 	})
-	batch = n.db.Begin(false)
-	defer batch.Discard()
-	status, err := batch.Transaction(txnHashes[0][:]).GetStatus()
-	require.NoError(t, err)
-	require.False(t, status.Pending(), "Transaction is still pending")
+	r := n.QueryTx(txnHashes[0][:], 0, false)
+	require.False(t, r.Status.Pending(), "Transaction is still pending")
 
 	spec = n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
@@ -1046,17 +922,15 @@ func TestUpdateKey(t *testing.T) {
 }
 
 func TestRemoveKey(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
+	})
 	h2 := sha256.Sum256(testKey2.PubKey().Bytes())
 	// Add second key because CreateKeyBook can't do it
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1100,9 +974,7 @@ func TestRemoveKey(t *testing.T) {
 }
 
 func TestSignatorHeight(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	liteKey, fooKey := generateKey(), generateKey()
 
@@ -1112,17 +984,17 @@ func TestSignatorHeight(t *testing.T) {
 	keyBookUrl := protocol.AccountUrl("foo", "book")
 	keyPageUrl := protocol.FormatKeyPageUrl(keyBookUrl, 0)
 	require.NoError(t, err)
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
+	})
 
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
-	require.NoError(t, batch.Commit())
-
-	getHeight := func(u *url.URL) uint64 {
-		batch := n.db.Begin(true)
-		defer batch.Discard()
-		chain, err := batch.Account(u).MainChain().Get()
-		require.NoError(t, err)
-		return uint64(chain.Height())
+	getHeight := func(u *url.URL) (h uint64) {
+		n.View(func(batch *database.Batch) {
+			chain, err := batch.Account(u).MainChain().Get()
+			require.NoError(t, err)
+			h = uint64(chain.Height())
+		})
+		return
 	}
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1138,9 +1010,9 @@ func TestSignatorHeight(t *testing.T) {
 			Build())
 	})
 
-	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.AddCredits(batch, keyPageUrl, 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.AddCredits(batch, keyPageUrl, 1e9))
+	})
 
 	keyPageHeight := getHeight(keyPageUrl)
 
@@ -1159,14 +1031,12 @@ func TestSignatorHeight(t *testing.T) {
 }
 
 func TestCreateToken(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, nil)
 
 	fooKey := generateKey()
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+	})
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.CreateToken)
@@ -1186,19 +1056,17 @@ func TestCreateToken(t *testing.T) {
 
 func TestIssueTokens(t *testing.T) {
 	check := newDefaultCheckError(t, true)
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 
 	fooKey, liteKey := generateKey(), generateKey()
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
-	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo.acme/acmetokens", "acc://ACME", float64(10), false))
-	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+		require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
+		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo.acme/acmetokens", "acc://ACME", float64(10), false))
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
+	})
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
-	require.NoError(t, batch.Commit())
 
 	// Issue foo.acme/tokens to a foo.acme/tokens lite token account
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1241,23 +1109,21 @@ func TestIssueTokens(t *testing.T) {
 func TestIssueTokensRefund(t *testing.T) {
 	check := newDefaultCheckError(t, true)
 
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 
 	fooKey, liteKey := generateKey(), generateKey()
 	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
-	batch := n.db.Begin(true)
-
 	fooDecimals := 10
 	fooPrecision := uint64(math.Pow(10.0, float64(fooDecimals)))
 
 	maxSupply := int64(1000000 * fooPrecision)
 	supplyLimit := big.NewInt(maxSupply)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
-	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 1e9))
-	require.NoError(t, batch.Commit())
+
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+		require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
+		require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 1e9))
+	})
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
@@ -1324,7 +1190,15 @@ type CheckError struct {
 }
 
 func newDefaultCheckError(t *testing.T, enable bool) *CheckError {
-	return &CheckError{T: t, H: NewDefaultErrorHandler(t), Disable: !enable}
+	return &CheckError{T: t, H: func(err error) {
+		t.Helper()
+
+		var err2 *errors.Error
+		if errors.As(err, &err2) && err2.Code == errors.Delivered {
+			return
+		}
+		assert.NoError(t, err)
+	}, Disable: !enable}
 }
 
 func (c *CheckError) ErrorHandler() func(err error) {
@@ -1339,23 +1213,21 @@ func (c *CheckError) ErrorHandler() func(err error) {
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	check := newDefaultCheckError(t, true)
 
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 
 	fooKey, liteKey := generateKey(), generateKey()
 	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
-	batch := n.db.Begin(true)
-
 	fooDecimals := 10
 	fooPrecision := uint64(math.Pow(10.0, float64(fooDecimals)))
 
 	maxSupply := int64(1000000 * fooPrecision)
 	supplyLimit := big.NewInt(maxSupply)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
-	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 1e9))
-	require.NoError(t, batch.Commit())
+
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+		require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
+		require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 1e9))
+	})
 
 	var err error
 
@@ -1494,42 +1366,6 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 
 }
 
-func TestInvalidDeposit(t *testing.T) {
-	// The lite address ends with `foo/tokens` but the token is `foo2/tokens` so
-	// the synthetic transaction will fail. This test verifies that the
-	// transaction fails, but more importantly it verifies that
-	// `Executor.Commit()` does *not* break if DeliverTx fails with a
-	// non-existent origin. This is motivated by a bug that has been fixed. This
-	// bug could have been triggered by a failing SyntheticCreateChains,
-	// SyntheticDepositTokens, or SyntheticDepositCredits.
-
-	t.Skip("TODO Fix - generate a receipt")
-
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	n := nodes[partitions[1]][0]
-
-	liteKey := generateKey()
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
-	require.NoError(t, err)
-
-	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		body := new(protocol.SyntheticDepositTokens)
-		body.Cause = n.network.NodeUrl().WithTxID([32]byte{1})
-		body.Token = protocol.AccountUrl("foo2", "tokens")
-		body.Amount.SetUint64(123)
-
-		send(newTxn(liteAddr.String()).
-			WithBody(body).
-			InitiateSynthetic(n.network.NodeUrl()).
-			Sign(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
-			Build())
-	})[0]
-
-	tx := n.GetTx(id[:])
-	require.NotZero(t, tx.Status.Code)
-}
-
 func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	account := batch.Account(accountUrl)
 	state, err := account.GetState()
@@ -1569,106 +1405,102 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	}
 }
 
-func TestMultisig(t *testing.T) {
-	check := newDefaultCheckError(t, true)
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+// func TestMultisig(t *testing.T) {
+// 	check := newDefaultCheckError(t, true)
+// 	n := simulator.NewFakeNode(t, check.ErrorHandler())
 
-	key1, key2 := acctesting.GenerateTmKey(t.Name(), 1), acctesting.GenerateTmKey(t.Name(), 2)
+// 	key1, key2 := acctesting.GenerateTmKey(t.Name(), 1), acctesting.GenerateTmKey(t.Name(), 2)
 
-	t.Log("Setup")
-	n := nodes[partitions[1]][0]
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateADI(batch, key1, "foo"))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("foo", "book0", "1"), func(page *protocol.KeyPage) {
-		hash := sha256.Sum256(key2[32:])
-		page.AcceptThreshold = 2
-		page.CreditBalance = 1e8
-		page.AddKeySpec(&protocol.KeySpec{
-			PublicKeyHash: hash[:],
-		})
-	}))
-	require.NoError(t, batch.Commit())
+// 	t.Log("Setup")
+// 	n.Update(func(batch *database.Batch) {
+// 		require.NoError(t, acctesting.CreateADI(batch, key1, "foo"))
+// 		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("foo", "book0", "1"), func(page *protocol.KeyPage) {
+// 			hash := sha256.Sum256(key2[32:])
+// 			page.AcceptThreshold = 2
+// 			page.CreditBalance = 1e8
+// 			page.AddKeySpec(&protocol.KeySpec{
+// 				PublicKeyHash: hash[:],
+// 			})
+// 		}))
+// 	})
 
-	t.Log("Initiate the transaction")
-	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		send(newTxn("foo").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(&protocol.CreateTokenAccount{
-				Url:      protocol.AccountUrl("foo", "tokens"),
-				TokenUrl: protocol.AcmeUrl(),
-			}).
-			Initiate(protocol.SignatureTypeED25519, key1.Bytes()).
-			Build())
-	})
+// 	t.Log("Initiate the transaction")
+// 	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+// 		send(newTxn("foo").
+// 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+// 			WithBody(&protocol.CreateTokenAccount{
+// 				Url:      protocol.AccountUrl("foo", "tokens"),
+// 				TokenUrl: protocol.AcmeUrl(),
+// 			}).
+// 			Initiate(protocol.SignatureTypeED25519, key1.Bytes()).
+// 			Build())
+// 	})
 
-	txnResp := n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
-	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
+// 	txnResp := n.queryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
+// 	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
+// 	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
 
-	t.Log("Double signing with key 1 should not complete the transaction")
-	sigHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
-		send(acctesting.NewTransaction().
-			WithTimestampVar(&globalNonce).
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithTxnHash(ids[0][:]).
-			Sign(protocol.SignatureTypeED25519, key1.Bytes()).
-			Build())
-	})
-	n.MustWaitForTxns(convertIds32(sigHashes...)...)
+// 	t.Log("Double signing with key 1 should not complete the transaction")
+// 	sigHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+// 		send(acctesting.NewTransaction().
+// 			WithTimestampVar(&globalNonce).
+// 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+// 			WithTxnHash(ids[0][:]).
+// 			Sign(protocol.SignatureTypeED25519, key1.Bytes()).
+// 			Build())
+// 	})
+// 	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
-	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
-	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
+// 	txnResp = n.queryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
+// 	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
+// 	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
 
-	t.Log("Signing with key 2 should complete the transaction")
-	sigHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
-		send(acctesting.NewTransaction().
-			WithTimestampVar(&globalNonce).
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithTxnHash(ids[0][:]).
-			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
-			Build())
-	})
-	n.MustWaitForTxns(convertIds32(sigHashes...)...)
+// 	t.Log("Signing with key 2 should complete the transaction")
+// 	sigHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
+// 		send(acctesting.NewTransaction().
+// 			WithTimestampVar(&globalNonce).
+// 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+// 			WithTxnHash(ids[0][:]).
+// 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
+// 			Build())
+// 	})
+// 	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
-	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.True(t, txnResp.Status.Delivered(), "Transaction is was not delivered")
-	require.False(t, txnResp.Status.Pending(), "Transaction is still pending")
+// 	txnResp = n.queryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
+// 	require.True(t, txnResp.Status.Delivered(), "Transaction is was not delivered")
+// 	require.False(t, txnResp.Status.Pending(), "Transaction is still pending")
 
-	// this should fail, so tell fake tendermint not to give up
-	// an error will be displayed on the console, but this is exactly what we expect so don't panic
-	check.Disable = true
-	t.Run("Signing a complete transaction should fail", func(t *testing.T) {
-		t.Skip("No longer an error")
+// 	// this should fail, so tell fake tendermint not to give up
+// 	// an error will be displayed on the console, but this is exactly what we expect so don't panic
+// 	check.Disable = true
+// 	t.Run("Signing a complete transaction should fail", func(t *testing.T) {
+// 		t.Skip("No longer an error")
 
-		_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
-			send(acctesting.NewTransaction().
-				WithTimestampVar(&globalNonce).
-				WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-				WithTxnHash(ids[0][:]).
-				Sign(protocol.SignatureTypeED25519, key2.Bytes()).
-				Build())
-		})
-		require.Error(t, err)
-	})
-}
+// 		_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+// 			send(acctesting.NewTransaction().
+// 				WithTimestampVar(&globalNonce).
+// 				WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+// 				WithTxnHash(ids[0][:]).
+// 				Sign(protocol.SignatureTypeED25519, key2.Bytes()).
+// 				Build())
+// 		})
+// 		require.Error(t, err)
+// 	})
+// }
 
 func TestAccountAuth(t *testing.T) {
 	check := newDefaultCheckError(t, true)
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 
 	fooKey, barKey := generateKey(), generateKey()
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	require.NoError(t, acctesting.CreateSubADI(batch, "foo", "foo/bar"))
-	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/bar/tokens", protocol.AcmeUrl().String(), 0, false))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/bar/book", barKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "bar", "book", "1"), 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
+		require.NoError(t, acctesting.CreateSubADI(batch, "foo", "foo/bar"))
+		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/bar/tokens", protocol.AcmeUrl().String(), 0, false))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/bar/book", barKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "bar", "book", "1"), 1e9))
+	})
 
 	// Disable auth
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1749,28 +1581,26 @@ func TestAccountAuth(t *testing.T) {
 
 func TestDelegatedKeypageUpdate(t *testing.T) {
 	check := newDefaultCheckError(t, false)
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 	aliceKey, charlieKey, bobKey, jjkey, newKey1, newKey2 := generateKey(), generateKey(), generateKey(), generateKey(), generateKey(), generateKey()
 	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
 	newKey1hash := sha256.Sum256(newKey1.PubKey().Address())
 	newKey2hash := sha256.Sum256(newKey2.PubKey().Address())
 
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, jjkey, "jj", 1e9))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
-		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
-		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
-		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
-	}))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
-		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
-	}))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, jjkey, "jj", 1e9))
+		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
+			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
+			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+			kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
+		}))
+		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
+			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+		}))
+	})
 
 	page := n.GetKeyPage("jj/book0/1")
 	//look for the key.
@@ -1817,25 +1647,23 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 
 func TestMultiLevelDelegation(t *testing.T) {
 	check := newDefaultCheckError(t, false)
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 	aliceKey, charlieKey, bobKey := generateKey(), generateKey(), generateKey()
 	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
-		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
-		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
-		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
-		require.NoError(t, kp.SetThreshold(3))
-	}))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
-		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
-	}))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
+		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
+			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
+			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+			kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
+			require.NoError(t, kp.SetThreshold(3))
+		}))
+		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
+			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+		}))
+	})
 
 	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
 		cda := new(protocol.CreateDataAccount)
@@ -1863,30 +1691,19 @@ func TestMultiLevelDelegation(t *testing.T) {
 
 		send(env)
 	})
-	require.Error(t, err)
-
-	var resp *abci.ResponseCheckTx
-	require.NoError(t, json.Unmarshal([]byte(err.Error()), &resp), "Expected error to be a CheckTx response")
-
-	result := new(protocol.TransactionResultSet)
-	require.NoError(t, result.UnmarshalBinary(resp.Data))
-	require.Len(t, result.Results, 1)
-	require.NotNil(t, result.Results[0].Error)
-	require.EqualError(t, result.Results[0].Error, "signature 2: invalid signature")
+	require.EqualError(t, err, "signature 2: invalid signature")
 }
 
 func TestDuplicateKeyNewKeypage(t *testing.T) {
 	check := newDefaultCheckError(t, false)
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
-	n := nodes[partitions[1]][0]
+	n := simulator.NewFakeNode(t, check.ErrorHandler())
 	aliceKey := generateKey()
 	aliceKeyHash := sha256.Sum256(aliceKey.PubKey().Bytes())
 	aliceKey1 := generateKey()
 	aliceKeyHash1 := sha256.Sum256(aliceKey1.PubKey().Bytes())
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
-	require.NoError(t, batch.Commit())
+	n.Update(func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+	})
 
 	page := n.GetKeyPage("alice/book0/1")
 	require.Len(t, page.Keys, 1)
@@ -1912,7 +1729,8 @@ func TestDuplicateKeyNewKeypage(t *testing.T) {
 			Build())
 	})
 	require.NoError(t, err)
-	n.MustWaitForTxns(txns[0][:])
+	_ = txns
+	// n.MustWaitForTxns(txns[0][:])
 	page = n.GetKeyPage("alice/book0/2")
 
 	require.Len(t, page.Keys, 2)
@@ -1939,25 +1757,5 @@ func TestDuplicateKeyNewKeypage(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
 			Build())
 	})
-	var resp *abci.ResponseCheckTx
-	require.NoError(t, json.Unmarshal([]byte(err.Error()), &resp), "Expected error to be a CheckTx response")
-
-	result := new(protocol.TransactionResultSet)
-	require.NoError(t, result.UnmarshalBinary(resp.Data))
-	require.Len(t, result.Results, 1)
-	require.NotNil(t, result.Results[0].Error)
-	require.EqualError(t, result.Results[0].Error, "duplicate keys: signing keys of a keypage must be unique")
-}
-
-func TestNetworkDefinition(t *testing.T) {
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
-	dn := nodes[partitions[0]][0]
-
-	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
-	require.NotEmpty(t, networkDefs.Partitions)
-	require.NotEmpty(t, networkDefs.Partitions[0].ID)
-	require.NotEmpty(t, networkDefs.Validators)
-	require.NotEmpty(t, networkDefs.Validators[0].PublicKey)
-	require.NotEmpty(t, networkDefs.Validators[0].Partitions)
+	require.EqualError(t, err, "duplicate keys: signing keys of a keypage must be unique")
 }

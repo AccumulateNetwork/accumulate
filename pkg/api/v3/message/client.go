@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -42,6 +42,7 @@ var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
 var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
+var _ api.Faucet = (*Client)(nil)
 
 // NodeStatus implements [api.NodeService.NodeStatus].
 func (c *Client) NodeStatus(ctx context.Context, opts NodeStatusOptions) (*api.NodeStatus, error) {
@@ -89,6 +90,14 @@ func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts
 	return typedRequest[*ValidateResponse, []*api.Submission](c, ctx, req)
 }
 
+// Faucet implements [api.Faucet.Faucet].
+func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	// Wrap the request as a FaucetRequest and expect a FaucetResponse,
+	// which is unpacked into Submissions
+	req := &FaucetRequest{Account: account, FaucetOptions: opts}
+	return typedRequest[*FaucetResponse, *api.Submission](c, ctx, req)
+}
+
 // typedRequest executes a round-trip call, sending the request and expecting a
 // response of the given type.
 func typedRequest[M response[T], T any](c *Client, ctx context.Context, req Message) (T, error) {
@@ -128,6 +137,7 @@ func (r *MetricsResponse) rval() *api.Metrics                   { return r.Value
 func (r *RecordResponse) rval() api.Record                      { return r.Value } //nolint:unused
 func (r *SubmitResponse) rval() []*api.Submission               { return r.Value } //nolint:unused
 func (r *ValidateResponse) rval() []*api.Submission             { return r.Value } //nolint:unused
+func (r *FaucetResponse) rval() *api.Submission                 { return r.Value } //nolint:unused
 func (r *EventMessage) rval() []api.Event                       { return r.Value } //nolint:unused
 func (r *PrivateSequenceResponse) rval() *api.TransactionRecord { return r.Value } //nolint:unused
 
@@ -235,10 +245,15 @@ func (c *Client) roundTrip(ctx context.Context, req []Message, callback func(res
 
 	// Process each request
 	for _, req := range req {
+		addr := AddressOf(req)
+
 		// Route it
-		addr, err := c.Router.Route(req)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
+		var err error
+		if addr == nil {
+			addr, err = c.Router.Route(req)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
 		}
 
 		// Dial the address
@@ -322,10 +337,11 @@ func (c *Client) dial(ctx context.Context, addr multiaddr.Multiaddr, streams map
 	}
 }
 
-// getParts queries the network for the list of partitions.
-func (c *Client) getParts(ctx context.Context) ([]multiaddr.Multiaddr, error) {
+// GetNetInfo queries the directory network for the network status. GetNetInfo
+// is intended to be used to initialize the message router.
+func (c *Client) GetNetInfo(ctx context.Context) (*api.NetworkStatus, error) {
 	// Route the message to /acc/directory
-	dirMa, err := multiaddr.NewComponent("acc", protocol.Directory)
+	dirMa, err := multiaddr.NewComponent(api.N_ACC, (&api.ServiceAddress{Type: api.ServiceTypeNetwork, Partition: protocol.Directory}).String())
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
 	}
@@ -349,11 +365,21 @@ func (c *Client) getParts(ctx context.Context) ([]multiaddr.Multiaddr, error) {
 		return nil, errors.UnknownError.WithFormat("get network status: %w", err)
 	}
 
+	return res.Value, nil
+}
+
+// getParts queries the network for the list of partitions.
+func (c *Client) getParts(ctx context.Context) ([]multiaddr.Multiaddr, error) {
+	ns, err := c.GetNetInfo(ctx)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	// Pre-calculate a list of multiaddresses for each partition of the form
 	// /acc/{partition}
-	ma := make([]multiaddr.Multiaddr, len(res.Value.Network.Partitions))
-	for i, part := range res.Value.Network.Partitions {
-		ma[i], err = multiaddr.NewComponent("acc", part.ID)
+	ma := make([]multiaddr.Multiaddr, len(ns.Network.Partitions))
+	for i, part := range ns.Network.Partitions {
+		ma[i], err = multiaddr.NewComponent(api.N_ACC, part.ID)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
 		}

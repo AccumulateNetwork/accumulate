@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -52,6 +52,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/node/connections/status"
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
+	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
@@ -131,7 +132,7 @@ func (d *Daemon) Key() crypto.PrivKey {
 func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
 func (d *Daemon) Jrpc_TESTONLY() *v2.JrpcMethods  { return d.apiv2 }
-func (d *Daemon) API() *nodeapi.Handler           { return d.api }
+func (d *Daemon) P2P_TESTONLY() *p2p.Node         { return d.p2pnode }
 
 func (d *Daemon) Start() (err error) {
 	if d.done != nil {
@@ -331,22 +332,6 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
 
-	d.p2pnode, err = p2p.New(p2p.Options{
-		Logger:         d.Logger.With("module", "acc-rpc"),
-		Listen:         d.Config.Accumulate.P2P.Listen,
-		BootstrapPeers: app.Accumulate.P2P.BootstrapPeers,
-		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
-		Partitions: []p2p.PartitionOptions{
-			{
-				Moniker: d.Config.Moniker,
-				ID:      d.Config.Accumulate.PartitionId,
-			},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("initialize P2P: %w", err)
-	}
-
 	nodeSvc := tm.NewNodeService(tm.NodeServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
@@ -386,7 +371,7 @@ func (d *Daemon) Start() (err error) {
 		Partition: d.Config.Accumulate.PartitionId,
 		EventBus:  d.eventBus,
 	})
-	p2ph, err := message.NewHandler(
+	messageHandler, err := message.NewHandler(
 		d.Logger.With("module", "acc-rpc"),
 		&message.NodeService{NodeService: nodeSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
@@ -399,14 +384,37 @@ func (d *Daemon) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("initialize P2P handler: %w", err)
 	}
-	d.p2pnode.SetRpcHandler(d.Config.Accumulate.PartitionId, p2ph.Handle)
+
+	d.p2pnode, err = p2p.New(p2p.Options{
+		Logger:         d.Logger.With("module", "acc-rpc"),
+		Listen:         d.Config.Accumulate.P2P.Listen,
+		BootstrapPeers: app.Accumulate.P2P.BootstrapPeers,
+		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+	})
+	if err != nil {
+		return fmt.Errorf("initialize P2P: %w", err)
+	}
+	services := []interface{ Type() v3.ServiceType }{
+		nodeSvc,
+		metricsSvc,
+		netSvc,
+		querySvc,
+		submitSvc,
+		validateSvc,
+		eventSvc,
+	}
+	for _, s := range services {
+		d.p2pnode.RegisterService(&v3.ServiceAddress{
+			Type:      s.Type(),
+			Partition: d.Config.Accumulate.PartitionId,
+		}, messageHandler.Handle)
+	}
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
-		Logger:    d.Logger.With("module", "acc-rpc"),
-		Node:      d.p2pnode,
-		Partition: d.Config.Accumulate.PartitionId,
-		Router:    router,
-		V2:        d.apiv2,
+		Logger: d.Logger.With("module", "acc-rpc"),
+		Node:   d.p2pnode,
+		Router: router,
+		V2:     d.apiv2,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize API: %w", err)

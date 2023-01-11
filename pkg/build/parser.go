@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -261,6 +261,8 @@ func bigfloat(v float64, precision uint64) *big.Int {
 
 func (p *parser) parseTimestamp(v any) signing.Timestamp {
 	switch v := v.(type) {
+	case signing.Timestamp:
+		return v
 	case time.Time:
 		return signing.TimestampFromValue(v.UTC().UnixMilli())
 	case *uint64:
