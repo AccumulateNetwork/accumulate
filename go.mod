@@ -47,6 +47,7 @@ require (
 	github.com/chzyer/readline v1.5.1
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
+	github.com/gobeam/stringy v0.0.5
 	github.com/libp2p/go-libp2p v0.24.0
 	github.com/libp2p/go-libp2p-pubsub v0.8.2
 	github.com/mattn/go-shellwords v1.0.12
