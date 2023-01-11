@@ -292,8 +292,7 @@ func (d *Daemon) Start() (err error) {
 		jsonrpc2.DebugMethodFunc = true
 	}
 
-	// Create the JSON-RPC handler
-	d.jrpc, err = api.NewJrpc(api.Options{
+	apiOpts := api.Options{
 		Logger:            d.Logger,
 		Describe:          &d.Config.Accumulate.Describe,
 		Router:            router,
@@ -302,7 +301,18 @@ func (d *Daemon) Start() (err error) {
 		Database:          d.db,
 		ConnectionManager: d.connectionManager,
 		Key:               d.Key().Bytes(),
-	})
+	}
+
+	if d.Config.Accumulate.Website.ExplorerProxy != "" {
+		u, err := url.Parse(d.Config.Accumulate.Website.ExplorerProxy)
+		if err != nil {
+			return fmt.Errorf("invalid explorer proxy URL: %w", err)
+		}
+		apiOpts.ExplorerProxy = u
+	}
+
+	// Create the JSON-RPC handler
+	d.jrpc, err = api.NewJrpc(apiOpts)
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
 	}

@@ -149,6 +149,9 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 				if flagInit.NoWebsite {
 					config.Accumulate.Website.Enabled = false
 				}
+				if flagInit.ExplorerProxy != "" {
+					config.Accumulate.Website.ExplorerProxy = flagInit.ExplorerProxy
+				}
 
 				if len(flagInit.Etcd) > 0 {
 					config.Accumulate.Storage.Type = cfg.EtcdStorage

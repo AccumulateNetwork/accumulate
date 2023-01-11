@@ -245,6 +245,7 @@ type API struct {
 type Website struct {
 	Enabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
 	ListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
+	ExplorerProxy string `toml:"explorer-proxy" mapstructure:"explorer-proxy"`
 }
 
 func MakeAbsolute(root, path string) string {

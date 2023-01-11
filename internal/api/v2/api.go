@@ -7,6 +7,7 @@
 package api
 
 import (
+	stdurl "net/url"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -31,6 +32,7 @@ type Options struct {
 	Database          database.Beginner
 	ConnectionManager connections.ConnectionManager
 	Key               []byte
+	ExplorerProxy     *stdurl.URL
 }
 
 func (o *Options) loadGlobals() (*core.GlobalValues, error) {

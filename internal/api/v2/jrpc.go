@@ -13,6 +13,7 @@ import (
 	stdlog "log"
 	"mime"
 	"net/http"
+	"net/http/httputil"
 	"os"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -83,6 +84,12 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux.Handle("/version", m.jrpc2http(m.Version))
 	mux.Handle("/describe", m.jrpc2http(m.Describe))
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
+
+	if m.ExplorerProxy == nil {
+		return mux
+	}
+
+	mux.Handle("/", httputil.NewSingleHostReverseProxy(m.ExplorerProxy))
 	return mux
 }
 

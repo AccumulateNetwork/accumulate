@@ -66,6 +66,7 @@ var flagInit struct {
 	EnableTimingLogs bool
 	FactomAddresses  string
 	Snapshots        []string
+	ExplorerProxy    string
 }
 
 var flagInitNode struct {
@@ -126,6 +127,7 @@ func initInitFlags() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	cmdInit.PersistentFlags().StringVar(&flagInit.FactomAddresses, "factom-addresses", "", "A text file containing Factoid addresses to import")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Snapshots, "snapshot", nil, "A snapshot of accounts to import")
+	cmdInit.PersistentFlags().StringVar(&flagInit.ExplorerProxy, "explorer-proxy", "", "Add reverse proxy for the given explorer URL (e.g. http://localhost:3000) to the Accumulate API")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.ResetFlags()
