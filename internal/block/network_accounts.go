@@ -77,7 +77,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		case protocol.Votes,
 			protocol.Evidence:
 			// Prevent direct writes
-			return errors.Format(errors.StatusBadRequest, "%v cannot be updated directly", principal)
+			return errors.Format(errors.StatusBadRequest, "%v cannot be updated directly", principal.GetUrl())
 
 		default:
 			return nil
@@ -88,7 +88,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 		// Force WriteToState for variable accounts
 		if !body.WriteToState {
-			return errors.Format(errors.StatusBadRequest, "updates to %v must write to state", principal)
+			return errors.Format(errors.StatusBadRequest, "updates to %v must write to state", principal.GetUrl())
 		}
 	}
 
