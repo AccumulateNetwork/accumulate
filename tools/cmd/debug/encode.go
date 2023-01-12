@@ -8,12 +8,12 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -118,11 +118,18 @@ func sign(_ *cobra.Command, args []string) {
 	sig, err := protocol.UnmarshalSignatureJSON([]byte(args[0]))
 	check(err)
 
-	key, err := hex.DecodeString(args[1])
+	addr, err := address.Parse(args[1])
 	check(err)
 
 	signer := new(signing.Builder)
-	signer.SetPrivateKey(key)
+	if pk, ok := addr.GetPrivateKey(); ok {
+		signer.SetPrivateKey(pk)
+	} else if unknown, ok := addr.(*address.Unknown); ok {
+		signer.SetPrivateKey(unknown.Value)
+	} else {
+		fatalf("%v is not a key", addr)
+	}
+
 	_, err = signer.Import(sig)
 	check(err)
 
