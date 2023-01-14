@@ -98,8 +98,13 @@ func (m *Executor) EndBlock(block *Block) error {
 
 		// For each modified account
 		for _, account := range block.Batch.UpdatedAccounts() {
+			chains, err := account.UpdatedChains()
+			if err != nil {
+				return errors.Format(errors.StatusUnknownError, "get updated chains of %v: %w", account.Url(), err)
+			}
+
 			// For each modified chain
-			for _, e := range account.UpdatedChains() {
+			for _, e := range chains {
 				// Anchoring the synthetic transaction ledger causes sadness and
 				// despair (it breaks things but I don't know why)
 				_, ok := protocol.ParsePartitionUrl(e.Account)

@@ -11,8 +11,6 @@
     type: int
   - name: markMask
     type: int
-  - name: initialHeight
-    type: int
   attributes:
   - name: Head
     type: state
