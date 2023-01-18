@@ -181,9 +181,6 @@ SignatureSet:
     - name: Signer
       type: url
       pointer: true
-    - name: Authority
-      type: url
-      pointer: true
     - name: TransactionHash
       type: hash
       optional: true
@@ -191,6 +188,9 @@ SignatureSet:
       type: Signature
       marshal-as: union
       repeatable: true
+    - name: Authority
+      type: url
+      pointer: true
 
 RemoteSignature:
   union: { type: signature }
