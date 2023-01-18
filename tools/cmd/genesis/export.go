@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var cmdExport = &cobra.Command{
@@ -37,6 +38,7 @@ var flagExport = struct {
 }{}
 
 func init() {
+	testing.EnableDebugFeatures()
 	cmd.AddCommand(cmdExport)
 	cmdExport.Flags().StringVar(&flagExport.FactomLDAs, "factom-ldas", "", "A snapshot containing the transaction history of Factom LDAs, for repairing the database")
 	cmdExport.Flags().StringVar(&flagExport.NetworkName, "network", "", "Change the name of the network")
