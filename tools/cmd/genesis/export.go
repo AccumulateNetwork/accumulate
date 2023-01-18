@@ -33,14 +33,14 @@ var cmdExport = &cobra.Command{
 var flagExport = struct {
 	FactomLDAs  string
 	NetworkName string
-	Validators  []string
+	Validators  string
 }{}
 
 func init() {
 	cmd.AddCommand(cmdExport)
 	cmdExport.Flags().StringVar(&flagExport.FactomLDAs, "factom-ldas", "", "A snapshot containing the transaction history of Factom LDAs, for repairing the database")
 	cmdExport.Flags().StringVar(&flagExport.NetworkName, "network", "", "Change the name of the network")
-	cmdExport.Flags().StringSliceVar(&flagExport.Validators, "validators", nil, "Overwrite the network definition's validator set (JSON)")
+	cmdExport.Flags().StringVar(&flagExport.Validators, "validators", "", "Overwrite the network definition's validator set (JSON)")
 }
 
 func export(_ *cobra.Command, args []string) {
@@ -91,11 +91,11 @@ func export(_ *cobra.Command, args []string) {
 	}
 
 	// Overwrite the validator set
-	if flagExport.Validators != nil {
+	if flagExport.Validators != "" {
 		globals.Network.Validators = nil
-		for _, str := range flagExport.Validators {
-			val := new(protocol.ValidatorInfo)
-			check(json.Unmarshal([]byte(str), val))
+		var val []*protocol.ValidatorInfo
+		check(json.Unmarshal([]byte(flagExport.Validators), &val))
+		for _, val := range val {
 			for _, part := range val.Partitions {
 				globals.Network.AddValidator(val.PublicKey, part.ID, part.Active)
 			}
