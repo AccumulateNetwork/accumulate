@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -185,13 +185,31 @@ func (e *Error) Format(f fmt.State, verb rune) {
 	}
 }
 
+// Print prints an error message plus its call stack and causal chain. Compound
+// errors are usually formatted as '<description>: <cause>'. Print will print
+// this out as:
+//
+//	<description>:
+//	<call stack>
+//
+//	<cause>
+//	<call stack>
 func (e *Error) Print() string {
+	// If the error has no call stack just return the message
 	if e.CallStack == nil {
 		return e.Error()
 	}
+
 	var str []string
 	for e != nil {
-		str = append(str, e.Message+"\n"+e.printCallstack())
+		// Remove the suffix if the error is compound, as per the method
+		// description
+		msg := e.Message
+		if e.Cause != nil {
+			msg = strings.TrimSuffix(msg, e.Cause.Message)
+		}
+
+		str = append(str, msg+"\n"+e.printCallstack())
 		e = e.Cause
 	}
 	return strings.Join(str, "\n")

@@ -11,8 +11,15 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+type Block struct {
+	BlockMeta
+	State BlockState
+	Batch *database.Batch
+}
 
 // BlockMeta is metadata about a block.
 type BlockMeta = execute.BlockParams

@@ -34,12 +34,13 @@ type Message interface {
 func (m *UserTransaction) ID() *url.TxID { return m.Transaction.ID() }
 
 func (m *UserSignature) ID() *url.TxID {
+	hash := *(*[32]byte)(m.Signature.Hash())
 	switch sig := m.Signature.(type) {
 	case *protocol.ReceiptSignature:
-		return sig.SourceNetwork.WithTxID(sig.TransactionHash)
+		return sig.SourceNetwork.WithTxID(hash)
 	case *protocol.InternalSignature:
-		return protocol.UnknownUrl().WithTxID(sig.TransactionHash)
+		return protocol.UnknownUrl().WithTxID(hash)
 	default:
-		return sig.RoutingLocation().WithTxID(sig.GetTransactionHash())
+		return sig.RoutingLocation().WithTxID(hash)
 	}
 }
