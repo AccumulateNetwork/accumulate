@@ -149,7 +149,7 @@ func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, v
 		txn, err := CollectTransaction(batch.Transaction(h[:]))
 		if err != nil {
 			if errors.Is(err, errors.StatusNotFound) {
-				w.Logger.Info("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
+				w.Logger.Debug("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
 				continue
 			}
 			return errors.Format(errors.StatusUnknownError, "collect transaction %x: %w", h[:4], err)
