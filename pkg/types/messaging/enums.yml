@@ -5,12 +5,12 @@ MessageType:
   UserSignature:
     value: 2
     description: is a key signature from a user
+  SyntheticTransaction:
+    value: 3
+    description: is a transaction produced by the protocol
 
   # Possible additions for executor v2
 
-  # SyntheticTransaction:
-  #   value: 4
-  #   description: is a transaction produced by the protocol
   # ValidatorSignature:
   #   value: 5
   #   description: is a key signature from a core protocol validator

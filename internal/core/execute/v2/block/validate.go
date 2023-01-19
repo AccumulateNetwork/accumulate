@@ -182,14 +182,9 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Stateful validation (mostly for synthetic transactions)
 	var signer protocol.Signer2
 	var delegate protocol.Signer
 	switch signature := signature.(type) {
-	case *protocol.ReceiptSignature:
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
-		err = verifyReceiptSignature(delivery.Transaction, signature, md)
-
 	case *protocol.RemoteSignature:
 		return nil, errors.BadRequest.With("a remote signature is not allowed outside of a forwarded transaction")
 
@@ -281,12 +276,9 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 		}
 	}
 
-	var gotReceiptSig, gotED25519Sig bool
+	var gotED25519Sig bool
 	for _, sig := range signatures {
 		switch sig.(type) {
-		case *protocol.ReceiptSignature:
-			gotReceiptSig = true
-
 		case *protocol.ED25519Signature, *protocol.LegacyED25519Signature:
 			gotED25519Sig = true
 
@@ -300,10 +292,6 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	}
 	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
 		return nil
-	}
-
-	if !gotReceiptSig {
-		return errors.Unauthenticated.WithFormat("missing synthetic transaction receipt")
 	}
 	return nil
 }
