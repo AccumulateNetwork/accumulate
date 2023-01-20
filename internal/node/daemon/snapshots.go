@@ -170,16 +170,9 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
-	batch := db.Begin(true)
-	defer batch.Discard()
-	err = exec.RestoreSnapshot(batch, file)
+	err = exec.RestoreSnapshot(db, file)
 	if err != nil {
 		return fmt.Errorf("failed to restore snapshot: %v", err)
-	}
-
-	err = batch.Commit()
-	if err != nil {
-		return fmt.Errorf("failed to commit changes: %v", err)
 	}
 
 	return nil
