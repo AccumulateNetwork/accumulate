@@ -72,8 +72,8 @@ func (SyntheticTransaction) Process(b *bundle, batch *database.Batch, msg messag
 			if fwd, ok := other.(*internal.ForwardedMessage); ok {
 				other = fwd.Message
 			}
-			sig, ok := other.(*messaging.UserSignature)
-			if ok && sig.TransactionHash == txn.ID().Hash() {
+			sig, ok := other.(*messaging.ValidatorSignature)
+			if ok && sig.Signature.GetTransactionHash() == txn.ID().Hash() {
 				signed = true
 				break
 			}

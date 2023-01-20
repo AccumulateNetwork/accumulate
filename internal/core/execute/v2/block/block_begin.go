@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -444,7 +445,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			}
 		}
 
-		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, txn.Header.Source)
+		keySig, err := x.signTransaction(txn.GetHash())
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -454,9 +455,9 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 				Transaction: txn,
 				Proof:       receipt,
 			},
-			&messaging.UserSignature{
-				Signature:       keySig,
-				TransactionHash: txn.ID().Hash(),
+			&messaging.ValidatorSignature{
+				Signature: keySig,
+				Source:    x.Describe.NodeUrl(),
 			},
 		}
 
@@ -502,13 +503,25 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	txn.Body = anchor
 
 	// Create a key signature
-	keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, destPartUrl)
+	keySig, err := x.signTransaction(txn.GetHash())
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	messages := []messaging.Message{
+		// Since anchors don't require proofs, they're not synthetic so we
+		// pretend like they're user transactions
+		&messaging.UserTransaction{
+			Transaction: txn,
+		},
+		&messaging.ValidatorSignature{
+			Signature: keySig,
+			Source:    x.Describe.NodeUrl(),
+		},
+	}
+
 	// Dispatch the envelope
-	env := &messaging.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{keySig}}
+	env := &messaging.Envelope{Messages: messages}
 	err = x.mainDispatcher.Submit(context.Background(), destPartUrl, env)
 	return errors.UnknownError.Wrap(err)
 }
@@ -528,4 +541,28 @@ func didUpdateToV2(anchor protocol.AnchorBody) bool {
 		}
 	}
 	return false
+}
+
+func (x *Executor) signTransaction(hash []byte) (protocol.KeySignature, error) {
+	if x.Key == nil {
+		return nil, errors.InternalError.WithFormat("attempted to sign with a nil key")
+	}
+
+	sig, err := new(signing.Builder).
+		SetType(protocol.SignatureTypeED25519).
+		SetPrivateKey(x.Key).
+		SetUrl(protocol.DnUrl().JoinPath(protocol.Network)).
+		SetVersion(x.globals.Active.Network.Version).
+		SetTimestamp(1).
+		Sign(hash)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	ks, ok := sig.(protocol.KeySignature)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("expected key signature, got %v", sig.Type())
+	}
+
+	return ks, nil
 }

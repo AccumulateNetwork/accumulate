@@ -161,21 +161,9 @@ func RouteMessages(r Router, messages []messaging.Message) (string, error) {
 
 	var route string
 	for _, msg := range messages {
-		switch msg := msg.(type) {
-		case *messaging.UserSignature:
-			r, err := r.RouteAccount(msg.Signature.RoutingLocation())
-			if err != nil {
-				return "", err
-			}
-
-			if route == "" {
-				route = r
-				continue
-			}
-
-			if route != r {
-				return "", errors.BadRequest.With("cannot route envelope(s): conflicting routes")
-			}
+		err := routeMessage(r.RouteAccount, &route, msg)
+		if err != nil {
+			return "", errors.UnknownError.With("cannot route message(s): %w", err)
 		}
 	}
 	if route == "" {
@@ -195,36 +183,17 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*messag
 	}
 
 	var route string
-	routeSig := func(sig protocol.Signature) error {
-		r, err := routeAccount(sig.RoutingLocation())
-		if err != nil {
-			return err
-		}
-
-		if route != "" && route != r {
-			return errors.BadRequest.With("cannot route envelope(s): conflicting routes")
-		}
-
-		route = r
-		return nil
-	}
-
 	for _, env := range envs {
 		for _, msg := range env.Messages {
-			msg, ok := msg.(*messaging.UserSignature)
-			if !ok {
-				continue
-			}
-
-			err := routeSig(msg.Signature)
+			err := routeMessage(routeAccount, &route, msg)
 			if err != nil {
-				return "", errors.UnknownError.Wrap(err)
+				return "", errors.UnknownError.With("cannot route message(s): %w", err)
 			}
 		}
 		for _, sig := range env.Signatures {
-			err := routeSig(sig)
+			err := routeMessage(routeAccount, &route, &messaging.UserSignature{Signature: sig})
 			if err != nil {
-				return "", errors.UnknownError.Wrap(err)
+				return "", errors.UnknownError.With("cannot route message(s): %w", err)
 			}
 		}
 	}
@@ -233,6 +202,40 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*messag
 	}
 
 	return route, nil
+}
+
+func routeMessage(routeAccount func(*url.URL) (string, error), route *string, msg messaging.Message) error {
+	var r string
+	var err error
+	switch msg := msg.(type) {
+	case *messaging.UserSignature:
+		r, err = routeAccount(msg.Signature.RoutingLocation())
+
+	case *messaging.SyntheticTransaction:
+		r, err = routeAccount(msg.Transaction.Header.Destination)
+
+	case *messaging.UserTransaction:
+		if msg.Transaction.Header.Destination == nil {
+			return nil
+		}
+		r, err = routeAccount(msg.Transaction.Header.Destination)
+
+	default:
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if *route == "" {
+		*route = r
+		return nil
+	}
+
+	if *route != r {
+		return errors.BadRequest.With("conflicting routes")
+	}
+	return nil
 }
 
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
