@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -187,7 +187,7 @@ func (p *parser) parseAmount(v any, precision uint64) *big.Int {
 	case int32:
 		return intexp(big.NewInt(int64(v)), precision)
 	case int64:
-		return intexp(big.NewInt(int64(v)), precision)
+		return intexp(big.NewInt(int64(v)), precision) //nolint:unconvert
 	case uint:
 		return intexp(big.NewInt(int64(v)), precision)
 	case uint8:
@@ -202,7 +202,7 @@ func (p *parser) parseAmount(v any, precision uint64) *big.Int {
 	case float32:
 		return bigfloat(float64(v), precision)
 	case float64:
-		return bigfloat(float64(v), precision)
+		return bigfloat(float64(v), precision) //nolint:unconvert
 
 	case string:
 		parts := strings.Split(v, ".")
@@ -261,6 +261,8 @@ func bigfloat(v float64, precision uint64) *big.Int {
 
 func (p *parser) parseTimestamp(v any) signing.Timestamp {
 	switch v := v.(type) {
+	case signing.Timestamp:
+		return v
 	case time.Time:
 		return signing.TimestampFromValue(v.UTC().UnixMilli())
 	case *uint64:
@@ -296,7 +298,7 @@ func (p *parser) parseUint(v any) uint64 {
 	case uint32:
 		return uint64(v)
 	case uint64:
-		return uint64(v)
+		return uint64(v) //nolint:unconvert
 
 	case float32:
 		return uint64(v)

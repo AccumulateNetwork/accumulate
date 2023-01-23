@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package p2p
 
 import (
@@ -39,13 +45,15 @@ func TestResetPriorities(t *testing.T) {
 	require.Equal(t, 0, mgr.peers[p4].priority)
 }
 
+func noServices() []*service { return nil }
+
 func TestPeering(t *testing.T) {
 	// Set up a seed
 	logger := logging.ConsoleLoggerForTest(t, "info")
 	h1, err := libp2p.New()
 	require.NoError(t, err)
 	defer h1.Close()
-	m1, err := newPeerManager(h1, Options{Logger: logger})
+	m1, err := newPeerManager(h1, noServices, Options{Logger: logger})
 	require.NoError(t, err)
 
 	// Build an address for the seed
@@ -64,11 +72,11 @@ func TestPeering(t *testing.T) {
 	require.NoError(t, err)
 	defer h4.Close()
 
-	m2, err := newPeerManager(h2, Options{Logger: logger, BootstrapPeers: []multiaddr.Multiaddr{h1addr}})
+	m2, err := newPeerManager(h2, noServices, Options{Logger: logger, BootstrapPeers: []multiaddr.Multiaddr{h1addr}})
 	require.NoError(t, err)
-	m3, err := newPeerManager(h3, Options{Logger: logger, BootstrapPeers: []multiaddr.Multiaddr{h1addr}})
+	m3, err := newPeerManager(h3, noServices, Options{Logger: logger, BootstrapPeers: []multiaddr.Multiaddr{h1addr}})
 	require.NoError(t, err)
-	m4, err := newPeerManager(h4, Options{Logger: logger, BootstrapPeers: []multiaddr.Multiaddr{h1addr}})
+	m4, err := newPeerManager(h4, noServices, Options{Logger: logger, BootstrapPeers: []multiaddr.Multiaddr{h1addr}})
 	require.NoError(t, err)
 
 	// Wait until every node is peered with every other

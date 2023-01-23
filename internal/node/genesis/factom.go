@@ -8,7 +8,6 @@ package genesis
 
 import (
 	"io"
-	"io/ioutil"
 	"strconv"
 	"strings"
 
@@ -22,7 +21,7 @@ type GenesisAddressAndBalances struct {
 }
 
 func LoadFactomAddressesAndBalances(file io.Reader) ([]*GenesisAddressAndBalances, error) {
-	factomData, err := ioutil.ReadAll(file)
+	factomData, err := io.ReadAll(file)
 	if err != nil {
 		return nil, err
 	}

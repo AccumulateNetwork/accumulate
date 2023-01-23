@@ -152,7 +152,7 @@ func (s *Session) bigint(v Numish, precision int) *big.Int {
 	case int32:
 		return intexp(big.NewInt(int64(v)), precision)
 	case int64:
-		return intexp(big.NewInt(int64(v)), precision)
+		return intexp(big.NewInt(int64(v)), precision) //nolint:unconvert
 	case uint:
 		return intexp(big.NewInt(int64(v)), precision)
 	case uint8:
@@ -167,7 +167,7 @@ func (s *Session) bigint(v Numish, precision int) *big.Int {
 	case float32:
 		return bigfloat(float64(v), precision)
 	case float64:
-		return bigfloat(float64(v), precision)
+		return bigfloat(float64(v), precision) //nolint:unconvert
 
 	case string:
 		parts := strings.Split(v, ".")

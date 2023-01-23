@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -467,12 +467,20 @@ func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions)
 
 // NetworkStatus implements pkg/api/v3.NetworkService.
 func (s *simService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
-	return (*nodeService)(s.partitions[protocol.Directory].nodes[0]).NetworkStatus(ctx, opts)
+	p, ok := s.partitions[opts.Partition]
+	if !ok {
+		return nil, errors.NotFound.WithFormat("%q is not a partition", opts.Partition)
+	}
+	return (*nodeService)(p.nodes[0]).NetworkStatus(ctx, opts)
 }
 
 // Metrics implements pkg/api/v3.MetricsService.
 func (s *simService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
-	return nil, errors.NotAllowed
+	p, ok := s.partitions[opts.Partition]
+	if !ok {
+		return nil, errors.NotFound.WithFormat("%q is not a partition", opts.Partition)
+	}
+	return (*nodeService)(p.nodes[0]).Metrics(ctx, opts)
 }
 
 // Query routes the scope to a partition and calls Query on the first node of
@@ -503,6 +511,25 @@ func (s *simService) Validate(ctx context.Context, envelope *protocol.Envelope, 
 		return nil, err
 	}
 	return (*nodeService)(s.partitions[part].nodes[0]).Validate(ctx, envelope, opts)
+}
+
+// Subscribe implements [api.EventService].
+func (s *simService) Subscribe(ctx context.Context, opts api.SubscribeOptions) (<-chan api.Event, error) {
+	if opts.Partition != "" {
+		p, ok := s.partitions[opts.Partition]
+		if !ok {
+			return nil, errors.NotFound.WithFormat("%q is not a partition", opts.Partition)
+		}
+		return (*nodeService)(p.nodes[0]).Subscribe(ctx, opts)
+	}
+	if opts.Account != nil {
+		part, err := s.router.RouteAccount(opts.Account)
+		if err != nil {
+			return nil, err
+		}
+		return (*nodeService)(s.partitions[part].nodes[0]).Subscribe(ctx, opts)
+	}
+	return nil, errors.BadRequest.With("either partition or account is required")
 }
 
 // Sequence routes the source to a partition and calls Sequence on the first

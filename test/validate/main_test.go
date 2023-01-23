@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package validate
 
 import (
@@ -6,24 +12,34 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/tendermint/tendermint/libs/log"
+	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -37,7 +53,9 @@ func TestManualValidate(t *testing.T) {
 	if *validateNetwork == "" {
 		t.Skip()
 	}
-	suite.Run(t, &ValidationTestSuite{Network: *validateNetwork})
+	addr, err := multiaddr.NewMultiaddr(*validateNetwork)
+	require.NoError(t, err)
+	suite.Run(t, &ValidationTestSuite{Network: []multiaddr.Multiaddr{addr}})
 }
 
 // TestValidate runs the validation test suite against the simulator.
@@ -50,10 +68,32 @@ func TestValidateFull(t *testing.T) {
 	if !*fullValidate {
 		t.Skip()
 	}
-	netInit := simulator.LocalNetwork(t.Name(), 3, 3, net.ParseIP("127.0.1.1"), 30000)
+
+	// Put the faucet on the DN
+	faucet := AccountUrl("faucet")
+	faucetKey := acctesting.GenerateKey(faucet)
 	values := new(core.GlobalValues)
+	values.Routing = new(RoutingTable)
+	values.Routing.AddOverride(faucet, Directory)
+
+	// Create a snapshot with the faucet
+	db := database.OpenInMemory(nil)
+	MakeIdentity(t, db, faucet, faucetKey[32:])
+	UpdateAccount(t, db, faucet.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e12 })
+	MakeAccount(t, db, &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
+	batch := db.Begin(false)
+	buf := new(ioutil2.Buffer)
+	_, err := snapshot.Collect(batch, new(snapshot.Header), buf, snapshot.CollectOptions{})
+	require.NoError(t, err)
+
+	// Initialize the network configs
+	netInit := simulator.LocalNetwork(t.Name(), 3, 3, net.ParseIP("127.0.1.1"), 30000)
 	logger := acctesting.NewTestLogger(t)
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), logger, nil, nil)
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), logger, nil, []func() (ioutil2.SectionReader, error){
+		func() (ioutil2.SectionReader, error) {
+			return ioutil2.NewBuffer(buf.Bytes()), nil
+		},
+	})
 	require.NoError(t, err)
 	configs := accumulated.BuildNodesConfig(netInit, nil)
 
@@ -62,8 +102,7 @@ func TestValidateFull(t *testing.T) {
 		return logging.TestLogWriter(t)(c.LogFormat)
 	}
 
-	_ = genDocs
-
+	// Initialize the nodes
 	var count int
 	dir := t.TempDir()
 	nodes := make([][][2]*accumulated.Daemon, len(configs))
@@ -78,11 +117,11 @@ func TestValidateFull(t *testing.T) {
 				// Disable prometheus
 				cfg.Instrumentation.Prometheus = false
 
-				// // Set log levels
-				// cfg.LogLevel = config.LogLevel{}.
-				// 	Parse(config.DefaultLogLevels).
-				// 	SetModule("executor", "debug").
-				// 	String()
+				// Ignore Tendermint p2p errors
+				cfg.LogLevel = config.LogLevel{}.
+					Parse(config.DefaultLogLevels).
+					SetModule("p2p", "fatal").
+					String()
 
 				// Set paths
 				cfg.SetRoot(filepath.Join(dir, fmt.Sprintf("node-%d", count), cfg.Accumulate.PartitionId))
@@ -134,33 +173,64 @@ func TestValidateFull(t *testing.T) {
 		}
 	}
 
+	// Create the faucet service
+	createFaucet(t, logger, faucetKey, configs[0][0][0].Accumulate.P2P.BootstrapPeers, faucet)
+
 	color.HiBlack("----- Started -----")
 	defer color.HiBlack("----- Stopping -----")
-	suite.Run(t, &ValidationTestSuite{Network: "ws://127.0.1.1:30004/v3"})
+	suite.Run(t, &ValidationTestSuite{Network: []multiaddr.Multiaddr{nodes[0][0][0].P2P_TESTONLY().Addrs()[0]}})
+}
+
+func createFaucet(t *testing.T, logger log.Logger, faucetKey []byte, peers []multiaddr.Multiaddr, faucet *url.URL) {
+	// Create the faucet node
+	node, err := p2p.New(p2p.Options{
+		Logger:         logger,
+		BootstrapPeers: peers,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = node.Close() })
+
+	// Create the faucet service
+	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
+		Logger:    logger.With("module", "faucet"),
+		Account:   faucet.JoinPath("tokens"),
+		Key:       build.ED25519PrivateKey(faucetKey),
+		Submitter: node,
+		Querier:   node,
+		Events:    node,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { faucetSvc.Stop() })
+
+	// Register it
+	handler, err := message.NewHandler(logger, message.Faucet{Faucet: faucetSvc})
+	require.NoError(t, err)
+	require.True(t, node.RegisterService(&api.ServiceAddress{Type: faucetSvc.Type()}, handler.Handle))
 }
 
 type ValidationTestSuite struct {
-	Network string
+	Network []multiaddr.Multiaddr
 
 	suite.Suite
 	*Harness
-	nonce  uint64
-	faucet func(recipient any) build.SignatureBuilder
+	nonce     uint64
+	faucetSvc api.Faucet
 }
 
 func (s *ValidationTestSuite) SetupSuite() {
-	if s.Network == "" {
+	if s.Network == nil {
 		s.setupForSim()
 	} else {
-		s.setupForNet(s.Network)
+		s.setupForNet()
 	}
 }
 
 func (s *ValidationTestSuite) setupForSim() {
 	// Set up the simulator and harness
+	logger := acctesting.NewTestLogger(s.T())
 	net := simulator.SimpleNetwork(s.T().Name(), 3, 1)
 	sim, err := simulator.New(
-		acctesting.NewTestLogger(s.T()),
+		logger,
 		simulator.MemoryDatabase,
 		net,
 		simulator.Genesis(GenesisTime),
@@ -169,41 +239,60 @@ func (s *ValidationTestSuite) setupForSim() {
 
 	s.Harness = New(s.T(), sim.Services(), sim)
 
-	// Faucet with IssueTokens
-	s.faucet = func(recipient any) build.SignatureBuilder {
-		b := build.Transaction().For("ACME").
-			IssueTokens(1e6, AcmePrecisionPower).To(recipient).
-			SignWith(DnUrl(), "operators", "1").Version(1).Timestamp(1).PrivateKey(net.Bvns[0].Nodes[0].PrivValKey)
-		for i, bvn := range net.Bvns {
-			for j, node := range bvn.Nodes {
-				if i == 0 && j == 0 {
-					continue
-				}
-				b = b.SignWith(DnUrl(), "operators", "1").Version(1).Timestamp(1).PrivateKey(node.PrivValKey)
-			}
-		}
-		return b
-	}
+	// Set up the faucet
+	faucet := AccountUrl("faucet")
+	faucetKey := acctesting.GenerateKey(faucet)
+
+	MakeIdentity(s.T(), sim.DatabaseFor(faucet), faucet, faucetKey[32:])
+	UpdateAccount(s.T(), sim.DatabaseFor(faucet), faucet.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e12 })
+	MakeAccount(s.T(), sim.DatabaseFor(faucet), &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
+
+	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
+		Logger:    logger.With("module", "faucet"),
+		Account:   faucet.JoinPath("tokens"),
+		Key:       build.ED25519PrivateKey(faucetKey),
+		Submitter: sim.Services(),
+		Querier:   sim.Services(),
+		Events:    sim.Services(),
+	})
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { faucetSvc.Stop() })
+
+	s.faucetSvc = faucetSvc
 }
 
-func (s *ValidationTestSuite) setupForNet(addr string) {
-	// Set up the client and harness
-	services, err := websocket.NewClient(addr, logging.ConsoleLoggerForTest(s.T(), "info"))
+func (s *ValidationTestSuite) setupForNet() {
+	// Set up the client
+	s.T().Log("Create the client the harness")
+	node, err := p2p.New(p2p.Options{
+		Logger:         logging.ConsoleLoggerForTest(s.T(), "info"),
+		BootstrapPeers: s.Network,
+	})
 	s.Require().NoError(err)
+	s.T().Cleanup(func() { _ = node.Close() })
+
+	s.T().Log("Wait for the faucet")
+	node.WaitForService(&api.ServiceAddress{Type: api.ServiceTypeFaucet})
+
+	// Set up the harness
 	ctx, cancel := context.WithCancel(context.Background())
 	s.T().Cleanup(cancel)
-	events, err := services.Subscribe(ctx, api.SubscribeOptions{Partition: protocol.Directory})
+	events, err := node.Subscribe(ctx, api.SubscribeOptions{Partition: protocol.Directory})
 	s.Require().NoError(err)
-	s.Harness = New(s.T(), services, BlockStep(events))
+	s.Harness = New(s.T(), node, BlockStep(events))
 
 	// Faucet via faucet
-	s.faucet = func(recipient any) build.SignatureBuilder {
-		return build.Faucet(recipient)
-	}
+	s.faucetSvc = node
 }
 
 func (s *ValidationTestSuite) SetupTest() {
 	s.Harness.TB = s.T()
+}
+
+func (s *ValidationTestSuite) faucet(account *url.URL) *protocol.TransactionStatus {
+	sub, err := s.faucetSvc.Faucet(context.Background(), account, api.FaucetOptions{})
+	s.Require().NoError(err)
+	return sub.Status
 }
 
 func (s *ValidationTestSuite) TestMain() {
@@ -228,8 +317,8 @@ func (s *ValidationTestSuite) TestMain() {
 	oracle := float64(ns.Oracle.Price) / AcmeOraclePrecision
 
 	s.TB.Log("Generate a Lite Token Account")
-	st1 := s.BuildAndSubmitSuccessfully(s.faucet(liteAcme))
-	st2 := s.BuildAndSubmitSuccessfully(s.faucet(liteAcme))
+	st1 := s.faucet(liteAcme)
+	st2 := s.faucet(liteAcme)
 	s.StepUntil(
 		Txn(st1.TxID).Succeeds(),
 		Txn(st2.TxID).Succeeds(),

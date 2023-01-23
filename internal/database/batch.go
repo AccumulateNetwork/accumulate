@@ -116,7 +116,7 @@ func (b *Batch) Update(fn func(batch *Batch) error) error {
 // panic.
 func (b *Batch) Commit() error {
 	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
+		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
 	}
 	defer func() { b.done = true }()
 
@@ -190,7 +190,7 @@ func (b *Batch) AccountByID(id []byte) (*Account, error) {
 // GetValue implements record.Store.
 func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
+		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
 	}
 
 	v, err := resolveValue[record.ValueReader](b, key)
@@ -205,7 +205,7 @@ func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 // PutValue implements record.Store.
 func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
+		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
 	}
 
 	v, err := resolveValue[record.ValueWriter](b, key)

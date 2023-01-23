@@ -16,6 +16,8 @@ Type:
     value: 0x06
   SubscribeRequest:
     value: 0x07
+  FaucetRequest:
+    value: 0x08
 
   ErrorResponse:
     value: 0x20
@@ -33,6 +35,8 @@ Type:
     value: 0x26
   SubscribeResponse:
     value: 0x27
+  FaucetResponse:
+    value: 0x28
 
   Event:
     value: 0x40

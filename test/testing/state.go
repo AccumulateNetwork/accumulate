@@ -202,7 +202,7 @@ func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr string, credits f
 		return err
 	}
 
-	u, err := ParseUrl(string(urlStr))
+	u, err := ParseUrl(urlStr)
 	if err != nil {
 		return err
 	}

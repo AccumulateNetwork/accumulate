@@ -76,7 +76,7 @@ func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte
 // putBpt adds an entry to the list of pending BPT updates.
 func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 	if b.done {
-		panic("attempted to use a commited or discarded batch")
+		panic("attempted to use a committed or discarded batch")
 	}
 	if b.bptEntries == nil {
 		panic("attempted to update the BPT after committing the BPT")

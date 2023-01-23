@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api_test
 
 import (
@@ -6,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	dut "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -56,7 +62,7 @@ func TestSequencer(t *testing.T) {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
-	svc := NewSequencer(SequencerParams{
+	svc := dut.NewSequencer(dut.SequencerParams{
 		Logger:       logger,
 		Database:     sim.DatabaseFor(alice),
 		EventBus:     events.NewBus(logger),

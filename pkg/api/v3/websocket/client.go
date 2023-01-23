@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package websocket
 
 import (
@@ -180,6 +186,11 @@ func (c *Client) Submit(ctx context.Context, envelope *protocol.Envelope, opts a
 // Validate implements [api.Validator.Validate].
 func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	return c.inner.Validate(ctx, envelope, opts)
+}
+
+// Faucet implements [api.Faucet.Faucet].
+func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return c.inner.Faucet(ctx, account, opts)
 }
 
 // Subscribe implements [api.EventService.Subscribe].

@@ -146,7 +146,7 @@ func packChainValue(qr *query.ResponseChainEntry) *ChainQueryResponse {
 	resp := new(ChainQueryResponse)
 	resp.Type = "chainEntry"
 	resp.MainChain = new(MerkleState)
-	resp.MainChain.Height = uint64(qr.Height)
+	resp.MainChain.Height = qr.Height
 	resp.MainChain.Roots = qr.State
 	resp.Receipt = qr.Receipt
 

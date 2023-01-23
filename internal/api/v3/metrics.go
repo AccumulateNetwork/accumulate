@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
@@ -33,6 +39,8 @@ func NewMetricsService(params MetricsServiceParams) *MetricsService {
 	s.querier.Querier = params.Querier
 	return s
 }
+
+func (s *MetricsService) Type() api.ServiceType { return api.ServiceTypeMetrics }
 
 func (s *MetricsService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	status, err := s.node.NodeStatus(ctx, api.NodeStatusOptions{})

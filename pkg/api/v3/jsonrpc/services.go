@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package jsonrpc
 
 import (
@@ -129,4 +135,20 @@ func (s Validator) Validate(ctx context.Context, params json.RawMessage) interfa
 		return formatResponse(nil, err)
 	}
 	return formatResponse(s.Validator.Validate(ctx, req.Envelope, req.ValidateOptions))
+}
+
+type Faucet struct{ api.Faucet }
+
+func (s Faucet) methods() jsonrpc2.MethodMap {
+	return jsonrpc2.MethodMap{
+		"faucet": s.faucet,
+	}
+}
+
+func (s Faucet) faucet(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.FaucetRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.Faucet.Faucet(ctx, req.Account, req.FaucetOptions))
 }

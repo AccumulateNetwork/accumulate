@@ -53,7 +53,7 @@ func init() {
 
 func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	if flagRun.PprofListen != "" {
-		go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }()
+		go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }() //nolint:gosec
 	}
 
 	prog := NewProgram(cmd, func(cmd *cobra.Command) (string, error) {

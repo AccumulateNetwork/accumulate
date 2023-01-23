@@ -20,18 +20,18 @@ Info:
     #   type: protocol.ValidatorInfo
     #   marshal-as: reference
     #   pointer: true
-    - name: Partitions
-      type: PartitionInfo
+    - name: Services
+      type: ServiceInfo
       marshal-as: reference
       repeatable: true
       pointer: true
 
-PartitionInfo:
+ServiceInfo:
   fields:
-    - name: ID
-      type: string
-    - name: Moniker
-      type: string
+    - name: Address
+      type: api.ServiceAddress
+      marshal-as: reference
+      pointer: true
 
 AddrInfo:
   fields:

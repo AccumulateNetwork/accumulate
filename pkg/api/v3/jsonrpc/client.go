@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package jsonrpc
 
 import (
@@ -25,6 +31,7 @@ var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
 var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
+var _ api.Faucet = (*Client)(nil)
 
 // NewClient creates new API client with default config
 func NewClient(server string) *Client {
@@ -59,6 +66,11 @@ func (c *Client) Submit(ctx context.Context, envelope *protocol.Envelope, opts a
 func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	req := &message.ValidateRequest{Envelope: envelope, ValidateOptions: opts}
 	return sendRequestUnmarshalAs[[]*api.Submission](c, ctx, "validate", req)
+}
+
+func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	req := &message.FaucetRequest{Account: account, FaucetOptions: opts}
+	return sendRequestUnmarshalAs[*api.Submission](c, ctx, "faucet", req)
 }
 
 func (c *Client) sendRequest(ctx context.Context, method string, req, resp interface{}) error {

@@ -57,7 +57,7 @@ func TestSliceBytes(t *testing.T) {
 }
 
 func TestFormatTimeLapse(t *testing.T) {
-	var d = time.Duration(time.Hour*3 + time.Minute*4 + time.Second*5)
+	var d = time.Hour*3 + time.Minute*4 + time.Second*5
 	str := FormatTimeLapse(d)
 	if fmt.Sprint(str) != "    03:04:05 h:m:s  " {
 		t.Error("failed to print time as desired")

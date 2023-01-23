@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package message
 
 import (
@@ -44,7 +50,7 @@ func TestBatchDialer(t *testing.T) {
 	// Construct the batch dialer to test and a client
 	batchCtx, batchDone := context.WithCancel(context.Background())
 	dialer = BatchDialer(batchCtx, dialer)
-	addr, err := multiaddr.NewComponent("acc", "foo")
+	addr, err := multiaddr.NewComponent(api.N_ACC, "query:foo")
 	require.NoError(t, err)
 	client := &Client{Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
 
