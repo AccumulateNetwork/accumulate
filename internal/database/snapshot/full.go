@@ -53,14 +53,14 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.Netw
 // CollectAnchors collects anchors from the anchor ledger's anchor sequence
 // chain.
 func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl) error {
-	txnHashes := new(HashSet)
+	var txnHashes HashSet
 	record := batch.Account(network.AnchorPool())
 	err := txnHashes.CollectFromChain(record, record.AnchorSequenceChain())
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	err = w.CollectTransactions(batch, txnHashes.Hashes, CollectOptions{})
+	err = w.CollectTransactions(batch, txnHashes, CollectOptions{})
 	return errors.UnknownError.Wrap(err)
 }
 

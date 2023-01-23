@@ -131,7 +131,7 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 		}
 		partition, okPartition := key[1].(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch: %v", key)
 		}
 		v := c.SystemData(partition)
 		return v, key[2:], nil

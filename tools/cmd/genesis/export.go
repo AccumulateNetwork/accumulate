@@ -46,7 +46,7 @@ func init() {
 }
 
 func export(_ *cobra.Command, args []string) {
-	// Build a map of Factom LDAs from the given snapshot
+	fmt.Println("Build a map of Factom LDAs from the given snapshot")
 	factom := ldaCollector{}
 	if flagExport.FactomLDAs != "" {
 		f, err := os.Open(flagExport.FactomLDAs)
@@ -55,44 +55,47 @@ func export(_ *cobra.Command, args []string) {
 		check(f.Close())
 	}
 
-	// Load the node
+	fmt.Println("Load the node")
 	nodeDir, outPath := args[0], args[1]
 	daemon, err := accumulated.Load(nodeDir, func(c *config.Config) (io.Writer, error) {
 		return logging.NewConsoleWriter(c.LogFormat)
 	})
 	check(err)
 
-	// Load the old genesis document
+	fmt.Println("Load the old genesis document")
 	oldDoc, err := types.GenesisDocFromFile(daemon.Config.GenesisFile())
 	check(err)
 
-	// Open the database
+	// We don't need this so nil it to free the memory
+	oldDoc.AppState = nil
+
+	fmt.Println("Open the database")
 	db, err := database.Open(daemon.Config, daemon.Logger)
 	check(err)
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	// Load the system ledger
+	fmt.Println("Load the system ledger")
 	var ledger *protocol.SystemLedger
 	partUrl := config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.PartitionId)}
 	check(batch.Account(partUrl.Ledger()).Main().GetAs(&ledger))
 
-	// Get the hash of the genesis transaction
+	fmt.Println("Get the hash of the genesis transaction")
 	genesisTx, err := batch.Account(partUrl.Ledger()).MainChain().Inner().Get(0)
 	check(err)
 
-	// Load the global variables
+	fmt.Println("Load the global variables")
 	globals := new(core.GlobalValues)
 	check(globals.Load(partUrl, func(account *url.URL, target interface{}) error {
 		return batch.Account(account).Main().GetAs(target)
 	}))
 
-	// Change the name of the network
+	fmt.Println("Change the name of the network")
 	if flagExport.NetworkName != "" {
 		globals.Network.NetworkName = flagExport.NetworkName
 	}
 
-	// Overwrite the validator set
+	fmt.Println("Overwrite the validator set")
 	if flagExport.Validators != "" {
 		globals.Network.Validators = nil
 		var val []*protocol.ValidatorInfo
@@ -104,13 +107,13 @@ func export(_ *cobra.Command, args []string) {
 		}
 	}
 
-	// Take a snapshot
+	fmt.Println("Take a snapshot")
 	header := new(snapshot.Header)
 	header.Height = ledger.Index
 	header.Timestamp = ledger.Timestamp
 
 	buf := new(ioutil2.Buffer)
-	w, err := snapshot.Collect(batch, header, buf, snapshot.CollectOptions{
+	w, err := snapshot.Collect(db, header, buf, snapshot.CollectOptions{
 		Logger: daemon.Logger.With("module", "snapshot"),
 		VisitAccount: func(acct *snapshot.Account) error {
 			// Fix Factom LDAs
@@ -148,7 +151,7 @@ func export(_ *cobra.Command, args []string) {
 	check(err)
 	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.PartitionUrl()))
 
-	// Build a new genesis doc
+	fmt.Println("Build a new genesis doc")
 	doc := new(types.GenesisDoc)
 	doc.InitialHeight = int64(ledger.Index) + 1
 	doc.GenesisTime = ledger.Timestamp
@@ -158,12 +161,12 @@ func export(_ *cobra.Command, args []string) {
 	doc.AppState, err = json.Marshal(buf.Bytes())
 	check(err)
 
-	// Apply the network ID prefix
+	fmt.Println("Apply the network ID prefix")
 	if flagExport.NetworkName != "" {
 		doc.ChainID = flagExport.NetworkName + "-" + daemon.Config.Accumulate.PartitionId
 	}
 
-	// Build the validator list
+	fmt.Println("Build the validator list")
 	for _, val := range globals.Network.Validators {
 		if !val.IsActiveOn(daemon.Config.Accumulate.PartitionId) {
 			continue
@@ -178,7 +181,7 @@ func export(_ *cobra.Command, args []string) {
 		doc.Validators = append(doc.Validators, *genval)
 	}
 
-	// Write the new genesis doc
+	fmt.Println("Write the new genesis doc")
 	outFile, err := os.Create(outPath)
 	check(err)
 	defer outFile.Close()

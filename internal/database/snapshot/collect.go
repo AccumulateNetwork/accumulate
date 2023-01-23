@@ -7,12 +7,14 @@
 package snapshot
 
 import (
+	"bytes"
 	"compress/gzip"
 	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -30,8 +32,11 @@ type CollectOptions struct {
 	PreserveAccountHistory func(account *database.Account) (bool, error)
 }
 
-func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts CollectOptions) (*Writer, error) {
-	header.RootHash = *(*[32]byte)(batch.BptRoot())
+func Collect(db database.Beginner, header *Header, file io.WriteSeeker, opts CollectOptions) (*Writer, error) {
+	_ = db.View(func(batch *database.Batch) error {
+		header.RootHash = *(*[32]byte)(batch.BptRoot())
+		return nil
+	})
 
 	w, err := Create(file, header)
 	if err != nil {
@@ -43,49 +48,57 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 	// yet been restored, so the transaction section must come first. However we
 	// need to scan the BPT in order to know what transactions need to be saved.
 	var accounts []*url.URL
-	txnHashes := new(HashSet)
-	err = batch.VisitAccounts(func(record *database.Account) error {
-		accounts = append(accounts, record.Url())
-		pending, err := record.Pending().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load pending: %w", err)
-		}
-		for _, txid := range pending {
-			txnHashes.Add(txid.Hash())
-		}
-		return nil
+	var txnHashes HashSet
+	err = db.View(func(batch *database.Batch) error {
+		return batch.VisitAccounts(func(record *database.Account) error {
+			accounts = append(accounts, record.Url())
+			pending, err := record.Pending().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load pending: %w", err)
+			}
+			for _, txid := range pending {
+				txnHashes.Add(txid.Hash())
+			}
+			return nil
+		})
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Collect transaction and signature hashes
-	sigHashes := new(HashSet)
+	var sigHashes HashSet
 	for _, u := range accounts {
-		record := batch.Account(u)
-		if opts.PreserveAccountHistory != nil {
-			preserve, err := opts.PreserveAccountHistory(record)
+		err = db.View(func(batch *database.Batch) error {
+			record := batch.Account(u)
+			if opts.PreserveAccountHistory != nil {
+				preserve, err := opts.PreserveAccountHistory(record)
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
+				}
+				if !preserve {
+					return nil
+				}
+			}
+
+			err = txnHashes.CollectFromChain(record, record.MainChain())
 			if err != nil {
-				return nil, errors.UnknownError.Wrap(err)
+				return errors.UnknownError.WithFormat("collect from %v main chain: %v", u, err)
 			}
-			if !preserve {
-				continue
+
+			err = txnHashes.CollectFromChain(record, record.ScratchChain())
+			if err != nil {
+				return errors.UnknownError.WithFormat("collect from %v scratch chain: %v", u, err)
 			}
-		}
 
-		err = txnHashes.CollectFromChain(record, record.MainChain())
+			err = sigHashes.CollectFromChain(record, record.SignatureChain())
+			if err != nil {
+				return errors.UnknownError.WithFormat("collect from %v signature chain: %v", u, err)
+			}
+			return nil
+		})
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("collect from %v main chain: %v", u, err)
-		}
-
-		err = txnHashes.CollectFromChain(record, record.ScratchChain())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("collect from %v scratch chain: %v", u, err)
-		}
-
-		err = sigHashes.CollectFromChain(record, record.SignatureChain())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("collect from %v signature chain: %v", u, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -103,19 +116,19 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 	}
 
 	// Save transactions
-	err = w.CollectTransactions(batch, txnHashes.Hashes, opts)
+	err = w.CollectTransactions(db, txnHashes, opts)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Save signatures
-	err = w.CollectSignatures(batch, sigHashes.Hashes, opts)
+	err = w.CollectSignatures(db, sigHashes, opts)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Save accounts
-	err = w.CollectAccounts(batch, opts)
+	err = w.CollectAccounts(db, opts)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -123,12 +136,14 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 	return w, nil
 }
 
-func (w *Writer) CollectAccounts(batch *database.Batch, opts CollectOptions) error {
+func (w *Writer) CollectAccounts(db database.Beginner, opts CollectOptions) error {
 	sw, err := w.Open(SectionTypeAccounts)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open accounts section: %w", err)
 	}
 
+	batch := db.Begin(false)
+	defer batch.Discard()
 	err = batch.SaveAccounts(sw, func(record *database.Account) ([]byte, error) {
 		// preserve, err := preserveHistory(record)
 		// if err != nil {
@@ -162,27 +177,33 @@ func (w *Writer) CollectAccounts(batch *database.Batch, opts CollectOptions) err
 	return errors.UnknownError.Wrap(err)
 }
 
-func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, opts CollectOptions) error {
+func (w *Writer) CollectTransactions(db database.Beginner, hashes [][32]byte, opts CollectOptions) error {
 	var txns []*Transaction
 	for _, h := range hashes {
 		h := h // See docs/developer/rangevarref.md
-		txn, err := CollectTransaction(batch.Transaction(h[:]))
-		if err != nil {
-			if errors.Is(err, errors.NotFound) {
-				w.Logger.Debug("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
-				continue
-			}
-			return errors.UnknownError.WithFormat("collect transaction %x: %w", h[:4], err)
-		}
-
-		if opts.VisitTransaction != nil {
-			err = opts.VisitTransaction(txn)
+		err := db.View(func(batch *database.Batch) error {
+			txn, err := CollectTransaction(batch.Transaction(h[:]))
 			if err != nil {
-				return errors.UnknownError.WithFormat("visit transaction: %w", err)
+				if errors.Is(err, errors.NotFound) {
+					w.Logger.Debug("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
+					return nil
+				}
+				return errors.UnknownError.WithFormat("collect transaction %x: %w", h[:4], err)
 			}
-		}
 
-		txns = append(txns, txn)
+			if opts.VisitTransaction != nil {
+				err = opts.VisitTransaction(txn)
+				if err != nil {
+					return errors.UnknownError.WithFormat("visit transaction: %w", err)
+				}
+			}
+
+			txns = append(txns, txn)
+			return nil
+		})
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
 
 	return w.WriteTransactions(txns, false)
@@ -228,27 +249,33 @@ func (w *Writer) WriteTransactions(txns []*Transaction, gz bool) error {
 	return errors.UnknownError.Wrap(err)
 }
 
-func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opts CollectOptions) error {
+func (w *Writer) CollectSignatures(db database.Beginner, hashes [][32]byte, opts CollectOptions) error {
 	var sigs []*Signature
 	for _, h := range hashes {
 		h := h // See docs/developer/rangevarref.md
-		sig, err := CollectSignature(batch.Transaction(h[:]))
-		if err != nil {
-			if errors.Is(err, errors.NotFound) {
-				w.Logger.Error("Skipping signature", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
-				continue
-			}
-			return errors.UnknownError.WithFormat("collect signature %x: %w", h[:4], err)
-		}
-
-		if opts.VisitSignature != nil {
-			err = opts.VisitSignature(sig)
+		err := db.View(func(batch *database.Batch) error {
+			sig, err := CollectSignature(batch.Transaction(h[:]))
 			if err != nil {
-				return errors.UnknownError.WithFormat("visit signature: %w", err)
+				if errors.Is(err, errors.NotFound) {
+					w.Logger.Error("Skipping signature", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
+					return nil
+				}
+				return errors.UnknownError.WithFormat("collect signature %x: %w", h[:4], err)
 			}
-		}
 
-		sigs = append(sigs, sig)
+			if opts.VisitSignature != nil {
+				err = opts.VisitSignature(sig)
+				if err != nil {
+					return errors.UnknownError.WithFormat("visit signature: %w", err)
+				}
+			}
+
+			sigs = append(sigs, sig)
+			return nil
+		})
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
 
 	if len(sigs) == 0 {
@@ -274,20 +301,32 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opt
 	return errors.UnknownError.Wrap(err)
 }
 
-type HashSet struct {
-	seen   map[[32]byte]bool
-	Hashes [][32]byte
+// HashSet is an ordered set of 32-byte hashes.
+type HashSet [][32]byte
+
+// Add inserts a hash into the set.
+func (l *HashSet) Add(v [32]byte) {
+	ptr, new := sortutil.BinaryInsert((*[][32]byte)(l), func(u [32]byte) int {
+		return bytes.Compare(u[:], v[:])
+	})
+	if new {
+		*ptr = v
+	}
 }
 
-func (s *HashSet) Add(h [32]byte) {
-	if s.seen == nil {
-		s.seen = map[[32]byte]bool{}
-	}
-	if s.seen[h] {
-		return
-	}
-	s.seen[h] = true
-	s.Hashes = append(s.Hashes, h)
+// Remove removes a hash from the set.
+func (l *HashSet) Remove(v [32]byte) {
+	sortutil.Remove((*[][32]byte)(l), func(u [32]byte) int {
+		return bytes.Compare(u[:], v[:])
+	})
+}
+
+// Hash checks if the set has the given hash.
+func (l HashSet) Has(v [32]byte) bool {
+	_, ok := sortutil.Search(([][32]byte)(l), func(u [32]byte) int {
+		return bytes.Compare(u[:], v[:])
+	})
+	return ok
 }
 
 func (s *HashSet) CollectFromChain(a *database.Account, c *database.Chain2) error {

@@ -42,8 +42,7 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 	defer batch1.Discard()
 
 	var accounts []*url.URL
-	txnHashes := new(snapshot.HashSet)
-	sigHashes := new(snapshot.HashSet)
+	var txnHashes, sigHashes snapshot.HashSet
 
 	bpt := pmt.NewBPTManager(stx)
 	place := pmt.FirstPossibleBptKey
@@ -101,7 +100,7 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 	db2 := database.OpenInMemory(nil)
 	batch2 := db2.Begin(true)
 	defer batch2.Discard()
-	for _, hash := range txnHashes.Hashes {
+	for _, hash := range txnHashes {
 		hash := hash
 		c, err := snapshot.CollectTransaction(batch1.Transaction(hash[:]))
 		checkf(err, "collect txn %x", hash)
@@ -113,7 +112,7 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 			}
 		}
 	}
-	for _, hash := range sigHashes.Hashes {
+	for _, hash := range sigHashes {
 		hash := hash
 		c, err := snapshot.CollectSignature(batch1.Transaction(hash[:]))
 		checkf(err, "collect sig %x", hash)
