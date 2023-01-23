@@ -160,7 +160,7 @@ func SnapshotFromDirectory(dir string) SnapshotFunc {
 func Genesis(time time.Time) SnapshotFunc {
 	// By default run tests with the new executor version
 	values := new(core.GlobalValues)
-	values.ExecutorVersion = protocol.ExecutorVersionV1SignatureAnchoring
+	values.ExecutorVersion = protocol.ExecutorVersionLatest
 	return GenesisWith(time, values)
 }
 
