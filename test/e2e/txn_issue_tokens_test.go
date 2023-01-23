@@ -23,7 +23,7 @@ func TestIssueTokens_Good(t *testing.T) {
 
 	// Initialize
 	values := new(core.GlobalValues)
-	values.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
+	values.ExecutorVersion = ExecutorVersionLatest
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(values)
 
