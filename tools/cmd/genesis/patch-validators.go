@@ -8,7 +8,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -143,12 +142,10 @@ func patchValidators(_ *cobra.Command, args []string) {
 			b, _ = json.Marshal(netdef.Validators)
 			fmt.Printf("Validator set is now: %s\n", b)
 
-			account.Hash
-
-			bpt.InsertKV(key, hash)
+			recalculateHash(account)
+			bpt.InsertKV(key, account.Hash)
 
 			b, err = account.MarshalBinary()
-			b, err := io.ReadAll(reader)
 			check(err)
 			accounts[key] = b
 			check(err)
@@ -156,64 +153,21 @@ func patchValidators(_ *cobra.Command, args []string) {
 			return nil
 		}))
 		check(bpt.Bpt.Update())
+		genesis.AppHash = bpt.Bpt.RootHash[:]
 
 		if accounts[networkAccountKey] == nil {
 			fatalf("%v is not present in this genesis document", networkUrl)
 		}
 
 		// Write accounts
-		var didPatch bool
 		check(bpt.Bpt.SaveSnapshot(sw, func(key storage.Key, hash [32]byte) ([]byte, error) {
 			b, ok := accounts[key]
 			if !ok {
 				// Should not be possible
 				fatalf("missing data for account %x", key)
 			}
-
-			if key != networkAccountKey {
-				return b, nil
-			}
-
-			didPatch = true
-			account := new(snapshot.Account)
-			check(account.UnmarshalBinaryFrom(bytes.NewReader(b)))
-			if !account.Url.Equal(networkUrl) {
-				fatalf("entry for %v does not match (expected %v, got %v)", networkUrl, networkUrl, account.Url)
-			}
-
-			data, ok := account.Main.(*protocol.DataAccount)
-			if !ok {
-				fatalf("entry for %v does not match (expected %v, got %v)", networkUrl, protocol.AccountTypeDataAccount, account.Main.Type())
-			}
-			if data.Entry == nil {
-				fatalf("entry for %v does not have a data entry", networkUrl)
-			}
-			entry, ok := data.Entry.(*protocol.AccumulateDataEntry)
-			if !ok {
-				fatalf("entry for %v does not match (expected %v, got %v)", networkUrl, protocol.DataEntryTypeAccumulate, data.Entry.Type())
-			}
-			if len(entry.Data) != 1 {
-				fatalf("entry for %v has an invalid data entry", networkUrl)
-			}
-
-			netdef := new(protocol.NetworkDefinition)
-			checkf(netdef.UnmarshalBinary(entry.Data[0]), "unmarshal network definition")
-			b, _ = json.Marshal(netdef.Validators)
-			fmt.Printf("Validator set was: %s\n", b)
-
-			netdef.Validators = validators
-			entry.Data[0], err = netdef.MarshalBinary()
-			check(err)
-			b, _ = json.Marshal(netdef.Validators)
-			fmt.Printf("Validator set is now: %s\n", b)
-
-			b, err = account.MarshalBinary()
-			check(err)
 			return b, nil
 		}))
-		if !didPatch {
-			fatalf("did not patch %v", networkUrl)
-		}
 
 		check(sw.Close())
 	}
@@ -230,10 +184,12 @@ func patchValidators(_ *cobra.Command, args []string) {
 func recalculateHash(a *snapshot.Account) {
 	var err error
 	var hasher hash.Hasher
-	hashState(&err, &hasher, true, a.Main)          // Add a simple hash of the main state
+	hashState(&err, &hasher, true, a.Main)                 // Add a simple hash of the main state
 	hashState(&err, &hasher, false, hashSecondaryState(a)) // Add a merkle hash of the Secondary State which is a list of accounts contained by the adi
-	hashState(&err, &hasher, false, a.hashChains)         // Add a merkle hash of chains
-	hashState(&err, &hasher, false, a.hashTransactions)   // Add a merkle hash of transactions
+	hashState(&err, &hasher, false, hashChains(a))         // Add a merkle hash of chains
+	hashState(&err, &hasher, false, hashTransactions(a))   // Add a merkle hash of transactions
+
+	a.Hash = *(*[32]byte)(hasher.MerkleHash())
 }
 
 func hashSecondaryState(a *snapshot.Account) hash.Hasher {
@@ -248,8 +204,7 @@ func hashSecondaryState(a *snapshot.Account) hash.Hasher {
 
 // hashChains returns a merkle hash of the DAG root of every chain in alphabetic
 // order.
-func hashChains(a *snapshot.Account) (hash.Hasher, error) {
-	var err error
+func hashChains(a *snapshot.Account) hash.Hasher {
 	var hasher hash.Hasher
 	for _, chain := range a.Chains {
 		if chain.Head.Count == 0 {
@@ -258,32 +213,18 @@ func hashChains(a *snapshot.Account) (hash.Hasher, error) {
 			hasher.AddHash((*[32]byte)(chain.Head.GetMDRoot()))
 		}
 	}
-	return hasher, err
+	return hasher
 }
 
 // hashTransactions returns a merkle hash of the transaction hash and status of
 // every pending transaction and every synthetic transaction waiting for an
 // anchor.
-func hashTransactions(a *snapshot.Account) (hash.Hasher, error) {
-	var err error
+func hashTransactions(a *snapshot.Account) hash.Hasher {
 	var hasher hash.Hasher
-	for _, txid := range a.Pending {
-		h := txid.Hash()
-		hashState(&err, &hasher, false, a.parent.Transaction(h[:]).GetState)
-		hashState(&err, &hasher, false, a.parent.Transaction(h[:]).GetStatus)
+	if len(a.Pending) > 0 {
+		fatalf("%v has pending transactions", a.Url)
 	}
-
-	// // TODO Include this
-	// for _, anchor := range loadState(&err, false, a.SyntheticAnchors().Get) {
-	// 	hasher.AddHash(&anchor) //nolint:rangevarref
-	// 	for _, txid := range loadState(&err, false, a.SyntheticForAnchor(anchor).Get) {
-	// 		h := txid.Hash()
-	// 		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetState)
-	// 		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetStatus)
-	// 	}
-	// }
-
-	return hasher, err
+	return hasher
 }
 
 func zero[T any]() (z T) { return z }
