@@ -64,7 +64,9 @@ type Header struct {
 	RootHash [32]byte `json:"rootHash,omitempty" form:"rootHash" query:"rootHash" validate:"required"`
 	// Timestamp is the snapshot's block time.
 	Timestamp time.Time `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	extraData []byte
+	// ExecutorVersion is the snapshot's executor version.
+	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion" validate:"required"`
+	extraData       []byte
 }
 
 type OldChain struct {
@@ -179,6 +181,7 @@ func (v *Header) Copy() *Header {
 	u.Height = v.Height
 	u.RootHash = v.RootHash
 	u.Timestamp = v.Timestamp
+	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -377,6 +380,9 @@ func (v *Header) Equal(u *Header) bool {
 		return false
 	}
 	if !((v.Timestamp).Equal(u.Timestamp)) {
+		return false
+	}
+	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
 	}
 
@@ -682,6 +688,7 @@ var fieldNames_Header = []string{
 	2: "Height",
 	3: "RootHash",
 	4: "Timestamp",
+	5: "ExecutorVersion",
 }
 
 func (v *Header) MarshalBinary() ([]byte, error) {
@@ -699,6 +706,9 @@ func (v *Header) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Timestamp == (time.Time{})) {
 		writer.WriteTime(4, v.Timestamp)
+	}
+	if !(v.ExecutorVersion == 0) {
+		writer.WriteEnum(5, v.ExecutorVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Header)
@@ -731,6 +741,11 @@ func (v *Header) IsValid() error {
 		errs = append(errs, "field Timestamp is missing")
 	} else if v.Timestamp == (time.Time{}) {
 		errs = append(errs, "field Timestamp is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field ExecutorVersion is missing")
+	} else if v.ExecutorVersion == 0 {
+		errs = append(errs, "field ExecutorVersion is not set")
 	}
 
 	switch len(errs) {
@@ -1186,6 +1201,9 @@ func (v *Header) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadTime(4); ok {
 		v.Timestamp = x
 	}
+	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
+		v.ExecutorVersion = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_Header)
 	if err != nil {
@@ -1452,10 +1470,11 @@ func (v *Chain) MarshalJSON() ([]byte, error) {
 
 func (v *Header) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Version   uint64    `json:"version,omitempty"`
-		Height    uint64    `json:"height,omitempty"`
-		RootHash  string    `json:"rootHash,omitempty"`
-		Timestamp time.Time `json:"timestamp,omitempty"`
+		Version         uint64                   `json:"version,omitempty"`
+		Height          uint64                   `json:"height,omitempty"`
+		RootHash        string                   `json:"rootHash,omitempty"`
+		Timestamp       time.Time                `json:"timestamp,omitempty"`
+		ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty"`
 	}{}
 	if !(v.Version == 0) {
 		u.Version = v.Version
@@ -1468,6 +1487,9 @@ func (v *Header) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Timestamp == (time.Time{})) {
 		u.Timestamp = v.Timestamp
+	}
+	if !(v.ExecutorVersion == 0) {
+		u.ExecutorVersion = v.ExecutorVersion
 	}
 	return json.Marshal(&u)
 }
@@ -1630,15 +1652,17 @@ func (v *Chain) UnmarshalJSON(data []byte) error {
 
 func (v *Header) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Version   uint64    `json:"version,omitempty"`
-		Height    uint64    `json:"height,omitempty"`
-		RootHash  string    `json:"rootHash,omitempty"`
-		Timestamp time.Time `json:"timestamp,omitempty"`
+		Version         uint64                   `json:"version,omitempty"`
+		Height          uint64                   `json:"height,omitempty"`
+		RootHash        string                   `json:"rootHash,omitempty"`
+		Timestamp       time.Time                `json:"timestamp,omitempty"`
+		ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty"`
 	}{}
 	u.Version = v.Version
 	u.Height = v.Height
 	u.RootHash = encoding.ChainToJSON(v.RootHash)
 	u.Timestamp = v.Timestamp
+	u.ExecutorVersion = v.ExecutorVersion
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1650,6 +1674,7 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 		v.RootHash = x
 	}
 	v.Timestamp = u.Timestamp
+	v.ExecutorVersion = u.ExecutorVersion
 	return nil
 }
 

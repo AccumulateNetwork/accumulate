@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -261,14 +262,13 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 
 func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Store the transaction
-	obj := batch.Transaction(transaction.GetHash())
-	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})
+	err := batch.Message(transaction.ID().Hash()).Main().Put(&messaging.SyntheticTransaction{Transaction: transaction})
 	if err != nil {
 		return fmt.Errorf("store transaction: %w", err)
 	}
 
 	// Update the status
-	err = obj.PutStatus(status)
+	err = batch.Transaction(transaction.GetHash()).PutStatus(status)
 	if err != nil {
 		return fmt.Errorf("store status: %w", err)
 	}

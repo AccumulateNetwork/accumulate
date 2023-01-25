@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -88,8 +89,7 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 	switch query := query.(type) {
 	case *api.DefaultQuery:
 		if txid, err := scope.AsTxID(); err == nil {
-			h := txid.Hash()
-			return s.queryTransactionOrSignature(ctx, batch, batch.Transaction(h[:]))
+			return s.queryMessage(ctx, batch, txid)
 		}
 
 		return s.queryAccount(ctx, batch, batch.Account(scope), query.IncludeReceipt)
@@ -236,32 +236,27 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	return r, nil
 }
 
-func (s *Querier) queryTransactionOrSignature(ctx context.Context, batch *database.Batch, record *database.Transaction) (api.Record, error) {
-	return loadTransactionOrSignature(batch, record)
+func (s *Querier) queryMessage(ctx context.Context, batch *database.Batch, txid *url.TxID) (api.Record, error) {
+	return loadTransactionOrSignature(batch, txid)
 }
 
-func (s *Querier) queryTransaction(ctx context.Context, batch *database.Batch, record *database.Transaction) (*api.TransactionRecord, error) {
-	state, err := record.Main().Get()
+func (s *Querier) queryTransaction(ctx context.Context, batch *database.Batch, txid *url.TxID) (*api.TransactionRecord, error) {
+	var msg messaging.MessageWithTransaction
+	err := batch.Message(txid.Hash()).Main().GetAs(&msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
-	if state.Transaction == nil {
-		return nil, errors.Conflict.WithFormat("record is not a transaction")
-	}
-
-	return loadTransaction(batch, record, state.Transaction)
+	return loadTransaction(batch, msg.GetTransaction())
 }
 
-func (s *Querier) querySignature(ctx context.Context, batch *database.Batch, record *database.Transaction) (*api.SignatureRecord, error) {
-	state, err := record.Main().Get()
+func (s *Querier) querySignature(ctx context.Context, batch *database.Batch, msgid *url.TxID) (*api.SignatureRecord, error) {
+	var msg messaging.MessageWithSignature
+	err := batch.Message(msgid.Hash()).Main().GetAs(&msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
-	if state.Signature == nil {
-		return nil, errors.Conflict.WithFormat("record is not a signature")
-	}
 
-	return loadSignature(batch, state.Signature, state.Txid)
+	return loadSignature(batch, msg.GetSignature(), msg.GetTxID())
 }
 
 func (s *Querier) queryAccountChains(ctx context.Context, record *database.Account) (*api.RecordRange[*api.ChainRecord], error) {
@@ -367,15 +362,14 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 			}
 
 		case merkle.ChainTypeTransaction:
-			record := batch.Transaction(value)
 			var typ string
 			var err error
 			if strings.EqualFold(r.Name, "signature") {
 				typ = "signature"
-				r.Value, err = s.querySignature(ctx, batch, record)
+				r.Value, err = s.querySignature(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
 			} else {
 				typ = "transaction"
-				r.Value, err = s.queryTransaction(ctx, batch, record)
+				r.Value, err = s.queryTransaction(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
 			}
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("load %s: %w", typ, err)
@@ -453,7 +447,7 @@ func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, rec
 	r.Entry = *(*[32]byte)(entryHash)
 
 	if expand {
-		r.Value, err = s.queryTransaction(ctx, batch, batch.Transaction(txnHash))
+		r.Value, err = s.queryTransaction(ctx, batch, protocol.UnknownUrl().WithTxID(*(*[32]byte)(txnHash)))
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
@@ -537,8 +531,7 @@ func (s *Querier) queryPendingRange(ctx context.Context, batch *database.Batch, 
 			return &api.TxIDRecord{Value: v}, nil
 		}
 
-		h := v.Hash()
-		r, err := s.queryTransaction(ctx, batch, batch.Transaction(h[:]))
+		r, err := s.queryTransaction(ctx, batch, v)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("expand pending entry: %w", err)
 		}
@@ -834,7 +827,8 @@ func (s *Querier) searchForKeyEntry(ctx context.Context, batch *database.Batch, 
 }
 
 func (s *Querier) searchForTransactionHash(ctx context.Context, batch *database.Batch, hash [32]byte) (*api.RecordRange[*api.TxIDRecord], error) {
-	state, err := batch.Transaction(hash[:]).Main().Get()
+	var msg messaging.MessageWithTransaction
+	err := batch.Message(hash).Main().GetAs(&msg)
 	switch {
 	case errors.Is(err, errors.NotFound):
 		return new(api.RecordRange[*api.TxIDRecord]), nil
@@ -842,23 +836,12 @@ func (s *Querier) searchForTransactionHash(ctx context.Context, batch *database.
 	case err != nil:
 		return nil, errors.UnknownError.Wrap(err)
 
-	case state.Transaction != nil:
-		// TODO Replace with principal or signer as appropriate
-		txid := s.partition.WithTxID(*(*[32]byte)(state.Transaction.GetHash()))
-		r := new(api.RecordRange[*api.TxIDRecord])
-		r.Total = 1
-		r.Records = []*api.TxIDRecord{{Value: txid}}
-		return r, nil
-
-	case state.Signature != nil:
-		// TODO Replace with principal or signer as appropriate
-		txid := s.partition.WithTxID(*(*[32]byte)(state.Signature.Hash()))
-		r := new(api.RecordRange[*api.TxIDRecord])
-		r.Total = 1
-		r.Records = []*api.TxIDRecord{{Value: txid}}
-		return r, nil
-
 	default:
-		return new(api.RecordRange[*api.TxIDRecord]), nil
+		// TODO Replace with principal or signer as appropriate
+		txid := s.partition.WithTxID(msg.ID().Hash())
+		r := new(api.RecordRange[*api.TxIDRecord])
+		r.Total = 1
+		r.Records = []*api.TxIDRecord{{Value: txid}}
+		return r, nil
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -29,6 +29,7 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.Netw
 	header := new(Header)
 	header.Height = ledger.Index
 	header.Timestamp = ledger.Timestamp
+	header.ExecutorVersion = ledger.ExecutorVersion
 
 	w, err := Collect(batch, header, file, CollectOptions{
 		Logger: logger,

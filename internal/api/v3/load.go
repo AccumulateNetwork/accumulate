@@ -12,26 +12,28 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func loadTransactionOrSignature(batch *database.Batch, record *database.Transaction) (api.Record, error) {
-	state, err := record.Main().Get()
+func loadTransactionOrSignature(batch *database.Batch, txid *url.TxID) (api.Record, error) {
+	msg, err := batch.Message(txid.Hash()).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
-	switch {
-	case state.Transaction != nil:
-		return loadTransaction(batch, record, state.Transaction)
-	case state.Signature != nil:
-		return loadSignature(batch, state.Signature, state.Txid)
+	switch msg := msg.(type) {
+	case messaging.MessageWithTransaction:
+		return loadTransaction(batch, msg.GetTransaction())
+	case messaging.MessageWithSignature:
+		return loadSignature(batch, msg.GetSignature(), msg.GetTxID())
 	default:
-		return nil, errors.InternalError.WithFormat("invalid transaction state")
+		return nil, errors.InternalError.WithFormat("unsupported message type %v", msg.Type())
 	}
 }
 
-func loadTransaction(batch *database.Batch, record *database.Transaction, txn *protocol.Transaction) (*api.TransactionRecord, error) {
+func loadTransaction(batch *database.Batch, txn *protocol.Transaction) (*api.TransactionRecord, error) {
+	record := batch.Transaction(txn.GetHash())
 	status, err := record.Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
@@ -77,12 +79,11 @@ func loadTransaction(batch *database.Batch, record *database.Transaction, txn *p
 		}
 
 		for _, e := range set.Entries() {
-			s, err := batch.Transaction(e.SignatureHash[:]).Main().Get()
+			var msg messaging.MessageWithSignature
+			err = batch.Message(e.SignatureHash).Main().GetAs(&msg)
 			switch {
 			case err == nil:
-				if s.Signature != nil {
-					sig.Signatures = append(sig.Signatures, s.Signature)
-				}
+				sig.Signatures = append(sig.Signatures, msg.GetSignature())
 			case errors.Is(err, errors.NotFound):
 				continue
 			default:
@@ -171,7 +172,7 @@ func loadBlockEntry(batch *database.Batch, entry *protocol.BlockEntry) (*api.Cha
 		}
 
 	case merkle.ChainTypeTransaction:
-		r.Value, err = loadTransactionOrSignature(batch, batch.Transaction(value))
+		r.Value, err = loadTransactionOrSignature(batch, protocol.UnknownUrl().WithTxID(r.Entry))
 		if err != nil {
 			return r, errors.UnknownError.WithFormat("load %s chain entry %d transaction: %w", entry.Chain, entry.Index, err)
 		}

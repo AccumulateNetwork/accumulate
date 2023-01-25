@@ -49,8 +49,7 @@ func (NetworkUpdate) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 	}
 
 	// Store the transaction
-	txr := batch.Transaction(txn.GetHash())
-	err = txr.Main().Put(&database.SigOrTxn{Transaction: txn})
+	err = batch.Message(txn.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: txn})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
@@ -62,7 +61,7 @@ func (NetworkUpdate) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 	status.Initiator = signer.GetUrl()
 	status.AddSigner(signer)
 
-	err = txr.Status().Put(status)
+	err = batch.Transaction(txn.GetHash()).Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store transaction status: %w", err)
 	}

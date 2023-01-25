@@ -130,13 +130,10 @@ func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *me
 
 	var messages []messaging.Message
 	for _, txid := range synth {
-		h := txid.Hash()
-		s, err := st.batch.Transaction(h[:]).Main().Get()
+		var txn messaging.MessageWithTransaction
+		err = st.batch.Message(txid.Hash()).Main().GetAs(&txn)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-		}
-		if s.Transaction == nil {
-			return nil, errors.InternalError.WithFormat("synthetic transaction %v is not a transaction", txid)
 		}
 
 		msg := &messaging.SyntheticTransaction{
@@ -157,7 +154,7 @@ func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *me
 				},
 			}
 		}
-		sequence[msg] = int(s.Transaction.Header.SequenceNumber)
+		sequence[msg] = int(txn.GetTransaction().Header.SequenceNumber)
 		messages = append(messages, msg)
 	}
 	return messages, nil

@@ -50,7 +50,7 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 		}
 		switch sig := other.(type) {
 		case *messaging.UserSignature:
-			if sig.TransactionHash == txn.ID().Hash() {
+			if sig.TxID.Hash() == txn.ID().Hash() {
 				signed = true
 				break
 			}
@@ -68,7 +68,7 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	loaded, err := storeTransaction(batch, txn.Transaction)
+	loaded, err := storeTransaction(batch, txn)
 	if err != nil {
 		if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
 			return protocol.NewErrorStatus(txn.ID(), err), nil
@@ -102,8 +102,9 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 	return nil, nil
 }
 
-func storeTransaction(batch *database.Batch, txn *protocol.Transaction) (*protocol.Transaction, error) {
-	record := batch.Transaction(txn.GetHash())
+func storeTransaction(batch *database.Batch, msg messaging.MessageWithTransaction) (*protocol.Transaction, error) {
+	txn := msg.GetTransaction()
+	record := batch.Message(txn.ID().Hash())
 
 	// Validate the synthetic transaction header
 	if typ := txn.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
@@ -124,6 +125,7 @@ func storeTransaction(batch *database.Batch, txn *protocol.Transaction) (*protoc
 
 	isRemote := txn.Body.Type() == protocol.TransactionTypeRemote
 	s, err := record.Main().Get()
+	s2, isTxn := s.(messaging.MessageWithTransaction)
 	switch {
 	case errors.Is(err, errors.NotFound) && !isRemote:
 		// Store the transaction
@@ -132,13 +134,13 @@ func storeTransaction(batch *database.Batch, txn *protocol.Transaction) (*protoc
 		// Unknown error or remote transaction with no local copy
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 
-	case s.Transaction == nil:
+	case !isTxn:
 		// It's not a transaction
 		return nil, errors.BadRequest.With("not a transaction")
 
-	case isRemote || s.Transaction.Equal(txn):
+	case isRemote || s2.GetTransaction().Equal(txn):
 		// Transaction has already been recorded
-		return s.Transaction, nil
+		return s2.GetTransaction(), nil
 
 	default:
 		// This should be impossible
@@ -147,7 +149,7 @@ func storeTransaction(batch *database.Batch, txn *protocol.Transaction) (*protoc
 
 	// If we reach this point, Validate should have verified that there is a
 	// signer that can be charged for this recording
-	err = record.Main().Put(&database.SigOrTxn{Transaction: txn})
+	err = record.Main().Put(msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
