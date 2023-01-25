@@ -136,13 +136,15 @@ func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *me
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
 
-		msg := &messaging.SyntheticTransaction{
-			Transaction: &protocol.Transaction{
-				Header: protocol.TransactionHeader{
-					Principal: txid.Account(),
-				},
-				Body: &protocol.RemoteTransaction{
-					Hash: txid.Hash(),
+		msg := &messaging.SyntheticMessage{
+			Message: &messaging.UserTransaction{
+				Transaction: &protocol.Transaction{
+					Header: protocol.TransactionHeader{
+						Principal: txid.Account(),
+					},
+					Body: &protocol.RemoteTransaction{
+						Hash: txid.Hash(),
+					},
 				},
 			},
 		}

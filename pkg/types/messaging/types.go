@@ -31,8 +31,8 @@ type Message interface {
 	Type() MessageType
 }
 
-func (m *UserTransaction) ID() *url.TxID      { return m.Transaction.ID() }
-func (m *SyntheticTransaction) ID() *url.TxID { return m.Transaction.ID() }
+func (m *UserTransaction) ID() *url.TxID  { return m.Transaction.ID() }
+func (m *SyntheticMessage) ID() *url.TxID { return m.Message.ID() }
 
 func (m *ValidatorSignature) ID() *url.TxID {
 	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
@@ -55,8 +55,7 @@ type MessageWithTransaction interface {
 	GetTransaction() *protocol.Transaction
 }
 
-func (m *UserTransaction) GetTransaction() *protocol.Transaction      { return m.Transaction }
-func (m *SyntheticTransaction) GetTransaction() *protocol.Transaction { return m.Transaction }
+func (m *UserTransaction) GetTransaction() *protocol.Transaction { return m.Transaction }
 
 type MessageWithSignature interface {
 	Message

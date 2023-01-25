@@ -28,7 +28,8 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 	var deliveries []*Delivery
 	txnIndex := map[[32]byte]int{}
 
-	for _, msg := range messages {
+	var process func(msg messaging.Message) error
+	process = func(msg messaging.Message) error {
 		switch msg := msg.(type) {
 		case *messaging.UserTransaction:
 			hash := *(*[32]byte)(msg.Transaction.GetHash())
@@ -39,14 +40,8 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 				deliveries = append(deliveries, &Delivery{Transaction: msg.Transaction})
 			}
 
-		case *messaging.SyntheticTransaction:
-			hash := *(*[32]byte)(msg.Transaction.GetHash())
-			if i, ok := txnIndex[hash]; ok {
-				deliveries[i].Transaction = msg.Transaction
-			} else {
-				txnIndex[hash] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Transaction: msg.Transaction})
-			}
+		case *messaging.SyntheticMessage:
+			return process(msg.Message)
 
 		case *messaging.UserSignature:
 			if i, ok := txnIndex[msg.TxID.Hash()]; ok {
@@ -65,7 +60,15 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 			}
 
 		default:
-			return nil, errors.BadRequest.WithFormat("unsupported message type %v", msg.Type())
+			return errors.BadRequest.WithFormat("unsupported message type %v", msg.Type())
+		}
+		return nil
+	}
+
+	for _, msg := range messages {
+		err := process(msg)
+		if err != nil {
+			return nil, err
 		}
 	}
 

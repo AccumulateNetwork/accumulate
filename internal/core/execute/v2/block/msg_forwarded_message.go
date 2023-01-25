@@ -24,17 +24,17 @@ type ForwardedMessage struct{}
 
 func (ForwardedMessage) Type() messaging.MessageType { return internal.MessageTypeForwardedMessage }
 
-func (ForwardedMessage) Process(b *bundle, batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
-	fwd, ok := msg.(*internal.ForwardedMessage)
+func (ForwardedMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	fwd, ok := ctx.message.(*internal.ForwardedMessage)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeForwardedMessage, msg.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeForwardedMessage, ctx.message.Type())
 	}
-	msg = fwd.Message
+	msg := fwd.Message
 
 	// Mark the message as having been forwarded
-	b.forwarded.Add(msg.ID().Hash())
+	ctx.forwarded.Add(msg.ID().Hash())
 
-	st, err := b.callMessageExecutor(batch, msg)
+	st, err := ctx.callMessageExecutor(batch, ctx.childWith(msg))
 	err = errors.UnknownError.Wrap(err)
 	return st, err
 }
