@@ -15,15 +15,11 @@ import (
 )
 
 func init() {
-	messageExecutors = append(messageExecutors, func(ExecutorOptions) MessageExecutor { return TransactionIsReady{} })
+	registerSimpleExec[TransactionIsReady](&messageExecutors, internal.MessageTypeTransactionIsReady)
 }
 
 // TransactionIsReady queues a transaction for execution.
 type TransactionIsReady struct{}
-
-func (TransactionIsReady) Type() messaging.MessageType {
-	return internal.MessageTypeTransactionIsReady
-}
 
 func (TransactionIsReady) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	txn, ok := ctx.message.(*internal.TransactionIsReady)

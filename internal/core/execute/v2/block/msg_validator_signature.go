@@ -14,16 +14,12 @@ import (
 )
 
 func init() {
-	messageExecutors = append(messageExecutors, func(ExecutorOptions) MessageExecutor { return ValidatorSignature{} })
+	registerSimpleExec[ValidatorSignature](&messageExecutors, messaging.MessageTypeValidatorSignature)
 }
 
 // ValidatorSignature executes the signature, queuing the transaction for processing
 // when appropriate.
 type ValidatorSignature struct{}
-
-func (ValidatorSignature) Type() messaging.MessageType {
-	return messaging.MessageTypeValidatorSignature
-}
 
 func (x ValidatorSignature) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	sig, ok := ctx.message.(*messaging.ValidatorSignature)
