@@ -12,7 +12,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type Block struct {
@@ -32,7 +33,7 @@ type BlockState struct {
 	MakeMajorBlockTime time.Time
 	Delivered          uint64
 	Signed             uint64
-	ProducedTxns       []*protocol.Transaction
+	Produced           int
 	ChainUpdates       chain.ChainUpdates
 	ReceivedAnchors    []*chain.ReceivedAnchor
 
@@ -45,13 +46,22 @@ type BlockAnchorState struct {
 	OpenMajorBlockTime   time.Time
 }
 
+// ProducedMessage is a message produced by another message.
+type ProducedMessage struct {
+	// Producer is the ID of the producer.
+	Producer *url.TxID
+
+	// Message is the produced message.
+	Message messaging.Message
+}
+
 // Empty returns true if nothing happened during the block.
 func (s *BlockState) Empty() bool {
 	return !s.OpenedMajorBlock &&
 		s.Anchor == nil &&
 		s.Delivered == 0 &&
 		s.Signed == 0 &&
-		len(s.ProducedTxns) == 0 &&
+		s.Produced == 0 &&
 		len(s.ChainUpdates.Entries) == 0
 }
 
@@ -67,7 +77,6 @@ func (s *BlockState) MergeSignature(r *ProcessSignatureState) {
 
 func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
 	s.Delivered++
-	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
 	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
 	if r.MakeMajorBlock > 0 {

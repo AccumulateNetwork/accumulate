@@ -72,7 +72,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		"delivered", block.State.Delivered,
 		"signed", block.State.Signed,
 		"updated", len(block.State.ChainUpdates.Entries),
-		"produced", len(block.State.ProducedTxns))
+		"produced", block.State.Produced)
 	t := time.Now()
 
 	// Load the main chain of the minor root
@@ -190,7 +190,7 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	// Add the synthetic transaction chain to the root chain
 	var synthIndexIndex uint64
-	if len(block.State.ProducedTxns) > 0 {
+	if block.State.Produced > 0 {
 		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
@@ -492,7 +492,7 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 	}
 
 	// Did we produce synthetic transactions?
-	if len(block.State.ProducedTxns) > 0 {
+	if block.State.Produced > 0 {
 		return true
 	}
 
