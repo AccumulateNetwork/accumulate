@@ -267,9 +267,12 @@ func (b *bundle) executeTransaction(hash [32]byte) (*protocol.TransactionStatus,
 	}
 
 	delivery := &chain.Delivery{Transaction: txn.GetTransaction(), Internal: b.internal.Has(hash)}
-	err = delivery.LoadSyntheticMetadata(batch, txn.GetTransaction())
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	if typ := txn.GetTransaction().Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
+		// Load sequence info
+		delivery.Sequence, err = getSequence(batch, delivery.Transaction.ID())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
+		}
 	}
 
 	status, state, err := b.Executor.ProcessTransaction(batch, delivery)

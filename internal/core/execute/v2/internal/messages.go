@@ -75,6 +75,11 @@ func (m *TransactionIsReady) CopyAsInterface() any        { return m }
 // envelope.
 type internalMessage struct{}
 
+// Hash panics.
+func (internalMessage) Hash() [32]byte {
+	panic("this is an internal message that must not be marshalled")
+}
+
 // MarshalBinary returns an error.
 func (internalMessage) MarshalBinary() (data []byte, err error) {
 	return nil, errors.InternalError.WithFormat("this is an internal message that must not be marshalled")

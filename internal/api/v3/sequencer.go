@@ -114,10 +114,12 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	txn.Body = msg.GetTransaction().Body
 
 	var signatures []protocol.Signature
+	r := new(api.TransactionRecord)
 	if globals.ExecutorVersion.V2() {
-		txn.Header.Source = s.partition.URL
-		txn.Header.Destination = dst
-		txn.Header.SequenceNumber = num
+		r.Sequence = new(messaging.SequencedMessage)
+		r.Sequence.Source = s.partition.URL
+		r.Sequence.Destination = dst
+		r.Sequence.Number = num
 
 	} else {
 		// Create a partition signature
@@ -145,7 +147,6 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	}
 	signatures = append(signatures, keySig)
 
-	r := new(api.TransactionRecord)
 	r.Transaction = txn
 	r.TxID = txn.ID()
 	r.Signatures = new(api.RecordRange[*api.SignatureRecord])
@@ -191,6 +192,18 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", entry.Source, err)
 	}
 
+	r := new(api.TransactionRecord)
+
+	if globals.ExecutorVersion.V2() {
+		// Load the transaction
+		var seq *messaging.SequencedMessage
+		err = batch.Message2(hash).Main().GetAs(&seq)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+		}
+		r.Sequence = seq
+	}
+
 	// Load the transaction
 	var msg messaging.MessageWithTransaction
 	err = batch.Message2(hash).Main().GetAs(&msg)
@@ -198,6 +211,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
 
+	hash = msg.GetTransaction().GetHash()
 	status, err := batch.Transaction(hash).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
@@ -263,7 +277,6 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	}
 	signatures = append(signatures, keySig)
 
-	r := new(api.TransactionRecord)
 	r.Transaction = msg.GetTransaction()
 	r.TxID = msg.GetTransaction().ID()
 	r.Signatures = new(api.RecordRange[*api.SignatureRecord])

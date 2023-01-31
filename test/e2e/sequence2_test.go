@@ -50,8 +50,8 @@ func TestMissingSynthTxn(t *testing.T) {
 			for _, msg := range messages {
 			again:
 				switch m := msg.(type) {
-				case *messaging.SyntheticMessage:
-					msg = m.Message
+				case interface{ Unwrap() messaging.Message }:
+					msg = m.Unwrap()
 					goto again
 				case messaging.MessageWithTransaction:
 					if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {

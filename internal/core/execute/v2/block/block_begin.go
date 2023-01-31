@@ -143,8 +143,8 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 
 	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
 
-	err = putSyntheticTransaction(
-		batch, txn,
+	err = putMessageWithStatus(batch,
+		&messaging.UserTransaction{Transaction: txn},
 		&protocol.TransactionStatus{Code: errors.Delivered})
 	if err != nil {
 		return err
@@ -224,9 +224,9 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 	anchorTxn.Body = anchor
 
 	// Record the anchor
-	err = putSyntheticTransaction(block.Batch, anchorTxn, &protocol.TransactionStatus{
-		Code: errors.Remote,
-	})
+	err = putMessageWithStatus(block.Batch,
+		&messaging.UserTransaction{Transaction: anchorTxn},
+		&protocol.TransactionStatus{Code: errors.Remote})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -394,6 +394,8 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.InternalError.WithFormat("load synthetic index chain entry %d: %w", indexIndex-1, err)
 		}
 		from = prevEntry.Source + 1
+	} else {
+		from = 1 // Skip genesis
 	}
 
 	if blockReceipt == nil {
@@ -422,18 +424,18 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 	// For each synthetic transaction from the last block
 	for i, hash := range entries {
 		// Load it
-		var msg messaging.MessageWithTransaction
-		err := batch.Message2(hash).Main().GetAs(&msg)
+		var seq *messaging.SequencedMessage
+		err := batch.Message2(hash).Main().GetAs(&seq)
 		if err != nil {
 			return errors.UnknownError.WithFormat("load synthetic transaction: %w", err)
 		}
-		txn := msg.GetTransaction()
-		if txn.Body.Type() == protocol.TransactionTypeSystemGenesis {
-			continue // Genesis is added to partition/synthetic#chain/main, but it's not a real synthetic transaction
+		if h := seq.Hash(); !bytes.Equal(hash, h[:]) {
+			return errors.InternalError.WithFormat("synthetic message stored as %X hashes to %X", hash[:4], h[:4])
 		}
 
-		if !bytes.Equal(hash, txn.GetHash()) {
-			return errors.InternalError.WithFormat("%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
+		txn, ok := seq.Message.(messaging.MessageWithTransaction)
+		if !ok {
+			return errors.InternalError.WithFormat("invalid synthetic transaction: expected %v, got %v", messaging.MessageTypeUserTransaction, seq.Message.Type())
 		}
 
 		// Get the synthetic main chain receipt
@@ -454,17 +456,17 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.UnknownError.WithFormat("combine receipts: %w", err)
 		}
 
-		keySig, err := x.signTransaction(txn.GetHash())
+		// TODO Sign the sequenced message, not the transaction
+		keySig, err := x.signTransaction(txn.GetTransaction().GetHash())
+		// keySig, err := x.signTransaction(hash)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 
 		messages := []messaging.Message{
 			&messaging.SyntheticMessage{
-				Message: &messaging.UserTransaction{
-					Transaction: txn,
-				},
-				Proof: receipt,
+				Message: seq,
+				Proof:   receipt,
 			},
 			&messaging.ValidatorSignature{
 				Signature: keySig,
@@ -475,7 +477,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		// Only send synthetic transactions from the leader
 		if isLeader {
 			env := &messaging.Envelope{Messages: messages}
-			err = x.mainDispatcher.Submit(context.Background(), txn.Header.Principal, env)
+			err = x.mainDispatcher.Submit(context.Background(), txn.GetTransaction().Header.Principal, env)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", hash[:4], err)
 			}
@@ -508,9 +510,6 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	// Create the transaction
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = destPartUrl.JoinPath(protocol.AnchorPool)
-	txn.Header.Source = x.Describe.NodeUrl()
-	txn.Header.Destination = destPartUrl
-	txn.Header.SequenceNumber = sequenceNumber
 	txn.Body = anchor
 
 	// Create a key signature
@@ -522,8 +521,13 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	messages := []messaging.Message{
 		// Since anchors don't require proofs, they're not synthetic so we
 		// pretend like they're user transactions
-		&messaging.UserTransaction{
-			Transaction: txn,
+		&messaging.SequencedMessage{
+			Message: &messaging.UserTransaction{
+				Transaction: txn,
+			},
+			Source:      x.Describe.NodeUrl(),
+			Destination: destPartUrl,
+			Number:      sequenceNumber,
 		},
 		&messaging.ValidatorSignature{
 			Signature: keySig,
