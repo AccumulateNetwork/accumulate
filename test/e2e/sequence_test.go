@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -207,8 +206,6 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 		}
 	}
 	require.NotNil(t, receipt)
-	req := new(query.RequestByUrl)
-	req.Url = DnUrl().JoinPath(AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", receipt.Proof.Anchor))
 	simulator.QueryUrl[*api.ChainQueryResponse](sim, DnUrl(), true)
 
 	// Submit the synthetic transaction

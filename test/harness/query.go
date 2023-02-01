@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -75,11 +75,22 @@ func (h *Harness) QueryChain(scope *url.URL, query *api.ChainQuery) *api.ChainRe
 	return r
 }
 
-// QueryChains queries the Harness's service, passing the given arguments.
-// QueryChains fails if Query returns an error. See api.Querier2.QueryChains.
-func (h *Harness) QueryChains(scope *url.URL, query *api.ChainQuery) *api.RecordRange[*api.ChainRecord] {
+// QueryAccountChains queries the Harness's service, passing the given
+// arguments. QueryAccountChains fails if Query returns an error. See
+// api.Querier2.QueryAccountChains.
+func (h *Harness) QueryAccountChains(scope *url.URL, query *api.ChainQuery) *api.RecordRange[*api.ChainRecord] {
 	h.TB.Helper()
-	r, err := h.Query().QueryChains(context.Background(), scope, query)
+	r, err := h.Query().QueryAccountChains(context.Background(), scope, query)
+	require.NoError(h.TB, err)
+	return r
+}
+
+// QueryTransactionChains queries the Harness's service, passing the given
+// arguments. QueryTransactionChains fails if Query returns an error. See
+// api.Querier2.QueryTransactionChains.
+func (h *Harness) QueryTransactionChains(scope *url.TxID, query *api.ChainQuery) *api.RecordRange[*api.ChainEntryRecord[api.Record]] {
+	h.TB.Helper()
+	r, err := h.Query().QueryTransactionChains(context.Background(), scope, query)
 	require.NoError(h.TB, err)
 	return r
 }
@@ -306,7 +317,7 @@ func (h *Harness) SearchForDelegate(scope *url.URL, search *api.DelegateSearchQu
 // SearchForTransactionHash queries the Harness's service, passing the given
 // arguments. SearchForTransactionHash fails if Query returns an error. See
 // api.Querier2.SearchForTransactionHash.
-func (h *Harness) SearchForTransactionHash(scope *url.URL, search *api.TransactionHashSearchQuery) *api.RecordRange[*api.TxIDRecord] {
+func (h *Harness) SearchForTransactionHash(scope *url.URL, search *api.MessageHashSearchQuery) *api.RecordRange[*api.TxIDRecord] {
 	h.TB.Helper()
 	r, err := h.Query().SearchForTransactionHash(context.Background(), scope, search)
 	require.NoError(h.TB, err)

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -56,7 +55,7 @@ func TestMinorBlock_Expand(t *testing.T) {
 	// Call the API
 	req := new(api.MinorBlocksQuery)
 	req.Url = DnUrl()
-	req.TxFetchMode = query.TxFetchModeExpand
+	req.TxFetchMode = api.TxFetchModeExpand
 	req.Start = 1
 	req.Count = 10
 	res, err := sim.Partition(Directory).API.QueryMinorBlocks(context.Background(), req)

@@ -160,6 +160,8 @@ func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback fun
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// TODO Move the aggregation logic into a separate module
+
 	// Collect aggregate requests
 	var parts []multiaddr.Multiaddr
 	aggregate := map[Message]aggregator{}
@@ -172,14 +174,14 @@ func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback fun
 		if req.Scope == nil || !protocol.IsUnknown(req.Scope) {
 			continue
 		}
-		if _, ok := req.Query.(*api.TransactionHashSearchQuery); !ok {
+		if _, ok := req.Query.(*api.MessageHashSearchQuery); !ok {
 			continue
 		}
 
 		// Query the network for a list of partitions
 		if parts == nil {
 			var err error
-			parts, err = c.getParts(ctx)
+			parts, err = c.getParts(ctx, api.ServiceTypeQuery)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -373,7 +375,7 @@ func (c *Client) GetNetInfo(ctx context.Context) (*api.NetworkStatus, error) {
 }
 
 // getParts queries the network for the list of partitions.
-func (c *Client) getParts(ctx context.Context) ([]multiaddr.Multiaddr, error) {
+func (c *Client) getParts(ctx context.Context, service api.ServiceType) ([]multiaddr.Multiaddr, error) {
 	ns, err := c.GetNetInfo(ctx)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -383,7 +385,10 @@ func (c *Client) getParts(ctx context.Context) ([]multiaddr.Multiaddr, error) {
 	// /acc/{partition}
 	ma := make([]multiaddr.Multiaddr, len(ns.Network.Partitions))
 	for i, part := range ns.Network.Partitions {
-		ma[i], err = multiaddr.NewComponent(api.N_ACC, part.ID)
+		sa := new(api.ServiceAddress)
+		sa.Type = service
+		sa.Partition = part.ID
+		ma[i], err = multiaddr.NewComponent(api.N_ACC, sa.String())
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
 		}

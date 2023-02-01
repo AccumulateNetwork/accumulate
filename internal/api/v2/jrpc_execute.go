@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -179,13 +180,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		return err
 	}
 
-	// Route the request
-	partition, err := m.Router.Route(env)
-	if err != nil {
-		return validatorError(err)
-	}
-
-	return m.submit(ctx, partition, env, req.CheckOnly)
+	return m.submit(m.NetV3, ctx, env, req.CheckOnly)
 }
 
 func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage) interface{} {
@@ -195,13 +190,7 @@ func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage)
 		return validatorError(err)
 	}
 
-	// Route the request
-	partition, err := m.Router.Route(req.Envelope)
-	if err != nil {
-		return validatorError(err)
-	}
-
-	return m.submit(ctx, partition, req.Envelope, req.CheckOnly)
+	return m.submit(m.NetV3, ctx, req.Envelope, req.CheckOnly)
 }
 
 func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) interface{} {
@@ -211,18 +200,24 @@ func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) 
 		return validatorError(err)
 	}
 
-	return m.submit(ctx, m.Options.Describe.PartitionId, req.Envelope, req.CheckOnly)
+	return m.submit(m.LocalV3, ctx, req.Envelope, req.CheckOnly)
 }
 
-func (m *JrpcMethods) submit(ctx context.Context, partition string, env *protocol.Envelope, checkOnly bool) interface{} {
+func (m *JrpcMethods) submit(v3 V3, ctx context.Context, env *protocol.Envelope, checkOnly bool) interface{} {
 	// Marshal the envelope
 	txData, err := env.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
 
-	// Submit the envelope(s)
-	resp, err := m.Router.Submit(ctx, partition, env, checkOnly, false)
+	// Submit the envelope
+	var resp []*api.Submission
+	var yes, no = true, false
+	if checkOnly {
+		resp, err = v3.Validate(ctx, env, api.ValidateOptions{Full: &no})
+	} else {
+		resp, err = v3.Submit(ctx, env, api.SubmitOptions{Verify: &no, Wait: &yes})
+	}
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -230,7 +225,10 @@ func (m *JrpcMethods) submit(ctx context.Context, partition string, env *protoco
 	// Build the response
 	simpleHash := sha256.Sum256(txData)
 	res := new(TxResponse)
-	res.Code = uint64(resp.Code)
+	if len(resp) > 0 && !resp[0].Success {
+		res.Code = 1
+		res.Message = resp[0].Message
+	}
 	res.Txid = env.Transaction[0].ID()
 	res.TransactionHash = env.Transaction[0].GetHash()
 	res.SignatureHashes = make([][]byte, len(env.Signatures))
@@ -240,36 +238,17 @@ func (m *JrpcMethods) submit(ctx context.Context, partition string, env *protoco
 		res.SignatureHashes[i] = sig.Hash()
 	}
 
-	// Parse the results
-	results := new(protocol.TransactionResultSet)
-	err = results.UnmarshalBinary(resp.Data)
-	if err != nil {
-		m.logError("Failed to decode transaction results", "error", err)
+	if len(resp) == 1 {
+		res.Result = resp[0].Status
+	} else if len(resp) > 0 {
+		var st []*protocol.TransactionStatus
+		for _, r := range resp {
+			st = append(st, r.Status)
+		}
+		res.Result = st
 	}
 
-	if len(results.Results) == 1 {
-		res.Result = results.Results[0]
-	} else if len(results.Results) > 0 {
-		res.Result = results.Results
-	}
-
-	// Check for errors
-	switch {
-	case len(resp.MempoolError) > 0:
-		res.Message = resp.MempoolError
-		return res
-	case len(resp.Log) > 0:
-		res.Message = resp.Log
-		return res
-	case len(resp.Info) > 0:
-		res.Message = resp.Info
-		return res
-	case resp.Code != 0:
-		res.Message = "An unknown error occurred"
-		return res
-	default:
-		return res
-	}
+	return res
 }
 
 func processExecuteRequest(req *TxRequest, payload []byte) (*protocol.Envelope, error) {

@@ -148,11 +148,10 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	// Set up the API
 	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{
 		Logger:        n.logger,
-		Describe:      &network,
-		Router:        s.router,
 		TxMaxWaitTime: time.Hour,
-		Database:      n,
-		Key:           init.PrivValKey,
+		Describe:      &network,
+		LocalV3:       (*nodeService)(n),
+		NetV3:         (*simService)(s),
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -357,10 +356,14 @@ func (s *nodeService) Metrics(ctx context.Context, opts api.MetricsOptions) (*ap
 
 // Query implements [api.Querier].
 func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	// Copy to avoid changing the caller's values
+	query = api.CopyQuery(query)
+
 	r, err := s.querySvc.Query(ctx, scope, query)
 	if err != nil {
 		return nil, err
 	}
+
 	// Force despecialization of generic types
 	b, err := r.MarshalBinary()
 	if err != nil {
