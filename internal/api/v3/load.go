@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -99,9 +99,25 @@ func loadTransaction(batch *database.Batch, record *database.Transaction, txn *p
 }
 
 func loadSignature(batch *database.Batch, sig protocol.Signature, txid *url.TxID) (*api.SignatureRecord, error) {
+	record := batch.Transaction(sig.Hash())
+	status, err := record.Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
+
+	produced, err := record.Produced().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load produced: %w", err)
+	}
+
 	r := new(api.SignatureRecord)
 	r.Signature = sig
 	r.TxID = txid
+	r.Status = status
+	r.Produced, _ = api.MakeRange(produced, 0, 0, func(x *url.TxID) (*api.TxIDRecord, error) {
+		return &api.TxIDRecord{Value: x}, nil
+	})
+
 	if sig.Type().IsSystem() {
 		return r, nil
 	}
@@ -110,7 +126,7 @@ func loadSignature(batch *database.Batch, sig protocol.Signature, txid *url.TxID
 	}
 
 	var signer protocol.Signer
-	err := batch.Account(sig.GetSigner()).Main().GetAs(&signer)
+	err = batch.Account(sig.GetSigner()).Main().GetAs(&signer)
 	switch {
 	case err == nil:
 		r.Signer = signer
@@ -133,6 +149,7 @@ func loadBlockEntry(batch *database.Batch, entry *protocol.BlockEntry) (*api.Cha
 	if err != nil {
 		return r, errors.UnknownError.WithFormat("load %s chain: %w", entry.Chain, err)
 	}
+	r.Type = chain.Type()
 
 	value, err := chain.Entry(int64(entry.Index))
 	if err != nil {

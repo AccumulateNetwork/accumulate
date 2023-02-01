@@ -54,44 +54,77 @@ func EqualRecord(a, b Record) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *AccountRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*AccountRecord)
 		return ok && a.Equal(b)
 	case *ChainEntryRecord[Record]:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ChainEntryRecord[Record])
 		return ok && a.Equal(b)
 	case *ChainRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ChainRecord)
 		return ok && a.Equal(b)
 	case *IndexEntryRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*IndexEntryRecord)
 		return ok && a.Equal(b)
 	case *KeyRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*KeyRecord)
 		return ok && a.Equal(b)
 	case *MajorBlockRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*MajorBlockRecord)
 		return ok && a.Equal(b)
 	case *MinorBlockRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*MinorBlockRecord)
 		return ok && a.Equal(b)
 	case *RecordRange[Record]:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*RecordRange[Record])
 		return ok && a.Equal(b)
 	case *SignatureRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SignatureRecord)
 		return ok && a.Equal(b)
 	case *TransactionRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*TransactionRecord)
 		return ok && a.Equal(b)
 	case *TxIDRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*TxIDRecord)
 		return ok && a.Equal(b)
 	case *UrlRecord:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*UrlRecord)
 		return ok && a.Equal(b)
 	default:
@@ -199,14 +232,14 @@ func NewQuery(typ QueryType) (Query, error) {
 		return new(DelegateSearchQuery), nil
 	case QueryTypeDirectory:
 		return new(DirectoryQuery), nil
+	case QueryTypeMessageHashSearch:
+		return new(MessageHashSearchQuery), nil
 	case QueryTypePending:
 		return new(PendingQuery), nil
 	case QueryTypePublicKeyHashSearch:
 		return new(PublicKeyHashSearchQuery), nil
 	case QueryTypePublicKeySearch:
 		return new(PublicKeySearchQuery), nil
-	case QueryTypeTransactionHashSearch:
-		return new(TransactionHashSearchQuery), nil
 	default:
 		return nil, fmt.Errorf("unknown query %v", typ)
 	}
@@ -217,42 +250,72 @@ func EqualQuery(a, b Query) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *AnchorSearchQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*AnchorSearchQuery)
 		return ok && a.Equal(b)
 	case *BlockQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*BlockQuery)
 		return ok && a.Equal(b)
 	case *ChainQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ChainQuery)
 		return ok && a.Equal(b)
 	case *DataQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*DataQuery)
 		return ok && a.Equal(b)
 	case *DefaultQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*DefaultQuery)
 		return ok && a.Equal(b)
 	case *DelegateSearchQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*DelegateSearchQuery)
 		return ok && a.Equal(b)
 	case *DirectoryQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*DirectoryQuery)
 		return ok && a.Equal(b)
+	case *MessageHashSearchQuery:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MessageHashSearchQuery)
+		return ok && a.Equal(b)
 	case *PendingQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*PendingQuery)
 		return ok && a.Equal(b)
 	case *PublicKeyHashSearchQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*PublicKeyHashSearchQuery)
 		return ok && a.Equal(b)
 	case *PublicKeySearchQuery:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*PublicKeySearchQuery)
-		return ok && a.Equal(b)
-	case *TransactionHashSearchQuery:
-		b, ok := b.(*TransactionHashSearchQuery)
 		return ok && a.Equal(b)
 	default:
 		return false
@@ -276,13 +339,13 @@ func CopyQuery(v Query) Query {
 		return v.Copy()
 	case *DirectoryQuery:
 		return v.Copy()
+	case *MessageHashSearchQuery:
+		return v.Copy()
 	case *PendingQuery:
 		return v.Copy()
 	case *PublicKeyHashSearchQuery:
 		return v.Copy()
 	case *PublicKeySearchQuery:
-		return v.Copy()
-	case *TransactionHashSearchQuery:
 		return v.Copy()
 	default:
 		return v.CopyAsInterface().(Query)
@@ -363,17 +426,23 @@ func EqualEvent(a, b Event) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *BlockEvent:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*BlockEvent)
 		return ok && a.Equal(b)
 	case *ErrorEvent:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ErrorEvent)
 		return ok && a.Equal(b)
 	case *GlobalsEvent:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*GlobalsEvent)
 		return ok && a.Equal(b)
 	default:

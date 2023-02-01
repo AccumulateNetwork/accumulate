@@ -53,8 +53,8 @@ const QueryTypePublicKeyHashSearch QueryType = 18
 // QueryTypeDelegateSearch .
 const QueryTypeDelegateSearch QueryType = 19
 
-// QueryTypeTransactionHashSearch .
-const QueryTypeTransactionHashSearch QueryType = 20
+// QueryTypeMessageHashSearch .
+const QueryTypeMessageHashSearch QueryType = 20
 
 // RecordTypeAccount .
 const RecordTypeAccount RecordType = 1
@@ -190,7 +190,7 @@ func (v QueryType) GetEnumValue() uint64 { return uint64(v) }
 func (v *QueryType) SetEnumValue(id uint64) bool {
 	u := QueryType(id)
 	switch u {
-	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeTransactionHashSearch:
+	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
 		*v = u
 		return true
 	default:
@@ -221,8 +221,8 @@ func (v QueryType) String() string {
 		return "publicKeyHashSearch"
 	case QueryTypeDelegateSearch:
 		return "delegateSearch"
-	case QueryTypeTransactionHashSearch:
-		return "transactionHashSearch"
+	case QueryTypeMessageHashSearch:
+		return "messageHashSearch"
 	default:
 		return fmt.Sprintf("QueryType:%d", v)
 	}
@@ -251,8 +251,8 @@ func QueryTypeByName(name string) (QueryType, bool) {
 		return QueryTypePublicKeyHashSearch, true
 	case "delegatesearch":
 		return QueryTypeDelegateSearch, true
-	case "transactionhashsearch":
-		return QueryTypeTransactionHashSearch, true
+	case "messagehashsearch":
+		return QueryTypeMessageHashSearch, true
 	default:
 		return 0, false
 	}

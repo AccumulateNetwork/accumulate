@@ -27,7 +27,6 @@ Faucet:
 
 Query:
   description: queries an account or account chain by URL
-  kind: query
   rpc: query
   input: GeneralQuery
   output: ChainQueryResponse|TransactionQueryResponse|MultiResponse
@@ -37,7 +36,6 @@ Query:
 
 QueryDirectory:
   description: queries the directory entries of an account
-  kind: query
   rpc: query-directory
   input: DirectoryQuery
   output: MultiResponse
@@ -60,7 +58,6 @@ QueryTxLocal:
 
 QueryTxHistory:
   description: queries an account's transaction history
-  kind: query
   rpc: query-tx-history
   input: TxHistoryQuery
   output: MultiResponse
@@ -69,7 +66,6 @@ QueryTxHistory:
 
 QueryData:
   description: queries an entry on an account's data chain
-  kind: query
   rpc: query-data
   input: DataEntryQuery
   output: ChainQueryResponse
@@ -78,7 +74,6 @@ QueryData:
 
 QueryDataSet:
   description: queries a range of entries on an account's data chain
-  kind: query
   rpc: query-data-set
   input: DataEntrySetQuery
   output: MultiResponse
@@ -87,7 +82,6 @@ QueryDataSet:
 
 QueryKeyPageIndex:
   description: queries the location of a key within an account's key book(s)
-  kind: query
   rpc: query-key-index
   input: KeyPageIndexQuery
   output: ChainQueryResponse
@@ -96,7 +90,6 @@ QueryKeyPageIndex:
 
 QueryMinorBlocks:
   description: queries an account's minor blocks
-  kind: query
   experimental: true
   rpc: query-minor-blocks
   input: MinorBlocksQuery
@@ -106,7 +99,6 @@ QueryMinorBlocks:
 
 QueryMajorBlocks:
   description: queries an account's major blocks
-  kind: query
   experimental: true
   rpc: query-major-blocks
   input: MajorBlocksQuery
@@ -115,7 +107,6 @@ QueryMajorBlocks:
   call-params: [Url, QueryPagination]
 
 QuerySynth:
-  kind: query
   experimental: true
   rpc: query-synth
   input: SyntheticTransactionRequest
