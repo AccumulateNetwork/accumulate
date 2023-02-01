@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,30 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-func (x *Executor) ValidateEnvelopeSet(batch *database.Batch, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, delivery := range deliveries {
-		status := new(protocol.TransactionStatus)
-		results[i] = status
-
-		var err error
-		status.Result, err = x.ValidateEnvelope(batch, delivery)
-
-		// Wait until after ValidateEnvelope, because the transaction may get
-		// loaded by LoadTransaction
-		status.TxID = delivery.Transaction.ID()
-
-		if err != nil {
-			status.Set(err)
-			if captureError != nil {
-				captureError(err, delivery, status)
-			}
-		}
-	}
-
-	return results
-}
 
 // ValidateEnvelope verifies that the envelope is valid. It checks the basics,
 // like the envelope has signatures and a hash and/or a transaction. It

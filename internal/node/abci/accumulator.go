@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -25,8 +25,8 @@ import (
 	"github.com/tendermint/tendermint/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -34,6 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -47,7 +48,8 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block          *block.Block
+	block          execute.Block
+	blockState     execute.BlockState
 	blockSpan      trace.Span
 	txct           int64
 	timer          time.Time
@@ -65,7 +67,7 @@ type Accumulator struct {
 type AccumulatorOptions struct {
 	*config.Config
 	Tracer   trace.Tracer
-	Executor *block.Executor
+	Executor execute.Executor
 	EventBus *events.Bus
 	DB       *database.Database
 	Logger   log.Logger
@@ -281,12 +283,9 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	}
 
 	// Notify the world of the committed block
-	block := new(block.Block)
-	block.Index = protocol.GenesisBlock
-	block.Time = req.Time
 	err = app.EventBus.Publish(events.DidCommitBlock{
-		Index: block.Index,
-		Time:  block.Time,
+		Index: protocol.GenesisBlock,
+		Time:  req.Time,
 	})
 	if err != nil {
 		panic(fmt.Errorf("failed to publish block notification: %v", err))
@@ -332,17 +331,18 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	var ret abci.ResponseBeginBlock
 
-	app.block = new(block.Block)
-	app.block.Context = ctx
-	app.block.IsLeader = bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
-	app.block.Index = uint64(req.Header.Height)
-	app.block.Time = req.Header.Time
-	app.block.CommitInfo = &req.LastCommitInfo
-	app.block.Evidence = req.ByzantineValidators
-	app.block.Batch = app.DB.Begin(true)
-
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	err := app.Executor.BeginBlock(app.block)
+	isLeader := bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
+
+	var err error
+	app.block, err = app.Executor.Begin(execute.BlockParams{
+		Context:    ctx,
+		IsLeader:   isLeader,
+		Index:      uint64(req.Header.Height),
+		Time:       req.Header.Time,
+		CommitInfo: &req.LastCommitInfo,
+		Evidence:   req.ByzantineValidators,
+	})
 	if err != nil {
 		app.fatal(err)
 		return ret
@@ -400,7 +400,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		defer batch.Discard()
 	}
 
-	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)
+	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)
 	if err != nil {
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseCheckTx
@@ -415,8 +415,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	const maxPriority = (1 << 32) - 1
 
 	seq := map[[32]byte]uint64{}
-	for _, env := range envelopes {
-		for _, sig := range env.Signatures {
+	for _, message := range messages {
+		message := message.(*messaging.LegacyMessage)
+		for _, sig := range message.Signatures {
 			sig, ok := sig.(*protocol.PartitionSignature)
 			if ok {
 				seq[sig.TransactionHash] = sig.SequenceNumber
@@ -427,11 +428,12 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
 		var priority int64
-		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() {
+		message := messages[i].(*messaging.LegacyMessage)
+		if typ := message.Transaction.Body.Type(); typ.IsSystem() {
 			priority = maxPriority
 		} else if typ.IsSynthetic() {
 			// Set the priority based on the sequence number to try to keep them in order
-			seq := seq[*(*[32]byte)(envelopes[i].Transaction.GetHash())]
+			seq := seq[*(*[32]byte)(message.Transaction.GetHash())]
 			priority = maxPriority - 1 - int64(seq)
 		}
 		if resp.Priority < priority {
@@ -440,7 +442,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if result.Error == nil {
 			continue
 		}
-		if !result.Code.Success() && !envelopes[i].Transaction.Body.Type().IsUser() {
+		if !result.Code.Success() && !message.Transaction.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
@@ -456,7 +458,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
 	defer app.recover(&rdt.Code)
 
-	_, span := app.Tracer.Start(app.block.Context, "DeliverTx")
+	_, span := app.Tracer.Start(app.block.Params().Context, "DeliverTx")
 	defer span.End()
 
 	// Is the node borked?
@@ -485,16 +487,17 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	defer app.recover(nil)
 
-	_, span := app.Tracer.Start(app.block.Context, "EndBlock")
+	_, span := app.Tracer.Start(app.block.Params().Context, "EndBlock")
 	defer span.End()
 
-	err := app.Executor.EndBlock(app.block)
+	var err error
+	app.blockState, err = app.block.Close()
 	if err != nil {
 		app.fatal(err)
 		return abci.ResponseEndBlock{}
 	}
 
-	if app.block.State.Empty() {
+	if app.blockState.IsEmpty() {
 		return abci.ResponseEndBlock{}
 	}
 
@@ -509,15 +512,15 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit() abci.ResponseCommit {
 	defer app.recover(nil)
-	defer func() { app.block = nil }()
+	defer func() { app.block, app.blockState = nil, nil }()
 	defer app.blockSpan.End()
 
-	_, span := app.Tracer.Start(app.block.Context, "Commit")
+	_, span := app.Tracer.Start(app.block.Params().Context, "Commit")
 	defer span.End()
 
 	tick := time.Now()
 	// Is the block empty?
-	if app.block.State.Empty() {
+	if app.blockState.IsEmpty() {
 		timeSinceAppStart := time.Since(app.startTime).Seconds()
 		ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
 		if ds != nil {
@@ -528,7 +531,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 				aveBlockTime = blockTime / float64(app.txct)
 				estTps = 1.0 / aveBlockTime
 			}
-			ds.Save("height", app.block.Index, 10, true)
+			ds.Save("height", app.block.Params().Index, 10, true)
 			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 			ds.Save("block_time", blockTime, 6, false)
 			ds.Save("ave_block_time", aveBlockTime, 10, false)
@@ -545,15 +548,15 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 		ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
 		if ds != nil {
-			ds.Save("height", app.block.Index, 10, true)
+			ds.Save("height", app.block.Params().Index, 10, true)
 			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-			app.Executor.BlockTimers.Store(ds)
+			app.Executor.StoreBlockTimers(ds)
 		}
 
 		go app.Accumulate.AnalysisLog.Flush()
 
 		// Discard changes
-		app.block.Batch.Discard()
+		app.blockState.Discard()
 
 		// Get the old root
 		batch := app.DB.Begin(false)
@@ -565,7 +568,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	// Commit the batch
-	err := app.block.Batch.Commit()
+	err := app.blockState.Commit()
 
 	commitTime := time.Since(tick).Seconds()
 	tick = time.Now()
@@ -576,10 +579,11 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	// Notify the world of the committed block
+	major, _, _ := app.blockState.DidCompleteMajorBlock()
 	err = app.EventBus.Publish(events.DidCommitBlock{
-		Index: app.block.Index,
-		Time:  app.block.Time,
-		Major: app.block.State.MakeMajorBlock,
+		Index: app.block.Params().Index,
+		Time:  app.block.Params().Time,
+		Major: major,
 	})
 	if err != nil {
 		app.fatal(err)
@@ -619,7 +623,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 			aveBlockTime = blockTime / float64(app.txct)
 			estTps = 1.0 / aveBlockTime
 		}
-		ds.Save("height", app.block.Index, 10, true)
+		ds.Save("height", app.block.Params().Index, 10, true)
 		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 		ds.Save("block_time", blockTime, 6, false)
 		ds.Save("commit_time", commitTime, 6, false)
@@ -641,13 +645,13 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
 	if ds != nil {
-		ds.Save("height", app.block.Index, 10, true)
+		ds.Save("height", app.block.Params().Index, 10, true)
 		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-		app.Executor.BlockTimers.Store(ds)
+		app.Executor.StoreBlockTimers(ds)
 	}
 
 	go app.Accumulate.AnalysisLog.Flush()
 	duration := time.Since(app.timer)
-	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock, "duration", duration, "count", app.txct)
+	app.logger.Debug("Committed", "minor", app.block.Params().Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", major, "duration", duration, "count", app.txct)
 	return resp
 }
