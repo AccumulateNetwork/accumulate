@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -21,14 +20,11 @@ import (
 
 func MustBuild(t testing.TB, b interface {
 	Done() (*protocol.Envelope, error)
-}) *chain.Delivery {
+}) *protocol.Envelope {
 	t.Helper()
 	env, err := b.Done()
 	require.NoError(t, err)
-	delivery, err := chain.NormalizeEnvelope(env)
-	require.NoError(t, err)
-	require.Len(t, delivery, 1)
-	return delivery[0]
+	return env
 }
 
 func MustGet0[T any](t testing.TB, fn func() (T, error)) T {

@@ -43,7 +43,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
-	m.Background(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
+	m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
 
 	// Update active globals
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
@@ -303,7 +303,7 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 }
 
 func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) {
-	batch := x.db.Begin(false)
+	batch := x.Database.Begin(false)
 	defer batch.Discard()
 
 	// Setup
