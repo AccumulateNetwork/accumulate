@@ -72,71 +72,131 @@ func Equal(a, b Message) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *Addressed:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*Addressed)
 		return ok && a.Equal(b)
 	case *ErrorResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ErrorResponse)
 		return ok && a.Equal(b)
 	case *EventMessage:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*EventMessage)
 		return ok && a.Equal(b)
 	case *FaucetRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*FaucetRequest)
 		return ok && a.Equal(b)
 	case *FaucetResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*FaucetResponse)
 		return ok && a.Equal(b)
 	case *MetricsRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*MetricsRequest)
 		return ok && a.Equal(b)
 	case *MetricsResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*MetricsResponse)
 		return ok && a.Equal(b)
 	case *NetworkStatusRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*NetworkStatusRequest)
 		return ok && a.Equal(b)
 	case *NetworkStatusResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*NetworkStatusResponse)
 		return ok && a.Equal(b)
 	case *NodeStatusRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*NodeStatusRequest)
 		return ok && a.Equal(b)
 	case *NodeStatusResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*NodeStatusResponse)
 		return ok && a.Equal(b)
 	case *PrivateSequenceRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*PrivateSequenceRequest)
 		return ok && a.Equal(b)
 	case *PrivateSequenceResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*PrivateSequenceResponse)
 		return ok && a.Equal(b)
 	case *QueryRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*QueryRequest)
 		return ok && a.Equal(b)
 	case *RecordResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*RecordResponse)
 		return ok && a.Equal(b)
 	case *SubmitRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SubmitRequest)
 		return ok && a.Equal(b)
 	case *SubmitResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SubmitResponse)
 		return ok && a.Equal(b)
 	case *SubscribeRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SubscribeRequest)
 		return ok && a.Equal(b)
 	case *SubscribeResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SubscribeResponse)
 		return ok && a.Equal(b)
 	case *ValidateRequest:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ValidateRequest)
 		return ok && a.Equal(b)
 	case *ValidateResponse:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ValidateResponse)
 		return ok && a.Equal(b)
 	default:
