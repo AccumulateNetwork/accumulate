@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,7 +8,6 @@ package client
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 )
 
 // Types exported from internal/api/v2
@@ -17,7 +16,6 @@ type (
 	ChainIdQuery                = api.ChainIdQuery
 	ChainQueryResponse          = api.ChainQueryResponse
 	DataEntryQuery              = api.DataEntryQuery
-	DataEntryQueryResponse      = api.DataEntryQueryResponse
 	DataEntrySetQuery           = api.DataEntrySetQuery
 	DescriptionResponse         = api.DescriptionResponse
 	DirectoryQuery              = api.DirectoryQuery
@@ -55,32 +53,32 @@ type (
 
 // Types exported from internal/api/v2/query
 type (
-	BlockFilterMode      = query.BlockFilterMode
-	ChainState           = query.ChainState
-	GeneralReceipt       = query.GeneralReceipt
-	ResponseDataEntry    = query.ResponseDataEntry
-	ResponseDataEntrySet = query.ResponseDataEntrySet
-	ResponseKeyPageIndex = query.ResponseKeyPageIndex
-	TxFetchMode          = query.TxFetchMode
-	TxReceipt            = query.TxReceipt
+	BlockFilterMode      = api.BlockFilterMode
+	ChainState           = api.ChainState
+	GeneralReceipt       = api.GeneralReceipt
+	ResponseDataEntry    = api.ResponseDataEntry
+	ResponseDataEntrySet = api.ResponseDataEntrySet
+	ResponseKeyPageIndex = api.ResponseKeyPageIndex
+	TxFetchMode          = api.TxFetchMode
+	TxReceipt            = api.TxReceipt
 )
 
 // Enums exported from internal/api/v2/query
 const (
-	BlockFilterModeExcludeNone  = query.BlockFilterModeExcludeNone
-	BlockFilterModeExcludeEmpty = query.BlockFilterModeExcludeEmpty
-	TxFetchModeExpand           = query.TxFetchModeExpand
-	TxFetchModeIds              = query.TxFetchModeIds
-	TxFetchModeCountOnly        = query.TxFetchModeCountOnly
-	TxFetchModeOmit             = query.TxFetchModeOmit
+	BlockFilterModeExcludeNone  = api.BlockFilterModeExcludeNone
+	BlockFilterModeExcludeEmpty = api.BlockFilterModeExcludeEmpty
+	TxFetchModeExpand           = api.TxFetchModeExpand
+	TxFetchModeIds              = api.TxFetchModeIds
+	TxFetchModeCountOnly        = api.TxFetchModeCountOnly
+	TxFetchModeOmit             = api.TxFetchModeOmit
 )
 
 func BlockFilterModeByName(name string) (BlockFilterMode, bool) {
-	return query.BlockFilterModeByName(name)
+	return api.BlockFilterModeByName(name)
 }
 
 func TxFetchModeByName(name string) (TxFetchMode, bool) {
-	return query.TxFetchModeByName(name)
+	return api.TxFetchModeByName(name)
 }
 
 // Errors exported from internal/api/v2
