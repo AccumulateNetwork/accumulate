@@ -76,6 +76,7 @@ type ChainEntryRecord[T Record] struct {
 	Entry     [32]byte         `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	Value     T                `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	Receipt   *Receipt         `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	State     [][]byte         `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	extraData []byte
 }
 
@@ -176,6 +177,12 @@ type MajorBlockRecord struct {
 	extraData   []byte
 }
 
+type MessageHashSearchQuery struct {
+	fieldsSet []bool
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
 type Metrics struct {
 	fieldsSet []bool
 	TPS       float64 `json:"tps" form:"tps" query:"tps" validate:"required"`
@@ -193,7 +200,7 @@ type MetricsOptions struct {
 type MinorBlockRecord struct {
 	fieldsSet []bool
 	Index     uint64                                  `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Time      time.Time                               `json:"time,omitempty" form:"time" query:"time" validate:"required"`
+	Time      *time.Time                              `json:"time,omitempty" form:"time" query:"time" validate:"required"`
 	Entries   *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
@@ -268,8 +275,8 @@ type RangeOptions struct {
 	// Count is the number of requested results.
 	Count *uint64 `json:"count,omitempty" form:"count" query:"count"`
 	// Expand requests expanded results.
-	Expand    bool `json:"expand,omitempty" form:"expand" query:"expand"`
-	FromEnd   bool `json:"fromEnd,omitempty" form:"fromEnd" query:"fromEnd"`
+	Expand    *bool `json:"expand,omitempty" form:"expand" query:"expand"`
+	FromEnd   bool  `json:"fromEnd,omitempty" form:"fromEnd" query:"fromEnd"`
 	extraData []byte
 }
 
@@ -299,9 +306,11 @@ type ServiceAddress struct {
 
 type SignatureRecord struct {
 	fieldsSet []bool
-	Signature protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	TxID      *url.TxID          `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
-	Signer    protocol.Signer    `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signature protocol.Signature          `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	TxID      *url.TxID                   `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Signer    protocol.Signer             `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Status    *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Produced  *RecordRange[*TxIDRecord]   `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
 	extraData []byte
 }
 
@@ -328,12 +337,6 @@ type SubscribeOptions struct {
 	fieldsSet []bool
 	Partition string   `json:"partition,omitempty" form:"partition" query:"partition"`
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account"`
-	extraData []byte
-}
-
-type TransactionHashSearchQuery struct {
-	fieldsSet []bool
-	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
 	extraData []byte
 }
 
@@ -398,6 +401,8 @@ func (*KeyRecord) RecordType() RecordType { return RecordTypeKey }
 
 func (*MajorBlockRecord) RecordType() RecordType { return RecordTypeMajorBlock }
 
+func (*MessageHashSearchQuery) QueryType() QueryType { return QueryTypeMessageHashSearch }
+
 func (*MinorBlockRecord) RecordType() RecordType { return RecordTypeMinorBlock }
 
 func (*PendingQuery) QueryType() QueryType { return QueryTypePending }
@@ -409,8 +414,6 @@ func (*PublicKeySearchQuery) QueryType() QueryType { return QueryTypePublicKeySe
 func (*RecordRange[T]) RecordType() RecordType { return RecordTypeRange }
 
 func (*SignatureRecord) RecordType() RecordType { return RecordTypeSignature }
-
-func (*TransactionHashSearchQuery) QueryType() QueryType { return QueryTypeTransactionHashSearch }
 
 func (*TransactionRecord) RecordType() RecordType { return RecordTypeTransaction }
 
@@ -511,6 +514,10 @@ func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 	}
 	if v.Receipt != nil {
 		u.Receipt = (v.Receipt).Copy()
+	}
+	u.State = make([][]byte, len(v.State))
+	for i, v := range v.State {
+		u.State[i] = encoding.BytesCopy(v)
 	}
 
 	return u
@@ -699,6 +706,16 @@ func (v *MajorBlockRecord) Copy() *MajorBlockRecord {
 
 func (v *MajorBlockRecord) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *MessageHashSearchQuery) Copy() *MessageHashSearchQuery {
+	u := new(MessageHashSearchQuery)
+
+	u.Hash = v.Hash
+
+	return u
+}
+
+func (v *MessageHashSearchQuery) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *Metrics) Copy() *Metrics {
 	u := new(Metrics)
 
@@ -724,7 +741,10 @@ func (v *MinorBlockRecord) Copy() *MinorBlockRecord {
 	u := new(MinorBlockRecord)
 
 	u.Index = v.Index
-	u.Time = v.Time
+	if v.Time != nil {
+		u.Time = new(time.Time)
+		*u.Time = *v.Time
+	}
 	if v.Entries != nil {
 		u.Entries = (v.Entries).Copy()
 	}
@@ -854,7 +874,10 @@ func (v *RangeOptions) Copy() *RangeOptions {
 		u.Count = new(uint64)
 		*u.Count = *v.Count
 	}
-	u.Expand = v.Expand
+	if v.Expand != nil {
+		u.Expand = new(bool)
+		*u.Expand = *v.Expand
+	}
 	u.FromEnd = v.FromEnd
 
 	return u
@@ -903,6 +926,12 @@ func (v *SignatureRecord) Copy() *SignatureRecord {
 	}
 	if v.Signer != nil {
 		u.Signer = protocol.CopySigner(v.Signer)
+	}
+	if v.Status != nil {
+		u.Status = (v.Status).Copy()
+	}
+	if v.Produced != nil {
+		u.Produced = (v.Produced).Copy()
 	}
 
 	return u
@@ -953,16 +982,6 @@ func (v *SubscribeOptions) Copy() *SubscribeOptions {
 }
 
 func (v *SubscribeOptions) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *TransactionHashSearchQuery) Copy() *TransactionHashSearchQuery {
-	u := new(TransactionHashSearchQuery)
-
-	u.Hash = v.Hash
-
-	return u
-}
-
-func (v *TransactionHashSearchQuery) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TransactionRecord) Copy() *TransactionRecord {
 	u := new(TransactionRecord)
@@ -1172,6 +1191,14 @@ func (v *ChainEntryRecord[T]) Equal(u *ChainEntryRecord[T]) bool {
 		return false
 	case !((v.Receipt).Equal(u.Receipt)):
 		return false
+	}
+	if len(v.State) != len(u.State) {
+		return false
+	}
+	for i := range v.State {
+		if !(bytes.Equal(v.State[i], u.State[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -1413,6 +1440,14 @@ func (v *MajorBlockRecord) Equal(u *MajorBlockRecord) bool {
 	return true
 }
 
+func (v *MessageHashSearchQuery) Equal(u *MessageHashSearchQuery) bool {
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+
+	return true
+}
+
 func (v *Metrics) Equal(u *Metrics) bool {
 	if !(v.TPS == u.TPS) {
 		return false
@@ -1436,7 +1471,12 @@ func (v *MinorBlockRecord) Equal(u *MinorBlockRecord) bool {
 	if !(v.Index == u.Index) {
 		return false
 	}
-	if !((v.Time).Equal(u.Time)) {
+	switch {
+	case v.Time == u.Time:
+		// equal
+	case v.Time == nil || u.Time == nil:
+		return false
+	case !((*v.Time).Equal(*u.Time)):
 		return false
 	}
 	switch {
@@ -1607,7 +1647,12 @@ func (v *RangeOptions) Equal(u *RangeOptions) bool {
 	case !(*v.Count == *u.Count):
 		return false
 	}
-	if !(v.Expand == u.Expand) {
+	switch {
+	case v.Expand == u.Expand:
+		// equal
+	case v.Expand == nil || u.Expand == nil:
+		return false
+	case !(*v.Expand == *u.Expand):
 		return false
 	}
 	if !(v.FromEnd == u.FromEnd) {
@@ -1668,6 +1713,22 @@ func (v *SignatureRecord) Equal(u *SignatureRecord) bool {
 	if !(protocol.EqualSigner(v.Signer, u.Signer)) {
 		return false
 	}
+	switch {
+	case v.Status == u.Status:
+		// equal
+	case v.Status == nil || u.Status == nil:
+		return false
+	case !((v.Status).Equal(u.Status)):
+		return false
+	}
+	switch {
+	case v.Produced == u.Produced:
+		// equal
+	case v.Produced == nil || u.Produced == nil:
+		return false
+	case !((v.Produced).Equal(u.Produced)):
+		return false
+	}
 
 	return true
 }
@@ -1722,14 +1783,6 @@ func (v *SubscribeOptions) Equal(u *SubscribeOptions) bool {
 	case v.Account == nil || u.Account == nil:
 		return false
 	case !((v.Account).Equal(u.Account)):
-		return false
-	}
-
-	return true
-}
-
-func (v *TransactionHashSearchQuery) Equal(u *TransactionHashSearchQuery) bool {
-	if !(v.Hash == u.Hash) {
 		return false
 	}
 
@@ -2089,6 +2142,7 @@ var fieldNames_ChainEntryRecord = []string{
 	6: "Entry",
 	7: "Value",
 	8: "Receipt",
+	9: "State",
 }
 
 func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
@@ -2114,6 +2168,11 @@ func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Receipt == nil) {
 		writer.WriteValue(8, v.Receipt.MarshalBinary)
+	}
+	if !(len(v.State) == 0) {
+		for _, v := range v.State {
+			writer.WriteBytes(9, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainEntryRecord)
@@ -2162,6 +2221,11 @@ func (v *ChainEntryRecord[T]) IsValid() error {
 		errs = append(errs, "field Receipt is missing")
 	} else if v.Receipt == nil {
 		errs = append(errs, "field Receipt is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field State is missing")
+	} else if len(v.State) == 0 {
+		errs = append(errs, "field State is not set")
 	}
 
 	switch len(errs) {
@@ -2861,6 +2925,50 @@ func (v *MajorBlockRecord) IsValid() error {
 	}
 }
 
+var fieldNames_MessageHashSearchQuery = []string{
+	1: "QueryType",
+	2: "Hash",
+}
+
+func (v *MessageHashSearchQuery) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.QueryType())
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(2, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MessageHashSearchQuery)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *MessageHashSearchQuery) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field QueryType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_Metrics = []string{
 	1: "TPS",
 }
@@ -2954,8 +3062,8 @@ func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
 	if !(v.Index == 0) {
 		writer.WriteUint(2, v.Index)
 	}
-	if !(v.Time == (time.Time{})) {
-		writer.WriteTime(3, v.Time)
+	if !(v.Time == nil) {
+		writer.WriteTime(3, *v.Time)
 	}
 	if !(v.Entries == nil) {
 		writer.WriteValue(4, v.Entries.MarshalBinary)
@@ -2982,7 +3090,7 @@ func (v *MinorBlockRecord) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Time is missing")
-	} else if v.Time == (time.Time{}) {
+	} else if v.Time == nil {
 		errs = append(errs, "field Time is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -3482,8 +3590,8 @@ func (v *RangeOptions) MarshalBinary() ([]byte, error) {
 	if !(v.Count == nil) {
 		writer.WriteUint(2, *v.Count)
 	}
-	if !(!v.Expand) {
-		writer.WriteBool(3, v.Expand)
+	if !(v.Expand == nil) {
+		writer.WriteBool(3, *v.Expand)
 	}
 	if !(!v.FromEnd) {
 		writer.WriteBool(4, v.FromEnd)
@@ -3676,6 +3784,8 @@ var fieldNames_SignatureRecord = []string{
 	2: "Signature",
 	3: "TxID",
 	4: "Signer",
+	5: "Status",
+	6: "Produced",
 }
 
 func (v *SignatureRecord) MarshalBinary() ([]byte, error) {
@@ -3691,6 +3801,12 @@ func (v *SignatureRecord) MarshalBinary() ([]byte, error) {
 	}
 	if !(protocol.EqualSigner(v.Signer, nil)) {
 		writer.WriteValue(4, v.Signer.MarshalBinary)
+	}
+	if !(v.Status == nil) {
+		writer.WriteValue(5, v.Status.MarshalBinary)
+	}
+	if !(v.Produced == nil) {
+		writer.WriteValue(6, v.Produced.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SignatureRecord)
@@ -3721,6 +3837,16 @@ func (v *SignatureRecord) IsValid() error {
 		errs = append(errs, "field Signer is missing")
 	} else if protocol.EqualSigner(v.Signer, nil) {
 		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Status is missing")
+	} else if v.Status == nil {
+		errs = append(errs, "field Status is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Produced is missing")
+	} else if v.Produced == nil {
+		errs = append(errs, "field Produced is not set")
 	}
 
 	switch len(errs) {
@@ -3853,50 +3979,6 @@ func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
 
 func (v *SubscribeOptions) IsValid() error {
 	var errs []string
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_TransactionHashSearchQuery = []string{
-	1: "QueryType",
-	2: "Hash",
-}
-
-func (v *TransactionHashSearchQuery) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.QueryType())
-	if !(v.Hash == ([32]byte{})) {
-		writer.WriteHash(2, &v.Hash)
-	}
-
-	_, _, err := writer.Reset(fieldNames_TransactionHashSearchQuery)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *TransactionHashSearchQuery) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field QueryType is missing")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Hash is missing")
-	} else if v.Hash == ([32]byte{}) {
-		errs = append(errs, "field Hash is not set")
-	}
 
 	switch len(errs) {
 	case 0:
@@ -4339,6 +4421,13 @@ func (v *ChainEntryRecord[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error
 	})
 	if x := new(Receipt); reader.ReadValue(8, x.UnmarshalBinaryFrom) {
 		v.Receipt = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(9); ok {
+			v.State = append(v.State, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_ChainEntryRecord)
@@ -4844,6 +4933,41 @@ func (v *MajorBlockRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *MessageHashSearchQuery) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MessageHashSearchQuery) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vQueryType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vQueryType = *x
+	}
+	if !(v.QueryType() == vQueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), vQueryType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MessageHashSearchQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadHash(2); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_MessageHashSearchQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Metrics) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -4916,7 +5040,7 @@ func (v *MinorBlockRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		v.Index = x
 	}
 	if x, ok := reader.ReadTime(3); ok {
-		v.Time = x
+		v.Time = &x
 	}
 	if x := new(RecordRange[*ChainEntryRecord[Record]]); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Entries = x
@@ -5217,7 +5341,7 @@ func (v *RangeOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Count = &x
 	}
 	if x, ok := reader.ReadBool(3); ok {
-		v.Expand = x
+		v.Expand = &x
 	}
 	if x, ok := reader.ReadBool(4); ok {
 		v.FromEnd = x
@@ -5377,6 +5501,12 @@ func (v *SignatureRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		}
 		return err
 	})
+	if x := new(protocol.TransactionStatus); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+		v.Status = x
+	}
+	if x := new(RecordRange[*TxIDRecord]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+		v.Produced = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SignatureRecord)
 	if err != nil {
@@ -5460,41 +5590,6 @@ func (v *SubscribeOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SubscribeOptions)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *TransactionHashSearchQuery) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *TransactionHashSearchQuery) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vQueryType QueryType
-	if x := new(QueryType); reader.ReadEnum(1, x) {
-		vQueryType = *x
-	}
-	if !(v.QueryType() == vQueryType) {
-		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), vQueryType)
-	}
-
-	return v.UnmarshalFieldsFrom(reader)
-}
-
-func (v *TransactionHashSearchQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x, ok := reader.ReadHash(2); ok {
-		v.Hash = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_TransactionHashSearchQuery)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -5722,6 +5817,7 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 		Entry      string                        `json:"entry,omitempty"`
 		Value      encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
 		Receipt    *Receipt                      `json:"receipt,omitempty"`
+		State      encoding.JsonList[*string]    `json:"state,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Account = v.Account
@@ -5731,6 +5827,10 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 	u.Entry = encoding.ChainToJSON(v.Entry)
 	u.Value = encoding.JsonUnmarshalWith[T]{Value: v.Value, Func: func(b []byte) (T, error) { return encoding.Cast[T](UnmarshalRecordJSON(b)) }}
 	u.Receipt = v.Receipt
+	u.State = make(encoding.JsonList[*string], len(v.State))
+	for i, x := range v.State {
+		u.State[i] = encoding.BytesToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -5895,11 +5995,21 @@ func (v *MajorBlockRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MessageHashSearchQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		Hash      string    `json:"hash,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	return json.Marshal(&u)
+}
+
 func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		RecordType RecordType                              `json:"recordType"`
 		Index      uint64                                  `json:"index,omitempty"`
-		Time       time.Time                               `json:"time,omitempty"`
+		Time       *time.Time                              `json:"time,omitempty"`
 		Entries    *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -6009,21 +6119,15 @@ func (v *SignatureRecord) MarshalJSON() ([]byte, error) {
 		Signature  encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
 		TxID       *url.TxID                                      `json:"txID,omitempty"`
 		Signer     encoding.JsonUnmarshalWith[protocol.Signer]    `json:"signer,omitempty"`
+		Status     *protocol.TransactionStatus                    `json:"status,omitempty"`
+		Produced   *RecordRange[*TxIDRecord]                      `json:"produced,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
 	u.TxID = v.TxID
 	u.Signer = encoding.JsonUnmarshalWith[protocol.Signer]{Value: v.Signer, Func: protocol.UnmarshalSignerJSON}
-	return json.Marshal(&u)
-}
-
-func (v *TransactionHashSearchQuery) MarshalJSON() ([]byte, error) {
-	u := struct {
-		QueryType QueryType `json:"queryType"`
-		Hash      string    `json:"hash,omitempty"`
-	}{}
-	u.QueryType = v.QueryType()
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Status = v.Status
+	u.Produced = v.Produced
 	return json.Marshal(&u)
 }
 
@@ -6187,6 +6291,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 		Entry      string                        `json:"entry,omitempty"`
 		Value      encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
 		Receipt    *Receipt                      `json:"receipt,omitempty"`
+		State      encoding.JsonList[*string]    `json:"state,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Account = v.Account
@@ -6196,6 +6301,10 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 	u.Entry = encoding.ChainToJSON(v.Entry)
 	u.Value = encoding.JsonUnmarshalWith[T]{Value: v.Value, Func: func(b []byte) (T, error) { return encoding.Cast[T](UnmarshalRecordJSON(b)) }}
 	u.Receipt = v.Receipt
+	u.State = make(encoding.JsonList[*string], len(v.State))
+	for i, x := range v.State {
+		u.State[i] = encoding.BytesToJSON(x)
+	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -6214,6 +6323,14 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 	v.Value = u.Value.Value
 
 	v.Receipt = u.Receipt
+	v.State = make([][]byte, len(u.State))
+	for i, x := range u.State {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding State: %w", err)
+		} else {
+			v.State[i] = x
+		}
+	}
 	return nil
 }
 
@@ -6502,11 +6619,32 @@ func (v *MajorBlockRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *MessageHashSearchQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		Hash      string    `json:"hash,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.QueryType() == u.QueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
+	}
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	return nil
+}
+
 func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		RecordType RecordType                              `json:"recordType"`
 		Index      uint64                                  `json:"index,omitempty"`
-		Time       time.Time                               `json:"time,omitempty"`
+		Time       *time.Time                              `json:"time,omitempty"`
 		Entries    *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -6711,11 +6849,15 @@ func (v *SignatureRecord) UnmarshalJSON(data []byte) error {
 		Signature  encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
 		TxID       *url.TxID                                      `json:"txID,omitempty"`
 		Signer     encoding.JsonUnmarshalWith[protocol.Signer]    `json:"signer,omitempty"`
+		Status     *protocol.TransactionStatus                    `json:"status,omitempty"`
+		Produced   *RecordRange[*TxIDRecord]                      `json:"produced,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
 	u.TxID = v.TxID
 	u.Signer = encoding.JsonUnmarshalWith[protocol.Signer]{Value: v.Signer, Func: protocol.UnmarshalSignerJSON}
+	u.Status = v.Status
+	u.Produced = v.Produced
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -6727,27 +6869,8 @@ func (v *SignatureRecord) UnmarshalJSON(data []byte) error {
 	v.TxID = u.TxID
 	v.Signer = u.Signer.Value
 
-	return nil
-}
-
-func (v *TransactionHashSearchQuery) UnmarshalJSON(data []byte) error {
-	u := struct {
-		QueryType QueryType `json:"queryType"`
-		Hash      string    `json:"hash,omitempty"`
-	}{}
-	u.QueryType = v.QueryType()
-	u.Hash = encoding.ChainToJSON(v.Hash)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.QueryType() == u.QueryType) {
-		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
-	}
-	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
-		return fmt.Errorf("error decoding Hash: %w", err)
-	} else {
-		v.Hash = x
-	}
+	v.Status = u.Status
+	v.Produced = u.Produced
 	return nil
 }
 

@@ -125,7 +125,7 @@ DelegateSearchQuery:
       type: url
       pointer: true
 
-TransactionHashSearchQuery:
+MessageHashSearchQuery:
   union: { type: query }
   fields:
     - name: Hash

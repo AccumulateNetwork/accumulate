@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -50,10 +50,6 @@ func validatorError(err error) jsonrpc2.Error {
 	return jsonrpc2.NewError(ErrCodeValidation, "Validation Error", err)
 }
 
-// func submissionError(err error) jsonrpc2.Error {
-// 	return jsonrpc2.NewError(ErrCodeSubmission, "Submission Entry Error", err)
-// }
-
 func accumulateError(err error) jsonrpc2.Error {
 	if errors.Is(err, storage.ErrNotFound) {
 		return jsonrpc2.NewError(ErrCodeNotFound, "Accumulate Error", "Not Found")
@@ -70,14 +66,4 @@ func accumulateError(err error) jsonrpc2.Error {
 	}
 
 	return jsonrpc2.NewError(ErrCodeAccumulate, "Accumulate Error", err)
-}
-
-func metricsQueryError(err error) jsonrpc2.Error {
-	return jsonrpc2.NewError(ErrCodeMetricsQuery, "Metrics Query Error", err)
-}
-
-func internalError(err error) jsonrpc2.Error {
-	// Capture internal errors but do not forward them to the user
-	// sentry.CaptureException(err)
-	return ErrInternal
 }
