@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,9 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -47,15 +48,18 @@ func TestAnchorThreshold(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateTokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 
 	// Capture the BVN's anchors and verify they're the same
-	var anchors []*chain.Delivery
-	sim.SetSubmitHook("Directory", func(delivery *chain.Delivery) (dropTx bool, keepHook bool) {
+	var anchors []*protocol.Envelope
+	sim.SetSubmitHook("Directory", func(message messaging.Message) (dropTx bool, keepHook bool) {
+		delivery := message.(*messaging.LegacyMessage)
 		if delivery.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
 			return false, true
 		}
-		anchors = append(anchors, delivery)
+		env, err := messaging.Envelope(message)
+		require.NoError(t, err)
+		anchors = append(anchors, env)
 		return true, len(anchors) < valCount
 	})
 
@@ -63,9 +67,9 @@ func TestAnchorThreshold(t *testing.T) {
 		sim.Step()
 	}
 
-	txid := anchors[0].Transaction.ID()
+	txid := anchors[0].Transaction[0].ID()
 	for _, anchor := range anchors[1:] {
-		require.True(t, anchors[0].Transaction.Equal(anchor.Transaction))
+		require.True(t, anchors[0].Transaction[0].Equal(anchor.Transaction[0]))
 	}
 
 	// Verify the anchor was captured
