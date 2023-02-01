@@ -103,7 +103,7 @@ func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOp
 func typedRequest[M response[T], T any](c *Client, ctx context.Context, req Message) (T, error) {
 	var typRes M
 	var errRes *ErrorResponse
-	err := c.roundTripWithFanout(ctx, []Message{req}, func(res, _ Message) error {
+	err := c.RoundTrip(ctx, []Message{req}, func(res, _ Message) error {
 		switch res := res.(type) {
 		case *ErrorResponse:
 			errRes = res
@@ -141,17 +141,18 @@ func (r *FaucetResponse) rval() *api.Submission                 { return r.Value
 func (r *EventMessage) rval() []api.Event                       { return r.Value } //nolint:unused
 func (r *PrivateSequenceResponse) rval() *api.TransactionRecord { return r.Value } //nolint:unused
 
-// roundTripWithFanout routes each requests and executes a round-trip call. If
-// there are no transport errors, roundTripWithFanout will only dial each
-// address once. If multiple requests route to the same address, the first
-// request will dial a stream and subsequent requests to that address will reuse
-// the existing stream.
+// RoundTrip routes each requests and executes a round-trip call. If there are
+// no transport errors, RoundTrip will only dial each address once. If multiple
+// requests route to the same address, the first request will dial a stream and
+// subsequent requests to that address will reuse the existing stream.
 //
 // Certain types of requests, such as transaction hash searches, are fanned out
-// to every partition. If requests contains such a request, roundTripWithFanout
-// queries the network for a list of partitions, submits the request to every
-// partition, and aggregates the responses into a single response.
-func (c *Client) roundTripWithFanout(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
+// to every partition. If requests contains such a request, RoundTrip queries
+// the network for a list of partitions, submits the request to every partition,
+// and aggregates the responses into a single response.
+//
+// RoundTrip is a low-level interface not intended for general use.
+func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
 	if c.DisableFanout {
 		return c.roundTrip(ctx, requests, callback)
 	}
@@ -250,6 +251,9 @@ func (c *Client) roundTrip(ctx context.Context, req []Message, callback func(res
 		// Route it
 		var err error
 		if addr == nil {
+			if c.Router == nil {
+				return errors.BadRequest.With("cannot route message: router is missing")
+			}
 			addr, err = c.Router.Route(req)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
