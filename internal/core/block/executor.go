@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,10 +7,12 @@
 package block
 
 import (
+	"context"
 	"crypto/ed25519"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
@@ -22,21 +24,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Executor struct {
 	ExecutorOptions
 
-	globals     *Globals
-	executors   map[protocol.TransactionType]chain.TransactionExecutor
-	dispatcher  *dispatcher
-	logger      logging.OptionalLogger
-	db          database.Beginner
-	isValidator bool
-
-	// oldBlockMeta blockMetadata
+	globals        *Globals
+	executors      map[protocol.TransactionType]chain.TransactionExecutor
+	logger         logging.OptionalLogger
+	db             database.Beginner
+	isValidator    bool
+	mainDispatcher Dispatcher
 }
 
 type ExecutorOptions struct {
@@ -47,11 +49,22 @@ type ExecutorOptions struct {
 	EventBus            *events.Bus                        //
 	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
 	Background          func(func())                       // Background task launcher
-	BatchReplayLimit    int                                //
+	NewDispatcher       func() Dispatcher                  // Synthetic transaction dispatcher factory
+	Sequencer           private.Sequencer                  // Synthetic and anchor sequence API service
+	Querier             api.Querier                        // Query API service
 
 	isGenesis bool
 
 	BlockTimers TimerSet
+}
+
+// A Dispatcher dispatches synthetic transactions produced by the executor.
+type Dispatcher interface {
+	// Submit adds an envelope to the queue.
+	Submit(ctx context.Context, dest *url.URL, env *protocol.Envelope) error
+
+	// Send submits the queued transactions.
+	Send(context.Context) <-chan error
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -136,12 +149,15 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 	if opts.Background == nil {
 		opts.Background = func(f func()) { go f() }
 	}
+	if opts.isGenesis {
+		opts.NewDispatcher = func() Dispatcher { return nullDispatcher{} }
+	}
 
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
-	m.dispatcher = newDispatcher(opts)
 	m.db = db
+	m.mainDispatcher = opts.NewDispatcher()
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -145,12 +145,12 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 			Vote:            protocol.VoteTypeAccept,
 			Signer:          signer.Url,
 			Authority:       signer.Url,
-			TransactionHash: state.Transaction.ID().Hash(),
+			TransactionHash: txn.ID().Hash(),
 			Signatures: []protocol.Signature{
 				partSig,
 				keySig,
 			},
-		}, TxID: state.Transaction.ID(), Signer: signer},
+		}, TxID: txn.ID(), Signer: signer},
 	}
 	return r, nil
 }

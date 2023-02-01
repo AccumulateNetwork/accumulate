@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -41,12 +41,12 @@ func (x *Executor) BeginBlock(block *Block) error {
 		return err
 	}
 
-	errs := x.dispatcher.Send(context.Background())
+	errs := x.mainDispatcher.Send(context.Background())
 	x.Background(func() {
 		for err := range errs {
 			switch err := err.(type) {
-			case *txnDispatchError:
-				x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+			case *protocol.TransactionStatusError:
+				x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 			default:
 				x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
 			}
@@ -464,7 +464,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		// Only send synthetic transactions from the leader
 		if isLeader {
 			env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
-			err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
+			err = x.mainDispatcher.Submit(context.Background(), txn.Header.Principal, env)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", hash[:4], err)
 			}
@@ -483,7 +483,7 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 
 	// Only send anchors from a validator
 	if x.isValidator {
-		err = x.dispatcher.BroadcastTx(context.Background(), destPartUrl, env)
+		err = x.mainDispatcher.Submit(context.Background(), destPartUrl, env)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
