@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,9 +18,9 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -151,8 +151,9 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 
 	eventBus := events.NewBus(d.Logger.With("module", "events"))
 	router := routing.NewRouter(eventBus, nil, d.Logger)
-	execOpts := block.ExecutorOptions{
+	execOpts := execute.Options{
 		Logger:   d.Logger,
+		Database: db,
 		Key:      pv.Key.PrivKey.Bytes(),
 		Describe: d.Config.Accumulate.Describe,
 		Router:   router,
@@ -164,7 +165,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
-	exec, err := block.NewNodeExecutor(execOpts, db)
+	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -99,7 +99,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	// Capture background tasks
 	errg := new(errgroup.Group)
-	exec.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
+	exec.BackgroundTaskLauncher = func(f func()) { errg.Go(func() error { f(); return nil }) }
 
 	b.block = new(block.Block)
 	b.block.Index = protocol.GenesisBlock
