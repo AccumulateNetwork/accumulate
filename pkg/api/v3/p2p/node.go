@@ -19,6 +19,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// This package exists so the peer to peer implementation can be internal, but
+// we still provide something for external parties to use.
+
 // Node is a peer to peer node. Node acts as a client, routing messages to its
 // peers, and as a server that can register services to the network.
 type Node struct {

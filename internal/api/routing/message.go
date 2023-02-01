@@ -122,7 +122,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	}
 
 	_ = "/acc/query:apollo"
-	_ = "/acc/query:apollo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
+	_ = "/acc/node:apollo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
 
 	// Return /acc/{service}:{partition}
 	ma, err := multiaddr.NewComponent(api.N_ACC, service.String())
