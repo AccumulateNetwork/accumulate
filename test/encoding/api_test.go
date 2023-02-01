@@ -17,10 +17,10 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
@@ -71,7 +71,7 @@ func TestAPIv2Consistency(t *testing.T) {
 			require.NoError(t, sim.Step())
 		}
 
-		deliveries, err := chain.NormalizeEnvelope(sub.Envelope)
+		deliveries, err := messaging.NormalizeLegacy(sub.Envelope)
 		require.NoError(t, err)
 		require.Len(t, deliveries, 1)
 		_, err = sim.Submit(deliveries[0])
