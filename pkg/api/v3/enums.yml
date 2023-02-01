@@ -40,7 +40,7 @@ QueryType:
     value: 0x12
   DelegateSearch:
     value: 0x13
-  TransactionHashSearch:
+  MessageHashSearch:
     value: 0x14
 
 RecordType:

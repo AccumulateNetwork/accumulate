@@ -38,12 +38,12 @@ func Equal{{elideInterface .}}(a, b {{.Interface}}) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type){
 	{{- range .Members}}
 	case *{{.Type.FullName false true}}:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*{{.Type.FullName false true}})
 		return ok && a.Equal(b)
 	{{- end}}

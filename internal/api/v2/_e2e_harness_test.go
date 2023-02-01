@@ -16,7 +16,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -108,7 +107,7 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 		q.Url = u
 		q.Key = params.Key.Public().(ed25519.PublicKey)
 		qr := queryRecord(t, japi, "query-key-index", q)
-		resp := new(query.ResponseKeyPageIndex)
+		resp := new(api.ResponseKeyPageIndex)
 		recode(t, qr.Data, resp)
 		signator = resp.Signer
 	}
