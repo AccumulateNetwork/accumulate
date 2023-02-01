@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,13 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -309,7 +308,7 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 
 	// Setup
 	wg := new(sync.WaitGroup)
-	dispatcher := newDispatcher(x.ExecutorOptions)
+	dispatcher := x.NewDispatcher()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -334,21 +333,22 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 
 	wg.Wait()
 	for err := range dispatcher.Send(ctx) {
-		x.logger.Error("Failed to dispatch missing synthetic transactions", "error", err)
+		switch err := err.(type) {
+		case *protocol.TransactionStatusError:
+			x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
+		default:
+			x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+		}
 	}
 }
 
-func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, wg *sync.WaitGroup, dispatcher *dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) []*url.TxID {
-	var pending []*url.TxID
-	// Get the partition ID
-	id, ok := protocol.ParsePartitionUrl(partition.Url)
-	if !ok {
-		// If this happens we're kind of screwed
-		panic(errors.InternalError.WithFormat("synthetic ledger has an invalid partition URL: %v", partition.Url))
-	}
+func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, wg *sync.WaitGroup, dispatcher Dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) []*url.TxID {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// For each pending synthetic transaction
-	var batch jsonrpc2.BatchRequest
+	var pending []*url.TxID
+	dest := x.Describe.NodeUrl()
 	for i, txid := range partition.Pending {
 		// If we know the ID we must have a local copy (so we don't need to
 		// fetch it)
@@ -358,118 +358,110 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		seqNum := partition.Delivered + uint64(i) + 1
-		var message = "Missing synthetic transaction"
+		message := "Missing synthetic transaction"
+		src := partition.Url.JoinPath(protocol.Synthetic)
 		if anchor {
 			message = "Missing anchor transaction"
+			src = partition.Url.JoinPath(protocol.AnchorPool)
 		}
 		x.logger.Info(message, "seq-num", seqNum, "source", partition.Url)
 
 		// Request the transaction by sequence number
-		batch = append(batch, jsonrpc2.Request{
-			ID:     i + 1,
-			Method: "query-synth",
-			Params: &api.SyntheticTransactionRequest{
-				Source:         partition.Url,
-				Destination:    x.Describe.NodeUrl(),
-				SequenceNumber: seqNum,
-				Anchor:         anchor,
-			},
-		})
-		if x.BatchReplayLimit > 0 && len(batch) == x.BatchReplayLimit {
-			break
-		}
-	}
-
-	if len(batch) == 0 {
-		return pending
-	}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		// Send the requests
-		var resp []*api.TransactionQueryResponse
-		err := x.Router.RequestAPIv2(ctx, id, "", batch, &resp)
+		resp, err := x.Sequencer.Sequence(ctx, src, dest, seqNum)
 		if err != nil {
-			x.logger.Error("Failed to request synthetic transactions", "error", err, "from", partition.Url)
-			return
+			x.logger.Error("Failed to request sequenced transaction", "error", err, "from", src, "seq-num", seqNum)
+			continue
 		}
 
-		// Sanity check
-		if len(resp) != len(batch) {
-			x.logger.Error("Bad response to query-synth: the number of responses does not match the number of requests", "from", partition.Url, "want", len(batch), "got", len(resp))
-			return
+		// Sanity check: the response includes a transaction
+		if resp.Transaction == nil {
+			x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
+			continue
+		}
+		if resp.Signatures == nil {
+			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
+			continue
 		}
 
-		// Broadcast each transaction locally
-		for i, resp := range resp {
-			req := batch[i].Params.(*api.SyntheticTransactionRequest)
-
-			// Sanity check: the response includes a transaction
-			if resp.Transaction == nil {
-				x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", req.SequenceNumber, "is-anchor", req.Anchor)
+		var gotSynth, gotReceipt, gotKey, bad bool
+		var signatures []protocol.Signature
+		for _, signature := range resp.Signatures.Records {
+			h := signature.TxID.Hash()
+			if !bytes.Equal(h[:], resp.Transaction.GetHash()) {
+				x.logger.Error("Signature from query-synth does not match the transaction hash", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "txid", signature.TxID, "signature", signature)
+				bad = true
 				continue
 			}
 
-			// Put the synthetic signature first
-			var gotSynth, gotReceipt, gotKey, bad bool
-			for i, signature := range resp.Signatures {
-				h := signature.GetTransactionHash()
-				if !bytes.Equal(h[:], resp.Transaction.GetHash()) {
-					x.logger.Error("Signature from query-synth does not match the transaction hash", "from", partition.Url, "seq-num", req.SequenceNumber, "is-anchor", req.Anchor, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "signature", signature)
-					bad = true
-					continue
-				}
+			set, ok := signature.Signature.(*protocol.SignatureSet)
+			if !ok {
+				x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected %T, got %T", (*protocol.SignatureSet)(nil), signature.Signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "txid", signature.TxID, "signature", signature)
+				bad = true
+				continue
+			}
 
+			for _, signature := range set.Signatures {
 				switch signature.(type) {
 				case *protocol.PartitionSignature:
 					gotSynth = true
-					resp.Signatures[0], resp.Signatures[i] = resp.Signatures[i], resp.Signatures[0]
+
+					// Put the synthetic signature first
+					if len(signatures) > 0 {
+						signatures = append(signatures, signatures[0])
+						signatures[0] = signature
+						continue
+					}
 				case *protocol.ReceiptSignature:
 					gotReceipt = true
 				case *protocol.ED25519Signature:
 					gotKey = true
 				}
+				signatures = append(signatures, signature)
 			}
 
-			var missing []string
-			if !gotSynth {
-				missing = append(missing, "synthetic")
-			}
-			if !gotReceipt && !anchor {
-				missing = append(missing, "receipt")
-			}
-			if !gotKey {
-				missing = append(missing, "key")
-			}
-			if len(missing) > 0 {
-				err := fmt.Errorf("missing %s signature(s)", strings.Join(missing, ", "))
-				x.logger.Error("Invalid synthetic transaction", "error", err, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
-				bad = true
-			}
-
-			if bad {
-				continue
-			}
-
-			err = dispatcher.BroadcastTxLocal(ctx, &protocol.Envelope{
-				Signatures:  resp.Signatures,
-				Transaction: []*protocol.Transaction{resp.Transaction},
-			})
-			if err != nil {
-				x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
-				continue
-			}
 		}
-	}()
+
+		var missing []string
+		if !gotSynth {
+			missing = append(missing, "synthetic")
+		}
+		if !gotReceipt && !anchor {
+			missing = append(missing, "receipt")
+		}
+		if !gotKey {
+			missing = append(missing, "key")
+		}
+		if len(missing) > 0 {
+			err := fmt.Errorf("missing %s signature(s)", strings.Join(missing, ", "))
+			x.logger.Error("Invalid synthetic transaction", "error", err, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
+			bad = true
+		}
+
+		if bad {
+			continue
+		}
+
+		err = dispatcher.Submit(ctx, dest, &protocol.Envelope{
+			Signatures:  signatures,
+			Transaction: []*protocol.Transaction{resp.Transaction},
+		})
+		if err != nil {
+			x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
+			continue
+		}
+	}
 
 	return pending
 }
 
-func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Batch, dispatcher *dispatcher, blockIndex uint64, pending []*url.TxID) {
+func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Batch, dispatcher Dispatcher, blockIndex uint64, pending []*url.TxID) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	querier := api.Querier2{Querier: x.Querier}
+
 	anchors := map[[32]byte][]*url.TxID{}
 	source := map[*url.TxID]*url.URL{}
+	var sigs []protocol.Signature
 	for _, txid := range pending {
 		h := txid.Hash()
 		status, err := batch.Transaction(h[:]).GetStatus()
@@ -488,54 +480,25 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 		a := *(*[32]byte)(status.Proof.Anchor)
 		anchors[a] = append(anchors[a], txid)
 		source[txid] = status.SourceNetwork
-		if x.BatchReplayLimit > 0 && len(anchors) == x.BatchReplayLimit {
-			break
-		}
-	}
-	if len(anchors) == 0 {
-		return
-	}
 
-	var jbatch jsonrpc2.BatchRequest
-	for anchor := range anchors {
-		jbatch = append(jbatch, jsonrpc2.Request{
-			ID:     1,
-			Method: "query",
-			Params: &api.GeneralQuery{
-				UrlQuery: api.UrlQuery{
-					Url: protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", anchor)),
-				},
-			},
-		})
-	}
-
-	// Send the requests
-	var resp []*api.ChainQueryResponse
-	err := x.Router.RequestAPIv2(ctx, protocol.Directory, "", jbatch, &resp)
-	if err != nil {
-		// If an individual request failed, log it
-		var berr jsonrpc2.BatchError
-		if !errors.As(err, &berr) {
-			x.logger.Error("Failed to request anchors", "error", err)
-			return
-		}
-		for _, err := range berr {
-			x.logger.Error("Failed to request anchors", "error", err)
-		}
-	}
-
-	var sigs []protocol.Signature
-	for _, resp := range resp {
-		if resp == nil || resp.Receipt == nil || resp.Receipt.Error != "" {
+		r, err := querier.SearchForAnchor(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{Anchor: status.Proof.Anchor, IncludeReceipt: true})
+		if err != nil {
+			x.logger.Error("Failed to request anchor", "error", err, "anchor", logging.AsHex(status.Proof.Anchor).Slice(0, 4))
 			continue
 		}
 
-		for _, txid := range anchors[*(*[32]byte)(resp.Receipt.Proof.Start)] {
-			sig := new(protocol.ReceiptSignature)
-			sig.SourceNetwork = protocol.DnUrl()
-			sig.Proof = resp.Receipt.Proof
-			sig.TransactionHash = txid.Hash()
-			sigs = append(sigs, sig)
+		for _, resp := range r.Records {
+			if resp == nil || resp.Receipt == nil {
+				continue
+			}
+
+			for _, txid := range anchors[*(*[32]byte)(resp.Receipt.Start)] {
+				sig := new(protocol.ReceiptSignature)
+				sig.SourceNetwork = protocol.DnUrl()
+				sig.Proof = resp.Receipt.Receipt
+				sig.TransactionHash = txid.Hash()
+				sigs = append(sigs, sig)
+			}
 		}
 	}
 
@@ -543,7 +506,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 		return
 	}
 
-	err = dispatcher.BroadcastTxLocal(ctx, &protocol.Envelope{Signatures: sigs})
+	err := dispatcher.Submit(ctx, protocol.PartitionUrl(x.Describe.PartitionId), &protocol.Envelope{Signatures: sigs})
 	if err != nil {
 		x.logger.Error("Failed to dispatch receipts", "error", err)
 	}
