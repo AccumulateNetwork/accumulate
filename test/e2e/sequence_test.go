@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,11 +16,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -376,11 +379,21 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	})
 
 	// Resubmit the original, valid signature
+	messages := make([]messaging.Message, len(original))
+	for i, delivery := range original {
+		messages[i] = &messaging.LegacyMessage{
+			Transaction: delivery.Transaction,
+			Signatures:  delivery.Signatures,
+		}
+	}
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	x.Executor.ValidateEnvelopeSet(batch, original, func(err error, _ *chain.Delivery, _ *TransactionStatus) {
-		require.NoError(t, err)
-	})
+	results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, messages)
+	for _, result := range results {
+		if result.Error != nil {
+			require.NoError(t, result.Error)
+		}
+	}
 	x.Submit2(false, original)
 
 	// Verify it is delivered

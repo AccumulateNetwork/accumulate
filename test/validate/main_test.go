@@ -14,6 +14,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -69,6 +70,16 @@ func TestValidateFull(t *testing.T) {
 		t.Skip()
 	}
 
+	// Tendermint is stupid and doesn't properly shut down its databases. So we
+	// have no way to ensure Tendermint is completely shut down, which leads to
+	// race conditions. Instead of forking Tendermint or dumping a bunch of time
+	// into some other solution, we're just going to leave Tendermint running.
+	// That means this test cannot be run in the same process as any other test
+	// that needs 127.0.1.X.
+	dir, err := os.MkdirTemp("", "Accumulate-"+t.Name())
+	require.NoError(t, err)
+	// dir := t.TempDir()
+
 	// Put the faucet on the DN
 	faucet := AccountUrl("faucet")
 	faucetKey := acctesting.GenerateKey(faucet)
@@ -83,7 +94,7 @@ func TestValidateFull(t *testing.T) {
 	MakeAccount(t, db, &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
 	batch := db.Begin(false)
 	buf := new(ioutil2.Buffer)
-	_, err := snapshot.Collect(batch, new(snapshot.Header), buf, snapshot.CollectOptions{})
+	_, err = snapshot.Collect(batch, new(snapshot.Header), buf, snapshot.CollectOptions{})
 	require.NoError(t, err)
 
 	// Initialize the network configs
@@ -104,7 +115,6 @@ func TestValidateFull(t *testing.T) {
 
 	// Initialize the nodes
 	var count int
-	dir := t.TempDir()
 	nodes := make([][][2]*accumulated.Daemon, len(configs))
 	for i, configs := range configs {
 		nodes[i] = make([][2]*accumulated.Daemon, len(configs))
@@ -144,16 +154,19 @@ func TestValidateFull(t *testing.T) {
 		}
 	}
 
-	// Don't complete until every node has been torn down
-	t.Cleanup(func() {
-		for _, nodes := range nodes {
-			for _, nodes := range nodes {
-				for _, node := range nodes {
-					<-node.Done()
-				}
-			}
-		}
-	})
+	// // Don't complete until every node has been torn down
+	// t.Cleanup(func() {
+	// 	for _, nodes := range nodes {
+	// 		for _, nodes := range nodes {
+	// 			for _, node := range nodes {
+	// 				<-node.Done()
+	// 			}
+	// 		}
+	// 	}
+
+	// 	// Give Tendermint a second to shut down
+	// 	time.Sleep(10 * time.Second)
+	// })
 
 	// Start the nodes
 	for _, nodes := range nodes {
@@ -161,7 +174,9 @@ func TestValidateFull(t *testing.T) {
 			for _, node := range nodes {
 				node := node
 				require.NoError(t, node.Start())
-				t.Cleanup(func() { _ = node.Stop() })
+
+				// Tendermint doesn't properly stop itself 😡
+				// t.Cleanup(func() { _ = node.Stop() })
 			}
 		}
 	}
