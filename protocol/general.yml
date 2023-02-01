@@ -302,3 +302,15 @@ TokenIssuerProof:
       type: merkle.Receipt
       marshal-as: reference
       pointer: true
+
+AnnotatedReceipt:
+  description: is a [merkle.Receipt] annotated with the account and chain it originates from
+  fields:
+    - name: Receipt
+      type: merkle.Receipt
+      marshal-as: reference
+      pointer: true
+    - name: Anchor
+      type: AnchorMetadata
+      marshal-as: reference
+      pointer: true

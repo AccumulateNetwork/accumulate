@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -40,7 +40,7 @@ func TestCreateKeyPage_HashSize(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateKeyPage{Keys: []*KeySpecParams{{KeyHash: []byte{1}}}}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 	require.NotZero(t, st.Code)
 	require.EqualError(t, st.Error, "public key hash length is invalid")
 }
