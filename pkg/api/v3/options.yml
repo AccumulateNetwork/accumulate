@@ -12,6 +12,7 @@ RangeOptions:
     - name: Expand
       description: requests expanded results
       type: bool
+      pointer: true
       optional: true
     - name: FromEnd
       type: bool

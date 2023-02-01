@@ -1,0 +1,21 @@
+TxFetchMode:
+  Expand:
+    value: 0
+    description: expand the full transactions in the result set
+  Ids:
+    value: 1
+    description: include the transaction IDs & count in the result set
+  CountOnly:
+    value: 2
+    description: only include the transaction count in the result set
+  Omit:
+    value: 3
+    description: omit all transaction info from the result set
+
+BlockFilterMode:
+  ExcludeNone:
+    value: 0
+    description: return all blocks including empty ones
+  ExcludeEmpty:
+    value: 1
+    description: exclude empty blocks

@@ -32,11 +32,11 @@ func EqualMessage(a, b Message) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *LegacyMessage:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*LegacyMessage)
 		return ok && a.Equal(b)
 	default:

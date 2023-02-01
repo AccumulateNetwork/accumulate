@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -43,8 +42,6 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 	// Get a proof of the account state
-	req := new(query.RequestByUrl)
-	req.Url = aliceUrl
 	acctResp := sim.H.QueryAccount(aliceUrl, &api.DefaultQuery{IncludeReceipt: true})
 	localReceipt := acctResp.Receipt
 	// Execute enough blocks to ensure the block is anchored

@@ -10,7 +10,7 @@ ChainQueryResponse:
       marshal-as: reference
       alternative: MerkleState
     - name: Chains
-      type: query.ChainState
+      type: ChainState
       repeatable: true
       marshal-as: reference
     - name: Data
@@ -18,7 +18,7 @@ ChainQueryResponse:
     - name: ChainId
       type: bytes
     - name: Receipt
-      type: query.GeneralReceipt
+      type: GeneralReceipt
       marshal-as: reference
       pointer: true
 
@@ -62,7 +62,7 @@ TransactionQueryResponse:
       repeatable: true
     - name: Receipts
       repeatable: true
-      type: query.TxReceipt
+      type: TxReceipt
       marshal-as: reference
       pointer: true
     - name: SignatureBooks
@@ -307,10 +307,10 @@ MinorBlocksQuery:
     - QueryPagination
   fields:
     - name: TxFetchMode
-      type: query.TxFetchMode
+      type: TxFetchMode
       optional: true
     - name: BlockFilterMode
-      type: query.BlockFilterMode
+      type: BlockFilterMode
       optional: true
 
 MajorBlocksQuery:

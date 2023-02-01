@@ -45,9 +45,7 @@ issues:
   - { source: func \(x \*Executor\) executeEnvelope,     linters: [maintidx]}
   - { source: func \(x \*Executor\) processSignature,    linters: [maintidx]}
   - { source: func \(d \*Daemon\) Start,                 linters: [maintidx]}
-  - { source: func \(m \*queryBackend\) queryByUrl,      linters: [maintidx]}
-  - { source: func \(m \*queryBackend\) queryByTxId,     linters: [maintidx]}
-  - { source: func \(m \*queryBackend\) Query,           linters: [maintidx]}
+  - { source: func \(m \*JrpcMethods\) Query,            linters: [maintidx]}
   - { source: func TestTransactionIsReady,               linters: [maintidx]}
   - { source: func \(s \*ValidationTestSuite\) TestMain, linters: [maintidx]}
 

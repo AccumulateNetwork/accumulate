@@ -180,9 +180,9 @@ func SnapshotFromDirectory(dir string) SnapshotFunc {
 	}
 }
 
-func SnapshotMap(snapshots map[string]ioutil2.SectionReader) SnapshotFunc {
+func SnapshotMap(snapshots map[string][]byte) SnapshotFunc {
 	return func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
-		return snapshots[partition], nil
+		return ioutil2.NewBuffer(snapshots[partition]), nil
 	}
 }
 
@@ -217,6 +217,10 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 
 func (s *Simulator) Router() routing.Router { return s.router }
 func (s *Simulator) EventBus() *events.Bus  { return s.partitions[protocol.Directory].nodes[0].eventBus }
+
+func (s *Simulator) BlockIndex(partition string) uint64 {
+	return s.partitions[partition].blockIndex
+}
 
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
@@ -360,6 +364,10 @@ func (s *Simulator) SignWithNode(partition string, i int) nodeSigner {
 	return nodeSigner{s.partitions[partition].nodes[i]}
 }
 
+func (s *Simulator) API() *client.Client {
+	return s.partitions[protocol.Directory].nodes[0].clientV2
+}
+
 type nodeSigner struct {
 	*Node
 }
@@ -479,11 +487,44 @@ func (s *simService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api
 // Query routes the scope to a partition and calls Query on the first node of
 // that partition, returning the result.
 func (s *simService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	r, err := s.queryFanout(ctx, scope, query)
+	if r != nil || err != nil {
+		return r, err
+	}
+
 	part, err := s.router.RouteAccount(scope)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	return (*nodeService)(s.partitions[part].nodes[0]).Query(ctx, scope, query)
+}
+
+func (s *simService) queryFanout(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	// If the request is a transaction hash search query request, fan it out
+	if scope == nil || !protocol.IsUnknown(scope) {
+		return nil, nil
+	}
+	if _, ok := query.(*api.MessageHashSearchQuery); !ok {
+		return nil, nil
+	}
+
+	records := new(api.RecordRange[api.Record])
+	for _, p := range s.partitions {
+		if p.ID == "BVN1" {
+			print("")
+		}
+		r, err := (*nodeService)(p.nodes[0]).Query(ctx, scope, query)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		rr, ok := r.(*api.RecordRange[api.Record])
+		if !ok {
+			return nil, errors.InternalError.WithFormat("expected %v, got %v", api.RecordTypeRange, r.RecordType())
+		}
+		records.Records = append(records.Records, rr.Records...)
+	}
+	records.Total = uint64(len(records.Records))
+	return records, nil
 }
 
 // Submit routes the envelope to a partition and calls Submit on the first node

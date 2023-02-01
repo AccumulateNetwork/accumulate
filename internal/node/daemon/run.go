@@ -37,7 +37,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -72,7 +71,6 @@ type Daemon struct {
 	node              *node.Node
 	apiServer         *http.Server
 	privVal           *privval.FilePV
-	apiv2             *v2.JrpcMethods
 	p2pnode           *p2p.Node
 	api               *nodeapi.Handler
 	nodeKey           *tmp2p.NodeKey
@@ -132,8 +130,8 @@ func (d *Daemon) Key() crypto.PrivKey {
 
 func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
-func (d *Daemon) Jrpc_TESTONLY() *v2.JrpcMethods  { return d.apiv2 }
 func (d *Daemon) P2P_TESTONLY() *p2p.Node         { return d.p2pnode }
+func (d *Daemon) API() *nodeapi.Handler           { return d.api }
 
 func (d *Daemon) Start() (err error) {
 	if d.done != nil {
@@ -315,21 +313,6 @@ func (d *Daemon) Start() (err error) {
 		jsonrpc2.DebugMethodFunc = true
 	}
 
-	// Create the JSON-RPC handler
-	d.apiv2, err = v2.NewJrpc(v2.Options{
-		Logger:            d.Logger,
-		Describe:          &d.Config.Accumulate.Describe,
-		Router:            router,
-		PrometheusServer:  d.Config.Accumulate.API.PrometheusServer,
-		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
-		Database:          d.db,
-		ConnectionManager: d.connectionManager,
-		Key:               d.Key().Bytes(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to start API: %v", err)
-	}
-
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
 	err = d.connectionManager.InitClients(d.localTm, statusChecker)
@@ -421,10 +404,11 @@ func (d *Daemon) Start() (err error) {
 	close(dialer.ready)
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
-		Logger: d.Logger.With("module", "acc-rpc"),
-		Node:   d.p2pnode,
-		Router: router,
-		V2:     d.apiv2,
+		Logger:  d.Logger.With("module", "acc-rpc"),
+		Node:    d.p2pnode,
+		Router:  router,
+		Network: &d.Config.Accumulate.Describe,
+		MaxWait: d.Config.Accumulate.API.TxMaxWaitTime,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize API: %w", err)

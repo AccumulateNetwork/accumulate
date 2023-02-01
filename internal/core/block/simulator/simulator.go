@@ -611,14 +611,11 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 	// Initialize API v3
 	x.service = newExecService(x, logger)
 
-	// Initialize API v2
 	jrpc, err := api.NewJrpc(api.Options{
 		Logger:        logger,
-		Describe:      &network,
-		Router:        sim.Router(),
 		TxMaxWaitTime: time.Hour,
-		Database:      x,
-		Key:           execOpts.Key,
+		LocalV3:       x.service,
+		NetV3:         sim.Services(),
 	})
 	require.NoError(sim, err)
 	x.API = acctesting.DirectJrpcClient(jrpc)
