@@ -41,6 +41,7 @@ type QuerierTestSuite struct {
 	alice       *url.URL
 	aliceKey    ed25519.PrivateKey
 	createAlice *TransactionStatus
+	writeData   *TransactionStatus
 }
 
 func (s *QuerierTestSuite) QuerierFor(u *url.URL) api.Querier2 {
@@ -119,6 +120,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 			SignWith(s.alice, "book", "1").Version(1).Timestamp(1).PrivateKey(s.aliceKey)))
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
+	s.writeData = st
 
 	st = sim.SubmitSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.alice, "data").
@@ -156,13 +158,35 @@ func (s *QuerierTestSuite) TestQueryAccount() {
 		s.True(r.Directory.Records[0].Value.Equal(s.alice.JoinPath("book")))
 }
 
-func (s *QuerierTestSuite) TestQueryChains() {
-	r, err := s.QuerierFor(s.alice).QueryChains(context.Background(), s.alice, nil)
+func (s *QuerierTestSuite) TestQueryAccountChains() {
+	r, err := s.QuerierFor(s.alice).QueryAccountChains(context.Background(), s.alice, nil)
 	s.Require().NoError(err)
 	_ = s.Len(r.Records, 3) &&
 		s.Equal("main", r.Records[0].Name) &&
 		s.Equal(merkle.ChainTypeTransaction, r.Records[0].Type) &&
 		s.Equal(2, int(r.Records[0].Count))
+}
+
+func (s *QuerierTestSuite) TestQueryTransactionChains() {
+	r, err := s.QuerierFor(s.alice).QueryTransactionChains(context.Background(), s.writeData.TxID, &api.ChainQuery{IncludeReceipt: true})
+	s.Require().NoError(err)
+	s.Require().Len(r.Records, 2)
+
+	r1 := r.Records[0]
+	_ = s.Equal(s.alice.ShortString(), r1.Account.ShortString()) &&
+		s.Equal("main", r1.Name) &&
+		s.Equal(merkle.ChainTypeTransaction, r1.Type) &&
+		s.Equal(1, int(r1.Index)) &&
+		s.Equal(s.writeData.TxID.Hash(), r1.Entry) &&
+		s.NotNil(r1.Receipt)
+
+	r2 := r.Records[1]
+	_ = s.Equal(s.alice.JoinPath("data").ShortString(), r2.Account.ShortString()) &&
+		s.Equal("main", r2.Name) &&
+		s.Equal(merkle.ChainTypeTransaction, r2.Type) &&
+		s.Equal(0, int(r2.Index)) &&
+		s.Equal(s.writeData.TxID.Hash(), r1.Entry) &&
+		s.NotNil(r2.Receipt)
 }
 
 func (s *QuerierTestSuite) TestQueryChain() {
@@ -311,7 +335,7 @@ func (s *QuerierTestSuite) TestSearchForPublicKeyHash() {
 }
 
 func (s *QuerierTestSuite) TestSearchForTransactionHash() {
-	r, err := s.QuerierFor(s.faucet).SearchForTransactionHash(context.Background(), s.faucet, &api.TransactionHashSearchQuery{Hash: s.createAlice.TxID.Hash()})
+	r, err := s.QuerierFor(s.faucet).SearchForTransactionHash(context.Background(), s.faucet, &api.MessageHashSearchQuery{Hash: s.createAlice.TxID.Hash()})
 	s.Require().NoError(err)
 	s.Require().Len(r.Records, 1)
 }
