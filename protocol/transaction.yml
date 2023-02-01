@@ -30,6 +30,20 @@ TransactionHeader:
       type: bytes
       optional: true
 
+    # Possible additions for executor v2
+
+    # - name: Source
+    #   type: url
+    #   pointer: true
+    #   optional: true
+    # - name: Destination
+    #   type: url
+    #   pointer: true
+    #   optional: true
+    # - name: SequenceNumber
+    #   type: uint
+    #   optional: true
+
 Transaction:
   fields:
     - name: Header

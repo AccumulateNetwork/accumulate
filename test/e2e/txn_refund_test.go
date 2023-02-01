@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,18 +7,17 @@
 package e2e
 
 import (
-	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
-	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -26,64 +25,47 @@ func TestRefundCycle(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
 
 	// Setup accounts
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
-	sim.CreateIdentity(alice, aliceKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
-	sim.CreateAccount(&TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e12)})
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e12)})
 
 	// Send tokens
-	txn := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{
-				To: []*TokenRecipient{{
-					Url:    AccountUrl("bob", "tokens"),
-					Amount: *big.NewInt(1),
-				}},
-			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
-	)[0].Transaction[0]
-	_, _, synth := sim.WaitForTransaction(delivered, txn.GetHash(), 50)
+	st := sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(alice, "tokens").
+			SendTokens(1, AcmePrecisionPower).To("bob.acme", "tokens").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
-	// Erase the sender ADI
-	_ = sim.PartitionFor(alice).Database.Update(func(batch *database.Batch) error {
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Erase the sender
+	Update(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
 		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("tokens")))
 		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("book", "1")))
 		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("book")))
 		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice))
-		return nil
 	})
 
-	// Wait for the deposit
-	var allSynth []*url.TxID
-	for _, id := range synth {
-		h := id.Hash()
-		_, _, synth := sim.WaitForTransaction(delivered, h[:], 50)
-		allSynth = append(allSynth, synth...)
+	// The deposit and refund should fail (because the account no longer exists)
+	sim.StepUntil(
+		Txn(st.TxID).Produced().Fails(),
+		Txn(st.TxID).Refund().FailsWithCode(errors.NotFound))
+
+	// Ensure the refund did not produce anything
+	for _, id := range sim.QueryTransaction(st.TxID, nil).Produced.Records { //      Produced by SendTokens
+		for _, id := range sim.QueryTransaction(id.Value, nil).Produced.Records { // Produced by deposit
+			require.Zero(t, sim.QueryTransaction(id.Value, nil).Produced.Total) //   Produced by refund
+		}
 	}
-
-	// Wait for the refunds
-	synth, allSynth = allSynth, nil
-	for _, id := range synth {
-		h := id.Hash()
-		_, status, synth := sim.WaitForTransaction(delivered, h[:], 50)
-		allSynth = append(allSynth, synth...)
-
-		// Verify the refunds failed (because the account no longer exists)
-		require.NotNil(t, status.Error)
-		require.Equal(t, errors.NotFound, status.Error.Code)
-	}
-
-	// Verify the failed refund did not generate a refund
-	require.Empty(t, allSynth)
 }
 
 func TestRefundFailedUserTransaction_Local(t *testing.T) {
@@ -92,40 +74,34 @@ func TestRefundFailedUserTransaction_Local(t *testing.T) {
 
 	// Initialize
 	var timestamp uint64
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
 
-	sim.CreateIdentity(alice, aliceKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
-	sim.CreateAccount(&TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e12)})
 
-	// The transaction is submitted but fails when delivered
-	sim.S.SetExecutor(&overrideExecutor{
-		typ:      TransactionTypeSendTokens,
-		validate: func(st *chain.StateManager, tx *chain.Delivery) error { return nil },
-		execute:  func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
-	})
+	// Submit the transaction
+	st := sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(alice, "tokens").
+			SendTokens(1, AcmePrecisionPower).To("bob.acme", "tokens").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
-	// Submit a transaction
-	st := sim.H.SubmitSuccessfully(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
-	sim.H.StepUntil(
-		Txn(st.TxID).Fails())
+	// Zero the balance before the transaction is executed to make it fail
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), func(a *TokenAccount) { a.Balance.SetUint64(0) })
 
-	hash := st.TxID.Hash()
-	sim.WaitForTransactionFlow(delivered, hash[:])
+	// The transaction fails (insufficient balance) and issues a refund
+	sim.StepUntil(
+		Txn(st.TxID).Fails(),
+		Txn(st.TxID).Produced().Succeeds())
 
 	// The transaction produces a refund for the signer
-	produced := simulator.GetTxnState[[]*url.TxID](sim, st.TxID, (*database.Transaction).Produced)
+	produced := sim.QueryTransaction(st.TxID, nil).Produced.Records
 	require.Len(t, produced, 1, "Expected a single transaction to be produced")
-	refund := simulator.GetTxnState[*database.SigOrTxn](sim, produced[0], (*database.Transaction).Main)
-	require.NotNil(t, refund.Transaction)
+	refund := sim.QueryTransaction(produced[0].Value, nil)
 	require.IsType(t, (*SyntheticDepositCredits)(nil), refund.Transaction.Body)
 	require.Equal(t, alice.JoinPath("book", "1").ShortString(), refund.Transaction.Header.Principal.ShortString())
 }
@@ -138,39 +114,32 @@ func TestRefundFailedUserTransaction_Remote(t *testing.T) {
 
 	// Initialize
 	var timestamp uint64
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.Genesis(GenesisTime),
+	)
 
-	sim.CreateIdentity(alice, aliceKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
-	sim.CreateIdentity(bob, bobKey[32:])
-	sim.CreateAccount(&TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl(), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: alice.JoinPath("book")}}}})
-
-	// The transaction would fail if submitted directly
-	sim.S.SetExecutor(&overrideExecutor{
-		typ:      TransactionTypeSendTokens,
-		validate: func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
-		execute:  func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
-	})
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl(), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: alice.JoinPath("book")}}}})
 
 	// Submit a transaction with a remote signature
-	txn := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(bob.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
-	)[0].Transaction[0]
-	status, _ := sim.WaitForTransactionFlow(delivered, txn.GetHash())
-	require.True(t, status[0].Failed())
+	st := sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(bob, "tokens").
+			SendTokens(1, AcmePrecisionPower).To("charlie.acme", "tokens").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+
+	// The transaction fails (insufficient balance) and issues a refund
+	sim.StepUntil(
+		Txn(st.TxID).Fails(),
+		Txn(st.TxID).Produced().Succeeds())
 
 	// The transaction produces a refund for the signer
-	produced := simulator.GetTxnState[[]*url.TxID](sim, status[0].TxID, (*database.Transaction).Produced)
+	produced := sim.QueryTransaction(st.TxID, nil).Produced.Records
 	require.Len(t, produced, 1, "Expected a single transaction to be produced")
-	refund := simulator.GetTxnState[*database.SigOrTxn](sim, produced[0], (*database.Transaction).Main)
-	require.NotNil(t, refund.Transaction)
+	refund := sim.QueryTransaction(produced[0].Value, nil)
 	require.IsType(t, (*SyntheticDepositCredits)(nil), refund.Transaction.Body)
 	require.Equal(t, alice.JoinPath("book", "1").ShortString(), refund.Transaction.Header.Principal.ShortString())
 }
