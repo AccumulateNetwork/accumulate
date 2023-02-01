@@ -1,0 +1,22 @@
+MessageType:
+  Legacy:
+    value: 1
+    description: is used for the V1 executor
+
+  # Possible additions for executor v2
+
+  # UserTransaction:
+  #   value: 2
+  #   description: is a transaction from a user
+  # SyntheticTransaction:
+  #   value: 3
+  #   description: is a transaction produced by the protocol
+  # UserSignature:
+  #   value: 4
+  #   description: is a key signature from a user
+  # ValidatorSignature:
+  #   value: 5
+  #   description: is a key signature from a core protocol validator
+  # AuthoritySignature:
+  #   value: 6
+  #   description: is a signature from an authority who's signing requirements have been met

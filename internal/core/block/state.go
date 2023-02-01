@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,19 +9,13 @@ package block
 import (
 	"time"
 
-	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // BlockMeta is metadata about a block.
-type BlockMeta struct {
-	IsLeader   bool
-	Index      uint64
-	Time       time.Time
-	CommitInfo *types.CommitInfo
-	Evidence   []types.Misbehavior
-}
+type BlockMeta = execute.BlockParams
 
 // BlockState tracks various metrics of a block of transactions as they are
 // executed.

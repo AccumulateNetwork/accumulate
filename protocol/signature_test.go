@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -159,7 +159,7 @@ func TestInitWithOtherKeys(t *testing.T) {
 
 			// Confirm a simple hash was used and verify that it matches the
 			// initiator
-			require.Equal(t, env.Transaction.Header.Initiator[:], env.Signatures[0].Metadata().Hash())
+			require.Equal(t, env.Transaction[0].Header.Initiator[:], env.Signatures[0].Metadata().Hash())
 
 			// Execute
 			st := sim.SubmitSuccessfully(env)

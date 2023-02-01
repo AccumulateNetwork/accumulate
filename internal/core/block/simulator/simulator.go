@@ -28,14 +28,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -389,7 +392,7 @@ func (s *Simulator) SubmitTo(partition string, envelope *protocol.Envelope) erro
 	x := s.Partition(partition)
 
 	// Normalize - use a copy to avoid weird issues caused by modifying values
-	deliveries, err := chain.NormalizeEnvelope(envelope.Copy())
+	deliveries, err := messaging.NormalizeLegacy(envelope.Copy())
 	if err != nil {
 		return err
 	}
@@ -397,16 +400,17 @@ func (s *Simulator) SubmitTo(partition string, envelope *protocol.Envelope) erro
 	// Check
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	x.Executor.ValidateEnvelopeSet(batch, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-		err = e
-	})
-	if err != nil {
-		return err
+	results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, deliveries)
+	for _, result := range results {
+		if result.Error != nil {
+			return errors.UnknownError.Wrap(result.Error)
+		}
 	}
 
 	// Enqueue
 	x.Submit(false, envelope)
 	return nil
+
 }
 
 // MustSubmitAndExecuteBlock executes a block with the envelopes and fails the test if
@@ -588,6 +592,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 	// Initialize the executor
 	execOpts := block.ExecutorOptions{
 		Logger:        logger,
+		Database:      x,
 		Key:           init.PrivValKey,
 		Describe:      network,
 		Router:        sim.Router(),
@@ -600,7 +605,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		execOpts.MajorBlockScheduler = blockscheduler.Init(eventBus)
 	}
 	var err error
-	x.Executor, err = block.NewNodeExecutor(execOpts, x)
+	x.Executor, err = block.NewNodeExecutor(execOpts)
 	require.NoError(sim, err)
 
 	// Initialize API v3
@@ -695,7 +700,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	block.Batch = x.Database.Begin(true)
 
 	// Run background tasks in the error group to ensure they complete before the next block begins
-	x.Executor.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
+	x.Executor.BackgroundTaskLauncher = func(f func()) { errg.Go(func() error { f(); return nil }) }
 
 	deliveries := x.takeSubmitted()
 	errg.Go(func() error {
@@ -704,9 +709,14 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		err := x.Executor.BeginBlock(block)
 		require.NoError(x, err)
 
+		messages := make([]messaging.Message, 0, len(deliveries))
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
+				messages = append(messages, &messaging.LegacyMessage{
+					Transaction: deliveries[i].Transaction,
+					Signatures:  deliveries[i].Signatures,
+				})
 				continue
 			}
 			if !errors.Is(err, errors.Delivered) {
@@ -720,11 +730,11 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results := x.Executor.ExecuteEnvelopeSet(block, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-			err = e
-		})
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
+		results := abci.ExecuteEnvelopeSet(&execute.BlockV1{Block: block, Executor: x.Executor}, messages)
+		for _, result := range results {
+			if result.Error != nil {
+				return errors.UnknownError.Wrap(result.Error)
+			}
 		}
 		if statusChan != nil {
 			for _, result := range results {
