@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -140,4 +140,25 @@ func (tx *SendTokens) AddRecipient(to *url.URL, amount *big.Int) {
 	recipient.Url = to
 	recipient.Amount = *amount
 	tx.To = append(tx.To, recipient)
+}
+
+// TransactionStatusError wraps a [TransactionStatus] and implements [error].
+type TransactionStatusError struct {
+	*TransactionStatus
+}
+
+// AsError returns nil or the status wrapped as a [TransactionStatusError].
+func (s *TransactionStatus) AsError() error {
+	if s.Error == nil {
+		return nil
+	}
+	return TransactionStatusError{s}
+}
+
+func (e TransactionStatusError) Error() string {
+	return e.TransactionStatus.Error.Error()
+}
+
+func (e TransactionStatusError) Unwrap() error {
+	return e.TransactionStatus.Error
 }
