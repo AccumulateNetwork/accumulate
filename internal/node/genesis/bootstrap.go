@@ -197,7 +197,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	}
 
 	// Create network variable accounts
-	err := b.GenesisGlobals.Store(b.partition, func(accountUrl *url.URL, target interface{}) error {
+	err := b.GenesisGlobals.InitializeDataAccounts(b.partition, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
 		da.AddAuthority(b.networkAuthority)
@@ -273,6 +273,7 @@ func (b *bootstrap) createMainLedger() {
 	ledger := new(protocol.SystemLedger)
 	ledger.Url = b.partition.Ledger()
 	ledger.Index = protocol.GenesisBlock
+	ledger.ExecutorVersion = b.GenesisGlobals.ExecutorVersion
 	b.WriteRecords(ledger)
 }
 

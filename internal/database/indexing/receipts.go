@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -185,6 +185,9 @@ func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c 
 	indexChain, err := c.Index().Get()
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("unable to load %s index chain: %w", c.Name(), err)
+	}
+	if indexChain.Height() == 0 {
+		return nil, 0, nil, fmt.Errorf("cannot create receipt for entry %d of %s chain: index chain is empty", index, c.Name())
 	}
 
 	_, entry, err := SearchIndexChain(indexChain, uint64(indexChain.Height())-1, MatchAfter, SearchIndexChainBySource(uint64(index)))
