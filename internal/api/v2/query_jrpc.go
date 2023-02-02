@@ -77,7 +77,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 		}
 
 		for r := range ch {
-			if r.Status.Remote() {
+			if !req.IncludeRemote && r.Status.Remote() {
 				continue
 			}
 			return r, nil

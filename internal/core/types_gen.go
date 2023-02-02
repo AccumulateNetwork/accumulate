@@ -27,7 +27,9 @@ type GlobalValues struct {
 	Globals   *protocol.NetworkGlobals    `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
 	Network   *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Routing   *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
-	extraData []byte
+	// ExecutorVersion is the active executor version.
+	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
+	extraData       []byte
 }
 
 func (v *GlobalValues) Copy() *GlobalValues {
@@ -45,6 +47,7 @@ func (v *GlobalValues) Copy() *GlobalValues {
 	if v.Routing != nil {
 		u.Routing = (v.Routing).Copy()
 	}
+	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -84,6 +87,9 @@ func (v *GlobalValues) Equal(u *GlobalValues) bool {
 	case !((v.Routing).Equal(u.Routing)):
 		return false
 	}
+	if !(v.ExecutorVersion == u.ExecutorVersion) {
+		return false
+	}
 
 	return true
 }
@@ -93,6 +99,7 @@ var fieldNames_GlobalValues = []string{
 	2: "Globals",
 	3: "Network",
 	4: "Routing",
+	5: "ExecutorVersion",
 }
 
 func (v *GlobalValues) MarshalBinary() ([]byte, error) {
@@ -110,6 +117,9 @@ func (v *GlobalValues) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Routing == nil) {
 		writer.WriteValue(4, v.Routing.MarshalBinary)
+	}
+	if !(v.ExecutorVersion == 0) {
+		writer.WriteEnum(5, v.ExecutorVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_GlobalValues)
@@ -172,6 +182,9 @@ func (v *GlobalValues) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x := new(protocol.RoutingTable); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Routing = x
+	}
+	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
+		v.ExecutorVersion = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_GlobalValues)
