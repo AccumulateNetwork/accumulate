@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -93,6 +93,7 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 		return nil, errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
 
+	next := map[[32]byte]int{}
 	entries := map[[32]byte]*Data{}
 	record := func(acct *url.URL, e *Entry) {
 		d, ok := entries[acct.AccountID32()]
@@ -171,39 +172,44 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 				return nil, errors.UnknownError.WithFormat("get %v %s chain: %w", e.Account, e.Chain, err)
 			}
 
-			txnHash, err := chain.Inner().Get(int64(e.Index))
-			if err != nil {
-				return nil, errors.UnknownError.WithFormat("get %v %s chain entry %d: %w", e.Account, e.Chain, e.Index, err)
+			i := next[e.Account.AccountID32()]
+			next[e.Account.AccountID32()] = int(e.Index) + 1
+			for ; i <= int(e.Index); i++ {
+				txnHash, err := chain.Inner().Get(int64(i))
+				if err != nil {
+					return nil, errors.UnknownError.WithFormat("get %v %s chain entry %d: %w", e.Account, e.Chain, i, err)
+				}
+
+				state, err := batch.Transaction(txnHash).Main().Get()
+				switch {
+				case errors.Is(err, errors.NotFound):
+					fmt.Printf("Cannot load state of %v %s chain entry %d (%x)\n", e.Account, e.Chain, i, txnHash)
+					continue
+				case err != nil:
+					return nil, errors.UnknownError.WithFormat("load %v %s chain entry %d state: %w", e.Account, e.Chain, i, err)
+				case state.Transaction == nil:
+					return nil, errors.UnknownError.WithFormat("%v %s chain entry %d is not a transaction: %w", e.Account, e.Chain, i, err)
+				}
+
+				var entryHash []byte
+				switch body := state.Transaction.Body.(type) {
+				case *protocol.WriteData:
+					entryHash = body.Entry.Hash()
+				case *protocol.SyntheticWriteData:
+					entryHash = body.Entry.Hash()
+				case *protocol.SystemWriteData:
+					entryHash = body.Entry.Hash()
+				default:
+					// Don't care
+					continue
+				}
+
+				record(e.Account, &Entry{
+					Entry: *(*[32]byte)(entryHash),
+					Txn:   *(*[32]byte)(txnHash),
+				})
 			}
 
-			state, err := batch.Transaction(txnHash).Main().Get()
-			switch {
-			case errors.Is(err, errors.NotFound):
-				fmt.Printf("Cannot load state of %v %s chain entry %d (%x)\n", e.Account, e.Chain, e.Index, txnHash)
-				continue
-			case err != nil:
-				return nil, errors.UnknownError.WithFormat("load %v %s chain entry %d state: %w", e.Account, e.Chain, e.Index, err)
-			case state.Transaction == nil:
-				return nil, errors.UnknownError.WithFormat("%v %s chain entry %d is not a transaction: %w", e.Account, e.Chain, e.Index, err)
-			}
-
-			var entryHash []byte
-			switch body := state.Transaction.Body.(type) {
-			case *protocol.WriteData:
-				entryHash = body.Entry.Hash()
-			case *protocol.SyntheticWriteData:
-				entryHash = body.Entry.Hash()
-			case *protocol.SystemWriteData:
-				entryHash = body.Entry.Hash()
-			default:
-				// Don't care
-				continue
-			}
-
-			record(e.Account, &Entry{
-				Entry: *(*[32]byte)(entryHash),
-				Txn:   *(*[32]byte)(txnHash),
-			})
 		}
 	}
 	return entries, nil

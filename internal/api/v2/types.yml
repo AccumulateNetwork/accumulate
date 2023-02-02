@@ -337,6 +337,10 @@ QueryOptions:
     - name: Prove
       type: bool
       optional: true
+    - name: IncludeRemote
+      description: tells QueryTx not to ignore remote transactions
+      type: bool
+      optional: true
 
 TxnQuery:
   non-binary: true

@@ -25,6 +25,10 @@ import (
 // ValidateEnvelope should not modify anything. Right now it updates signer
 // timestamps and credits, but that will be moved to ProcessSignature.
 func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (protocol.TransactionResult, error) {
+	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body == nil {
+		return nil, errors.BadRequest.WithFormat("missing body")
+	}
+
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
@@ -44,6 +48,15 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	_, err := delivery.LoadTransaction(batch)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+		if delivery.Transaction.Header.Principal == nil {
+			return nil, errors.BadRequest.WithFormat("missing principal")
+		}
+		if delivery.Transaction.Header.Initiator == [32]byte{} {
+			return nil, errors.BadRequest.WithFormat("missing initiator")
+		}
 	}
 
 	// Get a temp status - DO NOT STORE THIS

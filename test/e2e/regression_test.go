@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,6 +16,8 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	oldsim "gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -270,8 +272,10 @@ func TestSynthTxnToDirectory(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionLatest
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(values)
 
 	alice := acctesting.GenerateKey(t.Name(), "alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
@@ -308,8 +312,10 @@ func TestSynthTxnFromDirectory(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionLatest
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(values)
 
 	alice := acctesting.GenerateKey(t.Name(), "alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
@@ -319,6 +325,46 @@ func TestSynthTxnFromDirectory(t *testing.T) {
 	// Put Alice on the DN and Bob on BVN0
 	sim.SetRouteFor(aliceUrl.RootIdentity(), "Directory")
 	sim.SetRouteFor(bobUrl.RootIdentity(), "BVN0")
+
+	// Create Alice
+	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
+
+	// Send tokens from BVN to DN
+	env := acctesting.NewTransaction().
+		WithPrincipal(aliceUrl).
+		WithTimestampVar(&timestamp).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&SendTokens{
+			To: []*TokenRecipient{{
+				Url:    bobUrl,
+				Amount: *big.NewInt(1e6),
+			}},
+		}).
+		Initiate(SignatureTypeED25519, alice).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
+}
+
+func TestSynthTxnFromAndToDirectory(t *testing.T) {
+	// Tests AC-2231
+	var timestamp uint64
+
+	// Initialize
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionLatest
+	sim := oldsim.New(t, 3)
+	sim.InitFromGenesisWith(values)
+
+	alice := acctesting.GenerateKey(t.Name(), "alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey(t.Name(), "bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
+
+	// Put Alice on BVN0 and Bob on the DN
+	sim.SetRouteFor(aliceUrl.RootIdentity(), "Directory")
+	sim.SetRouteFor(bobUrl.RootIdentity(), "Directory")
 
 	// Create Alice
 	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})

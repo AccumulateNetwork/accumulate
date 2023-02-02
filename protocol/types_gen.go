@@ -57,6 +57,12 @@ type AcmeOracle struct {
 	extraData []byte
 }
 
+type ActivateProtocolVersion struct {
+	fieldsSet []bool
+	Version   ExecutorVersion `json:"version,omitempty" form:"version" query:"version"`
+	extraData []byte
+}
+
 type AddAccountAuthorityOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to add.
@@ -790,8 +796,10 @@ type SystemLedger struct {
 	AcmeBurnt      big.Int                `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	PendingUpdates []NetworkAccountUpdate `json:"pendingUpdates,omitempty" form:"pendingUpdates" query:"pendingUpdates" validate:"required"`
 	// Anchor is the block anchor that should be sent for the last block.
-	Anchor    AnchorBody `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
-	extraData []byte
+	Anchor AnchorBody `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	// ExecutorVersion is the active executor version.
+	ExecutorVersion ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
+	extraData       []byte
 }
 
 type SystemWriteData struct {
@@ -983,6 +991,8 @@ func (*ADI) Type() AccountType { return AccountTypeIdentity }
 func (*AccumulateDataEntry) Type() DataEntryType { return DataEntryTypeAccumulate }
 
 func (*AcmeFaucet) Type() TransactionType { return TransactionTypeAcmeFaucet }
+
+func (*ActivateProtocolVersion) Type() TransactionType { return TransactionTypeActivateProtocolVersion }
 
 func (*AddAccountAuthorityOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeAddAuthority
@@ -1192,6 +1202,16 @@ func (v *AcmeOracle) Copy() *AcmeOracle {
 }
 
 func (v *AcmeOracle) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ActivateProtocolVersion) Copy() *ActivateProtocolVersion {
+	u := new(ActivateProtocolVersion)
+
+	u.Version = v.Version
+
+	return u
+}
+
+func (v *ActivateProtocolVersion) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AddAccountAuthorityOperation) Copy() *AddAccountAuthorityOperation {
 	u := new(AddAccountAuthorityOperation)
@@ -2435,6 +2455,7 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	if v.Anchor != nil {
 		u.Anchor = CopyAnchorBody(v.Anchor)
 	}
+	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -2847,6 +2868,14 @@ func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
 
 func (v *AcmeOracle) Equal(u *AcmeOracle) bool {
 	if !(v.Price == u.Price) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ActivateProtocolVersion) Equal(u *ActivateProtocolVersion) bool {
+	if !(v.Version == u.Version) {
 		return false
 	}
 
@@ -4471,6 +4500,9 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 	if !(EqualAnchorBody(v.Anchor, u.Anchor)) {
 		return false
 	}
+	if !(v.ExecutorVersion == u.ExecutorVersion) {
+		return false
+	}
 
 	return true
 }
@@ -5123,6 +5155,45 @@ func (v *AcmeOracle) IsValid() error {
 		errs = append(errs, "field Price is missing")
 	} else if v.Price == 0 {
 		errs = append(errs, "field Price is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ActivateProtocolVersion = []string{
+	1: "Type",
+	2: "Version",
+}
+
+func (v *ActivateProtocolVersion) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Version == 0) {
+		writer.WriteEnum(2, v.Version)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ActivateProtocolVersion)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ActivateProtocolVersion) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
 	}
 
 	switch len(errs) {
@@ -9786,6 +9857,7 @@ var fieldNames_SystemLedger = []string{
 	5: "AcmeBurnt",
 	6: "PendingUpdates",
 	7: "Anchor",
+	8: "ExecutorVersion",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -9812,6 +9884,9 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(EqualAnchorBody(v.Anchor, nil)) {
 		writer.WriteValue(7, v.Anchor.MarshalBinary)
+	}
+	if !(v.ExecutorVersion == 0) {
+		writer.WriteEnum(8, v.ExecutorVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemLedger)
@@ -11267,6 +11342,41 @@ func (v *AcmeOracle) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AcmeOracle)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ActivateProtocolVersion) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ActivateProtocolVersion) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ActivateProtocolVersion) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(ExecutorVersion); reader.ReadEnum(2, x) {
+		v.Version = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_ActivateProtocolVersion)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -14399,6 +14509,9 @@ func (v *SystemLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		}
 		return err
 	})
+	if x := new(ExecutorVersion); reader.ReadEnum(8, x) {
+		v.ExecutorVersion = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_SystemLedger)
 	if err != nil {
@@ -15301,6 +15414,16 @@ func (v *AcmeFaucet) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	return json.Marshal(&u)
+}
+
+func (v *ActivateProtocolVersion) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    TransactionType `json:"type"`
+		Version ExecutorVersion `json:"version,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Version = v.Version
 	return json.Marshal(&u)
 }
 
@@ -16311,13 +16434,14 @@ func (v *SystemGenesis) MarshalJSON() ([]byte, error) {
 
 func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                             `json:"type"`
-		Url            *url.URL                                `json:"url,omitempty"`
-		Index          uint64                                  `json:"index,omitempty"`
-		Timestamp      time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
-		Anchor         encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
+		Type            AccountType                             `json:"type"`
+		Url             *url.URL                                `json:"url,omitempty"`
+		Index           uint64                                  `json:"index,omitempty"`
+		Timestamp       time.Time                               `json:"timestamp,omitempty"`
+		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates  encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		Anchor          encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
+		ExecutorVersion ExecutorVersion                         `json:"executorVersion,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -16326,6 +16450,7 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
 	u.Anchor = encoding.JsonUnmarshalWith[AnchorBody]{Value: v.Anchor, Func: UnmarshalAnchorBodyJSON}
+	u.ExecutorVersion = v.ExecutorVersion
 	return json.Marshal(&u)
 }
 
@@ -16677,6 +16802,23 @@ func (v *AcmeFaucet) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
+	return nil
+}
+
+func (v *ActivateProtocolVersion) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    TransactionType `json:"type"`
+		Version ExecutorVersion `json:"version,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Version = v.Version
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Version = u.Version
 	return nil
 }
 
@@ -18546,13 +18688,14 @@ func (v *SystemGenesis) UnmarshalJSON(data []byte) error {
 
 func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                             `json:"type"`
-		Url            *url.URL                                `json:"url,omitempty"`
-		Index          uint64                                  `json:"index,omitempty"`
-		Timestamp      time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
-		Anchor         encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
+		Type            AccountType                             `json:"type"`
+		Url             *url.URL                                `json:"url,omitempty"`
+		Index           uint64                                  `json:"index,omitempty"`
+		Timestamp       time.Time                               `json:"timestamp,omitempty"`
+		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates  encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		Anchor          encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
+		ExecutorVersion ExecutorVersion                         `json:"executorVersion,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -18561,6 +18704,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
 	u.Anchor = encoding.JsonUnmarshalWith[AnchorBody]{Value: v.Anchor, Func: UnmarshalAnchorBodyJSON}
+	u.ExecutorVersion = v.ExecutorVersion
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -18578,6 +18722,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	v.PendingUpdates = u.PendingUpdates
 	v.Anchor = u.Anchor.Value
 
+	v.ExecutorVersion = u.ExecutorVersion
 	return nil
 }
 

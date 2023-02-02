@@ -45,7 +45,7 @@ func (v {{.Name}}) String() string {
 	{{- $typ := .Name}}
 	{{- range .Values}}
 	case {{valueName .}}:
-		return "{{lowerCamel .Name}}"
+		return "{{if .Label}}{{.Label}}{{else}}{{lowerCamel .Name}}{{end}}"
 	{{- end}}
 	default:
 		return fmt.Sprintf("{{.Name}}:%d", v)
@@ -73,6 +73,10 @@ func {{.Name}}ByName(name string) ({{.Name}}, bool) {
 	{{- $typ := (valueName .)}}
 	case "{{lower .Name}}":
 		return {{$typ}}, true
+	{{- if .Label}}
+	case "{{lower .Label}}":
+		return {{$typ}}, true
+	{{- end}}
 	{{- range .Aliases}}
 	case "{{.}}":
 		return {{$typ}}, true

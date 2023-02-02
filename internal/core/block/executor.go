@@ -73,6 +73,9 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 
 		// Forwarding
 		chain.SyntheticForwardTransaction{},
+
+		// Operator transactions
+		chain.ActivateProtocolVersion{},
 	}
 
 	switch opts.Describe.NetworkType {
