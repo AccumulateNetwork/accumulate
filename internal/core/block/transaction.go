@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -101,7 +101,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Do extra processing for special network accounts
-	err = x.processNetworkAccountUpdates(batch, delivery, principal)
+	err = x.processNetworkAccountUpdates(st.GetBatch(), delivery, principal)
 	if err != nil {
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
