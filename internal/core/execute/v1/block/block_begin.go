@@ -28,6 +28,10 @@ import (
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
+	if x.globals.Active.ExecutorVersion.V2() {
+		return errors.Conflict.WithFormat("executor v1 is incompatible with version %v", x.globals.Active.ExecutorVersion)
+	}
+
 	//clear the timers
 	x.BlockTimers.Reset()
 
