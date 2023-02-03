@@ -433,7 +433,11 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 
 	// This should never happen, but if it does Add will panic
 	if status.Pending() && delivery.SequenceNumber <= partLedger.Delivered {
-		return nil, errors.FatalError.WithFormat("synthetic transactions executed out of order: delivered %d, executed %d", partLedger.Delivered, delivery.SequenceNumber)
+		msg := "synthetic transactions"
+		if delivery.Transaction.Body.Type().IsSystem() {
+			msg = "anchors"
+		}
+		return nil, errors.FatalError.WithFormat("%s executed out of order: delivered %d, executed %d", msg, partLedger.Delivered, delivery.SequenceNumber)
 	}
 
 	// The ledger's Delivered number needs to be updated if the transaction
@@ -447,7 +451,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 
 	nextHash, ok := partLedger.Get(delivery.SequenceNumber + 1)
 	if ok {
-		state.ProcessAdditionalTransaction(delivery.NewSyntheticFromSequence(nextHash.Hash()))
+		state.ProcessSynthetic(nextHash)
 	}
 
 	return status, nil

@@ -162,3 +162,12 @@ func (e TransactionStatusError) Error() string {
 func (e TransactionStatusError) Unwrap() error {
 	return e.TransactionStatus.Error
 }
+
+// NewErrorStatus returns a new transaction status for the given ID with the
+// given error.
+func NewErrorStatus(id *url.TxID, err error) *TransactionStatus {
+	st := new(TransactionStatus)
+	st.TxID = id
+	st.Set(err)
+	return st
+}

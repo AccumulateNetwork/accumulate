@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"sort"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -73,14 +75,14 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 
 	// Process updates when present
 	if len(body.Updates) > 0 && st.NetworkType != config.Directory {
-		err := processNetworkAccountUpdates(st, tx, body.Updates)
+		err := processNetworkAccountUpdates(st, body.Updates)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	if st.NetworkType != config.Directory {
-		err = processReceiptsFromDirectory(st, tx, body)
+		err = processReceiptsFromDirectory(st, body)
 		if err != nil {
 			return nil, err
 		}
@@ -89,16 +91,14 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	return nil, nil
 }
 
-func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol.DirectoryAnchor) error {
-	var deliveries []*Delivery
-	var sequence = map[*Delivery]int{}
+func processReceiptsFromDirectory(st *StateManager, body *protocol.DirectoryAnchor) error {
+	var sequence = map[messaging.Message]int{}
 
 	// Process pending transactions from the DN
-	d, err := loadSynthTxns(st, tx, body.RootChainAnchor[:], body.Source, nil, sequence)
+	messages, err := loadSynthTxns(st, body.RootChainAnchor[:], body.Source, nil, sequence)
 	if err != nil {
 		return err
 	}
-	deliveries = append(deliveries, d...)
 
 	// Process receipts
 	for i, receipt := range body.Receipts {
@@ -109,30 +109,28 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 
 		st.logger.Info("Received receipt", "module", "anchoring", "from", logging.AsHex(receipt.RootChainReceipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source)
 
-		d, err := loadSynthTxns(st, tx, receipt.RootChainReceipt.Start, body.Source, receipt.RootChainReceipt, sequence)
+		msg, err := loadSynthTxns(st, receipt.RootChainReceipt.Start, body.Source, receipt.RootChainReceipt, sequence)
 		if err != nil {
 			return err
 		}
-		deliveries = append(deliveries, d...)
+		messages = append(messages, msg...)
 	}
 
 	// Submit the receipts, sorted
-	sort.Slice(deliveries, func(i, j int) bool {
-		return sequence[deliveries[i]] < sequence[deliveries[j]]
+	sort.Slice(messages, func(i, j int) bool {
+		return sequence[messages[i]] < sequence[messages[j]]
 	})
-	for _, d := range deliveries {
-		st.State.ProcessAdditionalTransaction(d)
-	}
+	st.State.AdditionalMessages = append(st.State.AdditionalMessages, messages...)
 	return nil
 }
 
-func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.URL, receipt *merkle.Receipt, sequence map[*Delivery]int) ([]*Delivery, error) {
+func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *merkle.Receipt, sequence map[messaging.Message]int) ([]messaging.Message, error) {
 	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(anchor))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", anchor[:4], err)
 	}
 
-	var deliveries []*Delivery
+	var messages []messaging.Message
 	for _, txid := range synth {
 		h := txid.Hash()
 		sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
@@ -140,31 +138,35 @@ func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.UR
 			return nil, err
 		}
 
-		var d *Delivery
+		var d messaging.Message
 		if receipt != nil {
-			d = tx.NewSyntheticReceipt(txid.Hash(), source, receipt)
+			d = &messaging.UserSignature{
+				TransactionHash: txid.Hash(),
+				Signature: &protocol.ReceiptSignature{
+					SourceNetwork:   source,
+					Proof:           *receipt,
+					TransactionHash: txid.Hash(),
+				},
+			}
 		} else {
-			d = tx.NewSyntheticFromSequence(txid.Hash())
+			d = &internal.SyntheticMessage{TxID: txid}
 		}
 		sequence[d] = int(sig.SequenceNumber)
-		deliveries = append(deliveries, d)
+		messages = append(messages, d)
 	}
-	return deliveries, nil
+	return messages, nil
 }
 
-func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates []protocol.NetworkAccountUpdate) error {
+func processNetworkAccountUpdates(st *StateManager, updates []protocol.NetworkAccountUpdate) error {
 	for _, update := range updates {
-		txn := new(protocol.Transaction)
-		txn.Body = update.Body
-
+		var account *url.URL
 		switch update.Name {
 		case protocol.Operators:
-			txn.Header.Principal = st.OperatorsPage()
+			account = st.OperatorsPage()
 		default:
-			txn.Header.Principal = st.NodeUrl(update.Name)
+			account = st.NodeUrl(update.Name)
 		}
-
-		st.State.ProcessAdditionalTransaction(delivery.NewInternal(txn))
+		st.State.ProcessNetworkUpdate(st.txHash, account, update.Body)
 	}
 	return nil
 }
