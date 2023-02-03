@@ -30,6 +30,13 @@ type FieldType struct {
 	Name string
 }
 
+func (f *FieldType) Equal(g *FieldType) bool {
+	if f == g {
+		return true
+	}
+	return f != nil && g != nil && *f == *g
+}
+
 func (f *FieldType) Title() string {
 	return TitleCase(f.String())
 }
@@ -192,6 +199,7 @@ type Type struct {
 	NonBinary bool `yaml:"non-binary"`
 	// Incomparable specifies whether two values of the type can be checked for equality.
 	Incomparable    bool `yaml:"incomparable"`
+	NoCopy          bool `yaml:"no-copy"`
 	IgnoreSizeLimit bool `yaml:"ignore-size-limit"`
 	// CustomIsValid specifies the type defines a custom IsValid() error method.
 	CustomIsValid bool `yaml:"custom-is-valid"`

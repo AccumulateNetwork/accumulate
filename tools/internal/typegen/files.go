@@ -22,7 +22,15 @@ func GetModifiedDate(file string) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-	return time.Parse("2006-01-02 15:04:05 -0700", strings.TrimSpace(string(b)))
+	s := strings.TrimSpace(string(b))
+	if s != "" {
+		return time.Parse("2006-01-02 15:04:05 -0700", s)
+	}
+	st, err := os.Stat(file)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return st.ModTime(), nil
 }
 
 type FileReader struct {

@@ -22,17 +22,34 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type LegacyMessage struct {
+type Envelope struct {
 	fieldsSet   []bool
-	Signatures  []protocol.Signature  `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	Signatures  []protocol.Signature    `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	TxHash      []byte                  `json:"txHash,omitempty" form:"txHash" query:"txHash"`
+	Transaction []*protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
+	Messages    []Message               `json:"messages,omitempty" form:"messages" query:"messages"`
+	extraData   []byte
+}
+
+type UserSignature struct {
+	fieldsSet       []bool
+	Signature       protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	TransactionHash [32]byte           `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	extraData       []byte
+}
+
+type UserTransaction struct {
+	fieldsSet   []bool
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	extraData   []byte
 }
 
-func (*LegacyMessage) Type() MessageType { return MessageTypeLegacy }
+func (*UserSignature) Type() MessageType { return MessageTypeUserSignature }
 
-func (v *LegacyMessage) Copy() *LegacyMessage {
-	u := new(LegacyMessage)
+func (*UserTransaction) Type() MessageType { return MessageTypeUserTransaction }
+
+func (v *Envelope) Copy() *Envelope {
+	u := new(Envelope)
 
 	u.Signatures = make([]protocol.Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
@@ -40,6 +57,41 @@ func (v *LegacyMessage) Copy() *LegacyMessage {
 			u.Signatures[i] = protocol.CopySignature(v)
 		}
 	}
+	u.TxHash = encoding.BytesCopy(v.TxHash)
+	u.Transaction = make([]*protocol.Transaction, len(v.Transaction))
+	for i, v := range v.Transaction {
+		if v != nil {
+			u.Transaction[i] = (v).Copy()
+		}
+	}
+	u.Messages = make([]Message, len(v.Messages))
+	for i, v := range v.Messages {
+		if v != nil {
+			u.Messages[i] = CopyMessage(v)
+		}
+	}
+
+	return u
+}
+
+func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UserSignature) Copy() *UserSignature {
+	u := new(UserSignature)
+
+	if v.Signature != nil {
+		u.Signature = protocol.CopySignature(v.Signature)
+	}
+	u.TransactionHash = v.TransactionHash
+
+	return u
+}
+
+func (v *UserSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UserTransaction) Copy() *UserTransaction {
+	u := new(UserTransaction)
+
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
 	}
@@ -47,9 +99,9 @@ func (v *LegacyMessage) Copy() *LegacyMessage {
 	return u
 }
 
-func (v *LegacyMessage) CopyAsInterface() interface{} { return v.Copy() }
+func (v *UserTransaction) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *LegacyMessage) Equal(u *LegacyMessage) bool {
+func (v *Envelope) Equal(u *Envelope) bool {
 	if len(v.Signatures) != len(u.Signatures) {
 		return false
 	}
@@ -58,6 +110,41 @@ func (v *LegacyMessage) Equal(u *LegacyMessage) bool {
 			return false
 		}
 	}
+	if !(bytes.Equal(v.TxHash, u.TxHash)) {
+		return false
+	}
+	if len(v.Transaction) != len(u.Transaction) {
+		return false
+	}
+	for i := range v.Transaction {
+		if !((v.Transaction[i]).Equal(u.Transaction[i])) {
+			return false
+		}
+	}
+	if len(v.Messages) != len(u.Messages) {
+		return false
+	}
+	for i := range v.Messages {
+		if !(EqualMessage(v.Messages[i], u.Messages[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *UserSignature) Equal(u *UserSignature) bool {
+	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *UserTransaction) Equal(u *UserTransaction) bool {
 	switch {
 	case v.Transaction == u.Transaction:
 		// equal
@@ -70,27 +157,37 @@ func (v *LegacyMessage) Equal(u *LegacyMessage) bool {
 	return true
 }
 
-var fieldNames_LegacyMessage = []string{
-	1: "Type",
-	2: "Signatures",
+var fieldNames_Envelope = []string{
+	1: "Signatures",
+	2: "TxHash",
 	3: "Transaction",
+	4: "Messages",
 }
 
-func (v *LegacyMessage) MarshalBinary() ([]byte, error) {
+func (v *Envelope) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, v.Type())
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(2, v.MarshalBinary)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
-	if !(v.Transaction == nil) {
-		writer.WriteValue(3, v.Transaction.MarshalBinary)
+	if !(len(v.TxHash) == 0) {
+		writer.WriteBytes(2, v.TxHash)
+	}
+	if !(len(v.Transaction) == 0) {
+		for _, v := range v.Transaction {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Messages) == 0) {
+		for _, v := range v.Messages {
+			writer.WriteValue(4, v.MarshalBinary)
+		}
 	}
 
-	_, _, err := writer.Reset(fieldNames_LegacyMessage)
+	_, _, err := writer.Reset(fieldNames_Envelope)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -98,18 +195,107 @@ func (v *LegacyMessage) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *LegacyMessage) IsValid() error {
+func (v *Envelope) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_UserSignature = []string{
+	1: "Type",
+	2: "Signature",
+	3: "TransactionHash",
+}
+
+func (v *UserSignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(protocol.EqualSignature(v.Signature, nil)) {
+		writer.WriteValue(2, v.Signature.MarshalBinary)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(3, &v.TransactionHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UserSignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *UserSignature) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Signatures is missing")
-	} else if len(v.Signatures) == 0 {
-		errs = append(errs, "field Signatures is not set")
+		errs = append(errs, "field Signature is missing")
+	} else if protocol.EqualSignature(v.Signature, nil) {
+		errs = append(errs, "field Signature is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field TransactionHash is missing")
+	} else if v.TransactionHash == ([32]byte{}) {
+		errs = append(errs, "field TransactionHash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_UserTransaction = []string{
+	1: "Type",
+	2: "Transaction",
+}
+
+func (v *UserTransaction) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Transaction == nil) {
+		writer.WriteValue(2, v.Transaction.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UserTransaction)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *UserTransaction) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Transaction is missing")
 	} else if v.Transaction == nil {
 		errs = append(errs, "field Transaction is not set")
@@ -125,11 +311,65 @@ func (v *LegacyMessage) IsValid() error {
 	}
 }
 
-func (v *LegacyMessage) UnmarshalBinary(data []byte) error {
+func (v *Envelope) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *LegacyMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		ok := reader.ReadValue(1, func(r io.Reader) error {
+			x, err := protocol.UnmarshalSignatureFrom(r)
+			if err == nil {
+				v.Signatures = append(v.Signatures, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.TxHash = x
+	}
+	for {
+		if x := new(protocol.Transaction); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+			v.Transaction = append(v.Transaction, x)
+		} else {
+			break
+		}
+	}
+	for {
+		ok := reader.ReadValue(4, func(r io.Reader) error {
+			x, err := UnmarshalMessageFrom(r)
+			if err == nil {
+				v.Messages = append(v.Messages, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_Envelope)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *UserSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UserSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	var vType MessageType
@@ -143,24 +383,19 @@ func (v *LegacyMessage) UnmarshalBinaryFrom(rd io.Reader) error {
 	return v.UnmarshalFieldsFrom(reader)
 }
 
-func (v *LegacyMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	for {
-		ok := reader.ReadValue(2, func(r io.Reader) error {
-			x, err := protocol.UnmarshalSignatureFrom(r)
-			if err == nil {
-				v.Signatures = append(v.Signatures, x)
-			}
-			return err
-		})
-		if !ok {
-			break
+func (v *UserSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := protocol.UnmarshalSignatureFrom(r)
+		if err == nil {
+			v.Signature = x
 		}
-	}
-	if x := new(protocol.Transaction); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
-		v.Transaction = x
+		return err
+	})
+	if x, ok := reader.ReadHash(3); ok {
+		v.TransactionHash = *x
 	}
 
-	seen, err := reader.Reset(fieldNames_LegacyMessage)
+	seen, err := reader.Reset(fieldNames_UserSignature)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -172,36 +407,161 @@ func (v *LegacyMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func (v *LegacyMessage) MarshalJSON() ([]byte, error) {
+func (v *UserTransaction) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UserTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *UserTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Transaction = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UserTransaction)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *Envelope) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        MessageType                                        `json:"type"`
-		Signatures  encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
-		Transaction *protocol.Transaction                              `json:"transaction,omitempty"`
+		Signatures  *encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
+		TxHash      *string                                             `json:"txHash,omitempty"`
+		Transaction encoding.JsonList[*protocol.Transaction]            `json:"transaction,omitempty"`
+		Messages    *encoding.JsonUnmarshalListWith[Message]            `json:"messages,omitempty"`
 	}{}
-	u.Type = v.Type()
-	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
-	u.Transaction = v.Transaction
+	if !(len(v.Signatures) == 0) {
+		u.Signatures = &encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
+	}
+	if !(len(v.TxHash) == 0) {
+		u.TxHash = encoding.BytesToJSON(v.TxHash)
+	}
+	if !(len(v.Transaction) == 0) {
+		u.Transaction = v.Transaction
+	}
+	if !(len(v.Messages) == 0) {
+		u.Messages = &encoding.JsonUnmarshalListWith[Message]{Value: v.Messages, Func: UnmarshalMessageJSON}
+	}
 	return json.Marshal(&u)
 }
 
-func (v *LegacyMessage) UnmarshalJSON(data []byte) error {
+func (v *UserSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        MessageType                                        `json:"type"`
-		Signatures  encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
-		Transaction *protocol.Transaction                              `json:"transaction,omitempty"`
+		Type            MessageType                                     `json:"type"`
+		Signature       *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		TransactionHash string                                          `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
+	if !(protocol.EqualSignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *UserTransaction) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type        MessageType           `json:"type"`
+		Transaction *protocol.Transaction `json:"transaction,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Transaction == nil) {
+		u.Transaction = v.Transaction
+	}
+	return json.Marshal(&u)
+}
+
+func (v *Envelope) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Signatures  *encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
+		TxHash      *string                                             `json:"txHash,omitempty"`
+		Transaction encoding.JsonList[*protocol.Transaction]            `json:"transaction,omitempty"`
+		Messages    *encoding.JsonUnmarshalListWith[Message]            `json:"messages,omitempty"`
+	}{}
+	u.Signatures = &encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
+	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Transaction = v.Transaction
+	u.Messages = &encoding.JsonUnmarshalListWith[Message]{Value: v.Messages, Func: UnmarshalMessageJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+	for i, x := range u.Signatures.Value {
+		v.Signatures[i] = x
+	}
+	if x, err := encoding.BytesFromJSON(u.TxHash); err != nil {
+		return fmt.Errorf("error decoding TxHash: %w", err)
+	} else {
+		v.TxHash = x
+	}
+	v.Transaction = u.Transaction
+	v.Messages = make([]Message, len(u.Messages.Value))
+	for i, x := range u.Messages.Value {
+		v.Messages[i] = x
+	}
+	return nil
+}
+
+func (v *UserSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            MessageType                                     `json:"type"`
+		Signature       *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		TransactionHash string                                          `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
+
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = x
+	}
+	return nil
+}
+
+func (v *UserTransaction) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type        MessageType           `json:"type"`
+		Transaction *protocol.Transaction `json:"transaction,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Transaction = v.Transaction
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Transaction = u.Transaction
 	return nil

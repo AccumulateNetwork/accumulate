@@ -400,7 +400,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		defer batch.Discard()
 	}
 
-	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)
+	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+		return app.Executor.Validate(batch, messages)
+	}, req.Tx)
 	if err != nil {
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseCheckTx
@@ -415,26 +417,34 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	const maxPriority = (1 << 32) - 1
 
+	txns := map[[32]byte]protocol.TransactionType{}
 	seq := map[[32]byte]uint64{}
-	for _, message := range messages {
-		message := message.(*messaging.LegacyMessage)
-		for _, sig := range message.Signatures {
-			sig, ok := sig.(*protocol.PartitionSignature)
-			if ok {
-				seq[sig.TransactionHash] = sig.SequenceNumber
+	for _, msg := range messages {
+		switch msg := msg.(type) {
+		case *messaging.UserTransaction:
+			txns[*(*[32]byte)(msg.Transaction.GetHash())] = msg.Transaction.Body.Type()
+		case *messaging.UserSignature:
+			sig, ok := msg.Signature.(*protocol.PartitionSignature)
+			if !ok {
+				continue
 			}
+			seq[sig.TransactionHash] = sig.SequenceNumber
 		}
 	}
 
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
+		typ, ok := txns[result.TxID.Hash()]
+		if !ok {
+			continue
+		}
+
 		var priority int64
-		message := messages[i].(*messaging.LegacyMessage)
-		if typ := message.Transaction.Body.Type(); typ.IsSystem() {
+		if typ.IsSystem() {
 			priority = maxPriority
 		} else if typ.IsSynthetic() {
 			// Set the priority based on the sequence number to try to keep them in order
-			seq := seq[*(*[32]byte)(message.Transaction.GetHash())]
+			seq := seq[result.TxID.Hash()]
 			priority = maxPriority - 1 - int64(seq)
 		}
 		if resp.Priority < priority {
@@ -443,7 +453,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if result.Error == nil {
 			continue
 		}
-		if !result.Code.Success() && !message.Transaction.Body.Type().IsUser() {
+		if !result.Code.Success() && !typ.IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
@@ -470,7 +480,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 	}
 
-	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), deliverTx(app.Executor, app.block), req.Tx)
+	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), app.block.Process, req.Tx)
 	if err != nil {
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseDeliverTx

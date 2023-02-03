@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -67,7 +68,7 @@ func BenchmarkBlock(b *testing.B) {
 
 			for _, blockSize := range blockSize {
 				var timestamp uint64
-				envs := make([]*protocol.Envelope, blockSize)
+				envs := make([]*messaging.Envelope, blockSize)
 				for j := range envs {
 					envs[j] = acctesting.NewTransaction().
 						WithPrincipal(alice).

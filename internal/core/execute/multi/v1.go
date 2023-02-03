@@ -46,21 +46,27 @@ func (x *ExecutorV1) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (a
 
 // Validate converts the message to a delivery and validates it. Validate
 // returns an error if the message is not a [message.LegacyMessage].
-func (x *ExecutorV1) Validate(batch *database.Batch, message messaging.Message) (*protocol.TransactionStatus, error) {
-	legacy, ok := message.(*messaging.LegacyMessage)
-	if !ok {
-		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
+func (x *ExecutorV1) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+	deliveries, err := chain.DeliveriesFromMessages(messages)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	delivery := chain.DeliveryFromMessage(legacy)
-	status := new(protocol.TransactionStatus)
-	var err error
-	status.Result, err = (*block.Executor)(x).ValidateEnvelope(batch, delivery)
+	st := make([]*protocol.TransactionStatus, len(deliveries))
+	for i, delivery := range deliveries {
+		st[i] = new(protocol.TransactionStatus)
+		st[i].Result, err = (*block.Executor)(x).ValidateEnvelope(batch, delivery)
 
-	// Wait until after ValidateEnvelope, because the transaction may get
-	// loaded by LoadTransaction
-	status.TxID = delivery.Transaction.ID()
-	return status, err
+		if err != nil {
+			st[i].Set(err)
+		}
+
+		// Wait until after ValidateEnvelope, because the transaction may get
+		// loaded by LoadTransaction
+		st[i].TxID = delivery.Transaction.ID()
+	}
+
+	return st, nil
 }
 
 // Begin constructs a [BlockV1] and calls [block.Executor.BeginBlock].
@@ -87,22 +93,29 @@ func (b *BlockV1) Params() execute.BlockParams { return b.Block.BlockMeta }
 
 // Process converts the message to a delivery and processes it. Process returns
 // an error if the message is not a [message.LegacyMessage].
-func (b *BlockV1) Process(message messaging.Message) (*protocol.TransactionStatus, error) {
-	legacy, ok := message.(*messaging.LegacyMessage)
-	if !ok {
-		return nil, errors.BadRequest.WithFormat("unsupported message type: expected %v, got %v", messaging.MessageTypeLegacy, message.Type())
+func (b *BlockV1) Process(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+	deliveries, err := chain.DeliveriesFromMessages(messages)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	delivery := chain.DeliveryFromMessage(legacy)
-	status, err := b.Executor.ExecuteEnvelope(b.Block, delivery)
-	if status == nil {
-		status = new(protocol.TransactionStatus)
+	st := make([]*protocol.TransactionStatus, len(deliveries))
+	for i, delivery := range deliveries {
+		st[i], err = b.Executor.ExecuteEnvelope(b.Block, delivery)
+		if st[i] == nil {
+			st[i] = new(protocol.TransactionStatus)
+		}
+
+		if err != nil {
+			st[i].Set(err)
+		}
+
+		// Wait until after ExecuteEnvelope, because the transaction may get
+		// loaded by LoadTransaction
+		st[i].TxID = delivery.Transaction.ID()
 	}
 
-	// Wait until after ValidateEnvelope, because the transaction may get
-	// loaded by LoadTransaction
-	status.TxID = delivery.Transaction.ID()
-	return status, err
+	return st, nil
 }
 
 // Close ends the block and returns the block state.

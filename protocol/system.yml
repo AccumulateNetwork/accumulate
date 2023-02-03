@@ -15,10 +15,12 @@ SystemLedger:
       type: time
     - name: AcmeBurnt
       type: bigint
+    # TODO Accounts should not reference transactions
     - name: PendingUpdates
       type: NetworkAccountUpdate
       marshal-as: reference
       repeatable: true
+    # TODO Accounts should not reference transactions
     - name: Anchor
       description: is the block anchor that should be sent for the last block
       type: AnchorBody

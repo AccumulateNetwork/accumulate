@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	mocks "gitlab.com/accumulatenetwork/accumulate/test/mocks/pkg/api/v3"
 )
@@ -68,7 +69,7 @@ func TestSubmitter(t *testing.T) {
 	s.EXPECT().Submit(mock.Anything, mock.Anything, mock.Anything).Return(expect, nil)
 	c := setupTest(t, message.Submitter{Submitter: s})
 	sig := &protocol.ED25519Signature{Signer: protocol.AccountUrl("foo")}
-	actual, err := c.Submit(context.Background(), &protocol.Envelope{Signatures: []protocol.Signature{sig}}, api.SubmitOptions{})
+	actual, err := c.Submit(context.Background(), &messaging.Envelope{Signatures: []protocol.Signature{sig}}, api.SubmitOptions{})
 	require.NoError(t, err)
 	require.Equal(t, len(expect), len(actual))
 	require.True(t, expect[0].Equal(actual[0]))
@@ -80,7 +81,7 @@ func TestValidator(t *testing.T) {
 	s.EXPECT().Validate(mock.Anything, mock.Anything, mock.Anything).Return(expect, nil)
 	c := setupTest(t, message.Validator{Validator: s})
 	sig := &protocol.ED25519Signature{Signer: protocol.AccountUrl("foo")}
-	actual, err := c.Validate(context.Background(), &protocol.Envelope{Signatures: []protocol.Signature{sig}}, api.ValidateOptions{})
+	actual, err := c.Validate(context.Background(), &messaging.Envelope{Signatures: []protocol.Signature{sig}}, api.ValidateOptions{})
 	require.NoError(t, err)
 	require.Equal(t, len(expect), len(actual))
 	require.True(t, expect[0].Equal(actual[0]))
