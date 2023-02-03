@@ -12,7 +12,6 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -133,9 +132,12 @@ func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *me
 	var messages []messaging.Message
 	for _, txid := range synth {
 		h := txid.Hash()
-		sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+		s, err := st.batch.Transaction(h[:]).Main().Get()
 		if err != nil {
-			return nil, err
+			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+		}
+		if s.Transaction == nil {
+			return nil, errors.InternalError.WithFormat("synthetic transaction %v is not a transaction", txid)
 		}
 
 		var d messaging.Message
@@ -151,7 +153,7 @@ func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *me
 		} else {
 			d = &internal.SyntheticMessage{TxID: txid}
 		}
-		sequence[d] = int(sig.SequenceNumber)
+		sequence[d] = int(s.Transaction.Header.SequenceNumber)
 		messages = append(messages, d)
 	}
 	return messages, nil
@@ -169,31 +171,4 @@ func processNetworkAccountUpdates(st *StateManager, updates []protocol.NetworkAc
 		st.State.ProcessNetworkUpdate(st.txHash, account, update.Body)
 	}
 	return nil
-}
-
-func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.PartitionSignature, error) {
-	status, err := transaction.GetStatus()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-
-	for _, signer := range status.Signers {
-		sigset, err := transaction.ReadSignaturesForSigner(signer)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load signature set %v: %w", signer.GetUrl(), err)
-		}
-
-		for _, entry := range sigset.Entries() {
-			state, err := batch.Transaction(entry.SignatureHash[:]).GetState()
-			if err != nil {
-				return nil, errors.UnknownError.WithFormat("load signature %x: %w", entry.SignatureHash[:8], err)
-			}
-
-			sig, ok := state.Signature.(*protocol.PartitionSignature)
-			if ok {
-				return sig, nil
-			}
-		}
-	}
-	return nil, errors.InternalError.With("cannot find synthetic signature")
 }

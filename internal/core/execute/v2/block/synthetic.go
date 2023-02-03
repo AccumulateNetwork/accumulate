@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -129,14 +128,10 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dest
+	txn.Header.Source = m.Describe.NodeUrl()
+	txn.Header.Destination = destPartUrl
+	txn.Header.SequenceNumber = destLedger.Produced
 	txn.Body = body
-	initSig, err := new(signing.Builder).
-		SetUrl(m.Describe.NodeUrl()).
-		SetVersion(destLedger.Produced).
-		InitiateSynthetic(txn, destPartUrl)
-	if err != nil {
-		return nil, err
-	}
 	m.logger.Debug("Built synthetic transaction", "module", "synthetic", "txid", logging.AsHex(txn.GetHash()), "destination", dest.String(), "type", body.Type(), "seq-num", destLedger.Produced)
 
 	// Update the ledger
@@ -149,10 +144,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	err = putSyntheticTransaction(
 		batch, txn,
 		&protocol.TransactionStatus{
-			Code:               errors.Remote,
-			SourceNetwork:      initSig.SourceNetwork,
-			DestinationNetwork: initSig.DestinationNetwork,
-			SequenceNumber:     initSig.SequenceNumber,
+			Code: errors.Remote,
 		})
 	if err != nil {
 		return nil, err
@@ -175,7 +167,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, err
 	}
 
-	partition, ok := protocol.ParsePartitionUrl(initSig.DestinationNetwork)
+	partition, ok := protocol.ParsePartitionUrl(txn.Header.Destination)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("destination URL is not a valid partition")
 	}
@@ -186,8 +178,8 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	if err != nil {
 		return nil, err
 	}
-	if indexIndex+1 != initSig.SequenceNumber {
-		m.logger.Error("Sequence number does not match index chain index", "seq-num", initSig.SequenceNumber, "index", indexIndex, "source", initSig.SourceNetwork, "destination", initSig.DestinationNetwork)
+	if indexIndex+1 != txn.Header.SequenceNumber {
+		m.logger.Error("Sequence number does not match index chain index", "seq-num", txn.Header.SequenceNumber, "index", indexIndex, "source", txn.Header.Source, "destination", txn.Header.Destination)
 	}
 
 	return txn, nil
@@ -223,9 +215,6 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		if err != nil {
 			return errors.UnknownError.WithFormat("load synthetic transaction status: %w", err)
 		}
-		if status.SourceNetwork == nil || status.DestinationNetwork == nil || status.SequenceNumber == 0 {
-			return errors.InternalError.WithFormat("synthetic transaction %X status is not correctly initialized", transaction.GetHash()[:4])
-		}
 
 		// Prove it
 		synthProof, err := chain.Receipt(int64(i+int(synthStart)), synthEnd)
@@ -249,11 +238,6 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 }
 
 func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
-	// Check that the partition signature has been received
-	if status.SourceNetwork == nil {
-		return errors.Unauthenticated.WithFormat("missing partition signature")
-	}
-
 	// Check for a key signature
 	hasKeySig, err := hasKeySignature(batch, status)
 	if err != nil {
