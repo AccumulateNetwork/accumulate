@@ -61,13 +61,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			return nil, err
 		}
 
-	case *protocol.InternalSignature:
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
-		err = verifyInternalSignature(delivery, signature, md)
-		if err != nil {
-			return nil, err
-		}
-
 	case *protocol.SignatureSet:
 		if !delivery.IsForwarded() {
 			return nil, errors.BadRequest.With("a signature set is not allowed outside of a forwarded transaction")
@@ -344,7 +337,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	switch signature := signature.(type) {
 	case *protocol.ReceiptSignature,
 		*protocol.PartitionSignature,
-		*protocol.InternalSignature,
 		*protocol.RemoteSignature,
 		*protocol.SignatureSet:
 		index = 0
@@ -728,22 +720,6 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 
 	if !receipt.Proof.Validate() {
 		return fmt.Errorf("invalid receipt")
-	}
-
-	return nil
-}
-
-func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSignature, md sigExecMetadata) error {
-	if md.Nested() {
-		return errors.BadRequest.With("internal signatures cannot be nested within another signature")
-	}
-
-	if !delivery.WasProducedInternally() {
-		return errors.BadRequest.With("internal signatures can only be used for transactions produced by a system transaction")
-	}
-
-	if delivery.IsForwarded() {
-		return errors.BadRequest.With("internal signatures cannot be forwarded")
 	}
 
 	return nil
