@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -40,7 +41,7 @@ type Faucet struct {
 	context  context.Context
 	cancel   context.CancelFunc
 	mu       *sync.Mutex
-	envelope *protocol.Envelope
+	envelope *messaging.Envelope
 }
 
 // FaucetParams are the parameters for a [Faucet].
@@ -156,7 +157,7 @@ func (f *Faucet) faucet(account *url.URL) (*url.TxID, error) {
 
 	// Add the new transaction and signature to the envelope (do not submit)
 	if f.envelope == nil {
-		f.envelope = new(protocol.Envelope)
+		f.envelope = new(messaging.Envelope)
 	}
 	f.envelope.Transaction = append(f.envelope.Transaction, env.Transaction...)
 	f.envelope.Signatures = append(f.envelope.Signatures, env.Signatures...)

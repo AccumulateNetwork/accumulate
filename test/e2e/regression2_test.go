@@ -203,15 +203,15 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 		}).
 		Initiate(SignatureTypeED25519, aliceKey).
 		Build()
-	deliveries, err := messaging.NormalizeLegacy(env)
+	deliveries, err := env.Normalize()
 	require.NoError(t, err)
-	require.Len(t, deliveries, 1)
+	require.Len(t, deliveries, 2)
 
 	// Submit the transaction directly to the wrong BVN
-	st, err := sim.SubmitTo(badBvn, deliveries[0])
+	st, err := sim.SubmitTo(badBvn, deliveries)
 	require.NoError(t, err)
-	require.NotNil(t, st.Error)
-	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvn, goodBvn), st.Error.Message)
+	require.NotNil(t, st[0].Error)
+	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvn, goodBvn), st[0].Error.Message)
 }
 
 func TestAnchoring(t *testing.T) {
@@ -421,7 +421,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 	charlieKey := acctesting.GenerateKey(charlie)
 
-	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *Envelope) {
+	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *messaging.Envelope) {
 		// Initialize with V1+sig
 		sim := NewSim(t,
 			simulator.MemoryDatabase,
@@ -460,7 +460,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		return sim, delivery
 	}
 
-	outOfOrder := func(sim *Sim, delivery *Envelope) *TransactionStatus {
+	outOfOrder := func(sim *Sim, delivery *messaging.Envelope) *TransactionStatus {
 		// Sign and submit the transaction with bob
 		st := sim.SubmitSuccessfully(MustBuild(t,
 			build.SignatureForTransaction(delivery.Transaction[0]).
@@ -475,7 +475,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		return st
 	}
 
-	extraSig := func(sim *Sim, delivery *Envelope) *TransactionStatus {
+	extraSig := func(sim *Sim, delivery *messaging.Envelope) *TransactionStatus {
 		// Submit alice's signature
 		st := sim.SubmitSuccessfully(delivery)
 
@@ -499,14 +499,21 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 
 	captureFwd := func(sim *Sim) func() *url.TxID {
 		var sigId *url.TxID
-		sim.SetSubmitHook("BVN1", func(d messaging.Message) (dropTx bool, keepHook bool) {
-			fwd, ok := d.(*messaging.LegacyMessage).Transaction.Body.(*SyntheticForwardTransaction)
-			if !ok || len(fwd.Signatures) != 1 || !fwd.Signatures[0].Destination.Equal(charlie.JoinPath("tokens")) {
-				return false, true
+		sim.SetSubmitHook("BVN1", func(messages []messaging.Message) (dropTx bool, keepHook bool) {
+			for _, msg := range messages {
+				msg, ok := msg.(*messaging.UserTransaction)
+				if !ok {
+					continue
+				}
+				fwd, ok := msg.Transaction.Body.(*SyntheticForwardTransaction)
+				if !ok || len(fwd.Signatures) != 1 || !fwd.Signatures[0].Destination.Equal(charlie.JoinPath("tokens")) {
+					continue
+				}
+				sig := fwd.Signatures[0]
+				sigId = sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
+				return false, false
 			}
-			sig := fwd.Signatures[0]
-			sigId = sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
-			return false, false
+			return false, true
 		})
 		return func() *url.TxID {
 			for sigId == nil {
@@ -642,7 +649,7 @@ func TestMissingPrincipal(t *testing.T) {
 		Initiate(txn)
 	require.NoError(t, err)
 
-	st := sim.Submit(&Envelope{Transaction: []*Transaction{txn}, Signatures: []Signature{sig}})
+	st := sim.Submit(&messaging.Envelope{Transaction: []*Transaction{txn}, Signatures: []Signature{sig}})
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "missing principal")
 }
