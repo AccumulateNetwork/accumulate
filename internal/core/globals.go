@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -89,26 +89,40 @@ const labelNetwork = "network definition"
 const labelRouting = "routing table"
 
 func (g *GlobalValues) Load(net config.NetworkUrl, getState getStateFunc) error {
+	// Load the oracle
 	if err := loadAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Load network globals
 	if err := loadAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, new(protocol.NetworkGlobals), &g.Globals); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Load the network definition
 	if err := loadAccount(net.JoinPath(protocol.Network), labelNetwork, getState, new(protocol.NetworkDefinition), &g.Network); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Load the routing table
 	if err := loadAccount(net.JoinPath(protocol.Routing), labelRouting, getState, new(protocol.RoutingTable), &g.Routing); err != nil {
 		return errors.UnknownError.Wrap(err)
+	}
+
+	// Load the executor version
+	var ledger *protocol.SystemLedger
+	if err := getState(net.Ledger(), &ledger); err != nil {
+		return errors.BadRequest.WithFormat("load system ledger: %w", err)
+	} else {
+		g.ExecutorVersion = ledger.ExecutorVersion
 	}
 
 	return nil
 }
 
-func (g *GlobalValues) Store(net config.NetworkUrl, getState getStateFunc, putState putStateFunc) error {
+// InitializeDataAccounts sets the initial state of the network data accounts
+// for genesis.
+func (g *GlobalValues) InitializeDataAccounts(net config.NetworkUrl, getState getStateFunc, putState putStateFunc) error {
 	if err := storeAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, putState, g.Oracle); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

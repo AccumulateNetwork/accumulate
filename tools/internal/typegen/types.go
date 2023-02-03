@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -328,5 +328,6 @@ type Enum map[string]*EnumValue
 type EnumValue struct {
 	Value       interface{}
 	Description string
+	Label       string
 	Aliases     []string
 }

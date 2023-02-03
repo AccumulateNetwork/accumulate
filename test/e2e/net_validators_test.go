@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -37,6 +37,7 @@ func TestUpdateValidators(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 3) // Use 1/3 so that M = 1 for 3 validators and M = 2 for 4
+	g.ExecutorVersion = ExecutorVersionLatest
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 
@@ -156,6 +157,7 @@ func TestUpdateOperators(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
+	g.ExecutorVersion = ExecutorVersionLatest
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Partition(Directory)

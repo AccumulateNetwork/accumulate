@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -159,6 +159,14 @@ func (u *URL) URL() *url.URL {
 // Compare returns an integer comparing two URLs as lower case strings. The
 // result will be 0 if u == v, -1 if u < v, and +1 if u > v.
 func (u *URL) Compare(v *URL) int {
+	switch {
+	case u == v:
+		return 0
+	case u == nil:
+		return -1
+	case v == nil:
+		return +1
+	}
 	uStr := strings.ToLower(u.String())
 	vStr := strings.ToLower(v.String())
 	switch {

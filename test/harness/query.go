@@ -56,6 +56,16 @@ func (h *Harness) QueryAccountAs(scope *url.URL, query *api.DefaultQuery, target
 	return r
 }
 
+// QuerySignature queries the Harness's service, passing the given arguments.
+// QuerySignature fails if Query returns an error. See
+// api.Querier2.QuerySignature.
+func (h *Harness) QuerySignature(txid *url.TxID, query *api.DefaultQuery) *api.SignatureRecord {
+	h.TB.Helper()
+	r, err := h.Query().QuerySignature(context.Background(), txid, query)
+	require.NoError(h.TB, err)
+	return r
+}
+
 // QueryTransaction queries the Harness's service, passing the given arguments.
 // QueryTransaction fails if Query returns an error. See
 // api.Querier2.QueryTransaction.

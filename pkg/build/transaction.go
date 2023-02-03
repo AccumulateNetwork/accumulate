@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -529,5 +529,24 @@ func (b UpdateKeyBuilder) Done() (*protocol.Transaction, error) {
 }
 
 func (b UpdateKeyBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.t.Body(&b.body).SignWith(signer, path...)
+}
+
+type ActivateProtocolVersionBuilder struct {
+	t    TransactionBuilder
+	body protocol.ActivateProtocolVersion
+}
+
+func (b TransactionBuilder) ActivateProtocolVersion(version protocol.ExecutorVersion) ActivateProtocolVersionBuilder {
+	c := ActivateProtocolVersionBuilder{t: b}
+	c.body.Version = version
+	return c
+}
+
+func (b ActivateProtocolVersionBuilder) Done() (*protocol.Transaction, error) {
+	return b.t.Body(&b.body).Done()
+}
+
+func (b ActivateProtocolVersionBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }

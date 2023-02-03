@@ -1,3 +1,12 @@
+ExecutorVersion:
+  V1:
+    value: 1
+    description: is the initial version of the executor at activation
+  V1SignatureAnchoring:
+    value: 2
+    label: v1-signatureAnchoring
+    description: introduces anchoring of signature chains into the root chain
+
 PartitionType:
   Directory:
     value: 1
@@ -173,6 +182,9 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
+  ActivateProtocolVersion:
+    value: 0x2F
+    description: activates a new version of the protocol
   Remote:
     value: 0x30
     aliases: [ signPending ]

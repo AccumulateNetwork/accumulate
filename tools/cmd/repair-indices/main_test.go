@@ -7,9 +7,11 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -29,11 +31,14 @@ func TestRepairIndices(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	// Initialize
+	globals := new(core.GlobalValues)
+	// globals.ExecutorVersion = ExecutorVersionV1
+	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	network := simulator.SimpleNetwork(t.Name(), 1, 1)
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		network,
-		simulator.Genesis(GenesisTime),
+		simulator.GenesisWith(GenesisTime, globals),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -101,6 +106,10 @@ func TestRepairIndices(t *testing.T) {
 	// Verify
 	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
 		data := indexing.Data(batch, alice.JoinPath("data"))
+		for i, n := 0, int(MustGet0(t, data.Count)); i < n; i++ {
+			fmt.Printf("Entry: %x\n", MustGet1(t, data.Entry, uint64(i)))
+		}
+
 		require.Equal(t, 3, int(MustGet0(t, data.Count)))
 		require.Equal(t, tx1.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 0))
 		require.Equal(t, tx2.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 1))
