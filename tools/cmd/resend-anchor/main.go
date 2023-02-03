@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -108,7 +109,7 @@ func querySynth(c *client.Client, txid *url.TxID, src, dst *url.URL, seqNum uint
 
 func executeLocal(c *client.Client, dst *url.URL, txn *protocol.Transaction, sigs []protocol.Signature) {
 	req := new(api.ExecuteRequest)
-	req.Envelope = new(protocol.Envelope)
+	req.Envelope = new(messaging.Envelope)
 	req.Envelope.Transaction = []*protocol.Transaction{txn}
 	req.Envelope.Signatures = sigs
 	res2, err := c.ExecuteLocal(context.Background(), req)

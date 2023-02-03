@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -222,7 +223,7 @@ func submitTransactionWithNode(cfg *config.Config, client *client.Client, transa
 	checkf(err, "sign transaction")
 
 	resp, err := client.ExecuteDirect(context.Background(), &api.ExecuteRequest{
-		Envelope: &protocol.Envelope{
+		Envelope: &messaging.Envelope{
 			Transaction: []*protocol.Transaction{transaction},
 			Signatures:  []protocol.Signature{signature},
 		},

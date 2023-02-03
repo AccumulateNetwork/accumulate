@@ -231,19 +231,15 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	return root, nil
 }
 
-func (n *Node) checkTx(message messaging.Message, typ abcitypes.CheckTxType) (*protocol.TransactionStatus, error) {
+func (n *Node) checkTx(messages []messaging.Message, typ abcitypes.CheckTxType) ([]*protocol.TransactionStatus, error) {
 	// TODO: Maintain a shared batch if typ is not recheck. I tried to do this
 	// but it lead to "attempted to use a committed or discarded batch" panics.
 
 	batch := n.database.Begin(false)
 	defer batch.Discard()
-
-	s, err := n.executor.Validate(batch, message)
-	if s == nil {
-		s = new(protocol.TransactionStatus)
-	}
+	s, err := n.executor.Validate(batch, messages)
 	if err != nil {
-		s.Set(err)
+		return nil, errors.UnknownError.WithFormat("check messages: %w", err)
 	}
 	return s, nil
 }
@@ -256,10 +252,10 @@ func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
 	return block, nil
 }
 
-func (n *Node) deliverTx(block execute.Block, message messaging.Message) (*protocol.TransactionStatus, error) {
-	s, err := block.Process(message)
+func (n *Node) deliverTx(block execute.Block, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+	s, err := block.Process(messages)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
+		return nil, errors.UnknownError.WithFormat("deliver messages: %w", err)
 	}
 	return s, nil
 }
@@ -377,12 +373,12 @@ func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query
 }
 
 // Submit implements [api.Submitter].
-func (s *nodeService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (s *nodeService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	return s.submit(envelope, false)
 }
 
 // Validate implements [api.Validator].
-func (s *nodeService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (s *nodeService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	return s.submit(envelope, true)
 }
 
@@ -391,28 +387,28 @@ func (s *nodeService) Subscribe(ctx context.Context, opts api.SubscribeOptions) 
 	return s.eventSvc.Subscribe(ctx, opts)
 }
 
-func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.Submission, error) {
+func (s *nodeService) submit(envelope *messaging.Envelope, pretend bool) ([]*api.Submission, error) {
 	// Convert the envelope to deliveries
-	deliveries, err := messaging.NormalizeLegacy(envelope)
+	deliveries, err := envelope.Normalize()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Submit each delivery
-	var r []*api.Submission
-	for i, delivery := range deliveries {
-		sub := new(api.Submission)
-		sub.Status, err = s.partition.Submit(delivery, pretend)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("delivery %d: %w", i, err)
-		}
-
-		// Create an api.Submission
-		sub.Success = sub.Status.Code.Success()
-		if sub.Status.Error != nil {
-			sub.Message = sub.Status.Error.Message
-		}
-		r = append(r, sub)
+	st, err := s.partition.Submit(deliveries, pretend)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	return r, nil
+
+	subs := make([]*api.Submission, len(st))
+	for i, st := range st {
+		// Create an api.Submission
+		subs[i] = new(api.Submission)
+		subs[i].Status = st
+		subs[i].Success = st.Code.Success()
+		if st.Error != nil {
+			subs[i].Message = st.Error.Message
+		}
+	}
+
+	return subs, nil
 }
