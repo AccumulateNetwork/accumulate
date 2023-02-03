@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,8 +21,19 @@ import (
 func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
 	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
 	defer x.BlockTimers.Stop(r)
-	// Only process updates to network accounts
-	if principal == nil || !x.Describe.NodeUrl().PrefixOf(principal.GetUrl()) {
+
+	// Only process updates to network accounts. To prevent potential issues
+	// replaying history, this condition must reject everything that was
+	// rejected by v0 except ActivateProtocolVersion.
+	switch {
+	case principal == nil:
+		return nil
+	case x.Describe.NodeUrl().PrefixOf(principal.GetUrl()):
+		// Ok
+	case delivery.Transaction.Body.Type() == protocol.TransactionTypeActivateProtocolVersion:
+		// Ok - no other condition is necessary because ActivateProtocolVersion
+		// will fail if the principal is not the partition ADI
+	default:
 		return nil
 	}
 
@@ -31,8 +42,17 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		return nil
 	}
 
+	// Do not forward synthetic transactions
+	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body.Type().IsSynthetic() {
+		return nil
+	}
+
 	targetName := strings.ToLower(strings.Trim(principal.GetUrl().Path, "/"))
 	switch body := delivery.Transaction.Body.(type) {
+	case *protocol.ActivateProtocolVersion:
+		// Add the version change to the pending globals
+		x.globals.Pending.ExecutorVersion = body.Version
+
 	case *protocol.UpdateKeyPage:
 		switch targetName {
 		case protocol.Operators + "/1":
@@ -52,8 +72,10 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		}
 
 	case *protocol.UpdateAccountAuth:
-		// Prevent authority changes
-		return errors.BadRequest.WithFormat("the authority set of a network account cannot be updated")
+		// Prevent authority changes (prior to v1+signatureAnchoring)
+		if !x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
+			return errors.BadRequest.WithFormat("the authority set of a network account cannot be updated")
+		}
 
 	case *protocol.WriteData:
 		var err error
@@ -77,7 +99,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		case protocol.Votes,
 			protocol.Evidence:
 			// Prevent direct writes
-			return errors.BadRequest.WithFormat("%v cannot be updated directly", principal)
+			return errors.BadRequest.WithFormat("%v cannot be updated directly", principal.GetUrl())
 
 		default:
 			return nil
@@ -88,7 +110,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 		// Force WriteToState for variable accounts
 		if !body.WriteToState {
-			return errors.BadRequest.WithFormat("updates to %v must write to state", principal)
+			return errors.BadRequest.WithFormat("updates to %v must write to state", principal.GetUrl())
 		}
 	}
 

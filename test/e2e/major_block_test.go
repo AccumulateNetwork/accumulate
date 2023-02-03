@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,6 +28,7 @@ func TestMajorBlock(t *testing.T) {
 	globals := new(core.GlobalValues)
 	globals.Globals = new(protocol.NetworkGlobals)
 	globals.Globals.MajorBlockSchedule = "*/5 * * * *" // Every 5 minutes (300 minor blocks)
+	globals.ExecutorVersion = protocol.ExecutorVersionLatest
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(globals)
 

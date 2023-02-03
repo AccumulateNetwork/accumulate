@@ -231,10 +231,17 @@ UpdateKey:
     - name: NewKeyHash
       type: bytes
 
+ActivateProtocolVersion:
+  union: { type: transaction }
+  fields:
+    - name: Version
+      type: ExecutorVersion
+      marshal-as: enum
+      optional: true
+
 RemoteTransaction:
   union: { type: transaction }
   fields:
     - name: Hash
-      # TODO Make this a transaction ID?
       type: hash
       optional: true

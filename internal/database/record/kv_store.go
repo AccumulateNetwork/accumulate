@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -40,7 +40,9 @@ func (s KvStore) GetValue(key Key, value ValueWriter) error {
 
 // PutValue marshals the value and stores it.
 func (s KvStore) PutValue(key Key, value ValueReader) error {
-	v, err := value.GetValue()
+	// TODO Detect conflicting writes at this level, when multiple batches are
+	// created from the same database
+	v, _, err := value.GetValue()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
