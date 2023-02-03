@@ -41,18 +41,18 @@ UserSignature:
     - name: TransactionHash
       type: hash
 
-# SyntheticTransactions:
-#   union: { type: message }
-#   fields:
-#     - name: Transactions
-#       type: protocol.Transaction
-#       marshal-as: reference
-#       pointer: true
-#       repeatable: true
-#     - name: Proof
-#       type: protocol.AnnotatedListReceipt
-#       marshal-as: reference
-#       pointer: true
+SyntheticTransaction:
+  # TODO Update to have multiple transactions with a list receipt
+  union: { type: message }
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Proof
+      type: protocol.AnnotatedReceipt
+      marshal-as: reference
+      pointer: true
 
 # ValidatorSignature:
 #   union: { type: message }

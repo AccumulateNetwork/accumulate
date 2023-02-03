@@ -39,6 +39,15 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 				deliveries = append(deliveries, &Delivery{Transaction: msg.Transaction})
 			}
 
+		case *messaging.SyntheticTransaction:
+			hash := *(*[32]byte)(msg.Transaction.GetHash())
+			if i, ok := txnIndex[hash]; ok {
+				deliveries[i].Transaction = msg.Transaction
+			} else {
+				txnIndex[hash] = len(deliveries)
+				deliveries = append(deliveries, &Delivery{Transaction: msg.Transaction})
+			}
+
 		case *messaging.UserSignature:
 			if i, ok := txnIndex[msg.TransactionHash]; ok {
 				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)

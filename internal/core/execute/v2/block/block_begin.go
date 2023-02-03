@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -344,7 +343,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt.RootChainReceipt)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -354,7 +353,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *merkle.Receipt) error {
+func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt) error {
 	indexIndex, err := batch.SystemData(x.Describe.PartitionId).SyntheticIndexIndex(blockIndex).Get()
 	switch {
 	case err == nil:
@@ -393,7 +392,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 	if blockReceipt == nil {
 		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex)
 	} else {
-		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex, "anchor-from", logging.AsHex(blockReceipt.Start).Slice(0, 4), "anchor-to", logging.AsHex(blockReceipt.Anchor).Slice(0, 4))
+		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex, "anchor-from", logging.AsHex(blockReceipt.RootChainReceipt.Start).Slice(0, 4), "anchor-to", logging.AsHex(blockReceipt.Anchor).Slice(0, 4))
 	}
 
 	// Process the transactions
@@ -429,31 +428,41 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.UnknownError.WithFormat("load synthetic transaction status: %w", err)
 		}
 
-		var signatures []protocol.Signature
-
-		localReceipt := new(protocol.ReceiptSignature)
-		localReceipt.SourceNetwork = txn.Header.Source
-		localReceipt.Proof = *status.Proof
-		localReceipt.TransactionHash = *(*[32]byte)(txn.GetHash())
-		signatures = append(signatures, localReceipt)
-
-		if blockReceipt != nil {
-			dnReceipt := new(protocol.ReceiptSignature)
-			dnReceipt.SourceNetwork = protocol.DnUrl()
-			dnReceipt.Proof = *blockReceipt
-			dnReceipt.TransactionHash = *(*[32]byte)(txn.GetHash())
-			signatures = append(signatures, dnReceipt)
+		receipt := new(protocol.AnnotatedReceipt)
+		receipt.Anchor = new(protocol.AnchorMetadata)
+		if status.GotDirectoryReceipt {
+			receipt.Receipt = status.Proof
+			receipt.Anchor.Account = protocol.DnUrl()
+		} else if blockReceipt == nil {
+			receipt.Anchor.Account = txn.Header.Source
+			receipt.Receipt = status.Proof
+		} else {
+			receipt.Anchor.Account = protocol.DnUrl()
+			receipt.Receipt, err = status.Proof.Combine(blockReceipt.RootChainReceipt)
+			if err != nil {
+				return errors.UnknownError.WithFormat("combine receipts: %w", err)
+			}
 		}
 
-		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, txn.Header.Destination)
+		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, txn.Header.Source)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
-		signatures = append(signatures, keySig)
+
+		messages := []messaging.Message{
+			&messaging.SyntheticTransaction{
+				Transaction: txn,
+				Proof:       receipt,
+			},
+			&messaging.UserSignature{
+				Signature:       keySig,
+				TransactionHash: txn.ID().Hash(),
+			},
+		}
 
 		// Only send synthetic transactions from the leader
 		if isLeader {
-			env := &messaging.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
+			env := &messaging.Envelope{Messages: messages}
 			err = x.mainDispatcher.Submit(context.Background(), txn.Header.Principal, env)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", hash[:4], err)
