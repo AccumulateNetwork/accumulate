@@ -95,6 +95,8 @@ func (m *Multi) willChangeGlobals(e events.WillChangeGlobals) error {
 	return nil
 }
 
+// updateActive updates the active executor version if the previous block
+// changed it. This is only exposed for the simulator
 func (m *Multi) updateActive() error {
 	if m.version >= m.newVersion {
 		return nil
@@ -125,7 +127,21 @@ func (m *Multi) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 }
 
 func (m *Multi) RestoreSnapshot(db database.Beginner, snapshot ioutil2.SectionReader) error {
-	return (*m.active.Load()).RestoreSnapshot(db, snapshot)
+	err := (*m.active.Load()).RestoreSnapshot(db, snapshot)
+	if err != nil || m.version >= m.newVersion {
+		return err
+	}
+
+	if db != m.opts.Database {
+		// If db is not the same one used for initializing the executor,
+		// NewExecutor will not see changes from RestoreSnapshot. TODO We
+		// probably should just remove the db parameter from this function.
+		return errors.Conflict.With("cannot activate the new executor version")
+	}
+
+	// Change the active executor implementation
+	err = m.updateActive()
+	return errors.UnknownError.Wrap(err)
 }
 
 func (m *Multi) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
@@ -137,9 +153,25 @@ func (m *Multi) Validate(batch *database.Batch, messages []messaging.Message) ([
 }
 
 func (m *Multi) Begin(params BlockParams) (Block, error) {
-	// Change the active executor implementation at the beginning of the block
-	if err := m.updateActive(); err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	b, err := (*m.active.Load()).Begin(params)
+	if err != nil {
+		return nil, err
 	}
-	return (*m.active.Load()).Begin(params)
+	return &multiBlock{m, b}, nil
+}
+
+type multiBlock struct {
+	multi *Multi
+	Block
+}
+
+func (b *multiBlock) Close() (BlockState, error) {
+	s, err := b.Block.Close()
+	if err != nil {
+		return s, err
+	}
+
+	// Change the active executor implementation at the end of the block
+	err = b.multi.updateActive()
+	return s, errors.UnknownError.Wrap(err)
 }

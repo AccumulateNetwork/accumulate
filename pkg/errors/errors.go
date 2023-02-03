@@ -205,7 +205,9 @@ func (e *Error) Print() string {
 		// Remove the suffix if the error is compound, as per the method
 		// description
 		msg := e.Message
-		if e.Cause != nil {
+		if msg == "" {
+			msg = e.Code.String()
+		} else if e.Cause != nil {
 			msg = strings.TrimSuffix(msg, e.Cause.Message)
 		}
 
