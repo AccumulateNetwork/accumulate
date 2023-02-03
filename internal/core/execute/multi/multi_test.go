@@ -16,7 +16,12 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
+
+func init() {
+	acctesting.EnableDebugFeatures()
+}
 
 func TestVersionSwitch(t *testing.T) {
 	// Initialize
@@ -28,6 +33,10 @@ func TestVersionSwitch(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
+
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 
 	// Version is unset
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
@@ -47,8 +56,20 @@ func TestVersionSwitch(t *testing.T) {
 	// Execute
 	st = sim.SubmitSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
-			ActivateProtocolVersion(ExecutorVersionV2).
+			ActivateProtocolVersion(ExecutorVersionV1Halt).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Give it a few blocks for everything to settle
+	sim.StepN(10)
+
+	// Execute
+	st = sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0))))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -56,11 +77,16 @@ func TestVersionSwitch(t *testing.T) {
 	// Give it a few blocks for the anchor to propagate
 	sim.StepN(10)
 
+	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
+
 	// Attempting to use V2 logic succeeds
 	st = sim.SubmitSuccessfully(MustBuild(t,
-		build.Transaction().For(DnUrl()).
+		build.Transaction().For(alice).
 			Body(&PlaceholderTransaction{}).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0))))
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
