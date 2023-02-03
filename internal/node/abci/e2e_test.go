@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -32,7 +33,7 @@ import (
 
 var rand = randpkg.New(randpkg.NewSource(0))
 
-type Tx = protocol.Envelope
+type Tx = messaging.Envelope
 
 func init() { acctesting.EnableDebugFeatures() }
 
@@ -62,7 +63,7 @@ func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*
 		recipients[i] = acctesting.AcmeLiteAddressStdPriv(key)
 	}
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.AcmeFaucet)
 		body.Url = senderUrl
 
@@ -103,7 +104,7 @@ func TestFaucet(t *testing.T) {
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.AcmeFaucet)
 		body.Url = aliceUrl
 
@@ -300,7 +301,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	n.Update(func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 	})
-	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	ids := n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		wdt := new(protocol.WriteDataTo)
 		wdt.Recipient = liteDataAddress
 		wdt.Entry = &firstEntry
@@ -359,7 +360,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		})
 
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "oof")
 			send(newTxn("FooBar").
@@ -389,7 +390,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "mgr", "book1", "2"), 1e9))
 		})
 
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			cda := new(protocol.CreateDataAccount)
 			cda.Url = protocol.AccountUrl("FooBar", "oof")
 			cda.Authorities = []*url.URL{
@@ -424,7 +425,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		})
 
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "oof")
 			send(newTxn("FooBar").
@@ -439,7 +440,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Contains(t, n.GetDirectory("FooBar"), protocol.AccountUrl("FooBar", "oof").String())
 
 		wd := new(protocol.WriteData)
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			entry := new(protocol.AccumulateDataEntry)
 			wd.Entry = entry
 			entry.Data = append(entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
@@ -482,7 +483,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		})
 
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "scr")
 			send(newTxn("FooBar").
@@ -498,7 +499,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		wd := new(protocol.WriteData)
 		wd.Scratch = true
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			entry := new(protocol.AccumulateDataEntry)
 			wd.Entry = entry
 			entry.Data = append(entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
@@ -543,7 +544,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		})
 
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
@@ -575,7 +576,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "book1", "1"), 1e9))
 		})
 
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
@@ -599,7 +600,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
 		})
 
-		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = protocol.AccountUrl("alice", "tokens")
 			tac.TokenUrl = protocol.AcmeUrl()
@@ -637,7 +638,7 @@ func TestLiteAccountTx(t *testing.T) {
 	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
 	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie)
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(bobUrl, big.NewInt(int64(1000)))
 		exch.AddRecipient(charlieUrl, big.NewInt(int64(2000)))
@@ -665,7 +666,7 @@ func TestAdiAccountTx(t *testing.T) {
 		require.NoError(t, acctesting.CreateTokenAccount(batch, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
 	})
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(protocol.AccountUrl("bar", "tokens"), big.NewInt(int64(68)))
 
@@ -691,7 +692,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	})
 
 	// The send should succeed
-	txnHashes := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	txnHashes := n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(protocol.AccountUrl("foo"), big.NewInt(int64(1000)))
 
@@ -731,7 +732,7 @@ func TestCreateKeyPage(t *testing.T) {
 	require.Equal(t, uint64(0), key.LastUsedOn)
 	require.Equal(t, fkh[:], key.PublicKeyHash)
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			KeyHash: tkh[:],
@@ -762,7 +763,7 @@ func TestCreateKeyBook(t *testing.T) {
 	bookUrl := protocol.AccountUrl("foo", "book1")
 	pageUrl := protocol.AccountUrl("foo", "book1", "1")
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		csg := new(protocol.CreateKeyBook)
 		csg.Url = protocol.AccountUrl("foo", "book1")
 		csg.PublicKeyHash = testKey.PubKey().Bytes()
@@ -793,7 +794,7 @@ func TestAddKeyPage(t *testing.T) {
 		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
 	})
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			KeyHash: testKey2.PubKey().Bytes(),
@@ -827,7 +828,7 @@ func TestAddKey(t *testing.T) {
 	newKey := generateKey()
 	nkh := sha256.Sum256(newKey.PubKey().Bytes())
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		op := new(protocol.AddKeyOperation)
 		op.Entry.KeyHash = nkh[:]
 		body := new(protocol.UpdateKeyPage)
@@ -861,7 +862,7 @@ func TestUpdateKeyPage(t *testing.T) {
 	newKey := generateKey()
 	kh := sha256.Sum256(testKey.PubKey().Bytes())
 	nkh := sha256.Sum256(newKey.PubKey().Bytes())
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		op := new(protocol.UpdateKeyOperation)
 
 		op.OldEntry.KeyHash = kh[:]
@@ -903,7 +904,7 @@ func TestUpdateKey(t *testing.T) {
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, testKeyHash[:], spec.Keys[0].PublicKeyHash)
 
-	txnHashes := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	txnHashes := n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.UpdateKey)
 		body.NewKeyHash = newKeyHash[:]
 
@@ -933,7 +934,7 @@ func TestRemoveKey(t *testing.T) {
 	})
 	h2 := sha256.Sum256(testKey2.PubKey().Bytes())
 	// Add second key because CreateKeyBook can't do it
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		op := new(protocol.AddKeyOperation)
 
 		op.Entry.KeyHash = h2[:]
@@ -947,7 +948,7 @@ func TestRemoveKey(t *testing.T) {
 			Build())
 	})
 	h1 := sha256.Sum256(testKey1.PubKey().Bytes())
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		op := new(protocol.RemoveKeyOperation)
 
 		op.Entry.KeyHash = h1[:]
@@ -997,7 +998,7 @@ func TestSignatorHeight(t *testing.T) {
 		return
 	}
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = protocol.AccountUrl("foo")
 		h := sha256.Sum256(fooKey.PubKey().Bytes())
@@ -1016,7 +1017,7 @@ func TestSignatorHeight(t *testing.T) {
 
 	keyPageHeight := getHeight(keyPageUrl)
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = tokenUrl
 		tac.TokenUrl = protocol.AcmeUrl()
@@ -1038,7 +1039,7 @@ func TestCreateToken(t *testing.T) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	})
 
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.CreateToken)
 		body.Url = protocol.AccountUrl("foo", "tokens")
 		body.Symbol = "FOO"
@@ -1069,7 +1070,7 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, err)
 
 	// Issue foo.acme/tokens to a foo.acme/tokens lite token account
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
@@ -1089,7 +1090,7 @@ func TestIssueTokens(t *testing.T) {
 	// Issue foo.acme/tokens to an ACME token account
 	check.Disable = true
 	initialbalance := n.GetTokenAccount("acc://foo.acme/acmetokens").Balance
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = n.GetTokenAccount("acc://foo.acme/acmetokens").Url
 		body.Amount.SetUint64(123)
@@ -1128,7 +1129,7 @@ func TestIssueTokensRefund(t *testing.T) {
 	require.NoError(t, err)
 
 	// issue tokens with supply limit
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.CreateToken)
 		body.Url = protocol.AccountUrl("foo", "tokens")
 		body.Symbol = "FOO"
@@ -1147,7 +1148,7 @@ func TestIssueTokensRefund(t *testing.T) {
 	require.Equal(t, supplyLimit.Int64(), issuer.SupplyLimit.Int64())
 
 	//issue tokens successfully
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
@@ -1167,7 +1168,7 @@ func TestIssueTokensRefund(t *testing.T) {
 
 	//issue tokens to incorrect principal
 	check.Disable = true
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.IssueTokens)
 		liteAddr = liteAddr.WithAuthority(liteAddr.Authority + "u")
 		body.Recipient = liteAddr
@@ -1232,7 +1233,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	var err error
 
 	// issue tokens with supply limit
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.CreateToken)
 		body.Url = protocol.AccountUrl("foo", "tokens")
 		body.Symbol = "FOO"
@@ -1260,7 +1261,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	atLimit := maxSupply - underLimit
 	overLimit := maxSupply + 1
 	// test under the limit
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
 
@@ -1282,7 +1283,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	require.Equal(t, maxSupply, issuer.SupplyLimit.Int64())
 
 	// test at the limit
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
 
@@ -1306,7 +1307,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	// test over the limit, this should fail, so tell fake tendermint not to give up
 	// an error will be displayed on the console, but this is exactly what we expect so don't panic
 	check.Disable = true
-	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
+	_, _, err = n.Execute(func(send func(*messaging.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
 
@@ -1328,7 +1329,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 
 	//now lets buy some credits, so we can do a token burn
 	check.Disable = false
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.AddCredits)
 		//burn the underLimit amount to see if that gets returned to the pool
 		body.Recipient = liteAddr.RootIdentity()
@@ -1343,7 +1344,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	})
 
 	//now lets burn some tokens to see if they get returned to the supply
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.BurnTokens)
 		//burn the underLimit amount to see if that gets returned to the pool
 		body.Amount.SetInt64(underLimit)
@@ -1425,7 +1426,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 // 	})
 
 // 	t.Log("Initiate the transaction")
-// 	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+// 	ids := n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 // 		send(newTxn("foo").
 // 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 // 			WithBody(&protocol.CreateTokenAccount{
@@ -1441,7 +1442,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 // 	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
 
 // 	t.Log("Double signing with key 1 should not complete the transaction")
-// 	sigHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+// 	sigHashes, _ := n.MustExecute(func(send func(*messaging.Envelope)) {
 // 		send(acctesting.NewTransaction().
 // 			WithTimestampVar(&globalNonce).
 // 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
@@ -1456,7 +1457,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 // 	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
 
 // 	t.Log("Signing with key 2 should complete the transaction")
-// 	sigHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
+// 	sigHashes, _ = n.MustExecute(func(send func(*messaging.Envelope)) {
 // 		send(acctesting.NewTransaction().
 // 			WithTimestampVar(&globalNonce).
 // 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
@@ -1476,7 +1477,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 // 	t.Run("Signing a complete transaction should fail", func(t *testing.T) {
 // 		t.Skip("No longer an error")
 
-// 		_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+// 		_, _, err := n.Execute(func(send func(*messaging.Envelope)) {
 // 			send(acctesting.NewTransaction().
 // 				WithTimestampVar(&globalNonce).
 // 				WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
@@ -1503,7 +1504,7 @@ func TestAccountAuth(t *testing.T) {
 	})
 
 	// Disable auth
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		send(newTxn("foo/tokens").
 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(&protocol.UpdateAccountAuth{
@@ -1519,7 +1520,7 @@ func TestAccountAuth(t *testing.T) {
 
 	// An unauthorized signer must not be allowed to enable auth
 	check.Disable = true
-	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+	_, _, err := n.Execute(func(send func(*messaging.Envelope)) {
 		send(newTxn("foo/tokens").
 			WithSigner(protocol.AccountUrl("foo", "bar", "book", "1"), 1).
 			WithBody(&protocol.UpdateAccountAuth{
@@ -1535,7 +1536,7 @@ func TestAccountAuth(t *testing.T) {
 	require.Error(t, err, "An unauthorized signer should not be able to enable auth")
 
 	// An unauthorized signer should be able to send tokens
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(protocol.AccountUrl("foo", "bar", "tokens"), big.NewInt(int64(68)))
 
@@ -1550,7 +1551,7 @@ func TestAccountAuth(t *testing.T) {
 	require.Equal(t, int64(68), n.GetTokenAccount("foo/bar/tokens").Balance.Int64())
 
 	// Enable auth
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		send(newTxn("foo/tokens").
 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(&protocol.UpdateAccountAuth{
@@ -1566,7 +1567,7 @@ func TestAccountAuth(t *testing.T) {
 
 	// An unauthorized signer should no longer be able to send tokens
 	check.Disable = true
-	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
+	_, _, err = n.Execute(func(send func(*messaging.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(protocol.AccountUrl("foo", "bar", "tokens"), big.NewInt(int64(68)))
 
@@ -1607,7 +1608,7 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	_, _, found := page.EntryByKeyHash(newKey1hash[:])
 	require.False(t, found, "key not found in page")
 	//Test with single level Key
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.UpdateKey)
 		body.NewKeyHash = newKey1hash[:]
 		send(newTxn("jj/book0/1").WithSigner(protocol.AccountUrl("jj", "book0", "1"), 1).WithBody(body).
@@ -1625,7 +1626,7 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	require.False(t, found, "key not found in page")
 
 	//Test with singleLevel Delegation
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 
 		body := new(protocol.UpdateKey)
 		body.NewKeyHash = newKey2hash[:]
@@ -1665,7 +1666,7 @@ func TestMultiLevelDelegation(t *testing.T) {
 		}))
 	})
 
-	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+	_, _, err := n.Execute(func(send func(*messaging.Envelope)) {
 		cda := new(protocol.CreateDataAccount)
 		cda.Url = protocol.AccountUrl("alice", "data")
 
@@ -1713,7 +1714,7 @@ func TestDuplicateKeyNewKeypage(t *testing.T) {
 	require.Equal(t, aliceKeyHash[:], key.PublicKeyHash)
 
 	//check for unique keys
-	_, txns, err := n.Execute(func(send func(*protocol.Envelope)) {
+	_, txns, err := n.Execute(func(send func(*messaging.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			KeyHash: aliceKeyHash[:],
@@ -1742,7 +1743,7 @@ func TestDuplicateKeyNewKeypage(t *testing.T) {
 	require.Equal(t, uint64(0), key2.GetLastUsedOn())
 
 	//check for duplicate keys
-	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
+	_, _, err = n.Execute(func(send func(*messaging.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			KeyHash: aliceKeyHash[:],

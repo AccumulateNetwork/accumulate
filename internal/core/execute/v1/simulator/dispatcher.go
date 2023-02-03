@@ -11,20 +11,20 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // dispatcher implements [block.Dispatcher] for the simulator.
 type dispatcher struct {
 	sim       *Simulator
-	envelopes map[string][]*protocol.Envelope
+	envelopes map[string][]*messaging.Envelope
 }
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // Submit routes the envelope and adds it to the queue for a partition.
-func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envelope) error {
+func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
 	partition, err := d.sim.router.RouteAccount(u)
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envel
 
 // Send submits queued envelopes to the respective partitions.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
-	envelopes := make(map[string][]*protocol.Envelope, len(d.envelopes))
+	envelopes := make(map[string][]*messaging.Envelope, len(d.envelopes))
 	for p, e := range d.envelopes {
 		envelopes[p] = e
 	}

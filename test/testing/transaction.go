@@ -12,19 +12,20 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type TransactionBuilder struct {
-	*protocol.Envelope
+	*messaging.Envelope
 	signer     signing.Builder
 	SkipChecks bool
 }
 
 func NewTransaction() TransactionBuilder {
 	var tb TransactionBuilder
-	tb.Envelope = new(protocol.Envelope)
+	tb.Envelope = new(messaging.Envelope)
 	tb.Transaction = []*protocol.Transaction{new(protocol.Transaction)}
 	return tb
 }
@@ -145,7 +146,7 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 	return tb
 }
 
-func (tb TransactionBuilder) Build() *protocol.Envelope {
+func (tb TransactionBuilder) Build() *messaging.Envelope {
 	return tb.Envelope
 }
 
@@ -185,7 +186,7 @@ func (tb TransactionBuilder) InitiateSynthetic(destPartitionUrl *url.URL) Transa
 	return tb
 }
 
-func (tb TransactionBuilder) Faucet() *protocol.Envelope {
+func (tb TransactionBuilder) Faucet() *messaging.Envelope {
 	sig, err := new(signing.Builder).UseFaucet().Initiate(tb.Transaction[0])
 	if err != nil {
 		panic(err)

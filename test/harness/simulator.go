@@ -80,6 +80,6 @@ func (s *Sim) SignWithNode(partition string, i int) signing.Signer {
 	return s.s.SignWithNode(partition, i)
 }
 
-func (s *Sim) SubmitTo(partition string, message messaging.Message) (*protocol.TransactionStatus, error) {
+func (s *Sim) SubmitTo(partition string, message []messaging.Message) ([]*protocol.TransactionStatus, error) {
 	return s.s.SubmitTo(partition, message)
 }

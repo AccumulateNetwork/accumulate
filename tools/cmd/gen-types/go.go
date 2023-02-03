@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -82,7 +82,7 @@ var goFuncs = template.FuncMap{
 	},
 
 	"jsonType": func(field *Field) string {
-		typ := GoJsonType(field)
+		typ := GoJsonType(field, "*")
 		if typ == "" {
 			typ = GoResolveType(field, false, false)
 		}
@@ -118,7 +118,7 @@ var goFuncs = template.FuncMap{
 			}
 
 			// Add a custom un/marshaller if the field needs special handling
-			if GoJsonType(f) != "" {
+			if GoJsonType(f, "") != "" {
 				return true
 			}
 
@@ -224,7 +224,7 @@ func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
 	return typ
 }
 
-func goJsonTypeSingle(field *Field) string {
+func goJsonTypeSingle(field *Field, pointer string) string {
 	switch field.Type.Code {
 	case Bytes:
 		return "*string"
@@ -240,15 +240,15 @@ func goJsonTypeSingle(field *Field) string {
 		return ""
 	}
 
-	return "encoding.JsonUnmarshalWith[" + GoResolveType(field, false, true) + "]"
+	return pointer + "encoding.JsonUnmarshalWith[" + GoResolveType(field, false, true) + "]"
 }
 
-func GoJsonType(field *Field) string {
+func GoJsonType(field *Field, pointer string) string {
 	if field.Repeatable && field.MarshalAs == Union {
-		return "encoding.JsonUnmarshalListWith[" + GoResolveType(field, false, true) + "]"
+		return pointer + "encoding.JsonUnmarshalListWith[" + GoResolveType(field, false, true) + "]"
 	}
 
-	typ := goJsonTypeSingle(field)
+	typ := goJsonTypeSingle(field, pointer)
 	switch {
 	case !field.Repeatable:
 		return typ
@@ -336,7 +336,7 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 	var expr string
 	var wantPtr bool
 	switch field.Type.Code {
-	case Bool, String, Hash, Uint, Int, Float, Duration:
+	case Bool, String, Hash, Uint, Int, Float, Duration, Any:
 		expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
 	case Bytes, RawJson:
 		expr, wantPtr = "bytes.Equal(%[1]s%[2]s, %[1]s%[3]s)", false
@@ -569,7 +569,8 @@ func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 		if ok {
 			unmarshal = fmt.Sprintf("func(b []byte) (%s, error) { return encoding.Cast[%[1]s](%s(b)) }", param.Name, unmarshal)
 		}
-		return fmt.Sprintf("\t%s = %s{Value: %s, Func: %s}", tgtName, GoJsonType(field), srcName, unmarshal), nil
+		s := fmt.Sprintf("\t%s = %s{Value: %s, Func: %s}", tgtName, GoJsonType(field, "&"), srcName, unmarshal)
+		return s, nil
 	}
 
 	method, wantPtr := goJsonMethod(field)
@@ -596,14 +597,14 @@ func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 	if checkNil {
 		format = "\t%s = make(%s, len(%s)); for i, x := range %[3]s { if x != nil { %[1]s[i] = encoding.%[4]sToJSON(%sx) } }"
 	}
-	return fmt.Sprintf(format, tgtName, GoJsonType(field), srcName, method, ptrPrefix), nil
+	return fmt.Sprintf(format, tgtName, GoJsonType(field, "&"), srcName, method, ptrPrefix), nil
 }
 
 func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...string) (string, error) {
 	err := GoFieldError("decoding", errName, errArgs...)
 	if field.MarshalAs == Union {
 		if !field.Repeatable {
-			return fmt.Sprintf("\t%s = %s.Value\n", tgtName, srcName), nil
+			return fmt.Sprintf("\tif %s != nil { %s = %[1]s.Value }\n", srcName, tgtName), nil
 		}
 		return fmt.Sprintf(
 			"	%s = make(%s, len(%s.Value));\n"+

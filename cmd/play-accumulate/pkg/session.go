@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -46,7 +47,7 @@ type Engine interface {
 	GetAccount(*URL) (protocol.Account, error)
 	GetDirectory(*URL) ([]*url.URL, error)
 	GetTransaction([32]byte) (*protocol.Transaction, error)
-	Submit(*protocol.Envelope) (*protocol.TransactionStatus, error)
+	Submit(*messaging.Envelope) (*protocol.TransactionStatus, error)
 	WaitFor(txn [32]byte, delivered bool) ([]*protocol.TransactionStatus, []*protocol.Transaction, error)
 }
 
