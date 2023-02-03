@@ -18,9 +18,8 @@ func init() {
 	messageExecutors = append(messageExecutors, func(ExecutorOptions) MessageExecutor { return NetworkUpdate{} })
 }
 
-// NetworkUpdate constructs a transaction and signature for the network update,
-// stores the transaction, and executes the signature (which queues the
-// transaction for processing).
+// NetworkUpdate constructs a transaction for the network update and queues it
+// for processing.
 type NetworkUpdate struct{}
 
 func (NetworkUpdate) Type() messaging.MessageType { return internal.MessageTypeNetworkUpdate }
@@ -31,33 +30,41 @@ func (NetworkUpdate) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeNetworkUpdate, msg.Type())
 	}
 
-	sig := new(protocol.InternalSignature)
-	sig.Cause = update.Cause
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = update.Account
-	txn.Header.Initiator = *(*[32]byte)(sig.Metadata().Hash())
+	txn.Header.Initiator = update.Cause
 	txn.Body = update.Body
-	sig.TransactionHash = *(*[32]byte)(txn.GetHash())
 
+	// Mark the transaction as internal and queue it for processing
 	b.internal.Add(txn.ID().Hash())
-	b.internal.Add(*(*[32]byte)(sig.Hash()))
+	b.transactionsToProcess.Add(txn.ID().Hash())
 
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
+	// Record that the cause produced this update
+	err := batch.Transaction(update.Cause[:]).Produced().Add(txn.ID())
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("update cause: %w", err)
+	}
+
 	// Store the transaction
-	err := batch.Transaction(sig.TransactionHash[:]).Main().Put(&database.SigOrTxn{Transaction: txn})
+	txr := batch.Transaction(txn.GetHash())
+	err = txr.Main().Put(&database.SigOrTxn{Transaction: txn})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
 
-	// Process the signature
-	st, err := b.callMessageExecutor(batch, &messaging.UserSignature{
-		Signature:       sig,
-		TransactionHash: txn.ID().Hash(),
-	})
+	// Store the transaction status
+	signer := b.Executor.globals.Active.AsSigner(b.Executor.Describe.PartitionId)
+	status := new(protocol.TransactionStatus)
+	status.TxID = txn.ID()
+	status.Initiator = signer.GetUrl()
+	status.AddSigner(signer)
+
+	err = txr.Status().Put(status)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.WithFormat("store transaction status: %w", err)
 	}
 
 	err = batch.Commit()
@@ -65,5 +72,6 @@ func (NetworkUpdate) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return st, nil
+	// The transaction has not been executed so don't add the status yet
+	return nil, nil
 }
