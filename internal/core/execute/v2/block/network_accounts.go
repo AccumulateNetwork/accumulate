@@ -117,7 +117,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	// Only push updates from the directory network
 	if x.Describe.NetworkType != config.Directory {
 		// Do not allow direct updates of the BVN accounts
-		if !delivery.WasProducedByPushedUpdate() {
+		if !delivery.WasProducedInternally() {
 			return errors.BadRequest.WithFormat("%v cannot be updated directly", principal.GetUrl())
 		}
 

@@ -9,6 +9,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -36,7 +37,13 @@ func (SyntheticForwardTransaction) Validate(st *StateManager, tx *Delivery) (pro
 	}
 
 	// Submit the transaction for processing
-	d := tx.NewForwarded(body)
-	st.State.ProcessAdditionalTransaction(d)
+	st.State.ProcessForwarded(&messaging.UserTransaction{Transaction: body.Transaction})
+	for _, sig := range body.Signatures {
+		sig := sig // See docs/developer/rangevarref.md
+		st.State.ProcessForwarded(&messaging.UserSignature{
+			Signature:       &sig,
+			TransactionHash: body.Transaction.ID().Hash(),
+		})
+	}
 	return nil, nil
 }

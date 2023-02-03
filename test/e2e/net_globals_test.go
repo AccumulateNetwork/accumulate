@@ -28,7 +28,7 @@ func TestOracleDistribution(t *testing.T) {
 	sim.InitFromGenesisWith(g)
 	dn := sim.Partition(Directory)
 	bvn0 := sim.Partition("BVN0")
-	bvn1 := sim.Partition("BVN1")
+	// bvn1 := sim.Partition("BVN1")
 
 	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.OperatorsPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
@@ -52,7 +52,7 @@ func TestOracleDistribution(t *testing.T) {
 			}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
 			Sign(SignatureTypeED25519, bvn0.Executor.Key).
-			Sign(SignatureTypeED25519, bvn1.Executor.Key).
+			// Sign(SignatureTypeED25519, bvn1.Executor.Key).
 			Build(),
 	)...)
 

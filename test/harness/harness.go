@@ -79,7 +79,7 @@ func (h *Harness) Step() {
 func (h *Harness) StepN(n int) {
 	h.TB.Helper()
 	for i := 0; i < n; i++ {
-		require.NoError(h.TB, h.stepper.Step())
+		h.Step()
 	}
 }
 

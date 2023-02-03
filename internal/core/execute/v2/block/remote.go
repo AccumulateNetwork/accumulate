@@ -8,30 +8,46 @@ package block
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Delivery) error {
-	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
-	defer x.BlockTimers.Stop(r)
-
-	// Synthetic and internally produced transactions are never remote
-	if !delivery.Transaction.Body.Type().IsUser() || delivery.WasProducedInternally() {
-		return nil
-	}
-
+func (b *bundle) ProcessRemoteSignatures() error {
 	var transactions []*protocol.SyntheticForwardTransaction
 	txnIndex := map[[32]byte]int{}
 	signerSeen := map[[32]byte]bool{}
 
-	batch := block.Batch.Begin(false)
+	batch := b.Block.Batch.Begin(false)
 	defer batch.Discard()
 
-	for _, signature := range delivery.Signatures {
-		_, fwd, err := x.shouldForwardSignature(batch, delivery.Transaction, signature, delivery.Transaction.Header.Principal, signerSeen)
+	for _, msg := range b.messages {
+		if fwd, ok := msg.(*internal.ForwardedMessage); ok {
+			msg = fwd.Message
+		}
+		sig, ok := msg.(*messaging.UserSignature)
+		if !ok {
+			continue
+		}
+
+		// Load the transaction. Earlier checks should guarantee this never fails.
+		txn, err := batch.Transaction(sig.TransactionHash[:]).Main().Get()
+		switch {
+		case err != nil:
+			return errors.InternalError.WithFormat("load transaction: %w", err)
+		case txn.Transaction == nil:
+			return errors.InternalError.WithFormat("%x is not a transaction", sig.TransactionHash)
+		}
+
+		// Synthetic transactions are never remote
+		if !txn.Transaction.Body.Type().IsUser() {
+			continue
+		}
+
+		_, fwd, err := b.Executor.shouldForwardSignature(batch, txn.Transaction, sig.Signature, txn.Transaction.Header.Principal, signerSeen)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -39,9 +55,9 @@ func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Deliver
 			continue
 		}
 
-		fwd.Cause = append(fwd.Cause, *(*[32]byte)(signature.Hash()))
+		fwd.Cause = append(fwd.Cause, sig.ID().Hash())
 		if fwd.Destination == nil {
-			fwd.Destination = delivery.Transaction.Header.Principal
+			fwd.Destination = txn.Transaction.Header.Principal
 		}
 
 		if i, ok := txnIndex[fwd.Destination.AccountID32()]; ok {
@@ -50,11 +66,17 @@ func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Deliver
 		}
 
 		transaction := new(protocol.SyntheticForwardTransaction)
-		transaction.Transaction = delivery.Transaction
+		transaction.Transaction = txn.Transaction
 		transaction.Signatures = append(transaction.Signatures, *fwd)
 		txnIndex[fwd.Destination.AccountID32()] = len(transactions)
 		transactions = append(transactions, transaction)
-		delivery.State.DidProduceTxn(fwd.Destination, transaction)
+
+		state, ok := b.state.Get(sig.TransactionHash)
+		if !ok {
+			state = new(chain.ProcessTransactionState)
+			b.state.Set(sig.TransactionHash, state)
+		}
+		state.DidProduceTxn(fwd.Destination, transaction)
 	}
 
 	return nil
