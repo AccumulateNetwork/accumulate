@@ -23,6 +23,9 @@ const MessageTypeUserSignature MessageType = 2
 // MessageTypeSyntheticTransaction is a transaction produced by the protocol.
 const MessageTypeSyntheticTransaction MessageType = 3
 
+// MessageTypeValidatorSignature is a key signature from a core protocol validator.
+const MessageTypeValidatorSignature MessageType = 4
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -30,7 +33,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSyntheticTransaction:
+	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSyntheticTransaction, MessageTypeValidatorSignature:
 		*v = u
 		return true
 	default:
@@ -47,6 +50,8 @@ func (v MessageType) String() string {
 		return "userSignature"
 	case MessageTypeSyntheticTransaction:
 		return "syntheticTransaction"
+	case MessageTypeValidatorSignature:
+		return "validatorSignature"
 	default:
 		return fmt.Sprintf("MessageType:%d", v)
 	}
@@ -61,6 +66,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeUserSignature, true
 	case "synthetictransaction":
 		return MessageTypeSyntheticTransaction, true
+	case "validatorsignature":
+		return MessageTypeValidatorSignature, true
 	default:
 		return 0, false
 	}
