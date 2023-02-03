@@ -41,8 +41,8 @@ func (SyntheticForwardTransaction) Validate(st *StateManager, tx *Delivery) (pro
 	for _, sig := range body.Signatures {
 		sig := sig // See docs/developer/rangevarref.md
 		st.State.ProcessForwarded(&messaging.UserSignature{
-			Signature:       &sig,
-			TransactionHash: body.Transaction.ID().Hash(),
+			Signature: &sig,
+			TxID:      body.Transaction.ID(),
 		})
 	}
 	return nil, nil

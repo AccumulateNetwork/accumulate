@@ -32,15 +32,13 @@ func (TransactionIsReady) Process(b *bundle, batch *database.Batch, msg messagin
 	}
 
 	// Make sure the ID refers to a transaction
-	h := txn.TxID.Hash()
-	s, err := batch.Transaction(h[:]).Main().Get()
+	var s messaging.MessageWithTransaction
+	err := batch.Message(txn.TxID.Hash()).Main().GetAs(&s)
 	switch {
 	case errors.Is(err, errors.NotFound):
 		return protocol.NewErrorStatus(txn.TxID, err), nil
 	case err != nil:
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-	case s.Transaction == nil:
-		return protocol.NewErrorStatus(txn.TxID, errors.BadRequest.WithFormat("%v is not a transaction", txn.ID())), nil
 	}
 
 	// Queue for execution

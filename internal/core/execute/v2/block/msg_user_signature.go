@@ -37,21 +37,22 @@ func (UserSignature) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 	defer batch.Discard()
 
 	// Load the transaction
-	txn, err := batch.Transaction(sig.TransactionHash[:]).Main().Get()
-	switch {
-	case err != nil:
+	var txn messaging.MessageWithTransaction
+	err := batch.Message(sig.TxID.Hash()).Main().GetAs(&txn)
+	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-	case txn.Transaction == nil:
-		return protocol.NewErrorStatus(sig.ID(), errors.BadRequest.WithFormat("%x is not a transaction", sig.TransactionHash)), nil
 	}
 
-	if !txn.Transaction.Body.Type().IsUser() {
-		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Transaction.Body.Type(), msg.Type())
+	// Use the full transaction ID (since normalization uses unknown.acme)
+	sig.TxID = txn.ID()
+
+	if !txn.GetTransaction().Body.Type().IsUser() {
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.GetTransaction().Body.Type(), msg.Type())
 	}
 
 	// Process the transaction if it is synthetic or system, or the signature is
 	// internal, or the signature is local to the principal
-	signature, transaction := sig.Signature, txn.Transaction
+	signature, transaction := sig.Signature, txn.GetTransaction()
 	if signature.RoutingLocation().LocalTo(transaction.Header.Principal) {
 		b.transactionsToProcess.Add(transaction.ID().Hash())
 	}
@@ -75,7 +76,7 @@ func (UserSignature) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 	if sig, ok := signature.(*protocol.RemoteSignature); ok {
 		signature = sig.Signature
 	}
-	err = batch.Transaction(signature.Hash()).Main().Put(&database.SigOrTxn{Signature: signature, Txid: transaction.ID()})
+	err = batch.Message2(signature.Hash()).Main().Put(sig)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
 	}

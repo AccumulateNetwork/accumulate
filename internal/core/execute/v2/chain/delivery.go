@@ -49,10 +49,10 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 			}
 
 		case *messaging.UserSignature:
-			if i, ok := txnIndex[msg.TransactionHash]; ok {
+			if i, ok := txnIndex[msg.TxID.Hash()]; ok {
 				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
 			} else {
-				txnIndex[msg.TransactionHash] = len(deliveries)
+				txnIndex[msg.TxID.Hash()] = len(deliveries)
 				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
 			}
 
@@ -105,15 +105,15 @@ func (d *Delivery) IsForwarded() bool {
 func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.TransactionStatus, error) {
 	// Load previous transaction state
 	isRemote := d.Transaction.Body.Type() == protocol.TransactionTypeRemote
-	record := batch.Transaction(d.Transaction.GetHash())
-	txState, err := record.GetState()
+	var txn messaging.MessageWithTransaction
+	err := batch.Message(d.Transaction.ID().Hash()).Main().GetAs(&txn)
 	switch {
 	case err == nil:
 		// Loaded existing the transaction from the database
 		if isRemote {
 			// Overwrite the transaction in the delivery
-			d.Transaction = txState.Transaction
-		} else if !txState.Transaction.Equal(d.Transaction) {
+			d.Transaction = txn.GetTransaction()
+		} else if !txn.GetTransaction().Equal(d.Transaction) {
 			// This should be impossible
 			return nil, errors.InternalError.WithFormat("submitted transaction does not match the locally stored transaction")
 		}
@@ -133,7 +133,7 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	}
 
 	// Check the transaction status
-	status, err := record.GetStatus()
+	status, err := batch.Transaction(d.Transaction.GetHash()).GetStatus()
 	switch {
 	case err != nil:
 		// Unknown error

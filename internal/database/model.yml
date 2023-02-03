@@ -142,6 +142,23 @@
           type: hash
         dataType: hash
 
+  - name: Message
+    type: entity
+    parameters:
+    - name: Hash
+      type: hash
+    attributes:
+    - name: Main
+      type: state
+      dataType: messaging.Message
+      union: true
+      private: true
+    # - name: Produced
+    #   type: state
+    #   dataType: txid
+    #   pointer: true
+    #   collection: set
+
   - name: Transaction
     type: entity
     private: true

@@ -41,10 +41,10 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 			}
 
 		case *messaging.UserSignature:
-			if i, ok := txnIndex[msg.TransactionHash]; ok {
+			if i, ok := txnIndex[msg.TxID.Hash()]; ok {
 				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
 			} else {
-				txnIndex[msg.TransactionHash] = len(deliveries)
+				txnIndex[msg.TxID.Hash()] = len(deliveries)
 				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
 			}
 
