@@ -113,13 +113,22 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	txn.Header.Principal = dst.JoinPath(protocol.AnchorPool)
 	txn.Body = state.Transaction.Body
 
-	// Create a partition signature
-	partSig, err := new(signing.Builder).
-		SetUrl(s.partition.URL).
-		SetVersion(num).
-		InitiateSynthetic(txn, dst)
-	if err != nil {
-		return nil, errors.InternalError.Wrap(err)
+	var signatures []protocol.Signature
+	if globals.ExecutorVersion.V2() {
+		txn.Header.Source = s.partition.URL
+		txn.Header.Destination = dst
+		txn.Header.SequenceNumber = num
+
+	} else {
+		// Create a partition signature
+		partSig, err := new(signing.Builder).
+			SetUrl(s.partition.URL).
+			SetVersion(num).
+			InitiateSynthetic(txn, dst)
+		if err != nil {
+			return nil, errors.InternalError.Wrap(err)
+		}
+		signatures = append(signatures, partSig)
 	}
 
 	// Create a key signature
@@ -134,6 +143,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	if err != nil {
 		return nil, errors.InternalError.Wrap(err)
 	}
+	signatures = append(signatures, keySig)
 
 	r := new(api.TransactionRecord)
 	r.Transaction = txn
@@ -146,10 +156,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 			Signer:          signer.Url,
 			Authority:       signer.Url,
 			TransactionHash: txn.ID().Hash(),
-			Signatures: []protocol.Signature{
-				partSig,
-				keySig,
-			},
+			Signatures:      signatures,
 		}, TxID: txn.ID(), Signer: signer},
 	}
 	return r, nil
@@ -196,20 +203,26 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		return nil, errors.NotReady.WithFormat("no proof yet")
 	}
 
-	// Add the partition signature
-	partSig := new(protocol.PartitionSignature)
-	partSig.SourceNetwork = status.SourceNetwork
-	partSig.DestinationNetwork = status.DestinationNetwork
-	partSig.SequenceNumber = status.SequenceNumber
-	partSig.TransactionHash = *(*[32]byte)(hash)
+	var signatures []protocol.Signature
 
-	// Add the receipt signature
-	receiptSig := new(protocol.ReceiptSignature)
-	receiptSig.SourceNetwork = status.SourceNetwork
-	if status.Proof != nil {
-		receiptSig.Proof = *status.Proof
+	if !globals.ExecutorVersion.V2() {
+		// Add the partition signature
+		partSig := new(protocol.PartitionSignature)
+		partSig.SourceNetwork = status.SourceNetwork
+		partSig.DestinationNetwork = status.DestinationNetwork
+		partSig.SequenceNumber = status.SequenceNumber
+		partSig.TransactionHash = *(*[32]byte)(hash)
+		signatures = append(signatures, partSig)
+
+		// Add the receipt signature
+		receiptSig := new(protocol.ReceiptSignature)
+		receiptSig.SourceNetwork = status.SourceNetwork
+		if status.Proof != nil {
+			receiptSig.Proof = *status.Proof
+		}
+		receiptSig.TransactionHash = *(*[32]byte)(hash)
+		signatures = append(signatures, receiptSig)
 	}
-	receiptSig.TransactionHash = *(*[32]byte)(hash)
 
 	// Add the key signature
 	signer := &protocol.UnknownSigner{Url: s.partition.JoinPath(protocol.Network)}
@@ -223,6 +236,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	if err != nil {
 		return nil, errors.InternalError.Wrap(err)
 	}
+	signatures = append(signatures, keySig)
 
 	r := new(api.TransactionRecord)
 	r.Transaction = state.Transaction
@@ -235,11 +249,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 			Signer:          signer.Url,
 			Authority:       signer.Url,
 			TransactionHash: state.Transaction.ID().Hash(),
-			Signatures: []protocol.Signature{
-				partSig,
-				receiptSig,
-				keySig,
-			},
+			Signatures:      signatures,
 		}, TxID: state.Transaction.ID(), Signer: signer},
 	}
 	return r, nil
