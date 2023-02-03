@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
@@ -102,7 +103,7 @@ func (s *SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error)
 	return nil, errors.NotFound.WithFormat("transaction %X not found", hash[:4])
 }
 
-func (s *SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {
+func (s *SimEngine) Submit(envelope *messaging.Envelope) (*protocol.TransactionStatus, error) {
 	envelope = envelope.Copy()
 	partition, err := s.Router().Route(envelope)
 	if err != nil {

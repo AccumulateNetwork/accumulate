@@ -14,8 +14,11 @@ import (
 	"strings"
 )
 
-// MessageTypeLegacy is used for the V1 executor.
-const MessageTypeLegacy MessageType = 1
+// MessageTypeUserTransaction is a transaction from a user.
+const MessageTypeUserTransaction MessageType = 1
+
+// MessageTypeUserSignature is a key signature from a user.
+const MessageTypeUserSignature MessageType = 2
 
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
@@ -24,7 +27,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeLegacy:
+	case MessageTypeUserTransaction, MessageTypeUserSignature:
 		*v = u
 		return true
 	default:
@@ -35,8 +38,10 @@ func (v *MessageType) SetEnumValue(id uint64) bool {
 // String returns the name of the Message Type.
 func (v MessageType) String() string {
 	switch v {
-	case MessageTypeLegacy:
-		return "legacy"
+	case MessageTypeUserTransaction:
+		return "userTransaction"
+	case MessageTypeUserSignature:
+		return "userSignature"
 	default:
 		return fmt.Sprintf("MessageType:%d", v)
 	}
@@ -45,8 +50,10 @@ func (v MessageType) String() string {
 // MessageTypeByName returns the named Message Type.
 func MessageTypeByName(name string) (MessageType, bool) {
 	switch strings.ToLower(name) {
-	case "legacy":
-		return MessageTypeLegacy, true
+	case "usertransaction":
+		return MessageTypeUserTransaction, true
+	case "usersignature":
+		return MessageTypeUserSignature, true
 	default:
 		return 0, false
 	}
