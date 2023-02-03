@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -34,6 +35,24 @@ func (t *Transaction) ensureSigner(signer protocol.Signer2) error {
 
 // GetState loads the transaction state.
 func (t *Transaction) GetState() (*SigOrTxn, error) {
+	msg, err := t.parent.Message2(t.hash()).Main().Get()
+	if !errors.Is(err, errors.NotFound) {
+		if err != nil {
+			return nil, err
+		}
+		switch msg := msg.(type) {
+		case messaging.MessageWithTransaction:
+			return &SigOrTxn{
+				Transaction: msg.GetTransaction(),
+			}, nil
+		case messaging.MessageWithSignature:
+			return &SigOrTxn{
+				Signature: msg.GetSignature(),
+				Txid:      msg.GetTxID(),
+			}, nil
+		}
+	}
+
 	v, err := t.Main().Get()
 	if err == nil {
 		return v, nil
