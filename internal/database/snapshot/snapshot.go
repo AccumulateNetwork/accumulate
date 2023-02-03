@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -24,6 +24,7 @@ const Version1 = 1
 var ErrSkip = stderrs.New("skip")
 
 type SectionVisitor interface{ VisitSection(*ReaderSection) error }
+type HeaderVisitor interface{ VisitHeader(*Header) error }
 type AccountVisitor interface{ VisitAccount(*Account, int) error }
 type TransactionVisitor interface{ VisitTransaction(*Transaction, int) error }
 type SignatureVisitor interface{ VisitSignature(*Signature, int) error }
@@ -77,6 +78,7 @@ func Create(file io.WriteSeeker, header *Header) (*Writer, error) {
 
 func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 	vSection, _ := visitor.(SectionVisitor)
+	vHeader, _ := visitor.(HeaderVisitor)
 	vAccount, _ := visitor.(AccountVisitor)
 	vTransaction, _ := visitor.(TransactionVisitor)
 	vSignature, _ := visitor.(SignatureVisitor)
@@ -87,6 +89,13 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 	}
 	if header.Version != Version1 {
 		return errors.BadRequest.WithFormat("expected version %d, got %d", Version1, header.Version)
+	}
+
+	if vHeader != nil {
+		err = vHeader.VisitHeader(header)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
 
 	for {

@@ -72,7 +72,7 @@ func (x ValidatorSignature) Process(b *bundle, batch *database.Batch, msg messag
 
 	// Once a signature has been included in the block, record the signature and
 	// its status not matter what, unless there is a system error
-	err = batch.Transaction(sig.Signature.Hash()).Main().Put(&database.SigOrTxn{Signature: sig.Signature, Txid: txn.ID()})
+	err = batch.Message2(sig.Signature.Hash()).Main().Put(sig)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
 	}
@@ -115,29 +115,27 @@ func (x ValidatorSignature) check(b *bundle, batch *database.Batch, sig *messagi
 	}
 
 	// Load the transaction
-	txn, err := batch.Transaction(h[:]).Main().Get()
-	switch {
-	case err != nil:
+	var txn messaging.MessageWithTransaction
+	err := batch.Message(h).Main().GetAs(&txn)
+	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-	case txn.Transaction == nil:
-		return nil, nil, errors.BadRequest.WithFormat("%x is not a transaction", h)
 	}
 
 	// A validator signature message is only allowed for synthetic and anchor
 	// transactions
-	if typ := txn.Transaction.Body.Type(); !typ.IsSynthetic() && !typ.IsAnchor() {
+	if typ := txn.GetTransaction().Body.Type(); !typ.IsSynthetic() && !typ.IsAnchor() {
 		return nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", typ, sig.Type())
 	}
 
 	// Sanity check - this should not happen because the transaction should have
 	// been rejected
-	if txn.Transaction.Header.Source == nil {
+	if txn.GetTransaction().Header.Source == nil {
 		return nil, nil, errors.InternalError.WithFormat("transaction is missing source")
 	}
 
 	// Verify the sources match
-	if !txn.Transaction.Header.Source.Equal(sig.Source) {
-		return nil, nil, errors.BadRequest.WithFormat("source does not match: message has %v, transaction has %v", sig.Source, txn.Transaction.Header.Source)
+	if !txn.GetTransaction().Header.Source.Equal(sig.Source) {
+		return nil, nil, errors.BadRequest.WithFormat("source does not match: message has %v, transaction has %v", sig.Source, txn.GetTransaction().Header.Source)
 	}
 
 	partition, ok := protocol.ParsePartitionUrl(sig.Source)
@@ -155,7 +153,7 @@ func (x ValidatorSignature) check(b *bundle, batch *database.Batch, sig *messagi
 		return nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
-	return txn.Transaction, signer, nil
+	return txn.GetTransaction(), signer, nil
 }
 
 func (x ValidatorSignature) process(b *bundle, batch *database.Batch, sig *messaging.ValidatorSignature, txn *protocol.Transaction, signer protocol.Signer2) error {

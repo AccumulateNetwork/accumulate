@@ -38,8 +38,9 @@ UserSignature:
       # type: protocol.KeySignature
       type: protocol.Signature
       marshal-as: union
-    - name: TransactionHash
-      type: hash
+    - name: TxID
+      type: txid
+      pointer: true
 
 SyntheticTransaction:
   # TODO Update to have multiple transactions with a list receipt
