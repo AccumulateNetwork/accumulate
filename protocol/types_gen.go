@@ -857,7 +857,13 @@ type TransactionHeader struct {
 	Initiator [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	Memo      string   `json:"memo,omitempty" form:"memo" query:"memo"`
 	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
-	extraData []byte
+	// Source is the source that produced the transaction.
+	Source *url.URL `json:"source,omitempty" form:"source" query:"source"`
+	// Destination is the destination that the transaction is sent to.
+	Destination *url.URL `json:"destination,omitempty" form:"destination" query:"destination"`
+	// SequenceNumber is the sequence number of the transaction.
+	SequenceNumber uint64 `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber"`
+	extraData      []byte
 }
 
 type TransactionResultSet struct {
@@ -2550,6 +2556,13 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	u.Initiator = v.Initiator
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesCopy(v.Metadata)
+	if v.Source != nil {
+		u.Source = v.Source
+	}
+	if v.Destination != nil {
+		u.Destination = v.Destination
+	}
+	u.SequenceNumber = v.SequenceNumber
 
 	return u
 }
@@ -4617,6 +4630,25 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Metadata, u.Metadata)) {
+		return false
+	}
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	switch {
+	case v.Destination == u.Destination:
+		// equal
+	case v.Destination == nil || u.Destination == nil:
+		return false
+	case !((v.Destination).Equal(u.Destination)):
+		return false
+	}
+	if !(v.SequenceNumber == u.SequenceNumber) {
 		return false
 	}
 
@@ -10248,6 +10280,9 @@ var fieldNames_TransactionHeader = []string{
 	2: "Initiator",
 	3: "Memo",
 	4: "Metadata",
+	5: "Source",
+	6: "Destination",
+	7: "SequenceNumber",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -10265,6 +10300,15 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Metadata) == 0) {
 		writer.WriteBytes(4, v.Metadata)
+	}
+	if !(v.Source == nil) {
+		writer.WriteUrl(5, v.Source)
+	}
+	if !(v.Destination == nil) {
+		writer.WriteUrl(6, v.Destination)
+	}
+	if !(v.SequenceNumber == 0) {
+		writer.WriteUint(7, v.SequenceNumber)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -14702,6 +14746,15 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(4); ok {
 		v.Metadata = x
 	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUrl(6); ok {
+		v.Destination = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.SequenceNumber = x
+	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
 	if err != nil {
@@ -17039,10 +17092,13 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Principal *url.URL `json:"principal,omitempty"`
-		Initiator string   `json:"initiator,omitempty"`
-		Memo      string   `json:"memo,omitempty"`
-		Metadata  *string  `json:"metadata,omitempty"`
+		Principal      *url.URL `json:"principal,omitempty"`
+		Initiator      string   `json:"initiator,omitempty"`
+		Memo           string   `json:"memo,omitempty"`
+		Metadata       *string  `json:"metadata,omitempty"`
+		Source         *url.URL `json:"source,omitempty"`
+		Destination    *url.URL `json:"destination,omitempty"`
+		SequenceNumber uint64   `json:"sequenceNumber,omitempty"`
 	}{}
 	if !(v.Principal == nil) {
 		u.Principal = v.Principal
@@ -17055,6 +17111,15 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Metadata) == 0) {
 		u.Metadata = encoding.BytesToJSON(v.Metadata)
+	}
+	if !(v.Source == nil) {
+		u.Source = v.Source
+	}
+	if !(v.Destination == nil) {
+		u.Destination = v.Destination
+	}
+	if !(v.SequenceNumber == 0) {
+		u.SequenceNumber = v.SequenceNumber
 	}
 	return json.Marshal(&u)
 }
@@ -19467,15 +19532,21 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Principal *url.URL `json:"principal,omitempty"`
-		Initiator string   `json:"initiator,omitempty"`
-		Memo      string   `json:"memo,omitempty"`
-		Metadata  *string  `json:"metadata,omitempty"`
+		Principal      *url.URL `json:"principal,omitempty"`
+		Initiator      string   `json:"initiator,omitempty"`
+		Memo           string   `json:"memo,omitempty"`
+		Metadata       *string  `json:"metadata,omitempty"`
+		Source         *url.URL `json:"source,omitempty"`
+		Destination    *url.URL `json:"destination,omitempty"`
+		SequenceNumber uint64   `json:"sequenceNumber,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
+	u.Source = v.Source
+	u.Destination = v.Destination
+	u.SequenceNumber = v.SequenceNumber
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -19491,6 +19562,9 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Metadata = x
 	}
+	v.Source = u.Source
+	v.Destination = u.Destination
+	v.SequenceNumber = u.SequenceNumber
 	return nil
 }
 

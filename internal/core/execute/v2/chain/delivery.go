@@ -130,30 +130,17 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	return status, nil
 }
 
-func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, typ protocol.TransactionType, status *protocol.TransactionStatus) error {
-	if typ.IsUser() {
+func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, txn *protocol.Transaction) error {
+	if txn.Body.Type().IsUser() {
 		return nil
 	}
-	switch typ {
+	switch txn.Body.Type() {
 	case protocol.TransactionTypeSystemGenesis, protocol.TransactionTypeSystemWriteData:
 		return nil
 	}
 
-	// Get the sequence number from the first signature?
-	if len(d.Signatures) > 0 {
-		if signature, ok := d.Signatures[0].(*protocol.PartitionSignature); ok {
-			d.SequenceNumber = signature.SequenceNumber
-			d.SourceNetwork = signature.SourceNetwork
-			return nil
-		}
-	}
-
-	if status.SequenceNumber == 0 {
-		return errors.InternalError.WithFormat("synthetic transaction sequence number is missing")
-	}
-
 	// Get the sequence number from the status
-	d.SequenceNumber = status.SequenceNumber
-	d.SourceNetwork = status.SourceNetwork
+	d.SequenceNumber = txn.Header.SequenceNumber
+	d.SourceNetwork = txn.Header.Source
 	return nil
 }

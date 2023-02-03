@@ -270,7 +270,7 @@ func (b *bundle) executeTransaction(hash [32]byte) (*protocol.TransactionStatus,
 	}
 
 	delivery := &chain.Delivery{Transaction: txn.Transaction, Internal: b.internal.Has(hash)}
-	err = delivery.LoadSyntheticMetadata(batch, txn.Transaction.Body.Type(), status)
+	err = delivery.LoadSyntheticMetadata(batch, txn.Transaction)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

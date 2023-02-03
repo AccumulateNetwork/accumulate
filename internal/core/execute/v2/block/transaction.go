@@ -286,19 +286,19 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	}
 
 	// If the sequence number is old, mark it already delivered
-	partitionLedger := ledger.Partition(status.SourceNetwork)
-	if status.SequenceNumber <= partitionLedger.Delivered {
+	partitionLedger := ledger.Partition(delivery.Transaction.Header.Source)
+	if delivery.Transaction.Header.SequenceNumber <= partitionLedger.Delivered {
 		return false, errors.Delivered.WithFormat("synthetic transaction has been delivered")
 	}
 
 	// If the transaction is out of sequence, mark it pending
-	if partitionLedger.Delivered+1 != status.SequenceNumber {
+	if partitionLedger.Delivered+1 != delivery.Transaction.Header.SequenceNumber {
 		x.logger.Info("Out of sequence synthetic transaction",
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-			"seq-got", status.SequenceNumber,
+			"seq-got", delivery.Transaction.Header.SequenceNumber,
 			"seq-want", partitionLedger.Delivered+1,
-			"source", status.SourceNetwork,
-			"destination", status.DestinationNetwork,
+			"source", delivery.Transaction.Header.Source,
+			"destination", delivery.Transaction.Header.Destination,
 			"type", delivery.Transaction.Body.Type(),
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 		)
@@ -335,9 +335,9 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	}
 
 	// Have we received enough signatures?
-	partition, ok := protocol.ParsePartitionUrl(status.SourceNetwork)
+	partition, ok := protocol.ParsePartitionUrl(delivery.Transaction.Header.Source)
 	if !ok {
-		return false, errors.BadRequest.WithFormat("source %v is not a partition", status.SourceNetwork)
+		return false, errors.BadRequest.WithFormat("source %v is not a partition", delivery.Transaction.Header.Source)
 	}
 	if uint64(len(status.AnchorSigners)) < x.globals.Active.ValidatorThreshold(partition) {
 		return false, nil
@@ -352,13 +352,13 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 
 	// If the transaction is out of sequence, mark it pending
 	partLedger := ledger.Anchor(delivery.SourceNetwork)
-	if partLedger.Delivered+1 != status.SequenceNumber {
+	if partLedger.Delivered+1 != delivery.Transaction.Header.SequenceNumber {
 		x.logger.Info("Out of sequence anchor transaction",
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-			"seq-got", status.SequenceNumber,
+			"seq-got", delivery.Transaction.Header.SequenceNumber,
 			"seq-want", partLedger.Delivered+1,
-			"source", status.SourceNetwork,
-			"destination", status.DestinationNetwork,
+			"source", delivery.Transaction.Header.Source,
+			"destination", delivery.Transaction.Header.Destination,
 			"type", delivery.Transaction.Body.Type(),
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 		)
