@@ -21,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // dispatcher implements [block.Dispatcher].
@@ -43,7 +42,7 @@ func newDispatcher(router routing.Router, dialer message.Dialer) *dispatcher {
 
 // Submit routes the account URL, constructs a multiaddr, and queues addressed
 // submit requests.
-func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envelope) error {
+func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
 	// Route the account
 	partition, err := d.router.RouteAccount(u)
 	if err != nil {
@@ -56,25 +55,19 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envel
 		return err
 	}
 
-	// Convert the envelope into deliveries
-	deliveries, err := messaging.NormalizeLegacy(env)
+	// Convert the envelope into messages
+	messages, err := env.Normalize()
 	if err != nil {
 		return err
 	}
 
-	// Queue a pre-addressed message for each delivery
-	for _, delivery := range deliveries {
-		delivery := delivery.(*messaging.LegacyMessage)
-		env := new(protocol.Envelope)
-		env.Signatures = append(env.Signatures, delivery.Signatures...)
-		env.Transaction = append(env.Transaction, delivery.Transaction)
-		d.messages = append(d.messages, &message.Addressed{
-			Address: addr,
-			Message: &message.SubmitRequest{
-				Envelope: env,
-			},
-		})
-	}
+	// Queue a pre-addressed message
+	d.messages = append(d.messages, &message.Addressed{
+		Address: addr,
+		Message: &message.SubmitRequest{
+			Envelope: &messaging.Envelope{Messages: messages},
+		},
+	})
 	return nil
 }
 

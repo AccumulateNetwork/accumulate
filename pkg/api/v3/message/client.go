@@ -12,6 +12,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -75,7 +76,7 @@ func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (ap
 }
 
 // Submit implements [api.Submitter.Submit].
-func (c *Client) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (c *Client) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	// Wrap the request as a SubmitRequest and expect a SubmitResponse, which is
 	// unpacked into Submissions
 	req := &SubmitRequest{Envelope: envelope, SubmitOptions: opts}
@@ -83,7 +84,7 @@ func (c *Client) Submit(ctx context.Context, envelope *protocol.Envelope, opts a
 }
 
 // Validate implements [api.Validator.Validate].
-func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (c *Client) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	// Wrap the request as a ValidateRequest and expect a ValidateResponse,
 	// which is unpacked into Submissions
 	req := &ValidateRequest{Envelope: envelope, ValidateOptions: opts}

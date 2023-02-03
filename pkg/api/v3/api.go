@@ -10,8 +10,8 @@ import (
 	"context"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package api enums.yml
@@ -80,12 +80,12 @@ type EventService interface {
 
 type Submitter interface {
 	// Submit submits an envelope for execution.
-	Submit(ctx context.Context, envelope *protocol.Envelope, opts SubmitOptions) ([]*Submission, error)
+	Submit(ctx context.Context, envelope *messaging.Envelope, opts SubmitOptions) ([]*Submission, error)
 }
 
 type Validator interface {
 	// Validate checks if an envelope is expected to succeed.
-	Validate(ctx context.Context, envelope *protocol.Envelope, opts ValidateOptions) ([]*Submission, error)
+	Validate(ctx context.Context, envelope *messaging.Envelope, opts ValidateOptions) ([]*Submission, error)
 }
 
 type Faucet interface {

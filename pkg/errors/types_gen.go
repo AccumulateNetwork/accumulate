@@ -308,11 +308,21 @@ func (v *Error) MarshalJSON() ([]byte, error) {
 		Cause     *Error                       `json:"cause,omitempty"`
 		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
 	}{}
-	u.Message = v.Message
-	u.Code = v.Code
-	u.CodeID = v.CodeID()
-	u.Cause = v.Cause
-	u.CallStack = v.CallStack
+	if !(len(v.Message) == 0) {
+		u.Message = v.Message
+	}
+	if !(v.Code == 0) {
+		u.Code = v.Code
+	}
+	if !(v.CodeID() == 0) {
+		u.CodeID = v.CodeID()
+	}
+	if !(v.Cause == nil) {
+		u.Cause = v.Cause
+	}
+	if !(len(v.CallStack) == 0) {
+		u.CallStack = v.CallStack
+	}
 	return json.Marshal(&u)
 }
 

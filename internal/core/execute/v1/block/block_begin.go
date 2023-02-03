@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -463,7 +464,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 
 		// Only send synthetic transactions from the leader
 		if isLeader {
-			env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
+			env := &messaging.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
 			err = x.mainDispatcher.Submit(context.Background(), txn.Header.Principal, env)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", hash[:4], err)

@@ -58,10 +58,13 @@ func TestDnStall(t *testing.T) {
 
 	// Drop all transactions from the DN
 	for _, p := range sim.Partitions() {
-		sim.SetSubmitHook(p.ID, func(message messaging.Message) (dropTx bool, keepHook bool) {
-			delivery := message.(*messaging.LegacyMessage)
-			for _, sig := range delivery.Signatures {
-				sig, ok := sig.(*PartitionSignature)
+		sim.SetSubmitHook(p.ID, func(messages []messaging.Message) (dropTx bool, keepHook bool) {
+			for _, msg := range messages {
+				msg, ok := msg.(*messaging.UserSignature)
+				if !ok {
+					continue
+				}
+				sig, ok := msg.Signature.(*PartitionSignature)
 				if !ok {
 					continue
 				}
