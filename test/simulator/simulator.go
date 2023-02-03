@@ -114,14 +114,6 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 		}
 	}
 
-	// Execute an extra block in case the executor is booting up with V2. This
-	// will ensure that the active executor implementation is swapped out for V2
-	// before the test submits anything, which makes it easier to debug tests.
-	err = s.Step()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
 	return s, nil
 }
 
