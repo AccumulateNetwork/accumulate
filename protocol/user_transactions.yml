@@ -231,6 +231,11 @@ UpdateKey:
     - name: NewKeyHash
       type: bytes
 
+PlaceholderTransaction:
+  union: { type: transaction }
+  description: is a placeholder for some observable change in V2 logic
+  fields:
+
 ActivateProtocolVersion:
   union: { type: transaction }
   fields:
