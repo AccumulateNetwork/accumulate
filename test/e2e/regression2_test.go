@@ -102,11 +102,15 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	bobKey := acctesting.GenerateKey(bob)
 
+	// Use version 1 because version 2 eliminates receipt signatures
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1
+
 	// Initialize
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
-		simulator.Genesis(GenesisTime),
+		simulator.GenesisWith(GenesisTime, g),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])

@@ -31,6 +31,13 @@ type Envelope struct {
 	extraData   []byte
 }
 
+type SyntheticTransaction struct {
+	fieldsSet   []bool
+	Transaction *protocol.Transaction      `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	extraData   []byte
+}
+
 type UserSignature struct {
 	fieldsSet       []bool
 	Signature       protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
@@ -43,6 +50,8 @@ type UserTransaction struct {
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	extraData   []byte
 }
+
+func (*SyntheticTransaction) Type() MessageType { return MessageTypeSyntheticTransaction }
 
 func (*UserSignature) Type() MessageType { return MessageTypeUserSignature }
 
@@ -75,6 +84,21 @@ func (v *Envelope) Copy() *Envelope {
 }
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticTransaction) Copy() *SyntheticTransaction {
+	u := new(SyntheticTransaction)
+
+	if v.Transaction != nil {
+		u.Transaction = (v.Transaction).Copy()
+	}
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+
+	return u
+}
+
+func (v *SyntheticTransaction) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UserSignature) Copy() *UserSignature {
 	u := new(UserSignature)
@@ -128,6 +152,27 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		if !(EqualMessage(v.Messages[i], u.Messages[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SyntheticTransaction) Equal(u *SyntheticTransaction) bool {
+	switch {
+	case v.Transaction == u.Transaction:
+		// equal
+	case v.Transaction == nil || u.Transaction == nil:
+		return false
+	case !((v.Transaction).Equal(u.Transaction)):
+		return false
+	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
 	}
 
 	return true
@@ -202,6 +247,59 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SyntheticTransaction = []string{
+	1: "Type",
+	2: "Transaction",
+	3: "Proof",
+}
+
+func (v *SyntheticTransaction) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Transaction == nil) {
+		writer.WriteValue(2, v.Transaction.MarshalBinary)
+	}
+	if !(v.Proof == nil) {
+		writer.WriteValue(3, v.Proof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticTransaction)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SyntheticTransaction) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Transaction is missing")
+	} else if v.Transaction == nil {
+		errs = append(errs, "field Transaction is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Proof is missing")
+	} else if v.Proof == nil {
+		errs = append(errs, "field Proof is not set")
 	}
 
 	switch len(errs) {
@@ -365,6 +463,44 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *SyntheticTransaction) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Transaction = x
+	}
+	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Proof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticTransaction)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *UserSignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -464,6 +600,22 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SyntheticTransaction) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type        MessageType                `json:"type"`
+		Transaction *protocol.Transaction      `json:"transaction,omitempty"`
+		Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Transaction == nil) {
+		u.Transaction = v.Transaction
+	}
+	if !(v.Proof == nil) {
+		u.Proof = v.Proof
+	}
+	return json.Marshal(&u)
+}
+
 func (v *UserSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            MessageType                                     `json:"type"`
@@ -520,6 +672,26 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Messages.Value {
 		v.Messages[i] = x
 	}
+	return nil
+}
+
+func (v *SyntheticTransaction) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type        MessageType                `json:"type"`
+		Transaction *protocol.Transaction      `json:"transaction,omitempty"`
+		Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Transaction = v.Transaction
+	u.Proof = v.Proof
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Transaction = u.Transaction
+	v.Proof = u.Proof
 	return nil
 }
 
