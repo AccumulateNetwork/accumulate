@@ -29,9 +29,8 @@ func (UserSignature) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserSignature, msg.Type())
 	}
-
-	if sig, ok := sig.Signature.(protocol.KeySignature); ok && sig.GetSigner().Equal(protocol.DnUrl().JoinPath(protocol.Network)) {
-		return nil, errors.BadRequest.With("anchor signatures must be submitted via a ValidatorSignature message")
+	if sig.Signature.Type().IsSystem() {
+		return nil, errors.BadRequest.WithFormat("cannot submit a %v signature with a %v message", sig.Signature.Type(), msg.Type())
 	}
 
 	batch = batch.Begin(true)
@@ -46,16 +45,14 @@ func (UserSignature) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 		return protocol.NewErrorStatus(sig.ID(), errors.BadRequest.WithFormat("%x is not a transaction", sig.TransactionHash)), nil
 	}
 
-	if typ := txn.Transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
-		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", typ, msg.Type())
+	if !txn.Transaction.Body.Type().IsUser() {
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Transaction.Body.Type(), msg.Type())
 	}
 
 	// Process the transaction if it is synthetic or system, or the signature is
 	// internal, or the signature is local to the principal
 	signature, transaction := sig.Signature, txn.Transaction
-	if !transaction.Body.Type().IsUser() ||
-		signature.Type() == protocol.SignatureTypeInternal ||
-		signature.RoutingLocation().LocalTo(transaction.Header.Principal) {
+	if signature.RoutingLocation().LocalTo(transaction.Header.Principal) {
 		b.transactionsToProcess.Add(transaction.ID().Hash())
 	}
 
@@ -63,9 +60,8 @@ func (UserSignature) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 	status.TxID = sig.ID()
 	status.Received = b.Block.Index
 
-	s, err := b.Executor.ProcessSignature(batch, &chain.Delivery{
+	s, err := b.Executor.processSignature2(batch, &chain.Delivery{
 		Transaction: transaction,
-		Internal:    b.internal.Has(sig.ID().Hash()),
 		Forwarded:   b.forwarded.Has(sig.ID().Hash()),
 	}, signature)
 	b.Block.State.MergeSignature(s)
