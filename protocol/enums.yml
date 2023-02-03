@@ -1,11 +1,18 @@
 ExecutorVersion:
   V1:
     value: 1
-    description: is the initial version of the executor at activation
+    description: is the first version of the executor system
   V1SignatureAnchoring:
     value: 2
     label: v1-signatureAnchoring
     description: introduces anchoring of signature chains into the root chain
+  V1Halt:
+    value: 3
+    label: v1-halt
+    description: halts transaction processing in preparation for v2
+  V2:
+    value: 4
+    description: is the second version of the execute system
 
 PartitionType:
   Directory:
@@ -182,6 +189,9 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
+  Placeholder:
+    value: 0x2E
+    description: is a placeholder for some observable change in V2 logic
   ActivateProtocolVersion:
     value: 0x2F
     description: activates a new version of the protocol

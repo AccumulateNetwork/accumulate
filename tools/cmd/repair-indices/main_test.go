@@ -7,7 +7,6 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -106,10 +105,6 @@ func TestRepairIndices(t *testing.T) {
 	// Verify
 	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
 		data := indexing.Data(batch, alice.JoinPath("data"))
-		for i, n := 0, int(MustGet0(t, data.Count)); i < n; i++ {
-			fmt.Printf("Entry: %x\n", MustGet1(t, data.Entry, uint64(i)))
-		}
-
 		require.Equal(t, 3, int(MustGet0(t, data.Count)))
 		require.Equal(t, tx1.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 0))
 		require.Equal(t, tx2.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 1))

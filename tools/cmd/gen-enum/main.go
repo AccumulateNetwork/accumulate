@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -67,9 +67,20 @@ func run(_ *cobra.Command, args []string) {
 		flags.FilePerType = true
 	}
 
+	modified, err := typegen.GetModifiedDate(args[0])
+	check(err)
+	for _, arg := range args[1:] {
+		t, err := typegen.GetModifiedDate(arg)
+		check(err)
+		if t.After(modified) {
+			modified = t
+		}
+	}
+
 	types, err := typegen.ReadMap[typegen.Enum](&flags.files, args, nil)
 	check(err)
 	ttypes := convert(types, flags.Package, flags.SubPackage)
+	ttypes.Year = modified.Year()
 
 	if !flags.FilePerType {
 		w := new(bytes.Buffer)
