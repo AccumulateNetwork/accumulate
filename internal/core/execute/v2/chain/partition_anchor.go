@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -112,8 +113,8 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	}
 
 	// Process pending synthetic transactions sent to the DN
-	var deliveries []*Delivery
-	var sequence = map[*Delivery]int{}
+	var txids []*url.TxID
+	var sequence = map[*url.TxID]int{}
 	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(body.RootChainAnchor)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
@@ -125,21 +126,16 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 			return nil, err
 		}
 
-		d := tx.NewChild(&protocol.Transaction{
-			Body: &protocol.RemoteTransaction{
-				Hash: txid.Hash(),
-			},
-		}, nil)
-		sequence[d] = int(sig.SequenceNumber)
-		deliveries = append(deliveries, d)
+		sequence[txid] = int(sig.SequenceNumber)
+		txids = append(txids, txid)
 	}
 
 	// Submit the transactions, sorted
-	sort.Slice(deliveries, func(i, j int) bool {
-		return sequence[deliveries[i]] < sequence[deliveries[j]]
+	sort.Slice(txids, func(i, j int) bool {
+		return sequence[txids[i]] < sequence[txids[j]]
 	})
-	for _, d := range deliveries {
-		st.State.ProcessAdditionalTransaction(d)
+	for _, id := range txids {
+		st.State.ProcessSynthetic(id)
 	}
 
 	return nil, nil

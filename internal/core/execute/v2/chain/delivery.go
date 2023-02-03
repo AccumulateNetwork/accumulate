@@ -9,7 +9,6 @@ package chain
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -62,8 +61,8 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 }
 
 type Delivery struct {
-	parent   *Delivery
-	internal bool
+	Internal  bool
+	Forwarded bool
 
 	Signatures  []protocol.Signature
 	Transaction *protocol.Transaction
@@ -75,86 +74,14 @@ type Delivery struct {
 	DestinationNetwork *url.URL
 }
 
-func (d *Delivery) NewChild(transaction *protocol.Transaction, signatures []protocol.Signature) *Delivery {
-	e := new(Delivery)
-	e.parent = d
-	e.Transaction = transaction
-	e.Signatures = signatures
-	return e
-}
-
-func (d *Delivery) NewInternal(transaction *protocol.Transaction) *Delivery {
-	if !d.Transaction.Body.Type().IsSystem() {
-		panic("illegal attempt to produce an internal transaction outside of a system transaction")
-	}
-
-	sig := new(protocol.InternalSignature)
-	sig.Cause = *(*[32]byte)(d.Transaction.GetHash())
-	transaction.Header.Initiator = *(*[32]byte)(sig.Metadata().Hash())
-	sig.TransactionHash = *(*[32]byte)(transaction.GetHash())
-
-	e := new(Delivery)
-	e.parent = d
-	e.internal = true
-	e.Transaction = transaction
-	e.Signatures = []protocol.Signature{sig}
-
-	return e
-}
-
-func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Delivery {
-	signatures := make([]protocol.Signature, len(fwd.Signatures))
-	for i, sig := range fwd.Signatures {
-		sig := sig // See docs/developer/rangevarref.md
-		signatures[i] = &sig
-	}
-
-	return d.NewChild(fwd.Transaction, signatures)
-}
-
-func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *merkle.Receipt) *Delivery {
-	return d.NewChild(&protocol.Transaction{
-		Body: &protocol.RemoteTransaction{
-			Hash: hash,
-		},
-	}, []protocol.Signature{
-		&protocol.ReceiptSignature{
-			SourceNetwork:   source,
-			Proof:           *receipt,
-			TransactionHash: hash,
-		},
-	})
-}
-
-func (d *Delivery) NewSyntheticFromSequence(hash [32]byte) *Delivery {
-	e := new(Delivery)
-	e.parent = d
-	e.Transaction = &protocol.Transaction{
-		Body: &protocol.RemoteTransaction{
-			Hash: hash,
-		},
-	}
-	return e
-}
-
-func (d *Delivery) Parent() *Delivery {
-	return d.parent
-}
-
 func (d *Delivery) WasProducedInternally() bool {
-	return d.parent != nil && d.internal
-}
-
-// WasProducedByPushedUpdate returns true if the transaction was produced by an
-// update pushed via an anchor from the directory network.
-func (d *Delivery) WasProducedByPushedUpdate() bool {
-	return d.parent != nil && d.internal && d.parent.Transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor
+	return d.Internal
 }
 
 // IsForwarded returns true if the transaction was delivered within a
 // SyntheticForwardedTransaction.
 func (d *Delivery) IsForwarded() bool {
-	return d.parent != nil && d.parent.Transaction.Body.Type() == protocol.TransactionTypeSyntheticForwardTransaction
+	return d.Forwarded
 }
 
 // LoadTransaction attempts to load the transaction from the database.
