@@ -482,13 +482,16 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			}
 
 			for _, signature := range set.Signatures {
-				switch signature.(type) {
-				case *protocol.ED25519Signature:
-					gotKey = true
+				keySig, ok := signature.(protocol.KeySignature)
+				if !ok {
+					x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "hash", logging.AsHex(signature.Hash()), "signature", signature)
+					bad = true
+					continue
 				}
-				messages = append(messages, &messaging.UserSignature{
-					Signature:       signature,
-					TransactionHash: h,
+				gotKey = true
+				messages = append(messages, &messaging.ValidatorSignature{
+					Signature: keySig,
+					Source:    partition.Url,
 				})
 			}
 

@@ -8,12 +8,12 @@ MessageType:
   SyntheticTransaction:
     value: 3
     description: is a transaction produced by the protocol
+  ValidatorSignature:
+    value: 4
+    description: is a key signature from a core protocol validator
 
   # Possible additions for executor v2
 
-  # ValidatorSignature:
-  #   value: 5
-  #   description: is a key signature from a core protocol validator
   # AuthoritySignature:
   #   value: 6
   #   description: is a signature from an authority who's signing requirements have been met

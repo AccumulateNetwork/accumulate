@@ -48,10 +48,17 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 		if fwd, ok := other.(*internal.ForwardedMessage); ok {
 			other = fwd.Message
 		}
-		sig, ok := other.(*messaging.UserSignature)
-		if ok && sig.TransactionHash == txn.ID().Hash() {
-			signed = true
-			break
+		switch sig := other.(type) {
+		case *messaging.UserSignature:
+			if sig.TransactionHash == txn.ID().Hash() {
+				signed = true
+				break
+			}
+		case *messaging.ValidatorSignature:
+			if sig.Signature.GetTransactionHash() == txn.ID().Hash() {
+				signed = true
+				break
+			}
 		}
 	}
 	if !signed {
