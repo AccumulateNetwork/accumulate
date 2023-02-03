@@ -136,6 +136,12 @@ func loadSignature(batch *database.Batch, sig protocol.Signature, txid *url.TxID
 	default:
 		return nil, errors.UnknownError.Wrap(err)
 	}
+
+	r.Status, err = batch.Transaction(sig.Hash()).Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
+
 	return r, nil
 }
 
