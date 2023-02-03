@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,11 +8,14 @@ package encoding
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"math/big"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -21,12 +24,14 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
+
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package encoding ../../internal/database/snapshot/types.yml --include sigSection,Signature
 
 func TestGenerateDbTestdata(t *testing.T) {
 	t.Skip("Only run manually")
@@ -43,7 +48,7 @@ func TestGenerateDbTestdata(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
 		func(partition string, _ int, logger log.Logger) database.Beginner {
-			if strings.EqualFold(partition, Directory) {
+			if strings.EqualFold(partition, protocol.Directory) {
 				return database.OpenInMemory(logger)
 			}
 			return db
@@ -54,10 +59,10 @@ func TestGenerateDbTestdata(t *testing.T) {
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
-	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	MakeAccount(t, sim.DatabaseFor(alice), &protocol.TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl()})
 	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
 	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
-	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	MakeAccount(t, sim.DatabaseFor(bob), &protocol.TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl()})
 
 	// Execute
 	st := sim.SubmitSuccessfully(MustBuild(t,
@@ -108,5 +113,65 @@ func TestDbEncoding(t *testing.T) {
 
 	b, err = os.ReadFile("../testdata/database-v1.0.0.snapshot")
 	require.NoError(t, err)
-	require.Equal(t, b, buf.Bytes())
+
+	h1, r1, err := snapshot.Open(ioutil2.NewBuffer(b))
+	require.NoError(t, err)
+	h2, r2, err := snapshot.Open(buf)
+	require.NoError(t, err)
+
+	require.Equal(t, h1, h2)
+
+	for {
+		var end1, end2 bool
+		s1, err := r1.Next()
+		if errors.Is(err, io.EOF) {
+			end1 = true
+		} else {
+			require.NoError(t, err)
+		}
+		s2, err := r2.Next()
+		if errors.Is(err, io.EOF) {
+			end2 = true
+		} else {
+			require.NoError(t, err)
+		}
+		require.Equal(t, end1, end2, "Expected the same number of sections")
+		if end1 {
+			break
+		}
+		require.Equal(t, s1.Type(), s2.Type(), "Expected the same section types")
+		require.Equal(t, s1.Offset(), s2.Offset(), "Expected the same offsets (%v)", s1.Type())
+		assert.Equal(t, s1.Size(), s2.Size(), "Expected the same sizes (%v @ %d)", s1.Type(), s1.Offset())
+
+		switch s1.Type() {
+		case snapshot.SectionTypeSignatures:
+			v1 := decodeSigSection(t, s1)
+			v2 := decodeSigSection(t, s2)
+			b1, err := json.MarshalIndent(v1.Signatures, "", "  ")
+			require.NoError(t, err)
+			b2, err := json.MarshalIndent(v2.Signatures, "", "  ")
+			require.NoError(t, err)
+			require.Equal(t, string(b1), string(b2), "Expected section content to match")
+		default:
+			b1 := dumpSection(t, s1)
+			b2 := dumpSection(t, s2)
+			require.Equal(t, b1, b2, "Expected section content to match")
+		}
+	}
+}
+
+func dumpSection(t *testing.T, s *snapshot.ReaderSection) []byte {
+	rd, err := s.Open()
+	require.NoError(t, err)
+	b, err := io.ReadAll(rd)
+	require.NoError(t, err)
+	return b
+}
+
+func decodeSigSection(t *testing.T, s *snapshot.ReaderSection) *sigSection {
+	rd, err := s.Open()
+	require.NoError(t, err)
+	sig := new(sigSection)
+	require.NoError(t, sig.UnmarshalBinaryFrom(rd))
+	return sig
 }

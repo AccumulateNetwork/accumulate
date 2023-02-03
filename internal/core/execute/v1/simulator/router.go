@@ -50,7 +50,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *messagin
 	for _, delivery := range deliveries {
 		messages = append(messages, &messaging.UserTransaction{Transaction: delivery.Transaction})
 		for _, sig := range delivery.Signatures {
-			messages = append(messages, &messaging.UserSignature{Signature: sig, TransactionHash: delivery.Transaction.ID().Hash()})
+			messages = append(messages, &messaging.UserSignature{Signature: sig, TxID: delivery.Transaction.ID()})
 		}
 	}
 
