@@ -210,15 +210,9 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	}
 
 	// Restore the snapshot
-	batch := n.Begin(true)
-	defer batch.Discard()
-	err = n.executor.RestoreSnapshot(batch, snapshot)
+	err = n.executor.RestoreSnapshot(n, snapshot)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
-	}
-	err = batch.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	err = n.View(func(batch *database.Batch) (err error) {
