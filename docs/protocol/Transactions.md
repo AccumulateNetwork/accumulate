@@ -14,7 +14,7 @@
   - Create a Signature Specification
   - Sponsored by an ADI or key book
   - When sponsored by an ADI, creates an unbound SS
-  - When sponsored by an key book, creates an SS bound to that key book
+  - When sponsored by a key book, creates an SS bound to that key book
 - **Create Signature Specification Group**
   - Create a Signature Specification Group
   - Sponsored by an ADI
@@ -33,7 +33,7 @@
   - Write data to an ADI Data Account
   - Sponsored by an ADI Data Account
 - **Write Data To**
-  - Write data to an Lite Data Account
+  - Write data to a Lite Data Account
   - Sponsored by an ADI or Lite Token Account
 - **Issue Tokens**
   - Issue tokens to a token account (ADI or Lite)
@@ -60,4 +60,4 @@
   - Sponsored by a signator (Lite Token Account or Signature Specification)
 - **Synthetic Burn Tokens**
   - Returns tokens to a Token Issuer's pool of available tokens
-  - SPonsored by a Token Issuer
+  - Sponsored by a Token Issuer
