@@ -49,3 +49,25 @@ func (m *UserSignature) ID() *url.TxID {
 		return sig.RoutingLocation().WithTxID(hash)
 	}
 }
+
+type MessageWithTransaction interface {
+	Message
+	GetTransaction() *protocol.Transaction
+}
+
+func (m *UserTransaction) GetTransaction() *protocol.Transaction      { return m.Transaction }
+func (m *SyntheticTransaction) GetTransaction() *protocol.Transaction { return m.Transaction }
+
+type MessageWithSignature interface {
+	Message
+	GetSignature() protocol.Signature
+	GetTxID() *url.TxID
+}
+
+func (m *UserSignature) GetSignature() protocol.Signature      { return m.Signature }
+func (m *ValidatorSignature) GetSignature() protocol.Signature { return m.Signature }
+func (m *UserSignature) GetTxID() *url.TxID                    { return m.TxID }
+
+func (m *ValidatorSignature) GetTxID() *url.TxID {
+	return protocol.UnknownUrl().WithTxID(m.Signature.GetTransactionHash())
+}

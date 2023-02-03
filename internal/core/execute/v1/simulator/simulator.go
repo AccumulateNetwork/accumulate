@@ -715,7 +715,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			if err == nil {
 				messages = append(messages, &messaging.UserTransaction{Transaction: deliveries[i].Transaction})
 				for _, sig := range deliveries[i].Signatures {
-					messages = append(messages, &messaging.UserSignature{Signature: sig, TransactionHash: deliveries[i].Transaction.ID().Hash()})
+					messages = append(messages, &messaging.UserSignature{Signature: sig, TxID: deliveries[i].Transaction.ID()})
 				}
 				continue
 			}
