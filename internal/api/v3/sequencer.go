@@ -252,5 +252,6 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 			Signatures:      signatures,
 		}, TxID: state.Transaction.ID(), Signer: signer},
 	}
+	r.Status = status
 	return r, nil
 }
