@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -56,6 +56,38 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Ke
 
 	c := NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt, labelfmt)
 	return &Chain2{account, key, c, nil, labelfmt}
+}
+
+func (c *Chain2) dirtyChains() []*MerkleManager {
+	if c == nil {
+		return nil
+	}
+	chains := c.index.dirtyChains()
+	if c.inner.IsDirty() {
+		chains = append(chains, c.inner)
+	}
+	return chains
+}
+
+// UpdatedChains returns a block entry for every chain updated in the current
+// database batch.
+func (a *Account) UpdatedChains() ([]*protocol.BlockEntry, error) {
+	var entries []*protocol.BlockEntry
+
+	// Add an entry for each modified chain
+	for _, c := range a.dirtyChains() {
+		head, err := c.Head().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("get %s chain head: %w", c.Name(), err)
+		}
+
+		entries = append(entries, &protocol.BlockEntry{
+			Account: a.Url(),
+			Chain:   c.Name(),
+			Index:   uint64(head.Count - 1),
+		})
+	}
+	return entries, nil
 }
 
 // Account returns the URL of the account.

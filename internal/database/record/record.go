@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -122,7 +122,7 @@ func (k Key) MarshalJSON() ([]byte, error) {
 // A ValueReader holds a readable value.
 type ValueReader interface {
 	// GetValue returns the value.
-	GetValue() (encoding.BinaryValue, error)
+	GetValue() (value encoding.BinaryValue, version int, err error)
 }
 
 // A ValueWriter holds a writable value.
