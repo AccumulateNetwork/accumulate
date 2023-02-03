@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"sort"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -140,21 +139,26 @@ func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *me
 			return nil, errors.InternalError.WithFormat("synthetic transaction %v is not a transaction", txid)
 		}
 
-		var d messaging.Message
+		msg := &messaging.SyntheticTransaction{
+			Transaction: &protocol.Transaction{
+				Header: protocol.TransactionHeader{
+					Principal: txid.Account(),
+				},
+				Body: &protocol.RemoteTransaction{
+					Hash: txid.Hash(),
+				},
+			},
+		}
 		if receipt != nil {
-			d = &messaging.UserSignature{
-				TransactionHash: txid.Hash(),
-				Signature: &protocol.ReceiptSignature{
-					SourceNetwork:   source,
-					Proof:           *receipt,
-					TransactionHash: txid.Hash(),
+			msg.Proof = &protocol.AnnotatedReceipt{
+				Receipt: receipt,
+				Anchor: &protocol.AnchorMetadata{
+					Account: source,
 				},
 			}
-		} else {
-			d = &internal.SyntheticMessage{TxID: txid}
 		}
-		sequence[d] = int(s.Transaction.Header.SequenceNumber)
-		messages = append(messages, d)
+		sequence[msg] = int(s.Transaction.Header.SequenceNumber)
+		messages = append(messages, msg)
 	}
 	return messages, nil
 }

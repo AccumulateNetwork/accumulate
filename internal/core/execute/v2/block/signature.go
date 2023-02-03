@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -46,13 +45,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var delegate protocol.Signer
 	var err error
 	switch signature := signature.(type) {
-	case *protocol.ReceiptSignature:
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
-		err = verifyReceiptSignature(delivery.Transaction, signature, md)
-		if err != nil {
-			return nil, err
-		}
-
 	case *protocol.SignatureSet:
 		if !delivery.IsForwarded() {
 			return nil, errors.BadRequest.With("a signature set is not allowed outside of a forwarded transaction")
@@ -170,32 +162,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	sigToStore := signature
 	var delegatedNotReady bool
 	switch signature := signature.(type) {
-	case *protocol.ReceiptSignature:
-		statusDirty = true
-		if signature.SourceNetwork.Equal(protocol.DnUrl()) {
-			status.GotDirectoryReceipt = true
-		}
-
-		// Capture the initial receipt
-		if status.Proof == nil {
-			if !bytes.Equal(delivery.Transaction.GetHash(), signature.Proof.Start) {
-				return nil, errors.Unauthorized.WithFormat("receipt does not match transaction")
-			}
-			status.Proof = &signature.Proof
-			break
-		}
-
-		if status.Proof.Contains(&signature.Proof) {
-			// We already have the proof, nothing to do
-			break
-		}
-
-		// Capture subsequent receipts
-		status.Proof, err = status.Proof.Combine(&signature.Proof)
-		if err != nil {
-			return nil, errors.Unauthorized.WithFormat("combine receipts: %w", err)
-		}
-
 	case *protocol.DelegatedSignature:
 		// If the signature is a local delegated signature, check that the delegate
 		// is satisfied, and store the full signature set
@@ -320,8 +286,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	var index int
 	switch signature := signature.(type) {
-	case *protocol.ReceiptSignature,
-		*protocol.RemoteSignature,
+	case *protocol.RemoteSignature,
 		*protocol.SignatureSet:
 		index = 0
 
@@ -668,26 +633,6 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	}
 
 	return signer, nil
-}
-
-func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol.ReceiptSignature, md sigExecMetadata) error {
-	if md.Nested() {
-		return errors.BadRequest.With("a receipt signature cannot be nested within another signature")
-	}
-
-	if !transaction.Body.Type().IsSynthetic() && !transaction.Body.Type().IsSystem() {
-		return fmt.Errorf("receipt signatures are not valid for %v transactions", transaction.Body.Type())
-	}
-
-	if md.IsInitiator {
-		return fmt.Errorf("receipt signatures must not be the initiator")
-	}
-
-	if !receipt.Proof.Validate() {
-		return fmt.Errorf("invalid receipt")
-	}
-
-	return nil
 }
 
 // validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
