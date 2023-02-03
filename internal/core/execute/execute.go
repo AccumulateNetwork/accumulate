@@ -42,8 +42,8 @@ type Executor interface {
 	// any additional validators.
 	InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error)
 
-	// Validate validates a message.
-	Validate(*database.Batch, messaging.Message) (*protocol.TransactionStatus, error)
+	// Validate validates a set of messages.
+	Validate(*database.Batch, []messaging.Message) ([]*protocol.TransactionStatus, error)
 
 	// Begin begins a Tendermint block.
 	Begin(BlockParams) (Block, error)
@@ -67,7 +67,7 @@ type Options struct {
 // A Dispatcher dispatches synthetic transactions produced by the executor.
 type Dispatcher interface {
 	// Submit adds an envelope to the queue.
-	Submit(ctx context.Context, dest *url.URL, env *protocol.Envelope) error
+	Submit(ctx context.Context, dest *url.URL, env *messaging.Envelope) error
 
 	// Send submits the queued transactions.
 	Send(context.Context) <-chan error
@@ -88,8 +88,8 @@ type Block interface {
 	// Params returns the parameters the block was created with.
 	Params() BlockParams
 
-	// Process processes a message.
-	Process(messaging.Message) (*protocol.TransactionStatus, error)
+	// Process processes a set of messages.
+	Process([]messaging.Message) ([]*protocol.TransactionStatus, error)
 
 	// Close closes the block and returns the end state of the block.
 	Close() (BlockState, error)

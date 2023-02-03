@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -104,7 +105,7 @@ func (h *Harness) StepUntil(conditions ...Condition) {
 }
 
 // Submit submits an envelope and returns the status.
-func (h *Harness) Submit(envelope *protocol.Envelope) *protocol.TransactionStatus {
+func (h *Harness) Submit(envelope *messaging.Envelope) *protocol.TransactionStatus {
 	h.TB.Helper()
 	subs, err := h.services.Submit(context.Background(), envelope, api.SubmitOptions{})
 	require.NoError(h.TB, err)
@@ -114,7 +115,7 @@ func (h *Harness) Submit(envelope *protocol.Envelope) *protocol.TransactionStatu
 
 // SubmitSuccessfully submits an envelope and returns the status.
 // SubmitSuccessfully fails if the transaction failed.
-func (h *Harness) SubmitSuccessfully(envelope *protocol.Envelope) *protocol.TransactionStatus {
+func (h *Harness) SubmitSuccessfully(envelope *messaging.Envelope) *protocol.TransactionStatus {
 	h.TB.Helper()
 	status := h.Submit(envelope)
 	if status.Error != nil {
@@ -125,7 +126,7 @@ func (h *Harness) SubmitSuccessfully(envelope *protocol.Envelope) *protocol.Tran
 
 // EnvelopeBuilder builds an envelope.
 type EnvelopeBuilder interface {
-	Done() (*protocol.Envelope, error)
+	Done() (*messaging.Envelope, error)
 }
 
 // BuildAndSubmit calls the envelope builder and submits the envelope.

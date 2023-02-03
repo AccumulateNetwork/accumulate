@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"os"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -52,7 +53,7 @@ func (ts *TestSuite) Store(file string) error {
 	return os.WriteFile(file, b, 0755)
 }
 
-func NewTxnTest(env *protocol.Envelope) *TestCase {
+func NewTxnTest(env *messaging.Envelope) *TestCase {
 	binary, err := env.MarshalBinary()
 	if err != nil {
 		panic(err)

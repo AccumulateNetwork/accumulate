@@ -16,6 +16,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -33,7 +34,7 @@ func TestTransactionPriority(t *testing.T) {
 		return nil
 	})
 	type Case struct {
-		Envelope       *protocol.Envelope
+		Envelope       *messaging.Envelope
 		ExpectPriority int64
 	}
 	cause := [32]byte{1}
@@ -191,7 +192,7 @@ func TestInvalidDeposit(t *testing.T) {
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
-	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	id := n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
 		body.Cause = n.network.NodeUrl().WithTxID([32]byte{1})
 		body.Token = protocol.AccountUrl("foo2", "tokens")

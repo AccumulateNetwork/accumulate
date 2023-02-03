@@ -22,6 +22,7 @@ SyntheticCreateIdentity:
   embeddings:
     - SyntheticOrigin
   fields:
+    # TODO Transactions should not reference accounts
     - name: Accounts
       type: Account
       marshal-as: union
