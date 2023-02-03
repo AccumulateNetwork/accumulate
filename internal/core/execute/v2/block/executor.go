@@ -10,8 +10,6 @@ import (
 	"crypto/ed25519"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -23,28 +21,32 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+var messageExecutors []func(ExecutorOptions) MessageExecutor
 
 type Executor struct {
 	ExecutorOptions
 	BlockTimers TimerSet
 
-	globals        *Globals
-	executors      map[protocol.TransactionType]chain.TransactionExecutor
-	logger         logging.OptionalLogger
-	db             database.Beginner
-	isValidator    bool
-	isGenesis      bool
-	mainDispatcher Dispatcher
+	globals          *Globals
+	executors        map[protocol.TransactionType]chain.TransactionExecutor
+	messageExecutors map[messaging.MessageType]MessageExecutor
+	logger           logging.OptionalLogger
+	db               database.Beginner
+	isValidator      bool
+	isGenesis        bool
+	mainDispatcher   Dispatcher
 }
 
 type ExecutorOptions = execute.Options
 type Dispatcher = execute.Dispatcher
 
-// NewNodeExecutor creates a new Executor for a node.
-func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
-	executors := []chain.TransactionExecutor{
+// NewExecutor creates a new Executor.
+func NewExecutor(opts ExecutorOptions) (*Executor, error) {
+	txnX := []chain.TransactionExecutor{
 		// User transactions
 		chain.AddCredits{},
 		chain.BurnTokens{},
@@ -83,13 +85,13 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 
 	switch opts.Describe.NetworkType {
 	case config.Directory:
-		executors = append(executors,
+		txnX = append(txnX,
 			chain.PartitionAnchor{},
 			chain.DirectoryAnchor{},
 		)
 
 	case config.BlockValidator:
-		executors = append(executors,
+		txnX = append(txnX,
 			chain.DirectoryAnchor{},
 		)
 
@@ -98,54 +100,25 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	}
 
 	// This is a no-op in dev
-	executors = addTestnetExecutors(executors)
+	txnX = addTestnetExecutors(txnX)
 
-	return newExecutor(opts, false, executors...)
-}
-
-// NewGenesisExecutor creates a transaction executor that can be used to set up
-// the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
-	exec, err := newExecutor(
-		ExecutorOptions{
-			Database: db,
-			Describe: *network,
-			Logger:   logger,
-			Router:   router,
-			EventBus: events.NewBus(logger),
-		},
-		true,
-		chain.SystemWriteData{},
-	)
-	if err != nil {
-		return nil, err
-	}
-	exec.globals = new(Globals)
-	exec.globals.Pending = *globals
-	exec.globals.Active = *globals
-	return exec, nil
-}
-
-func newExecutor(opts ExecutorOptions, isGenesis bool, executors ...chain.TransactionExecutor) (*Executor, error) {
 	if opts.BackgroundTaskLauncher == nil {
 		opts.BackgroundTaskLauncher = func(f func()) { go f() }
-	}
-	if isGenesis {
-		opts.NewDispatcher = func() Dispatcher { return nullDispatcher{} }
 	}
 
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
+	m.messageExecutors = newExecutorMap(opts, messageExecutors)
 	m.db = opts.Database
 	m.mainDispatcher = opts.NewDispatcher()
-	m.isGenesis = isGenesis
+	m.isGenesis = false
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
 	}
 
-	for _, x := range executors {
+	for _, x := range txnX {
 		if _, ok := m.executors[x.Type()]; ok {
 			panic(errors.InternalError.WithFormat("duplicate executor for %d", x.Type()))
 		}
@@ -201,46 +174,6 @@ func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
 
 func (x *Executor) SetExecutor_TESTONLY(y chain.TransactionExecutor) {
 	x.executors[y.Type()] = y
-}
-
-func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
-	var err error
-
-	if !m.isGenesis {
-		panic("Cannot call Genesis on a node txn executor")
-	}
-	m.executors[protocol.TransactionTypeSystemGenesis] = exec
-
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = protocol.AcmeUrl()
-	txn.Body = new(protocol.SystemGenesis)
-	delivery := new(chain.Delivery)
-	delivery.Transaction = txn
-
-	st := chain.NewStateManager(&m.Describe, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
-	defer st.Discard()
-
-	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
-		Initiator: txn.Header.Principal,
-	})
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	status, err := m.ExecuteEnvelope(block, delivery)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if status.Error != nil {
-		return errors.UnknownError.Wrap(status.Error)
-	}
-
-	err = m.EndBlock(block)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	return nil
 }
 
 func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {

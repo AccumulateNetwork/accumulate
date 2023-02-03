@@ -7,14 +7,97 @@
 package block
 
 import (
+	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// none is an empty struct.
+type none = struct{}
+
+// set is an unordered set of T implemented as a map of T to [none].
+type set[T comparable] map[T]none
+
+// Add adds a value to the set.
+func (s set[T]) Add(v T) { s[v] = none{} }
+
+// Remove removes a value from the set.
+func (s set[T]) Remove(v T) { delete(s, v) }
+
+// Hash checks if the set has the given value.
+func (s set[T]) Has(v T) bool { _, ok := s[v]; return ok }
+
+// hashSet is an ordered set of 32-byte hashes.
+type hashSet [][32]byte
+
+// Add inserts a hash into the set.
+func (l *hashSet) Add(v [32]byte) {
+	ptr, new := sortutil.BinaryInsert((*[][32]byte)(l), func(u [32]byte) int {
+		return bytes.Compare(u[:], v[:])
+	})
+	if new {
+		*ptr = v
+	}
+}
+
+// Remove removes a hash from the set.
+func (l *hashSet) Remove(v [32]byte) {
+	sortutil.Remove((*[][32]byte)(l), func(u [32]byte) int {
+		return bytes.Compare(u[:], v[:])
+	})
+}
+
+// Hash checks if the set has the given hash.
+func (l hashSet) Has(v [32]byte) bool {
+	_, ok := sortutil.Search(([][32]byte)(l), func(u [32]byte) int {
+		return bytes.Compare(u[:], v[:])
+	})
+	return ok
+}
+
+// orderedMap is an ordered map from K to V implemented with a builtin map,
+// slice of keys, and comparison function.
+type orderedMap[K comparable, V any] struct {
+	theMap map[K]V
+	keys   []K
+	cmp    func(u, v K) int
+}
+
+// Set sets the value of the given key to the given value.
+func (m *orderedMap[K, V]) Set(k K, v V) {
+	if m.theMap == nil {
+		m.theMap = map[K]V{}
+	}
+	m.theMap[k] = v
+	ptr, new := sortutil.BinaryInsert(&m.keys, func(l K) int { return m.cmp(l, k) })
+	if new {
+		*ptr = k
+	}
+}
+
+// Get retrieves the value of the given key.
+func (m *orderedMap[K, V]) Get(k K) (V, bool) {
+	v, ok := m.theMap[k]
+	return v, ok
+}
+
+// For iterates over the map in order.
+func (m *orderedMap[K, V]) For(fn func(k K, v V) error) error {
+	for _, k := range m.keys {
+		k := k // See docs/developer/rangevarref.md
+		err := fn(k, m.theMap[k])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // shouldIndexChain returns true if the given chain should be indexed.
 func shouldIndexChain(_ *url.URL, _ string, typ protocol.ChainType) (bool, error) {
