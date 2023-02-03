@@ -433,9 +433,39 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
+		if !anchor {
+			if resp.Status == nil {
+				x.logger.Error("Response to query-synth is missing the status", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
+				continue
+			}
+			if resp.Status.Proof == nil {
+				x.logger.Error("Response to query-synth is missing the proof", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
+				continue
+			}
+		}
 
-		var gotReceipt, gotKey, bad bool
-		var signatures []protocol.Signature
+		var messages []messaging.Message
+		if anchor {
+			messages = []messaging.Message{
+				&messaging.UserTransaction{
+					Transaction: resp.Transaction,
+				},
+			}
+		} else {
+			messages = []messaging.Message{
+				&messaging.SyntheticTransaction{
+					Transaction: resp.Transaction,
+					Proof: &protocol.AnnotatedReceipt{
+						Receipt: resp.Status.Proof,
+						Anchor: &protocol.AnchorMetadata{
+							Account: resp.Transaction.Header.Source,
+						},
+					},
+				},
+			}
+		}
+
+		var gotKey, bad bool
 		for _, signature := range resp.Signatures.Records {
 			h := signature.TxID.Hash()
 			if !bytes.Equal(h[:], resp.Transaction.GetHash()) {
@@ -453,37 +483,26 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 
 			for _, signature := range set.Signatures {
 				switch signature.(type) {
-				case *protocol.ReceiptSignature:
-					gotReceipt = true
 				case *protocol.ED25519Signature:
 					gotKey = true
 				}
-				signatures = append(signatures, signature)
+				messages = append(messages, &messaging.UserSignature{
+					Signature:       signature,
+					TransactionHash: h,
+				})
 			}
 
 		}
 
-		var missing []string
-		if !gotReceipt && !anchor {
-			missing = append(missing, "receipt")
-		}
 		if !gotKey {
-			missing = append(missing, "key")
-		}
-		if len(missing) > 0 {
-			err := fmt.Errorf("missing %s signature(s)", strings.Join(missing, ", "))
-			x.logger.Error("Invalid synthetic transaction", "error", err, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
+			x.logger.Error("Invalid synthetic transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
 			bad = true
 		}
-
 		if bad {
 			continue
 		}
 
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{
-			Signatures:  signatures,
-			Transaction: []*protocol.Transaction{resp.Transaction},
-		})
+		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
 		if err != nil {
 			x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
 			continue
@@ -500,7 +519,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 
 	anchors := map[[32]byte][]*url.TxID{}
 	source := map[*url.TxID]*url.URL{}
-	var sigs []protocol.Signature
+	var messages []messaging.Message
 	for _, txid := range pending {
 		h := txid.Hash()
 		status, err := batch.Transaction(h[:]).GetStatus()
@@ -542,20 +561,23 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 			}
 
 			for _, txid := range anchors[*(*[32]byte)(resp.Receipt.Start)] {
-				sig := new(protocol.ReceiptSignature)
-				sig.SourceNetwork = protocol.DnUrl()
-				sig.Proof = resp.Receipt.Receipt
-				sig.TransactionHash = txid.Hash()
-				sigs = append(sigs, sig)
+				msg := new(messaging.SyntheticTransaction)
+				msg.Transaction = new(protocol.Transaction)
+				msg.Transaction.Body = &protocol.RemoteTransaction{Hash: txid.Hash()}
+				msg.Proof = new(protocol.AnnotatedReceipt)
+				msg.Proof.Receipt = &resp.Receipt.Receipt
+				msg.Proof.Anchor = new(protocol.AnchorMetadata)
+				msg.Proof.Anchor.Account = protocol.DnUrl()
+				messages = append(messages, msg)
 			}
 		}
 	}
 
-	if len(sigs) == 0 {
+	if len(messages) == 0 {
 		return
 	}
 
-	err := dispatcher.Submit(ctx, protocol.PartitionUrl(x.Describe.PartitionId), &messaging.Envelope{Signatures: sigs})
+	err := dispatcher.Submit(ctx, protocol.PartitionUrl(x.Describe.PartitionId), &messaging.Envelope{Messages: messages})
 	if err != nil {
 		x.logger.Error("Failed to dispatch receipts", "error", err)
 	}
