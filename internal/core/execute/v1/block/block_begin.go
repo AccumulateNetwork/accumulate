@@ -50,7 +50,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	x.BackgroundTaskLauncher(func() {
 		for err := range errs {
 			switch err := err.(type) {
-			case *protocol.TransactionStatusError:
+			case protocol.TransactionStatusError:
 				x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 			default:
 				x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
