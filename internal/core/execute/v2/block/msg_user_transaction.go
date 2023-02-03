@@ -7,6 +7,8 @@
 package block
 
 import (
+	"strings"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -31,6 +33,15 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserTransaction, msg.Type())
 	}
 
+	if txn.Transaction == nil {
+		return nil, errors.BadRequest.With("missing transaction")
+	}
+
+	// TODO Can we remove this or do it a better way?
+	if txn.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
+		return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)), nil
+	}
+
 	// Ensure the transaction is signed
 	var signed bool
 	for _, other := range b.messages {
@@ -50,43 +61,19 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	isRemote := txn.Transaction.Body.Type() == protocol.TransactionTypeRemote
-	record := batch.Transaction(txn.Transaction.GetHash())
-	s, err := record.Main().Get()
-	switch {
-	case errors.Is(err, errors.NotFound) && !isRemote:
-		// Store the transaction
-
-	case err != nil:
-		// Unknown error or remote transaction with no local copy
-		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-
-	case s.Transaction != nil:
-		// It's not a transaction
-		return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.With("not a transaction")), nil
-
-	case isRemote || s.Transaction.Equal(txn.Transaction):
-		// Transaction has already been recorded
-		return nil, nil
-
-	default:
-		// This should be impossible
-		return nil, errors.InternalError.WithFormat("submitted transaction does not match the locally stored transaction")
-	}
-
-	// TODO Can we remove this or do it a better way?
-	if txn.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
-		return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)), nil
-	}
-
-	// If we reach this point, Validate should have verified that there is a
-	// signer that can be charged for this recording
-	err = record.Main().Put(&database.SigOrTxn{Transaction: txn.Transaction})
+	loaded, err := storeTransaction(batch, txn.Transaction)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
+		if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
+			return protocol.NewErrorStatus(txn.ID(), err), nil
+		}
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if loaded.Body.Type().IsSynthetic() {
+		return nil, errors.BadRequest.WithFormat("transaction type %v is not compatible with message type %v", loaded.Body.Type(), msg.Type())
 	}
 
 	// Record when the transaction is received
+	record := batch.Transaction(txn.Transaction.GetHash())
 	status, err := record.Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -106,4 +93,57 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 
 	// The transaction has not yet been processed so don't add its status
 	return nil, nil
+}
+
+func storeTransaction(batch *database.Batch, txn *protocol.Transaction) (*protocol.Transaction, error) {
+	record := batch.Transaction(txn.GetHash())
+
+	// Validate the synthetic transaction header
+	if typ := txn.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
+		var missing []string
+		if txn.Header.Source == nil {
+			missing = append(missing, "source")
+		}
+		if txn.Header.Destination == nil {
+			missing = append(missing, "destination")
+		}
+		if txn.Header.SequenceNumber == 0 {
+			missing = append(missing, "sequence number")
+		}
+		if len(missing) > 0 {
+			return nil, errors.BadRequest.WithFormat("invalid synthetic transaction: missing %s", strings.Join(missing, ", "))
+		}
+	}
+
+	isRemote := txn.Body.Type() == protocol.TransactionTypeRemote
+	s, err := record.Main().Get()
+	switch {
+	case errors.Is(err, errors.NotFound) && !isRemote:
+		// Store the transaction
+
+	case err != nil:
+		// Unknown error or remote transaction with no local copy
+		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+
+	case s.Transaction == nil:
+		// It's not a transaction
+		return nil, errors.BadRequest.With("not a transaction")
+
+	case isRemote || s.Transaction.Equal(txn):
+		// Transaction has already been recorded
+		return s.Transaction, nil
+
+	default:
+		// This should be impossible
+		return nil, errors.InternalError.WithFormat("submitted transaction does not match the locally stored transaction")
+	}
+
+	// If we reach this point, Validate should have verified that there is a
+	// signer that can be charged for this recording
+	err = record.Main().Put(&database.SigOrTxn{Transaction: txn})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
+	}
+
+	return txn, nil
 }

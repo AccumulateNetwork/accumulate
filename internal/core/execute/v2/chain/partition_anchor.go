@@ -138,7 +138,7 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		return sequence[txids[i]] < sequence[txids[j]]
 	})
 	for _, id := range txids {
-		st.State.ProcessSynthetic(id)
+		st.State.ProcessTransaction(id)
 	}
 
 	return nil, nil
