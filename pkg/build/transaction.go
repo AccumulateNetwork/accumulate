@@ -120,6 +120,24 @@ func (b CreateTokenAccountBuilder) SignWith(signer any, path ...string) Signatur
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
+type CreateLiteTokenAccountBuilder struct {
+	t    TransactionBuilder
+	body protocol.CreateLiteTokenAccount
+}
+
+func (b TransactionBuilder) CreateLiteTokenAccount() CreateLiteTokenAccountBuilder {
+	c := CreateLiteTokenAccountBuilder{t: b}
+	return c
+}
+
+func (b CreateLiteTokenAccountBuilder) Done() (*protocol.Transaction, error) {
+	return b.t.Body(&b.body).Done()
+}
+
+func (b CreateLiteTokenAccountBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.t.Body(&b.body).SignWith(signer, path...)
+}
+
 type SendTokensBuilder struct {
 	t      TransactionBuilder
 	amount big.Int

@@ -36,6 +36,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -47,6 +48,10 @@ import (
 
 var validateNetwork = flag.String("test.validate.network", "", "Validate a network")
 var fullValidate = flag.Bool("test.validate.full", false, "Enable TestValidateFull")
+
+func init() {
+	acctesting.EnableDebugFeatures()
+}
 
 // TestManualValidate is intended to be used to manually validate a deployed
 // network.
@@ -228,6 +233,7 @@ type ValidationTestSuite struct {
 
 	suite.Suite
 	*Harness
+	sim       *simulator.Simulator
 	nonce     uint64
 	faucetSvc api.Faucet
 }
@@ -252,6 +258,7 @@ func (s *ValidationTestSuite) setupForSim() {
 	)
 	s.Require().NoError(err)
 
+	s.sim = sim
 	s.Harness = New(s.T(), sim.Services(), sim)
 
 	// Set up the faucet
@@ -656,6 +663,26 @@ func (s *ValidationTestSuite) TestMain() {
 	h := st.TxID.Hash()
 	_ = s.NotNil(st.Error) &&
 		s.Equal(fmt.Sprintf("transaction %x (sendTokens) has been delivered", h[:4]), st.Error.Message)
+
+	if s.sim != nil {
+		var didDrop bool
+		s.TB.Log("Drop the next anchor")
+		s.sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop bool, keepHook bool) {
+			for _, msg := range messages {
+				msg, ok := msg.(*messaging.UserTransaction)
+				if !ok {
+					continue
+				}
+				if !msg.Transaction.Body.Type().IsAnchor() {
+					continue
+				}
+				didDrop = true
+				return true, false
+			}
+			return false, true
+		})
+		defer func() { s.True(didDrop, "Expected an anchor to be dropped") }()
+	}
 
 	s.TB.Log("Create a token issuer")
 	st = s.BuildAndSubmitSuccessfully(

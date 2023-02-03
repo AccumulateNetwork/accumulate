@@ -98,7 +98,7 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 
 	var signature protocol.Signature
 	var err error
-	if b.transaction.Header.Initiator == ([32]byte{}) {
+	if b.transaction.Body.Type() != protocol.TransactionTypeRemote && b.transaction.Header.Initiator == ([32]byte{}) {
 		signature, err = b.signer.Initiate(b.transaction)
 	} else {
 		signature, err = b.signer.Sign(b.transaction.GetHash())
