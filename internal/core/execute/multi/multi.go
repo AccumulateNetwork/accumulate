@@ -126,10 +126,10 @@ func (m *Multi) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additi
 	return m.active.InitChainValidators(initVal)
 }
 
-func (m *Multi) Validate(batch *database.Batch, message messaging.Message) (*protocol.TransactionStatus, error) {
+func (m *Multi) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.active.Validate(batch, message)
+	return m.active.Validate(batch, messages)
 }
 
 func (m *Multi) Begin(params BlockParams) (Block, error) {

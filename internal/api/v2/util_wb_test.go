@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -6,7 +6,10 @@
 
 package api
 
-import "gitlab.com/accumulatenetwork/accumulate/protocol"
+import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
 
 // Whitebox testing utilities
 
@@ -16,6 +19,6 @@ func (Package) ConstructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte,
 	return constructFaucetTxn(req)
 }
 
-func (Package) ProcessExecuteRequest(req *TxRequest, payload []byte) (*protocol.Envelope, error) {
+func (Package) ProcessExecuteRequest(req *TxRequest, payload []byte) (*messaging.Envelope, error) {
 	return processExecuteRequest(req, payload)
 }

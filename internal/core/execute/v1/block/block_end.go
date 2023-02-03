@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -487,7 +488,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			continue
 		}
 
-		err = dispatcher.Submit(ctx, dest, &protocol.Envelope{
+		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{
 			Signatures:  signatures,
 			Transaction: []*protocol.Transaction{resp.Transaction},
 		})
@@ -552,7 +553,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 		return
 	}
 
-	err := dispatcher.Submit(ctx, protocol.PartitionUrl(x.Describe.PartitionId), &protocol.Envelope{Signatures: sigs})
+	err := dispatcher.Submit(ctx, protocol.PartitionUrl(x.Describe.PartitionId), &messaging.Envelope{Signatures: sigs})
 	if err != nil {
 		x.logger.Error("Failed to dispatch receipts", "error", err)
 	}

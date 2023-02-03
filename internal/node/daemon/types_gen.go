@@ -45,8 +45,12 @@ func (v *BvnInit) MarshalJSON() ([]byte, error) {
 		Id    string                       `json:"id,omitempty"`
 		Nodes encoding.JsonList[*NodeInit] `json:"nodes,omitempty"`
 	}{}
-	u.Id = v.Id
-	u.Nodes = v.Nodes
+	if !(len(v.Id) == 0) {
+		u.Id = v.Id
+	}
+	if !(len(v.Nodes) == 0) {
+		u.Nodes = v.Nodes
+	}
 	return json.Marshal(&u)
 }
 
@@ -55,8 +59,12 @@ func (v *NetworkInit) MarshalJSON() ([]byte, error) {
 		Id   string                      `json:"id,omitempty"`
 		Bvns encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
 	}{}
-	u.Id = v.Id
-	u.Bvns = v.Bvns
+	if !(len(v.Id) == 0) {
+		u.Id = v.Id
+	}
+	if !(len(v.Bvns) == 0) {
+		u.Bvns = v.Bvns
+	}
 	return json.Marshal(&u)
 }
 
@@ -74,17 +82,35 @@ func (v *NodeInit) MarshalJSON() ([]byte, error) {
 		DnNodeKey        *string         `json:"dnNodeKey,omitempty"`
 		BvnNodeKey       *string         `json:"bvnNodeKey,omitempty"`
 	}{}
-	u.DnnType = v.DnnType
-	u.BvnnType = v.BvnnType
-	u.BasePort = v.BasePort
-	u.AdvertizeAddress = v.AdvertizeAddress
-	u.HostName = v.AdvertizeAddress
-	u.ListenAddress = v.ListenAddress
-	u.ListenIP = v.ListenAddress
-	u.PeerAddress = v.PeerAddress
-	u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
-	u.DnNodeKey = encoding.BytesToJSON(v.DnNodeKey)
-	u.BvnNodeKey = encoding.BytesToJSON(v.BvnNodeKey)
+	if !(v.DnnType == 0) {
+		u.DnnType = v.DnnType
+	}
+	if !(v.BvnnType == 0) {
+		u.BvnnType = v.BvnnType
+	}
+	if !(v.BasePort == 0) {
+		u.BasePort = v.BasePort
+	}
+	if !(len(v.AdvertizeAddress) == 0) {
+		u.AdvertizeAddress = v.AdvertizeAddress
+		u.HostName = v.AdvertizeAddress
+	}
+	if !(len(v.ListenAddress) == 0) {
+		u.ListenAddress = v.ListenAddress
+		u.ListenIP = v.ListenAddress
+	}
+	if !(len(v.PeerAddress) == 0) {
+		u.PeerAddress = v.PeerAddress
+	}
+	if !(len(v.PrivValKey) == 0) {
+		u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
+	}
+	if !(len(v.DnNodeKey) == 0) {
+		u.DnNodeKey = encoding.BytesToJSON(v.DnNodeKey)
+	}
+	if !(len(v.BvnNodeKey) == 0) {
+		u.BvnNodeKey = encoding.BytesToJSON(v.BvnNodeKey)
+	}
 	return json.Marshal(&u)
 }
 
