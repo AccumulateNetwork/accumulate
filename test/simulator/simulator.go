@@ -113,6 +113,15 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 			return nil, errors.UnknownError.WithFormat("init %s: %w", p.ID, err)
 		}
 	}
+
+	// Execute an extra block in case the executor is booting up with V2. This
+	// will ensure that the active executor implementation is swapped out for V2
+	// before the test submits anything, which makes it easier to debug tests.
+	err = s.Step()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	return s, nil
 }
 
@@ -232,10 +241,22 @@ func (s *Simulator) BlockIndex(partition string) uint64 {
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
 	s.blockErrGroup = new(errgroup.Group)
-	for _, p := range s.partitions {
-		p := p // Don't capture loop variables
-		s.blockErrGroup.Go(p.execute)
+
+	if s.Deterministic {
+		err := s.partitions[protocol.Directory].execute()
+		for _, bvn := range s.init.Bvns {
+			if e := s.partitions[bvn.Id].execute(); e != nil {
+				err = e
+			}
+		}
+		return err
+	} else {
+		for _, p := range s.partitions {
+			p := p // Don't capture loop variables
+			s.blockErrGroup.Go(p.execute)
+		}
 	}
+
 	return s.blockErrGroup.Wait()
 }
 
