@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -71,12 +72,13 @@ func (d *DataIndexer) GetLatest() (index uint64, entryHash, txnHash []byte, err 
 }
 
 func GetDataEntry(batch *database.Batch, txnHash []byte) (protocol.DataEntry, *url.TxID, *url.TxID, error) {
-	state, err := batch.Transaction(txnHash).GetState()
+	var msg messaging.MessageWithTransaction
+	err := batch.Message2(txnHash).Main().GetAs(&msg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	tx := state.Transaction
+	tx := msg.GetTransaction()
 	switch txn := tx.Body.(type) {
 	case *protocol.WriteData:
 		return txn.Entry, tx.ID(), nil, nil
