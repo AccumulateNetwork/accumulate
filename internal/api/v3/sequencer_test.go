@@ -32,7 +32,7 @@ func TestSequencer(t *testing.T) {
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		net,
-		simulator.Genesis(GenesisTime),
+		simulator.GenesisWith(GenesisTime, new(core.GlobalValues)), // Use v1
 	)
 
 	aliceKey := acctesting.GenerateKey("alice")

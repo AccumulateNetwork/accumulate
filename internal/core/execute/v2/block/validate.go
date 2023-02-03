@@ -54,7 +54,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		if delivery.Transaction.Header.Principal == nil {
 			return nil, errors.BadRequest.WithFormat("missing principal")
 		}
-		if delivery.Transaction.Header.Initiator == [32]byte{} {
+		if delivery.Transaction.Body.Type().IsUser() && delivery.Transaction.Header.Initiator == [32]byte{} {
 			return nil, errors.BadRequest.WithFormat("missing initiator")
 		}
 	}
@@ -105,18 +105,12 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		return new(protocol.EmptyResult), nil
 	}
 
-	// Load the first signer
-	firstSig := delivery.Signatures[0]
-	if _, ok := firstSig.(*protocol.ReceiptSignature); ok {
-		return nil, errors.BadRequest.WithFormat("invalid transaction: initiated by receipt signature")
-	}
-
 	// Lite token address => lite identity
 	var signerUrl *url.URL
-	if _, ok := firstSig.(*protocol.PartitionSignature); ok {
+	if delivery.Transaction.Body.Type().IsAnchor() {
 		signerUrl = x.Describe.OperatorsPage()
 	} else {
-		signerUrl = firstSig.GetSigner()
+		signerUrl = delivery.Signatures[0].GetSigner()
 		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
 			signerUrl = signerUrl.RootIdentity()
 		}
@@ -192,18 +186,6 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	var signer protocol.Signer2
 	var delegate protocol.Signer
 	switch signature := signature.(type) {
-	case *protocol.PartitionSignature:
-		// Add the partition info to the temp status
-		// TODO Replace fields on status with just PartitionSignature
-		if status.SourceNetwork == nil {
-			status.SourceNetwork = signature.SourceNetwork
-			status.DestinationNetwork = signature.DestinationNetwork
-			status.SequenceNumber = signature.SequenceNumber
-		}
-
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
-		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
-
 	case *protocol.ReceiptSignature:
 		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
@@ -282,12 +264,26 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 }
 
 func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, signatures []protocol.Signature) error {
-	var gotSynthSig, gotReceiptSig, gotED25519Sig bool
+	// Validate the synthetic transaction header
+	if transaction.Body.Type().IsSynthetic() {
+		var missing []string
+		if transaction.Header.Source == nil {
+			missing = append(missing, "source")
+		}
+		if transaction.Header.Destination == nil {
+			missing = append(missing, "destination")
+		}
+		if transaction.Header.SequenceNumber == 0 {
+			missing = append(missing, "sequence number")
+		}
+		if len(missing) > 0 {
+			return errors.BadRequest.WithFormat("invalid synthetic transaction: missing %s", strings.Join(missing, ", "))
+		}
+	}
+
+	var gotReceiptSig, gotED25519Sig bool
 	for _, sig := range signatures {
 		switch sig.(type) {
-		case *protocol.PartitionSignature:
-			gotSynthSig = true
-
 		case *protocol.ReceiptSignature:
 			gotReceiptSig = true
 
@@ -299,9 +295,6 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 		}
 	}
 
-	if !gotSynthSig {
-		return errors.Unauthenticated.WithFormat("missing synthetic transaction origin")
-	}
 	if !gotED25519Sig {
 		return errors.Unauthenticated.WithFormat("missing ED25519 signature")
 	}
