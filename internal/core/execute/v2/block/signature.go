@@ -16,7 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
+func (x *Executor) processSignature2(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
 	r := x.BlockTimers.Start(BlockTimerTypeProcessSignature)
 	defer x.BlockTimers.Stop(r)
 
@@ -27,9 +27,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 
 	var md sigExecMetadata
 	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
-	if !signature.Type().IsSystem() {
-		md.Location = signature.RoutingLocation()
-	}
+	md.Location = signature.RoutingLocation()
 	_, err = x.processSignature(batch, delivery, signature, md)
 	if err != nil {
 		return nil, err
@@ -41,7 +39,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 type sigExecMetadata = chain.SignatureValidationMetadata
 
 func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer2, error) {
-	var signer protocol.Signer2
+	var signer protocol.Signer
 	var delegate protocol.Signer
 	var err error
 	switch signature := signature.(type) {
@@ -104,32 +102,19 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		}
 
 	case protocol.KeySignature:
-		if delivery.Transaction.Body.Type().IsUser() {
-			signer, err = x.processKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
-			if err != nil {
-				return nil, err
-			}
+		signer, err = x.processKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
+		if err != nil {
+			return nil, err
+		}
 
-			// Basic validation
-			if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
-				return nil, errors.BadRequest.WithFormat("invalid signature")
-			}
+		// Basic validation
+		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+			return nil, errors.BadRequest.WithFormat("invalid signature")
+		}
 
-			// Do not store anything if the set is within a forwarded delegated transaction
-			if md.Forwarded && md.Delegated {
-				return signer, nil
-			}
-
-		} else {
-			signer, err = x.processPartitionSignature(batch, signature, delivery.Transaction)
-			if err != nil {
-				return nil, errors.UnknownError.Wrap(err)
-			}
-
-			// Basic validation
-			if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
-				return nil, errors.BadRequest.WithFormat("invalid signature")
-			}
+		// Do not store anything if the set is within a forwarded delegated transaction
+		if md.Forwarded && md.Delegated {
+			return signer, nil
 		}
 
 	default:
@@ -143,8 +128,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Store the transaction state (without signatures) if it is local to the
 	// signature, unless the body is just a hash
-	isSystemSig := signature.Type().IsSystem()
-	isLocalTxn := !isSystemSig && delivery.Transaction.Header.Principal.LocalTo(md.Location)
+	isLocalTxn := delivery.Transaction.Header.Principal.LocalTo(md.Location)
 	if isLocalTxn && delivery.Transaction.Body.Type() != protocol.TransactionTypeRemote {
 		err = batch.Transaction(delivery.Transaction.GetHash()).
 			PutState(&database.SigOrTxn{Transaction: delivery.Transaction})
@@ -200,28 +184,15 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Record the initiator (but only if we're at the final destination)
 	shouldRecordInit := md.IsInitiator
-	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() &&
-		delivery.Transaction.Body.Type().IsUser() &&
-		!delivery.WasProducedInternally() {
-		if md.Delegated {
-			shouldRecordInit = false
-		} else if md.Location == nil || !delivery.Transaction.Header.Principal.LocalTo(md.Location) {
-			shouldRecordInit = false
-		}
+	if md.Delegated {
+		shouldRecordInit = false
+	} else if !delivery.Transaction.Header.Principal.LocalTo(md.Location) {
+		shouldRecordInit = false
 	}
 	if shouldRecordInit {
-		var initUrl *url.URL
-		if signature.Type().IsSystem() {
-			initUrl = signer.GetUrl()
-		} else {
-			if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
-				initUrl = signer.GetUrl()
-			} else {
-				initUrl = signature.GetSigner()
-			}
-			if key, _, _ := protocol.ParseLiteTokenAddress(initUrl); key != nil {
-				initUrl = initUrl.RootIdentity()
-			}
+		initUrl := signer.GetUrl()
+		if key, _, _ := protocol.ParseLiteTokenAddress(initUrl); key != nil {
+			initUrl = initUrl.RootIdentity()
 		}
 		if status.Initiator != nil && !status.Initiator.Equal(initUrl) {
 			// This should be impossible
@@ -254,8 +225,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Add the signature to the signer's chain
-	isUserTxn := delivery.Transaction.Body.Type().IsUser() && !delivery.WasProducedInternally()
-	if isUserTxn && signer.GetUrl().LocalTo(md.Location) {
+	if signer.GetUrl().LocalTo(md.Location) {
 		chain, err := batch.Account(signer.GetUrl()).SignatureChain().Get()
 		if err != nil {
 			return nil, fmt.Errorf("load chain: %w", err)
@@ -267,7 +237,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Add the signature to the principal's chain
-	if isUserTxn && isLocalTxn {
+	if isLocalTxn {
 		chain, err := batch.Account(delivery.Transaction.Header.Principal).SignatureChain().Get()
 		if err != nil {
 			return nil, fmt.Errorf("load chain: %w", err)
@@ -605,11 +575,6 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Do not charge fees or update the nonce for synthetic transactions
-	if !delivery.Transaction.Body.Type().IsUser() {
-		return signer, nil
-	}
-
 	// Charge the fee
 	fee, err := x.computeSignerFee(delivery.Transaction, signature, md)
 	if err != nil {
@@ -651,32 +616,6 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 	_, _, ok = signer.EntryByKeyHash(signature.GetPublicKeyHash())
 	if !ok {
 		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
-	}
-
-	return signer, nil
-}
-
-func (x *Executor) processPartitionSignature(batch *database.Batch, signature protocol.KeySignature, transaction *protocol.Transaction) (protocol.Signer2, error) {
-	record := batch.Transaction(transaction.GetHash())
-	status, err := record.GetStatus()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	signer, err := x.validatePartitionSignature(signature, transaction, status)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Add all signers to the signer list so that the transaction readiness
-	// check knows to look for delegates
-	status.AddSigner(signer)
-	if transaction.Body.Type().IsAnchor() {
-		status.AddAnchorSigner(signature)
-	}
-	err = record.PutStatus(status)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return signer, nil
