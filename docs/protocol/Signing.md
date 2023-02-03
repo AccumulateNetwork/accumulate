@@ -63,7 +63,7 @@ actual signed hash
 - Each key of a signer can respond at most once. Additional responses
   (signatures) from the same public key are ignored.
 - A transaction is ready to execute once all of the enabled authorities of the
-  transaction's principal account are satisified.
+  transaction's principal account are satisfied.
 - An authority is satisfied once any of its signers are satisfied.
 - A signer is satisfied once the corresponding signature page is complete.
 - A signature page is complete once it meets the signature threshold of the
