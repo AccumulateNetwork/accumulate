@@ -56,6 +56,14 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
 			}
 
+		case *messaging.ValidatorSignature:
+			if i, ok := txnIndex[msg.Signature.GetTransactionHash()]; ok {
+				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
+			} else {
+				txnIndex[msg.Signature.GetTransactionHash()] = len(deliveries)
+				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
+			}
+
 		default:
 			return nil, errors.BadRequest.WithFormat("unsupported message type %v", msg.Type())
 		}
