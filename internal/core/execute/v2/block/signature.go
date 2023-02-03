@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -126,17 +127,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		return nil, err
 	}
 
-	// Store the transaction state (without signatures) if it is local to the
-	// signature, unless the body is just a hash
-	isLocalTxn := delivery.Transaction.Header.Principal.LocalTo(md.Location)
-	if isLocalTxn && delivery.Transaction.Body.Type() != protocol.TransactionTypeRemote {
-		err = batch.Transaction(delivery.Transaction.GetHash()).
-			PutState(&database.SigOrTxn{Transaction: delivery.Transaction})
-		if err != nil {
-			return nil, fmt.Errorf("store transaction: %w", err)
-		}
-	}
-
 	var statusDirty bool
 	status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
 	if err != nil {
@@ -215,11 +205,11 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Persist the signature
-	env := new(database.SigOrTxn)
-	env.Txid = delivery.Transaction.ID()
-	env.Signature = sigToStore
 	sigHash := signature.Hash()
-	err = batch.Transaction(sigHash).PutState(env)
+	err = batch.Message2(sigHash).Main().Put(&messaging.UserSignature{
+		Signature: sigToStore,
+		TxID:      delivery.Transaction.ID(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("store envelope: %w", err)
 	}
@@ -237,6 +227,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Add the signature to the principal's chain
+	isLocalTxn := delivery.Transaction.Header.Principal.LocalTo(md.Location)
 	if isLocalTxn {
 		chain, err := batch.Account(delivery.Transaction.Header.Principal).SignatureChain().Get()
 		if err != nil {
@@ -632,17 +623,13 @@ func hasKeySignature(batch *database.Batch, status *protocol.TransactionStatus) 
 		}
 
 		for _, e := range sigset.Entries() {
-			state, err := batch.Transaction(e.SignatureHash[:]).GetState()
+			var sig messaging.MessageWithSignature
+			err = batch.Message(e.SignatureHash).Main().GetAs(&sig)
 			if err != nil {
 				return false, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
 			}
 
-			if state.Signature == nil {
-				// This should not happen
-				continue
-			}
-
-			if _, ok := state.Signature.(protocol.KeySignature); ok {
+			if _, ok := sig.GetSignature().(protocol.KeySignature); ok {
 				return true, nil
 			}
 		}

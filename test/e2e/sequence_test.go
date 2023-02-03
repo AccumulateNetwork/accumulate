@@ -379,7 +379,7 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	for _, delivery := range original {
 		messages = append(messages, &messaging.UserTransaction{Transaction: delivery.Transaction})
 		for _, sig := range delivery.Signatures {
-			messages = append(messages, &messaging.UserSignature{Signature: sig, TransactionHash: delivery.Transaction.ID().Hash()})
+			messages = append(messages, &messaging.UserSignature{Signature: sig, TxID: delivery.Transaction.ID()})
 		}
 	}
 	batch := x.Database.Begin(false)
