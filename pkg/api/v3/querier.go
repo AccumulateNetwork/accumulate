@@ -35,12 +35,12 @@ func (q Querier2) QueryAccountAs(ctx context.Context, account *url.URL, query *D
 	return r, nil
 }
 
-func (q Querier2) QuerySignature(ctx context.Context, txid *url.TxID, query *DefaultQuery) (*SignatureRecord, error) {
-	return recordIs[*SignatureRecord](doQuery(q, ctx, txid.AsUrl(), query))
-}
-
 func (q Querier2) QueryTransaction(ctx context.Context, txid *url.TxID, query *DefaultQuery) (*TransactionRecord, error) {
 	return recordIs[*TransactionRecord](doQuery(q, ctx, txid.AsUrl(), query))
+}
+
+func (q Querier2) QuerySignature(ctx context.Context, txid *url.TxID, query *DefaultQuery) (*SignatureRecord, error) {
+	return recordIs[*SignatureRecord](doQuery(q, ctx, txid.AsUrl(), query))
 }
 
 func (q Querier2) QueryChain(ctx context.Context, scope *url.URL, query *ChainQuery) (*ChainRecord, error) {
