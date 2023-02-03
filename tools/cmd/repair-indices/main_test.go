@@ -31,8 +31,7 @@ func TestRepairIndices(t *testing.T) {
 
 	// Initialize
 	globals := new(core.GlobalValues)
-	// globals.ExecutorVersion = ExecutorVersionV1
-	globals.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
+	globals.ExecutorVersion = ExecutorVersionLatest
 	network := simulator.SimpleNetwork(t.Name(), 1, 1)
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
