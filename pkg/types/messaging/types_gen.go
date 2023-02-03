@@ -40,10 +40,10 @@ type SyntheticTransaction struct {
 }
 
 type UserSignature struct {
-	fieldsSet       []bool
-	Signature       protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	TransactionHash [32]byte           `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
-	extraData       []byte
+	fieldsSet []bool
+	Signature protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	TxID      *url.TxID          `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	extraData []byte
 }
 
 type UserTransaction struct {
@@ -116,7 +116,9 @@ func (v *UserSignature) Copy() *UserSignature {
 	if v.Signature != nil {
 		u.Signature = protocol.CopySignature(v.Signature)
 	}
-	u.TransactionHash = v.TransactionHash
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
 
 	return u
 }
@@ -207,7 +209,12 @@ func (v *UserSignature) Equal(u *UserSignature) bool {
 	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
 		return false
 	}
-	if !(v.TransactionHash == u.TransactionHash) {
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
 		return false
 	}
 
@@ -356,7 +363,7 @@ func (v *SyntheticTransaction) IsValid() error {
 var fieldNames_UserSignature = []string{
 	1: "Type",
 	2: "Signature",
-	3: "TransactionHash",
+	3: "TxID",
 }
 
 func (v *UserSignature) MarshalBinary() ([]byte, error) {
@@ -367,8 +374,8 @@ func (v *UserSignature) MarshalBinary() ([]byte, error) {
 	if !(protocol.EqualSignature(v.Signature, nil)) {
 		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
-	if !(v.TransactionHash == ([32]byte{})) {
-		writer.WriteHash(3, &v.TransactionHash)
+	if !(v.TxID == nil) {
+		writer.WriteTxid(3, v.TxID)
 	}
 
 	_, _, err := writer.Reset(fieldNames_UserSignature)
@@ -391,9 +398,9 @@ func (v *UserSignature) IsValid() error {
 		errs = append(errs, "field Signature is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field TransactionHash is missing")
-	} else if v.TransactionHash == ([32]byte{}) {
-		errs = append(errs, "field TransactionHash is not set")
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
 	}
 
 	switch len(errs) {
@@ -621,8 +628,8 @@ func (v *UserSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		}
 		return err
 	})
-	if x, ok := reader.ReadHash(3); ok {
-		v.TransactionHash = *x
+	if x, ok := reader.ReadTxid(3); ok {
+		v.TxID = x
 	}
 
 	seen, err := reader.Reset(fieldNames_UserSignature)
@@ -754,16 +761,16 @@ func (v *SyntheticTransaction) MarshalJSON() ([]byte, error) {
 
 func (v *UserSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            MessageType                                     `json:"type"`
-		Signature       *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		TransactionHash string                                          `json:"transactionHash,omitempty"`
+		Type      MessageType                                     `json:"type"`
+		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		TxID      *url.TxID                                       `json:"txID,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(protocol.EqualSignature(v.Signature, nil)) {
 		u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
 	}
-	if !(v.TransactionHash == ([32]byte{})) {
-		u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
 	}
 	return json.Marshal(&u)
 }
@@ -849,13 +856,13 @@ func (v *SyntheticTransaction) UnmarshalJSON(data []byte) error {
 
 func (v *UserSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            MessageType                                     `json:"type"`
-		Signature       *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		TransactionHash string                                          `json:"transactionHash,omitempty"`
+		Type      MessageType                                     `json:"type"`
+		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		TxID      *url.TxID                                       `json:"txID,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.TxID = v.TxID
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -866,11 +873,7 @@ func (v *UserSignature) UnmarshalJSON(data []byte) error {
 		v.Signature = u.Signature.Value
 	}
 
-	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
-		return fmt.Errorf("error decoding TransactionHash: %w", err)
-	} else {
-		v.TransactionHash = x
-	}
+	v.TxID = u.TxID
 	return nil
 }
 

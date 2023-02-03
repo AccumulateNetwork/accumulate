@@ -34,20 +34,18 @@ func (b *bundle) ProcessRemoteSignatures() error {
 		}
 
 		// Load the transaction. Earlier checks should guarantee this never fails.
-		txn, err := batch.Transaction(sig.TransactionHash[:]).Main().Get()
-		switch {
-		case err != nil:
+		var txn messaging.MessageWithTransaction
+		err := batch.Message(sig.TxID.Hash()).Main().GetAs(&txn)
+		if err != nil {
 			return errors.InternalError.WithFormat("load transaction: %w", err)
-		case txn.Transaction == nil:
-			return errors.InternalError.WithFormat("%x is not a transaction", sig.TransactionHash)
 		}
 
 		// Synthetic transactions are never remote
-		if !txn.Transaction.Body.Type().IsUser() {
+		if !txn.GetTransaction().Body.Type().IsUser() {
 			continue
 		}
 
-		_, fwd, err := b.Executor.shouldForwardSignature(batch, txn.Transaction, sig.Signature, txn.Transaction.Header.Principal, signerSeen)
+		_, fwd, err := b.Executor.shouldForwardSignature(batch, txn.GetTransaction(), sig.Signature, txn.GetTransaction().Header.Principal, signerSeen)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -57,7 +55,7 @@ func (b *bundle) ProcessRemoteSignatures() error {
 
 		fwd.Cause = append(fwd.Cause, sig.ID().Hash())
 		if fwd.Destination == nil {
-			fwd.Destination = txn.Transaction.Header.Principal
+			fwd.Destination = txn.GetTransaction().Header.Principal
 		}
 
 		if i, ok := txnIndex[fwd.Destination.AccountID32()]; ok {
@@ -66,15 +64,15 @@ func (b *bundle) ProcessRemoteSignatures() error {
 		}
 
 		transaction := new(protocol.SyntheticForwardTransaction)
-		transaction.Transaction = txn.Transaction
+		transaction.Transaction = txn.GetTransaction()
 		transaction.Signatures = append(transaction.Signatures, *fwd)
 		txnIndex[fwd.Destination.AccountID32()] = len(transactions)
 		transactions = append(transactions, transaction)
 
-		state, ok := b.state.Get(sig.TransactionHash)
+		state, ok := b.state.Get(sig.TxID.Hash())
 		if !ok {
 			state = new(chain.ProcessTransactionState)
-			b.state.Set(sig.TransactionHash, state)
+			b.state.Set(sig.TxID.Hash(), state)
 		}
 		state.DidProduceTxn(fwd.Destination, transaction)
 	}
@@ -132,8 +130,7 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 	}
 
 	// Signer is satisfied?
-	record := batch.Transaction(transaction.GetHash())
-	status, err := record.GetStatus()
+	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
 	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("load transaction status: %w", err)
 	}

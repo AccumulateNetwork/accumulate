@@ -324,16 +324,14 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 	}
 
 	for i, hash := range entries {
-		state, err := batch.Transaction(hash).Main().Get()
+		var msg messaging.MessageWithTransaction
+		err := batch.Message2(hash).Main().GetAs(&msg)
 		if err != nil {
 			return errors.InternalError.WithFormat("load transaction %d of the anchor main chain: %w", from+uint64(i), err)
 		}
-		if state.Transaction == nil {
-			return errors.InternalError.WithFormat("load transaction %d of the anchor main chain: not a transaction", from+uint64(i))
-		}
 
 		// Ignore anything that's not a directory anchor
-		anchor, ok := state.Transaction.Body.(*protocol.DirectoryAnchor)
+		anchor, ok := msg.GetTransaction().Body.(*protocol.DirectoryAnchor)
 		if !ok {
 			continue
 		}
@@ -410,12 +408,12 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 	// For each synthetic transaction from the last block
 	for _, hash := range entries {
 		// Load it
-		record := batch.Transaction(hash)
-		state, err := record.GetState()
+		var msg messaging.MessageWithTransaction
+		err := batch.Message2(hash).Main().GetAs(&msg)
 		if err != nil {
 			return errors.UnknownError.WithFormat("load synthetic transaction: %w", err)
 		}
-		txn := state.Transaction
+		txn := msg.GetTransaction()
 		if txn.Body.Type() == protocol.TransactionTypeSystemGenesis {
 			continue // Genesis is added to partition/synthetic#chain/main, but it's not a real synthetic transaction
 		}
@@ -424,7 +422,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.InternalError.WithFormat("%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
 		}
 
-		status, err := record.GetStatus()
+		status, err := batch.Transaction(hash).GetStatus()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load synthetic transaction status: %w", err)
 		}

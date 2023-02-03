@@ -84,7 +84,7 @@ func (SyntheticTransaction) Process(b *bundle, batch *database.Batch, msg messag
 	}
 
 	// Store the transaction (or load it if its remote)
-	loaded, err := storeTransaction(batch, txn.Transaction)
+	loaded, err := storeTransaction(batch, txn)
 	if err != nil {
 		if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
 			return protocol.NewErrorStatus(txn.ID(), err), nil

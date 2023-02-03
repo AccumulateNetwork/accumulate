@@ -538,19 +538,16 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 			false {
 			continue
 		}
-		s, err := batch.Transaction(h[:]).Main().Get()
+		var msg messaging.MessageWithTransaction
+		err = batch.Message(h).Main().GetAs(&msg)
 		if err != nil {
-			x.logger.Error("Error loading synthetic transaction status", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
-			continue
-		}
-		if s.Transaction == nil {
-			x.logger.Error("Error loading synthetic transaction status", "error", "transaction is not a transaction", "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
+			x.logger.Error("Error loading synthetic transaction", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
 			continue
 		}
 
 		a := *(*[32]byte)(status.Proof.Anchor)
 		anchors[a] = append(anchors[a], txid)
-		source[txid] = s.Transaction.Header.Source
+		source[txid] = msg.GetTransaction().Header.Source
 
 		r, err := querier.SearchForAnchor(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{Anchor: status.Proof.Anchor, IncludeReceipt: true})
 		if err != nil {

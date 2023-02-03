@@ -166,7 +166,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *messagi
 		case *messaging.UserSignature:
 			// If there's no message with the transaction ID, or that message is
 			// not a transaction, or its a user transaction, fail
-			msg2, ok := msgById[msg.TransactionHash]
+			msg2, ok := msgById[msg.TxID.Hash()]
 			if !ok {
 				goto failed
 			}

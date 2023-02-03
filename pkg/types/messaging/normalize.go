@@ -10,15 +10,16 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func (e *Envelope) Normalize() ([]Message, error) {
 	// Validate the envelope's TxHash
-	var defaultHash *[32]byte
+	var defaultTxID *url.TxID
 	switch len(e.TxHash) {
 	case 32:
-		defaultHash = (*[32]byte)(e.TxHash)
+		defaultTxID = protocol.UnknownUrl().WithTxID(*(*[32]byte)(e.TxHash))
 	case 0:
 		// Ok
 	default:
@@ -36,7 +37,7 @@ func (e *Envelope) Normalize() ([]Message, error) {
 	for i, msg := range e.Messages {
 		switch msg := msg.(type) {
 		case *UserTransaction:
-			hash, err := getTxnHash(msg.Transaction, defaultHash)
+			hash, err := getTxnHash(msg.Transaction, defaultTxID)
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("message %d: %w", i, err)
 			}
@@ -47,40 +48,40 @@ func (e *Envelope) Normalize() ([]Message, error) {
 
 	// If envelope.TransactionHash is unset and there's exactly one transaction,
 	// use that transaction as the default to sign
-	if defaultHash == nil && len(unsigned) == 1 {
+	if defaultTxID == nil && len(unsigned) == 1 {
 		for hash := range unsigned {
-			defaultHash = &hash //nolint:exportloopref,rangevarref
+			defaultTxID = protocol.UnknownUrl().WithTxID(hash)
 		}
 	}
 
 	// Convert signatures to messages
 	for i, sig := range e.Signatures {
-		hash := sig.GetTransactionHash()
 		switch {
-		case hash != [32]byte{}:
+		case sig.GetTransactionHash() != [32]byte{}:
 			// Signature specifies the transaction hash
+			messages = append(messages, &UserSignature{
+				Signature: sig,
+				TxID:      protocol.UnknownUrl().WithTxID(sig.GetTransactionHash()),
+			})
 
-		case defaultHash != nil:
+		case defaultTxID != nil:
 			// Use the default hash
-			hash = *defaultHash
+			messages = append(messages, &UserSignature{
+				Signature: sig,
+				TxID:      defaultTxID,
+			})
 
 		default:
 			return nil, errors.BadRequest.WithFormat("signature %d: missing hash", i)
 		}
 
-		// keysig, ok := sig.(protocol.KeySignature)
-		// if !ok {
-		// 	return nil, errors.BadRequest.With("signature %d: expected key signature, got %v", i, sig.Type())
-		// }
-
-		messages = append(messages, &UserSignature{Signature: sig, TransactionHash: hash})
 	}
 
 	// A transaction with no signatures is invalid
 	for _, msg := range messages {
 		switch msg := msg.(type) {
 		case *UserSignature:
-			delete(unsigned, msg.TransactionHash)
+			delete(unsigned, msg.TxID.Hash())
 		case *ValidatorSignature:
 			delete(unsigned, msg.Signature.GetTransactionHash())
 		}
@@ -92,7 +93,7 @@ func (e *Envelope) Normalize() ([]Message, error) {
 	return messages, nil
 }
 
-func getTxnHash(txn *protocol.Transaction, defaultHash *[32]byte) ([]byte, error) {
+func getTxnHash(txn *protocol.Transaction, defaultTxID *url.TxID) ([]byte, error) {
 	if txn.Body == nil {
 		return nil, errors.BadRequest.With("nil body")
 	}
@@ -103,13 +104,14 @@ func getTxnHash(txn *protocol.Transaction, defaultHash *[32]byte) ([]byte, error
 		// Normal transaction or a remote transaction that includes a hash
 		return hash, nil
 
-	case defaultHash != nil:
+	case defaultTxID != nil:
 		// Envelope specifies the transaction hash
-		hash = (*defaultHash)[:]
+		h := defaultTxID.Hash()
+		hash = h[:]
 
 		// Set the remote transaction's hash
 		if remote, ok := txn.Body.(*protocol.RemoteTransaction); ok {
-			remote.Hash = *(*[32]byte)(hash)
+			remote.Hash = defaultTxID.Hash()
 		}
 
 		return hash, nil

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,49 +9,57 @@ package snapshot
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 )
 
 // TODO: Check for existing records when restoring?
 
-func CollectSignature(record *database.Transaction) (*Signature, error) {
-	state, err := record.Main().Get()
+func CollectSignature(batch *database.Batch, hash [32]byte) (*Signature, error) {
+	var msg messaging.MessageWithSignature
+	err := batch.Message(hash).Main().GetAs(&msg)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-	if state.Signature == nil || state.Transaction != nil {
-		return nil, errors.BadRequest.WithFormat("signature is not a signature")
 	}
 
 	sig := new(Signature)
-	sig.Signature = state.Signature
-	sig.Txid = state.Txid
+	sig.Signature = msg.GetSignature()
+	sig.Txid = msg.GetTxID()
 	return sig, nil
 }
 
-func (s *Signature) Restore(batch *database.Batch) error {
-	err := batch.Transaction(s.Signature.Hash()).Main().Put(&database.SigOrTxn{Signature: s.Signature, Txid: s.Txid})
+func (s *Signature) Restore(header *Header, batch *database.Batch) error {
+	var err error
+	if header.ExecutorVersion.V2() {
+		err = batch.Message2(s.Signature.Hash()).Main().Put(&messaging.UserSignature{
+			Signature: s.Signature,
+			TxID:      s.Txid,
+		})
+	} else {
+		err = batch.Transaction(s.Signature.Hash()).Main().Put(&database.SigOrTxn{
+			Signature: s.Signature,
+			Txid:      s.Txid,
+		})
+	}
 	return errors.UnknownError.Wrap(err)
 }
 
-func CollectTransaction(record *database.Transaction) (*Transaction, error) {
-	state, err := record.Main().Get()
+func CollectTransaction(batch *database.Batch, hash [32]byte) (*Transaction, error) {
+	var msg messaging.MessageWithTransaction
+	err := batch.Message(hash).Main().GetAs(&msg)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	if state.Transaction == nil || state.Signature != nil {
-		return nil, errors.BadRequest.WithFormat("transaction is not a transaction")
-	}
 
 	txn := new(Transaction)
-	txn.Transaction = state.Transaction
-	txn.Status = loadState(&err, true, record.Status().Get)
+	txn.Transaction = msg.GetTransaction()
+	txn.Status = loadState(&err, true, batch.Transaction(hash[:]).Status().Get)
 
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	for _, signer := range txn.Status.Signers {
-		record, err := record.ReadSignaturesForSigner(signer)
+		record, err := batch.Transaction(hash[:]).ReadSignaturesForSigner(signer)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load %v signature set: %w", signer.GetUrl(), err)
 		}
@@ -66,18 +74,21 @@ func CollectTransaction(record *database.Transaction) (*Transaction, error) {
 	return txn, nil
 }
 
-func (t *Transaction) Restore(batch *database.Batch) error {
+func (t *Transaction) Restore(header *Header, batch *database.Batch) error {
 	var err error
-	record := batch.Transaction(t.Transaction.GetHash())
-	saveState(&err, record.Main().Put, &database.SigOrTxn{Transaction: t.Transaction})
-	saveState(&err, record.Status().Put, t.Status)
+	if header.ExecutorVersion.V2() {
+		saveState[messaging.Message](&err, batch.Message(t.Transaction.ID().Hash()).Main().Put, &messaging.UserTransaction{Transaction: t.Transaction})
+	} else {
+		saveState(&err, batch.Transaction(t.Transaction.GetHash()).Main().Put, &database.SigOrTxn{Transaction: t.Transaction})
+	}
+	saveState(&err, batch.Transaction(t.Transaction.GetHash()).Status().Put, t.Status)
 
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	for _, set := range t.SignatureSets {
-		err = record.RestoreSignatureSets(set.Signer, set.Version, set.Entries)
+		err = batch.Transaction(t.Transaction.GetHash()).RestoreSignatureSets(set.Signer, set.Version, set.Entries)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}

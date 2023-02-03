@@ -188,9 +188,10 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 			if !status(obj) {
 				return nil
 			}
-			state, err := batch.Transaction(hash).Main().Get()
+			var msg messaging.MessageWithTransaction
+			err = batch.Message2(hash).Main().GetAs(&msg)
 			require.NoError(s.TB, err)
-			txid = state.Transaction.ID()
+			txid = msg.GetTransaction().ID()
 			return nil
 		})
 		require.NoError(s.TB, err)
@@ -219,20 +220,20 @@ func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionSta
 	}
 
 	var synth []*url.TxID
-	var state *database.SigOrTxn
+	var state messaging.MessageWithTransaction
 	var status *protocol.TransactionStatus
 	err := s.S.DatabaseFor(x.AsUrl()).View(func(batch *database.Batch) error {
 		var err error
 		synth, err = batch.Transaction(txnHash).Produced().Get()
 		require.NoError(s.TB, err)
-		state, err = batch.Transaction(txnHash).Main().Get()
+		err = batch.Message2(txnHash).Main().GetAs(&state)
 		require.NoError(s.TB, err)
 		status, err = batch.Transaction(txnHash).Status().Get()
 		require.NoError(s.TB, err)
 		return nil
 	})
 	require.NoError(s.TB, err)
-	return state.Transaction, status, synth
+	return state.GetTransaction(), status, synth
 }
 
 func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {

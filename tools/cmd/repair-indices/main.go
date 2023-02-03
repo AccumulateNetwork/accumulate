@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -205,19 +206,18 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 					return nil, errors.UnknownError.WithFormat("get %v %s chain entry %d: %w", e.Account, e.Chain, i, err)
 				}
 
-				state, err := batch.Transaction(txnHash).Main().Get()
+				var msg messaging.MessageWithTransaction
+				err = batch.Message2(txnHash).Main().GetAs(&msg)
 				switch {
 				case errors.Is(err, errors.NotFound):
 					fmt.Printf("Cannot load state of %v %s chain entry %d (%x)\n", e.Account, e.Chain, i, txnHash)
 					continue
 				case err != nil:
 					return nil, errors.UnknownError.WithFormat("load %v %s chain entry %d state: %w", e.Account, e.Chain, i, err)
-				case state.Transaction == nil:
-					return nil, errors.UnknownError.WithFormat("%v %s chain entry %d is not a transaction: %w", e.Account, e.Chain, i, err)
 				}
 
 				var entryHash []byte
-				switch body := state.Transaction.Body.(type) {
+				switch body := msg.GetTransaction().Body.(type) {
 				case *protocol.WriteData:
 					entryHash = body.Entry.Hash()
 				case *protocol.SyntheticWriteData:

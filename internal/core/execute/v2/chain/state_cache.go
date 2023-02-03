@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -100,15 +101,12 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 
 // LoadTxn loads and unmarshals a saved transaction
 func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
-	env, err := c.batch.Transaction(txid[:]).GetState()
+	var txn messaging.MessageWithTransaction
+	err := c.batch.Message(txid).Main().GetAs(&txn)
 	if err != nil {
 		return nil, err
 	}
-	if env.Transaction == nil {
-		// This is a signature, not an envelope
-		return nil, errors.NotFound.WithFormat("transaction %X not found", txid[:4])
-	}
-	return env.Transaction, nil
+	return txn.GetTransaction(), nil
 }
 
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {

@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -382,13 +383,15 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 
 func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Delivery, state *chain.ProcessTransactionState, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
 	// Store the transaction state (without signatures)
-	db := batch.Transaction(delivery.Transaction.GetHash())
-	err := db.PutState(&database.SigOrTxn{Transaction: delivery.Transaction})
+	//
+	// TODO This should not always be a UserTransaction
+	err := batch.Message(delivery.Transaction.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: delivery.Transaction})
 	if err != nil {
 		return nil, fmt.Errorf("store transaction: %w", err)
 	}
 
 	// Update the status
+	db := batch.Transaction(delivery.Transaction.GetHash())
 	status, err := db.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("load transaction status: %w", err)
