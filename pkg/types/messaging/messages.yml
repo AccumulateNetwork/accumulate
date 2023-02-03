@@ -54,12 +54,15 @@ SyntheticTransaction:
       marshal-as: reference
       pointer: true
 
-# ValidatorSignature:
-#   union: { type: message }
-#   fields:
-#     - name: Signature
-#       type: protocol.KeySignature
-#       marshal-as: union
+ValidatorSignature:
+  union: { type: message }
+  fields:
+    - name: Signature
+      type: protocol.KeySignature
+      marshal-as: union
+    - name: Source
+      type: url
+      pointer: true
 
 # AuthoritySignature:
 #   union: { type: message }
