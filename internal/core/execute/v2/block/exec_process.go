@@ -162,15 +162,13 @@ additional:
 
 		err := d.state.For(func(hash [32]byte, state *chain.ProcessTransactionState) error {
 			// Load the transaction. Earlier checks should guarantee this never fails.
-			txn, err := batch.Transaction(hash[:]).Main().Get()
-			switch {
-			case err != nil:
+			var msg messaging.MessageWithTransaction
+			err := batch.Message(hash).Main().GetAs(&msg)
+			if err != nil {
 				return errors.InternalError.WithFormat("load transaction: %w", err)
-			case txn.Transaction == nil:
-				return errors.InternalError.WithFormat("%x is not a transaction", hash)
 			}
 
-			err = b.Executor.ProduceSynthetic(batch, txn.Transaction, state.ProducedTxns)
+			err = b.Executor.ProduceSynthetic(batch, msg.GetTransaction(), state.ProducedTxns)
 			return errors.UnknownError.Wrap(err)
 		})
 		if err != nil {
@@ -212,7 +210,7 @@ func (b *BlockV2) checkForUnsignedTransactions(messages []messaging.Message) err
 	for _, msg := range messages {
 		switch msg := msg.(type) {
 		case *messaging.UserSignature:
-			delete(unsigned, msg.TransactionHash)
+			delete(unsigned, msg.TxID.Hash())
 		case *messaging.ValidatorSignature:
 			delete(unsigned, msg.Signature.GetTransactionHash())
 		}
@@ -253,16 +251,13 @@ func (b *bundle) executeTransaction(hash [32]byte) (*protocol.TransactionStatus,
 	defer batch.Discard()
 
 	// Load the transaction. Earlier checks should guarantee this never fails.
-	record := batch.Transaction(hash[:])
-	txn, err := record.Main().Get()
-	switch {
-	case err != nil:
+	var txn messaging.MessageWithTransaction
+	err := batch.Message(hash).Main().GetAs(&txn)
+	if err != nil {
 		return nil, errors.InternalError.WithFormat("load transaction: %w", err)
-	case txn.Transaction == nil:
-		return nil, errors.InternalError.WithFormat("%x is not a transaction", hash)
 	}
 
-	status, err := record.Status().Get()
+	status, err := batch.Transaction(hash[:]).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -272,8 +267,8 @@ func (b *bundle) executeTransaction(hash [32]byte) (*protocol.TransactionStatus,
 		return status, nil
 	}
 
-	delivery := &chain.Delivery{Transaction: txn.Transaction, Internal: b.internal.Has(hash)}
-	err = delivery.LoadSyntheticMetadata(batch, txn.Transaction)
+	delivery := &chain.Delivery{Transaction: txn.GetTransaction(), Internal: b.internal.Has(hash)}
+	err = delivery.LoadSyntheticMetadata(batch, txn.GetTransaction())
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -290,10 +285,10 @@ func (b *bundle) executeTransaction(hash [32]byte) (*protocol.TransactionStatus,
 
 	kv := []interface{}{
 		"block", b.Block.Index,
-		"type", txn.Transaction.Body.Type(),
+		"type", txn.GetTransaction().Body.Type(),
 		"code", status.Code,
-		"txn-hash", logging.AsHex(txn.Transaction.GetHash()).Slice(0, 4),
-		"principal", txn.Transaction.Header.Principal,
+		"txn-hash", logging.AsHex(txn.GetTransaction().GetHash()).Slice(0, 4),
+		"principal", txn.GetTransaction().Header.Principal,
 	}
 	if status.Error != nil {
 		kv = append(kv, "error", status.Error)
@@ -310,7 +305,7 @@ func (b *bundle) executeTransaction(hash [32]byte) (*protocol.TransactionStatus,
 		}
 	} else {
 		fn := b.Executor.logger.Debug
-		switch txn.Transaction.Body.Type() {
+		switch txn.GetTransaction().Body.Type() {
 		case protocol.TransactionTypeDirectoryAnchor,
 			protocol.TransactionTypeBlockValidatorAnchor:
 			fn = b.Executor.logger.Info

@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -120,16 +121,13 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		return nil, errors.UnknownError.WithFormat("load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
 	}
 	for _, txid := range synth {
-		h := txid.Hash()
-		s, err := st.batch.Transaction(h[:]).Main().Get()
+		var txn messaging.MessageWithTransaction
+		err = st.batch.Message(txid.Hash()).Main().GetAs(&txn)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
-		if s.Transaction == nil {
-			return nil, errors.InternalError.WithFormat("synthetic transaction %v is not a transaction", txid)
-		}
 
-		sequence[txid] = int(s.Transaction.Header.SequenceNumber)
+		sequence[txid] = int(txn.GetTransaction().Header.SequenceNumber)
 		txids = append(txids, txid)
 	}
 
