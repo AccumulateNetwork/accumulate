@@ -121,12 +121,15 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	}
 	for _, txid := range synth {
 		h := txid.Hash()
-		sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+		s, err := st.batch.Transaction(h[:]).Main().Get()
 		if err != nil {
-			return nil, err
+			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+		}
+		if s.Transaction == nil {
+			return nil, errors.InternalError.WithFormat("synthetic transaction %v is not a transaction", txid)
 		}
 
-		sequence[txid] = int(sig.SequenceNumber)
+		sequence[txid] = int(s.Transaction.Header.SequenceNumber)
 		txids = append(txids, txid)
 	}
 

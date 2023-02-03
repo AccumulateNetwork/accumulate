@@ -381,10 +381,10 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	wg.Wait()
 	for err := range dispatcher.Send(ctx) {
 		switch err := err.(type) {
-		case *protocol.TransactionStatusError:
+		case protocol.TransactionStatusError:
 			x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 		default:
-			x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+			x.logger.Error("Failed to dispatch transactions", "error", err, "stack", fmt.Sprintf("%+v\n", err))
 		}
 	}
 }
@@ -425,12 +425,16 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
+		if resp.Transaction.Header.Source == nil {
+			x.logger.Error("Response to query-synth is missing the source", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
+			continue
+		}
 		if resp.Signatures == nil {
 			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
 
-		var gotSynth, gotReceipt, gotKey, bad bool
+		var gotReceipt, gotKey, bad bool
 		var signatures []protocol.Signature
 		for _, signature := range resp.Signatures.Records {
 			h := signature.TxID.Hash()
@@ -449,15 +453,6 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 
 			for _, signature := range set.Signatures {
 				switch signature.(type) {
-				case *protocol.PartitionSignature:
-					gotSynth = true
-
-					// Put the synthetic signature first
-					if len(signatures) > 0 {
-						signatures = append(signatures, signatures[0])
-						signatures[0] = signature
-						continue
-					}
 				case *protocol.ReceiptSignature:
 					gotReceipt = true
 				case *protocol.ED25519Signature:
@@ -469,9 +464,6 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		var missing []string
-		if !gotSynth {
-			missing = append(missing, "synthetic")
-		}
 		if !gotReceipt && !anchor {
 			missing = append(missing, "receipt")
 		}
@@ -524,9 +516,19 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 			false {
 			continue
 		}
+		s, err := batch.Transaction(h[:]).Main().Get()
+		if err != nil {
+			x.logger.Error("Error loading synthetic transaction status", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
+			continue
+		}
+		if s.Transaction == nil {
+			x.logger.Error("Error loading synthetic transaction status", "error", "transaction is not a transaction", "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
+			continue
+		}
+
 		a := *(*[32]byte)(status.Proof.Anchor)
 		anchors[a] = append(anchors[a], txid)
-		source[txid] = status.SourceNetwork
+		source[txid] = s.Transaction.Header.Source
 
 		r, err := querier.SearchForAnchor(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{Anchor: status.Proof.Anchor, IncludeReceipt: true})
 		if err != nil {

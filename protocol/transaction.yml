@@ -13,20 +13,20 @@ TransactionHeader:
     - name: Metadata
       type: bytes
       optional: true
-
-    # Possible additions for executor v2
-
-    # - name: Source
-    #   type: url
-    #   pointer: true
-    #   optional: true
-    # - name: Destination
-    #   type: url
-    #   pointer: true
-    #   optional: true
-    # - name: SequenceNumber
-    #   type: uint
-    #   optional: true
+    - name: Source
+      description: is the source that produced the transaction
+      type: url
+      pointer: true
+      optional: true
+    - name: Destination
+      description: is the destination that the transaction is sent to
+      type: url
+      pointer: true
+      optional: true
+    - name: SequenceNumber
+      description: is the sequence number of the transaction
+      type: uint
+      optional: true
 
 Transaction:
   fields:

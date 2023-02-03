@@ -12,7 +12,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -47,13 +46,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var delegate protocol.Signer
 	var err error
 	switch signature := signature.(type) {
-	case *protocol.PartitionSignature:
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
-		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
-		if err != nil {
-			return nil, err
-		}
-
 	case *protocol.ReceiptSignature:
 		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
@@ -178,13 +170,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	sigToStore := signature
 	var delegatedNotReady bool
 	switch signature := signature.(type) {
-	case *protocol.PartitionSignature:
-		// Capture the source, destination, and sequence number in the status
-		statusDirty = true
-		status.SourceNetwork = signature.SourceNetwork
-		status.DestinationNetwork = signature.DestinationNetwork
-		status.SequenceNumber = signature.SequenceNumber
-
 	case *protocol.ReceiptSignature:
 		statusDirty = true
 		if signature.SourceNetwork.Equal(protocol.DnUrl()) {
@@ -336,7 +321,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var index int
 	switch signature := signature.(type) {
 	case *protocol.ReceiptSignature,
-		*protocol.PartitionSignature,
 		*protocol.RemoteSignature,
 		*protocol.SignatureSet:
 		index = 0
@@ -686,25 +670,6 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	return signer, nil
 }
 
-func verifyPartitionSignature(net *config.Describe, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.PartitionSignature, md sigExecMetadata) error {
-	if md.Nested() {
-		return errors.BadRequest.With("partition signatures cannot be nested within another signature")
-	}
-	if !transaction.Body.Type().IsSynthetic() && !transaction.Body.Type().IsSystem() {
-		return fmt.Errorf("partition signatures are not valid for %v transactions", transaction.Body.Type())
-	}
-
-	if !md.IsInitiator {
-		return fmt.Errorf("partition signatures must be the initiator")
-	}
-
-	if !net.NodeUrl().Equal(signature.DestinationNetwork) {
-		return fmt.Errorf("wrong destination network: %v is not this network", signature.DestinationNetwork)
-	}
-
-	return nil
-}
-
 func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol.ReceiptSignature, md sigExecMetadata) error {
 	if md.Nested() {
 		return errors.BadRequest.With("a receipt signature cannot be nested within another signature")
@@ -727,11 +692,7 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 
 // validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
 func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, transaction *protocol.Transaction, status *protocol.TransactionStatus) (protocol.Signer2, error) {
-	if status.SourceNetwork == nil {
-		return nil, errors.BadRequest.WithFormat("missing partition signature")
-	}
-
-	partition, ok := protocol.ParsePartitionUrl(status.SourceNetwork)
+	partition, ok := protocol.ParsePartitionUrl(transaction.Header.Source)
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("partition signature source is not a partition")
 	}

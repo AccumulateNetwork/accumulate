@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -46,10 +47,10 @@ func (x *Executor) BeginBlock(block *Block) error {
 	x.BackgroundTaskLauncher(func() {
 		for err := range errs {
 			switch err := err.(type) {
-			case *protocol.TransactionStatusError:
+			case protocol.TransactionStatusError:
 				x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 			default:
-				x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+				x.logger.Error("Failed to dispatch transactions", "error", err, "stack", fmt.Sprintf("%+v\n", err))
 			}
 		}
 	})
@@ -212,9 +213,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 	// Record the anchor
 	err = putSyntheticTransaction(block.Batch, anchorTxn, &protocol.TransactionStatus{
-		Code:           errors.Remote,
-		SourceNetwork:  x.Describe.PartitionUrl().URL,
-		SequenceNumber: sequenceNumber,
+		Code: errors.Remote,
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -429,21 +428,11 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		if err != nil {
 			return errors.UnknownError.WithFormat("load synthetic transaction status: %w", err)
 		}
-		if status.DestinationNetwork == nil {
-			return errors.InternalError.WithFormat("synthetic transaction destination is not set")
-		}
 
 		var signatures []protocol.Signature
 
-		partSig := new(protocol.PartitionSignature)
-		partSig.SourceNetwork = status.SourceNetwork
-		partSig.DestinationNetwork = status.DestinationNetwork
-		partSig.SequenceNumber = status.SequenceNumber
-		partSig.TransactionHash = *(*[32]byte)(txn.GetHash())
-		signatures = append(signatures, partSig)
-
 		localReceipt := new(protocol.ReceiptSignature)
-		localReceipt.SourceNetwork = status.SourceNetwork
+		localReceipt.SourceNetwork = txn.Header.Source
 		localReceipt.Proof = *status.Proof
 		localReceipt.TransactionHash = *(*[32]byte)(txn.GetHash())
 		signatures = append(signatures, localReceipt)
@@ -456,7 +445,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			signatures = append(signatures, dnReceipt)
 		}
 
-		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, txn.Header.Destination)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -476,19 +465,58 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 }
 
 func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
-	destPartUrl := protocol.PartitionUrl(destPart)
-	env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
-	if err != nil {
-		return errors.InternalError.Wrap(err)
+	// Only send anchors from a validator
+	if !x.isValidator {
+		return nil
 	}
 
-	// Only send anchors from a validator
-	if x.isValidator {
-		err = x.mainDispatcher.Submit(context.Background(), destPartUrl, env)
+	// If we're on the DN,  the last block updated to v2, and the destination is
+	// a BVN, then we must send out the anchor as a v1 anchor since the BVNs
+	// will still be running v1
+	destPartUrl := protocol.PartitionUrl(destPart)
+	if x.Describe.NetworkType == config.Directory && didUpdateToV2(anchor) && !strings.EqualFold(destPart, protocol.Directory) {
+		env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return errors.InternalError.Wrap(err)
+		}
+
+		err = x.mainDispatcher.Submit(context.Background(), destPartUrl, env)
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Create the transaction
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = destPartUrl.JoinPath(protocol.AnchorPool)
+	txn.Header.Source = x.Describe.NodeUrl()
+	txn.Header.Destination = destPartUrl
+	txn.Header.SequenceNumber = sequenceNumber
+	txn.Body = anchor
+
+	// Create a key signature
+	keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, destPartUrl)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Dispatch the envelope
+	env := &messaging.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{keySig}}
+	err = x.mainDispatcher.Submit(context.Background(), destPartUrl, env)
+	return errors.UnknownError.Wrap(err)
+}
+
+func didUpdateToV2(anchor protocol.AnchorBody) bool {
+	// TODO Is there a better way to check for a recent version change?
+
+	dir, ok := anchor.(*protocol.DirectoryAnchor)
+	if !ok {
+		return false
+	}
+
+	for _, update := range dir.Updates {
+		update, ok := update.Body.(*protocol.ActivateProtocolVersion)
+		if ok && update.Version.V2() {
+			return true
 		}
 	}
-
-	return nil
+	return false
 }
