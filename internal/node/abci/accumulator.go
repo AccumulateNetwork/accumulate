@@ -405,6 +405,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseCheckTx
 		res.Info = string(b)
+		res.Log = string(b)
 		res.Code = uint32(protocol.ErrorCodeFailed)
 		return res
 	}
@@ -474,6 +475,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseDeliverTx
 		res.Info = string(b)
+		res.Log = string(b)
 		res.Code = uint32(protocol.ErrorCodeFailed)
 		return res
 	}
