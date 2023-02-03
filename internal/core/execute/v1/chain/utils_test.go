@@ -16,10 +16,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *protocol.Envelope) (*StateManager, *Delivery) {
+func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *messaging.Envelope) (*StateManager, *Delivery) {
 	t.Helper()
 	delivery, err := NormalizeEnvelope(envelope)
 	require.NoError(t, err)

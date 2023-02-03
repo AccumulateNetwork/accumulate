@@ -13,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -51,25 +50,29 @@ func TestAnchorThreshold(t *testing.T) {
 			Build())
 
 	// Capture the BVN's anchors and verify they're the same
-	var anchors []*protocol.Envelope
-	sim.SetSubmitHook("Directory", func(message messaging.Message) (dropTx bool, keepHook bool) {
-		delivery := message.(*messaging.LegacyMessage)
-		if delivery.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
-			return false, true
+	var anchors []*messaging.Envelope
+	sim.SetSubmitHook("Directory", func(messages []messaging.Message) (drop bool, keepHook bool) {
+		for _, msg := range messages {
+			msg, ok := msg.(*messaging.UserTransaction)
+			if !ok {
+				continue
+			}
+			if msg.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
+				continue
+			}
+			anchors = append(anchors, &messaging.Envelope{Messages: messages})
+			return true, len(anchors) < valCount
 		}
-		env, err := messaging.Envelope(message)
-		require.NoError(t, err)
-		anchors = append(anchors, env)
-		return true, len(anchors) < valCount
+		return false, true
 	})
 
 	for len(anchors) < valCount {
 		sim.Step()
 	}
 
-	txid := anchors[0].Transaction[0].ID()
+	txid := anchors[0].Messages[0].ID()
 	for _, anchor := range anchors[1:] {
-		require.True(t, anchors[0].Transaction[0].Equal(anchor.Transaction[0]))
+		require.True(t, messaging.EqualMessage(anchors[0].Messages[0], anchor.Messages[0]))
 	}
 
 	// Verify the anchor was captured

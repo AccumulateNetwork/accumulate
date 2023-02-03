@@ -17,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -59,7 +58,7 @@ func TestOutOfSequenceSynth(t *testing.T) {
 	}
 
 	// Execute
-	txns := make([]*Envelope, 5)
+	txns := make([]*messaging.Envelope, 5)
 	for i := range txns {
 		txns[i] = acctesting.NewTransaction().
 			WithPrincipal(aliceUrl).
@@ -120,7 +119,7 @@ func TestMissingSynthTxn(t *testing.T) {
 	}
 
 	// Execute
-	txns := make([]*Envelope, 5)
+	txns := make([]*messaging.Envelope, 5)
 	for i := range txns {
 		txns[i] = acctesting.NewTransaction().
 			WithPrincipal(aliceUrl).
@@ -209,7 +208,7 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 	simulator.QueryUrl[*api.ChainQueryResponse](sim, DnUrl(), true)
 
 	// Submit the synthetic transaction
-	sim.PartitionFor(bobUrl).Submit(false, &Envelope{
+	sim.PartitionFor(bobUrl).Submit(false, &messaging.Envelope{
 		Transaction: []*Transaction{deposit.Transaction},
 		Signatures:  deposit.Signatures,
 	})
@@ -376,16 +375,17 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	})
 
 	// Resubmit the original, valid signature
-	messages := make([]messaging.Message, len(original))
-	for i, delivery := range original {
-		messages[i] = &messaging.LegacyMessage{
-			Transaction: delivery.Transaction,
-			Signatures:  delivery.Signatures,
+	var messages []messaging.Message
+	for _, delivery := range original {
+		messages = append(messages, &messaging.UserTransaction{Transaction: delivery.Transaction})
+		for _, sig := range delivery.Signatures {
+			messages = append(messages, &messaging.UserSignature{Signature: sig, TransactionHash: delivery.Transaction.ID().Hash()})
 		}
 	}
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, messages)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(batch, messages)
+	require.NoError(t, err)
 	for _, result := range results {
 		if result.Error != nil {
 			require.NoError(t, result.Error)

@@ -1,0 +1,73 @@
+Envelope:
+  fields:
+    - name: Signatures
+      repeatable: true
+      type: protocol.Signature
+      marshal-as: union
+    - name: TxHash
+      type: bytes
+      optional: true
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+      optional: true
+      repeatable: true
+    - name: Messages
+      type: Message
+      marshal-as: union
+      optional: true
+      repeatable: true
+
+UserTransaction:
+  union: { type: message }
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+
+# Currently UserSignature is used for *all* signatures, so it's really just a
+# Signature message. However in the future system signatures should move to or
+# be replaced by system messages, so we might eventually update UserSignature to
+# only support key signatures.
+UserSignature:
+  union: { type: message }
+  fields:
+    - name: Signature
+      # type: protocol.KeySignature
+      type: protocol.Signature
+      marshal-as: union
+    - name: TransactionHash
+      type: hash
+
+# SyntheticTransactions:
+#   union: { type: message }
+#   fields:
+#     - name: Transactions
+#       type: protocol.Transaction
+#       marshal-as: reference
+#       pointer: true
+#       repeatable: true
+#     - name: Proof
+#       type: protocol.AnnotatedListReceipt
+#       marshal-as: reference
+#       pointer: true
+
+# ValidatorSignature:
+#   union: { type: message }
+#   fields:
+#     - name: Signature
+#       type: protocol.KeySignature
+#       marshal-as: union
+
+# AuthoritySignature:
+#   union: { type: message }
+#   fields:
+#     - name: Signature
+#       type: protocol.Signature
+#       marshal-as: union
+#     - name: Proof
+#       type: protocol.AnnotatedReceipt
+#       marshal-as: reference
+#       pointer: true

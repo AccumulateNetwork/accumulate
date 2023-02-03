@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -40,7 +41,7 @@ func TestSDK(t *testing.T) {
 					t.Run(fmt.Sprintf("Case %d", i+1), func(t *testing.T) {
 						t.Run("Marshal", func(t *testing.T) {
 							// Unmarshal the envelope from the TC
-							env := new(protocol.Envelope)
+							env := new(messaging.Envelope)
 							require.NoError(t, json.Unmarshal(tc.JSON, env))
 							flattenRawJson(t, reflect.ValueOf(env))
 
@@ -54,7 +55,7 @@ func TestSDK(t *testing.T) {
 
 						t.Run("Unmarshal", func(t *testing.T) {
 							// TEST Binary unmarshal the envelope from the TC
-							env := new(protocol.Envelope)
+							env := new(messaging.Envelope)
 							require.NoError(t, env.UnmarshalBinary(tc.Binary))
 
 							// Marshal the envelope

@@ -233,6 +233,7 @@ type Field struct {
 func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }
 func (t *Type) IsBinary() bool     { return !t.NonBinary }
 func (t *Type) IsComparable() bool { return !t.Incomparable }
+func (t *Type) IsCopyable() bool   { return !(t.Incomparable || t.NoCopy) }
 
 // Deprecated: use Union
 func (t *Type) Kind() string {

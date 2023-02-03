@@ -31,7 +31,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -372,7 +371,7 @@ func (s *Simulator) ExecuteBlocks(n int) {
 }
 
 // Submit routes and submits each envelope.
-func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelope, error) {
+func (s *Simulator) Submit(envelopes ...*messaging.Envelope) ([]*messaging.Envelope, error) {
 	s.Helper()
 
 	for _, envelope := range envelopes {
@@ -389,11 +388,11 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 }
 
 // SubmitTo submits the envelope to a specific partition.
-func (s *Simulator) SubmitTo(partition string, envelope *protocol.Envelope) error {
+func (s *Simulator) SubmitTo(partition string, envelope *messaging.Envelope) error {
 	x := s.Partition(partition)
 
 	// Normalize - use a copy to avoid weird issues caused by modifying values
-	deliveries, err := messaging.NormalizeLegacy(envelope.Copy())
+	deliveries, err := envelope.Copy().Normalize()
 	if err != nil {
 		return err
 	}
@@ -401,7 +400,10 @@ func (s *Simulator) SubmitTo(partition string, envelope *protocol.Envelope) erro
 	// Check
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, deliveries)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(batch, deliveries)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 	for _, result := range results {
 		if result.Error != nil {
 			return errors.UnknownError.Wrap(result.Error)
@@ -416,7 +418,7 @@ func (s *Simulator) SubmitTo(partition string, envelope *protocol.Envelope) erro
 
 // MustSubmitAndExecuteBlock executes a block with the envelopes and fails the test if
 // any envelope fails.
-func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) []*protocol.Envelope {
+func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*messaging.Envelope) []*messaging.Envelope {
 	s.Helper()
 
 	status, err := s.SubmitAndExecuteBlock(envelopes...)
@@ -442,7 +444,7 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 }
 
 // SubmitAndExecuteBlock executes a block with the envelopes.
-func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	s.Helper()
 
 	_, err := s.Submit(envelopes...)
@@ -497,7 +499,7 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 	return nil
 }
 
-func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
+func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*messaging.Envelope) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
 	s.Helper()
 
 	var statuses []*protocol.TransactionStatus
@@ -598,7 +600,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		Describe:      network,
 		Router:        sim.Router(),
 		EventBus:      eventBus,
-		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: sim, envelopes: map[string][]*protocol.Envelope{}} },
+		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: sim, envelopes: map[string][]*messaging.Envelope{}} },
 		Sequencer:     sim.Services(),
 		Querier:       sim.Services(),
 	}
@@ -630,7 +632,7 @@ func (x *ExecEntry) View(fn func(*database.Batch) error) error   { return x.Data
 //
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
-func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*chain.Delivery {
+func (x *ExecEntry) Submit(pretend bool, envelopes ...*messaging.Envelope) []*chain.Delivery {
 	var deliveries []*chain.Delivery
 	for _, env := range envelopes {
 		normalized, err := chain.NormalizeEnvelope(env)
@@ -707,14 +709,14 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		err := x.Executor.BeginBlock(block)
 		require.NoError(x, err)
 
-		messages := make([]messaging.Message, 0, len(deliveries))
+		var messages []messaging.Message
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
-				messages = append(messages, &messaging.LegacyMessage{
-					Transaction: deliveries[i].Transaction,
-					Signatures:  deliveries[i].Signatures,
-				})
+				messages = append(messages, &messaging.UserTransaction{Transaction: deliveries[i].Transaction})
+				for _, sig := range deliveries[i].Signatures {
+					messages = append(messages, &messaging.UserSignature{Signature: sig, TransactionHash: deliveries[i].Transaction.ID().Hash()})
+				}
 				continue
 			}
 			if !errors.Is(err, errors.Delivered) {
@@ -728,7 +730,10 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results := abci.ExecuteEnvelopeSet(&execute.BlockV1{Block: block, Executor: x.Executor}, messages)
+		results, err := (&execute.BlockV1{Block: block, Executor: x.Executor}).Process(messages)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 		for _, result := range results {
 			if result.Error != nil {
 				return errors.UnknownError.Wrap(result.Error)

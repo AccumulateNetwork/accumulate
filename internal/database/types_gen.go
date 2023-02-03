@@ -879,9 +879,15 @@ func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 		Transaction *string  `json:"transaction,omitempty"`
 		ChainEntry  uint64   `json:"chainEntry,omitempty"`
 	}{}
-	u.Account = v.Account
-	u.Transaction = encoding.BytesToJSON(v.Transaction)
-	u.ChainEntry = v.ChainEntry
+	if !(v.Account == nil) {
+		u.Account = v.Account
+	}
+	if !(len(v.Transaction) == 0) {
+		u.Transaction = encoding.BytesToJSON(v.Transaction)
+	}
+	if !(v.ChainEntry == 0) {
+		u.ChainEntry = v.ChainEntry
+	}
 	return json.Marshal(&u)
 }
 
@@ -892,25 +898,39 @@ func (v *ReceiptList) MarshalJSON() ([]byte, error) {
 		Receipt          *merkle.Receipt            `json:"receipt,omitempty"`
 		ContinuedReceipt *merkle.Receipt            `json:"continuedReceipt,omitempty"`
 	}{}
-	u.MerkleState = v.MerkleState
-	u.Elements = make(encoding.JsonList[*string], len(v.Elements))
-	for i, x := range v.Elements {
-		u.Elements[i] = encoding.BytesToJSON(x)
+	if !(v.MerkleState == nil) {
+		u.MerkleState = v.MerkleState
 	}
-	u.Receipt = v.Receipt
-	u.ContinuedReceipt = v.ContinuedReceipt
+	if !(len(v.Elements) == 0) {
+		u.Elements = make(encoding.JsonList[*string], len(v.Elements))
+		for i, x := range v.Elements {
+			u.Elements[i] = encoding.BytesToJSON(x)
+		}
+	}
+	if !(v.Receipt == nil) {
+		u.Receipt = v.Receipt
+	}
+	if !(v.ContinuedReceipt == nil) {
+		u.ContinuedReceipt = v.ContinuedReceipt
+	}
 	return json.Marshal(&u)
 }
 
 func (v *SigOrTxn) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
-		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Txid        *url.TxID                                      `json:"txid,omitempty"`
+		Transaction *protocol.Transaction                           `json:"transaction,omitempty"`
+		Signature   *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		Txid        *url.TxID                                       `json:"txid,omitempty"`
 	}{}
-	u.Transaction = v.Transaction
-	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.Txid = v.Txid
+	if !(v.Transaction == nil) {
+		u.Transaction = v.Transaction
+	}
+	if !(protocol.EqualSignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	}
+	if !(v.Txid == nil) {
+		u.Txid = v.Txid
+	}
 	return json.Marshal(&u)
 }
 
@@ -921,11 +941,19 @@ func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 		SignatureHash    string                 `json:"signatureHash,omitempty"`
 		ValidatorKeyHash string                 `json:"validatorKeyHash,omitempty"`
 	}{}
-	u.Type = v.Type
-	u.KeyEntryIndex = v.KeyEntryIndex
-	u.SignatureHash = encoding.ChainToJSON(v.SignatureHash)
-	if v.ValidatorKeyHash != nil {
-		u.ValidatorKeyHash = encoding.ChainToJSON(*v.ValidatorKeyHash)
+	if !(v.Type == 0) {
+		u.Type = v.Type
+	}
+	if !(v.KeyEntryIndex == 0) {
+		u.KeyEntryIndex = v.KeyEntryIndex
+	}
+	if !(v.SignatureHash == ([32]byte{})) {
+		u.SignatureHash = encoding.ChainToJSON(v.SignatureHash)
+	}
+	if !(v.ValidatorKeyHash == nil) {
+		if v.ValidatorKeyHash != nil {
+			u.ValidatorKeyHash = encoding.ChainToJSON(*v.ValidatorKeyHash)
+		}
 	}
 	return json.Marshal(&u)
 }
@@ -935,8 +963,12 @@ func (v *sigSetData) MarshalJSON() ([]byte, error) {
 		Version uint64                         `json:"version,omitempty"`
 		Entries encoding.JsonList[SigSetEntry] `json:"entries,omitempty"`
 	}{}
-	u.Version = v.Version
-	u.Entries = v.Entries
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = v.Entries
+	}
 	return json.Marshal(&u)
 }
 
@@ -995,18 +1027,20 @@ func (v *ReceiptList) UnmarshalJSON(data []byte) error {
 
 func (v *SigOrTxn) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
-		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Txid        *url.TxID                                      `json:"txid,omitempty"`
+		Transaction *protocol.Transaction                           `json:"transaction,omitempty"`
+		Signature   *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		Txid        *url.TxID                                       `json:"txid,omitempty"`
 	}{}
 	u.Transaction = v.Transaction
-	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
 	u.Txid = v.Txid
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Transaction = u.Transaction
-	v.Signature = u.Signature.Value
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
 
 	v.Txid = u.Txid
 	return nil

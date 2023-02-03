@@ -171,9 +171,13 @@ func (v *EntryMetadata) MarshalJSON() ([]byte, error) {
 		EBlockSequenceNumber uint64 `json:"eblockSequenceNumber"`
 		EntryIndex           uint64 `json:"entryIndex"`
 	}{}
-	u.DBlockKeyMR = encoding.ChainToJSON(v.DBlockKeyMR)
+	if !(v.DBlockKeyMR == ([32]byte{})) {
+		u.DBlockKeyMR = encoding.ChainToJSON(v.DBlockKeyMR)
+	}
 	u.DBlockHeight = v.DBlockHeight
-	u.EBlockKeyMR = encoding.ChainToJSON(v.EBlockKeyMR)
+	if !(v.EBlockKeyMR == ([32]byte{})) {
+		u.EBlockKeyMR = encoding.ChainToJSON(v.EBlockKeyMR)
+	}
 	u.EBlockSequenceNumber = v.EBlockSequenceNumber
 	u.EntryIndex = v.EntryIndex
 	return json.Marshal(&u)

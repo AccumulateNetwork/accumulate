@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,8 +13,8 @@ import (
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type NullRouter struct{}
@@ -25,7 +25,7 @@ func (NullRouter) RouteAccount(*url.URL) (string, error) {
 	return "", nil
 }
 
-func (NullRouter) Route(...*protocol.Envelope) (string, error) {
+func (NullRouter) Route(...*messaging.Envelope) (string, error) {
 	return "", nil
 }
 
@@ -33,7 +33,7 @@ func (NullRouter) Query(ctx context.Context, partition string, query []byte, opt
 	return nil, errors.NotFound
 }
 
-func (NullRouter) Submit(ctx context.Context, partition string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (NullRouter) Submit(ctx context.Context, partition string, tx *messaging.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	return new(routing.ResponseSubmit), nil
 }
 

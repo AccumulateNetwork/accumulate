@@ -682,11 +682,19 @@ func (v *Describe) MarshalJSON() ([]byte, error) {
 		LocalAddress string      `json:"localAddress,omitempty"`
 		Network      Network     `json:"network,omitempty"`
 	}{}
-	u.NetworkType = v.NetworkType
-	u.PartitionId = v.PartitionId
-	u.SubnetId = v.PartitionId
-	u.LocalAddress = v.LocalAddress
-	u.Network = v.Network
+	if !(v.NetworkType == 0) {
+		u.NetworkType = v.NetworkType
+	}
+	if !(len(v.PartitionId) == 0) {
+		u.PartitionId = v.PartitionId
+		u.SubnetId = v.PartitionId
+	}
+	if !(len(v.LocalAddress) == 0) {
+		u.LocalAddress = v.LocalAddress
+	}
+	if !((v.Network).Equal(new(Network))) {
+		u.Network = v.Network
+	}
 	return json.Marshal(&u)
 }
 
@@ -696,19 +704,27 @@ func (v *Network) MarshalJSON() ([]byte, error) {
 		Partitions encoding.JsonList[Partition] `json:"partitions,omitempty"`
 		Subnets    encoding.JsonList[Partition] `json:"subnets,omitempty"`
 	}{}
-	u.Id = v.Id
-	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
+	if !(len(v.Id) == 0) {
+		u.Id = v.Id
+	}
+	if !(len(v.Partitions) == 0) {
+		u.Partitions = v.Partitions
+		u.Subnets = v.Partitions
+	}
 	return json.Marshal(&u)
 }
 
 func (v *P2P) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Listen         encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		BootstrapPeers encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
+		Listen         *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BootstrapPeers *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
 	}{}
-	u.Listen = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
-	u.BootstrapPeers = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	if !(len(v.Listen) == 0) {
+		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(len(v.BootstrapPeers) == 0) {
+		u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	}
 	return json.Marshal(&u)
 }
 
@@ -719,10 +735,18 @@ func (v *Partition) MarshalJSON() ([]byte, error) {
 		BasePort int64                   `json:"basePort,omitempty"`
 		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}
-	u.Id = v.Id
-	u.Type = v.Type
-	u.BasePort = v.BasePort
-	u.Nodes = v.Nodes
+	if !(len(v.Id) == 0) {
+		u.Id = v.Id
+	}
+	if !(v.Type == 0) {
+		u.Type = v.Type
+	}
+	if !(v.BasePort == 0) {
+		u.BasePort = v.BasePort
+	}
+	if !(len(v.Nodes) == 0) {
+		u.Nodes = v.Nodes
+	}
 	return json.Marshal(&u)
 }
 
@@ -776,11 +800,11 @@ func (v *Network) UnmarshalJSON(data []byte) error {
 
 func (v *P2P) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Listen         encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		BootstrapPeers encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
+		Listen         *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BootstrapPeers *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
 	}{}
-	u.Listen = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
-	u.BootstrapPeers = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}

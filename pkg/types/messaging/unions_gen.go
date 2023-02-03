@@ -20,8 +20,10 @@ import (
 // NewMessage creates a new Message for the specified MessageType.
 func NewMessage(typ MessageType) (Message, error) {
 	switch typ {
-	case MessageTypeLegacy:
-		return new(LegacyMessage), nil
+	case MessageTypeUserSignature:
+		return new(UserSignature), nil
+	case MessageTypeUserTransaction:
+		return new(UserTransaction), nil
 	default:
 		return nil, fmt.Errorf("unknown message %v", typ)
 	}
@@ -33,11 +35,17 @@ func EqualMessage(a, b Message) bool {
 		return true
 	}
 	switch a := a.(type) {
-	case *LegacyMessage:
+	case *UserSignature:
 		if a == nil {
 			return b == nil
 		}
-		b, ok := b.(*LegacyMessage)
+		b, ok := b.(*UserSignature)
+		return ok && a.Equal(b)
+	case *UserTransaction:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*UserTransaction)
 		return ok && a.Equal(b)
 	default:
 		return false
@@ -47,7 +55,9 @@ func EqualMessage(a, b Message) bool {
 // CopyMessage copies a Message.
 func CopyMessage(v Message) Message {
 	switch v := v.(type) {
-	case *LegacyMessage:
+	case *UserSignature:
+		return v.Copy()
+	case *UserTransaction:
 		return v.Copy()
 	default:
 		return v.CopyAsInterface().(Message)

@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -175,11 +176,11 @@ func (n *FakeNode) GetTokenIssuer(s string) *protocol.TokenIssuer {
 	return harness.QueryAccountAs[*protocol.TokenIssuer](&n.H.Harness, n.parseUrl(s))
 }
 
-func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, txnHashes [][32]byte, err error) {
+func (n *FakeNode) Execute(inBlock func(func(*messaging.Envelope))) (sigHashes, txnHashes [][32]byte, err error) {
 	n.T().Helper()
 
 	var deliveries []*chain.Delivery
-	inBlock(func(env *protocol.Envelope) {
+	inBlock(func(env *messaging.Envelope) {
 		delivery, err := chain.NormalizeEnvelope(env)
 		n.Require().NoError(err)
 		deliveries = append(deliveries, delivery...)
@@ -202,7 +203,7 @@ func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, t
 
 	var cond []harness.Condition
 	for _, delivery := range deliveries {
-		status := n.H.Submit(&protocol.Envelope{
+		status := n.H.Submit(&messaging.Envelope{
 			Transaction: []*protocol.Transaction{delivery.Transaction},
 			Signatures:  delivery.Signatures,
 		})
@@ -218,14 +219,14 @@ func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, t
 	return sigHashes, txnHashes, nil
 }
 
-func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (sigHashes, txnHashes [][32]byte) {
+func (n *FakeNode) MustExecute(inBlock func(func(*messaging.Envelope))) (sigHashes, txnHashes [][32]byte) {
 	n.T().Helper()
 	sigHashes, txnHashes, err := n.Execute(inBlock)
 	n.Require().NoError(err)
 	return sigHashes, txnHashes
 }
 
-func (n *FakeNode) MustExecuteAndWait(inBlock func(func(*protocol.Envelope))) [][32]byte {
+func (n *FakeNode) MustExecuteAndWait(inBlock func(func(*messaging.Envelope))) [][32]byte {
 	// Execute already waits
 	_, txnHashes := n.MustExecute(inBlock)
 	return txnHashes

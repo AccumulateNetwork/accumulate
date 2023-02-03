@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -71,7 +72,7 @@ func SignTransaction(network *protocol.NetworkDefinition, nodeKey []byte, batch 
 	return keySig, nil
 }
 
-func PrepareBlockAnchor(network *config.Describe, netdef *protocol.NetworkDefinition, nodeKey []byte, batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*protocol.Envelope, error) {
+func PrepareBlockAnchor(network *config.Describe, netdef *protocol.NetworkDefinition, nodeKey []byte, batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*messaging.Envelope, error) {
 	// TODO Exporting this is not great
 
 	txn := new(protocol.Transaction)
@@ -93,5 +94,5 @@ func PrepareBlockAnchor(network *config.Describe, netdef *protocol.NetworkDefini
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}, nil
+	return &messaging.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}, nil
 }

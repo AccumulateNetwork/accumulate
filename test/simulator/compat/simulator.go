@@ -117,15 +117,13 @@ func (s *Simulator) ExecuteBlocks(n int) {
 	s.H.StepN(n)
 }
 
-func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelope, error) {
+func (s *Simulator) Submit(envelopes ...*messaging.Envelope) ([]*messaging.Envelope, error) {
 	for _, env := range envelopes {
-		deliveries, err := messaging.NormalizeLegacy(env)
+		deliveries, err := env.Normalize()
 		require.NoError(s.TB, err)
-		for _, d := range deliveries {
-			st, err := s.S.Submit(d)
-			if err != nil {
-				return nil, err
-			}
+		st, err := s.S.Submit(deliveries)
+		require.NoError(s.TB, err)
+		for _, st := range st {
 			if st.Error != nil {
 				return nil, st.Error
 			}
@@ -134,7 +132,7 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 	return envelopes, nil
 }
 
-func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) []*protocol.Envelope {
+func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*messaging.Envelope) []*messaging.Envelope {
 	_, err := s.Submit(envelopes...)
 	require.NoError(s.TB, err)
 	s.H.Step()
@@ -142,7 +140,7 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	return envelopes
 }
 
-func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	s.TB.Helper()
 
 	_, err := s.Submit(envelopes...)
@@ -260,7 +258,7 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 	return statuses, transactions
 }
 
-func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
+func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*messaging.Envelope) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
 	s.TB.Helper()
 
 	var statuses []*protocol.TransactionStatus
