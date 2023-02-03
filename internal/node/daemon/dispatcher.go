@@ -15,11 +15,11 @@ import (
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -31,7 +31,7 @@ type dispatcher struct {
 	messages []message.Message
 }
 
-var _ block.Dispatcher = (*dispatcher)(nil)
+var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // newDispatcher creates a new dispatcher.
 func newDispatcher(router routing.Router, dialer message.Dialer) *dispatcher {
@@ -57,13 +57,14 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envel
 	}
 
 	// Convert the envelope into deliveries
-	deliveries, err := chain.NormalizeEnvelope(env)
+	deliveries, err := messaging.NormalizeLegacy(env)
 	if err != nil {
 		return err
 	}
 
 	// Queue a pre-addressed message for each delivery
 	for _, delivery := range deliveries {
+		delivery := delivery.(*messaging.LegacyMessage)
 		env := new(protocol.Envelope)
 		env.Signatures = append(env.Signatures, delivery.Signatures...)
 		env.Transaction = append(env.Transaction, delivery.Transaction)
