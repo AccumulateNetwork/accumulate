@@ -518,6 +518,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		b, ok := b.(*LockAccount)
 		return ok && a.Equal(b)
 	case *PlaceholderTransaction:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*PlaceholderTransaction)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
