@@ -40,7 +40,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -232,14 +231,14 @@ func (d *Daemon) Start() (err error) {
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
 	dialer := &dialer{ready: make(chan struct{})}
 	client := &message.Client{Dialer: dialer, Router: routing.MessageRouter{Router: router}}
-	execOpts := block.ExecutorOptions{
+	execOpts := execute.Options{
 		Logger:        d.Logger,
 		Database:      d.db,
 		Key:           d.Key().Bytes(),
 		Describe:      d.Config.Accumulate.Describe,
 		Router:        router,
 		EventBus:      d.eventBus,
-		NewDispatcher: func() block.Dispatcher { return newDispatcher(router, client.Dialer) },
+		NewDispatcher: func() execute.Dispatcher { return newDispatcher(router, client.Dialer) },
 		Sequencer:     client.Private(),
 		Querier:       client,
 	}
@@ -332,9 +331,10 @@ func (d *Daemon) Start() (err error) {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	netSvc := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:   d.Logger.With("module", "acc-rpc"),
-		EventBus: d.eventBus,
-		Globals:  (*block.Executor)(exec.(*execute.ExecutorV1)).ActiveGlobals_TESTONLY(),
+		Logger:    d.Logger.With("module", "acc-rpc"),
+		EventBus:  d.eventBus,
+		Partition: d.Config.Accumulate.PartitionId,
+		Database:  d.db,
 	})
 	querySvc := api.NewQuerier(api.QuerierParams{
 		Logger:    d.Logger.With("module", "acc-rpc"),
