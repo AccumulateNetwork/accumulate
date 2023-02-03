@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -24,6 +24,7 @@ type RestoreVisitor struct {
 	db     database.Beginner
 	start  time.Time
 	batch  *database.Batch
+	header *Header
 
 	DisableWriteBatching bool
 	CompressChains       bool
@@ -42,6 +43,11 @@ func NewRestoreVisitor(db database.Beginner, logger log.Logger) *RestoreVisitor 
 }
 
 const chainBatchSize = 10000
+
+func (v *RestoreVisitor) VisitHeader(h *Header) error {
+	v.header = h
+	return nil
+}
 
 func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	// End of section
@@ -194,7 +200,7 @@ func (v *RestoreVisitor) VisitTransaction(txn *Transaction, i int) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	err = txn.Restore(v.batch)
+	err = txn.Restore(v.header, v.batch)
 	return errors.UnknownError.Wrap(err)
 }
 
@@ -209,7 +215,7 @@ func (v *RestoreVisitor) VisitSignature(sig *Signature, i int) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	err = sig.Restore(v.batch)
+	err = sig.Restore(v.header, v.batch)
 	return errors.UnknownError.Wrap(err)
 }
 

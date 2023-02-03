@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -103,9 +103,9 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 	defer batch2.Discard()
 	for _, hash := range txnHashes.Hashes {
 		hash := hash
-		c, err := snapshot.CollectTransaction(batch1.Transaction(hash[:]))
+		c, err := snapshot.CollectTransaction(batch1, hash)
 		checkf(err, "collect txn %x", hash)
-		err = c.Restore(batch2)
+		err = c.Restore(new(snapshot.Header), batch2)
 		checkf(err, "restore txn %x", hash)
 		for _, c := range c.SignatureSets {
 			for _, c := range c.Entries {
@@ -115,9 +115,9 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 	}
 	for _, hash := range sigHashes.Hashes {
 		hash := hash
-		c, err := snapshot.CollectSignature(batch1.Transaction(hash[:]))
+		c, err := snapshot.CollectSignature(batch1, hash)
 		checkf(err, "collect sig %x", hash)
-		err = c.Restore(batch2)
+		err = c.Restore(new(snapshot.Header), batch2)
 		checkf(err, "restore sig %x", hash)
 	}
 	for _, u := range accounts {

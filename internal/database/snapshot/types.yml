@@ -12,6 +12,10 @@ Header:
   - name: Timestamp
     description: is the snapshot's block time
     type: time
+  - name: ExecutorVersion
+    description: is the snapshot's executor version
+    type: protocol.ExecutorVersion
+    marshal-as: enum
 
 Account:
   fields:
