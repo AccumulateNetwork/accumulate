@@ -7,7 +7,7 @@
 package execute
 
 import (
-	"sync"
+	"sync/atomic"
 
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -49,11 +49,11 @@ func NewExecutor(opts Options) (Executor, error) {
 
 	// If the version is V2, create a V2 executor
 	if ledger != nil && ledger.ExecutorVersion.V2() {
-		exec, err := v2.NewNodeExecutor(opts)
+		exec, err := v2.NewExecutor(opts)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("create v2 executor: %w", err)
 		}
-		return (*ExecutorV2)(exec), nil
+		return (*v2.ExecutorV2)(exec), nil
 	}
 
 	exec, err := v1.NewNodeExecutor(opts)
@@ -62,20 +62,23 @@ func NewExecutor(opts Options) (Executor, error) {
 	}
 
 	x := new(Multi)
-	x.mu = new(sync.RWMutex)
 	x.opts = opts
-	x.active = (*ExecutorV1)(exec)
+	x.setActive((*ExecutorV1)(exec))
 
-	// Must be synchronous to avoid race conditions
+	// Must be synchronous to avoid races
 	events.SubscribeSync(opts.EventBus, x.willChangeGlobals)
 
 	return x, nil
 }
 
 type Multi struct {
-	mu     *sync.RWMutex
-	opts   Options
-	active Executor
+	opts                Options
+	version, newVersion protocol.ExecutorVersion // Can be non-atomic because they are read and written synchronously within a block
+	active              atomic.Pointer[Executor] // Use an atomic pointer to avoid races
+}
+
+func (m *Multi) setActive(exec Executor) {
+	m.active.Store(&exec)
 }
 
 func (m *Multi) willChangeGlobals(e events.WillChangeGlobals) error {
@@ -83,57 +86,60 @@ func (m *Multi) willChangeGlobals(e events.WillChangeGlobals) error {
 		return nil
 	}
 
+	// No need to update
+	if m.version.V2() {
+		return nil
+	}
+
+	m.newVersion = e.New.ExecutorVersion
+	return nil
+}
+
+func (m *Multi) updateActive() error {
+	if m.version >= m.newVersion {
+		return nil
+	}
+	m.version = m.newVersion
+
 	// TODO Can we move this call into [NewExecutor] to reduce the possibility
 	// of running into an error here?
-	exec, err := v2.NewNodeExecutor(m.opts)
+	exec, err := v2.NewExecutor(m.opts)
 	if err != nil {
 		return errors.UnknownError.WithFormat("create v2 executor: %w", err)
 	}
 
-	m.mu.Lock()
-	m.active = (*ExecutorV2)(exec)
-	m.mu.Unlock()
+	m.setActive((*v2.ExecutorV2)(exec))
 	return nil
 }
 
 func (m *Multi) EnableTimers() {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	m.active.EnableTimers()
+	(*m.active.Load()).EnableTimers()
 }
 
 func (m *Multi) StoreBlockTimers(ds *logging.DataSet) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	m.active.StoreBlockTimers(ds)
+	(*m.active.Load()).StoreBlockTimers(ds)
 }
 
 func (m *Multi) LoadStateRoot(batch *database.Batch) ([]byte, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.active.LoadStateRoot(batch)
+	return (*m.active.Load()).LoadStateRoot(batch)
 }
 
 func (m *Multi) RestoreSnapshot(db database.Beginner, snapshot ioutil2.SectionReader) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.active.RestoreSnapshot(db, snapshot)
+	return (*m.active.Load()).RestoreSnapshot(db, snapshot)
 }
 
 func (m *Multi) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.active.InitChainValidators(initVal)
+	return (*m.active.Load()).InitChainValidators(initVal)
 }
 
 func (m *Multi) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.active.Validate(batch, messages)
+	return (*m.active.Load()).Validate(batch, messages)
 }
 
 func (m *Multi) Begin(params BlockParams) (Block, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.active.Begin(params)
+	// Change the active executor implementation at the beginning of the block
+	if err := m.updateActive(); err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return (*m.active.Load()).Begin(params)
 }

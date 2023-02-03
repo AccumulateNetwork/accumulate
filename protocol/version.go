@@ -11,7 +11,7 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV1SignatureAnchoring
+const ExecutorVersionLatest = ExecutorVersionV2
 
 // SignatureAnchoringEnabled checks if the version is at least V1 signature anchoring.
 func (v ExecutorVersion) SignatureAnchoringEnabled() bool {
