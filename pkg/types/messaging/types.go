@@ -34,6 +34,10 @@ type Message interface {
 func (m *UserTransaction) ID() *url.TxID      { return m.Transaction.ID() }
 func (m *SyntheticTransaction) ID() *url.TxID { return m.Transaction.ID() }
 
+func (m *ValidatorSignature) ID() *url.TxID {
+	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
+}
+
 func (m *UserSignature) ID() *url.TxID {
 	hash := *(*[32]byte)(m.Signature.Hash())
 	switch sig := m.Signature.(type) {
