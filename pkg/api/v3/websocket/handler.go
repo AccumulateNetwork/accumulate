@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -149,7 +149,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					h.logger.Error("Panicked while handling stream", "error", r)
+					h.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
 				}
 			}()
 			defer cancel()
@@ -170,7 +170,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					h.logger.Error("Panicked while handling stream", "error", r)
+					h.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
 				}
 			}()
 			defer cancel()
