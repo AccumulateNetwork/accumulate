@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,6 +9,7 @@ package message
 import (
 	"context"
 	"io"
+	"runtime/debug"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/tendermint/tendermint/libs/log"
@@ -46,7 +47,7 @@ func (h *Handler) Handle(s Stream) {
 	// Panic protection
 	defer func() {
 		if r := recover(); r != nil {
-			h.logger.Error("Panicked while handling stream", "error", r)
+			h.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
 		}
 	}()
 
