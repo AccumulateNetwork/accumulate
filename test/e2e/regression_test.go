@@ -353,7 +353,7 @@ func TestSynthTxnFromAndToDirectory(t *testing.T) {
 
 	// Initialize
 	values := new(core.GlobalValues)
-	values.ExecutorVersion = ExecutorVersionLatest
+	values.ExecutorVersion = ExecutorVersionV1SignatureAnchoring
 	sim := oldsim.New(t, 3)
 	sim.InitFromGenesisWith(values)
 
