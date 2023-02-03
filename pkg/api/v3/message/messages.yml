@@ -42,7 +42,7 @@ SubmitRequest:
   union: { type: message }
   fields:
     - name: Envelope
-      type: protocol.Envelope
+      type: messaging.Envelope
       marshal-as: reference
       pointer: true
     - type: SubmitOptions
@@ -52,7 +52,7 @@ ValidateRequest:
   union: { type: message }
   fields:
     - name: Envelope
-      type: protocol.Envelope
+      type: messaging.Envelope
       marshal-as: reference
       pointer: true
     - type: ValidateOptions

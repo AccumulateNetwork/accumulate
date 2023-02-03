@@ -352,12 +352,24 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 		Anchor     *string                          `json:"anchor,omitempty"`
 		Entries    encoding.JsonList[*ReceiptEntry] `json:"entries,omitempty"`
 	}{}
-	u.Start = encoding.BytesToJSON(v.Start)
-	u.StartIndex = v.StartIndex
-	u.End = encoding.BytesToJSON(v.End)
-	u.EndIndex = v.EndIndex
-	u.Anchor = encoding.BytesToJSON(v.Anchor)
-	u.Entries = v.Entries
+	if !(len(v.Start) == 0) {
+		u.Start = encoding.BytesToJSON(v.Start)
+	}
+	if !(v.StartIndex == 0) {
+		u.StartIndex = v.StartIndex
+	}
+	if !(len(v.End) == 0) {
+		u.End = encoding.BytesToJSON(v.End)
+	}
+	if !(v.EndIndex == 0) {
+		u.EndIndex = v.EndIndex
+	}
+	if !(len(v.Anchor) == 0) {
+		u.Anchor = encoding.BytesToJSON(v.Anchor)
+	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = v.Entries
+	}
 	return json.Marshal(&u)
 }
 
@@ -366,8 +378,12 @@ func (v *ReceiptEntry) MarshalJSON() ([]byte, error) {
 		Right bool    `json:"right,omitempty"`
 		Hash  *string `json:"hash,omitempty"`
 	}{}
-	u.Right = v.Right
-	u.Hash = encoding.BytesToJSON(v.Hash)
+	if !(!v.Right) {
+		u.Right = v.Right
+	}
+	if !(len(v.Hash) == 0) {
+		u.Hash = encoding.BytesToJSON(v.Hash)
+	}
 	return json.Marshal(&u)
 }
 
@@ -377,14 +393,20 @@ func (v *State) MarshalJSON() ([]byte, error) {
 		Pending  encoding.JsonList[*string] `json:"pending,omitempty"`
 		HashList encoding.JsonList[*string] `json:"hashList,omitempty"`
 	}{}
-	u.Count = v.Count
-	u.Pending = make(encoding.JsonList[*string], len(v.Pending))
-	for i, x := range v.Pending {
-		u.Pending[i] = encoding.BytesToJSON(x)
+	if !(v.Count == 0) {
+		u.Count = v.Count
 	}
-	u.HashList = make(encoding.JsonList[*string], len(v.HashList))
-	for i, x := range v.HashList {
-		u.HashList[i] = encoding.BytesToJSON(x)
+	if !(len(v.Pending) == 0) {
+		u.Pending = make(encoding.JsonList[*string], len(v.Pending))
+		for i, x := range v.Pending {
+			u.Pending[i] = encoding.BytesToJSON(x)
+		}
+	}
+	if !(len(v.HashList) == 0) {
+		u.HashList = make(encoding.JsonList[*string], len(v.HashList))
+		for i, x := range v.HashList {
+			u.HashList[i] = encoding.BytesToJSON(x)
+		}
 	}
 	return json.Marshal(&u)
 }

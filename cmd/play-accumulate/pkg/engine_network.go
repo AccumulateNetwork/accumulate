@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -70,7 +71,7 @@ func (e NetEngine) GetTransaction(txid [32]byte) (*protocol.Transaction, error) 
 	return resp.Transaction, nil
 }
 
-func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {
+func (e NetEngine) Submit(envelope *messaging.Envelope) (*protocol.TransactionStatus, error) {
 	var err error
 	req := new(api.ExecuteRequest)
 	req.Envelope = envelope

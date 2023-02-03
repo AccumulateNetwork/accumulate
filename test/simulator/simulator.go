@@ -50,6 +50,10 @@ type Simulator struct {
 	netcfg     *config.Network
 
 	blockErrGroup *errgroup.Group
+
+	// Deterministic attempts to run the simulator in a fully deterministic,
+	// repeatable way
+	Deterministic bool
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) database.Beginner
@@ -259,26 +263,22 @@ func (s *Simulator) SetRouterSubmitHook(partition string, fn RouterSubmitHookFun
 	s.partitions[partition].SetRouterSubmitHook(fn)
 }
 
-func (s *Simulator) Submit(message messaging.Message) (*protocol.TransactionStatus, error) {
-	legacy := message.(*messaging.LegacyMessage)
-	partition, err := s.router.Route(&protocol.Envelope{
-		Transaction: []*protocol.Transaction{legacy.Transaction},
-		Signatures:  legacy.Signatures,
-	})
+func (s *Simulator) Submit(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+	partition, err := routing.RouteMessages(s.router, messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return s.SubmitTo(partition, message)
+	return s.SubmitTo(partition, messages)
 }
 
-func (s *Simulator) SubmitTo(partition string, message messaging.Message) (*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitTo(partition string, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	return p.Submit(message.(*messaging.LegacyMessage), false)
+	return p.Submit(messages, false)
 }
 
 func (s *Simulator) Partitions() []*protocol.PartitionInfo {
@@ -532,7 +532,7 @@ func (s *simService) queryFanout(ctx context.Context, scope *url.URL, query api.
 
 // Submit routes the envelope to a partition and calls Submit on the first node
 // of that partition, returning the result.
-func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (s *simService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	part, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, err
@@ -542,7 +542,7 @@ func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, op
 
 // Validate routes the envelope to a partition and calls Validate on the first
 // node of that partition, returning the result.
-func (s *simService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (s *simService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	part, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, err

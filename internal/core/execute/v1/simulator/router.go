@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -30,7 +30,7 @@ func (r router) RouteAccount(account *url.URL) (string, error) {
 	return r.Router.RouteAccount(account)
 }
 
-func (r router) Route(envs ...*protocol.Envelope) (string, error) {
+func (r router) Route(envs ...*messaging.Envelope) (string, error) {
 	return routing.RouteEnvelopes(r.RouteAccount, envs...)
 }
 
@@ -38,7 +38,7 @@ func (r router) RequestAPIv2(ctx context.Context, partitionId, method string, pa
 	return r.Partition(partitionId).API.RequestAPIv2(ctx, method, params, result)
 }
 
-func (r router) Submit(ctx context.Context, partition string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (r router) Submit(ctx context.Context, partition string, envelope *messaging.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	x := r.Partition(partition)
 	deliveries := x.Submit(pretend, envelope)
 
@@ -46,17 +46,20 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 		return new(routing.ResponseSubmit), nil
 	}
 
-	messages := make([]messaging.Message, len(deliveries))
-	for i, delivery := range deliveries {
-		messages[i] = &messaging.LegacyMessage{
-			Transaction: delivery.Transaction,
-			Signatures:  delivery.Signatures,
+	var messages []messaging.Message
+	for _, delivery := range deliveries {
+		messages = append(messages, &messaging.UserTransaction{Transaction: delivery.Transaction})
+		for _, sig := range delivery.Signatures {
+			messages = append(messages, &messaging.UserSignature{Signature: sig, TransactionHash: delivery.Transaction.ID().Hash()})
 		}
 	}
 
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	results := abci.ValidateEnvelopeSet((*execute.ExecutorV1)(x.Executor), batch, messages)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(batch, messages)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 	for _, s := range results {
 		if !s.Failed() {
 			continue
@@ -71,7 +74,6 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 		)
 	}
 
-	var err error
 	resp := new(routing.ResponseSubmit)
 	resp.Data, err = (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
 	require.NoError(r, err)

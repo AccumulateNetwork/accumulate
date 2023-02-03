@@ -13,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // dispatcher implements [block.Dispatcher] for the simulator.
@@ -25,13 +24,13 @@ type dispatcher struct {
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // Submit routes the envelope and adds it to the queue for a partition.
-func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *protocol.Envelope) error {
+func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
 	partition, err := d.sim.router.RouteAccount(u)
 	if err != nil {
 		return err
 	}
 
-	deliveries, err := messaging.NormalizeLegacy(env)
+	deliveries, err := env.Normalize()
 	if err != nil {
 		return err
 	}
@@ -59,11 +58,13 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		defer close(errs)
 
 		for part, envelopes := range envelopes {
-			for _, envelope := range envelopes {
-				st, err := d.sim.SubmitTo(part, envelope)
-				if err != nil {
-					errs <- err
-				} else if st.Error != nil && st.Code != errors.Delivered {
+			st, err := d.sim.SubmitTo(part, envelopes)
+			if err != nil {
+				errs <- err
+				continue
+			}
+			for _, st := range st {
+				if st.Error != nil && st.Code != errors.Delivered {
 					errs <- st.AsError()
 				}
 			}
