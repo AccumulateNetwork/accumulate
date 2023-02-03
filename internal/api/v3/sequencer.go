@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -100,18 +101,15 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 		return nil, errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", num-1, err)
 	}
 
-	record := batch.Transaction(hash)
-	state, err := record.Main().Get()
+	var msg messaging.MessageWithTransaction
+	err = batch.Message2(hash).Main().GetAs(&msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-	}
-	if state.Transaction == nil {
-		return nil, errors.Conflict.WithFormat("not a transaction")
 	}
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dst.JoinPath(protocol.AnchorPool)
-	txn.Body = state.Transaction.Body
+	txn.Body = msg.GetTransaction().Body
 
 	var signatures []protocol.Signature
 	if globals.ExecutorVersion.V2() {
@@ -186,16 +184,13 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", entry.Source, err)
 	}
 
-	record := batch.Transaction(hash)
-	state, err := record.Main().Get()
+	var msg messaging.MessageWithTransaction
+	err = batch.Message2(hash).Main().GetAs(&msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
-	if state.Transaction == nil {
-		return nil, errors.Conflict.WithFormat("not a transaction")
-	}
 
-	status, err := record.Status().Get()
+	status, err := batch.Transaction(hash).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
@@ -239,8 +234,8 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	signatures = append(signatures, keySig)
 
 	r := new(api.TransactionRecord)
-	r.Transaction = state.Transaction
-	r.TxID = state.Transaction.ID()
+	r.Transaction = msg.GetTransaction()
+	r.TxID = msg.GetTransaction().ID()
 	r.Signatures = new(api.RecordRange[*api.SignatureRecord])
 	r.Signatures.Total = 1
 	r.Signatures.Records = []*api.SignatureRecord{
@@ -248,9 +243,9 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 			Vote:            protocol.VoteTypeAccept,
 			Signer:          signer.Url,
 			Authority:       signer.Url,
-			TransactionHash: state.Transaction.ID().Hash(),
+			TransactionHash: msg.GetTransaction().ID().Hash(),
 			Signatures:      signatures,
-		}, TxID: state.Transaction.ID(), Signer: signer},
+		}, TxID: msg.GetTransaction().ID(), Signer: signer},
 	}
 	r.Status = status
 	return r, nil
