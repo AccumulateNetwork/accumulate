@@ -9,19 +9,21 @@ package chain
 import (
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type ProcessTransactionState struct {
-	ProducedTxns           []*protocol.Transaction
-	AdditionalTransactions []*Delivery
-	ChainUpdates           ChainUpdates
-	MakeMajorBlock         uint64
-	MakeMajorBlockTime     time.Time
-	ReceivedAnchors        []*ReceivedAnchor
+	ProducedTxns       []*protocol.Transaction
+	AdditionalMessages []messaging.Message
+	ChainUpdates       ChainUpdates
+	MakeMajorBlock     uint64
+	MakeMajorBlockTime time.Time
+	ReceivedAnchors    []*ReceivedAnchor
 }
 
 type ReceivedAnchor struct {
@@ -42,8 +44,26 @@ func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protoc
 	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index})
 }
 
-func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {
-	s.AdditionalTransactions = append(s.AdditionalTransactions, txn)
+// ProcessNetworkUpdate queues a [internal.NetworkUpdate] message for processing
+// after the current bundle.
+func (s *ProcessTransactionState) ProcessNetworkUpdate(cause [32]byte, account *url.URL, body protocol.TransactionBody) {
+	s.AdditionalMessages = append(s.AdditionalMessages, &internal.NetworkUpdate{
+		Cause:   cause,
+		Account: account,
+		Body:    body,
+	})
+}
+
+// ProcessNetworkUpdate queues a [internal.ForwardedMessage] for processing
+// after the current bundle.
+func (s *ProcessTransactionState) ProcessForwarded(msg messaging.Message) {
+	s.AdditionalMessages = append(s.AdditionalMessages, &internal.ForwardedMessage{Message: msg})
+}
+
+// ProcessNetworkUpdate queues a [internal.SyntheticMessage] for processing
+// after the current bundle.
+func (s *ProcessTransactionState) ProcessSynthetic(txid *url.TxID) {
+	s.AdditionalMessages = append(s.AdditionalMessages, &internal.SyntheticMessage{TxID: txid})
 }
 
 func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
@@ -52,7 +72,7 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 		s.MakeMajorBlockTime = r.MakeMajorBlockTime
 	}
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
-	s.AdditionalTransactions = append(s.AdditionalTransactions, r.AdditionalTransactions...)
+	s.AdditionalMessages = append(s.AdditionalMessages, r.AdditionalMessages...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
 	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
 }
