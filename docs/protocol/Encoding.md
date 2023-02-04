@@ -15,7 +15,7 @@ value, and prefixing each value with the field number.
 + `bool` is a boolean
   - Encoded as 0 or 1, as an unsigned integer.
 + `time` is a date and time
-  - Encoded as a Unix timestamp in UTC as an signed varint.
+  - Encoded as a Unix timestamp in UTC as a signed varint.
 + `bytes` is an array of bytes
   - Length is encoded as an unsigned varint;
   - Followed by the bytes, without modification.
@@ -33,7 +33,7 @@ array and then encoded as a byte array (prefixed with the length).
 
 ## Transactions and Accounts
 
-Transanctions and accounts have an implicit first field that denotes the
+Transactions and accounts have an implicit first field that denotes the
 transaction or account type, encoded as an unsigned varint.
 
 ## Example
