@@ -75,6 +75,11 @@ func (s *Sim) SetSubmitHook(partition string, fn simulator.SubmitHookFunc) {
 	s.s.SetSubmitHook(partition, fn)
 }
 
+// SetSubmitHookFor calls Simulator.SetSubmitHookFor.
+func (s *Sim) SetSubmitHookFor(account *url.URL, fn simulator.SubmitHookFunc) {
+	s.s.SetSubmitHookFor(account, fn)
+}
+
 // SignWithNode calls Simulator.SignWithNode.
 func (s *Sim) SignWithNode(partition string, i int) signing.Signer {
 	return s.s.SignWithNode(partition, i)
