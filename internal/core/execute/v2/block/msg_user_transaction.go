@@ -27,14 +27,17 @@ type UserTransaction struct{}
 
 func (UserTransaction) Type() messaging.MessageType { return messaging.MessageTypeUserTransaction }
 
-func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
-	txn, ok := msg.(*messaging.UserTransaction)
+func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	txn, ok := ctx.message.(*messaging.UserTransaction)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserTransaction, msg.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserTransaction, ctx.message.Type())
 	}
 
 	if txn.Transaction == nil {
 		return nil, errors.BadRequest.With("missing transaction")
+	}
+	if txn.Transaction.Body == nil {
+		return nil, errors.BadRequest.With("missing transaction body")
 	}
 
 	// TODO Can we remove this or do it a better way?
@@ -44,7 +47,7 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 
 	// Ensure the transaction is signed
 	var signed bool
-	for _, other := range b.messages {
+	for _, other := range ctx.messages {
 		if fwd, ok := other.(*internal.ForwardedMessage); ok {
 			other = fwd.Message
 		}
@@ -75,8 +78,17 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 		}
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	if loaded.Body.Type().IsSynthetic() {
-		return nil, errors.BadRequest.WithFormat("transaction type %v is not compatible with message type %v", loaded.Body.Type(), msg.Type())
+
+	// If the parent message is synthetic, only allow synthetic transactions.
+	// Otherwise, do not allow synthetic transactions.
+	if ctx.parent != nil && ctx.parent.Type() == messaging.MessageTypeSynthetic {
+		if !loaded.Body.Type().IsSynthetic() {
+			return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v", loaded.Body.Type())), nil
+		}
+	} else {
+		if loaded.Body.Type().IsSynthetic() {
+			return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v", loaded.Body.Type())), nil
+		}
 	}
 
 	// Record when the transaction is received
@@ -86,7 +98,7 @@ func (UserTransaction) Process(b *bundle, batch *database.Batch, msg messaging.M
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	if status.Received == 0 {
-		status.Received = b.Block.Index
+		status.Received = ctx.Block.Index
 		err = record.Status().Put(status)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)

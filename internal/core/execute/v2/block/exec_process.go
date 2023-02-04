@@ -107,7 +107,7 @@ additional:
 	// Process each message
 	remote := set[[32]byte]{}
 	for _, msg := range messages {
-		st, err := d.callMessageExecutor(b.Block.Batch, msg)
+		st, err := d.callMessageExecutor(b.Block.Batch, &MessageContext{bundle: d, message: msg})
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -221,26 +221,26 @@ func (b *BlockV2) checkForUnsignedTransactions(messages []messaging.Message) err
 	return nil
 }
 
-func (b *bundle) callMessageExecutor(batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
+func (b *bundle) callMessageExecutor(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// Internal messages are not allowed on the first pass. This is probably
 	// unnecessary since internal messages cannot be marshalled, but better safe
 	// than sorry.
-	if b.pass == 0 && msg.Type() >= internal.MessageTypeInternal {
-		return protocol.NewErrorStatus(msg.ID(), errors.BadRequest.WithFormat("unsupported message type %v", msg.Type())), nil
+	if b.pass == 0 && ctx.Type() >= internal.MessageTypeInternal {
+		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("unsupported message type %v", ctx.Type())), nil
 	}
 
 	// Find the appropriate executor
-	x, ok := b.Executor.messageExecutors[msg.Type()]
+	x, ok := b.Executor.messageExecutors[ctx.Type()]
 	if !ok {
 		// If the message type is internal, this is almost certainly a bug
-		if msg.Type() >= internal.MessageTypeInternal {
-			return nil, errors.InternalError.WithFormat("no executor registered for message type %v", msg.Type())
+		if ctx.Type() >= internal.MessageTypeInternal {
+			return nil, errors.InternalError.WithFormat("no executor registered for message type %v", ctx.Type())
 		}
-		return protocol.NewErrorStatus(msg.ID(), errors.BadRequest.WithFormat("unsupported message type %v", msg.Type())), nil
+		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("unsupported message type %v", ctx.Type())), nil
 	}
 
 	// Process the message
-	st, err := x.Process(b, batch, msg)
+	st, err := x.Process(batch, ctx)
 	err = errors.UnknownError.Wrap(err)
 	return st, err
 }

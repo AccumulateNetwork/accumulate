@@ -24,26 +24,26 @@ type NetworkUpdate struct{}
 
 func (NetworkUpdate) Type() messaging.MessageType { return internal.MessageTypeNetworkUpdate }
 
-func (NetworkUpdate) Process(b *bundle, batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
-	update, ok := msg.(*internal.NetworkUpdate)
+func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	msg, ok := ctx.message.(*internal.NetworkUpdate)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeNetworkUpdate, msg.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeNetworkUpdate, ctx.message.Type())
 	}
 
 	txn := new(protocol.Transaction)
-	txn.Header.Principal = update.Account
-	txn.Header.Initiator = update.Cause
-	txn.Body = update.Body
+	txn.Header.Principal = msg.Account
+	txn.Header.Initiator = msg.Cause
+	txn.Body = msg.Body
 
 	// Mark the transaction as internal and queue it for processing
-	b.internal.Add(txn.ID().Hash())
-	b.transactionsToProcess.Add(txn.ID().Hash())
+	ctx.internal.Add(txn.ID().Hash())
+	ctx.transactionsToProcess.Add(txn.ID().Hash())
 
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
 	// Record that the cause produced this update
-	err := batch.Transaction(update.Cause[:]).Produced().Add(txn.ID())
+	err := batch.Transaction(msg.Cause[:]).Produced().Add(txn.ID())
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("update cause: %w", err)
 	}
@@ -55,7 +55,7 @@ func (NetworkUpdate) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 	}
 
 	// Store the transaction status
-	signer := b.Executor.globals.Active.AsSigner(b.Executor.Describe.PartitionId)
+	signer := ctx.Executor.globals.Active.AsSigner(ctx.Executor.Describe.PartitionId)
 	status := new(protocol.TransactionStatus)
 	status.TxID = txn.ID()
 	status.Initiator = signer.GetUrl()

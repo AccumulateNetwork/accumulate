@@ -15,10 +15,10 @@ import (
 
 type ExecutorFor[T any, V interface{ Type() T }] interface {
 	Type() T
-	Process(*bundle, *database.Batch, V) (*protocol.TransactionStatus, error)
+	Process(*database.Batch, V) (*protocol.TransactionStatus, error)
 }
 
-type MessageExecutor = ExecutorFor[messaging.MessageType, messaging.Message]
+type MessageExecutor = ExecutorFor[messaging.MessageType, *MessageContext]
 
 func newExecutorMap[T comparable, V interface{ Type() T }](opts ExecutorOptions, list []func(ExecutorOptions) ExecutorFor[T, V]) map[T]ExecutorFor[T, V] {
 	m := map[T]ExecutorFor[T, V]{}
@@ -30,4 +30,21 @@ func newExecutorMap[T comparable, V interface{ Type() T }](opts ExecutorOptions,
 		m[x.Type()] = x
 	}
 	return m
+}
+
+// MessageContext is the context in which a message is executed.
+type MessageContext struct {
+	*bundle
+	message messaging.Message
+	parent  *MessageContext
+}
+
+func (m *MessageContext) Type() messaging.MessageType { return m.message.Type() }
+
+func (m *MessageContext) childWith(msg messaging.Message) *MessageContext {
+	n := new(MessageContext)
+	n.bundle = m.bundle
+	n.message = msg
+	n.parent = m
+	return n
 }

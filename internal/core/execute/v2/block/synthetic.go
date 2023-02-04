@@ -262,7 +262,7 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 
 func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Store the transaction
-	err := batch.Message(transaction.ID().Hash()).Main().Put(&messaging.SyntheticTransaction{Transaction: transaction})
+	err := batch.Message(transaction.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: transaction})
 	if err != nil {
 		return fmt.Errorf("store transaction: %w", err)
 	}

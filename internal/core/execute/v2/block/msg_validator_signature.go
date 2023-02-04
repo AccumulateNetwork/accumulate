@@ -25,10 +25,10 @@ func (ValidatorSignature) Type() messaging.MessageType {
 	return messaging.MessageTypeValidatorSignature
 }
 
-func (x ValidatorSignature) Process(b *bundle, batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
-	sig, ok := msg.(*messaging.ValidatorSignature)
+func (x ValidatorSignature) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	sig, ok := ctx.message.(*messaging.ValidatorSignature)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeValidatorSignature, msg.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeValidatorSignature, ctx.message.Type())
 	}
 
 	batch = batch.Begin(true)
@@ -45,15 +45,15 @@ func (x ValidatorSignature) Process(b *bundle, batch *database.Batch, msg messag
 	}
 
 	status.TxID = sig.ID()
-	status.Received = b.Block.Index
+	status.Received = ctx.Block.Index
 
 	// Check the message for basic validity
-	txn, signer, err := x.check(b, batch, sig)
+	txn, signer, err := x.check(ctx, batch, sig)
 	var err2 *errors.Error
 	switch {
 	case err == nil:
 		// Process the signature (update the transaction status)
-		err = x.process(b, batch, sig, txn, signer)
+		err = x.process(ctx, batch, sig, txn, signer)
 		if err != nil {
 			// A system error occurred
 			return nil, errors.UnknownError.Wrap(err)
@@ -88,16 +88,16 @@ func (x ValidatorSignature) Process(b *bundle, batch *database.Batch, msg messag
 	}
 
 	// Queue for execution
-	b.transactionsToProcess.Add(txn.ID().Hash())
+	ctx.transactionsToProcess.Add(txn.ID().Hash())
 
 	// Update the block state
-	b.Block.State.MergeSignature(&ProcessSignatureState{})
+	ctx.Block.State.MergeSignature(&ProcessSignatureState{})
 
 	return status, nil
 }
 
 // check checks if the message is garbage or not.
-func (x ValidatorSignature) check(b *bundle, batch *database.Batch, sig *messaging.ValidatorSignature) (*protocol.Transaction, protocol.Signer2, error) {
+func (x ValidatorSignature) check(ctx *MessageContext, batch *database.Batch, sig *messaging.ValidatorSignature) (*protocol.Transaction, protocol.Signer2, error) {
 	if sig.Signature == nil {
 		return nil, nil, errors.BadRequest.With("missing signature")
 	}
@@ -147,7 +147,7 @@ func (x ValidatorSignature) check(b *bundle, batch *database.Batch, sig *messagi
 	// it takes some time for changes to propagate, so we'd need an activation
 	// height or something.
 
-	signer := b.Executor.globals.Active.AsSigner(partition)
+	signer := ctx.Executor.globals.Active.AsSigner(partition)
 	_, _, ok = signer.EntryByKeyHash(sig.Signature.GetPublicKeyHash())
 	if !ok {
 		return nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
@@ -156,7 +156,7 @@ func (x ValidatorSignature) check(b *bundle, batch *database.Batch, sig *messagi
 	return txn.GetTransaction(), signer, nil
 }
 
-func (x ValidatorSignature) process(b *bundle, batch *database.Batch, sig *messaging.ValidatorSignature, txn *protocol.Transaction, signer protocol.Signer2) error {
+func (x ValidatorSignature) process(ctx *MessageContext, batch *database.Batch, sig *messaging.ValidatorSignature, txn *protocol.Transaction, signer protocol.Signer2) error {
 	// Add the anchor signer to the transaction status
 	if txn.Body.Type().IsAnchor() {
 		txst, err := batch.Transaction(txn.GetHash()).Status().Get()

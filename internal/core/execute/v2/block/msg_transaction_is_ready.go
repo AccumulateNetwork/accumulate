@@ -25,10 +25,10 @@ func (TransactionIsReady) Type() messaging.MessageType {
 	return internal.MessageTypeTransactionIsReady
 }
 
-func (TransactionIsReady) Process(b *bundle, batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
-	txn, ok := msg.(*internal.TransactionIsReady)
+func (TransactionIsReady) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	txn, ok := ctx.message.(*internal.TransactionIsReady)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeTransactionIsReady, msg.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeTransactionIsReady, ctx.message.Type())
 	}
 
 	// Make sure the ID refers to a transaction
@@ -42,7 +42,7 @@ func (TransactionIsReady) Process(b *bundle, batch *database.Batch, msg messagin
 	}
 
 	// Queue for execution
-	b.transactionsToProcess.Add(txn.TxID.Hash())
+	ctx.transactionsToProcess.Add(txn.TxID.Hash())
 
 	// The transaction has not yet been processed so don't add its status
 	return nil, nil

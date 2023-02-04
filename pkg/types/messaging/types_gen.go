@@ -32,11 +32,11 @@ type Envelope struct {
 	extraData   []byte
 }
 
-type SyntheticTransaction struct {
-	fieldsSet   []bool
-	Transaction *protocol.Transaction      `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
-	extraData   []byte
+type SyntheticMessage struct {
+	fieldsSet []bool
+	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	extraData []byte
 }
 
 type UserSignature struct {
@@ -59,7 +59,7 @@ type ValidatorSignature struct {
 	extraData []byte
 }
 
-func (*SyntheticTransaction) Type() MessageType { return MessageTypeSyntheticTransaction }
+func (*SyntheticMessage) Type() MessageType { return MessageTypeSynthetic }
 
 func (*UserSignature) Type() MessageType { return MessageTypeUserSignature }
 
@@ -95,11 +95,11 @@ func (v *Envelope) Copy() *Envelope {
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SyntheticTransaction) Copy() *SyntheticTransaction {
-	u := new(SyntheticTransaction)
+func (v *SyntheticMessage) Copy() *SyntheticMessage {
+	u := new(SyntheticMessage)
 
-	if v.Transaction != nil {
-		u.Transaction = (v.Transaction).Copy()
+	if v.Message != nil {
+		u.Message = CopyMessage(v.Message)
 	}
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
@@ -108,7 +108,7 @@ func (v *SyntheticTransaction) Copy() *SyntheticTransaction {
 	return u
 }
 
-func (v *SyntheticTransaction) CopyAsInterface() interface{} { return v.Copy() }
+func (v *SyntheticMessage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UserSignature) Copy() *UserSignature {
 	u := new(UserSignature)
@@ -184,13 +184,8 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	return true
 }
 
-func (v *SyntheticTransaction) Equal(u *SyntheticTransaction) bool {
-	switch {
-	case v.Transaction == u.Transaction:
-		// equal
-	case v.Transaction == nil || u.Transaction == nil:
-		return false
-	case !((v.Transaction).Equal(u.Transaction)):
+func (v *SyntheticMessage) Equal(u *SyntheticMessage) bool {
+	if !(EqualMessage(v.Message, u.Message)) {
 		return false
 	}
 	switch {
@@ -307,25 +302,25 @@ func (v *Envelope) IsValid() error {
 	}
 }
 
-var fieldNames_SyntheticTransaction = []string{
+var fieldNames_SyntheticMessage = []string{
 	1: "Type",
-	2: "Transaction",
+	2: "Message",
 	3: "Proof",
 }
 
-func (v *SyntheticTransaction) MarshalBinary() ([]byte, error) {
+func (v *SyntheticMessage) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Transaction == nil) {
-		writer.WriteValue(2, v.Transaction.MarshalBinary)
+	if !(EqualMessage(v.Message, nil)) {
+		writer.WriteValue(2, v.Message.MarshalBinary)
 	}
 	if !(v.Proof == nil) {
 		writer.WriteValue(3, v.Proof.MarshalBinary)
 	}
 
-	_, _, err := writer.Reset(fieldNames_SyntheticTransaction)
+	_, _, err := writer.Reset(fieldNames_SyntheticMessage)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -333,16 +328,16 @@ func (v *SyntheticTransaction) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *SyntheticTransaction) IsValid() error {
+func (v *SyntheticMessage) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Transaction is missing")
-	} else if v.Transaction == nil {
-		errs = append(errs, "field Transaction is not set")
+		errs = append(errs, "field Message is missing")
+	} else if EqualMessage(v.Message, nil) {
+		errs = append(errs, "field Message is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Proof is missing")
@@ -564,11 +559,11 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *SyntheticTransaction) UnmarshalBinary(data []byte) error {
+func (v *SyntheticMessage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *SyntheticTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *SyntheticMessage) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	var vType MessageType
@@ -582,15 +577,19 @@ func (v *SyntheticTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	return v.UnmarshalFieldsFrom(reader)
 }
 
-func (v *SyntheticTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.Transaction = x
-	}
+func (v *SyntheticMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Message = x
+		}
+		return err
+	})
 	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
 
-	seen, err := reader.Reset(fieldNames_SyntheticTransaction)
+	seen, err := reader.Reset(fieldNames_SyntheticMessage)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -743,15 +742,15 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *SyntheticTransaction) MarshalJSON() ([]byte, error) {
+func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        MessageType                `json:"type"`
-		Transaction *protocol.Transaction      `json:"transaction,omitempty"`
-		Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty"`
+		Type    MessageType                          `json:"type"`
+		Message *encoding.JsonUnmarshalWith[Message] `json:"message,omitempty"`
+		Proof   *protocol.AnnotatedReceipt           `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if !(v.Transaction == nil) {
-		u.Transaction = v.Transaction
+	if !(EqualMessage(v.Message, nil)) {
+		u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	}
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
@@ -834,14 +833,14 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *SyntheticTransaction) UnmarshalJSON(data []byte) error {
+func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        MessageType                `json:"type"`
-		Transaction *protocol.Transaction      `json:"transaction,omitempty"`
-		Proof       *protocol.AnnotatedReceipt `json:"proof,omitempty"`
+		Type    MessageType                          `json:"type"`
+		Message *encoding.JsonUnmarshalWith[Message] `json:"message,omitempty"`
+		Proof   *protocol.AnnotatedReceipt           `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Transaction = v.Transaction
+	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
 	u.Proof = v.Proof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -849,7 +848,10 @@ func (v *SyntheticTransaction) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Transaction = u.Transaction
+	if u.Message != nil {
+		v.Message = u.Message.Value
+	}
+
 	v.Proof = u.Proof
 	return nil
 }

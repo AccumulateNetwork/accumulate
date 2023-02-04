@@ -453,8 +453,10 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			}
 		} else {
 			messages = []messaging.Message{
-				&messaging.SyntheticTransaction{
-					Transaction: resp.Transaction,
+				&messaging.SyntheticMessage{
+					Message: &messaging.UserTransaction{
+						Transaction: resp.Transaction,
+					},
 					Proof: &protocol.AnnotatedReceipt{
 						Receipt: resp.Status.Proof,
 						Anchor: &protocol.AnchorMetadata{
@@ -561,9 +563,11 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 			}
 
 			for _, txid := range anchors[*(*[32]byte)(resp.Receipt.Start)] {
-				msg := new(messaging.SyntheticTransaction)
-				msg.Transaction = new(protocol.Transaction)
-				msg.Transaction.Body = &protocol.RemoteTransaction{Hash: txid.Hash()}
+				txn := new(messaging.UserTransaction)
+				txn.Transaction = new(protocol.Transaction)
+				txn.Transaction.Body = &protocol.RemoteTransaction{Hash: txid.Hash()}
+				msg := new(messaging.SyntheticMessage)
+				msg.Message = txn
 				msg.Proof = new(protocol.AnnotatedReceipt)
 				msg.Proof.Receipt = &resp.Receipt.Receipt
 				msg.Proof.Anchor = new(protocol.AnchorMetadata)
