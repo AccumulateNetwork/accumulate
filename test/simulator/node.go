@@ -119,7 +119,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Describe:      network,
 		Router:        s.router,
 		EventBus:      n.eventBus,
-		NewDispatcher: func() execute.Dispatcher { return &dispatcher{sim: s, envelopes: map[string][]messaging.Message{}} },
+		NewDispatcher: func() execute.Dispatcher { return &dispatcher{sim: s, envelopes: map[string][][]messaging.Message{}} },
 		Sequencer:     s.Services(),
 		Querier:       s.Services(),
 	}
