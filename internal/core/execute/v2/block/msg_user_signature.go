@@ -24,13 +24,13 @@ type UserSignature struct{}
 
 func (UserSignature) Type() messaging.MessageType { return messaging.MessageTypeUserSignature }
 
-func (UserSignature) Process(b *bundle, batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
-	sig, ok := msg.(*messaging.UserSignature)
+func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	sig, ok := ctx.message.(*messaging.UserSignature)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserSignature, msg.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserSignature, ctx.message.Type())
 	}
 	if sig.Signature.Type().IsSystem() {
-		return nil, errors.BadRequest.WithFormat("cannot submit a %v signature with a %v message", sig.Signature.Type(), msg.Type())
+		return nil, errors.BadRequest.WithFormat("cannot submit a %v signature with a %v message", sig.Signature.Type(), sig.Type())
 	}
 
 	batch = batch.Begin(true)
@@ -47,25 +47,25 @@ func (UserSignature) Process(b *bundle, batch *database.Batch, msg messaging.Mes
 	sig.TxID = txn.ID()
 
 	if !txn.GetTransaction().Body.Type().IsUser() {
-		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.GetTransaction().Body.Type(), msg.Type())
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.GetTransaction().Body.Type(), sig.Type())
 	}
 
 	// Process the transaction if it is synthetic or system, or the signature is
 	// internal, or the signature is local to the principal
 	signature, transaction := sig.Signature, txn.GetTransaction()
 	if signature.RoutingLocation().LocalTo(transaction.Header.Principal) {
-		b.transactionsToProcess.Add(transaction.ID().Hash())
+		ctx.transactionsToProcess.Add(transaction.ID().Hash())
 	}
 
 	status := new(protocol.TransactionStatus)
 	status.TxID = sig.ID()
-	status.Received = b.Block.Index
+	status.Received = ctx.Block.Index
 
-	s, err := b.Executor.processSignature2(batch, &chain.Delivery{
+	s, err := ctx.Executor.processSignature2(batch, &chain.Delivery{
 		Transaction: transaction,
-		Forwarded:   b.forwarded.Has(sig.ID().Hash()),
+		Forwarded:   ctx.forwarded.Has(sig.ID().Hash()),
 	}, signature)
-	b.Block.State.MergeSignature(s)
+	ctx.Block.State.MergeSignature(s)
 	if err == nil {
 		status.Code = errors.Delivered
 	} else {

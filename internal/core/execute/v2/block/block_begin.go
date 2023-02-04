@@ -449,9 +449,11 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		}
 
 		messages := []messaging.Message{
-			&messaging.SyntheticTransaction{
-				Transaction: txn,
-				Proof:       receipt,
+			&messaging.SyntheticMessage{
+				Message: &messaging.UserTransaction{
+					Transaction: txn,
+				},
+				Proof: receipt,
 			},
 			&messaging.ValidatorSignature{
 				Signature: keySig,
