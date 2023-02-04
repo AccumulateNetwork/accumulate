@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -169,12 +170,23 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		return nil
 	}
 
-	// Build receipts for synthetic transactions produced in the previous block
+	// Send the anchor first, before synthetic transactions
+	err = x.sendAnchor(block, ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("send anchor: %w", err)
+	}
+
+	// If the previous block included a directory anchor, send synthetic
+	// transactions anchored by that anchor
 	err = x.sendSyntheticTransactions(block.Batch, block.IsLeader)
 	if err != nil {
 		return errors.UnknownError.WithFormat("build synthetic transaction receipts: %w", err)
 	}
 
+	return nil
+}
+
+func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error {
 	// Is there an anchor to send?
 	if ledger.Anchor == nil {
 		x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
@@ -183,7 +195,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 	// Load the anchor ledger state
 	var anchorLedger *protocol.AnchorLedger
-	err = block.Batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	err := block.Batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load anchor ledger: %w", err)
 	}
@@ -273,17 +285,6 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		}
 	}
 
-	if x.Describe.NetworkType != config.Directory {
-		return nil
-	}
-
-	// If we're the DN, send synthetic transactions produced by the block we're
-	// anchoring, but send them after the anchor
-	err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, ledger.Index, nil)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
 	return nil
 }
 
@@ -334,6 +335,13 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 		anchor, ok := msg.GetTransaction().Body.(*protocol.DirectoryAnchor)
 		if !ok {
 			continue
+		}
+
+		if x.Describe.NetworkType == config.Directory {
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, anchor.MinorBlockIndex, nil)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
 		}
 
 		for _, receipt := range anchor.Receipts {
@@ -394,6 +402,12 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex, "anchor-from", logging.AsHex(blockReceipt.RootChainReceipt.Start).Slice(0, 4), "anchor-to", logging.AsHex(blockReceipt.Anchor).Slice(0, 4))
 	}
 
+	// Get the root receipt
+	rootReceipt, err := x.getRootReceiptForBlock(batch, indexEntry.Anchor, blockIndex)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
 	// Process the transactions
 	synthMainChain, err := record.MainChain().Get()
 	if err != nil {
@@ -406,7 +420,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 	}
 
 	// For each synthetic transaction from the last block
-	for _, hash := range entries {
+	for i, hash := range entries {
 		// Load it
 		var msg messaging.MessageWithTransaction
 		err := batch.Message2(hash).Main().GetAs(&msg)
@@ -422,25 +436,22 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.InternalError.WithFormat("%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
 		}
 
-		status, err := batch.Transaction(hash).GetStatus()
+		// Get the synthetic main chain receipt
+		synthReceipt, err := synthMainChain.Receipt(int64(from)+int64(i), int64(to))
 		if err != nil {
-			return errors.UnknownError.WithFormat("load synthetic transaction status: %w", err)
+			return errors.UnknownError.WithFormat("get synthetic main chain receipt from %d to %d: %w", from, to, err)
 		}
 
 		receipt := new(protocol.AnnotatedReceipt)
 		receipt.Anchor = new(protocol.AnchorMetadata)
-		if status.GotDirectoryReceipt {
-			receipt.Receipt = status.Proof
-			receipt.Anchor.Account = protocol.DnUrl()
-		} else if blockReceipt == nil {
-			receipt.Anchor.Account = txn.Header.Source
-			receipt.Receipt = status.Proof
+		receipt.Anchor.Account = protocol.DnUrl()
+		if blockReceipt == nil {
+			receipt.Receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt)
 		} else {
-			receipt.Anchor.Account = protocol.DnUrl()
-			receipt.Receipt, err = status.Proof.Combine(blockReceipt.RootChainReceipt)
-			if err != nil {
-				return errors.UnknownError.WithFormat("combine receipts: %w", err)
-			}
+			receipt.Receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt, blockReceipt.RootChainReceipt)
+		}
+		if err != nil {
+			return errors.UnknownError.WithFormat("combine receipts: %w", err)
 		}
 
 		keySig, err := x.signTransaction(txn.GetHash())
@@ -565,4 +576,34 @@ func (x *Executor) signTransaction(hash []byte) (protocol.KeySignature, error) {
 	}
 
 	return ks, nil
+}
+
+func (x *Executor) getRootReceiptForBlock(batch *database.Batch, from, block uint64) (*merkle.Receipt, error) {
+	// Load the root index chain
+	index, err := batch.Account(x.Describe.Ledger()).RootChain().Index().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
+	}
+	if index.Height() == 0 {
+		return nil, errors.NotFound.With("root index chain is empty")
+	}
+
+	// Locate the index entry for the given block
+	_, entry, err := indexing.SearchIndexChain(index, uint64(index.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(block))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("locate block %d root index chain entry: %w", block, err)
+	}
+
+	// Load the root chain
+	root, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
+	}
+
+	// Get a receipt from the entry to the block's anchor
+	receipt, err := root.Receipt(int64(from), int64(entry.Source))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("get root chain receipt from %d to %d: %w", from, entry.Source, err)
+	}
+	return receipt, nil
 }
