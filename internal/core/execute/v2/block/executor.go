@@ -25,20 +25,22 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var messageExecutors []func(ExecutorOptions) MessageExecutor
+var messageExecutors []func(ExecutorOptions) (messaging.MessageType, MessageExecutor)
+var signatureExecutors []func(ExecutorOptions) (protocol.SignatureType, SignatureExecutor)
 
 type Executor struct {
 	ExecutorOptions
 	BlockTimers TimerSet
 
-	globals          *Globals
-	executors        map[protocol.TransactionType]chain.TransactionExecutor
-	messageExecutors map[messaging.MessageType]MessageExecutor
-	logger           logging.OptionalLogger
-	db               database.Beginner
-	isValidator      bool
-	isGenesis        bool
-	mainDispatcher   Dispatcher
+	globals            *Globals
+	executors          map[protocol.TransactionType]chain.TransactionExecutor
+	messageExecutors   map[messaging.MessageType]MessageExecutor
+	signatureExecutors map[protocol.SignatureType]SignatureExecutor
+	logger             logging.OptionalLogger
+	db                 database.Beginner
+	isValidator        bool
+	isGenesis          bool
+	mainDispatcher     Dispatcher
 }
 
 type ExecutorOptions = execute.Options
@@ -110,6 +112,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
 	m.messageExecutors = newExecutorMap(opts, messageExecutors)
+	m.signatureExecutors = newExecutorMap(opts, signatureExecutors)
 	m.db = opts.Database
 	m.mainDispatcher = opts.NewDispatcher()
 	m.isGenesis = false
