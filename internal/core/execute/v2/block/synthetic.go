@@ -18,33 +18,81 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
+func (x *Executor) ProduceSynthetic(batch *database.Batch, produced []*ProducedMessage) error {
 	if len(produced) == 0 {
 		return nil
 	}
 
-	err := x.setSyntheticOrigin(batch, from, produced)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+	batch = batch.Begin(true)
+	defer batch.Discard()
 
-	state := new(chain.ChainUpdates)
-	for _, sub := range produced {
-		tx, err := x.buildSynthTxn(state, batch, sub.Header.Principal, sub.Body)
+	// Collect transactions and refundable synthetic transactions
+	txns := map[[32]byte]*protocol.Transaction{}
+	swos := map[[32]byte][]protocol.SynthTxnWithOrigin{}
+	for _, p := range produced {
+		from, err := batch.Message(p.Producer.Hash()).Main().Get()
 		if err != nil {
-			return err
+			return errors.InternalError.WithFormat("load message: %w", err)
 		}
-		sub.Header = tx.Header
-
-		// Don't record txn -> produced synth txn for internal transactions
-		if from.Body.Type().IsSystem() {
+		fromTxn, ok := from.(messaging.MessageWithTransaction)
+		if !ok {
 			continue
 		}
 
-		switch body := sub.Body.(type) {
+		sub, ok := p.Message.(messaging.MessageWithTransaction)
+		if !ok {
+			continue
+		}
+
+		swo, ok := sub.GetTransaction().Body.(protocol.SynthTxnWithOrigin)
+		if !ok {
+			continue
+		}
+
+		swo.SetCause(fromTxn.ID().Hash(), fromTxn.ID().Account())
+
+		h := p.Producer.Hash()
+		txns[h] = fromTxn.GetTransaction()
+		swos[h] = append(swos[h], swo)
+	}
+
+	for hash, from := range txns {
+		err := x.setSyntheticOrigin(batch, from, swos[hash])
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// Finalize the produced transactions
+	state := new(chain.ChainUpdates)
+	for _, p := range produced {
+		from, err := batch.Message(p.Producer.Hash()).Main().Get()
+		if err != nil {
+			return errors.InternalError.WithFormat("load message: %w", err)
+		}
+		fromTxn, _ := from.(messaging.MessageWithTransaction)
+
+		sub, ok := p.Message.(messaging.MessageWithTransaction)
+		if !ok {
+			return errors.InternalError.WithFormat("invalid produced message type %v", p.Message.Type())
+		}
+
+		tx, err := x.buildSynthTxn(state, batch, sub.GetTransaction().Header.Principal, sub.GetTransaction().Body)
+		if err != nil {
+			return err
+		}
+		sub.GetTransaction().Header = tx.Header
+
+		// Don't record txn -> produced synth txn for internal transactions
+		if fromTxn != nil && fromTxn.GetTransaction().Body.Type().IsSystem() {
+			continue
+		}
+
+		switch body := sub.GetTransaction().Body.(type) {
 		case protocol.SynthTxnWithOrigin:
 			// Record transaction -> produced synthetic transaction
-			err = batch.Transaction(from.GetHash()).Produced().Add(tx.ID())
+			h := from.ID().Hash()
+			err = batch.Transaction(h[:]).Produced().Add(tx.ID())
 			if err != nil {
 				return err
 			}
@@ -63,6 +111,11 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		}
 	}
 
+	err := batch.Commit()
+	if err != nil {
+		return errors.UnknownError.WithFormat("commit batch: %w", err)
+	}
+
 	return nil
 }
 
@@ -70,28 +123,9 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 // transaction. setSyntheticOrigin sets the refund amount for each synthetic
 // transaction, spreading the potential refund across all produced synthetic
 // transactions.
-func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
-	if len(produced) == 0 {
-		return nil
-	}
-
-	// Find all the synthetic transactions that implement the interface
-	var swos []protocol.SynthTxnWithOrigin
-	for _, txn := range produced {
-		swo, ok := txn.Body.(protocol.SynthTxnWithOrigin)
-		if !ok {
-			continue
-		}
-
-		swos = append(swos, swo)
-		swo.SetCause(*(*[32]byte)(from.GetHash()), from.Header.Principal)
-	}
-	if len(swos) == 0 {
-		return nil
-	}
-
+func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []protocol.SynthTxnWithOrigin) error {
 	// Set the refund amount for each output
-	refund, err := x.globals.Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(swos))
+	refund, err := x.globals.Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(produced))
 	if err != nil {
 		return errors.InternalError.WithFormat("compute refund: %w", err)
 	}
@@ -101,7 +135,7 @@ func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Tran
 		return errors.UnknownError.WithFormat("load status: %w", err)
 	}
 
-	for _, swo := range swos {
+	for _, swo := range produced {
 		swo.SetRefund(status.Initiator, refund)
 	}
 	return nil
