@@ -42,14 +42,13 @@ UserSignature:
       type: txid
       pointer: true
 
-SyntheticTransaction:
+SyntheticMessage:
   # TODO Update to have multiple transactions with a list receipt
   union: { type: message }
   fields:
-    - name: Transaction
-      type: protocol.Transaction
-      marshal-as: reference
-      pointer: true
+    - name: Message
+      type: Message
+      marshal-as: union
     - name: Proof
       type: protocol.AnnotatedReceipt
       marshal-as: reference
