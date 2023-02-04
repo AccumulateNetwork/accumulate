@@ -161,8 +161,8 @@ func MakeLiteTokenAccount(t testing.TB, db database.Updater, pubKey []byte, toke
 	t.Helper()
 	lid := protocol.LiteAuthorityForKey(pubKey, protocol.SignatureTypeED25519)
 	lta := lid.JoinPath(token.ShortString())
-	MakeAccount(t, db, &protocol.LiteIdentity{Url: lid})
-	MakeAccount(t, db, &protocol.LiteTokenAccount{Url: lta, TokenUrl: token})
+	MakeAccount(t, db, &protocol.LiteIdentity{Url: lid, CreditBalance: 1e9})
+	MakeAccount(t, db, &protocol.LiteTokenAccount{Url: lta, TokenUrl: token, Balance: *big.NewInt(1e15)})
 	return lta
 }
 

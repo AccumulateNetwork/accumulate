@@ -258,30 +258,9 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
 
-	if status.Proof == nil || !status.GotDirectoryReceipt {
-		return false, nil
-	}
-
-	// Load the anchor chain
-	anchorChain, err := batch.Account(x.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load %s intermediate anchor chain: %w", protocol.Directory, err)
-	}
-
-	// Is the result a valid DN anchor?
-	_, err = anchorChain.HeightOf(status.Proof.Anchor)
-	switch {
-	case err == nil:
-		// Ready
-	case errors.Is(err, storage.ErrNotFound):
-		return false, nil
-	default:
-		return false, errors.UnknownError.WithFormat("get height of entry %X of %s intermediate anchor chain: %w", status.Proof.Anchor[:4], protocol.Directory, err)
-	}
-
 	// Load the ledger
 	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
+	err := batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
 	}
@@ -474,26 +453,15 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 		return status, state, nil
 	}
 
+	if delivery.Transaction.Body.Type().IsSynthetic() {
+		x.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "module", "synthetic")
+		return status, state, nil
+	}
+
 	// Add the user transaction to the principal's list of pending transactions
-	if delivery.Transaction.Body.Type().IsUser() {
-		err = batch.Account(delivery.Transaction.Header.Principal).AddPending(delivery.Transaction.ID())
-		if err != nil {
-			return nil, nil, fmt.Errorf("store pending list: %w", err)
-		}
-
-		return status, state, nil
-	}
-
-	if status.Proof == nil {
-		x.logger.Error("Missing receipt for pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type())
-		return status, state, nil
-	}
-
-	x.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "anchor", logging.AsHex(status.Proof.Anchor).Slice(0, 4), "module", "synthetic")
-
-	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(status.Proof.Anchor), delivery.Transaction.ID())
+	err = batch.Account(delivery.Transaction.Header.Principal).AddPending(delivery.Transaction.ID())
 	if err != nil {
-		return nil, nil, errors.UnknownError.Wrap(err)
+		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
 
 	return status, state, nil
