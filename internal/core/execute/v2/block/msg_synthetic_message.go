@@ -35,75 +35,55 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 
 	// Basic validation
 	if syn.Message == nil {
-		return nil, errors.BadRequest.With("missing message")
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing message")), nil
 	}
-	if syn.Proof != nil {
-		if syn.Proof.Receipt == nil {
-			return nil, errors.BadRequest.With("missing proof receipt")
-		}
-		if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
-			return nil, errors.BadRequest.With("missing proof metadata")
-		}
+	if syn.Proof == nil {
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing proof")), nil
+	}
+	if syn.Proof.Receipt == nil {
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing proof receipt")), nil
+	}
+	if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing proof metadata")), nil
+	}
+
+	// Verify the proof starts with the transaction hash
+	h := syn.ID().Hash()
+	if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)), nil
 	}
 
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	// Load the status
-	h := syn.ID().Hash()
+	// Verify the proof ends with a DN anchor
+	_, err := batch.Account(ctx.Executor.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().IndexOf(syn.Proof.Receipt.Anchor)
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)), nil
+	default:
+		return nil, errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
+	}
+
+	// Record when the transaction was first received
 	status, err := batch.Transaction(h[:]).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
-	// Record when the transaction was first received
 	if status.Received == 0 {
 		status.Received = ctx.Block.Index
-	}
-
-	// Record the proof (if provided)
-	if syn.Proof != nil {
-		if syn.Proof.Anchor.Account.Equal(protocol.DnUrl()) {
-			status.GotDirectoryReceipt = true
+		err = batch.Transaction(h[:]).Status().Put(status)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
 		}
-
-		switch {
-		case status.Proof != nil && bytes.Equal(status.Proof.Anchor, syn.Proof.Receipt.Start):
-			// The incoming proof extends the one we have
-			status.Proof, err = status.Proof.Combine(syn.Proof.Receipt)
-			if err != nil {
-				return protocol.NewErrorStatus(syn.ID(), errors.Unauthorized.WithFormat("combine receipts: %w", err)), nil
-			}
-
-		case !bytes.Equal(h[:], syn.Proof.Receipt.Start):
-			return protocol.NewErrorStatus(syn.ID(), errors.Unauthorized.WithFormat("receipt does not match transaction")), nil
-
-			// Else the incoming proof starts from the transaction hash
-
-		case status.Proof == nil:
-			// We have no proof yet
-			status.Proof = syn.Proof.Receipt
-
-		case status.Proof.Contains(syn.Proof.Receipt):
-			// We already have the proof
-
-		case syn.Proof.Receipt.Contains(status.Proof):
-			// The incoming proof contains and extends the one we have
-			status.Proof = syn.Proof.Receipt
-
-		default:
-			return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("incoming receipt is incompatible with existing receipt")), nil
-		}
-	}
-
-	err = batch.Transaction(h[:]).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	var shouldQueue bool
 	switch syn.Message.Type() {
 	case messaging.MessageTypeUserTransaction:
-		// Allowed
+		// Allowed, queue for execution
 		shouldQueue = true
 
 	default:
