@@ -16,16 +16,12 @@ import (
 )
 
 func init() {
-	messageExecutors = append(messageExecutors, func(ExecutorOptions) MessageExecutor { return SyntheticMessage{} })
+	registerSimpleExec[SyntheticMessage](&messageExecutors, messaging.MessageTypeSynthetic)
 }
 
 // SyntheticMessage records the synthetic transaction but does not execute
 // it.
 type SyntheticMessage struct{}
-
-func (SyntheticMessage) Type() messaging.MessageType {
-	return messaging.MessageTypeSynthetic
-}
 
 func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	syn, ok := ctx.message.(*messaging.SyntheticMessage)

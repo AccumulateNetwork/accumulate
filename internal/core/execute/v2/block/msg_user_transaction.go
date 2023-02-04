@@ -17,15 +17,13 @@ import (
 )
 
 func init() {
-	messageExecutors = append(messageExecutors, func(ExecutorOptions) MessageExecutor { return UserTransaction{} })
+	registerSimpleExec[UserTransaction](&messageExecutors, messaging.MessageTypeUserTransaction)
 }
 
 // UserTransaction records the transaction but does not execute it. Transactions
 // are executed in response to _authority signature_ messages, not user
 // transaction messages.
 type UserTransaction struct{}
-
-func (UserTransaction) Type() messaging.MessageType { return messaging.MessageTypeUserTransaction }
 
 func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	txn, ok := ctx.message.(*messaging.UserTransaction)
