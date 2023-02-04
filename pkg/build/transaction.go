@@ -568,3 +568,22 @@ func (b ActivateProtocolVersionBuilder) Done() (*protocol.Transaction, error) {
 func (b ActivateProtocolVersionBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
+
+type LockAccountBuilder struct {
+	t    TransactionBuilder
+	body protocol.LockAccount
+}
+
+func (b TransactionBuilder) LockAccount(height uint64) LockAccountBuilder {
+	c := LockAccountBuilder{t: b}
+	c.body.Height = height
+	return c
+}
+
+func (b LockAccountBuilder) Done() (*protocol.Transaction, error) {
+	return b.t.Body(&b.body).Done()
+}
+
+func (b LockAccountBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.t.Body(&b.body).SignWith(signer, path...)
+}

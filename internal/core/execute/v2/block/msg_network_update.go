@@ -15,14 +15,12 @@ import (
 )
 
 func init() {
-	messageExecutors = append(messageExecutors, func(ExecutorOptions) MessageExecutor { return NetworkUpdate{} })
+	registerSimpleExec[NetworkUpdate](&messageExecutors, internal.MessageTypeNetworkUpdate)
 }
 
 // NetworkUpdate constructs a transaction for the network update and queues it
 // for processing.
 type NetworkUpdate struct{}
-
-func (NetworkUpdate) Type() messaging.MessageType { return internal.MessageTypeNetworkUpdate }
 
 func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	msg, ok := ctx.message.(*internal.NetworkUpdate)

@@ -10,19 +10,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
-	messageExecutors = append(messageExecutors, func(ExecutorOptions) MessageExecutor { return ForwardedMessage{} })
+	registerSimpleExec[ForwardedMessage](&messageExecutors, internal.MessageTypeForwardedMessage)
 }
 
 // ForwardedMessage marks a message as having been forwarded and processes the
 // inner message.
 type ForwardedMessage struct{}
-
-func (ForwardedMessage) Type() messaging.MessageType { return internal.MessageTypeForwardedMessage }
 
 func (ForwardedMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	fwd, ok := ctx.message.(*internal.ForwardedMessage)
