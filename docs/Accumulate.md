@@ -91,7 +91,7 @@ applications and use cases with the blockchain technology:
     * Performance
         * Sharding -- Block Validator Chains (BVCs) and the Directory Block Chain
           (DBC) run independently
-        * Synthetic Transactions -- Transaction processing runs in parallel with blockchain syncronization
+        * Synthetic Transactions -- Transaction processing runs in parallel with blockchain synchronization
         * BVCs and DBC each run their own consensus (independently)
         * Tokens are tracked across accounts, one chain per account
         * All accounts can process transactions in parallel
