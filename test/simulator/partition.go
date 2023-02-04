@@ -285,6 +285,22 @@ func (p *Partition) execute() error {
 		}
 	}
 
+	status := map[[32]byte]error{}
+	for _, r := range results[0] {
+		if r.Error != nil {
+			status[r.TxID.Hash()] = r.AsError()
+		}
+	}
+	for _, msg := range messages {
+		if msg.Type() == messaging.MessageTypeUserTransaction ||
+			msg.Type() == messaging.MessageTypeUserSignature {
+			continue
+		}
+		if err, ok := status[msg.ID().Hash()]; ok {
+			p.logger.Error("System message failed", "err", err, "type", msg.Type(), "id", msg.ID())
+		}
+	}
+
 	// End block
 	blockState := make([]execute.BlockState, len(p.nodes))
 	endBlock := make([][]*validatorUpdate, len(p.nodes))
