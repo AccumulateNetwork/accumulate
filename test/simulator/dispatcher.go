@@ -16,9 +16,12 @@ import (
 )
 
 // dispatcher implements [block.Dispatcher] for the simulator.
+//
+// dispatcher maintains a separate bundle (slice) of messages for each call to
+// Submit to make it easier to write tests that drop certain messages.
 type dispatcher struct {
 	sim       *Simulator
-	envelopes map[string][]messaging.Message
+	envelopes map[string][][]messaging.Message
 }
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
@@ -35,13 +38,13 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 		return err
 	}
 
-	d.envelopes[partition] = append(d.envelopes[partition], deliveries...)
+	d.envelopes[partition] = append(d.envelopes[partition], deliveries)
 	return nil
 }
 
 // Send submits queued envelopes to the respective partitions.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
-	envelopes := make(map[string][]messaging.Message, len(d.envelopes))
+	envelopes := make(map[string][][]messaging.Message, len(d.envelopes))
 	for p, e := range d.envelopes {
 		envelopes[p] = e
 	}
@@ -58,13 +61,22 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		defer close(errs)
 
 		for part, envelopes := range envelopes {
-			st, err := d.sim.SubmitTo(part, envelopes)
-			if err != nil {
-				errs <- err
-				continue
-			}
-			for _, st := range st {
-				if st.Error != nil && st.Code != errors.Delivered {
+			for _, envelopes := range envelopes {
+				st, err := d.sim.SubmitTo(part, envelopes)
+				if err != nil {
+					errs <- err
+					continue
+				}
+				for _, st := range st {
+					if st.Error == nil {
+						continue
+					}
+					if !st.Failed() {
+						continue
+					}
+					if st.Code == errors.NotAllowed && st.Error.Message == "dropped" {
+						continue
+					}
 					errs <- st.AsError()
 				}
 			}
