@@ -7,7 +7,6 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -15,14 +14,12 @@ import (
 )
 
 func init() {
-	messageExecutors = append(messageExecutors, func(ExecutorOptions) MessageExecutor { return UserSignature{} })
+	registerSimpleExec[UserSignature](&messageExecutors, messaging.MessageTypeUserSignature)
 }
 
 // UserSignature executes the signature, queuing the transaction for processing
 // when appropriate.
 type UserSignature struct{}
-
-func (UserSignature) Type() messaging.MessageType { return messaging.MessageTypeUserSignature }
 
 func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	sig, ok := ctx.message.(*messaging.UserSignature)
@@ -57,19 +54,9 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 		ctx.transactionsToProcess.Add(transaction.ID().Hash())
 	}
 
-	status := new(protocol.TransactionStatus)
-	status.TxID = sig.ID()
-	status.Received = ctx.Block.Index
-
-	s, err := ctx.Executor.processSignature2(batch, &chain.Delivery{
-		Transaction: transaction,
-		Forwarded:   ctx.forwarded.Has(sig.ID().Hash()),
-	}, signature)
-	ctx.Block.State.MergeSignature(s)
-	if err == nil {
-		status.Code = errors.Delivered
-	} else {
-		status.Set(err)
+	status, err := ctx.callSignatureExecutor(batch, ctx.sigWith(signature, transaction))
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Always record the signature and status
