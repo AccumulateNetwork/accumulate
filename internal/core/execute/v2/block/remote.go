@@ -7,7 +7,6 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -61,20 +60,26 @@ func (b *bundle) ProcessRemoteSignatures() error {
 		if i, ok := txnIndex[fwd.Destination.AccountID32()]; ok {
 			transaction := transactions[i]
 			transaction.Signatures = append(transaction.Signatures, *fwd)
+			continue
 		}
 
-		transaction := new(protocol.SyntheticForwardTransaction)
-		transaction.Transaction = txn.GetTransaction()
-		transaction.Signatures = append(transaction.Signatures, *fwd)
+		producer := sig.ID()
+		if sig, ok := sig.Signature.(*protocol.RemoteSignature); ok {
+			producer = producer.Account().WithTxID(*(*[32]byte)(sig.Signature.Hash()))
+		}
+
+		body := new(protocol.SyntheticForwardTransaction)
+		body.Transaction = txn.GetTransaction()
+		body.Signatures = append(body.Signatures, *fwd)
 		txnIndex[fwd.Destination.AccountID32()] = len(transactions)
-		transactions = append(transactions, transaction)
+		transactions = append(transactions, body)
 
-		state, ok := b.state.Get(sig.TxID.Hash())
-		if !ok {
-			state = new(chain.ProcessTransactionState)
-			b.state.Set(sig.TxID.Hash(), state)
-		}
-		state.DidProduceTxn(fwd.Destination, transaction)
+		msg := new(messaging.UserTransaction)
+		msg.Transaction = new(protocol.Transaction)
+		msg.Transaction.Header.Principal = fwd.Destination
+		msg.Transaction.Body = body
+		prod := &ProducedMessage{Producer: producer, Message: msg}
+		b.produced = append(b.produced, prod)
 	}
 
 	return nil
