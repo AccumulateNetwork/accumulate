@@ -87,6 +87,10 @@ func (x ValidatorSignature) Process(batch *database.Batch, ctx *MessageContext) 
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	if status.Failed() {
+		return status, nil
+	}
+
 	// Queue for execution
 	ctx.transactionsToProcess.Add(txn.ID().Hash())
 

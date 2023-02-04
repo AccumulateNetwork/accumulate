@@ -186,58 +186,6 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	return txn, nil
 }
 
-func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol.Transaction, rootAnchor, synthAnchor int64) error {
-	// Load the root chain
-	chain, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load root chain: %w", err)
-	}
-
-	// Prove the synthetic transaction chain anchor
-	rootProof, err := chain.Receipt(synthAnchor, rootAnchor)
-	if err != nil {
-		return errors.UnknownError.WithFormat("prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
-	}
-
-	// Load the synthetic transaction chain
-	chain, err = batch.Account(x.Describe.Synthetic()).MainChain().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load root chain: %w", err)
-	}
-
-	synthStart := chain.Height() - int64(len(produced))
-	synthEnd := chain.Height() - 1
-
-	// For each produced transaction
-	for i, transaction := range produced {
-		// TODO Can we make this less hacky?
-		record := batch.Transaction(transaction.GetHash())
-		status, err := record.GetStatus()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load synthetic transaction status: %w", err)
-		}
-
-		// Prove it
-		synthProof, err := chain.Receipt(int64(i+int(synthStart)), synthEnd)
-		if err != nil {
-			return errors.UnknownError.WithFormat("prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
-		}
-
-		r, err := synthProof.Combine(rootProof)
-		if err != nil {
-			return errors.UnknownError.WithFormat("combine receipts: %w", err)
-		}
-
-		status.Proof = r
-		err = record.PutStatus(status)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store synthetic transaction status: %w", err)
-		}
-	}
-
-	return nil
-}
-
 func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Check for a key signature
 	hasKeySig, err := hasKeySignature(batch, status)
@@ -250,11 +198,6 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 
 	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
 		return nil
-	}
-
-	// Check that the receipt signature has been received
-	if status.Proof == nil {
-		return errors.Unauthenticated.WithFormat("missing synthetic transaction receipt")
 	}
 
 	return nil
