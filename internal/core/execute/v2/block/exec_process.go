@@ -221,6 +221,7 @@ func (b *BlockV2) checkForUnsignedTransactions(messages []messaging.Message) err
 	return nil
 }
 
+// callMessageExecutor finds the executor for the message and calls it.
 func (b *bundle) callMessageExecutor(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// Internal messages are not allowed on the first pass. This is probably
 	// unnecessary since internal messages cannot be marshalled, but better safe
@@ -237,6 +238,20 @@ func (b *bundle) callMessageExecutor(batch *database.Batch, ctx *MessageContext)
 			return nil, errors.InternalError.WithFormat("no executor registered for message type %v", ctx.Type())
 		}
 		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("unsupported message type %v", ctx.Type())), nil
+	}
+
+	// Process the message
+	st, err := x.Process(batch, ctx)
+	err = errors.UnknownError.Wrap(err)
+	return st, err
+}
+
+// callSignatureExecutor finds the executor for the signature and calls it.
+func (b *bundle) callSignatureExecutor(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+	// Find the appropriate executor
+	x, ok := b.Executor.signatureExecutors[ctx.Type()]
+	if !ok {
+		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("unsupported signature type %v", ctx.Type())), nil
 	}
 
 	// Process the message
