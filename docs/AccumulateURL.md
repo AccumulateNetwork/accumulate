@@ -56,7 +56,7 @@ Create a new identity
 
 ####Key Update
 An identity can be updated to replace a public key.  The public key which will become invalid from
-the current block forward, but can still be used to for resolving identity keys for entries prior to the current block 
+the current block forward, but can still be used for resolving identity keys for entries prior to the current block 
 height.  No transactions using the replaced key will be valid going forward.
 
 > acc://RedWagon/identity?replace=PUBLICKEY1_HEX+PUBLICKEY2_HEX&signature=f97a65de43
