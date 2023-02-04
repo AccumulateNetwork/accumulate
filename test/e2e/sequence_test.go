@@ -17,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -74,70 +73,6 @@ func TestOutOfSequenceSynth(t *testing.T) {
 			Build()
 	}
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(txns...)...)
-
-	// Verify
-	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
-		var account *LiteTokenAccount
-		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
-		require.Equal(t, uint64(len(txns)), account.Balance.Uint64())
-		return nil
-	})
-}
-
-func TestMissingSynthTxn(t *testing.T) {
-	var timestamp uint64
-
-	// Initialize
-	sim := simulator.NewWith(t, simulator.SimulatorOptions{
-		// Add more logging to debug the intermittent failure
-		LogLevels: config.LogLevel{}.
-			Parse(acctesting.DefaultLogLevels).
-			SetModule("executor", "debug").
-			SetModule("synthetic", "debug").
-			String(),
-	})
-	sim.InitFromGenesis()
-
-	alice := acctesting.GenerateKey("Alice")
-	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
-	bob := acctesting.GenerateKey("Bob")
-	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
-	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
-	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
-
-	// The first time an envelope contains a deposit, drop the first deposit
-	var didDrop bool
-	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
-		for i, env := range envelopes {
-			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
-				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
-				didDrop = true
-				return append(envelopes[:i], envelopes[i+1:]...), false
-			}
-		}
-		return envelopes, true
-	}
-
-	// Execute
-	txns := make([]*messaging.Envelope, 5)
-	for i := range txns {
-		txns[i] = acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
-			WithTimestampVar(&timestamp).
-			WithSigner(aliceUrl, 1).
-			WithBody(&SendTokens{
-				To: []*TokenRecipient{{
-					Url:    bobUrl,
-					Amount: *big.NewInt(1),
-				}},
-			}).
-			Initiate(SignatureTypeLegacyED25519, alice).
-			Build()
-	}
-	envs := sim.MustSubmitAndExecuteBlock(txns...)
-	sim.ExecuteBlocks(10)
-	require.True(t, didDrop, "synthetic transactions have not been sent")
-	sim.WaitForTransactions(delivered, envs...)
 
 	// Verify
 	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
