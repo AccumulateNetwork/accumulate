@@ -43,8 +43,14 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing proof metadata")), nil
 	}
 
+	// A synthetic message must be sequenced (may change in the future)
+	seq, ok := syn.Message.(*messaging.SequencedMessage)
+	if !ok {
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("a synthetic message must be sequenced")), nil
+	}
+
 	// Verify the proof starts with the transaction hash
-	h := syn.ID().Hash()
+	h := syn.Message.ID().Hash()
 	if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
 		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)), nil
 	}
@@ -63,6 +69,22 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 		return nil, errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
 	}
 
+	// Record the synthetic message and it's cause/produced relation
+	err = batch.Message(syn.Hash()).Main().Put(syn)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store message: %w", err)
+	}
+
+	err = batch.Message(syn.Hash()).Produced().Add(syn.Message.ID())
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store message produced: %w", err)
+	}
+
+	err = batch.Message(syn.Message.Hash()).Cause().Add(syn.ID())
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store message cause: %w", err)
+	}
+
 	// Record when the transaction was first received
 	status, err := batch.Transaction(h[:]).Status().Get()
 	if err != nil {
@@ -77,13 +99,13 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 	}
 
 	var shouldQueue bool
-	switch syn.Message.Type() {
+	switch seq.Message.Type() {
 	case messaging.MessageTypeUserTransaction:
 		// Allowed, queue for execution
 		shouldQueue = true
 
 	default:
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v", syn.Message.Type())), nil
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", syn.Message.Type())), nil
 	}
 
 	st, err := ctx.callMessageExecutor(batch, ctx.childWith(syn.Message))
@@ -101,7 +123,7 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 
 	if shouldQueue {
 		// Queue for execution
-		ctx.transactionsToProcess.Add(syn.ID().Hash())
+		ctx.transactionsToProcess.Add(syn.Message.ID().Hash())
 	}
 
 	return st, nil

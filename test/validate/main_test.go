@@ -664,24 +664,35 @@ func (s *ValidationTestSuite) TestMain() {
 	_ = s.NotNil(st.Error) &&
 		s.Equal(fmt.Sprintf("transaction %x (sendTokens) has been delivered", h[:4]), st.Error.Message)
 
+	var dropped *url.TxID
 	if s.sim != nil {
-		var didDrop bool
 		s.TB.Log("Drop the next anchor")
 		s.sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop bool, keepHook bool) {
 			for _, msg := range messages {
-				msg, ok := msg.(*messaging.UserTransaction)
+				seq, ok := msg.(*messaging.SequencedMessage)
 				if !ok {
 					continue
 				}
-				if !msg.Transaction.Body.Type().IsAnchor() {
+				txn, ok := seq.Message.(*messaging.UserTransaction)
+				if !ok {
 					continue
 				}
-				didDrop = true
+				if !txn.Transaction.Body.Type().IsAnchor() {
+					continue
+				}
+				dropped = txn.ID()
 				return true, false
 			}
 			return false, true
 		})
-		defer func() { s.True(didDrop, "Expected an anchor to be dropped") }()
+
+		defer func() {
+			// Wait for an anchor to be dropped
+			s.StepUntil(func(*Harness) bool { return dropped != nil })
+
+			// Wait for that anchor to be healed
+			s.StepUntil(Txn(dropped).Succeeds())
+		}()
 	}
 
 	s.TB.Log("Create a token issuer")
