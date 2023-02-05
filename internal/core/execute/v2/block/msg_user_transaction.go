@@ -7,8 +7,6 @@
 package block
 
 import (
-	"strings"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -69,7 +67,7 @@ func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*pro
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	loaded, err := storeTransaction(batch, txn)
+	loaded, err := storeTransaction(batch, ctx, txn)
 	if err != nil {
 		if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
 			return protocol.NewErrorStatus(txn.ID(), err), nil
@@ -79,7 +77,7 @@ func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*pro
 
 	// If the parent message is synthetic, only allow synthetic transactions.
 	// Otherwise, do not allow synthetic transactions.
-	if ctx.parent != nil && ctx.parent.Type() == messaging.MessageTypeSynthetic {
+	if ctx.isWithin(messaging.MessageTypeSynthetic) {
 		if !loaded.Body.Type().IsSynthetic() {
 			return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v", loaded.Body.Type())), nil
 		}
@@ -112,25 +110,13 @@ func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*pro
 	return nil, nil
 }
 
-func storeTransaction(batch *database.Batch, msg messaging.MessageWithTransaction) (*protocol.Transaction, error) {
+func storeTransaction(batch *database.Batch, ctx *MessageContext, msg messaging.MessageWithTransaction) (*protocol.Transaction, error) {
 	txn := msg.GetTransaction()
 	record := batch.Message(txn.ID().Hash())
 
 	// Validate the synthetic transaction header
-	if typ := txn.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
-		var missing []string
-		if txn.Header.Source == nil {
-			missing = append(missing, "source")
-		}
-		if txn.Header.Destination == nil {
-			missing = append(missing, "destination")
-		}
-		if txn.Header.SequenceNumber == 0 {
-			missing = append(missing, "sequence number")
-		}
-		if len(missing) > 0 {
-			return nil, errors.BadRequest.WithFormat("invalid synthetic transaction: missing %s", strings.Join(missing, ", "))
-		}
+	if typ := txn.Body.Type(); (typ.IsSynthetic() || typ.IsAnchor()) && !ctx.isWithin(messaging.MessageTypeSequenced) {
+		return nil, errors.BadRequest.WithFormat("a %v transaction must be sequenced", typ)
 	}
 
 	isRemote := txn.Body.Type() == protocol.TransactionTypeRemote

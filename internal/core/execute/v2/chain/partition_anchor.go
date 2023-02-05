@@ -127,7 +127,12 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
 
-		sequence[txid] = int(txn.GetTransaction().Header.SequenceNumber)
+		seq, err := getSequence(st.batch, txid)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
+		}
+
+		sequence[txid] = int(seq.Number)
 		txids = append(txids, txid)
 	}
 

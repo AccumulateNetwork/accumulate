@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -31,7 +31,9 @@ func BigintCopy(v *big.Int) *big.Int {
 	return u
 }
 
-// SetPtr sets *target = value
+// SetPtr sets *target = value. If value cannot be assigned to *target and value
+// has an Unwrap() method that returns a single value, SetPtr will retry with
+// Unwrap()'s return value, recursively.
 func SetPtr(value, target interface{}) (err error) {
 	if value == nil {
 		panic("value is nil")
@@ -50,17 +52,29 @@ func SetPtr(value, target interface{}) (err error) {
 	}
 	rtarget = rtarget.Elem()
 
-	// If target is a pointer to value, there's nothing to do
+	// Check if value == *target
 	rvalue := reflect.ValueOf(value)
+try_assign:
 	if rvalue.Kind() == reflect.Ptr && rtarget.Kind() == reflect.Ptr && rvalue.Pointer() == rtarget.Pointer() {
-		return nil
+		return nil // Nothing to do
 	}
 
 	// Check if we can: *target = value
-	if !rvalue.Type().AssignableTo(rtarget.Type()) {
+	if rvalue.Type().AssignableTo(rtarget.Type()) {
+		rtarget.Set(rvalue)
+		return nil
+	}
+
+	// Look for an Unwrap() method
+	unwrap, ok := rvalue.Type().MethodByName("Unwrap")
+	if !ok || unwrap.Type.NumIn() != 1 || unwrap.Type.NumOut() != 1 {
 		return fmt.Errorf("cannot assign %T to %v", value, rtarget.Type())
 	}
 
-	rtarget.Set(rvalue)
-	return nil
+	// Unwrap and try again
+	rvalue = unwrap.Func.Call([]reflect.Value{rvalue})[0]
+	for rvalue.Kind() == reflect.Interface {
+		rvalue = rvalue.Elem()
+	}
+	goto try_assign
 }

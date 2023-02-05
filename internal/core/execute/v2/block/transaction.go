@@ -258,27 +258,33 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
 
+	// Find the sequence
+	seq, err := getSequence(batch, delivery.Transaction.ID())
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load sequence info: %w", err)
+	}
+
 	// Load the ledger
 	var ledger *protocol.SyntheticLedger
-	err := batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
 	}
 
 	// If the sequence number is old, mark it already delivered
-	partitionLedger := ledger.Partition(delivery.Transaction.Header.Source)
-	if delivery.Transaction.Header.SequenceNumber <= partitionLedger.Delivered {
+	partitionLedger := ledger.Partition(seq.Source)
+	if seq.Number <= partitionLedger.Delivered {
 		return false, errors.Delivered.WithFormat("synthetic transaction has been delivered")
 	}
 
 	// If the transaction is out of sequence, mark it pending
-	if partitionLedger.Delivered+1 != delivery.Transaction.Header.SequenceNumber {
+	if partitionLedger.Delivered+1 != seq.Number {
 		x.logger.Info("Out of sequence synthetic transaction",
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-			"seq-got", delivery.Transaction.Header.SequenceNumber,
+			"seq-got", seq.Number,
 			"seq-want", partitionLedger.Delivered+1,
-			"source", delivery.Transaction.Header.Source,
-			"destination", delivery.Transaction.Header.Destination,
+			"source", seq.Source,
+			"destination", seq.Destination,
 			"type", delivery.Transaction.Body.Type(),
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 		)
@@ -314,10 +320,16 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 		// Anchors must be sequenced
 	}
 
+	// Find the sequence
+	seq, err := getSequence(batch, delivery.Transaction.ID())
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load sequence info: %w", err)
+	}
+
 	// Have we received enough signatures?
-	partition, ok := protocol.ParsePartitionUrl(delivery.Transaction.Header.Source)
+	partition, ok := protocol.ParsePartitionUrl(seq.Source)
 	if !ok {
-		return false, errors.BadRequest.WithFormat("source %v is not a partition", delivery.Transaction.Header.Source)
+		return false, errors.BadRequest.WithFormat("source %v is not a partition", seq.Source)
 	}
 	if uint64(len(status.AnchorSigners)) < x.globals.Active.ValidatorThreshold(partition) {
 		return false, nil
@@ -325,20 +337,20 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 
 	// Load the ledger
 	var ledger *protocol.AnchorLedger
-	err := batch.Account(x.Describe.AnchorPool()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.AnchorPool()).GetStateAs(&ledger)
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load anchor ledger: %w", err)
 	}
 
 	// If the transaction is out of sequence, mark it pending
-	partLedger := ledger.Anchor(delivery.SourceNetwork)
-	if partLedger.Delivered+1 != delivery.Transaction.Header.SequenceNumber {
+	partLedger := ledger.Anchor(delivery.Sequence.Source)
+	if partLedger.Delivered+1 != seq.Number {
 		x.logger.Info("Out of sequence anchor transaction",
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-			"seq-got", delivery.Transaction.Header.SequenceNumber,
+			"seq-got", seq.Number,
 			"seq-want", partLedger.Delivered+1,
-			"source", delivery.Transaction.Header.Source,
-			"destination", delivery.Transaction.Header.Destination,
+			"source", seq.Source,
+			"destination", seq.Destination,
 			"type", delivery.Transaction.Body.Type(),
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 		)
@@ -402,7 +414,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 			return nil, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
 		}
 		ledger = anchorLedger
-		partLedger = anchorLedger.Anchor(delivery.SourceNetwork)
+		partLedger = anchorLedger.Anchor(delivery.Sequence.Source)
 	} else {
 		var synthLedger *protocol.SyntheticLedger
 		err = batch.Account(x.Describe.Synthetic()).GetStateAs(&synthLedger)
@@ -410,28 +422,28 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 			return nil, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
 		}
 		ledger = synthLedger
-		partLedger = synthLedger.Partition(delivery.SourceNetwork)
+		partLedger = synthLedger.Partition(delivery.Sequence.Source)
 	}
 
 	// This should never happen, but if it does Add will panic
-	if status.Pending() && delivery.SequenceNumber <= partLedger.Delivered {
+	if status.Pending() && delivery.Sequence.Number <= partLedger.Delivered {
 		msg := "synthetic transactions"
 		if delivery.Transaction.Body.Type().IsSystem() {
 			msg = "anchors"
 		}
-		return nil, errors.FatalError.WithFormat("%s executed out of order: delivered %d, executed %d", msg, partLedger.Delivered, delivery.SequenceNumber)
+		return nil, errors.FatalError.WithFormat("%s executed out of order: delivered %d, executed %d", msg, partLedger.Delivered, delivery.Sequence.Number)
 	}
 
 	// The ledger's Delivered number needs to be updated if the transaction
 	// succeeds or fails
-	if partLedger.Add(!status.Pending(), delivery.SequenceNumber, delivery.Transaction.ID()) {
+	if partLedger.Add(!status.Pending(), delivery.Sequence.Number, delivery.Transaction.ID()) {
 		err = batch.Account(ledger.GetUrl()).PutState(ledger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("store synthetic transaction ledger: %w", err)
 		}
 	}
 
-	nextHash, ok := partLedger.Get(delivery.SequenceNumber + 1)
+	nextHash, ok := partLedger.Get(delivery.Sequence.Number + 1)
 	if ok {
 		state.ProcessTransaction(nextHash)
 	}
