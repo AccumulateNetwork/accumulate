@@ -749,12 +749,26 @@ type Message struct {
 	label  string
 	parent *Batch
 
-	main record.Value[messaging.Message]
+	main     record.Value[messaging.Message]
+	cause    record.Set[*url.TxID]
+	produced record.Set[*url.TxID]
 }
 
 func (c *Message) getMain() record.Value[messaging.Message] {
 	return getOrCreateField(&c.main, func() record.Value[messaging.Message] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Union(messaging.UnmarshalMessage))
+	})
+}
+
+func (c *Message) Cause() record.Set[*url.TxID] {
+	return getOrCreateField(&c.cause, func() record.Set[*url.TxID] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Cause"), c.label+" "+"cause", record.Wrapped(record.TxidWrapper), record.CompareTxid)
+	})
+}
+
+func (c *Message) Produced() record.Set[*url.TxID] {
+	return getOrCreateField(&c.produced, func() record.Set[*url.TxID] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" "+"produced", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
@@ -766,6 +780,10 @@ func (c *Message) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Main":
 		return c.getMain(), key[1:], nil
+	case "Cause":
+		return c.Cause(), key[1:], nil
+	case "Produced":
+		return c.Produced(), key[1:], nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for message")
 	}
@@ -779,6 +797,12 @@ func (c *Message) IsDirty() bool {
 	if fieldIsDirty(c.main) {
 		return true
 	}
+	if fieldIsDirty(c.cause) {
+		return true
+	}
+	if fieldIsDirty(c.produced) {
+		return true
+	}
 
 	return false
 }
@@ -790,6 +814,8 @@ func (c *Message) Commit() error {
 
 	var err error
 	commitField(&err, c.main)
+	commitField(&err, c.cause)
+	commitField(&err, c.produced)
 
 	return err
 }
