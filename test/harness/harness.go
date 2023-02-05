@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -19,6 +20,7 @@ import (
 
 // New returns a new Harness with the given services and stepper.
 func New(tb testing.TB, services Services, stepper Stepper) *Harness {
+	color.NoColor = false
 	h := new(Harness)
 	h.TB = tb
 	h.services = services
@@ -89,7 +91,7 @@ func (h *Harness) StepUntil(conditions ...Condition) {
 	h.TB.Helper()
 	for i := 0; ; i++ {
 		if i >= 50 {
-			h.TB.Fatal("Condition not met after 50 blocks")
+			h.TB.Fatal(color.RedString("Condition not met after 50 blocks"))
 		}
 		ok := true
 		for _, c := range conditions {
