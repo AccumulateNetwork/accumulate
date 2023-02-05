@@ -67,6 +67,16 @@ func (b *BlockV2) Process(messages []messaging.Message) ([]*protocol.Transaction
 	var pass int
 additional:
 
+	// Put transactions last
+	for i, msg := range messages {
+		_, ok := unwrapMessageAs[messaging.MessageWithTransaction](msg)
+		if !ok {
+			continue
+		}
+		copy(messages[i:], messages[i+1:])
+		messages[len(messages)-1] = msg
+	}
+
 	// Do this now for the sake of comparing logs
 	for _, msg := range messages {
 		if fwd, ok := msg.(*internal.ForwardedMessage); ok {
@@ -268,8 +278,8 @@ func (b *bundle) executeTransaction(hash [32]byte) (*protocol.TransactionStatus,
 
 	delivery := &chain.Delivery{Transaction: txn.GetTransaction(), Internal: b.internal.Has(hash)}
 	if typ := txn.GetTransaction().Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
-		// Load sequence info
-		delivery.Sequence, err = getSequence(batch, delivery.Transaction.ID())
+		// Load sequence info (nil bundle is a hack)
+		delivery.Sequence, err = (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
 		}
