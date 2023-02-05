@@ -8,7 +8,12 @@ package encoding
 
 import (
 	"bytes"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"math/big"
+	"strconv"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -31,6 +36,20 @@ func (f *Field[V]) WriteTo(w *Writer, n uint, v V) {
 	f.Accessor.WriteTo(w, n, v)
 }
 
+// ToJSON writes the value's field (including the name) as JSON to the builder,
+// unless OmitEmpty is false and the field is empty.
+func (f *Field[V]) ToJSON(w *bytes.Buffer, v V) error {
+	if f.OmitEmpty && f.Accessor.IsEmpty(v) {
+		return nil
+	}
+	err := wrStrJson1(w, strings.ToLower(f.Name[:1])+f.Name[1:])
+	if err != nil {
+		return err
+	}
+	w.WriteRune(':')
+	return f.Accessor.ToJSON(w, v)
+}
+
 // Accessor implements various functions for a value's field.
 type Accessor[V any] interface {
 	// IsEmpty checks if the field is empty.
@@ -47,6 +66,12 @@ type Accessor[V any] interface {
 
 	// ReadField reads the value's field from the reader.
 	ReadFrom(r *Reader, n uint, v V) bool
+
+	// ToJSON writes the value's field as JSON to the builder.
+	ToJSON(w *bytes.Buffer, v V) error
+
+	// FromJSON reads the value's field as JSON.
+	FromJSON(b []byte, v V) error
 }
 
 // SliceField is an [Accessor] for a value's slice field.
@@ -111,6 +136,53 @@ func (f SliceField[V, U, A]) ReadFrom(r *Reader, n uint, v V) bool {
 	return true
 }
 
+func (f SliceField[V, U, A]) ToJSON(w *bytes.Buffer, v V) error {
+	g, u := f.val(), f(v)
+	w.WriteRune('[')
+	w2 := new(bytes.Buffer)
+	for i := range *u {
+		err := g.ToJSON(w2, SliceIndex[U]{*u, i})
+		if err != nil {
+			return err
+		}
+		if w2.Len() == 0 {
+			continue
+		}
+		if i > 0 {
+			w.WriteRune(',')
+		}
+		_, _ = w2.WriteTo(w)
+		w2.Reset()
+	}
+	w.WriteRune(']')
+	return nil
+}
+
+func (f SliceField[V, U, A]) FromJSON(b []byte, v V) error {
+	g, u := f.val(), f(v)
+	if string(b) == "null" {
+		*u = nil
+		return nil
+	}
+
+	// Attempt to unmarshal as an array
+	var bb []json.RawMessage
+	if json.Unmarshal(b, &bb) == nil {
+		*u = make([]U, len(bb))
+		for i, b := range bb {
+			err := g.FromJSON(b, SliceIndex[U]{*u, i})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Fall back to unmarshalling as a single value
+	*u = make([]U, 1)
+	return g.FromJSON(b, SliceIndex[U]{*u, 0})
+}
+
 // StructField is an [Accessor] for a value's struct field.
 type StructField[V any, U structPtr[W], W comparable] func(v V) U
 
@@ -139,6 +211,14 @@ func (f StructField[V, U, W]) ReadFrom(r *Reader, n uint, v V) bool {
 		*f(v) = *x
 	}
 	return ok
+}
+
+func (f StructField[V, U, W]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrStdJson(w, *f(v))
+}
+
+func (f StructField[V, U, W]) FromJSON(b []byte, v V) error {
+	return json.Unmarshal(b, f(v))
 }
 
 // StructPtrField is an [Accessor] for a value's struct pointer field.
@@ -174,6 +254,21 @@ func (f StructPtrField[V, U, W]) ReadFrom(r *Reader, n uint, v V) bool {
 		*f(v) = x
 	}
 	return ok
+}
+
+func (f StructPtrField[V, U, W]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrStdJson(w, *f(v))
+}
+
+func (f StructPtrField[V, U, W]) FromJSON(b []byte, v V) error {
+	if string(b) == "null" {
+		*f(v) = nil
+		return nil
+	}
+
+	u := U(new(W))
+	*f(v) = u
+	return json.Unmarshal(b, u)
 }
 
 // EnumField is an [Accessor] for a value's enum field.
@@ -279,12 +374,37 @@ func (f BoolField[V]) ReadFrom(r *Reader, n uint, v V) bool   { return rdVal(r.R
 func (f TimeField[V]) ReadFrom(r *Reader, n uint, v V) bool   { return rdVal(r.ReadTime, n, f, v) }
 func (f BytesField[V]) ReadFrom(r *Reader, n uint, v V) bool  { return rdVal(r.ReadBytes, n, f, v) }
 func (f StringField[V]) ReadFrom(r *Reader, n uint, v V) bool { return rdVal(r.ReadString, n, f, v) }
-func (f DurationField[V]) ReadFrom(r *Reader, n uint, v V) bool {
-	return rdVal(r.ReadDuration, n, f, v)
-}
 func (f BigIntField[V]) ReadFrom(r *Reader, n uint, v V) bool { return rdDeref(r.ReadBigInt, n, f, v) }
 func (f UrlField[V]) ReadFrom(r *Reader, n uint, v V) bool    { return rdDeref(r.ReadUrl, n, f, v) }
 func (f TxIDField[V]) ReadFrom(r *Reader, n uint, v V) bool   { return rdDeref(r.ReadTxid, n, f, v) }
+
+func (f EnumField[V, U, W]) ToJSON(w *bytes.Buffer, v V) error { return wrStrJson2(w, (*f(v))) }
+func (f HashField[V]) ToJSON(w *bytes.Buffer, v V) error       { return wrHashJson(w, f(v)) }
+func (f IntField[V]) ToJSON(w *bytes.Buffer, v V) error        { return wrIntJson(w, *f(v)) }
+func (f UintField[V]) ToJSON(w *bytes.Buffer, v V) error       { return wrUintJson(w, *f(v)) }
+func (f FloatField[V]) ToJSON(w *bytes.Buffer, v V) error      { return wrStdJson(w, *f(v)) }
+func (f BoolField[V]) ToJSON(w *bytes.Buffer, v V) error       { return wrBoolJson(w, *f(v)) }
+func (f TimeField[V]) ToJSON(w *bytes.Buffer, v V) error       { return wrStdJson(w, f(v)) }
+func (f DurationField[V]) ToJSON(w *bytes.Buffer, v V) error   { return wrDurationJson(w, *f(v)) }
+func (f BytesField[V]) ToJSON(w *bytes.Buffer, v V) error      { return wrBytesJson(w, (*f(v))) }
+func (f StringField[V]) ToJSON(w *bytes.Buffer, v V) error     { return wrStrJson1(w, *f(v)) }
+func (f BigIntField[V]) ToJSON(w *bytes.Buffer, v V) error     { return wrStrJson2(w, f(v)) }
+func (f UrlField[V]) ToJSON(w *bytes.Buffer, v V) error        { return wrStrJson2(w, f(v)) }
+func (f TxIDField[V]) ToJSON(w *bytes.Buffer, v V) error       { return wrStrJson2(w, f(v)) }
+
+func (f EnumField[V, U, W]) FromJSON(b []byte, v V) error { return json.Unmarshal(b, f(v)) }
+func (f HashField[V]) FromJSON(b []byte, v V) error       { return rdHashJson(b, f(v)) }
+func (f IntField[V]) FromJSON(b []byte, v V) error        { return json.Unmarshal(b, f(v)) }
+func (f UintField[V]) FromJSON(b []byte, v V) error       { return json.Unmarshal(b, f(v)) }
+func (f FloatField[V]) FromJSON(b []byte, v V) error      { return json.Unmarshal(b, f(v)) }
+func (f BoolField[V]) FromJSON(b []byte, v V) error       { return json.Unmarshal(b, f(v)) }
+func (f TimeField[V]) FromJSON(b []byte, v V) error       { return json.Unmarshal(b, f(v)) }
+func (f DurationField[V]) FromJSON(b []byte, v V) error   { return rdDurationJson(b, f(v)) }
+func (f BytesField[V]) FromJSON(b []byte, v V) error      { return rdBytesJson(b, f(v)) }
+func (f StringField[V]) FromJSON(b []byte, v V) error     { return json.Unmarshal(b, f(v)) }
+func (f BigIntField[V]) FromJSON(b []byte, v V) error     { return json.Unmarshal(b, f(v)) }
+func (f UrlField[V]) FromJSON(b []byte, v V) error        { return json.Unmarshal(b, f(v)) }
+func (f TxIDField[V]) FromJSON(b []byte, v V) error       { return json.Unmarshal(b, f(v)) }
 
 // EnumPtrField is an [Accessor] for a value's enum pointer field.
 type EnumPtrField[V any, U enumSet[W], W enumGet] func(v V) **W
@@ -325,7 +445,7 @@ type UrlPtrField[V any] func(v V) **url.URL
 // TxIDPtrField is an [Accessor] for a value's TxID pointer field.
 type TxIDPtrField[V any] func(v V) **url.TxID
 
-func (f EnumPtrField[V, U, W]) IsEmpty(v V) bool { return (**f(v)).GetEnumValue() == 0 }
+func (f EnumPtrField[V, U, W]) IsEmpty(v V) bool { return *f(v) == nil }
 func (f HashPtrField[V]) IsEmpty(v V) bool       { return *f(v) == nil }
 func (f IntPtrField[V]) IsEmpty(v V) bool        { return *f(v) == nil }
 func (f UintPtrField[V]) IsEmpty(v V) bool       { return *f(v) == nil }
@@ -339,7 +459,7 @@ func (f BigIntPtrField[V]) IsEmpty(v V) bool     { return *f(v) == nil }
 func (f UrlPtrField[V]) IsEmpty(v V) bool        { return *f(v) == nil }
 func (f TxIDPtrField[V]) IsEmpty(v V) bool       { return *f(v) == nil }
 
-func (f EnumPtrField[V, U, W]) CopyTo(dst, src V) { *f(dst) = *f(src) }
+func (f EnumPtrField[V, U, W]) CopyTo(dst, src V) { cpPtr(f, dst, src) }
 func (f HashPtrField[V]) CopyTo(dst, src V)       { cpPtr(f, dst, src) }
 func (f IntPtrField[V]) CopyTo(dst, src V)        { cpPtr(f, dst, src) }
 func (f UintPtrField[V]) CopyTo(dst, src V)       { cpPtr(f, dst, src) }
@@ -353,7 +473,7 @@ func (f BigIntPtrField[V]) CopyTo(dst, src V)     { cpPtr(f, dst, src) }
 func (f UrlPtrField[V]) CopyTo(dst, src V)        { cpPtr(f, dst, src) }
 func (f TxIDPtrField[V]) CopyTo(dst, src V)       { cpPtr(f, dst, src) }
 
-func (f EnumPtrField[V, U, W]) Equal(v, u V) bool { return *f(v) == *f(u) }
+func (f EnumPtrField[V, U, W]) Equal(v, u V) bool { return eqPtr(f, v, u) }
 func (f HashPtrField[V]) Equal(v, u V) bool       { return eqPtr(f, v, u) }
 func (f IntPtrField[V]) Equal(v, u V) bool        { return eqPtr(f, v, u) }
 func (f UintPtrField[V]) Equal(v, u V) bool       { return eqPtr(f, v, u) }
@@ -391,6 +511,72 @@ func (f BigIntPtrField[V]) ReadFrom(r *Reader, n uint, v V) bool { return rdVal(
 func (f UrlPtrField[V]) ReadFrom(r *Reader, n uint, v V) bool    { return rdVal(r.ReadUrl, n, f, v) }
 func (f TxIDPtrField[V]) ReadFrom(r *Reader, n uint, v V) bool   { return rdVal(r.ReadTxid, n, f, v) }
 
+func (f EnumPtrField[V, U, W]) FromJSON(b []byte, v V) error { return json.Unmarshal(b, f(v)) }
+func (f HashPtrField[V]) FromJSON(b []byte, v V) error       { return rdPtrJson(b, f(v), rdHashJson) }
+func (f IntPtrField[V]) FromJSON(b []byte, v V) error        { return json.Unmarshal(b, f(v)) }
+func (f UintPtrField[V]) FromJSON(b []byte, v V) error       { return json.Unmarshal(b, f(v)) }
+func (f FloatPtrField[V]) FromJSON(b []byte, v V) error      { return json.Unmarshal(b, f(v)) }
+func (f BoolPtrField[V]) FromJSON(b []byte, v V) error       { return json.Unmarshal(b, f(v)) }
+func (f TimePtrField[V]) FromJSON(b []byte, v V) error       { return json.Unmarshal(b, f(v)) }
+func (f DurationPtrField[V]) FromJSON(b []byte, v V) error   { return rdPtrJson(b, f(v), rdDurationJson) }
+func (f BytesPtrField[V]) FromJSON(b []byte, v V) error      { return rdPtrJson(b, f(v), rdBytesJson) }
+func (f StringPtrField[V]) FromJSON(b []byte, v V) error     { return json.Unmarshal(b, f(v)) }
+func (f BigIntPtrField[V]) FromJSON(b []byte, v V) error     { return json.Unmarshal(b, f(v)) }
+func (f UrlPtrField[V]) FromJSON(b []byte, v V) error        { return json.Unmarshal(b, f(v)) }
+func (f TxIDPtrField[V]) FromJSON(b []byte, v V) error       { return json.Unmarshal(b, f(v)) }
+
+func (f EnumPtrField[V, U, W]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrStrJson2[W])
+}
+
+func (f HashPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrPtrJson(w, *f(v), wrHashJson)
+}
+
+func (f IntPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrIntJson)
+}
+
+func (f UintPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrUintJson)
+}
+
+func (f FloatPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrStdJson[float64])
+}
+
+func (f BoolPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrBoolJson)
+}
+
+func (f TimePtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrStdJson[time.Time])
+}
+
+func (f DurationPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrDurationJson)
+}
+
+func (f BytesPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrBytesJson)
+}
+
+func (f StringPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrDerefJson(w, *f(v), wrStrJson1)
+}
+
+func (f BigIntPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrPtrJson(w, *f(v), wrStrJson2[*big.Int])
+}
+
+func (f UrlPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrPtrJson(w, *f(v), wrStrJson2[*url.URL])
+}
+
+func (f TxIDPtrField[V]) ToJSON(w *bytes.Buffer, v V) error {
+	return wrPtrJson(w, *f(v), wrStrJson2[*url.TxID])
+}
+
 func (f EnumField[V, U, W]) ReadFrom(r *Reader, n uint, v V) bool {
 	x := U(new(W))
 	ok := r.ReadEnum(n, x)
@@ -398,6 +584,10 @@ func (f EnumField[V, U, W]) ReadFrom(r *Reader, n uint, v V) bool {
 		*f(v) = *x
 	}
 	return ok
+}
+
+func (f DurationField[V]) ReadFrom(r *Reader, n uint, v V) bool {
+	return rdVal(r.ReadDuration, n, f, v)
 }
 
 func (f EnumPtrField[V, U, W]) ReadFrom(r *Reader, n uint, v V) bool {
@@ -500,6 +690,161 @@ func rdPtr[V, U any](rd func(uint) (U, bool), n uint, f func(V) **U, v V) bool {
 	return ok
 }
 
+func wrPtrJson[V any](w *bytes.Buffer, v *V, f func(*bytes.Buffer, *V) error) error {
+	if v == nil {
+		w.WriteString("null")
+		return nil
+	}
+	return f(w, v)
+}
+
+func wrDerefJson[V any](w *bytes.Buffer, v *V, f func(*bytes.Buffer, V) error) error {
+	if v == nil {
+		w.WriteString("null")
+		return nil
+	}
+	return f(w, *v)
+}
+
+func wrStrJson1(w *bytes.Buffer, s string) error {
+	return wrStdJson(w, s)
+	// w.WriteRune('"')
+	// for len(s) > 0 {
+	// 	i := strings.IndexRune(s, '"')
+	// 	if i < 0 {
+	// 		w.WriteString(s)
+	// 		break
+	// 	}
+	// 	s = s[i+1:]
+	// 	w.WriteString(`\"`)
+	// }
+	// w.WriteRune('"')
+	// return nil
+}
+
+func wrStrJson2[V fmt.Stringer](w *bytes.Buffer, s V) error {
+	return wrStrJson1(w, s.String())
+}
+
+func wrBytesJson(w *bytes.Buffer, b []byte) error {
+	if b == nil {
+		w.WriteString("null")
+		return nil
+	}
+	w.WriteRune('"')
+	w.WriteString(hex.EncodeToString(b))
+	w.WriteRune('"')
+	return nil
+}
+
+func wrHashJson(w *bytes.Buffer, h *[32]byte) error {
+	return wrBytesJson(w, h[:])
+}
+
+func wrIntJson(w *bytes.Buffer, v int64) error {
+	w.WriteString(strconv.FormatInt(v, 10))
+	return nil
+}
+
+func wrUintJson(w *bytes.Buffer, v uint64) error {
+	w.WriteString(strconv.FormatUint(v, 10))
+	return nil
+}
+
+// func wrFloatJson(w *bytes.Buffer, v float64) error {
+// 	w.WriteString(strconv.FormatFloat(v, 'f', 8, 64))
+// 	return nil
+// }
+
+func wrBoolJson(w *bytes.Buffer, v bool) error {
+	w.WriteString(strconv.FormatBool(v))
+	return nil
+}
+
+func wrStdJson[V any](w *bytes.Buffer, v V) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	w.Write(b)
+	return nil
+}
+
+func wrDurationJson(w *bytes.Buffer, v time.Duration) error {
+	sec, ns := SplitDuration(v)
+	w.WriteRune('{')
+	if sec != 0 || ns == 0 {
+		err := wrStrJson1(w, "seconds")
+		if err != nil {
+			return err
+		}
+		w.WriteString(strconv.FormatUint(sec, 10))
+	}
+	if ns != 0 {
+		err := wrStrJson1(w, "nanoseconds")
+		if err != nil {
+			return err
+		}
+		w.WriteString(strconv.FormatUint(ns, 10))
+	}
+	w.WriteRune('}')
+	return nil
+}
+
+func rdHashJson(b []byte, v *[32]byte) error {
+	var s string
+	err := json.Unmarshal(b, &s)
+	if err != nil {
+		return err
+	}
+
+	b, err = hex.DecodeString(s)
+	if err != nil {
+		return err
+	}
+
+	if len(b) != 32 {
+		return fmt.Errorf("invalid hash: want 32 bytes, got %d", len(b))
+	}
+
+	*v = *(*[32]byte)(b)
+	return nil
+}
+
+func rdBytesJson(b []byte, v *[]byte) error {
+	var s string
+	err := json.Unmarshal(b, &s)
+	if err != nil {
+		return err
+	}
+
+	*v, err = hex.DecodeString(s)
+	return err
+}
+
+func rdDurationJson(b []byte, v *time.Duration) error {
+	var u struct {
+		Seconds     uint64
+		Nanoseconds uint64
+	}
+	err := json.Unmarshal(b, &u)
+	if err != nil {
+		return err
+	}
+
+	*v = time.Second*time.Duration(u.Seconds) +
+		time.Nanosecond*time.Duration(u.Nanoseconds)
+	return nil
+}
+
+func rdPtrJson[V any](b []byte, v **V, fn func([]byte, *V) error) error {
+	if string(b) == "null" {
+		*v = nil
+		return nil
+	}
+	return fn(b, *v)
+}
+
 // SliceIndex is a slice and an index.
 type SliceIndex[U any] struct {
 	S []U
@@ -532,6 +877,7 @@ type enumSet[V any] interface {
 // implements EnumValueGetter.
 type enumGet interface {
 	comparable
+	String() string
 	EnumValueGetter
 }
 
