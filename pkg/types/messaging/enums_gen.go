@@ -26,6 +26,9 @@ const MessageTypeSynthetic MessageType = 3
 // MessageTypeValidatorSignature is a key signature from a validator.
 const MessageTypeValidatorSignature MessageType = 4
 
+// MessageTypeSequenced is a message that is part of a sequence.
+const MessageTypeSequenced MessageType = 5
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -33,7 +36,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSynthetic, MessageTypeValidatorSignature:
+	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSynthetic, MessageTypeValidatorSignature, MessageTypeSequenced:
 		*v = u
 		return true
 	default:
@@ -52,6 +55,8 @@ func (v MessageType) String() string {
 		return "synthetic"
 	case MessageTypeValidatorSignature:
 		return "validatorSignature"
+	case MessageTypeSequenced:
+		return "sequenced"
 	default:
 		return fmt.Sprintf("MessageType:%d", v)
 	}
@@ -68,6 +73,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeSynthetic, true
 	case "validatorsignature":
 		return MessageTypeValidatorSignature, true
+	case "sequenced":
+		return MessageTypeSequenced, true
 	default:
 		return 0, false
 	}

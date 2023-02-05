@@ -44,33 +44,6 @@ func registerSimpleExec[X ExecutorFor[T, V], T any, V interface{ Type() T }](lis
 	}
 }
 
-// MessageContext is the context in which a message is executed.
-type MessageContext struct {
-	*bundle
-	message messaging.Message
-	parent  *MessageContext
-}
-
-func (m *MessageContext) Type() messaging.MessageType { return m.message.Type() }
-
-// childWith constructs a child message context for the given message.
-func (m *MessageContext) childWith(msg messaging.Message) *MessageContext {
-	n := new(MessageContext)
-	n.bundle = m.bundle
-	n.message = msg
-	n.parent = m
-	return n
-}
-
-// sigWith constructs a signature context from this message context for the given signature and transaction.
-func (m *MessageContext) sigWith(sig protocol.Signature, txn *protocol.Transaction) *SignatureContext {
-	s := new(SignatureContext)
-	s.MessageContext = m
-	s.signature = sig
-	s.transaction = txn
-	return s
-}
-
 // SignatureContext is the context in which a message is executed.
 type SignatureContext struct {
 	*MessageContext

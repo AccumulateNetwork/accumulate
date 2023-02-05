@@ -63,8 +63,10 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, produced []*ProducedM
 		}
 	}
 
-	// Finalize the produced transactions
+	// Shouldn't this be recorded somewhere?
 	state := new(chain.ChainUpdates)
+
+	// Finalize the produced transactions
 	for _, p := range produced {
 		from, err := batch.Message(p.Producer.Hash()).Main().Get()
 		if err != nil {
@@ -163,10 +165,12 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dest
-	txn.Header.Source = m.Describe.NodeUrl()
-	txn.Header.Destination = destPartUrl
-	txn.Header.SequenceNumber = destLedger.Produced
 	txn.Body = body
+	seq := new(messaging.SequencedMessage)
+	seq.Message = &messaging.UserTransaction{Transaction: txn}
+	seq.Source = m.Describe.NodeUrl()
+	seq.Destination = destPartUrl
+	seq.Number = destLedger.Produced
 	m.logger.Debug("Built synthetic transaction", "module", "synthetic", "txid", logging.AsHex(txn.GetHash()), "destination", dest.String(), "type", body.Type(), "seq-num", destLedger.Produced)
 
 	// Update the ledger
@@ -176,8 +180,8 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Store the transaction, its status, and the initiator
-	err = putSyntheticTransaction(
-		batch, txn,
+	err = putMessageWithStatus(
+		batch, seq,
 		&protocol.TransactionStatus{
 			Code: errors.Remote,
 		})
@@ -191,18 +195,19 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, err
 	}
 
+	h := seq.Hash()
 	index := chain.Height()
-	err = chain.AddEntry(txn.GetHash(), false)
+	err = chain.AddEntry(h[:], false)
 	if err != nil {
 		return nil, err
 	}
 
-	err = state.DidAddChainEntry(batch, m.Describe.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, txn.GetHash(), uint64(index), 0, 0)
+	err = state.DidAddChainEntry(batch, m.Describe.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, h[:], uint64(index), 0, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	partition, ok := protocol.ParsePartitionUrl(txn.Header.Destination)
+	partition, ok := protocol.ParsePartitionUrl(seq.Destination)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("destination URL is not a valid partition")
 	}
@@ -213,8 +218,8 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	if err != nil {
 		return nil, err
 	}
-	if indexIndex+1 != txn.Header.SequenceNumber {
-		m.logger.Error("Sequence number does not match index chain index", "seq-num", txn.Header.SequenceNumber, "index", indexIndex, "source", txn.Header.Source, "destination", txn.Header.Destination)
+	if indexIndex+1 != seq.Number {
+		m.logger.Error("Sequence number does not match index chain index", "seq-num", seq.Number, "index", indexIndex, "source", seq.Source, "destination", seq.Destination)
 	}
 
 	return txn, nil
@@ -237,15 +242,16 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 	return nil
 }
 
-func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
+func putMessageWithStatus(batch *database.Batch, message messaging.Message, status *protocol.TransactionStatus) error {
 	// Store the transaction
-	err := batch.Message(transaction.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: transaction})
+	h := message.Hash()
+	err := batch.Message(h).Main().Put(message)
 	if err != nil {
 		return fmt.Errorf("store transaction: %w", err)
 	}
 
 	// Update the status
-	err = batch.Transaction(transaction.GetHash()).PutStatus(status)
+	err = batch.Transaction(h[:]).PutStatus(status)
 	if err != nil {
 		return fmt.Errorf("store status: %w", err)
 	}

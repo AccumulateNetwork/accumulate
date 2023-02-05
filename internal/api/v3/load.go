@@ -22,13 +22,17 @@ func loadTransactionOrSignature(batch *database.Batch, txid *url.TxID) (api.Reco
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
-	switch msg := msg.(type) {
-	case messaging.MessageWithTransaction:
-		return loadTransaction(batch, msg.GetTransaction())
-	case messaging.MessageWithSignature:
-		return loadSignature(batch, msg.GetSignature(), msg.GetTxID())
-	default:
-		return nil, errors.InternalError.WithFormat("unsupported message type %v", msg.Type())
+	for {
+		switch m := msg.(type) {
+		case messaging.MessageWithTransaction:
+			return loadTransaction(batch, m.GetTransaction())
+		case messaging.MessageWithSignature:
+			return loadSignature(batch, m.GetSignature(), m.GetTxID())
+		case interface{ Unwrap() messaging.Message }:
+			msg = m.Unwrap()
+		default:
+			return nil, errors.InternalError.WithFormat("unsupported message type %v", m.Type())
+		}
 	}
 }
 
