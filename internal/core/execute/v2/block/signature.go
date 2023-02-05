@@ -592,10 +592,13 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 }
 
 // validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
-func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, transaction *protocol.Transaction, status *protocol.TransactionStatus) (protocol.Signer2, error) {
-	partition, ok := protocol.ParsePartitionUrl(transaction.Header.Source)
+func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, transaction *protocol.Transaction, seq *messaging.SequencedMessage, status *protocol.TransactionStatus) (protocol.Signer2, error) {
+	if seq == nil {
+		return nil, errors.BadRequest.With("missing sequencing info")
+	}
+	partition, ok := protocol.ParsePartitionUrl(seq.Source)
 	if !ok {
-		return nil, errors.BadRequest.WithFormat("partition signature source is not a partition")
+		return nil, errors.BadRequest.With("partition signature source is not a partition")
 	}
 
 	signer := x.globals.Active.AsSigner(partition)

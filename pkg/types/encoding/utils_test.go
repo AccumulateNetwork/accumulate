@@ -1,10 +1,10 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package encoding
+package encoding_test
 
 import (
 	"testing"
@@ -12,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	. "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 )
 
 func TestDurationFromJSON(t *testing.T) {
@@ -26,4 +28,13 @@ func mustDurationFromJSON(t *testing.T, v interface{}) time.Duration {
 	d, err := DurationFromJSON(v)
 	require.NoError(t, err)
 	return d
+}
+
+func TestSetPtrUnwrap(t *testing.T) {
+	var target messaging.MessageWithTransaction
+	value := new(messaging.SequencedMessage)
+	value.Message = new(messaging.UserTransaction)
+
+	require.NoError(t, SetPtr(value, &target))
+	require.True(t, value.Message == target)
 }

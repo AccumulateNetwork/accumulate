@@ -113,6 +113,10 @@ TransactionRecord:
       type: RecordRange[*SignatureRecord]
       marshal-as: reference
       pointer: true
+    - name: Sequence
+      type: messaging.SequencedMessage
+      marshal-as: reference
+      pointer: true
 
 SignatureRecord:
   union: { type: record }

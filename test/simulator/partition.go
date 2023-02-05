@@ -192,6 +192,7 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 		}
 		for i, st := range r {
 			if !results[0][i].Equal(st) {
+				p.logger.Error("Consensus failure", "expected", results[0][i], "actual", st)
 				return nil, errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
 			}
 		}
@@ -296,8 +297,15 @@ func (p *Partition) execute() error {
 			msg.Type() == messaging.MessageTypeUserSignature {
 			continue
 		}
-		if err, ok := status[msg.ID().Hash()]; ok {
-			p.logger.Error("System message failed", "err", err, "type", msg.Type(), "id", msg.ID())
+		for {
+			if err, ok := status[msg.ID().Hash()]; ok {
+				p.logger.Error("System message failed", "err", err, "type", msg.Type(), "id", msg.ID())
+			}
+			if u, ok := msg.(interface{ Unwrap() messaging.Message }); ok {
+				msg = u.Unwrap()
+			} else {
+				break
+			}
 		}
 	}
 
