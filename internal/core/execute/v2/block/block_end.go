@@ -338,7 +338,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
-		if resp.Transaction.Header.Source == nil {
+		if resp.Sequence == nil || resp.Sequence.Source == nil {
 			x.logger.Error("Response to query-synth is missing the source", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
@@ -357,19 +357,22 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			}
 		}
 
+		seq := &messaging.SequencedMessage{
+			Message: &messaging.UserTransaction{
+				Transaction: resp.Transaction,
+			},
+			Source:      resp.Sequence.Source,
+			Destination: resp.Sequence.Destination,
+			Number:      resp.Sequence.Number,
+		}
+
 		var messages []messaging.Message
 		if anchor {
-			messages = []messaging.Message{
-				&messaging.UserTransaction{
-					Transaction: resp.Transaction,
-				},
-			}
+			messages = []messaging.Message{seq}
 		} else {
 			messages = []messaging.Message{
 				&messaging.SyntheticMessage{
-					Message: &messaging.UserTransaction{
-						Transaction: resp.Transaction,
-					},
+					Message: seq,
 					Proof: &protocol.AnnotatedReceipt{
 						Receipt: resp.Status.Proof,
 						Anchor: &protocol.AnchorMetadata{

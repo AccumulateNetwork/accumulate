@@ -23,6 +23,7 @@ import (
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -347,6 +348,7 @@ type TransactionRecord struct {
 	Status      *protocol.TransactionStatus    `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
 	Signatures  *RecordRange[*SignatureRecord] `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	Sequence    *messaging.SequencedMessage    `json:"sequence,omitempty" form:"sequence" query:"sequence" validate:"required"`
 	extraData   []byte
 }
 
@@ -1000,6 +1002,9 @@ func (v *TransactionRecord) Copy() *TransactionRecord {
 	}
 	if v.Signatures != nil {
 		u.Signatures = (v.Signatures).Copy()
+	}
+	if v.Sequence != nil {
+		u.Sequence = (v.Sequence).Copy()
 	}
 
 	return u
@@ -1828,6 +1833,14 @@ func (v *TransactionRecord) Equal(u *TransactionRecord) bool {
 	case v.Signatures == nil || u.Signatures == nil:
 		return false
 	case !((v.Signatures).Equal(u.Signatures)):
+		return false
+	}
+	switch {
+	case v.Sequence == u.Sequence:
+		// equal
+	case v.Sequence == nil || u.Sequence == nil:
+		return false
+	case !((v.Sequence).Equal(u.Sequence)):
 		return false
 	}
 
@@ -3997,6 +4010,7 @@ var fieldNames_TransactionRecord = []string{
 	4: "Status",
 	5: "Produced",
 	6: "Signatures",
+	7: "Sequence",
 }
 
 func (v *TransactionRecord) MarshalBinary() ([]byte, error) {
@@ -4018,6 +4032,9 @@ func (v *TransactionRecord) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Signatures == nil) {
 		writer.WriteValue(6, v.Signatures.MarshalBinary)
+	}
+	if !(v.Sequence == nil) {
+		writer.WriteValue(7, v.Sequence.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionRecord)
@@ -4058,6 +4075,11 @@ func (v *TransactionRecord) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if v.Signatures == nil {
 		errs = append(errs, "field Signatures is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Sequence is missing")
+	} else if v.Sequence == nil {
+		errs = append(errs, "field Sequence is not set")
 	}
 
 	switch len(errs) {
@@ -5635,6 +5657,9 @@ func (v *TransactionRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(RecordRange[*SignatureRecord]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Signatures = x
 	}
+	if x := new(messaging.SequencedMessage); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+		v.Sequence = x
+	}
 
 	seen, err := reader.Reset(fieldNames_TransactionRecord)
 	if err != nil {
@@ -6321,6 +6346,7 @@ func (v *TransactionRecord) MarshalJSON() ([]byte, error) {
 		Status      *protocol.TransactionStatus    `json:"status,omitempty"`
 		Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty"`
 		Signatures  *RecordRange[*SignatureRecord] `json:"signatures,omitempty"`
+		Sequence    *messaging.SequencedMessage    `json:"sequence,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.TxID == nil) {
@@ -6337,6 +6363,9 @@ func (v *TransactionRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Signatures == nil) {
 		u.Signatures = v.Signatures
+	}
+	if !(v.Sequence == nil) {
+		u.Sequence = v.Sequence
 	}
 	return json.Marshal(&u)
 }
@@ -7086,6 +7115,7 @@ func (v *TransactionRecord) UnmarshalJSON(data []byte) error {
 		Status      *protocol.TransactionStatus    `json:"status,omitempty"`
 		Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty"`
 		Signatures  *RecordRange[*SignatureRecord] `json:"signatures,omitempty"`
+		Sequence    *messaging.SequencedMessage    `json:"sequence,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.TxID = v.TxID
@@ -7093,6 +7123,7 @@ func (v *TransactionRecord) UnmarshalJSON(data []byte) error {
 	u.Status = v.Status
 	u.Produced = v.Produced
 	u.Signatures = v.Signatures
+	u.Sequence = v.Sequence
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -7104,6 +7135,7 @@ func (v *TransactionRecord) UnmarshalJSON(data []byte) error {
 	v.Status = u.Status
 	v.Produced = u.Produced
 	v.Signatures = u.Signatures
+	v.Sequence = u.Sequence
 	return nil
 }
 
