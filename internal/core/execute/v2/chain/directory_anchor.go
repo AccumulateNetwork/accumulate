@@ -136,6 +136,11 @@ func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *me
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
 
+		seq, err := getSequence(st.batch, txid)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
+		}
+
 		msg := &messaging.SyntheticMessage{
 			Message: &messaging.UserTransaction{
 				Transaction: &protocol.Transaction{
@@ -156,7 +161,7 @@ func loadSynthTxns(st *StateManager, anchor []byte, source *url.URL, receipt *me
 				},
 			}
 		}
-		sequence[msg] = int(txn.GetTransaction().Header.SequenceNumber)
+		sequence[msg] = int(seq.Number)
 		messages = append(messages, msg)
 	}
 	return messages, nil

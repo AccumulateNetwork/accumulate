@@ -42,8 +42,30 @@ UserSignature:
       type: txid
       pointer: true
 
+SequencedMessage:
+  union: { type: message }
+  fields:
+    - name: Message
+      type: Message
+      marshal-as: union
+    - name: Source
+      description: is the source that produced the transaction
+      type: url
+      pointer: true
+      optional: true
+    - name: Destination
+      description: is the destination that the transaction is sent to
+      type: url
+      pointer: true
+      optional: true
+    - name: Number
+      description: is the sequence number of the transaction
+      type: uint
+      optional: true
+
 SyntheticMessage:
   # TODO Update to have multiple transactions with a list receipt
+  # TODO Move source, dest, sequence from txn header to here
   union: { type: message }
   fields:
     - name: Message
