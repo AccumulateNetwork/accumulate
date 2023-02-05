@@ -250,8 +250,8 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
 
-	// Find the sequence
-	seq, err := getSequence(batch, delivery.Transaction.ID())
+	// Find the sequence (nil bundle is a hack)
+	seq, err := (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load sequence info: %w", err)
 	}
@@ -312,8 +312,8 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 		// Anchors must be sequenced
 	}
 
-	// Find the sequence
-	seq, err := getSequence(batch, delivery.Transaction.ID())
+	// Find the sequence (nil bundle is a hack)
+	seq, err := (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load sequence info: %w", err)
 	}

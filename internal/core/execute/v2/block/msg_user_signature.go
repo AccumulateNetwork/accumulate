@@ -34,8 +34,7 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	defer batch.Discard()
 
 	// Load the transaction
-	var txn messaging.MessageWithTransaction
-	err := batch.Message(sig.TxID.Hash()).Main().GetAs(&txn)
+	txn, err := ctx.getTransaction(batch, sig.TxID.Hash())
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
@@ -43,13 +42,13 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	// Use the full transaction ID (since normalization uses unknown.acme)
 	sig.TxID = txn.ID()
 
-	if !txn.GetTransaction().Body.Type().IsUser() {
-		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.GetTransaction().Body.Type(), sig.Type())
+	if !txn.Body.Type().IsUser() {
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), sig.Type())
 	}
 
 	// Process the transaction if it is synthetic or system, or the signature is
 	// internal, or the signature is local to the principal
-	signature, transaction := sig.Signature, txn.GetTransaction()
+	signature, transaction := sig.Signature, txn
 	if signature.RoutingLocation().LocalTo(transaction.Header.Principal) {
 		ctx.transactionsToProcess.Add(transaction.ID().Hash())
 	}
