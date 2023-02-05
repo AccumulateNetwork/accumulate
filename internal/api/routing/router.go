@@ -211,20 +211,8 @@ func routeMessage(routeAccount func(*url.URL) (string, error), route *string, ms
 	case *messaging.UserSignature:
 		r, err = routeAccount(msg.Signature.RoutingLocation())
 
-	case *messaging.SyntheticMessage:
-		switch msg := msg.Message.(type) {
-		case *messaging.UserTransaction:
-			r, err = routeAccount(msg.Transaction.Header.Destination)
-
-		default:
-			return nil
-		}
-
-	case *messaging.UserTransaction:
-		if msg.Transaction.Header.Destination == nil {
-			return nil
-		}
-		r, err = routeAccount(msg.Transaction.Header.Destination)
+	case *messaging.SequencedMessage:
+		r, err = routeAccount(msg.Destination)
 
 	default:
 		return nil
