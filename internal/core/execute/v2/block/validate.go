@@ -240,7 +240,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if delivery.Transaction.Body.Type().IsUser() {
 			signer, err = x.validateKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 		} else {
-			signer, err = x.validatePartitionSignature(signature, delivery.Transaction, status)
+			signer, err = x.validatePartitionSignature(signature, delivery.Transaction, delivery.Sequence, status)
 		}
 
 		// Basic validation
@@ -259,22 +259,22 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 }
 
 func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, signatures []protocol.Signature) error {
-	// Validate the synthetic transaction header
-	if transaction.Body.Type().IsSynthetic() {
-		var missing []string
-		if transaction.Header.Source == nil {
-			missing = append(missing, "source")
-		}
-		if transaction.Header.Destination == nil {
-			missing = append(missing, "destination")
-		}
-		if transaction.Header.SequenceNumber == 0 {
-			missing = append(missing, "sequence number")
-		}
-		if len(missing) > 0 {
-			return errors.BadRequest.WithFormat("invalid synthetic transaction: missing %s", strings.Join(missing, ", "))
-		}
-	}
+	// // Validate the synthetic transaction header
+	// if transaction.Body.Type().IsSynthetic() {
+	// 	var missing []string
+	// 	if transaction.Header.Source == nil {
+	// 		missing = append(missing, "source")
+	// 	}
+	// 	if transaction.Header.Destination == nil {
+	// 		missing = append(missing, "destination")
+	// 	}
+	// 	if transaction.Header.SequenceNumber == 0 {
+	// 		missing = append(missing, "sequence number")
+	// 	}
+	// 	if len(missing) > 0 {
+	// 		return errors.BadRequest.WithFormat("invalid synthetic transaction: missing %s", strings.Join(missing, ", "))
+	// 	}
+	// }
 
 	var gotED25519Sig bool
 	for _, sig := range signatures {

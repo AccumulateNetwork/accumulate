@@ -153,11 +153,16 @@
       dataType: messaging.Message
       union: true
       private: true
-    # - name: Produced
-    #   type: state
-    #   dataType: txid
-    #   pointer: true
-    #   collection: set
+    - name: Cause
+      type: state
+      dataType: txid
+      pointer: true
+      collection: set
+    - name: Produced
+      type: state
+      dataType: txid
+      pointer: true
+      collection: set
 
   - name: Transaction
     type: entity
