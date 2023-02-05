@@ -121,6 +121,12 @@ func (x ValidatorSignature) check(ctx *MessageContext, batch *database.Batch, si
 		return nil, nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
 
+	// Load the sequence
+	seq, err := getSequence(batch, txn.ID())
+	if err != nil {
+		return nil, nil, errors.UnknownError.Wrap(err)
+	}
+
 	// A validator signature message is only allowed for synthetic and anchor
 	// transactions
 	if typ := txn.GetTransaction().Body.Type(); !typ.IsSynthetic() && !typ.IsAnchor() {
@@ -129,13 +135,13 @@ func (x ValidatorSignature) check(ctx *MessageContext, batch *database.Batch, si
 
 	// Sanity check - this should not happen because the transaction should have
 	// been rejected
-	if txn.GetTransaction().Header.Source == nil {
+	if seq.Source == nil {
 		return nil, nil, errors.InternalError.WithFormat("transaction is missing source")
 	}
 
 	// Verify the sources match
-	if !txn.GetTransaction().Header.Source.Equal(sig.Source) {
-		return nil, nil, errors.BadRequest.WithFormat("source does not match: message has %v, transaction has %v", sig.Source, txn.GetTransaction().Header.Source)
+	if !seq.Source.Equal(sig.Source) {
+		return nil, nil, errors.BadRequest.WithFormat("source does not match: message has %v, transaction has %v", sig.Source, seq.Source)
 	}
 
 	partition, ok := protocol.ParsePartitionUrl(sig.Source)

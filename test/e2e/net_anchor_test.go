@@ -53,11 +53,15 @@ func TestAnchorThreshold(t *testing.T) {
 	var anchors []*messaging.Envelope
 	sim.SetSubmitHook("Directory", func(messages []messaging.Message) (drop bool, keepHook bool) {
 		for _, msg := range messages {
-			msg, ok := msg.(*messaging.UserTransaction)
+			seq, ok := msg.(*messaging.SequencedMessage)
 			if !ok {
 				continue
 			}
-			if msg.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
+			txn, ok := seq.Message.(*messaging.UserTransaction)
+			if !ok {
+				continue
+			}
+			if txn.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
 				continue
 			}
 			anchors = append(anchors, &messaging.Envelope{Messages: messages})
@@ -66,9 +70,7 @@ func TestAnchorThreshold(t *testing.T) {
 		return false, true
 	})
 
-	for len(anchors) < valCount {
-		sim.Step()
-	}
+	sim.StepUntil(func(*Harness) bool { return len(anchors) >= valCount })
 
 	txid := anchors[0].Messages[0].ID()
 	for _, anchor := range anchors[1:] {
