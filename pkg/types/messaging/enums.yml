@@ -11,6 +11,9 @@ MessageType:
   ValidatorSignature:
     value: 4
     description: is a key signature from a validator
+  Sequenced:
+    value: 5
+    description: is a message that is part of a sequence
 
   # Possible additions for executor v2
 

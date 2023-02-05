@@ -32,6 +32,18 @@ type Envelope struct {
 	extraData   []byte
 }
 
+type SequencedMessage struct {
+	fieldsSet []bool
+	Message   Message `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	// Source is the source that produced the transaction.
+	Source *url.URL `json:"source,omitempty" form:"source" query:"source"`
+	// Destination is the destination that the transaction is sent to.
+	Destination *url.URL `json:"destination,omitempty" form:"destination" query:"destination"`
+	// Number is the sequence number of the transaction.
+	Number    uint64 `json:"number,omitempty" form:"number" query:"number"`
+	extraData []byte
+}
+
 type SyntheticMessage struct {
 	fieldsSet []bool
 	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
@@ -58,6 +70,8 @@ type ValidatorSignature struct {
 	Source    *url.URL              `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	extraData []byte
 }
+
+func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
 
 func (*SyntheticMessage) Type() MessageType { return MessageTypeSynthetic }
 
@@ -94,6 +108,25 @@ func (v *Envelope) Copy() *Envelope {
 }
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SequencedMessage) Copy() *SequencedMessage {
+	u := new(SequencedMessage)
+
+	if v.Message != nil {
+		u.Message = CopyMessage(v.Message)
+	}
+	if v.Source != nil {
+		u.Source = v.Source
+	}
+	if v.Destination != nil {
+		u.Destination = v.Destination
+	}
+	u.Number = v.Number
+
+	return u
+}
+
+func (v *SequencedMessage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SyntheticMessage) Copy() *SyntheticMessage {
 	u := new(SyntheticMessage)
@@ -179,6 +212,33 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		if !(EqualMessage(v.Messages[i], u.Messages[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SequencedMessage) Equal(u *SequencedMessage) bool {
+	if !(EqualMessage(v.Message, u.Message)) {
+		return false
+	}
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	switch {
+	case v.Destination == u.Destination:
+		// equal
+	case v.Destination == nil || u.Destination == nil:
+		return false
+	case !((v.Destination).Equal(u.Destination)):
+		return false
+	}
+	if !(v.Number == u.Number) {
+		return false
 	}
 
 	return true
@@ -290,6 +350,62 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SequencedMessage = []string{
+	1: "Type",
+	2: "Message",
+	3: "Source",
+	4: "Destination",
+	5: "Number",
+}
+
+func (v *SequencedMessage) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(EqualMessage(v.Message, nil)) {
+		writer.WriteValue(2, v.Message.MarshalBinary)
+	}
+	if !(v.Source == nil) {
+		writer.WriteUrl(3, v.Source)
+	}
+	if !(v.Destination == nil) {
+		writer.WriteUrl(4, v.Destination)
+	}
+	if !(v.Number == 0) {
+		writer.WriteUint(5, v.Number)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SequencedMessage)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SequencedMessage) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Message is missing")
+	} else if EqualMessage(v.Message, nil) {
+		errs = append(errs, "field Message is not set")
 	}
 
 	switch len(errs) {
@@ -559,6 +675,54 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *SequencedMessage) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SequencedMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SequencedMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Message = x
+		}
+		return err
+	})
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Destination = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Number = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SequencedMessage)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SyntheticMessage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -742,6 +906,30 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SequencedMessage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type        MessageType                          `json:"type"`
+		Message     *encoding.JsonUnmarshalWith[Message] `json:"message,omitempty"`
+		Source      *url.URL                             `json:"source,omitempty"`
+		Destination *url.URL                             `json:"destination,omitempty"`
+		Number      uint64                               `json:"number,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(EqualMessage(v.Message, nil)) {
+		u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
+	}
+	if !(v.Source == nil) {
+		u.Source = v.Source
+	}
+	if !(v.Destination == nil) {
+		u.Destination = v.Destination
+	}
+	if !(v.Number == 0) {
+		u.Number = v.Number
+	}
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    MessageType                          `json:"type"`
@@ -830,6 +1018,35 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Messages.Value {
 		v.Messages[i] = x
 	}
+	return nil
+}
+
+func (v *SequencedMessage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type        MessageType                          `json:"type"`
+		Message     *encoding.JsonUnmarshalWith[Message] `json:"message,omitempty"`
+		Source      *url.URL                             `json:"source,omitempty"`
+		Destination *url.URL                             `json:"destination,omitempty"`
+		Number      uint64                               `json:"number,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
+	u.Source = v.Source
+	u.Destination = v.Destination
+	u.Number = v.Number
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Message != nil {
+		v.Message = u.Message.Value
+	}
+
+	v.Source = u.Source
+	v.Destination = u.Destination
+	v.Number = u.Number
 	return nil
 }
 

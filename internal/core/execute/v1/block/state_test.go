@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -33,7 +34,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 	// Initialize
 	t.Log("Setup")
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: ExecutorVersionV1SignatureAnchoring})
 
 	// Prepare the ADI
 	name := AccountUrl("foobarbaz")

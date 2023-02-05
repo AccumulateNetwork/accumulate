@@ -7,6 +7,7 @@
 package messaging
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -29,10 +30,20 @@ type Message interface {
 
 	// Type is the type of the message.
 	Type() MessageType
+
+	// Hash returns the hash of the message.
+	Hash() [32]byte
 }
 
-func (m *UserTransaction) ID() *url.TxID  { return m.Transaction.ID() }
-func (m *SyntheticMessage) ID() *url.TxID { return m.Message.ID() }
+func (m *UserTransaction) ID() *url.TxID { return m.Transaction.ID() }
+
+func (m *SequencedMessage) ID() *url.TxID {
+	return m.Destination.WithTxID(m.Hash())
+}
+
+func (m *SyntheticMessage) ID() *url.TxID {
+	return m.Message.ID().Account().WithTxID(m.Hash())
+}
 
 func (m *ValidatorSignature) ID() *url.TxID {
 	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
@@ -49,6 +60,9 @@ func (m *UserSignature) ID() *url.TxID {
 		return sig.RoutingLocation().WithTxID(hash)
 	}
 }
+
+func (m *SyntheticMessage) Unwrap() Message { return m.Message }
+func (m *SequencedMessage) Unwrap() Message { return m.Message }
 
 type MessageWithTransaction interface {
 	Message
@@ -69,4 +83,38 @@ func (m *UserSignature) GetTxID() *url.TxID                    { return m.TxID }
 
 func (m *ValidatorSignature) GetTxID() *url.TxID {
 	return protocol.UnknownUrl().WithTxID(m.Signature.GetTransactionHash())
+}
+
+func (m *UserTransaction) Hash() [32]byte {
+	return *(*[32]byte)(m.Transaction.GetHash())
+}
+
+func (m *UserSignature) Hash() [32]byte {
+	var h hash.Hasher
+	h.AddHash((*[32]byte)(m.Signature.Hash()))
+	h.AddTxID(m.TxID)
+	return *(*[32]byte)(h.MerkleHash())
+}
+
+func (m *SyntheticMessage) Hash() [32]byte {
+	var h hash.Hasher
+	h.AddHash2(m.Message.Hash())
+	h.AddHash((*[32]byte)(m.Proof.Receipt.Anchor))
+	return *(*[32]byte)(h.MerkleHash())
+}
+
+func (m *SequencedMessage) Hash() [32]byte {
+	var h hash.Hasher
+	h.AddHash2(m.Message.Hash())
+	h.AddUrl2(m.Source)
+	h.AddUrl2(m.Destination)
+	h.AddUint(m.Number)
+	return *(*[32]byte)(h.MerkleHash())
+}
+
+func (m *ValidatorSignature) Hash() [32]byte {
+	var h hash.Hasher
+	h.AddHash((*[32]byte)(m.Signature.Hash()))
+	h.AddUrl2(m.Source)
+	return *(*[32]byte)(h.MerkleHash())
 }
