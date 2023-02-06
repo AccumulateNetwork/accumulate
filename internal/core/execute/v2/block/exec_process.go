@@ -32,19 +32,6 @@ type bundle struct {
 	// after this one.
 	additional []messaging.Message
 
-	// transactionsToProcess is a list of transactions that have been signed and
-	// thus should be processed. It will be removed once authority signatures
-	// are implemented. MUST BE ORDERED.
-	transactionsToProcess hashSet
-
-	// internal tracks which messages were produced internally (e.g. network
-	// account updates).
-	internal set[[32]byte]
-
-	// forwarded tracks which messages were forwarded within a forwarding
-	// message.
-	forwarded set[[32]byte]
-
 	// state tracks transaction state objects.
 	state orderedMap[[32]byte, *chain.ProcessTransactionState]
 
@@ -66,16 +53,6 @@ func (b *BlockV2) Process(messages []messaging.Message) ([]*protocol.Transaction
 	// messages
 	var pass int
 additional:
-
-	// Put transactions last
-	for i, msg := range messages {
-		_, ok := unwrapMessageAs[messaging.MessageWithTransaction](msg)
-		if !ok {
-			continue
-		}
-		copy(messages[i:], messages[i+1:])
-		messages[len(messages)-1] = msg
-	}
 
 	// Do this now for the sake of comparing logs
 	for _, msg := range messages {
@@ -113,9 +90,6 @@ additional:
 	d.pass = pass
 	d.messages = messages
 	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
-	d.transactionsToProcess = hashSet{}
-	d.internal = set[[32]byte]{}
-	d.forwarded = set[[32]byte]{}
 
 	// Process each message
 	remote := set[[32]byte]{}
@@ -126,18 +100,6 @@ additional:
 		}
 
 		// Some executors may not produce a status at this stage
-		if st != nil {
-			statuses = append(statuses, st)
-		}
-	}
-
-	// Process transactions (MUST BE ORDERED)
-	for _, hash := range d.transactionsToProcess {
-		remote.Remove(hash)
-		st, err := d.executeTransaction(hash)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
 		if st != nil {
 			statuses = append(statuses, st)
 		}
@@ -252,90 +214,4 @@ func (b *bundle) callSignatureExecutor(batch *database.Batch, ctx *SignatureCont
 	st, err := x.Process(batch, ctx)
 	err = errors.UnknownError.Wrap(err)
 	return st, err
-}
-
-// executeTransaction executes a transaction.
-func (b *bundle) executeTransaction(hash [32]byte) (*protocol.TransactionStatus, error) {
-	batch := b.Block.Batch.Begin(true)
-	defer batch.Discard()
-
-	// Load the transaction. Earlier checks should guarantee this never fails.
-	var txn messaging.MessageWithTransaction
-	err := batch.Message(hash).Main().GetAs(&txn)
-	if err != nil {
-		return nil, errors.InternalError.WithFormat("load transaction: %w", err)
-	}
-
-	status, err := batch.Transaction(hash[:]).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Do not process the transaction if it has already been delivered
-	if status.Delivered() {
-		return status, nil
-	}
-
-	delivery := &chain.Delivery{Transaction: txn.GetTransaction(), Internal: b.internal.Has(hash)}
-	if typ := txn.GetTransaction().Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
-		// Load sequence info (nil bundle is a hack)
-		delivery.Sequence, err = (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
-		}
-	}
-
-	status, state, err := b.Executor.ProcessTransaction(batch, delivery)
-	if err != nil {
-		return nil, err
-	}
-
-	err = batch.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("commit batch: %w", err)
-	}
-
-	kv := []interface{}{
-		"block", b.Block.Index,
-		"type", txn.GetTransaction().Body.Type(),
-		"code", status.Code,
-		"txn-hash", logging.AsHex(txn.GetTransaction().GetHash()).Slice(0, 4),
-		"principal", txn.GetTransaction().Header.Principal,
-	}
-	if status.Error != nil {
-		kv = append(kv, "error", status.Error)
-		if b.pass > 0 {
-			b.Executor.logger.Info("Additional transaction failed", kv...)
-		} else {
-			b.Executor.logger.Info("Transaction failed", kv...)
-		}
-	} else if status.Pending() {
-		if b.pass > 0 {
-			b.Executor.logger.Debug("Additional transaction pending", kv...)
-		} else {
-			b.Executor.logger.Debug("Transaction pending", kv...)
-		}
-	} else {
-		fn := b.Executor.logger.Debug
-		switch txn.GetTransaction().Body.Type() {
-		case protocol.TransactionTypeDirectoryAnchor,
-			protocol.TransactionTypeBlockValidatorAnchor:
-			fn = b.Executor.logger.Info
-			kv = append(kv, "module", "anchoring")
-		}
-		if b.pass > 0 {
-			fn("Additional transaction succeeded", kv...)
-		} else {
-			fn("Transaction succeeded", kv...)
-		}
-	}
-
-	for _, newTxn := range state.ProducedTxns {
-		msg := &messaging.UserTransaction{Transaction: newTxn}
-		prod := &ProducedMessage{Producer: txn.ID(), Message: msg}
-		b.produced = append(b.produced, prod)
-	}
-	b.additional = append(b.additional, state.AdditionalMessages...)
-	b.state.Set(hash, state)
-	return status, nil
 }

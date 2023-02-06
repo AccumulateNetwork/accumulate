@@ -277,10 +277,12 @@ func (p *Partition) execute() error {
 	}
 	for _, r := range results[1:] {
 		if len(r) != len(results[0]) {
+			p.logger.Error("Consensus failure", "step", "deliver", "expected", results[0], "actual", r)
 			return errors.FatalError.WithFormat("consensus failure: different number of results")
 		}
 		for i, st := range r {
 			if !results[0][i].Equal(st) {
+				p.logger.Error("Consensus failure", "step", "deliver", "id", st.TxID, "expected", results[0][i], "actual", st)
 				return errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
 			}
 		}

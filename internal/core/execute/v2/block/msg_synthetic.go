@@ -101,11 +101,9 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 		}
 	}
 
-	var shouldQueue bool
 	switch seq.Message.Type() {
 	case messaging.MessageTypeUserTransaction:
-		// Allowed, queue for execution
-		shouldQueue = true
+		// Allowed
 
 	default:
 		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", syn.Message.Type())), nil
@@ -115,18 +113,10 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	if st != nil && st.Failed() {
-		return st, nil
-	}
 
 	err = batch.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	if shouldQueue {
-		// Queue for execution
-		ctx.transactionsToProcess.Add(syn.Message.ID().Hash())
 	}
 
 	return st, nil

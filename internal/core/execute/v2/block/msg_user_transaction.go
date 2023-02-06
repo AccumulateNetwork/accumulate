@@ -7,8 +7,10 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -23,7 +25,7 @@ func init() {
 // transaction messages.
 type UserTransaction struct{}
 
-func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	txn, ok := ctx.message.(*messaging.UserTransaction)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserTransaction, ctx.message.Type())
@@ -41,63 +43,32 @@ func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*pro
 		return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)), nil
 	}
 
-	// Ensure the transaction is signed or is synthetic
-	if !ctx.isWithin(messaging.MessageTypeSynthetic) {
-		var signed bool
-		for _, other := range ctx.messages {
-			if fwd, ok := other.(*internal.ForwardedMessage); ok {
-				other = fwd.Message
-			}
-			switch sig := other.(type) {
-			case *messaging.UserSignature:
-				if sig.TxID.Hash() == txn.ID().Hash() {
-					signed = true
-					break
-				}
-			case *messaging.ValidatorSignature:
-				if sig.Signature.GetTransactionHash() == txn.ID().Hash() {
-					signed = true
-					break
-				}
-			}
-		}
-		if !signed {
-			return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("%v is not signed", txn.ID())), nil
-		}
-	}
-
 	batch = batch.Begin(true)
 	defer batch.Discard()
+	ctx2 := ctx.txnWith(txn.Transaction)
 
-	loaded, err := storeTransaction(batch, ctx, txn)
-	if err != nil {
-		if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
-			return protocol.NewErrorStatus(txn.ID(), err), nil
+	// Check the transaction, but only if it was not internally produced
+	var err error
+	if !ctx.isWithin(internal.MessageTypeMessageIsReady, internal.MessageTypeNetworkUpdate) {
+		ctx2.transaction, err = storeTransaction(batch, ctx, txn)
+		if err != nil {
+			if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
+				return protocol.NewErrorStatus(txn.ID(), err), nil
+			}
+			return nil, errors.UnknownError.Wrap(err)
 		}
-		return nil, errors.UnknownError.Wrap(err)
-	}
 
-	// If the parent message is synthetic, only allow synthetic transactions.
-	// Otherwise, do not allow synthetic transactions.
-	if ctx.isWithin(messaging.MessageTypeSynthetic) {
-		if !loaded.Body.Type().IsSynthetic() {
-			return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v", loaded.Body.Type())), nil
-		}
-	} else {
-		if loaded.Body.Type().IsSynthetic() {
-			return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v", loaded.Body.Type())), nil
+		st, err := x.checkTransaction(batch, ctx2)
+		if err != nil || st.Failed() {
+			return st, err
 		}
 	}
 
-	// Record when the transaction is received
-	record := batch.Transaction(txn.Transaction.GetHash())
-	status, err := record.Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	if status.Received == 0 {
-		status.Received = ctx.Block.Index
-		err = record.Status().Put(status)
+	// Execute the transaction, but ONLY if this is a nested context - DO NOT
+	// attempt to execute a bare user transaction
+	var status *protocol.TransactionStatus
+	if ctx.shouldExecuteTransaction() {
+		status, err = x.executeTransaction(batch, ctx2)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -108,8 +79,7 @@ func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*pro
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// The transaction has not yet been processed so don't add its status
-	return nil, nil
+	return status, nil
 }
 
 func storeTransaction(batch *database.Batch, ctx *MessageContext, msg messaging.MessageWithTransaction) (*protocol.Transaction, error) {
@@ -153,4 +123,135 @@ func storeTransaction(batch *database.Batch, ctx *MessageContext, msg messaging.
 	}
 
 	return txn, nil
+}
+
+func (UserTransaction) checkTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
+	// Ensure the transaction is signed, is synthetic, or was internally queued
+	if !ctx.isWithin(messaging.MessageTypeSynthetic) {
+		var signed bool
+		for _, other := range ctx.messages {
+			if fwd, ok := other.(*internal.ForwardedMessage); ok {
+				other = fwd.Message
+			}
+			switch sig := other.(type) {
+			case *messaging.UserSignature:
+				if sig.TxID.Hash() == ctx.transaction.ID().Hash() {
+					signed = true
+					break
+				}
+			case *messaging.ValidatorSignature:
+				if sig.Signature.GetTransactionHash() == ctx.transaction.ID().Hash() {
+					signed = true
+					break
+				}
+			}
+		}
+		if !signed {
+			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("%v is not signed", ctx.transaction.ID())), nil
+		}
+	}
+
+	// If the parent message is synthetic, only allow synthetic transactions.
+	// Otherwise, do not allow synthetic transactions.
+	if ctx.isWithin(messaging.MessageTypeSynthetic) {
+		if !ctx.transaction.Body.Type().IsSynthetic() {
+			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v", ctx.transaction.Body.Type())), nil
+		}
+	} else {
+		if ctx.transaction.Body.Type().IsSynthetic() {
+			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v", ctx.transaction.Body.Type())), nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (UserTransaction) executeTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
+	batch = batch.Begin(true)
+	defer batch.Discard()
+
+	// Record when the transaction is received
+	status, err := batch.Transaction(ctx.transaction.GetHash()).Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if status.Received == 0 {
+		status.Received = ctx.Block.Index
+		err = batch.Transaction(ctx.transaction.GetHash()).Status().Put(status)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// Do not process the transaction if it has already been delivered
+	if status.Delivered() {
+		return status, nil
+	}
+
+	delivery := &chain.Delivery{
+		Transaction: ctx.transaction,
+		Internal:    ctx.isWithin(internal.MessageTypeNetworkUpdate),
+		Forwarded:   ctx.isWithin(internal.MessageTypeForwardedMessage),
+	}
+	if typ := ctx.transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
+		// Load sequence info (nil bundle is a hack)
+		delivery.Sequence, err = (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
+		}
+	}
+
+	status, state, err := ctx.Executor.ProcessTransaction(batch, delivery)
+	if err != nil {
+		return nil, err
+	}
+
+	err = batch.Commit()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("commit batch: %w", err)
+	}
+
+	kv := []interface{}{
+		"block", ctx.Block.Index,
+		"type", ctx.transaction.Body.Type(),
+		"code", status.Code,
+		"txn-hash", logging.AsHex(ctx.transaction.GetHash()).Slice(0, 4),
+		"principal", ctx.transaction.Header.Principal,
+	}
+	if status.Error != nil {
+		kv = append(kv, "error", status.Error)
+		if ctx.pass > 0 {
+			ctx.Executor.logger.Info("Additional transaction failed", kv...)
+		} else {
+			ctx.Executor.logger.Info("Transaction failed", kv...)
+		}
+	} else if status.Pending() {
+		if ctx.pass > 0 {
+			ctx.Executor.logger.Debug("Additional transaction pending", kv...)
+		} else {
+			ctx.Executor.logger.Debug("Transaction pending", kv...)
+		}
+	} else {
+		fn := ctx.Executor.logger.Debug
+		switch ctx.transaction.Body.Type() {
+		case protocol.TransactionTypeDirectoryAnchor,
+			protocol.TransactionTypeBlockValidatorAnchor:
+			fn = ctx.Executor.logger.Info
+			kv = append(kv, "module", "anchoring")
+		}
+		if ctx.pass > 0 {
+			fn("Additional transaction succeeded", kv...)
+		} else {
+			fn("Transaction succeeded", kv...)
+		}
+	}
+
+	for _, newTxn := range state.ProducedTxns {
+		msg := &messaging.UserTransaction{Transaction: newTxn}
+		prod := &ProducedMessage{Producer: ctx.transaction.ID(), Message: msg}
+		ctx.produced = append(ctx.produced, prod)
+	}
+	ctx.additional = append(ctx.additional, state.AdditionalMessages...)
+	ctx.state.Set(ctx.transaction.ID().Hash(), state)
+	return status, nil
 }
