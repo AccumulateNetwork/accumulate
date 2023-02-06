@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -84,4 +85,92 @@ func TestMissingSynthTxn(t *testing.T) {
 		lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
 		require.Equal(t, len(st)*protocol.AcmePrecision, int(lta.Balance.Uint64()))
 	})
+}
+
+func TestMissingDirectoryAnchorTxn(t *testing.T) {
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	liteKey := acctesting.GenerateKey("Lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+
+	faucetKey := acctesting.GenerateKey("Faucet")
+	faucet := acctesting.AcmeLiteAddressStdPriv(faucetKey)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
+
+	// Drop the next directory anchor
+	var didDrop bool
+	sim.SetSubmitHookFor(alice, func(messages []messaging.Message) (drop, keepHook bool) {
+		for _, msg := range messages {
+			var txn messaging.MessageWithTransaction
+			if encoding.SetPtr(msg, &txn) == nil && txn.GetTransaction().Body.Type() == TransactionTypeDirectoryAnchor {
+				didDrop = true
+				return true, false
+			}
+		}
+		return false, true
+	})
+
+	// Cause a synthetic transaction
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(faucet).
+			SendTokens(1, AcmeOraclePrecisionPower).To(lite).
+			SignWith(faucet).Timestamp(1).Version(1).PrivateKey(faucetKey))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	require.True(t, didDrop)
+}
+
+func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	liteKey := acctesting.GenerateKey("Lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+
+	faucetKey := acctesting.GenerateKey("Faucet")
+	faucet := acctesting.AcmeLiteAddressStdPriv(faucetKey)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
+
+	// Drop the next directory anchor
+	var didDrop bool
+	sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop, keepHook bool) {
+		for _, msg := range messages {
+			var txn messaging.MessageWithTransaction
+			if encoding.SetPtr(msg, &txn) == nil && txn.GetTransaction().Body.Type() == TransactionTypeBlockValidatorAnchor {
+				didDrop = true
+				return true, false
+			}
+		}
+		return false, true
+	})
+
+	// Cause a synthetic transaction
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(faucet).
+			SendTokens(1, AcmeOraclePrecisionPower).To(lite).
+			SignWith(faucet).Timestamp(1).Version(1).PrivateKey(faucetKey))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	require.True(t, didDrop)
 }
