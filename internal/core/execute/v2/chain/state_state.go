@@ -63,7 +63,7 @@ func (s *ProcessTransactionState) ProcessForwarded(msg messaging.Message) {
 // ProcessTransaction queues a transaction for processing after the current
 // bundle.
 func (s *ProcessTransactionState) ProcessTransaction(txid *url.TxID) {
-	s.AdditionalMessages = append(s.AdditionalMessages, &internal.TransactionIsReady{
+	s.AdditionalMessages = append(s.AdditionalMessages, &internal.MessageIsReady{
 		TxID: txid,
 	})
 }
