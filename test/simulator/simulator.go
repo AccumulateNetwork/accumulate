@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -35,6 +34,7 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -50,6 +50,10 @@ type Simulator struct {
 	netcfg     *config.Network
 
 	blockErrGroup *errgroup.Group
+
+	// Deterministic attempts to run the simulator in a fully deterministic,
+	// repeatable way
+	Deterministic bool
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) database.Beginner
@@ -109,6 +113,7 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 			return nil, errors.UnknownError.WithFormat("init %s: %w", p.ID, err)
 		}
 	}
+
 	return s, nil
 }
 
@@ -180,14 +185,17 @@ func SnapshotFromDirectory(dir string) SnapshotFunc {
 	}
 }
 
-func SnapshotMap(snapshots map[string]ioutil2.SectionReader) SnapshotFunc {
+func SnapshotMap(snapshots map[string][]byte) SnapshotFunc {
 	return func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
-		return snapshots[partition], nil
+		return ioutil2.NewBuffer(snapshots[partition]), nil
 	}
 }
 
 func Genesis(time time.Time) SnapshotFunc {
-	return GenesisWith(time, nil)
+	// By default run tests with the new executor version
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = protocol.ExecutorVersionLatest
+	return GenesisWith(time, values)
 }
 
 func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
@@ -218,13 +226,29 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 func (s *Simulator) Router() routing.Router { return s.router }
 func (s *Simulator) EventBus() *events.Bus  { return s.partitions[protocol.Directory].nodes[0].eventBus }
 
+func (s *Simulator) BlockIndex(partition string) uint64 {
+	return s.partitions[partition].blockIndex
+}
+
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
 	s.blockErrGroup = new(errgroup.Group)
-	for _, p := range s.partitions {
-		p := p // Don't capture loop variables
-		s.blockErrGroup.Go(p.execute)
+
+	if s.Deterministic {
+		err := s.partitions[protocol.Directory].execute()
+		for _, bvn := range s.init.Bvns {
+			if e := s.partitions[bvn.Id].execute(); e != nil {
+				err = e
+			}
+		}
+		return err
+	} else {
+		for _, p := range s.partitions {
+			p := p // Don't capture loop variables
+			s.blockErrGroup.Go(p.execute)
+		}
 	}
+
 	return s.blockErrGroup.Wait()
 }
 
@@ -252,33 +276,22 @@ func (s *Simulator) SetRouterSubmitHook(partition string, fn RouterSubmitHookFun
 	s.partitions[partition].SetRouterSubmitHook(fn)
 }
 
-func (s *Simulator) SetExecutor(exec chain.TransactionExecutor) {
-	for _, p := range s.partitions {
-		for _, n := range p.nodes {
-			n.executor.SetExecutor_TESTONLY(exec)
-		}
-	}
-}
-
-func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	partition, err := s.router.Route(&protocol.Envelope{
-		Transaction: []*protocol.Transaction{delivery.Transaction},
-		Signatures:  delivery.Signatures,
-	})
+func (s *Simulator) Submit(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+	partition, err := routing.RouteMessages(s.router, messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return s.SubmitTo(partition, delivery)
+	return s.SubmitTo(partition, messages)
 }
 
-func (s *Simulator) SubmitTo(partition string, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitTo(partition string, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	return p.Submit(delivery, false)
+	return p.Submit(messages, false)
 }
 
 func (s *Simulator) Partitions() []*protocol.PartitionInfo {
@@ -367,16 +380,20 @@ func (s *Simulator) SignWithNode(partition string, i int) nodeSigner {
 	return nodeSigner{s.partitions[partition].nodes[i]}
 }
 
+func (s *Simulator) API() *client.Client {
+	return s.partitions[protocol.Directory].nodes[0].clientV2
+}
+
 type nodeSigner struct {
 	*Node
 }
 
 var _ signing.Signer = nodeSigner{}
 
-func (n nodeSigner) Key() []byte { return n.executor.Key }
+func (n nodeSigner) Key() []byte { return n.init.PrivValKey }
 
 func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
-	k := n.executor.Key
+	k := n.init.PrivValKey
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.PublicKey = k[32:]
@@ -407,7 +424,7 @@ func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
 }
 
 func (n nodeSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) error {
-	k := n.executor.Key
+	k := n.init.PrivValKey
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		protocol.SignLegacyED25519(sig, k, sigMdHash, message)
@@ -486,6 +503,11 @@ func (s *simService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api
 // Query routes the scope to a partition and calls Query on the first node of
 // that partition, returning the result.
 func (s *simService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	r, err := s.queryFanout(ctx, scope, query)
+	if r != nil || err != nil {
+		return r, err
+	}
+
 	part, err := s.router.RouteAccount(scope)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -493,9 +515,37 @@ func (s *simService) Query(ctx context.Context, scope *url.URL, query api.Query)
 	return (*nodeService)(s.partitions[part].nodes[0]).Query(ctx, scope, query)
 }
 
+func (s *simService) queryFanout(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	// If the request is a transaction hash search query request, fan it out
+	if scope == nil || !protocol.IsUnknown(scope) {
+		return nil, nil
+	}
+	if _, ok := query.(*api.MessageHashSearchQuery); !ok {
+		return nil, nil
+	}
+
+	records := new(api.RecordRange[api.Record])
+	for _, p := range s.partitions {
+		if p.ID == "BVN1" {
+			print("")
+		}
+		r, err := (*nodeService)(p.nodes[0]).Query(ctx, scope, query)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		rr, ok := r.(*api.RecordRange[api.Record])
+		if !ok {
+			return nil, errors.InternalError.WithFormat("expected %v, got %v", api.RecordTypeRange, r.RecordType())
+		}
+		records.Records = append(records.Records, rr.Records...)
+	}
+	records.Total = uint64(len(records.Records))
+	return records, nil
+}
+
 // Submit routes the envelope to a partition and calls Submit on the first node
 // of that partition, returning the result.
-func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (s *simService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	part, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, err
@@ -505,7 +555,7 @@ func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, op
 
 // Validate routes the envelope to a partition and calls Validate on the first
 // node of that partition, returning the result.
-func (s *simService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (s *simService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	part, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, err

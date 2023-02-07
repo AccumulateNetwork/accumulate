@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -60,7 +61,7 @@ func TestReplay(t *testing.T) {
 			})
 	}
 
-	succeeds := func(sim *simulator.Simulator, env *Envelope) {
+	succeeds := func(sim *simulator.Simulator, env *messaging.Envelope) {
 		t.Helper()
 		st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
 		for _, st := range st {
@@ -72,7 +73,7 @@ func TestReplay(t *testing.T) {
 		require.True(t, protocol.EqualDataEntry(entry, account.Entry))
 	}
 
-	fails := func(sim *simulator.Simulator, env *Envelope) {
+	fails := func(sim *simulator.Simulator, env *messaging.Envelope) {
 		t.Helper()
 		sts, err := sim.SubmitAndExecuteBlock(env)
 		if err != nil {

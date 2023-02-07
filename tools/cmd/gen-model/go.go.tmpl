@@ -20,7 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 )
 
@@ -220,8 +220,8 @@ func (c *{{fullName .}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 }
 
 {{if hasChains .}}
-{{if not .Root}}
-func (c *{{fullName .}}) resolveChain(name string) (chain *database.Chain, ok bool) {
+{{/*if not .Root}}
+func (c *{{fullName .}}) resolveChain(name string) (chain *MerkleManager, ok bool) {
 	{{- range .Attributes}}
 	{{- if and (.Type.IsChain) (not (parameterized .))}}
 	if name == "{{chainName .}}"{
@@ -232,7 +232,7 @@ func (c *{{fullName .}}) resolveChain(name string) (chain *database.Chain, ok bo
 
 	{{- range .Attributes}}
 	{{- if and (parameterized .) (hasChains .)}}
-	tryResolveChainParam(&chain, &ok, name, "{{chainName .}}(", {{parameterCount .}}, func(params []string, name string) (*database.Chain, bool) {
+	tryResolveChainParam(&chain, &ok, name, "{{chainName .}}(", {{parameterCount .}}, func(params []string, name string) (*MerkleManager, bool) {
 		ok := true
 		{{- range $i, $p := .Parameters}}
 		param{{$p.Name}} := parseChainParam(&ok, params[{{$i}}], record.Parse{{title $p.Type.String}})
@@ -244,19 +244,19 @@ func (c *{{fullName .}}) resolveChain(name string) (chain *database.Chain, ok bo
 		return c.{{template "accessor" .}}({{range .Parameters}}param{{.Name}},{{end}}){{if .Type.IsChain}}, true{{else}}.resolveChain(name){{end}}
 	})
 	{{- else if and (not .Type.IsChain) (hasChains .)}}
-	tryResolveChain(&chain, &ok, name, "{{chainName .}}-", c.{{template "accessor" .}})
+	tryResolveChain(&chain, &ok, name, "{{chainName .}}", c.{{template "accessor" .}})
 	{{- end}}
 	{{- end}}
 	return
 }
-{{end}}
+{{end}}*/}}
 
-func (c *{{fullName .}}) dirtyChains() []*database.Chain {
+func (c *{{fullName .}}) dirtyChains() []*MerkleManager {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*database.Chain
+	var chains []*MerkleManager
 	{{  range .Attributes}}
 	{{- if parameterized .}}
 	{{- if .Type.IsChain}}

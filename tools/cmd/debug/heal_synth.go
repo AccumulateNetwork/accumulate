@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -55,7 +56,7 @@ func healSynth(_ *cobra.Command, args []string) {
 
 				fmt.Printf("Resubmitting %v\n", txid)
 				xreq := new(api.ExecuteRequest)
-				xreq.Envelope = new(protocol.Envelope)
+				xreq.Envelope = new(messaging.Envelope)
 				xreq.Envelope.Transaction = []*protocol.Transaction{res.Transaction}
 				for _, sig := range res.Signatures {
 					sig, ok := sig.(*protocol.PartitionSignature)

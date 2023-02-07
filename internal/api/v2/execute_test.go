@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,18 +13,18 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	core "github.com/tendermint/tendermint/rpc/core/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+//go:generate go run github.com/vektra/mockery/v2
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w .
 
-//go:generate go run github.com/golang/mock/mockgen -source ../../node/connections/connection_context.go -package api_test -destination ./mock_connections_test.go
+func init() { acctesting.EnableDebugFeatures() }
 
 func TestExecuteCheckOnly(t *testing.T) {
 	env := acctesting.NewTransaction().
@@ -45,22 +45,14 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		connectionManager := connections.NewFakeConnectionManager([]string{""})
-		local := NewMockABCIClient(ctrl)
-		clients := map[string]connections.FakeClient{}
-		clients[""] = connections.FakeClient{local, nil}
-		connectionManager.SetClients(clients)
-		table := new(protocol.RoutingTable)
-		table.Routes = routing.BuildSimpleTable([]string{""})
-		router, err := routing.NewStaticRouter(table, connectionManager, nil)
-		require.NoError(t, err)
-		j, err := NewJrpc(Options{
-			Router: router,
-			Key:    make([]byte, 64),
-		})
+		v3 := NewMockV3(t)
+		j, err := NewJrpc(Options{NetV3: v3, LocalV3: v3})
 		require.NoError(t, err)
 
-		local.EXPECT().CheckTx(gomock.Any(), gomock.Any()).Return(new(core.ResultCheckTx), nil)
+		v3.EXPECT().Validate(mock.Anything, mock.Anything, mock.Anything).Return([]*api.Submission{{
+			Status:  new(protocol.TransactionStatus),
+			Success: true,
+		}}, nil)
 
 		req := baseReq
 		req.CheckOnly = true
@@ -73,22 +65,14 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		connectionManager := connections.NewFakeConnectionManager([]string{""})
-		local := NewMockABCIClient(ctrl)
-		clients := map[string]connections.FakeClient{}
-		clients[""] = connections.FakeClient{local, nil}
-		connectionManager.SetClients(clients)
-		table := new(protocol.RoutingTable)
-		table.Routes = routing.BuildSimpleTable([]string{""})
-		router, err := routing.NewStaticRouter(table, connectionManager, nil)
-		require.NoError(t, err)
-		j, err := NewJrpc(Options{
-			Router: router,
-			Key:    make([]byte, 64),
-		})
+		v3 := NewMockV3(t)
+		j, err := NewJrpc(Options{NetV3: v3, LocalV3: v3})
 		require.NoError(t, err)
 
-		local.EXPECT().BroadcastTxSync(gomock.Any(), gomock.Any()).Return(new(core.ResultBroadcastTx), nil)
+		v3.EXPECT().Submit(mock.Anything, mock.Anything, mock.Anything).Return([]*api.Submission{{
+			Status:  new(protocol.TransactionStatus),
+			Success: true,
+		}}, nil)
 
 		req := baseReq
 		req.CheckOnly = false

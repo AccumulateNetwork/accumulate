@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -88,15 +89,18 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 	switch query := query.(type) {
 	case *api.DefaultQuery:
 		if txid, err := scope.AsTxID(); err == nil {
-			h := txid.Hash()
-			return s.queryTransactionOrSignature(ctx, batch, batch.Transaction(h[:]))
+			return s.queryMessage(ctx, batch, txid)
 		}
 
 		return s.queryAccount(ctx, batch, batch.Account(scope), query.IncludeReceipt)
 
 	case *api.ChainQuery:
 		if query.Name == "" {
-			return s.queryChains(ctx, batch.Account(scope))
+			if txid, err := scope.AsTxID(); err == nil {
+				h := txid.Hash()
+				return s.queryTransactionChains(ctx, batch, batch.Transaction(h[:]), query.IncludeReceipt)
+			}
+			return s.queryAccountChains(ctx, batch.Account(scope))
 		}
 
 		record, err := batch.Account(scope).ChainByName(query.Name)
@@ -120,11 +124,11 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 
 	case *api.DataQuery:
 		if query.Index != nil {
-			return s.queryDataEntryByIndex(ctx, batch, indexing.Data(batch, scope), *query.Index)
+			return s.queryDataEntryByIndex(ctx, batch, indexing.Data(batch, scope), *query.Index, true)
 		}
 
 		if query.Entry != nil {
-			return s.queryDataEntryByHash(ctx, batch, indexing.Data(batch, scope), query.Entry)
+			return s.queryDataEntryByHash(ctx, batch, indexing.Data(batch, scope), query.Entry, true)
 		}
 
 		if query.Range != nil {
@@ -176,7 +180,7 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 			return s.EntryByDelegate(query.Delegate)
 		})
 
-	case *api.TransactionHashSearchQuery:
+	case *api.MessageHashSearchQuery:
 		return s.searchForTransactionHash(ctx, batch, query.Hash)
 
 	default:
@@ -232,35 +236,30 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	return r, nil
 }
 
-func (s *Querier) queryTransactionOrSignature(ctx context.Context, batch *database.Batch, record *database.Transaction) (api.Record, error) {
-	return loadTransactionOrSignature(batch, record)
+func (s *Querier) queryMessage(ctx context.Context, batch *database.Batch, txid *url.TxID) (api.Record, error) {
+	return loadTransactionOrSignature(batch, txid)
 }
 
-func (s *Querier) queryTransaction(ctx context.Context, batch *database.Batch, record *database.Transaction) (*api.TransactionRecord, error) {
-	state, err := record.Main().Get()
+func (s *Querier) queryTransaction(ctx context.Context, batch *database.Batch, txid *url.TxID) (*api.TransactionRecord, error) {
+	var msg messaging.MessageWithTransaction
+	err := batch.Message(txid.Hash()).Main().GetAs(&msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
-	if state.Transaction == nil {
-		return nil, errors.Conflict.WithFormat("record is not a transaction")
-	}
-
-	return loadTransaction(batch, record, state.Transaction)
+	return loadTransaction(batch, msg.GetTransaction())
 }
 
-func (s *Querier) querySignature(ctx context.Context, batch *database.Batch, record *database.Transaction) (*api.SignatureRecord, error) {
-	state, err := record.Main().Get()
+func (s *Querier) querySignature(ctx context.Context, batch *database.Batch, msgid *url.TxID) (*api.SignatureRecord, error) {
+	var msg messaging.MessageWithSignature
+	err := batch.Message(msgid.Hash()).Main().GetAs(&msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
-	if state.Signature == nil {
-		return nil, errors.Conflict.WithFormat("record is not a signature")
-	}
 
-	return loadSignature(batch, state.Signature, state.Txid)
+	return loadSignature(batch, msg.GetSignature(), msg.GetTxID())
 }
 
-func (s *Querier) queryChains(ctx context.Context, record *database.Account) (*api.RecordRange[*api.ChainRecord], error) {
+func (s *Querier) queryAccountChains(ctx context.Context, record *database.Account) (*api.RecordRange[*api.ChainRecord], error) {
 	chains, err := record.Chains().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load chains index: %w", err)
@@ -278,6 +277,28 @@ func (s *Querier) queryChains(ctx context.Context, record *database.Account) (*a
 		r.Records[i] = cr
 	}
 	return r, nil
+}
+
+func (s *Querier) queryTransactionChains(ctx context.Context, batch *database.Batch, record *database.Transaction, wantReceipt bool) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+	entries, err := record.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load transaction chains: %w", err)
+	}
+
+	return api.MakeRange(entries, 0, 0, func(e *database.TransactionChainEntry) (*api.ChainEntryRecord[api.Record], error) {
+		c, err := batch.Account(e.Account).ChainByName(e.Chain)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load %v %s chain: %w", e.Account, e.Chain, err)
+		}
+
+		r, err := s.queryChainEntryByIndex(ctx, batch, c, e.ChainIndex, false, wantReceipt)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		r.Account = e.Account
+		return r, nil
+	})
 }
 
 func (s *Querier) queryChainByName(ctx context.Context, record *database.Account, name string) (*api.ChainRecord, error) {
@@ -326,6 +347,12 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	r.Index = index
 	r.Entry = *(*[32]byte)(value)
 
+	ms, err := record.Inner().GetAnyState(int64(index))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load state: %w", err)
+	}
+	r.State = ms.Pending
+
 	if expand {
 		switch r.Type {
 		case merkle.ChainTypeIndex:
@@ -335,15 +362,14 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 			}
 
 		case merkle.ChainTypeTransaction:
-			record := batch.Transaction(value)
 			var typ string
 			var err error
 			if strings.EqualFold(r.Name, "signature") {
 				typ = "signature"
-				r.Value, err = s.querySignature(ctx, batch, record)
+				r.Value, err = s.querySignature(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
 			} else {
 				typ = "transaction"
-				r.Value, err = s.queryTransaction(ctx, batch, record)
+				r.Value, err = s.queryTransaction(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
 			}
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("load %s: %w", typ, err)
@@ -383,13 +409,13 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	return r, nil
 }
 
-func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
 	entryHash, err := record.Entry(index)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get entry hash: %w", err)
 	}
 
-	return s.queryDataEntry(ctx, batch, record, index, entryHash)
+	return s.queryDataEntry(ctx, batch, record, index, entryHash, expand)
 }
 
 func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
@@ -400,15 +426,15 @@ func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch,
 	if count == 0 {
 		return nil, errors.NotFound.WithFormat("account has no data entries")
 	}
-	return s.queryDataEntryByIndex(ctx, batch, record, count-1)
+	return s.queryDataEntryByIndex(ctx, batch, record, count-1, true)
 }
 
-func (s *Querier) queryDataEntryByHash(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, entryHash []byte) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntryByHash(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
 	// TODO: Find a way to get the index without scanning the entire set
-	return s.queryDataEntry(ctx, batch, record, 0, entryHash)
+	return s.queryDataEntry(ctx, batch, record, 0, entryHash, expand)
 }
 
-func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, entryHash []byte) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
 	txnHash, err := record.Transaction(entryHash)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get transaction hash: %w", err)
@@ -420,9 +446,11 @@ func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, rec
 	r.Index = index
 	r.Entry = *(*[32]byte)(entryHash)
 
-	r.Value, err = s.queryTransaction(ctx, batch, batch.Transaction(txnHash))
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+	if expand {
+		r.Value, err = s.queryTransaction(ctx, batch, protocol.UnknownUrl().WithTxID(*(*[32]byte)(txnHash)))
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+		}
 	}
 
 	return r, nil
@@ -439,7 +467,11 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 	allocRange(r, opts, zeroBased)
 
 	for i := range r.Records {
-		r.Records[i], err = s.queryChainEntryByIndex(ctx, batch, record, r.Start+uint64(i), opts.Expand, false)
+		var expand bool
+		if opts.Expand != nil {
+			expand = *opts.Expand
+		}
+		r.Records[i], err = s.queryChainEntryByIndex(ctx, batch, record, r.Start+uint64(i), expand, false)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("get entry %d: %w", r.Start+uint64(i), err)
 		}
@@ -457,8 +489,12 @@ func (s *Querier) queryDataEntryRange(ctx context.Context, batch *database.Batch
 	r.Total = total
 	allocRange(r, opts, zeroBased)
 
+	expand := true
+	if opts.Expand != nil {
+		expand = *opts.Expand
+	}
 	for i := range r.Records {
-		r.Records[i], err = s.queryDataEntryByIndex(ctx, batch, record, r.Start+uint64(i))
+		r.Records[i], err = s.queryDataEntryByIndex(ctx, batch, record, r.Start+uint64(i), expand)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("get entry %d: %w", r.Start+uint64(i), err)
 		}
@@ -472,7 +508,7 @@ func (s *Querier) queryDirectoryRange(ctx context.Context, batch *database.Batch
 		return nil, errors.UnknownError.WithFormat("load directory: %w", err)
 	}
 	r, err := api.MakeRange(directory, opts.Start, *opts.Count, func(v *url.URL) (api.Record, error) {
-		if !opts.Expand {
+		if opts.Expand == nil || !*opts.Expand {
 			return &api.UrlRecord{Value: v}, nil
 		}
 
@@ -491,12 +527,11 @@ func (s *Querier) queryPendingRange(ctx context.Context, batch *database.Batch, 
 		return nil, errors.UnknownError.WithFormat("load pending: %w", err)
 	}
 	r, err := api.MakeRange(pending, opts.Start, *opts.Count, func(v *url.TxID) (api.Record, error) {
-		if !opts.Expand {
+		if opts.Expand == nil || !*opts.Expand {
 			return &api.TxIDRecord{Value: v}, nil
 		}
 
-		h := v.Hash()
-		r, err := s.queryTransaction(ctx, batch, batch.Transaction(h[:]))
+		r, err := s.queryTransaction(ctx, batch, v)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("expand pending entry: %w", err)
 		}
@@ -520,7 +555,7 @@ func (s *Querier) queryMinorBlock(ctx context.Context, batch *database.Batch, mi
 
 	r := new(api.MinorBlockRecord)
 	r.Index = ledger.Index
-	r.Time = ledger.Time
+	r.Time = &ledger.Time
 	r.Entries = new(api.RecordRange[*api.ChainEntryRecord[api.Record]])
 	r.Entries.Total = uint64(len(ledger.Entries))
 
@@ -688,11 +723,11 @@ func (s *Querier) queryMinorBlockRange2(ctx context.Context, batch *database.Bat
 		}
 
 		if errors.Is(err, errors.NotFound) {
-			blockIndex++
 			if !omitEmpty {
 				blocks[i] = &api.MinorBlockRecord{Index: blockIndex}
 				i++
 			}
+			blockIndex++
 			continue
 		}
 
@@ -792,17 +827,18 @@ func (s *Querier) searchForKeyEntry(ctx context.Context, batch *database.Batch, 
 }
 
 func (s *Querier) searchForTransactionHash(ctx context.Context, batch *database.Batch, hash [32]byte) (*api.RecordRange[*api.TxIDRecord], error) {
-	state, err := batch.Transaction(hash[:]).Main().Get()
+	var msg messaging.MessageWithTransaction
+	err := batch.Message(hash).Main().GetAs(&msg)
 	switch {
 	case errors.Is(err, errors.NotFound):
 		return new(api.RecordRange[*api.TxIDRecord]), nil
+
 	case err != nil:
 		return nil, errors.UnknownError.Wrap(err)
-	case state.Transaction == nil:
-		return nil, errors.UnknownError.Wrap(err)
+
 	default:
 		// TODO Replace with principal or signer as appropriate
-		txid := s.partition.WithTxID(*(*[32]byte)(state.Transaction.GetHash()))
+		txid := s.partition.WithTxID(msg.ID().Hash())
 		r := new(api.RecordRange[*api.TxIDRecord])
 		r.Total = 1
 		r.Records = []*api.TxIDRecord{{Value: txid}}

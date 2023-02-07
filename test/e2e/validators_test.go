@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -17,7 +18,7 @@ import (
 // AddOperator constructs an envelope that will add an operator to the network.
 // If partition is non-empty, the envelope will also add the operator as a
 // validator to the partition.
-func AddOperator(values *core.GlobalValues, operatorCount int, newPubKey, newKeyHash []byte, partition string, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
+func AddOperator(values *core.GlobalValues, operatorCount int, newPubKey, newKeyHash []byte, partition string, signers ...*signing.Builder) ([]*messaging.Envelope, error) {
 	env1, err1 := AddToOperatorPage(values, operatorCount, newKeyHash, signers...)
 	for _, signer := range signers {
 		signer.Version++
@@ -28,11 +29,11 @@ func AddOperator(values *core.GlobalValues, operatorCount int, newPubKey, newKey
 	} else if err2 != nil {
 		return nil, err2
 	} else {
-		return []*protocol.Envelope{env1, env2}, nil
+		return []*messaging.Envelope{env1, env2}, nil
 	}
 }
 
-func AddToOperatorPage(values *core.GlobalValues, operatorCount int, newKeyHash []byte, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func AddToOperatorPage(values *core.GlobalValues, operatorCount int, newKeyHash []byte, signers ...*signing.Builder) (*messaging.Envelope, error) {
 	// Add the key hash to the page and update the threshold
 	addKey := new(protocol.AddKeyOperation)
 	addKey.Entry.KeyHash = newKeyHash
@@ -43,7 +44,7 @@ func AddToOperatorPage(values *core.GlobalValues, operatorCount int, newKeyHash 
 	return initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Operators, "1"), updatePage)
 }
 
-func AddValidator(values *core.GlobalValues, operatorCount int, newPubKey []byte, partition string, isFollower bool, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func AddValidator(values *core.GlobalValues, operatorCount int, newPubKey []byte, partition string, isFollower bool, signers ...*signing.Builder) (*messaging.Envelope, error) {
 	// Add the key to the network definition
 	values.Network.AddValidator(newPubKey, partition, !isFollower)
 	return updateNetworkDefinition(values, signers)
@@ -52,7 +53,7 @@ func AddValidator(values *core.GlobalValues, operatorCount int, newPubKey []byte
 // RemoveOperator constructs an envelope that will remove an operator from the
 // network. If partition is non-empty, the envelope will also remove the operator
 // as a validator from the partition.
-func RemoveOperator(values *core.GlobalValues, operatorCount int, oldPubKey, oldKeyHash []byte, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
+func RemoveOperator(values *core.GlobalValues, operatorCount int, oldPubKey, oldKeyHash []byte, signers ...*signing.Builder) ([]*messaging.Envelope, error) {
 	env1, err1 := RemoveFromOperatorPage(values, operatorCount, oldKeyHash, signers...)
 	for _, signer := range signers {
 		signer.Version++
@@ -63,11 +64,11 @@ func RemoveOperator(values *core.GlobalValues, operatorCount int, oldPubKey, old
 	} else if err2 != nil {
 		return nil, err2
 	} else {
-		return []*protocol.Envelope{env1, env2}, nil
+		return []*messaging.Envelope{env1, env2}, nil
 	}
 }
 
-func RemoveFromOperatorPage(values *core.GlobalValues, operatorCount int, oldKeyHash []byte, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func RemoveFromOperatorPage(values *core.GlobalValues, operatorCount int, oldKeyHash []byte, signers ...*signing.Builder) (*messaging.Envelope, error) {
 	// Remove the key hash from the page and update the threshold
 	removeKey := new(protocol.RemoveKeyOperation)
 	removeKey.Entry.KeyHash = oldKeyHash
@@ -78,7 +79,7 @@ func RemoveFromOperatorPage(values *core.GlobalValues, operatorCount int, oldKey
 	return initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Operators, "1"), updatePage)
 }
 
-func RemoveValidator(values *core.GlobalValues, operatorCount int, oldPubKey []byte, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func RemoveValidator(values *core.GlobalValues, operatorCount int, oldPubKey []byte, signers ...*signing.Builder) (*messaging.Envelope, error) {
 	// Remove the key from the network definition
 	values.Network.RemoveValidator(oldPubKey)
 	return updateNetworkDefinition(values, signers)
@@ -87,7 +88,7 @@ func RemoveValidator(values *core.GlobalValues, operatorCount int, oldPubKey []b
 // UpdateOperatorKey constructs an envelope that will update an operator's key.
 // If partition is non-empty, the envelope will also update the operator's key in
 // the network definition.
-func UpdateOperatorKey(values *core.GlobalValues, oldPubKey, oldKeyHash, newPubKey, newKeyHash []byte, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
+func UpdateOperatorKey(values *core.GlobalValues, oldPubKey, oldKeyHash, newPubKey, newKeyHash []byte, signers ...*signing.Builder) ([]*messaging.Envelope, error) {
 	env1, err1 := UpdateKeyOnOperatorPage(oldKeyHash, newKeyHash, signers...)
 	for _, signer := range signers {
 		signer.Version++
@@ -98,11 +99,11 @@ func UpdateOperatorKey(values *core.GlobalValues, oldPubKey, oldKeyHash, newPubK
 	} else if err2 != nil {
 		return nil, err2
 	} else {
-		return []*protocol.Envelope{env1, env2}, nil
+		return []*messaging.Envelope{env1, env2}, nil
 	}
 }
 
-func UpdateKeyOnOperatorPage(oldKeyHash, newKeyHash []byte, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func UpdateKeyOnOperatorPage(oldKeyHash, newKeyHash []byte, signers ...*signing.Builder) (*messaging.Envelope, error) {
 	// Update the key hash
 	updateKey := new(protocol.UpdateKeyOperation)
 	updateKey.OldEntry.KeyHash = oldKeyHash
@@ -112,7 +113,7 @@ func UpdateKeyOnOperatorPage(oldKeyHash, newKeyHash []byte, signers ...*signing.
 	return initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Operators, "1"), updatePage)
 }
 
-func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, signers ...*signing.Builder) (*messaging.Envelope, error) {
 	// Update the key in the network
 	err := values.Network.UpdateValidatorKey(oldPubKey, newPubKey)
 	if err != nil {
@@ -121,7 +122,7 @@ func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, 
 	return updateNetworkDefinition(values, signers)
 }
 
-func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Builder) (*protocol.Envelope, error) {
+func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Builder) (*messaging.Envelope, error) {
 	values.Network.Version++
 	writeData := new(protocol.WriteData)
 	writeData.WriteToState = true
@@ -134,11 +135,11 @@ func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Build
 	return env, nil
 }
 
-func initiateTransaction(signers []*signing.Builder, principal *url.URL, body protocol.TransactionBody) (*protocol.Envelope, error) {
+func initiateTransaction(signers []*signing.Builder, principal *url.URL, body protocol.TransactionBody) (*messaging.Envelope, error) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = principal
 	txn.Body = body
-	env := new(protocol.Envelope)
+	env := new(messaging.Envelope)
 	env.Transaction = append(env.Transaction, txn)
 
 	for i, signer := range signers {

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,6 +9,7 @@ package database
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -22,17 +23,13 @@ func GetSignaturesForSigner(transaction *Transaction, signer protocol.Signer) ([
 	entries := sigset.Entries()
 	signatures := make([]protocol.Signature, 0, len(entries))
 	for _, e := range entries {
-		state, err := transaction.parent.Transaction(e.SignatureHash[:]).GetState()
+		var msg messaging.MessageWithSignature
+		err = transaction.parent.Message(e.SignatureHash).Main().GetAs(&msg)
 		if err != nil {
 			return nil, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
 		}
 
-		if state.Signature == nil {
-			// This should not happen
-			continue
-		}
-
-		signatures = append(signatures, state.Signature)
+		signatures = append(signatures, msg.GetSignature())
 	}
 	return signatures, nil
 }

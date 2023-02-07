@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -35,6 +36,7 @@ type Batch struct {
 	bptEntries  map[storage.Key][32]byte
 
 	account     map[accountKey]*Account
+	message     map[messageKey]*Message
 	transaction map[transactionKey]*Transaction
 	systemData  map[systemDataKey]*SystemData
 }
@@ -45,6 +47,14 @@ type accountKey struct {
 
 func keyForAccount(url *url.URL) accountKey {
 	return accountKey{record.MapKeyUrl(url)}
+}
+
+type messageKey struct {
+	Hash [32]byte
+}
+
+func keyForMessage(hash [32]byte) messageKey {
+	return messageKey{hash}
 }
 
 type transactionKey struct {
@@ -71,6 +81,18 @@ func (c *Batch) getAccount(url *url.URL) *Account {
 		v.key = record.Key{}.Append("Account", url)
 		v.parent = c
 		v.label = "account" + " " + url.RawString()
+		return v
+	})
+}
+
+func (c *Batch) Message(hash [32]byte) *Message {
+	return getOrCreateMap(&c.message, keyForMessage(hash), func() *Message {
+		v := new(Message)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = record.Key{}.Append("Message", hash)
+		v.parent = c
+		v.label = "message" + " " + hex.EncodeToString(hash[:])
 		return v
 	})
 }
@@ -115,6 +137,16 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 		}
 		v := c.getAccount(url)
 		return v, key[2:], nil
+	case "Message":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for batch")
+		}
+		hash, okHash := key[1].([32]byte)
+		if !okHash {
+			return nil, nil, errors.InternalError.With("bad key for batch")
+		}
+		v := c.Message(hash)
+		return v, key[2:], nil
 	case "Transaction":
 		if len(key) < 2 {
 			return nil, nil, errors.InternalError.With("bad key for batch")
@@ -150,6 +182,11 @@ func (c *Batch) IsDirty() bool {
 			return true
 		}
 	}
+	for _, v := range c.message {
+		if v.IsDirty() {
+			return true
+		}
+	}
 	for _, v := range c.transaction {
 		if v.IsDirty() {
 			return true
@@ -164,6 +201,20 @@ func (c *Batch) IsDirty() bool {
 	return false
 }
 
+func (c *Batch) dirtyChains() []*MerkleManager {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*MerkleManager
+
+	for _, v := range c.account {
+		chains = append(chains, v.dirtyChains()...)
+	}
+
+	return chains
+}
+
 func (c *Batch) baseCommit() error {
 	if c == nil {
 		return nil
@@ -171,6 +222,9 @@ func (c *Batch) baseCommit() error {
 
 	var err error
 	for _, v := range c.account {
+		commitField(&err, v)
+	}
+	for _, v := range c.message {
 		commitField(&err, v)
 	}
 	for _, v := range c.transaction {
@@ -470,6 +524,29 @@ func (c *Account) IsDirty() bool {
 	return false
 }
 
+func (c *Account) dirtyChains() []*MerkleManager {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*MerkleManager
+
+	chains = append(chains, c.mainChain.dirtyChains()...)
+	chains = append(chains, c.scratchChain.dirtyChains()...)
+	chains = append(chains, c.signatureChain.dirtyChains()...)
+	chains = append(chains, c.rootChain.dirtyChains()...)
+	chains = append(chains, c.anchorSequenceChain.dirtyChains()...)
+	chains = append(chains, c.majorBlockChain.dirtyChains()...)
+	for _, v := range c.syntheticSequenceChain {
+		chains = append(chains, v.dirtyChains()...)
+	}
+	for _, v := range c.anchorChain {
+		chains = append(chains, v.dirtyChains()...)
+	}
+
+	return chains
+}
+
 func (c *Account) baseCommit() error {
 	if c == nil {
 		return nil
@@ -553,6 +630,19 @@ func (c *AccountAnchorChain) IsDirty() bool {
 	}
 
 	return false
+}
+
+func (c *AccountAnchorChain) dirtyChains() []*MerkleManager {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*MerkleManager
+
+	chains = append(chains, c.root.dirtyChains()...)
+	chains = append(chains, c.bpt.dirtyChains()...)
+
+	return chains
 }
 
 func (c *AccountAnchorChain) Commit() error {
@@ -648,6 +738,84 @@ func (c *AccountData) Commit() error {
 	for _, v := range c.transaction {
 		commitField(&err, v)
 	}
+
+	return err
+}
+
+type Message struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    record.Key
+	label  string
+	parent *Batch
+
+	main     record.Value[messaging.Message]
+	cause    record.Set[*url.TxID]
+	produced record.Set[*url.TxID]
+}
+
+func (c *Message) getMain() record.Value[messaging.Message] {
+	return getOrCreateField(&c.main, func() record.Value[messaging.Message] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Union(messaging.UnmarshalMessage))
+	})
+}
+
+func (c *Message) Cause() record.Set[*url.TxID] {
+	return getOrCreateField(&c.cause, func() record.Set[*url.TxID] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Cause"), c.label+" "+"cause", record.Wrapped(record.TxidWrapper), record.CompareTxid)
+	})
+}
+
+func (c *Message) Produced() record.Set[*url.TxID] {
+	return getOrCreateField(&c.produced, func() record.Set[*url.TxID] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" "+"produced", record.Wrapped(record.TxidWrapper), record.CompareTxid)
+	})
+}
+
+func (c *Message) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.InternalError.With("bad key for message")
+	}
+
+	switch key[0] {
+	case "Main":
+		return c.getMain(), key[1:], nil
+	case "Cause":
+		return c.Cause(), key[1:], nil
+	case "Produced":
+		return c.Produced(), key[1:], nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for message")
+	}
+}
+
+func (c *Message) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.main) {
+		return true
+	}
+	if fieldIsDirty(c.cause) {
+		return true
+	}
+	if fieldIsDirty(c.produced) {
+		return true
+	}
+
+	return false
+}
+
+func (c *Message) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.main)
+	commitField(&err, c.cause)
+	commitField(&err, c.produced)
 
 	return err
 }

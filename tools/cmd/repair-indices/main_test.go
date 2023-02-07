@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -29,11 +30,13 @@ func TestRepairIndices(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 
 	// Initialize
+	globals := new(core.GlobalValues)
+	globals.ExecutorVersion = ExecutorVersionLatest
 	network := simulator.SimpleNetwork(t.Name(), 1, 1)
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		network,
-		simulator.Genesis(GenesisTime),
+		simulator.GenesisWith(GenesisTime, globals),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -74,13 +77,13 @@ func TestRepairIndices(t *testing.T) {
 
 	// Save to and restore from snapshot
 	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
-	snapshots := map[string]ioutil2.SectionReader{}
+	snapshots := map[string][]byte{}
 	for _, p := range sim.Partitions() {
 		View(t, sim.Database(p.ID), func(batch *database.Batch) {
 			buf := new(ioutil2.Buffer)
 			err := snapshot.FullCollect(batch, buf, config.NetworkUrl{URL: PartitionUrl(p.ID)}, logger, true)
 			require.NoError(t, err)
-			snapshots[p.ID] = buf
+			snapshots[p.ID] = buf.Bytes()
 		})
 	}
 

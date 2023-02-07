@@ -757,9 +757,18 @@ func (v *FakeAccount) MarshalJSON() ([]byte, error) {
 		Url         *url.URL                                   `json:"url,omitempty"`
 		Authorities encoding.JsonList[protocol.AuthorityEntry] `json:"authorities,omitempty"`
 	}{}
-	u.TheType = v.FakeLiteAccount.TheType
-	u.Url = v.FakeLiteAccount.Url
-	u.Authorities = v.AccountAuth.Authorities
+	if !(v.FakeLiteAccount.TheType == 0) {
+
+		u.TheType = v.FakeLiteAccount.TheType
+	}
+	if !(v.FakeLiteAccount.Url == nil) {
+
+		u.Url = v.FakeLiteAccount.Url
+	}
+	if !(len(v.AccountAuth.Authorities) == 0) {
+
+		u.Authorities = v.AccountAuth.Authorities
+	}
 	return json.Marshal(&u)
 }
 
@@ -769,9 +778,17 @@ func (v *FakeAuthority) MarshalJSON() ([]byte, error) {
 		AccountAuth     protocol.AccountAuth `json:"accountAuth,omitempty"`
 		Signers         *url.URL             `json:"signers,omitempty"`
 	}{}
-	u.FakeLiteAccount = v.FakeAccount.FakeLiteAccount
-	u.AccountAuth = v.FakeAccount.AccountAuth
-	u.Signers = v.Signers
+	if !((v.FakeAccount.FakeLiteAccount).Equal(new(FakeLiteAccount))) {
+
+		u.FakeLiteAccount = v.FakeAccount.FakeLiteAccount
+	}
+	if !((v.FakeAccount.AccountAuth).Equal(new(protocol.AccountAuth))) {
+
+		u.AccountAuth = v.FakeAccount.AccountAuth
+	}
+	if !(v.Signers == nil) {
+		u.Signers = v.Signers
+	}
 	return json.Marshal(&u)
 }
 
@@ -784,12 +801,24 @@ func (v *FakeSignature) MarshalJSON() ([]byte, error) {
 		SignerVersion uint64                 `json:"signerVersion,omitempty"`
 		Timestamp     uint64                 `json:"timestamp,omitempty"`
 	}{}
-	u.TheType = v.TheType
-	u.Vote = v.Vote
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Signer = v.Signer
-	u.SignerVersion = v.SignerVersion
-	u.Timestamp = v.Timestamp
+	if !(v.TheType == 0) {
+		u.TheType = v.TheType
+	}
+	if !(v.Vote == 0) {
+		u.Vote = v.Vote
+	}
+	if !(len(v.PublicKey) == 0) {
+		u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	}
+	if !(v.Signer == nil) {
+		u.Signer = v.Signer
+	}
+	if !(v.SignerVersion == 0) {
+		u.SignerVersion = v.SignerVersion
+	}
+	if !(v.Timestamp == 0) {
+		u.Timestamp = v.Timestamp
+	}
 	return json.Marshal(&u)
 }
 
@@ -802,12 +831,26 @@ func (v *FakeSigner) MarshalJSON() ([]byte, error) {
 		Version       uint64                               `json:"version,omitempty"`
 		Keys          encoding.JsonList[*protocol.KeySpec] `json:"keys,omitempty"`
 	}{}
-	u.TheType = v.FakeLiteAccount.TheType
-	u.Url = v.FakeLiteAccount.Url
-	u.CreditBalance = v.CreditBalance
-	u.Threshold = v.Threshold
-	u.Version = v.Version
-	u.Keys = v.Keys
+	if !(v.FakeLiteAccount.TheType == 0) {
+
+		u.TheType = v.FakeLiteAccount.TheType
+	}
+	if !(v.FakeLiteAccount.Url == nil) {
+
+		u.Url = v.FakeLiteAccount.Url
+	}
+	if !(v.CreditBalance == 0) {
+		u.CreditBalance = v.CreditBalance
+	}
+	if !(v.Threshold == 0) {
+		u.Threshold = v.Threshold
+	}
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	if !(len(v.Keys) == 0) {
+		u.Keys = v.Keys
+	}
 	return json.Marshal(&u)
 }
 

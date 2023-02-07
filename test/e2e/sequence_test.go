@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,14 +13,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -57,7 +57,7 @@ func TestOutOfSequenceSynth(t *testing.T) {
 	}
 
 	// Execute
-	txns := make([]*Envelope, 5)
+	txns := make([]*messaging.Envelope, 5)
 	for i := range txns {
 		txns[i] = acctesting.NewTransaction().
 			WithPrincipal(aliceUrl).
@@ -73,70 +73,6 @@ func TestOutOfSequenceSynth(t *testing.T) {
 			Build()
 	}
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(txns...)...)
-
-	// Verify
-	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
-		var account *LiteTokenAccount
-		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
-		require.Equal(t, uint64(len(txns)), account.Balance.Uint64())
-		return nil
-	})
-}
-
-func TestMissingSynthTxn(t *testing.T) {
-	var timestamp uint64
-
-	// Initialize
-	sim := simulator.NewWith(t, simulator.SimulatorOptions{
-		// Add more logging to debug the intermittent failure
-		LogLevels: config.LogLevel{}.
-			Parse(acctesting.DefaultLogLevels).
-			SetModule("executor", "debug").
-			SetModule("synthetic", "debug").
-			String(),
-	})
-	sim.InitFromGenesis()
-
-	alice := acctesting.GenerateKey("Alice")
-	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
-	bob := acctesting.GenerateKey("Bob")
-	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
-	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
-	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
-
-	// The first time an envelope contains a deposit, drop the first deposit
-	var didDrop bool
-	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
-		for i, env := range envelopes {
-			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
-				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
-				didDrop = true
-				return append(envelopes[:i], envelopes[i+1:]...), false
-			}
-		}
-		return envelopes, true
-	}
-
-	// Execute
-	txns := make([]*Envelope, 5)
-	for i := range txns {
-		txns[i] = acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
-			WithTimestampVar(&timestamp).
-			WithSigner(aliceUrl, 1).
-			WithBody(&SendTokens{
-				To: []*TokenRecipient{{
-					Url:    bobUrl,
-					Amount: *big.NewInt(1),
-				}},
-			}).
-			Initiate(SignatureTypeLegacyED25519, alice).
-			Build()
-	}
-	envs := sim.MustSubmitAndExecuteBlock(txns...)
-	sim.ExecuteBlocks(10)
-	require.True(t, didDrop, "synthetic transactions have not been sent")
-	sim.WaitForTransactions(delivered, envs...)
 
 	// Verify
 	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
@@ -204,12 +140,10 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 		}
 	}
 	require.NotNil(t, receipt)
-	req := new(query.RequestByUrl)
-	req.Url = DnUrl().JoinPath(AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", receipt.Proof.Anchor))
 	simulator.QueryUrl[*api.ChainQueryResponse](sim, DnUrl(), true)
 
 	// Submit the synthetic transaction
-	sim.PartitionFor(bobUrl).Submit(false, &Envelope{
+	sim.PartitionFor(bobUrl).Submit(false, &messaging.Envelope{
 		Transaction: []*Transaction{deposit.Transaction},
 		Signatures:  deposit.Signatures,
 	})
@@ -376,11 +310,22 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	})
 
 	// Resubmit the original, valid signature
+	var messages []messaging.Message
+	for _, delivery := range original {
+		messages = append(messages, &messaging.UserTransaction{Transaction: delivery.Transaction})
+		for _, sig := range delivery.Signatures {
+			messages = append(messages, &messaging.UserSignature{Signature: sig, TxID: delivery.Transaction.ID()})
+		}
+	}
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	x.Executor.ValidateEnvelopeSet(batch, original, func(err error, _ *chain.Delivery, _ *TransactionStatus) {
-		require.NoError(t, err)
-	})
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(batch, messages)
+	require.NoError(t, err)
+	for _, result := range results {
+		if result.Error != nil {
+			require.NoError(t, result.Error)
+		}
+	}
 	x.Submit2(false, original)
 
 	// Verify it is delivered

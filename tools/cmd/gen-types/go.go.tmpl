@@ -35,9 +35,6 @@ import (
 	{{- if not (isPkg "protocol")}}
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	{{- end}}
-	{{- if not (isPkg "types/api/query")}}
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
-	{{- end}}
 )
 
 {{range .Types}}
@@ -67,7 +64,7 @@ type {{.FullName true true}} struct {
 func (*{{.FullName true false}}) {{if $lud}}{{.UnionType}}{{else}}Type{{end}}() {{.UnionType}} { return {{.UnionType}}{{.UnionValue}} }
 {{end}}{{end}}
 
-{{range .Types}}{{if .IsComparable}}
+{{range .Types}}{{if .IsCopyable}}
 func (v *{{.FullName true false}}) Copy() *{{.FullName true false}} {
 	u := new({{.FullName true false}})
 
@@ -288,10 +285,22 @@ func (v *{{.FullName true false}}) MarshalJSON() ([]byte, error) {
 	{{- if .IsEmbedded}}
 	{{- $name := get .}}
 	{{- range .TypeRef.Fields}}
+	{{- if .OmitEmpty}}
+	if !({{isZero . (print "v." $name "." (get .))}}) {
+		{{template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
+	}
+	{{- else}}
 	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
 	{{- end}}
+	{{- end}}
+	{{- else}}
+	{{- if .OmitEmpty}}
+	if !({{isZero . (print "v." (get .))}}) {
+		{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
+	}
 	{{- else}}
 	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
+	{{- end}}
 	{{- end}}
 	{{- end}}
 	return json.Marshal(&u)

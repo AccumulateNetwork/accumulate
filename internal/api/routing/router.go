@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -24,9 +25,9 @@ import (
 // TODO Route and Send should probably be handled separately.
 type Router interface {
 	RouteAccount(*url.URL) (string, error)
-	Route(...*protocol.Envelope) (string, error)
+	Route(...*messaging.Envelope) (string, error)
 	RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error
-	Submit(ctx context.Context, partition string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error)
+	Submit(ctx context.Context, partition string, tx *messaging.Envelope, pretend, async bool) (*ResponseSubmit, error)
 }
 
 // ResponseSubmit is the response from a call to Submit.
@@ -149,34 +150,86 @@ func NewStaticRouter(table *protocol.RoutingTable, cm connections.ConnectionMana
 
 var _ Router = (*RouterInstance)(nil)
 
-func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protocol.Envelope) (string, error) {
+// RouteMessages routes the message bundle based on the routing location of its
+// signatures. RouteMessages will return an error if the message bundle does not
+// contain any signatures. RouteMessages will return an error if the message
+// bundle has signatures with conflicting routing locations.
+func RouteMessages(r Router, messages []messaging.Message) (string, error) {
+	if len(messages) == 0 {
+		return "", errors.BadRequest.With("nothing to route")
+	}
+
+	var route string
+	for _, msg := range messages {
+		err := routeMessage(r.RouteAccount, &route, msg)
+		if err != nil {
+			return "", errors.UnknownError.With("cannot route message(s): %w", err)
+		}
+	}
+	if route == "" {
+		return "", errors.BadRequest.With("nothing to route")
+	}
+
+	return route, nil
+}
+
+// RouteEnvelopes routes envelopes based on the routing location of their
+// signatures. RouteEnvelopes will return an error if the envelopes do not
+// contain any signatures. RouteEnvelopes will return an error if the message
+// bundle has signatures with conflicting routing locations.
+func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*messaging.Envelope) (string, error) {
 	if len(envs) == 0 {
 		return "", errors.BadRequest.With("nothing to route")
 	}
 
 	var route string
 	for _, env := range envs {
-		if len(env.Signatures) == 0 {
-			return "", errors.BadRequest.With("cannot route envelope: no signatures")
+		for _, msg := range env.Messages {
+			err := routeMessage(routeAccount, &route, msg)
+			if err != nil {
+				return "", errors.UnknownError.With("cannot route message(s): %w", err)
+			}
 		}
 		for _, sig := range env.Signatures {
-			sigRoute, err := routeAccount(sig.RoutingLocation())
+			err := routeMessage(routeAccount, &route, &messaging.UserSignature{Signature: sig})
 			if err != nil {
-				return "", err
-			}
-
-			if route == "" {
-				route = sigRoute
-				continue
-			}
-
-			if route != sigRoute {
-				return "", errors.BadRequest.With("cannot route envelope(s): conflicting routes")
+				return "", errors.UnknownError.With("cannot route message(s): %w", err)
 			}
 		}
 	}
+	if route == "" {
+		return "", errors.BadRequest.With("nothing to route")
+	}
 
 	return route, nil
+}
+
+func routeMessage(routeAccount func(*url.URL) (string, error), route *string, msg messaging.Message) error {
+	var r string
+	var err error
+	switch msg := msg.(type) {
+	case *messaging.UserSignature:
+		r, err = routeAccount(msg.Signature.RoutingLocation())
+
+	case *messaging.SequencedMessage:
+		r, err = routeAccount(msg.Destination)
+
+	default:
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if *route == "" {
+		*route = r
+		return nil
+	}
+
+	if *route != r {
+		return errors.BadRequest.With("conflicting routes")
+	}
+	return nil
 }
 
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
@@ -198,7 +251,7 @@ func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
 }
 
 // Route routes the account using modulo routing.
-func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
+func (r *RouterInstance) Route(envs ...*messaging.Envelope) (string, error) {
 	return RouteEnvelopes(r.RouteAccount, envs...)
 }
 
@@ -234,7 +287,7 @@ func (r *RouterInstance) RequestAPIv2(ctx context.Context, partitionId, method s
 // Submit submits the transaction to the specified partition. If the partition matches
 // this network's ID, the transaction is broadcasted via the local client.
 // Otherwise the transaction is broadcasted via an RPC client.
-func (r *RouterInstance) Submit(ctx context.Context, partitionId string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error) {
+func (r *RouterInstance) Submit(ctx context.Context, partitionId string, tx *messaging.Envelope, pretend, async bool) (*ResponseSubmit, error) {
 	raw, err := tx.MarshalBinary()
 	if err != nil {
 		return nil, err

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,10 +9,12 @@ package e2e
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -39,25 +41,25 @@ func TestCreateLiteTokenAccount(t *testing.T) {
 		var timestamp uint64
 
 		// Initialize
-		sim := simulator.New(t, 3)
-		sim.InitFromGenesis()
+		sim := NewSim(t,
+			simulator.MemoryDatabase,
+			simulator.SimpleNetwork(t.Name(), 3, 3),
+			simulator.Genesis(GenesisTime),
+		)
 
-		sim.CreateAccount(&LiteIdentity{Url: liteSigner, CreditBalance: 1e9})
-		sim.CreateIdentity(alice, aliceKey[32:])
-		updateAccount(sim, alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
+		MakeAccount(t, sim.DatabaseFor(liteSigner), &LiteIdentity{Url: liteSigner, CreditBalance: 1e9})
+		MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+		UpdateAccount(t, sim.DatabaseFor(alice), alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
 
-		st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-			acctesting.NewTransaction().
-				WithPrincipal(subject).
-				WithSigner(c.SignerUrl, 1).
-				WithTimestampVar(&timestamp).
-				WithBody(&CreateLiteTokenAccount{}).
-				Initiate(SignatureTypeED25519, c.SignerKey).
-				Build(),
-		)...)
-		require.False(t, st[0].Failed(), "Expected the transaction to succeed")
+		st := sim.SubmitSuccessfully(MustBuild(t,
+			build.Transaction().For(subject).
+				CreateLiteTokenAccount().
+				SignWith(c.SignerUrl).Version(1).Timestamp(&timestamp).PrivateKey(c.SignerKey)))
+
+		sim.StepUntil(
+			Txn(st.TxID).Succeeds())
 
 		// Verify
-		simulator.GetAccount[*LiteTokenAccount](sim, subject)
+		GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(subject), subject)
 	})
 }

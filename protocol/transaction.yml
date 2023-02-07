@@ -1,21 +1,5 @@
 # Transaction data types
 
-Envelope:
-  fields:
-    - name: Signatures
-      repeatable: true
-      type: Signature
-      marshal-as: union
-    - name: TxHash
-      type: bytes
-      optional: true
-    - name: Transaction
-      type: Transaction
-      marshal-as: reference
-      pointer: true
-      optional: true
-      repeatable: true
-
 TransactionHeader:
   fields:
     - name: Principal

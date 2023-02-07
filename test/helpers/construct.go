@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,22 +13,19 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func MustBuild(t testing.TB, b interface {
-	Done() (*protocol.Envelope, error)
-}) *chain.Delivery {
+	Done() (*messaging.Envelope, error)
+}) *messaging.Envelope {
 	t.Helper()
 	env, err := b.Done()
 	require.NoError(t, err)
-	delivery, err := chain.NormalizeEnvelope(env)
-	require.NoError(t, err)
-	require.Len(t, delivery, 1)
-	return delivery[0]
+	return env
 }
 
 func MustGet0[T any](t testing.TB, fn func() (T, error)) T {
@@ -164,8 +161,8 @@ func MakeLiteTokenAccount(t testing.TB, db database.Updater, pubKey []byte, toke
 	t.Helper()
 	lid := protocol.LiteAuthorityForKey(pubKey, protocol.SignatureTypeED25519)
 	lta := lid.JoinPath(token.ShortString())
-	MakeAccount(t, db, &protocol.LiteIdentity{Url: lid})
-	MakeAccount(t, db, &protocol.LiteTokenAccount{Url: lta, TokenUrl: token})
+	MakeAccount(t, db, &protocol.LiteIdentity{Url: lid, CreditBalance: 1e9})
+	MakeAccount(t, db, &protocol.LiteTokenAccount{Url: lta, TokenUrl: token, Balance: *big.NewInt(1e15)})
 	return lta
 }
 

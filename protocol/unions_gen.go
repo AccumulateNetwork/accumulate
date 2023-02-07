@@ -60,53 +60,95 @@ func EqualAccount(a, b Account) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *ADI:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ADI)
 		return ok && a.Equal(b)
 	case *AnchorLedger:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*AnchorLedger)
 		return ok && a.Equal(b)
 	case *BlockLedger:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*BlockLedger)
 		return ok && a.Equal(b)
 	case *DataAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*DataAccount)
 		return ok && a.Equal(b)
 	case *KeyBook:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*KeyBook)
 		return ok && a.Equal(b)
 	case *KeyPage:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*KeyPage)
 		return ok && a.Equal(b)
 	case *LiteDataAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*LiteDataAccount)
 		return ok && a.Equal(b)
 	case *LiteIdentity:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*LiteIdentity)
 		return ok && a.Equal(b)
 	case *LiteTokenAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*LiteTokenAccount)
 		return ok && a.Equal(b)
 	case *SyntheticLedger:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SyntheticLedger)
 		return ok && a.Equal(b)
 	case *SystemLedger:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SystemLedger)
 		return ok && a.Equal(b)
 	case *TokenAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*TokenAccount)
 		return ok && a.Equal(b)
 	case *TokenIssuer:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*TokenIssuer)
 		return ok && a.Equal(b)
 	case *UnknownAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*UnknownAccount)
 		return ok && a.Equal(b)
 	case *UnknownSigner:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*UnknownSigner)
 		return ok && a.Equal(b)
 	default:
@@ -224,14 +266,17 @@ func EqualDataEntry(a, b DataEntry) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *AccumulateDataEntry:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*AccumulateDataEntry)
 		return ok && a.Equal(b)
 	case *FactomDataEntryWrapper:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*FactomDataEntryWrapper)
 		return ok && a.Equal(b)
 	default:
@@ -311,6 +356,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	switch typ {
 	case TransactionTypeAcmeFaucet:
 		return new(AcmeFaucet), nil
+	case TransactionTypeActivateProtocolVersion:
+		return new(ActivateProtocolVersion), nil
 	case TransactionTypeAddCredits:
 		return new(AddCredits), nil
 	case TransactionTypeBlockValidatorAnchor:
@@ -337,6 +384,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeLockAccount:
 		return new(LockAccount), nil
+	case TransactionTypePlaceholder:
+		return new(PlaceholderTransaction), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -377,95 +426,191 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *AcmeFaucet:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*AcmeFaucet)
 		return ok && a.Equal(b)
+	case *ActivateProtocolVersion:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ActivateProtocolVersion)
+		return ok && a.Equal(b)
 	case *AddCredits:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*AddCredits)
 		return ok && a.Equal(b)
 	case *BlockValidatorAnchor:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*BlockValidatorAnchor)
 		return ok && a.Equal(b)
 	case *BurnTokens:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*BurnTokens)
 		return ok && a.Equal(b)
 	case *CreateDataAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*CreateDataAccount)
 		return ok && a.Equal(b)
 	case *CreateIdentity:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*CreateIdentity)
 		return ok && a.Equal(b)
 	case *CreateKeyBook:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*CreateKeyBook)
 		return ok && a.Equal(b)
 	case *CreateKeyPage:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*CreateKeyPage)
 		return ok && a.Equal(b)
 	case *CreateLiteTokenAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*CreateLiteTokenAccount)
 		return ok && a.Equal(b)
 	case *CreateToken:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*CreateToken)
 		return ok && a.Equal(b)
 	case *CreateTokenAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*CreateTokenAccount)
 		return ok && a.Equal(b)
 	case *DirectoryAnchor:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*DirectoryAnchor)
 		return ok && a.Equal(b)
 	case *IssueTokens:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*IssueTokens)
 		return ok && a.Equal(b)
 	case *LockAccount:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*LockAccount)
 		return ok && a.Equal(b)
+	case *PlaceholderTransaction:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PlaceholderTransaction)
+		return ok && a.Equal(b)
 	case *RemoteTransaction:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*RemoteTransaction)
 		return ok && a.Equal(b)
 	case *SendTokens:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SendTokens)
 		return ok && a.Equal(b)
 	case *SyntheticBurnTokens:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SyntheticBurnTokens)
 		return ok && a.Equal(b)
 	case *SyntheticCreateIdentity:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SyntheticCreateIdentity)
 		return ok && a.Equal(b)
 	case *SyntheticDepositCredits:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SyntheticDepositCredits)
 		return ok && a.Equal(b)
 	case *SyntheticDepositTokens:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SyntheticDepositTokens)
 		return ok && a.Equal(b)
 	case *SyntheticForwardTransaction:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SyntheticForwardTransaction)
 		return ok && a.Equal(b)
 	case *SyntheticWriteData:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SyntheticWriteData)
 		return ok && a.Equal(b)
 	case *SystemGenesis:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SystemGenesis)
 		return ok && a.Equal(b)
 	case *SystemWriteData:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SystemWriteData)
 		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*UpdateAccountAuth)
 		return ok && a.Equal(b)
 	case *UpdateKey:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*UpdateKey)
 		return ok && a.Equal(b)
 	case *UpdateKeyPage:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*UpdateKeyPage)
 		return ok && a.Equal(b)
 	case *WriteData:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*WriteData)
 		return ok && a.Equal(b)
 	case *WriteDataTo:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*WriteDataTo)
 		return ok && a.Equal(b)
 	default:
@@ -478,6 +623,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	switch v := v.(type) {
 	case *AcmeFaucet:
 		return v.Copy()
+	case *ActivateProtocolVersion:
+		return v.Copy()
 	case *AddCredits:
 		return v.Copy()
 	case *BlockValidatorAnchor:
@@ -503,6 +650,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *IssueTokens:
 		return v.Copy()
 	case *LockAccount:
+		return v.Copy()
+	case *PlaceholderTransaction:
 		return v.Copy()
 	case *RemoteTransaction:
 		return v.Copy()
@@ -615,20 +764,29 @@ func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *AddAccountAuthorityOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*AddAccountAuthorityOperation)
 		return ok && a.Equal(b)
 	case *DisableAccountAuthOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*DisableAccountAuthOperation)
 		return ok && a.Equal(b)
 	case *EnableAccountAuthOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*EnableAccountAuthOperation)
 		return ok && a.Equal(b)
 	case *RemoveAccountAuthorityOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*RemoveAccountAuthorityOperation)
 		return ok && a.Equal(b)
 	default:
@@ -730,23 +888,35 @@ func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *AddKeyOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*AddKeyOperation)
 		return ok && a.Equal(b)
 	case *RemoveKeyOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*RemoveKeyOperation)
 		return ok && a.Equal(b)
 	case *SetThresholdKeyPageOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SetThresholdKeyPageOperation)
 		return ok && a.Equal(b)
 	case *UpdateAllowedKeyPageOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*UpdateAllowedKeyPageOperation)
 		return ok && a.Equal(b)
 	case *UpdateKeyOperation:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*UpdateKeyOperation)
 		return ok && a.Equal(b)
 	default:
@@ -864,44 +1034,77 @@ func EqualSignature(a, b Signature) bool {
 	if a == b {
 		return true
 	}
-	if a == nil || b == nil {
-		return false
-	}
 	switch a := a.(type) {
 	case *BTCLegacySignature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*BTCLegacySignature)
 		return ok && a.Equal(b)
 	case *BTCSignature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*BTCSignature)
 		return ok && a.Equal(b)
 	case *DelegatedSignature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*DelegatedSignature)
 		return ok && a.Equal(b)
 	case *ED25519Signature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ED25519Signature)
 		return ok && a.Equal(b)
 	case *ETHSignature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ETHSignature)
 		return ok && a.Equal(b)
 	case *InternalSignature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*InternalSignature)
 		return ok && a.Equal(b)
 	case *LegacyED25519Signature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*LegacyED25519Signature)
 		return ok && a.Equal(b)
 	case *PartitionSignature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*PartitionSignature)
 		return ok && a.Equal(b)
 	case *RCD1Signature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*RCD1Signature)
 		return ok && a.Equal(b)
 	case *ReceiptSignature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*ReceiptSignature)
 		return ok && a.Equal(b)
 	case *RemoteSignature:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*RemoteSignature)
 		return ok && a.Equal(b)
 	case *SignatureSet:
+		if a == nil {
+			return b == nil
+		}
 		b, ok := b.(*SignatureSet)
 		return ok && a.Equal(b)
 	default:

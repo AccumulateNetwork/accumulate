@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -33,7 +34,7 @@ func sendLotsOfTokens(sim *simulator.Simulator, N, M int, timestamp *uint64, sen
 	}
 
 	for i := 0; i < M; i++ {
-		var envs []*Envelope
+		var envs []*messaging.Envelope
 
 		for i := 0; i < N; i++ {
 			envs = append(envs, acctesting.NewTransaction().

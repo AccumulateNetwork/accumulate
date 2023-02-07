@@ -144,31 +144,39 @@ func (v *Message) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *Message) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID      uint64                                      `json:"id,omitempty"`
-		Status  StreamStatus                                `json:"status,omitempty"`
-		Message encoding.JsonUnmarshalWith[message.Message] `json:"message,omitempty"`
+		ID      uint64                                       `json:"id,omitempty"`
+		Status  StreamStatus                                 `json:"status,omitempty"`
+		Message *encoding.JsonUnmarshalWith[message.Message] `json:"message,omitempty"`
 	}{}
-	u.ID = v.ID
-	u.Status = v.Status
-	u.Message = encoding.JsonUnmarshalWith[message.Message]{Value: v.Message, Func: message.UnmarshalJSON}
+	if !(v.ID == 0) {
+		u.ID = v.ID
+	}
+	if !(v.Status == 0) {
+		u.Status = v.Status
+	}
+	if !(message.Equal(v.Message, nil)) {
+		u.Message = &encoding.JsonUnmarshalWith[message.Message]{Value: v.Message, Func: message.UnmarshalJSON}
+	}
 	return json.Marshal(&u)
 }
 
 func (v *Message) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID      uint64                                      `json:"id,omitempty"`
-		Status  StreamStatus                                `json:"status,omitempty"`
-		Message encoding.JsonUnmarshalWith[message.Message] `json:"message,omitempty"`
+		ID      uint64                                       `json:"id,omitempty"`
+		Status  StreamStatus                                 `json:"status,omitempty"`
+		Message *encoding.JsonUnmarshalWith[message.Message] `json:"message,omitempty"`
 	}{}
 	u.ID = v.ID
 	u.Status = v.Status
-	u.Message = encoding.JsonUnmarshalWith[message.Message]{Value: v.Message, Func: message.UnmarshalJSON}
+	u.Message = &encoding.JsonUnmarshalWith[message.Message]{Value: v.Message, Func: message.UnmarshalJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.ID = u.ID
 	v.Status = u.Status
-	v.Message = u.Message.Value
+	if u.Message != nil {
+		v.Message = u.Message.Value
+	}
 
 	return nil
 }

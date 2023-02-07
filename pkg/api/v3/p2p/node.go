@@ -15,9 +15,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// This package exists so the peer to peer implementation can be internal, but
+// we still provide something for external parties to use.
 
 // Node is a peer to peer node. Node acts as a client, routing messages to its
 // peers, and as a server that can register services to the network.
@@ -107,12 +111,12 @@ func (n *Node) Query(ctx context.Context, scope *url.URL, query api.Query) (api.
 }
 
 // Submit implements [api.Submitter.Submit].
-func (n *Node) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (n *Node) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	return n.client.Submit(ctx, envelope, opts)
 }
 
 // Validate implements [api.Validator.Validate].
-func (n *Node) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (n *Node) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	return n.client.Validate(ctx, envelope, opts)
 }
 

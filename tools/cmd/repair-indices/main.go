@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,9 +12,11 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -94,7 +96,13 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 	}
 
 	entries := map[[32]byte]*Data{}
+	haveEntry := map[[2][32]byte]bool{}
+	lastIndexIndex := map[[32]byte]uint64{}
 	record := func(acct *url.URL, e *Entry) {
+		if haveEntry[[2][32]byte{acct.AccountID32(), e.Txn}] {
+			return
+		}
+
 		d, ok := entries[acct.AccountID32()]
 		if !ok {
 			d = new(Data)
@@ -103,6 +111,7 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 		}
 
 		d.Entries = append(d.Entries, e)
+		haveEntry[[2][32]byte{acct.AccountID32(), e.Txn}] = true
 	}
 
 	defer fmt.Printf(" done\n")
@@ -171,39 +180,60 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 				return nil, errors.UnknownError.WithFormat("get %v %s chain: %w", e.Account, e.Chain, err)
 			}
 
-			txnHash, err := chain.Inner().Get(int64(e.Index))
+			ic, err := chain.Index().Get()
 			if err != nil {
-				return nil, errors.UnknownError.WithFormat("get %v %s chain entry %d: %w", e.Account, e.Chain, e.Index, err)
+				return nil, errors.UnknownError.WithFormat("get %v %s index chain: %w", e.Account, e.Chain, err)
+			}
+			index, entry, err := indexing.SearchIndexChain(ic, lastIndexIndex[e.Account.AccountID32()], indexing.MatchExact, indexing.SearchIndexChainBySource(e.Index))
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("find %v %s index chain entry for height %d: %w", e.Account, e.Chain, e.Index, err)
+			}
+			lastIndexIndex[e.Account.AccountID32()] = index
+
+			var prev uint64
+			if index > 0 {
+				entry := new(protocol.IndexEntry)
+				err = ic.EntryAs(int64(index-1), entry)
+				if err != nil {
+					return nil, errors.UnknownError.WithFormat("load %v %s index chain entry %d: %w", e.Account, e.Chain, index-1, err)
+				}
+				prev = entry.Source + 1
 			}
 
-			state, err := batch.Transaction(txnHash).Main().Get()
-			switch {
-			case errors.Is(err, errors.NotFound):
-				fmt.Printf("Cannot load state of %v %s chain entry %d (%x)\n", e.Account, e.Chain, e.Index, txnHash)
-				continue
-			case err != nil:
-				return nil, errors.UnknownError.WithFormat("load %v %s chain entry %d state: %w", e.Account, e.Chain, e.Index, err)
-			case state.Transaction == nil:
-				return nil, errors.UnknownError.WithFormat("%v %s chain entry %d is not a transaction: %w", e.Account, e.Chain, e.Index, err)
-			}
+			for i := prev; i <= entry.Source; i++ {
+				txnHash, err := chain.Inner().Get(int64(i))
+				if err != nil {
+					return nil, errors.UnknownError.WithFormat("get %v %s chain entry %d: %w", e.Account, e.Chain, i, err)
+				}
 
-			var entryHash []byte
-			switch body := state.Transaction.Body.(type) {
-			case *protocol.WriteData:
-				entryHash = body.Entry.Hash()
-			case *protocol.SyntheticWriteData:
-				entryHash = body.Entry.Hash()
-			case *protocol.SystemWriteData:
-				entryHash = body.Entry.Hash()
-			default:
-				// Don't care
-				continue
-			}
+				var msg messaging.MessageWithTransaction
+				err = batch.Message2(txnHash).Main().GetAs(&msg)
+				switch {
+				case errors.Is(err, errors.NotFound):
+					fmt.Printf("Cannot load state of %v %s chain entry %d (%x)\n", e.Account, e.Chain, i, txnHash)
+					continue
+				case err != nil:
+					return nil, errors.UnknownError.WithFormat("load %v %s chain entry %d state: %w", e.Account, e.Chain, i, err)
+				}
 
-			record(e.Account, &Entry{
-				Entry: *(*[32]byte)(entryHash),
-				Txn:   *(*[32]byte)(txnHash),
-			})
+				var entryHash []byte
+				switch body := msg.GetTransaction().Body.(type) {
+				case *protocol.WriteData:
+					entryHash = body.Entry.Hash()
+				case *protocol.SyntheticWriteData:
+					entryHash = body.Entry.Hash()
+				case *protocol.SystemWriteData:
+					entryHash = body.Entry.Hash()
+				default:
+					// Don't care
+					continue
+				}
+
+				record(e.Account, &Entry{
+					Entry: *(*[32]byte)(entryHash),
+					Txn:   *(*[32]byte)(txnHash),
+				})
+			}
 		}
 	}
 	return entries, nil

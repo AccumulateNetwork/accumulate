@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,10 +13,10 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -74,7 +74,7 @@ func (r *Router) RouteAccount(account *url.URL) (string, error) {
 	return r.tree.Route(account)
 }
 
-func (r *Router) Route(envs ...*protocol.Envelope) (string, error) {
+func (r *Router) Route(envs ...*messaging.Envelope) (string, error) {
 	return routing.RouteEnvelopes(r.RouteAccount, envs...)
 }
 
@@ -94,7 +94,7 @@ func (r *Router) RequestAPIv2(ctx context.Context, partition, method string, par
 	return c.RequestAPIv2(ctx, method, params, result)
 }
 
-func (r *Router) Submit(ctx context.Context, partition string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (r *Router) Submit(ctx context.Context, partition string, envelope *messaging.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	if async {
 		go func() {
 			_, err := r.Submit(ctx, partition, envelope, pretend, false)
@@ -117,15 +117,20 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	messages, err := envelope.Normalize()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("submit: %w", err)
+	}
+
+	msgById := map[[32]byte]messaging.Message{}
+	for _, msg := range messages {
+		msgById[msg.ID().Hash()] = msg
 	}
 
 	p.mu.Lock()
 	if p.routerSubmitHook != nil {
 		var keep bool
-		deliveries, keep = p.routerSubmitHook(deliveries)
+		messages, keep = p.routerSubmitHook(messages)
 		if !keep {
 			p.routerSubmitHook = nil
 		}
@@ -133,18 +138,53 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 	p.mu.Unlock()
 
 	resp := new(routing.ResponseSubmit)
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, delivery := range deliveries {
-		results[i], err = p.Submit(delivery, pretend)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+	results, err := p.Submit(messages, pretend)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// This should more or less preserve the original behavior of failing if a
+	// user transaction fails
+	for _, st := range results {
+		if !st.Failed() {
+			continue
 		}
 
-		// If a user transaction fails, the batch fails
-		if results[i].Failed() && deliveries[i].Transaction.Body.Type().IsUser() {
-			resp.Code = uint32(protocol.ErrorCodeUnknownError)
-			resp.Log = "One or more user transactions failed"
+		// If there's no message with the given ID, fail
+		msg, ok := msgById[st.TxID.Hash()]
+		if !ok {
+			goto failed
 		}
+
+		switch msg := msg.(type) {
+		case *messaging.UserTransaction:
+			// If a user transaction fails, fail
+			if msg.Transaction.Body.Type().IsUser() {
+				goto failed
+			}
+
+		case *messaging.UserSignature:
+			// If there's no message with the transaction ID, or that message is
+			// not a transaction, or its a user transaction, fail
+			msg2, ok := msgById[msg.TxID.Hash()]
+			if !ok {
+				goto failed
+			}
+			txn, ok := msg2.(*messaging.UserTransaction)
+			if !ok {
+				goto failed
+			}
+			if txn.Transaction.Body.Type().IsUser() {
+				goto failed
+			}
+		}
+
+		continue
+
+	failed:
+		resp.Code = uint32(protocol.ErrorCodeUnknownError)
+		resp.Log = "One or more user transactions failed"
+		break
 	}
 
 	resp.Data, err = (&protocol.TransactionResultSet{Results: results}).MarshalBinary()

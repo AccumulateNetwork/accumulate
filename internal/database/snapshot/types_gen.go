@@ -64,7 +64,9 @@ type Header struct {
 	RootHash [32]byte `json:"rootHash,omitempty" form:"rootHash" query:"rootHash" validate:"required"`
 	// Timestamp is the snapshot's block time.
 	Timestamp time.Time `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	extraData []byte
+	// ExecutorVersion is the snapshot's executor version.
+	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion" validate:"required"`
+	extraData       []byte
 }
 
 type OldChain struct {
@@ -179,6 +181,7 @@ func (v *Header) Copy() *Header {
 	u.Height = v.Height
 	u.RootHash = v.RootHash
 	u.Timestamp = v.Timestamp
+	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -377,6 +380,9 @@ func (v *Header) Equal(u *Header) bool {
 		return false
 	}
 	if !((v.Timestamp).Equal(u.Timestamp)) {
+		return false
+	}
+	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
 	}
 
@@ -682,6 +688,7 @@ var fieldNames_Header = []string{
 	2: "Height",
 	3: "RootHash",
 	4: "Timestamp",
+	5: "ExecutorVersion",
 }
 
 func (v *Header) MarshalBinary() ([]byte, error) {
@@ -699,6 +706,9 @@ func (v *Header) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Timestamp == (time.Time{})) {
 		writer.WriteTime(4, v.Timestamp)
+	}
+	if !(v.ExecutorVersion == 0) {
+		writer.WriteEnum(5, v.ExecutorVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Header)
@@ -731,6 +741,11 @@ func (v *Header) IsValid() error {
 		errs = append(errs, "field Timestamp is missing")
 	} else if v.Timestamp == (time.Time{}) {
 		errs = append(errs, "field Timestamp is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field ExecutorVersion is missing")
+	} else if v.ExecutorVersion == 0 {
+		errs = append(errs, "field ExecutorVersion is not set")
 	}
 
 	switch len(errs) {
@@ -1186,6 +1201,9 @@ func (v *Header) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadTime(4); ok {
 		v.Timestamp = x
 	}
+	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
+		v.ExecutorVersion = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_Header)
 	if err != nil {
@@ -1394,19 +1412,33 @@ func (v *txnSection) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *Account) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Main      encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
-		OldChains encoding.JsonList[*OldChain]                 `json:"oldChains,omitempty"`
-		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
-		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
-		Url       *url.URL                                     `json:"url,omitempty"`
-		Chains    encoding.JsonList[*Chain]                    `json:"chains,omitempty"`
+		Main      *encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
+		OldChains encoding.JsonList[*OldChain]                  `json:"oldChains,omitempty"`
+		Pending   encoding.JsonList[*url.TxID]                  `json:"pending,omitempty"`
+		Directory encoding.JsonList[*url.URL]                   `json:"directory,omitempty"`
+		Url       *url.URL                                      `json:"url,omitempty"`
+		Chains    encoding.JsonList[*Chain]                     `json:"chains,omitempty"`
 	}{}
-	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
-	u.OldChains = v.OldChains
-	u.Pending = v.Pending
-	u.Directory = v.Directory
-	u.Url = v.Url
-	u.Chains = v.Chains
+	if !(v.Hash == ([32]byte{})) {
+	}
+	if !(protocol.EqualAccount(v.Main, nil)) {
+		u.Main = &encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
+	}
+	if !(len(v.OldChains) == 0) {
+		u.OldChains = v.OldChains
+	}
+	if !(len(v.Pending) == 0) {
+		u.Pending = v.Pending
+	}
+	if !(len(v.Directory) == 0) {
+		u.Directory = v.Directory
+	}
+	if !(v.Url == nil) {
+		u.Url = v.Url
+	}
+	if !(len(v.Chains) == 0) {
+		u.Chains = v.Chains
+	}
 	return json.Marshal(&u)
 }
 
@@ -1418,25 +1450,47 @@ func (v *Chain) MarshalJSON() ([]byte, error) {
 		Head       *database.MerkleState                    `json:"head,omitempty"`
 		MarkPoints encoding.JsonList[*database.MerkleState] `json:"markPoints,omitempty"`
 	}{}
-	u.Name = v.Name
-	u.Type = v.Type
-	u.MarkPower = v.MarkPower
-	u.Head = v.Head
-	u.MarkPoints = v.MarkPoints
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(v.Type == 0) {
+		u.Type = v.Type
+	}
+	if !(v.MarkPower == 0) {
+		u.MarkPower = v.MarkPower
+	}
+	if !(v.Head == nil) {
+		u.Head = v.Head
+	}
+	if !(len(v.MarkPoints) == 0) {
+		u.MarkPoints = v.MarkPoints
+	}
 	return json.Marshal(&u)
 }
 
 func (v *Header) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Version   uint64    `json:"version,omitempty"`
-		Height    uint64    `json:"height,omitempty"`
-		RootHash  string    `json:"rootHash,omitempty"`
-		Timestamp time.Time `json:"timestamp,omitempty"`
+		Version         uint64                   `json:"version,omitempty"`
+		Height          uint64                   `json:"height,omitempty"`
+		RootHash        string                   `json:"rootHash,omitempty"`
+		Timestamp       time.Time                `json:"timestamp,omitempty"`
+		ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty"`
 	}{}
-	u.Version = v.Version
-	u.Height = v.Height
-	u.RootHash = encoding.ChainToJSON(v.RootHash)
-	u.Timestamp = v.Timestamp
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	if !(v.Height == 0) {
+		u.Height = v.Height
+	}
+	if !(v.RootHash == ([32]byte{})) {
+		u.RootHash = encoding.ChainToJSON(v.RootHash)
+	}
+	if !(v.Timestamp == (time.Time{})) {
+		u.Timestamp = v.Timestamp
+	}
+	if !(v.ExecutorVersion == 0) {
+		u.ExecutorVersion = v.ExecutorVersion
+	}
 	return json.Marshal(&u)
 }
 
@@ -1448,27 +1502,41 @@ func (v *OldChain) MarshalJSON() ([]byte, error) {
 		Pending encoding.JsonList[*string] `json:"pending,omitempty"`
 		Entries encoding.JsonList[*string] `json:"entries,omitempty"`
 	}{}
-	u.Name = v.Name
-	u.Type = v.Type
-	u.Count = v.Count
-	u.Pending = make(encoding.JsonList[*string], len(v.Pending))
-	for i, x := range v.Pending {
-		u.Pending[i] = encoding.BytesToJSON(x)
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
 	}
-	u.Entries = make(encoding.JsonList[*string], len(v.Entries))
-	for i, x := range v.Entries {
-		u.Entries[i] = encoding.BytesToJSON(x)
+	if !(v.Type == 0) {
+		u.Type = v.Type
+	}
+	if !(v.Count == 0) {
+		u.Count = v.Count
+	}
+	if !(len(v.Pending) == 0) {
+		u.Pending = make(encoding.JsonList[*string], len(v.Pending))
+		for i, x := range v.Pending {
+			u.Pending[i] = encoding.BytesToJSON(x)
+		}
+	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = make(encoding.JsonList[*string], len(v.Entries))
+		for i, x := range v.Entries {
+			u.Entries[i] = encoding.BytesToJSON(x)
+		}
 	}
 	return json.Marshal(&u)
 }
 
 func (v *Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Txid      *url.TxID                                      `json:"txid,omitempty"`
-		Signature encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		Txid      *url.TxID                                       `json:"txid,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
 	}{}
-	u.Txid = v.Txid
-	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	if !(v.Txid == nil) {
+		u.Txid = v.Txid
+	}
+	if !(protocol.EqualSignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	}
 	return json.Marshal(&u)
 }
 
@@ -1478,9 +1546,15 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 		Status        *protocol.TransactionStatus   `json:"status,omitempty"`
 		SignatureSets encoding.JsonList[*TxnSigSet] `json:"signatureSets,omitempty"`
 	}{}
-	u.Transaction = v.Transaction
-	u.Status = v.Status
-	u.SignatureSets = v.SignatureSets
+	if !(v.Transaction == nil) {
+		u.Transaction = v.Transaction
+	}
+	if !(v.Status == nil) {
+		u.Status = v.Status
+	}
+	if !(len(v.SignatureSets) == 0) {
+		u.SignatureSets = v.SignatureSets
+	}
 	return json.Marshal(&u)
 }
 
@@ -1490,9 +1564,15 @@ func (v *TxnSigSet) MarshalJSON() ([]byte, error) {
 		Version uint64                                  `json:"version,omitempty"`
 		Entries encoding.JsonList[database.SigSetEntry] `json:"entries,omitempty"`
 	}{}
-	u.Signer = v.Signer
-	u.Version = v.Version
-	u.Entries = v.Entries
+	if !(v.Signer == nil) {
+		u.Signer = v.Signer
+	}
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = v.Entries
+	}
 	return json.Marshal(&u)
 }
 
@@ -1500,7 +1580,9 @@ func (v *sigSection) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signatures encoding.JsonList[*Signature] `json:"signatures,omitempty"`
 	}{}
-	u.Signatures = v.Signatures
+	if !(len(v.Signatures) == 0) {
+		u.Signatures = v.Signatures
+	}
 	return json.Marshal(&u)
 }
 
@@ -1508,20 +1590,22 @@ func (v *txnSection) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transactions encoding.JsonList[*Transaction] `json:"transactions,omitempty"`
 	}{}
-	u.Transactions = v.Transactions
+	if !(len(v.Transactions) == 0) {
+		u.Transactions = v.Transactions
+	}
 	return json.Marshal(&u)
 }
 
 func (v *Account) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Main      encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
-		OldChains encoding.JsonList[*OldChain]                 `json:"oldChains,omitempty"`
-		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
-		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
-		Url       *url.URL                                     `json:"url,omitempty"`
-		Chains    encoding.JsonList[*Chain]                    `json:"chains,omitempty"`
+		Main      *encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
+		OldChains encoding.JsonList[*OldChain]                  `json:"oldChains,omitempty"`
+		Pending   encoding.JsonList[*url.TxID]                  `json:"pending,omitempty"`
+		Directory encoding.JsonList[*url.URL]                   `json:"directory,omitempty"`
+		Url       *url.URL                                      `json:"url,omitempty"`
+		Chains    encoding.JsonList[*Chain]                     `json:"chains,omitempty"`
 	}{}
-	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
+	u.Main = &encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.OldChains = v.OldChains
 	u.Pending = v.Pending
 	u.Directory = v.Directory
@@ -1530,7 +1614,9 @@ func (v *Account) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Main = u.Main.Value
+	if u.Main != nil {
+		v.Main = u.Main.Value
+	}
 
 	v.OldChains = u.OldChains
 	v.Pending = u.Pending
@@ -1566,15 +1652,17 @@ func (v *Chain) UnmarshalJSON(data []byte) error {
 
 func (v *Header) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Version   uint64    `json:"version,omitempty"`
-		Height    uint64    `json:"height,omitempty"`
-		RootHash  string    `json:"rootHash,omitempty"`
-		Timestamp time.Time `json:"timestamp,omitempty"`
+		Version         uint64                   `json:"version,omitempty"`
+		Height          uint64                   `json:"height,omitempty"`
+		RootHash        string                   `json:"rootHash,omitempty"`
+		Timestamp       time.Time                `json:"timestamp,omitempty"`
+		ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty"`
 	}{}
 	u.Version = v.Version
 	u.Height = v.Height
 	u.RootHash = encoding.ChainToJSON(v.RootHash)
 	u.Timestamp = v.Timestamp
+	u.ExecutorVersion = v.ExecutorVersion
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1586,6 +1674,7 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 		v.RootHash = x
 	}
 	v.Timestamp = u.Timestamp
+	v.ExecutorVersion = u.ExecutorVersion
 	return nil
 }
 
@@ -1635,16 +1724,18 @@ func (v *OldChain) UnmarshalJSON(data []byte) error {
 
 func (v *Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Txid      *url.TxID                                      `json:"txid,omitempty"`
-		Signature encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		Txid      *url.TxID                                       `json:"txid,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
 	}{}
 	u.Txid = v.Txid
-	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Txid = u.Txid
-	v.Signature = u.Signature.Value
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
 
 	return nil
 }

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -132,7 +133,7 @@ func (b bldTxn) Initiate(key interface{}) bldTxn {
 }
 
 func (b bldTxn) Submit() *submittedTxn {
-	env := new(protocol.Envelope)
+	env := new(messaging.Envelope)
 	env.Transaction = []*protocol.Transaction{b.transaction}
 	env.Signatures = b.signatures
 	status, err := b.s.Engine.Submit(env)

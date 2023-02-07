@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -63,6 +63,7 @@ type value[T any] struct {
 	status       valueStatus
 	value        encodableValue[T]
 	allowMissing bool
+	version      int
 }
 
 var _ ValueReader = (*value[*wrappedValue[uint64]])(nil)
@@ -86,7 +87,8 @@ func (v *value[T]) Key(i int) interface{} {
 	return v.key[i]
 }
 
-// Get loads the value, unmarshalling it if necessary.
+// Get loads the value, unmarshalling it if necessary. If IsDirty returns true,
+// Get is guaranteed to succeed.
 func (v *value[T]) Get() (u T, err error) {
 	// Do we already have the value?
 	switch v.status {
@@ -167,8 +169,17 @@ func (v *value[T]) Put(u T) error {
 		v.logger.Debug("Put", "value", u)
 	}
 
+	// Required for proper versioning
+	if v.status == valueUndefined {
+		_, err := v.Get()
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
 	v.value.setValue(u)
 	v.status = valueDirty
+	v.version++
 	return nil
 }
 
@@ -203,21 +214,28 @@ func (v *value[T]) Resolve(key Key) (Record, Key, error) {
 }
 
 // GetValue loads the value.
-func (v *value[T]) GetValue() (encoding.BinaryValue, error) {
+func (v *value[T]) GetValue() (encoding.BinaryValue, int, error) {
 	_, err := v.Get()
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return nil, 0, errors.UnknownError.Wrap(err)
 	}
-	return v.value, nil
+	return v.value, v.version, nil
 }
 
 // LoadValue sets the value from the reader. If put is false, the value will be
 // copied. If put is true, the value will be marked dirty.
 func (v *value[T]) LoadValue(value ValueReader, put bool) error {
-	uv, err := value.GetValue()
+	uv, version, err := value.GetValue()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
+
+	if put && version <= v.version {
+		// TODO Is it safe to make this an error?
+		v.logger.Error("Conflicting values written from concurrent batches", "key", v.key)
+		// return errors.Format(errors.StatusConflict, "conflicting values written to %v from concurrent batches", v.key)
+	}
+	v.version = version
 
 	u, ok := uv.(encodableValue[T])
 	if !ok {

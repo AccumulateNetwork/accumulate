@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -30,6 +30,10 @@ func (h *Hasher) AddHash(v *[32]byte) {
 	// Copy to avoid weird memory issues
 	vv := *v
 	*h = append(*h, vv[:])
+}
+
+func (h *Hasher) AddHash2(v [32]byte) {
+	*h = append(*h, v[:])
 }
 
 func (h *Hasher) AddInt(v int64) {
@@ -78,7 +82,29 @@ func (h *Hasher) AddBigInt(v *big.Int) {
 }
 
 func (h *Hasher) AddUrl(v *url.URL) {
-	h.AddString(v.String())
+	if v == nil {
+		h.AddHash2([32]byte{})
+	} else {
+		h.AddString(v.String())
+	}
+}
+
+func (h *Hasher) AddUrl2(v *url.URL) {
+	if v == nil {
+		h.AddHash2([32]byte{})
+	} else {
+		h.AddHash2(v.Hash32())
+	}
+}
+
+func (h *Hasher) AddTxID(v *url.TxID) {
+	if v == nil {
+		h.AddHash2([32]byte{})
+	} else {
+		u := v.Hash()
+		x := Combine(u[:], v.Account().Hash())
+		h.AddHash((*[32]byte)(x))
+	}
 }
 
 func (h *Hasher) AddValue(v interface{ MerkleHash() []byte }) {

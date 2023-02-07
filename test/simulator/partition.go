@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,33 +8,36 @@ package simulator
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Partition struct {
 	protocol.PartitionInfo
+	sim        *Simulator
 	logger     logging.OptionalLogger
 	nodes      []*Node
 	validators [][32]byte
 
 	mu         *sync.Mutex
-	mempool    []*chain.Delivery
-	deliver    []*chain.Delivery
+	mempool    []messaging.Message
+	deliver    []messaging.Message
 	blockIndex uint64
 	blockTime  time.Time
 
@@ -42,8 +45,8 @@ type Partition struct {
 	routerSubmitHook RouterSubmitHookFunc
 }
 
-type SubmitHookFunc func(*chain.Delivery) (dropTx, keepHook bool)
-type RouterSubmitHookFunc func([]*chain.Delivery) (_ []*chain.Delivery, keepHook bool)
+type SubmitHookFunc func([]messaging.Message) (drop, keepHook bool)
+type RouterSubmitHookFunc func([]messaging.Message) (_ []messaging.Message, keepHook bool)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -53,6 +56,7 @@ type validatorUpdate struct {
 func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
 	p := new(Partition)
 	p.PartitionInfo = partition
+	p.sim = s
 	p.logger.Set(s.logger, "partition", partition.ID)
 	p.mu = new(sync.Mutex)
 	return p
@@ -151,60 +155,74 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	return nil
 }
 
-func copyDelivery(d *chain.Delivery) *chain.Delivery {
-	e := new(chain.Delivery)
-	e.Transaction = d.Transaction.Copy()
-	e.Signatures = make([]protocol.Signature, len(d.Signatures))
-	for i, s := range d.Signatures {
-		e.Signatures[i] = s.CopyAsInterface().(protocol.Signature)
-	}
-	return e
-}
-
-func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.TransactionStatus, error) {
+func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*protocol.TransactionStatus, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.submitHook != nil {
-		drop, keep := p.submitHook(delivery)
+		drop, keep := p.submitHook(messages)
 		if !keep {
 			p.submitHook = nil
 		}
 		if drop {
-			s := new(protocol.TransactionStatus)
-			s.TxID = delivery.Transaction.ID()
-			return s, nil
+			st := make([]*protocol.TransactionStatus, len(messages))
+			for i, msg := range messages {
+				st[i] = new(protocol.TransactionStatus)
+				st[i].TxID = msg.ID()
+				st[i].Code = errors.NotAllowed
+				st[i].Error = errors.NotAllowed.With("dropped")
+			}
+			return st, nil
 		}
 	}
 
-	var err error
-	result := make([]*protocol.TransactionStatus, len(p.nodes))
+	// var err error
+	results := make([][]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
-		// Make a copy to prevent changes
-		result[i], err = node.checkTx(copyDelivery(delivery), types.CheckTxType_New)
+		var err error
+		results[i], err = node.checkTx(messages, types.CheckTxType_New)
 		if err != nil {
 			return nil, errors.FatalError.Wrap(err)
 		}
 	}
-	for _, r := range result[1:] {
-		if !result[0].Equal(r) {
-			return nil, errors.FatalError.WithFormat("consensus failure: check tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
+
+	for _, r := range results[1:] {
+		if len(r) != len(results[0]) {
+			return nil, errors.FatalError.WithFormat("consensus failure: different number of results")
+		}
+		for i, st := range r {
+			if !results[0][i].Equal(st) {
+				p.logger.Error("Consensus failure", "expected", results[0][i], "actual", st)
+				return nil, errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
+			}
 		}
 	}
 
-	if !pretend && result[0].Code.Success() {
-		p.mempool = append(p.mempool, delivery)
+	ok := true
+	for _, st := range results[0] {
+		if st.Failed() {
+			ok = false
+		}
 	}
-	return result[0], nil
+
+	if !pretend && ok {
+		p.mempool = append(p.mempool, messages...)
+	}
+	return results[0], nil
 }
 
 func (p *Partition) execute() error {
 	// TODO: Limit how many transactions are added to the block? Call recheck?
 	p.mu.Lock()
-	deliveries := p.deliver
+	messages := p.deliver
 	p.deliver = p.mempool
 	p.mempool = nil
 	p.mu.Unlock()
+
+	if p.sim.Deterministic {
+		// Order transactions to ensure the simulator is deterministic
+		orderMessagesDeterministically(messages)
+	}
 
 	// Initialize block index
 	if p.blockIndex > 0 {
@@ -234,15 +252,15 @@ func (p *Partition) execute() error {
 
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)
-	blocks := make([]*block.Block, len(p.nodes))
+	blocks := make([]execute.Block, len(p.nodes))
 	for i, n := range p.nodes {
-		b := new(block.Block)
-		b.Index = p.blockIndex
-		b.Time = p.blockTime
-		b.IsLeader = i == leader
-		blocks[i] = b
-
-		err := n.beginBlock(b)
+		var err error
+		blocks[i], err = n.beginBlock(execute.BlockParams{
+			Context:  context.Background(),
+			Index:    p.blockIndex,
+			Time:     p.blockTime,
+			IsLeader: i == leader,
+		})
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
@@ -250,26 +268,52 @@ func (p *Partition) execute() error {
 
 	// Deliver Tx
 	var err error
-	results := make([]*protocol.TransactionStatus, len(p.nodes))
-	for _, delivery := range deliveries {
-		for i, node := range p.nodes {
-			// Make a copy to prevent changes
-			results[i], err = node.deliverTx(blocks[i], copyDelivery(delivery))
-			if err != nil {
-				return errors.FatalError.WithFormat("execute: %w", err)
+	results := make([][]*protocol.TransactionStatus, len(p.nodes))
+	for i, node := range p.nodes {
+		results[i], err = node.deliverTx(blocks[i], messages)
+		if err != nil {
+			return errors.FatalError.WithFormat("execute: %w", err)
+		}
+	}
+	for _, r := range results[1:] {
+		if len(r) != len(results[0]) {
+			return errors.FatalError.WithFormat("consensus failure: different number of results")
+		}
+		for i, st := range r {
+			if !results[0][i].Equal(st) {
+				return errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
 			}
 		}
-		for _, r := range results[1:] {
-			if !results[0].Equal(r) {
-				return errors.FatalError.WithFormat("consensus failure: deliver tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
+	}
+
+	status := map[[32]byte]error{}
+	for _, r := range results[0] {
+		if r.Error != nil {
+			status[r.TxID.Hash()] = r.AsError()
+		}
+	}
+	for _, msg := range messages {
+		if msg.Type() == messaging.MessageTypeUserTransaction ||
+			msg.Type() == messaging.MessageTypeUserSignature {
+			continue
+		}
+		for {
+			if err, ok := status[msg.ID().Hash()]; ok {
+				p.logger.Error("System message failed", "err", err, "type", msg.Type(), "id", msg.ID())
+			}
+			if u, ok := msg.(interface{ Unwrap() messaging.Message }); ok {
+				msg = u.Unwrap()
+			} else {
+				break
 			}
 		}
 	}
 
 	// End block
+	blockState := make([]execute.BlockState, len(p.nodes))
 	endBlock := make([][]*validatorUpdate, len(p.nodes))
 	for i, n := range p.nodes {
-		endBlock[i], err = n.endBlock(blocks[i])
+		blockState[i], endBlock[i], err = n.endBlock(blocks[i])
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
@@ -308,7 +352,7 @@ func (p *Partition) execute() error {
 	// Commit
 	commit := make([][]byte, len(p.nodes))
 	for i, n := range p.nodes {
-		commit[i], err = n.commit(blocks[i])
+		commit[i], err = n.commit(blockState[i])
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
@@ -320,4 +364,87 @@ func (p *Partition) execute() error {
 	}
 
 	return nil
+}
+
+// orderMessagesDeterministically reorders messages deterministically,
+// preserving certain invariants. Transactions must sort first and user
+// transactions must stay in their original order.
+func orderMessagesDeterministically(messages []messaging.Message) {
+	// Record order of user transactions and sequence of system transactions
+	userTxnOrder := map[[32]byte]int{}
+	sysTxnOrder := map[[32]byte]int{}
+	for i, msg := range messages {
+		switch msg := msg.(type) {
+		case *messaging.UserTransaction:
+			if msg.Transaction.Body.Type().IsUser() {
+				userTxnOrder[msg.ID().Hash()] = i
+			}
+
+		case *messaging.UserSignature:
+			if sig, ok := msg.Signature.(*protocol.PartitionSignature); ok {
+				sysTxnOrder[sig.TransactionHash] = int(sig.SequenceNumber)
+			}
+		}
+	}
+
+	sort.SliceStable(messages, func(i, j int) bool {
+		// Sort by type - user transactions are sorted first because that is the
+		// first message type
+		a, b := messages[i], messages[j]
+		if a.Type() != b.Type() {
+			return a.Type() < b.Type()
+		}
+
+		switch a := a.(type) {
+		case *messaging.UserTransaction:
+			// Sort user transactions first, then anchors, then synthetic
+			b := b.(*messaging.UserTransaction)
+			if x := txnOrder(a) - txnOrder(b); x != 0 {
+				return x < 0
+			}
+
+			// Sort user transactions by their original order
+			if a.Transaction.Body.Type().IsUser() {
+				return userTxnOrder[a.ID().Hash()] < userTxnOrder[b.ID().Hash()]
+			}
+
+			// Sort system transactions by their sequence number
+			if x := sysTxnOrder[a.ID().Hash()] - sysTxnOrder[b.ID().Hash()]; x != 0 {
+				return x < 0
+			}
+			return a.ID().Compare(b.ID()) < 0
+
+		case *messaging.UserSignature:
+			// Sort partition signatures first
+			b := b.(*messaging.UserSignature)
+			c, d := a.Signature.Type() == protocol.SignatureTypePartition, b.Signature.Type() == protocol.SignatureTypePartition
+			switch {
+			case c && !d:
+				return true
+			case !c && d:
+				return false
+			}
+
+			// Otherwise sort by hash
+			return bytes.Compare(a.Signature.Hash(), b.Signature.Hash()) < 0
+
+		default:
+			// Sort other messages by ID
+			return a.ID().Compare(b.ID()) < 0
+		}
+	})
+}
+
+// txnOrder returns an order parameter for the given user transaction. Sorting
+// with this will sort user transactions first, then anchors, then synthetic
+// transactions.
+func txnOrder(msg *messaging.UserTransaction) int {
+	switch {
+	case msg.Transaction.Body.Type().IsUser():
+		return 0
+	case msg.Transaction.Body.Type().IsAnchor():
+		return 1
+	default:
+		return 2
+	}
 }

@@ -64,30 +64,37 @@
     - name: MainChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: ScratchChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: SignatureChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: RootChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: AnchorSequenceChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: MajorBlockChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
     - name: SyntheticSequenceChain
       type: other
       dataType: Chain2
+      hasChains: true
       pointer: true
       private: true
       parameters:
@@ -103,10 +110,12 @@
       - name: Root
         type: other
         dataType: Chain2
+        hasChains: true
         pointer: true
       - name: BPT
         type: other
         dataType: Chain2
+        hasChains: true
         pointer: true
 
     # Indices
@@ -132,6 +141,28 @@
         - name: EntryHash
           type: hash
         dataType: hash
+
+  - name: Message
+    type: entity
+    parameters:
+    - name: Hash
+      type: hash
+    attributes:
+    - name: Main
+      type: state
+      dataType: messaging.Message
+      union: true
+      private: true
+    - name: Cause
+      type: state
+      dataType: txid
+      pointer: true
+      collection: set
+    - name: Produced
+      type: state
+      dataType: txid
+      pointer: true
+      collection: set
 
   - name: Transaction
     type: entity

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -166,7 +166,7 @@ func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, o
 	var txns []*Transaction
 	for _, h := range hashes {
 		h := h // See docs/developer/rangevarref.md
-		txn, err := CollectTransaction(batch.Transaction(h[:]))
+		txn, err := CollectTransaction(batch, h)
 		if err != nil {
 			if errors.Is(err, errors.NotFound) {
 				w.Logger.Info("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
@@ -232,7 +232,7 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opt
 	var sigs []*Signature
 	for _, h := range hashes {
 		h := h // See docs/developer/rangevarref.md
-		sig, err := CollectSignature(batch.Transaction(h[:]))
+		sig, err := CollectSignature(batch, h)
 		if err != nil {
 			if errors.Is(err, errors.NotFound) {
 				w.Logger.Error("Skipping signature", "error", err, "hash", logging.AsHex(h).Slice(0, 4))

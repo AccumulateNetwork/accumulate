@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client/http"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 )
 
 // TestUnconfirmed queries the node for transactions pending in the mempool and
@@ -30,7 +30,7 @@ func TestUnconfirmed(t *testing.T) {
 	fmt.Printf("%d unconfirmed transaction(s)\n\n", res.Total)
 
 	for _, tx := range res.Txs {
-		env := new(protocol.Envelope)
+		env := new(messaging.Envelope)
 		err = env.UnmarshalBinary(tx)
 		if err != nil {
 			t.Errorf("Bad envelope: %v", err)

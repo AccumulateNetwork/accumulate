@@ -15,14 +15,21 @@ SystemLedger:
       type: time
     - name: AcmeBurnt
       type: bigint
+    # TODO Accounts should not reference transactions
     - name: PendingUpdates
       type: NetworkAccountUpdate
       marshal-as: reference
       repeatable: true
+    # TODO Accounts should not reference transactions
     - name: Anchor
       description: is the block anchor that should be sent for the last block
       type: AnchorBody
       marshal-as: union
+    - name: ExecutorVersion
+      description: is the active executor version
+      type: ExecutorVersion
+      marshal-as: enum
+      optional: true
 
 SyntheticLedger:
   union: { type: account }

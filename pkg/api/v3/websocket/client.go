@@ -9,6 +9,7 @@ package websocket
 import (
 	"context"
 	"io"
+	"runtime/debug"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -18,8 +19,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Client is a WebSocket message transport client for API v3.
@@ -179,12 +180,12 @@ func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (ap
 }
 
 // Submit implements [api.Submitter.Submit].
-func (c *Client) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (c *Client) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	return c.inner.Submit(ctx, envelope, opts)
 }
 
 // Validate implements [api.Validator.Validate].
-func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (c *Client) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	return c.inner.Validate(ctx, envelope, opts)
 }
 
@@ -235,7 +236,7 @@ func (c *clientDialer) Dial(ctx context.Context, _ multiaddr.Multiaddr) (message
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				c.logger.Error("Panicked while handling stream", "error", r)
+				c.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
 			}
 		}()
 		defer cancel()

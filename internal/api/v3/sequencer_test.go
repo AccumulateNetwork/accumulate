@@ -26,13 +26,17 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
+func init() {
+	acctesting.EnableDebugFeatures()
+}
+
 func TestSequencer(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
 	net := simulator.SimpleNetwork(t.Name(), 2, 1)
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		net,
-		simulator.Genesis(GenesisTime),
+		simulator.GenesisWith(GenesisTime, new(core.GlobalValues)), // Use v1
 	)
 
 	aliceKey := acctesting.GenerateKey("alice")

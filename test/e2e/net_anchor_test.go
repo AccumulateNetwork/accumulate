@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -47,25 +47,34 @@ func TestAnchorThreshold(t *testing.T) {
 			WithTimestamp(1).
 			WithBody(&CreateTokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			Build())
 
 	// Capture the BVN's anchors and verify they're the same
-	var anchors []*chain.Delivery
-	sim.SetSubmitHook("Directory", func(delivery *chain.Delivery) (dropTx bool, keepHook bool) {
-		if delivery.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
-			return false, true
+	var anchors []*messaging.Envelope
+	sim.SetSubmitHook("Directory", func(messages []messaging.Message) (drop bool, keepHook bool) {
+		for _, msg := range messages {
+			seq, ok := msg.(*messaging.SequencedMessage)
+			if !ok {
+				continue
+			}
+			txn, ok := seq.Message.(*messaging.UserTransaction)
+			if !ok {
+				continue
+			}
+			if txn.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
+				continue
+			}
+			anchors = append(anchors, &messaging.Envelope{Messages: messages})
+			return true, len(anchors) < valCount
 		}
-		anchors = append(anchors, delivery)
-		return true, len(anchors) < valCount
+		return false, true
 	})
 
-	for len(anchors) < valCount {
-		sim.Step()
-	}
+	sim.StepUntil(func(*Harness) bool { return len(anchors) >= valCount })
 
-	txid := anchors[0].Transaction.ID()
+	txid := anchors[0].Messages[0].ID()
 	for _, anchor := range anchors[1:] {
-		require.True(t, anchors[0].Transaction.Equal(anchor.Transaction))
+		require.True(t, messaging.EqualMessage(anchors[0].Messages[0], anchor.Messages[0]))
 	}
 
 	// Verify the anchor was captured

@@ -12,6 +12,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -75,7 +76,7 @@ func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (ap
 }
 
 // Submit implements [api.Submitter.Submit].
-func (c *Client) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (c *Client) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	// Wrap the request as a SubmitRequest and expect a SubmitResponse, which is
 	// unpacked into Submissions
 	req := &SubmitRequest{Envelope: envelope, SubmitOptions: opts}
@@ -83,7 +84,7 @@ func (c *Client) Submit(ctx context.Context, envelope *protocol.Envelope, opts a
 }
 
 // Validate implements [api.Validator.Validate].
-func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (c *Client) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	// Wrap the request as a ValidateRequest and expect a ValidateResponse,
 	// which is unpacked into Submissions
 	req := &ValidateRequest{Envelope: envelope, ValidateOptions: opts}
@@ -103,7 +104,7 @@ func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOp
 func typedRequest[M response[T], T any](c *Client, ctx context.Context, req Message) (T, error) {
 	var typRes M
 	var errRes *ErrorResponse
-	err := c.roundTripWithFanout(ctx, []Message{req}, func(res, _ Message) error {
+	err := c.RoundTrip(ctx, []Message{req}, func(res, _ Message) error {
 		switch res := res.(type) {
 		case *ErrorResponse:
 			errRes = res
@@ -141,23 +142,26 @@ func (r *FaucetResponse) rval() *api.Submission                 { return r.Value
 func (r *EventMessage) rval() []api.Event                       { return r.Value } //nolint:unused
 func (r *PrivateSequenceResponse) rval() *api.TransactionRecord { return r.Value } //nolint:unused
 
-// roundTripWithFanout routes each requests and executes a round-trip call. If
-// there are no transport errors, roundTripWithFanout will only dial each
-// address once. If multiple requests route to the same address, the first
-// request will dial a stream and subsequent requests to that address will reuse
-// the existing stream.
+// RoundTrip routes each requests and executes a round-trip call. If there are
+// no transport errors, RoundTrip will only dial each address once. If multiple
+// requests route to the same address, the first request will dial a stream and
+// subsequent requests to that address will reuse the existing stream.
 //
 // Certain types of requests, such as transaction hash searches, are fanned out
-// to every partition. If requests contains such a request, roundTripWithFanout
-// queries the network for a list of partitions, submits the request to every
-// partition, and aggregates the responses into a single response.
-func (c *Client) roundTripWithFanout(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
+// to every partition. If requests contains such a request, RoundTrip queries
+// the network for a list of partitions, submits the request to every partition,
+// and aggregates the responses into a single response.
+//
+// RoundTrip is a low-level interface not intended for general use.
+func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
 	if c.DisableFanout {
 		return c.roundTrip(ctx, requests, callback)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// TODO Move the aggregation logic into a separate module
 
 	// Collect aggregate requests
 	var parts []multiaddr.Multiaddr
@@ -171,14 +175,14 @@ func (c *Client) roundTripWithFanout(ctx context.Context, requests []Message, ca
 		if req.Scope == nil || !protocol.IsUnknown(req.Scope) {
 			continue
 		}
-		if _, ok := req.Query.(*api.TransactionHashSearchQuery); !ok {
+		if _, ok := req.Query.(*api.MessageHashSearchQuery); !ok {
 			continue
 		}
 
 		// Query the network for a list of partitions
 		if parts == nil {
 			var err error
-			parts, err = c.getParts(ctx)
+			parts, err = c.getParts(ctx, api.ServiceTypeQuery)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -250,6 +254,9 @@ func (c *Client) roundTrip(ctx context.Context, req []Message, callback func(res
 		// Route it
 		var err error
 		if addr == nil {
+			if c.Router == nil {
+				return errors.BadRequest.With("cannot route message: router is missing")
+			}
 			addr, err = c.Router.Route(req)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
@@ -369,7 +376,7 @@ func (c *Client) GetNetInfo(ctx context.Context) (*api.NetworkStatus, error) {
 }
 
 // getParts queries the network for the list of partitions.
-func (c *Client) getParts(ctx context.Context) ([]multiaddr.Multiaddr, error) {
+func (c *Client) getParts(ctx context.Context, service api.ServiceType) ([]multiaddr.Multiaddr, error) {
 	ns, err := c.GetNetInfo(ctx)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -379,7 +386,10 @@ func (c *Client) getParts(ctx context.Context) ([]multiaddr.Multiaddr, error) {
 	// /acc/{partition}
 	ma := make([]multiaddr.Multiaddr, len(ns.Network.Partitions))
 	for i, part := range ns.Network.Partitions {
-		ma[i], err = multiaddr.NewComponent(api.N_ACC, part.ID)
+		sa := new(api.ServiceAddress)
+		sa.Type = service
+		sa.Partition = part.ID
+		ma[i], err = multiaddr.NewComponent(api.N_ACC, sa.String())
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
 		}

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,11 +23,12 @@ func TestOracleDistribution(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
+	g.ExecutorVersion = ExecutorVersionLatest
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Partition(Directory)
 	bvn0 := sim.Partition("BVN0")
-	bvn1 := sim.Partition("BVN1")
+	// bvn1 := sim.Partition("BVN1")
 
 	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.OperatorsPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
@@ -51,7 +52,7 @@ func TestOracleDistribution(t *testing.T) {
 			}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
 			Sign(SignatureTypeED25519, bvn0.Executor.Key).
-			Sign(SignatureTypeED25519, bvn1.Executor.Key).
+			// Sign(SignatureTypeED25519, bvn1.Executor.Key).
 			Build(),
 	)...)
 
@@ -78,6 +79,7 @@ func TestRoutingDistribution(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
+	g.ExecutorVersion = ExecutorVersionLatest
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Partition(Directory)

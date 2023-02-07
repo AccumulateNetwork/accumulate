@@ -14,6 +14,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -46,6 +48,10 @@ import (
 
 var validateNetwork = flag.String("test.validate.network", "", "Validate a network")
 var fullValidate = flag.Bool("test.validate.full", false, "Enable TestValidateFull")
+
+func init() {
+	acctesting.EnableDebugFeatures()
+}
 
 // TestManualValidate is intended to be used to manually validate a deployed
 // network.
@@ -69,6 +75,16 @@ func TestValidateFull(t *testing.T) {
 		t.Skip()
 	}
 
+	// Tendermint is stupid and doesn't properly shut down its databases. So we
+	// have no way to ensure Tendermint is completely shut down, which leads to
+	// race conditions. Instead of forking Tendermint or dumping a bunch of time
+	// into some other solution, we're just going to leave Tendermint running.
+	// That means this test cannot be run in the same process as any other test
+	// that needs 127.0.1.X.
+	dir, err := os.MkdirTemp("", "Accumulate-"+t.Name())
+	require.NoError(t, err)
+	// dir := t.TempDir()
+
 	// Put the faucet on the DN
 	faucet := AccountUrl("faucet")
 	faucetKey := acctesting.GenerateKey(faucet)
@@ -83,7 +99,7 @@ func TestValidateFull(t *testing.T) {
 	MakeAccount(t, db, &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
 	batch := db.Begin(false)
 	buf := new(ioutil2.Buffer)
-	_, err := snapshot.Collect(batch, new(snapshot.Header), buf, snapshot.CollectOptions{})
+	_, err = snapshot.Collect(batch, new(snapshot.Header), buf, snapshot.CollectOptions{})
 	require.NoError(t, err)
 
 	// Initialize the network configs
@@ -104,7 +120,6 @@ func TestValidateFull(t *testing.T) {
 
 	// Initialize the nodes
 	var count int
-	dir := t.TempDir()
 	nodes := make([][][2]*accumulated.Daemon, len(configs))
 	for i, configs := range configs {
 		nodes[i] = make([][2]*accumulated.Daemon, len(configs))
@@ -144,16 +159,19 @@ func TestValidateFull(t *testing.T) {
 		}
 	}
 
-	// Don't complete until every node has been torn down
-	t.Cleanup(func() {
-		for _, nodes := range nodes {
-			for _, nodes := range nodes {
-				for _, node := range nodes {
-					<-node.Done()
-				}
-			}
-		}
-	})
+	// // Don't complete until every node has been torn down
+	// t.Cleanup(func() {
+	// 	for _, nodes := range nodes {
+	// 		for _, nodes := range nodes {
+	// 			for _, node := range nodes {
+	// 				<-node.Done()
+	// 			}
+	// 		}
+	// 	}
+
+	// 	// Give Tendermint a second to shut down
+	// 	time.Sleep(10 * time.Second)
+	// })
 
 	// Start the nodes
 	for _, nodes := range nodes {
@@ -161,7 +179,9 @@ func TestValidateFull(t *testing.T) {
 			for _, node := range nodes {
 				node := node
 				require.NoError(t, node.Start())
-				t.Cleanup(func() { _ = node.Stop() })
+
+				// Tendermint doesn't properly stop itself 😡
+				// t.Cleanup(func() { _ = node.Stop() })
 			}
 		}
 	}
@@ -213,6 +233,7 @@ type ValidationTestSuite struct {
 
 	suite.Suite
 	*Harness
+	sim       *simulator.Simulator
 	nonce     uint64
 	faucetSvc api.Faucet
 }
@@ -237,6 +258,7 @@ func (s *ValidationTestSuite) setupForSim() {
 	)
 	s.Require().NoError(err)
 
+	s.sim = sim
 	s.Harness = New(s.T(), sim.Services(), sim)
 
 	// Set up the faucet
@@ -641,6 +663,37 @@ func (s *ValidationTestSuite) TestMain() {
 	h := st.TxID.Hash()
 	_ = s.NotNil(st.Error) &&
 		s.Equal(fmt.Sprintf("transaction %x (sendTokens) has been delivered", h[:4]), st.Error.Message)
+
+	var dropped *url.TxID
+	if s.sim != nil {
+		s.TB.Log("Drop the next anchor")
+		s.sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop bool, keepHook bool) {
+			for _, msg := range messages {
+				seq, ok := msg.(*messaging.SequencedMessage)
+				if !ok {
+					continue
+				}
+				txn, ok := seq.Message.(*messaging.UserTransaction)
+				if !ok {
+					continue
+				}
+				if !txn.Transaction.Body.Type().IsAnchor() {
+					continue
+				}
+				dropped = txn.ID()
+				return true, false
+			}
+			return false, true
+		})
+
+		defer func() {
+			// Wait for an anchor to be dropped
+			s.StepUntil(func(*Harness) bool { return dropped != nil })
+
+			// Wait for that anchor to be healed
+			s.StepUntil(Txn(dropped).Succeeds())
+		}()
+	}
 
 	s.TB.Log("Create a token issuer")
 	st = s.BuildAndSubmitSuccessfully(

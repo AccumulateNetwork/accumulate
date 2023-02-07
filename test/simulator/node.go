@@ -14,15 +14,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	abci "github.com/tendermint/tendermint/abci/types"
+	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -31,6 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -47,7 +48,7 @@ type Node struct {
 	privValKey []byte
 
 	globals  atomic.Value
-	executor *block.Executor
+	executor execute.Executor
 	apiV2    *apiv2.JrpcMethods
 	clientV2 *client.Client
 	querySvc api.Querier
@@ -112,11 +113,24 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
-		Logger:   n.logger,
-		Key:      init.PrivValKey,
-		Describe: network,
-		Router:   s.router,
-		EventBus: n.eventBus,
+		Logger:        n.logger,
+		Database:      n,
+		Key:           init.PrivValKey,
+		Describe:      network,
+		Router:        s.router,
+		EventBus:      n.eventBus,
+		NewDispatcher: func() execute.Dispatcher { return &dispatcher{sim: s, envelopes: map[string][][]messaging.Message{}} },
+		Sequencer:     s.Services(),
+		Querier:       s.Services(),
+	}
+
+	// Add background tasks to the block's error group. The simulator must call
+	// Group.Wait before changing the group, to ensure no race conditions.
+	execOpts.BackgroundTaskLauncher = func(f func()) {
+		s.blockErrGroup.Go(func() error {
+			f()
+			return nil
+		})
 	}
 
 	// Initialize the major block scheduler
@@ -126,28 +140,18 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 
 	// Create an executor
 	var err error
-	n.executor, err = block.NewNodeExecutor(execOpts, n)
+	n.executor, err = execute.NewExecutor(execOpts)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Add background tasks to the block's error group. The simulator must call
-	// Group.Wait before changing the group, to ensure no race conditions.
-	n.executor.Background = func(f func()) {
-		s.blockErrGroup.Go(func() error {
-			f()
-			return nil
-		})
 	}
 
 	// Set up the API
 	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{
 		Logger:        n.logger,
-		Describe:      &network,
-		Router:        s.router,
 		TxMaxWaitTime: time.Hour,
-		Database:      n,
-		Key:           init.PrivValKey,
+		Describe:      &network,
+		LocalV3:       (*nodeService)(n),
+		NetV3:         (*simService)(s),
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -206,15 +210,9 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	}
 
 	// Restore the snapshot
-	batch := n.Begin(true)
-	defer batch.Discard()
-	err = n.executor.RestoreSnapshot(batch, snapshot)
+	err = n.executor.RestoreSnapshot(n, snapshot)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
-	}
-	err = batch.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	err = n.View(func(batch *database.Batch) (err error) {
@@ -227,59 +225,54 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	return root, nil
 }
 
-func (n *Node) checkTx(delivery *chain.Delivery, typ abci.CheckTxType) (*protocol.TransactionStatus, error) {
+func (n *Node) checkTx(messages []messaging.Message, typ abcitypes.CheckTxType) ([]*protocol.TransactionStatus, error) {
 	// TODO: Maintain a shared batch if typ is not recheck. I tried to do this
 	// but it lead to "attempted to use a committed or discarded batch" panics.
 
 	batch := n.database.Begin(false)
 	defer batch.Discard()
-
-	r, err := n.executor.ValidateEnvelope(batch, delivery)
-	s := new(protocol.TransactionStatus)
-	s.TxID = delivery.Transaction.ID()
-	s.Result = r
+	s, err := n.executor.Validate(batch, messages)
 	if err != nil {
-		s.Set(err)
+		return nil, errors.UnknownError.WithFormat("check messages: %w", err)
 	}
 	return s, nil
 }
 
-func (n *Node) beginBlock(block *block.Block) error {
-	block.Batch = n.Begin(true)
-	err := n.executor.BeginBlock(block)
+func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
+	block, err := n.executor.Begin(params)
 	if err != nil {
-		return errors.UnknownError.WithFormat("begin block: %w", err)
+		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
 	}
-	return nil
+	return block, nil
 }
 
-func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	s, err := n.executor.ExecuteEnvelope(block, delivery)
+func (n *Node) deliverTx(block execute.Block, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+	s, err := block.Process(messages)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
+		return nil, errors.UnknownError.WithFormat("deliver messages: %w", err)
 	}
 	return s, nil
 }
 
-func (n *Node) endBlock(block *block.Block) ([]*validatorUpdate, error) {
-	err := n.executor.EndBlock(block)
+func (n *Node) endBlock(block execute.Block) (execute.BlockState, []*validatorUpdate, error) {
+	state, err := block.Close()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("end block: %w", err)
+		return nil, nil, errors.UnknownError.WithFormat("end block: %w", err)
 	}
 
-	if block.State.Empty() {
-		return nil, nil
+	if state.IsEmpty() {
+		return state, nil, nil
 	}
 
 	u := n.validatorUpdates
 	n.validatorUpdates = nil
-	return u, nil
+	return state, u, nil
 }
 
-func (n *Node) commit(block *block.Block) ([]byte, error) {
-	if block.State.Empty() {
+func (n *Node) commit(state execute.BlockState) ([]byte, error) {
+	if state.IsEmpty() {
 		// Discard changes
-		block.Batch.Discard()
+		state.Discard()
 
 		// Get the old root
 		batch := n.database.Begin(false)
@@ -288,16 +281,17 @@ func (n *Node) commit(block *block.Block) ([]byte, error) {
 	}
 
 	// Commit
-	err := block.Batch.Commit()
+	err := state.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("commit: %w", err)
 	}
 
 	// Notify
+	major, _, _ := state.DidCompleteMajorBlock()
 	err = n.eventBus.Publish(events.DidCommitBlock{
-		Index: block.Index,
-		Time:  block.Time,
-		Major: block.State.MakeMajorBlock,
+		Index: state.Params().Index,
+		Time:  state.Params().Time,
+		Major: major,
 	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("notify of commit: %w", err)
@@ -352,10 +346,14 @@ func (s *nodeService) Metrics(ctx context.Context, opts api.MetricsOptions) (*ap
 
 // Query implements [api.Querier].
 func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	// Copy to avoid changing the caller's values
+	query = api.CopyQuery(query)
+
 	r, err := s.querySvc.Query(ctx, scope, query)
 	if err != nil {
 		return nil, err
 	}
+
 	// Force despecialization of generic types
 	b, err := r.MarshalBinary()
 	if err != nil {
@@ -369,12 +367,12 @@ func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query
 }
 
 // Submit implements [api.Submitter].
-func (s *nodeService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (s *nodeService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	return s.submit(envelope, false)
 }
 
 // Validate implements [api.Validator].
-func (s *nodeService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (s *nodeService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	return s.submit(envelope, true)
 }
 
@@ -383,28 +381,28 @@ func (s *nodeService) Subscribe(ctx context.Context, opts api.SubscribeOptions) 
 	return s.eventSvc.Subscribe(ctx, opts)
 }
 
-func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.Submission, error) {
+func (s *nodeService) submit(envelope *messaging.Envelope, pretend bool) ([]*api.Submission, error) {
 	// Convert the envelope to deliveries
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	deliveries, err := envelope.Normalize()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Submit each delivery
-	var r []*api.Submission
-	for i, delivery := range deliveries {
-		sub := new(api.Submission)
-		sub.Status, err = s.partition.Submit(delivery, pretend)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("delivery %d: %w", i, err)
-		}
-
-		// Create an api.Submission
-		sub.Success = sub.Status.Code.Success()
-		if sub.Status.Error != nil {
-			sub.Message = sub.Status.Error.Message
-		}
-		r = append(r, sub)
+	st, err := s.partition.Submit(deliveries, pretend)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	return r, nil
+
+	subs := make([]*api.Submission, len(st))
+	for i, st := range st {
+		// Create an api.Submission
+		subs[i] = new(api.Submission)
+		subs[i].Status = st
+		subs[i].Success = st.Code.Success()
+		if st.Error != nil {
+			subs[i].Message = st.Error.Message
+		}
+	}
+
+	return subs, nil
 }

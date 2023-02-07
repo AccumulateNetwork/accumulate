@@ -737,11 +737,15 @@ func (v *SeedList) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *NetworkConfigResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkState NetworkState                                      `json:"networkState,omitempty"`
-		Signature    encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		NetworkState NetworkState                                       `json:"networkState,omitempty"`
+		Signature    *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
-	u.NetworkState = v.NetworkState
-	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	if !((v.NetworkState).Equal(new(NetworkState))) {
+		u.NetworkState = v.NetworkState
+	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	}
 	return json.Marshal(&u)
 }
 
@@ -749,27 +753,39 @@ func (v *PartitionList) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Partitions encoding.JsonList[string] `json:"partitions,omitempty"`
 	}{}
-	u.Partitions = v.Partitions
+	if !(len(v.Partitions) == 0) {
+		u.Partitions = v.Partitions
+	}
 	return json.Marshal(&u)
 }
 
 func (v *PartitionListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Partitions encoding.JsonList[string]                         `json:"partitions,omitempty"`
-		Signature  encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Partitions encoding.JsonList[string]                          `json:"partitions,omitempty"`
+		Signature  *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
-	u.Partitions = v.PartitionList.Partitions
-	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	if !(len(v.PartitionList.Partitions) == 0) {
+
+		u.Partitions = v.PartitionList.Partitions
+	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	}
 	return json.Marshal(&u)
 }
 
 func (v *SeedCountResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Count     int64                                             `json:"count,omitempty"`
-		Signature encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Count     int64                                              `json:"count,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
-	u.Count = v.SeedCount.Count
-	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	if !(v.SeedCount.Count == 0) {
+
+		u.Count = v.SeedCount.Count
+	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	}
 	return json.Marshal(&u)
 }
 
@@ -779,38 +795,57 @@ func (v *SeedList) MarshalJSON() ([]byte, error) {
 		Type      config.NetworkType        `json:"type,omitempty"`
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
 	}{}
-	u.BasePort = v.BasePort
-	u.Type = v.Type
-	u.Addresses = v.Addresses
+	if !(v.BasePort == 0) {
+		u.BasePort = v.BasePort
+	}
+	if !(v.Type == 0) {
+		u.Type = v.Type
+	}
+	if !(len(v.Addresses) == 0) {
+		u.Addresses = v.Addresses
+	}
 	return json.Marshal(&u)
 }
 
 func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		BasePort  uint64                                            `json:"basePort,omitempty"`
-		Type      config.NetworkType                                `json:"type,omitempty"`
-		Addresses encoding.JsonList[string]                         `json:"addresses,omitempty"`
-		Signature encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		BasePort  uint64                                             `json:"basePort,omitempty"`
+		Type      config.NetworkType                                 `json:"type,omitempty"`
+		Addresses encoding.JsonList[string]                          `json:"addresses,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
-	u.BasePort = v.SeedList.BasePort
-	u.Type = v.SeedList.Type
-	u.Addresses = v.SeedList.Addresses
-	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	if !(v.SeedList.BasePort == 0) {
+
+		u.BasePort = v.SeedList.BasePort
+	}
+	if !(v.SeedList.Type == 0) {
+
+		u.Type = v.SeedList.Type
+	}
+	if !(len(v.SeedList.Addresses) == 0) {
+
+		u.Addresses = v.SeedList.Addresses
+	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	}
 	return json.Marshal(&u)
 }
 
 func (v *NetworkConfigResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkState NetworkState                                      `json:"networkState,omitempty"`
-		Signature    encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		NetworkState NetworkState                                       `json:"networkState,omitempty"`
+		Signature    *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
 	u.NetworkState = v.NetworkState
-	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.NetworkState = u.NetworkState
-	v.Signature = u.Signature.Value
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
 
 	return nil
 }
@@ -829,32 +864,36 @@ func (v *PartitionList) UnmarshalJSON(data []byte) error {
 
 func (v *PartitionListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Partitions encoding.JsonList[string]                         `json:"partitions,omitempty"`
-		Signature  encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Partitions encoding.JsonList[string]                          `json:"partitions,omitempty"`
+		Signature  *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
 	u.Partitions = v.PartitionList.Partitions
-	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.PartitionList.Partitions = u.Partitions
-	v.Signature = u.Signature.Value
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
 
 	return nil
 }
 
 func (v *SeedCountResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Count     int64                                             `json:"count,omitempty"`
-		Signature encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Count     int64                                              `json:"count,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
 	u.Count = v.SeedCount.Count
-	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.SeedCount.Count = u.Count
-	v.Signature = u.Signature.Value
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
 
 	return nil
 }
@@ -879,22 +918,24 @@ func (v *SeedList) UnmarshalJSON(data []byte) error {
 
 func (v *SeedListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		BasePort  uint64                                            `json:"basePort,omitempty"`
-		Type      config.NetworkType                                `json:"type,omitempty"`
-		Addresses encoding.JsonList[string]                         `json:"addresses,omitempty"`
-		Signature encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		BasePort  uint64                                             `json:"basePort,omitempty"`
+		Type      config.NetworkType                                 `json:"type,omitempty"`
+		Addresses encoding.JsonList[string]                          `json:"addresses,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
 	u.BasePort = v.SeedList.BasePort
 	u.Type = v.SeedList.Type
 	u.Addresses = v.SeedList.Addresses
-	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.SeedList.BasePort = u.BasePort
 	v.SeedList.Type = u.Type
 	v.SeedList.Addresses = u.Addresses
-	v.Signature = u.Signature.Value
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
 
 	return nil
 }

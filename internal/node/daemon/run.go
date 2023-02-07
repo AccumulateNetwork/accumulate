@@ -37,13 +37,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
@@ -71,7 +70,6 @@ type Daemon struct {
 	node              *node.Node
 	apiServer         *http.Server
 	privVal           *privval.FilePV
-	apiv2             *v2.JrpcMethods
 	p2pnode           *p2p.Node
 	api               *nodeapi.Handler
 	nodeKey           *tmp2p.NodeKey
@@ -131,8 +129,8 @@ func (d *Daemon) Key() crypto.PrivKey {
 
 func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
-func (d *Daemon) Jrpc_TESTONLY() *v2.JrpcMethods  { return d.apiv2 }
 func (d *Daemon) P2P_TESTONLY() *p2p.Node         { return d.p2pnode }
+func (d *Daemon) API() *nodeapi.Handler           { return d.api }
 
 func (d *Daemon) Start() (err error) {
 	if d.done != nil {
@@ -231,13 +229,18 @@ func (d *Daemon) Start() (err error) {
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
-	execOpts := block.ExecutorOptions{
-		Logger:           d.Logger,
-		Key:              d.Key().Bytes(),
-		Describe:         d.Config.Accumulate.Describe,
-		Router:           router,
-		EventBus:         d.eventBus,
-		BatchReplayLimit: d.Config.Accumulate.BatchReplayLimit,
+	dialer := &dialer{ready: make(chan struct{})}
+	client := &message.Client{Dialer: dialer, Router: routing.MessageRouter{Router: router}}
+	execOpts := execute.Options{
+		Logger:        d.Logger,
+		Database:      d.db,
+		Key:           d.Key().Bytes(),
+		Describe:      d.Config.Accumulate.Describe,
+		Router:        router,
+		EventBus:      d.eventBus,
+		NewDispatcher: func() execute.Dispatcher { return newDispatcher(router, client.Dialer) },
+		Sequencer:     client.Private(),
+		Querier:       client,
 	}
 
 	// On DNs initialize the major block scheduler
@@ -245,7 +248,7 @@ func (d *Daemon) Start() (err error) {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
-	exec, err := block.NewNodeExecutor(execOpts, d.db)
+	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
@@ -309,21 +312,6 @@ func (d *Daemon) Start() (err error) {
 		jsonrpc2.DebugMethodFunc = true
 	}
 
-	// Create the JSON-RPC handler
-	d.apiv2, err = v2.NewJrpc(v2.Options{
-		Logger:            d.Logger,
-		Describe:          &d.Config.Accumulate.Describe,
-		Router:            router,
-		PrometheusServer:  d.Config.Accumulate.API.PrometheusServer,
-		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
-		Database:          d.db,
-		ConnectionManager: d.connectionManager,
-		Key:               d.Key().Bytes(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to start API: %v", err)
-	}
-
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
 	err = d.connectionManager.InitClients(d.localTm, statusChecker)
@@ -343,9 +331,10 @@ func (d *Daemon) Start() (err error) {
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	netSvc := api.NewNetworkService(api.NetworkServiceParams{
-		Logger:   d.Logger.With("module", "acc-rpc"),
-		EventBus: d.eventBus,
-		Globals:  exec.ActiveGlobals_TESTONLY(),
+		Logger:    d.Logger.With("module", "acc-rpc"),
+		EventBus:  d.eventBus,
+		Partition: d.Config.Accumulate.PartitionId,
+		Database:  d.db,
 	})
 	querySvc := api.NewQuerier(api.QuerierParams{
 		Logger:    d.Logger.With("module", "acc-rpc"),
@@ -410,11 +399,16 @@ func (d *Daemon) Start() (err error) {
 		}, messageHandler.Handle)
 	}
 
+	// Unblock the dialer
+	dialer.dialer = d.p2pnode.Dialer()
+	close(dialer.ready)
+
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
-		Logger: d.Logger.With("module", "acc-rpc"),
-		Node:   d.p2pnode,
-		Router: router,
-		V2:     d.apiv2,
+		Logger:  d.Logger.With("module", "acc-rpc"),
+		Node:    d.p2pnode,
+		Router:  router,
+		Network: &d.Config.Accumulate.Describe,
+		MaxWait: d.Config.Accumulate.API.TxMaxWaitTime,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize API: %w", err)

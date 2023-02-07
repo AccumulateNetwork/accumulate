@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,6 +28,13 @@ type TypeCode int
 type FieldType struct {
 	Code TypeCode
 	Name string
+}
+
+func (f *FieldType) Equal(g *FieldType) bool {
+	if f == g {
+		return true
+	}
+	return f != nil && g != nil && *f == *g
 }
 
 func (f *FieldType) Title() string {
@@ -192,6 +199,7 @@ type Type struct {
 	NonBinary bool `yaml:"non-binary"`
 	// Incomparable specifies whether two values of the type can be checked for equality.
 	Incomparable    bool `yaml:"incomparable"`
+	NoCopy          bool `yaml:"no-copy"`
 	IgnoreSizeLimit bool `yaml:"ignore-size-limit"`
 	// CustomIsValid specifies the type defines a custom IsValid() error method.
 	CustomIsValid bool `yaml:"custom-is-valid"`
@@ -328,5 +336,6 @@ type Enum map[string]*EnumValue
 type EnumValue struct {
 	Value       interface{}
 	Description string
+	Label       string
 	Aliases     []string
 }

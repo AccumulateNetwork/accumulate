@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -20,8 +20,8 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
@@ -99,7 +99,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	// Capture background tasks
 	errg := new(errgroup.Group)
-	exec.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
+	exec.BackgroundTaskLauncher = func(f func()) { errg.Go(func() error { f(); return nil }) }
 
 	b.block = new(block.Block)
 	b.block.Index = protocol.GenesisBlock
@@ -197,7 +197,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	}
 
 	// Create network variable accounts
-	err := b.GenesisGlobals.Store(b.partition, func(accountUrl *url.URL, target interface{}) error {
+	err := b.GenesisGlobals.InitializeDataAccounts(b.partition, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
 		da.AddAuthority(b.networkAuthority)
@@ -273,6 +273,7 @@ func (b *bootstrap) createMainLedger() {
 	ledger := new(protocol.SystemLedger)
 	ledger.Url = b.partition.Ledger()
 	ledger.Index = protocol.GenesisBlock
+	ledger.ExecutorVersion = b.GenesisGlobals.ExecutorVersion
 	b.WriteRecords(ledger)
 }
 

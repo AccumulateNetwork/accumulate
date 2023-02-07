@@ -1,0 +1,79 @@
+ResponseKeyPageIndex:
+  fields:
+    - name: Authority
+      alternative: KeyBook
+      type: url
+      pointer: true
+    - name: Signer
+      alternative: KeyPage
+      type: url
+      pointer: true
+    - name: Index
+      type: uvarint
+      keep-empty: true
+
+GeneralReceipt:
+  fields:
+    - name: LocalBlock
+      type: uvarint
+    - name: LocalBlockTime
+      type: time
+      pointer: true
+    - name: DirectoryBlock
+      type: uvarint
+    - name: MajorBlock
+      type: uint
+    - name: Proof
+      type: merkle.Receipt
+      marshal-as: reference
+      alternative: Receipt
+    - name: Error
+      type: string
+
+TxReceipt:
+  embeddings:
+  - GeneralReceipt
+  fields:
+    - name: Account
+      type: url
+      marshal-as: reference
+      pointer: true
+    - name: Chain
+      type: string
+
+ResponseDataEntry:
+  fields:
+    - name: EntryHash
+      type: hash
+    - name: Entry
+      type: protocol.DataEntry
+      marshal-as: union
+    - name: TxId
+      type: txid
+      pointer: true
+    - name: CauseTxId
+      type: txid
+      pointer: true
+
+ResponseDataEntrySet:
+  fields:
+    - name: DataEntries
+      repeatable: true
+      type: ResponseDataEntry
+      marshal-as: reference
+    - name: Total
+      type: uvarint
+
+ChainState:
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
+    - name: Height
+      type: uvarint
+      alternative: Count
+    - name: Roots
+      repeatable: true
+      type: bytes

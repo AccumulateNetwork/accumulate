@@ -9,6 +9,7 @@ package build
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -64,13 +65,13 @@ func (b SignatureBuilder) PrivateKey(key []byte) SignatureBuilder {
 	return b
 }
 
-func (b SignatureBuilder) Done() (*protocol.Envelope, error) {
+func (b SignatureBuilder) Done() (*messaging.Envelope, error) {
 	b = b.sign()
 	if !b.ok() {
 		return nil, b.err()
 	}
 
-	env := new(protocol.Envelope)
+	env := new(messaging.Envelope)
 	env.Transaction = []*protocol.Transaction{b.transaction}
 	env.Signatures = b.signatures
 	return env, nil
@@ -97,7 +98,7 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 
 	var signature protocol.Signature
 	var err error
-	if b.transaction.Header.Initiator == ([32]byte{}) {
+	if b.transaction.Body.Type() != protocol.TransactionTypeRemote && b.transaction.Header.Initiator == ([32]byte{}) {
 		signature, err = b.signer.Initiate(b.transaction)
 	} else {
 		signature, err = b.signer.Sign(b.transaction.GetHash())

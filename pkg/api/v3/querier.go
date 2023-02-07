@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -39,12 +39,20 @@ func (q Querier2) QueryTransaction(ctx context.Context, txid *url.TxID, query *D
 	return recordIs[*TransactionRecord](doQuery(q, ctx, txid.AsUrl(), query))
 }
 
+func (q Querier2) QuerySignature(ctx context.Context, txid *url.TxID, query *DefaultQuery) (*SignatureRecord, error) {
+	return recordIs[*SignatureRecord](doQuery(q, ctx, txid.AsUrl(), query))
+}
+
 func (q Querier2) QueryChain(ctx context.Context, scope *url.URL, query *ChainQuery) (*ChainRecord, error) {
 	return recordIs[*ChainRecord](doQuery(q, ctx, scope, query))
 }
 
-func (q Querier2) QueryChains(ctx context.Context, scope *url.URL, query *ChainQuery) (*RecordRange[*ChainRecord], error) {
+func (q Querier2) QueryAccountChains(ctx context.Context, scope *url.URL, query *ChainQuery) (*RecordRange[*ChainRecord], error) {
 	return rangeOf[*ChainRecord](doQuery(q, ctx, scope, query))
+}
+
+func (q Querier2) QueryTransactionChains(ctx context.Context, scope *url.TxID, query *ChainQuery) (*RecordRange[*ChainEntryRecord[Record]], error) {
+	return rangeOf[*ChainEntryRecord[Record]](doQuery(q, ctx, scope.AsUrl(), query))
 }
 
 func (q Querier2) QueryChainEntry(ctx context.Context, scope *url.URL, query *ChainQuery) (*ChainEntryRecord[Record], error) {
@@ -94,7 +102,7 @@ func (q Querier2) QueryDirectoryUrls(ctx context.Context, scope *url.URL, query 
 	if query.Range == nil {
 		query.Range = new(RangeOptions)
 	}
-	query.Range.Expand = false
+	query.Range.Expand = nil
 	return rangeOf[*UrlRecord](doQuery(q, ctx, scope, query))
 }
 
@@ -105,7 +113,8 @@ func (q Querier2) QueryDirectory(ctx context.Context, scope *url.URL, query *Dir
 	if query.Range == nil {
 		query.Range = new(RangeOptions)
 	}
-	query.Range.Expand = true
+	expand := true
+	query.Range.Expand = &expand
 	return rangeOf[*AccountRecord](doQuery(q, ctx, scope, query))
 }
 
@@ -116,7 +125,7 @@ func (q Querier2) QueryPendingIds(ctx context.Context, scope *url.URL, query *Pe
 	if query.Range == nil {
 		query.Range = new(RangeOptions)
 	}
-	query.Range.Expand = false
+	query.Range.Expand = nil
 	return rangeOf[*TxIDRecord](doQuery(q, ctx, scope, query))
 }
 
@@ -127,7 +136,8 @@ func (q Querier2) QueryPending(ctx context.Context, scope *url.URL, query *Pendi
 	if query.Range == nil {
 		query.Range = new(RangeOptions)
 	}
-	query.Range.Expand = true
+	expand := true
+	query.Range.Expand = &expand
 	return rangeOf[*TransactionRecord](doQuery(q, ctx, scope, query))
 }
 
@@ -163,7 +173,7 @@ func (q Querier2) SearchForDelegate(ctx context.Context, scope *url.URL, search 
 	return rangeOf[*KeyRecord](doQuery(q, ctx, scope, search))
 }
 
-func (q Querier2) SearchForTransactionHash(ctx context.Context, scope *url.URL, search *TransactionHashSearchQuery) (*RecordRange[*TxIDRecord], error) {
+func (q Querier2) SearchForTransactionHash(ctx context.Context, scope *url.URL, search *MessageHashSearchQuery) (*RecordRange[*TxIDRecord], error) {
 	return rangeOf[*TxIDRecord](doQuery(q, ctx, scope, search))
 }
 

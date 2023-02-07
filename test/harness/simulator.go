@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,10 +12,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
@@ -75,11 +75,16 @@ func (s *Sim) SetSubmitHook(partition string, fn simulator.SubmitHookFunc) {
 	s.s.SetSubmitHook(partition, fn)
 }
 
+// SetSubmitHookFor calls Simulator.SetSubmitHookFor.
+func (s *Sim) SetSubmitHookFor(account *url.URL, fn simulator.SubmitHookFunc) {
+	s.s.SetSubmitHookFor(account, fn)
+}
+
 // SignWithNode calls Simulator.SignWithNode.
 func (s *Sim) SignWithNode(partition string, i int) signing.Signer {
 	return s.s.SignWithNode(partition, i)
 }
 
-func (s *Sim) SubmitTo(partition string, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	return s.s.SubmitTo(partition, delivery)
+func (s *Sim) SubmitTo(partition string, message []messaging.Message) ([]*protocol.TransactionStatus, error) {
+	return s.s.SubmitTo(partition, message)
 }

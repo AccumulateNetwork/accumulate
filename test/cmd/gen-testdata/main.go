@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -14,9 +14,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	sdktest "gitlab.com/accumulatenetwork/accumulate/test/sdk"
@@ -208,8 +206,9 @@ func txnTest(originUrl *url.URL, body TransactionBody) *TC {
 	signer.Url = originUrl
 	signer.SetPrivateKey(key)
 	signer.Version = 1
+	//provide a deterministic timestamp
 	signer.SetTimestamp(uint64(1234567890))
-	env := new(Envelope)
+	env := new(messaging.Envelope)
 	txn := new(Transaction)
 	env.Transaction = []*Transaction{txn}
 	txn.Header.Principal = originUrl
