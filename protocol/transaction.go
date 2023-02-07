@@ -134,6 +134,53 @@ func (t TransactionType) IsAnchor() bool {
 	return false
 }
 
+// GetAdditionalAuthorities returns a list of additional authorities that must
+// sign the transaction, beyond the authorities of the principal.
+func (t *Transaction) GetAdditionalAuthorities() []*url.URL {
+	switch body := t.Body.(type) {
+	// Creation transactions
+	case *CreateIdentity:
+		return body.Authorities
+	case *CreateTokenAccount:
+		return body.Authorities
+	case *CreateDataAccount:
+		return body.Authorities
+	case *CreateToken:
+		return body.Authorities
+	case *CreateKeyBook:
+		return body.Authorities
+
+	// Key book or page operations
+	case *UpdateKeyPage:
+		var authorities []*url.URL
+		for _, op := range body.Operation {
+			switch op := op.(type) {
+			case *AddKeyOperation:
+				if op.Entry.Delegate != nil {
+					authorities = append(authorities, op.Entry.Delegate)
+				}
+			case *UpdateKeyOperation:
+				// The old entry can match just on the hash, so always assume the delegate is new
+				if op.NewEntry.Delegate != nil {
+					authorities = append(authorities, op.NewEntry.Delegate)
+				}
+			}
+		}
+		return authorities
+
+	case *UpdateAccountAuth:
+		var authorities []*url.URL
+		for _, op := range body.Operations {
+			switch op := op.(type) {
+			case *AddAccountAuthorityOperation:
+				authorities = append(authorities, op.Authority)
+			}
+		}
+		return authorities
+	}
+	return nil
+}
+
 type SyntheticTransaction interface {
 	TransactionBody
 }

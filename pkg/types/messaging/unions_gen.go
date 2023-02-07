@@ -24,6 +24,8 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(BlockAnchor), nil
 	case MessageTypeSequenced:
 		return new(SequencedMessage), nil
+	case MessageTypeSignatureRequest:
+		return new(SignatureRequest), nil
 	case MessageTypeSynthetic:
 		return new(SyntheticMessage), nil
 	case MessageTypeUserSignature:
@@ -52,6 +54,12 @@ func EqualMessage(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*SequencedMessage)
+		return ok && a.Equal(b)
+	case *SignatureRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SignatureRequest)
 		return ok && a.Equal(b)
 	case *SyntheticMessage:
 		if a == nil {
@@ -82,6 +90,8 @@ func CopyMessage(v Message) Message {
 	case *BlockAnchor:
 		return v.Copy()
 	case *SequencedMessage:
+		return v.Copy()
+	case *SignatureRequest:
 		return v.Copy()
 	case *SyntheticMessage:
 		return v.Copy()

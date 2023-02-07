@@ -23,7 +23,7 @@ func init() {
 // it.
 type SyntheticMessage struct{}
 
-func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	syn, ok := ctx.message.(*messaging.SyntheticMessage)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSynthetic, ctx.message.Type())
@@ -99,14 +99,15 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 	}
 
 	switch seq.Message.Type() {
-	case messaging.MessageTypeUserTransaction:
+	case messaging.MessageTypeUserTransaction,
+		messaging.MessageTypeSignatureRequest:
 		// Allowed
 
 	default:
 		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", syn.Message.Type())), nil
 	}
 
-	st, err := ctx.callMessageExecutor(batch, ctx.childWith(syn.Message))
+	st, err := ctx.callMessageExecutor(batch, syn.Message)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

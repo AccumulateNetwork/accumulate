@@ -94,7 +94,8 @@ additional:
 	// Process each message
 	remote := set[[32]byte]{}
 	for _, msg := range messages {
-		st, err := d.callMessageExecutor(b.Block.Batch, &MessageContext{bundle: d, message: msg})
+		ctx := &MessageContext{bundle: d, message: msg}
+		st, err := d.callMessageExecutor(b.Block.Batch, ctx)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -103,6 +104,9 @@ additional:
 		if st != nil {
 			statuses = append(statuses, st)
 		}
+
+		d.additional = append(d.additional, ctx.additional...)
+		d.produced = append(d.produced, ctx.produced...)
 	}
 
 	// Record remote transactions (remove?)

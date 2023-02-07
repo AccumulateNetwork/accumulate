@@ -32,6 +32,11 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 	process = func(msg messaging.Message) error {
 		switch msg := msg.(type) {
 		case *messaging.SequencedMessage:
+			// For now don't validate signature requests
+			if msg.Message.Type() == messaging.MessageTypeSignatureRequest {
+				return nil
+			}
+
 			hash := msg.Message.Hash()
 			if i, ok := txnIndex[hash]; ok {
 				deliveries[i].Sequence = msg
