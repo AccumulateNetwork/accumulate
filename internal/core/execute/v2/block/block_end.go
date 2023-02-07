@@ -366,11 +366,9 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			Number:      resp.Sequence.Number,
 		}
 
-		var messages []messaging.Message
-		if anchor {
-			messages = []messaging.Message{seq}
-		} else {
-			messages = []messaging.Message{
+		// Don't include signatures if the transaction is synthetic
+		if !anchor {
+			messages := []messaging.Message{
 				&messaging.SyntheticMessage{
 					Message: seq,
 					Proof: &protocol.AnnotatedReceipt{
@@ -381,10 +379,6 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 					},
 				},
 			}
-		}
-
-		// Don't include signatures if the transaction is synthetic
-		if !anchor {
 			err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
 			if err != nil {
 				x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Transaction.Body.Type())
@@ -392,7 +386,9 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			continue
 		}
 
-		var gotKey, bad bool
+		anchor := &messaging.BlockAnchor{Anchor: seq}
+
+		var bad bool
 		for _, signature := range resp.Signatures.Records {
 			h := signature.TxID.Hash()
 			if !bytes.Equal(h[:], resp.Transaction.GetHash()) {
@@ -415,16 +411,12 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 					bad = true
 					continue
 				}
-				gotKey = true
-				messages = append(messages, &messaging.ValidatorSignature{
-					Signature: keySig,
-					Source:    partition.Url,
-				})
+				anchor.Signature = keySig
 			}
 
 		}
 
-		if !gotKey {
+		if anchor.Signature == nil {
 			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
 			bad = true
 		}
@@ -432,7 +424,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			continue
 		}
 
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
+		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{anchor}})
 		if err != nil {
 			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Transaction.Body.Type())
 			continue
