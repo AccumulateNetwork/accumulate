@@ -57,7 +57,6 @@ require (
 	github.com/multiformats/go-multihash v0.2.1
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/vektra/mockery/v2 v2.14.0
-	gitlab.com/accumulatenetwork/core/wallet v0.3.4
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.10.0
 	go.opentelemetry.io/otel/sdk v1.10.0
@@ -166,7 +165,6 @@ require (
 	github.com/tyler-smith/go-bip32 v1.0.0 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	github.com/whyrusleeping/timecache v0.0.0-20160911033111-cfcb2f1abfee // indirect
-	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221027084553-1a2124c6287f // indirect
 	go.uber.org/dig v1.15.0 // indirect
 	go.uber.org/fx v1.18.2 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220827204233-334a2380cb91 // indirect
