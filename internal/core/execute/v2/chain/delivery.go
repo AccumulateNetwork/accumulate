@@ -58,13 +58,23 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
 			}
 
-		case *messaging.ValidatorSignature:
-			if i, ok := txnIndex[msg.Signature.GetTransactionHash()]; ok {
+		case *messaging.BlockAnchor:
+			seq, ok := msg.Anchor.(*messaging.SequencedMessage)
+			if !ok {
+				return errors.BadRequest.With("anchor must contain a sequenced transaction")
+			}
+			txn, ok := seq.Message.(*messaging.UserTransaction)
+			if !ok {
+				return errors.BadRequest.With("anchor must contain a sequenced transaction")
+			}
+
+			if i, ok := txnIndex[txn.Hash()]; ok {
 				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
 			} else {
-				txnIndex[msg.Signature.GetTransactionHash()] = len(deliveries)
+				txnIndex[txn.Hash()] = len(deliveries)
 				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
 			}
+			return process(msg.Anchor)
 
 		case interface{ Unwrap() messaging.Message }:
 			return process(msg.Unwrap())

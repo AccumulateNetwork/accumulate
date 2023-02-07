@@ -144,23 +144,16 @@ func (UserTransaction) resolveTransaction(batch *database.Batch, msg *messaging.
 
 func (UserTransaction) checkTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
 	// Ensure the transaction is signed, is synthetic, or was internally queued
-	if !ctx.isWithin(messaging.MessageTypeSynthetic) {
+	if !ctx.isWithin(messaging.MessageTypeSynthetic, messaging.MessageTypeBlockAnchor) {
 		var signed bool
 		for _, other := range ctx.messages {
 			if fwd, ok := other.(*internal.ForwardedMessage); ok {
 				other = fwd.Message
 			}
-			switch sig := other.(type) {
-			case *messaging.UserSignature:
-				if sig.TxID.Hash() == ctx.transaction.ID().Hash() {
-					signed = true
-					break
-				}
-			case *messaging.ValidatorSignature:
-				if sig.Signature.GetTransactionHash() == ctx.transaction.ID().Hash() {
-					signed = true
-					break
-				}
+			if sig, ok := other.(*messaging.UserSignature); ok &&
+				sig.TxID.Hash() == ctx.transaction.ID().Hash() {
+				signed = true
+				break
 			}
 		}
 		if !signed {
@@ -168,14 +161,19 @@ func (UserTransaction) checkTransaction(batch *database.Batch, ctx *TransactionC
 		}
 	}
 
-	// If the parent message is synthetic, only allow synthetic transactions.
-	// Otherwise, do not allow synthetic transactions.
+	// Only allow synthetic transactions within a synthetic message, anchor
+	// transactions within a block anchor, and don't allow other transactions to
+	// be wrapped in either
 	if ctx.isWithin(messaging.MessageTypeSynthetic) {
 		if !ctx.transaction.Body.Type().IsSynthetic() {
 			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v", ctx.transaction.Body.Type())), nil
 		}
+	} else if ctx.isWithin(messaging.MessageTypeBlockAnchor) {
+		if !ctx.transaction.Body.Type().IsAnchor() {
+			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("a block anchor cannot carry a %v", ctx.transaction.Body.Type())), nil
+		}
 	} else {
-		if ctx.transaction.Body.Type().IsSynthetic() {
+		if typ := ctx.transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
 			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v", ctx.transaction.Body.Type())), nil
 		}
 	}
