@@ -10,7 +10,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -54,6 +53,7 @@ import (
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -483,6 +483,10 @@ func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
 }
 
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
+	if d.nodeKey.PrivKey.Equals(e.nodeKey.PrivKey) {
+		return errors.Conflict.With("cannot connect nodes directly as they have the same node key")
+	}
+
 	err := d.p2pnode.ConnectDirectly(e.p2pnode)
 	if err != nil {
 		return err
