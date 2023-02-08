@@ -144,25 +144,6 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 		return true, nil
 	}
 
-	// UpdateKey transactions are always M=1 and always require a signature from
-	// the initiator
-	if delivery.Transaction.Body.Type() == protocol.TransactionTypeUpdateKey {
-		if status.Initiator == nil {
-			return false, fmt.Errorf("missing initiator")
-		}
-
-		initSigs, err := batch.Transaction(delivery.Transaction.GetHash()).ReadSignatures(status.Initiator)
-		if err != nil {
-			return false, fmt.Errorf("load initiator signatures: %w", err)
-		}
-
-		if initSigs.Count() == 0 {
-			return false, fmt.Errorf("missing initiator signature")
-		}
-
-		return true, nil
-	}
-
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](x, delivery.Transaction.Body.Type())
 	if ok {

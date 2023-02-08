@@ -386,7 +386,7 @@ func TestUpdateKeyWithDelegate(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
-		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
 
@@ -404,7 +404,7 @@ func TestUpdateKeyWithDelegate(t *testing.T) {
 	st := sim.SubmitSuccessfully(MustBuild(t,
 		build.Transaction().For(bob, "book", "1").
 			UpdateKey(aliceKey, SignatureTypeED25519).
-			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey).Delegator(bob, "book", "1")))
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
