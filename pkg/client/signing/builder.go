@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -308,7 +308,7 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 	if s.InitMode == InitWithSimpleHash {
 		txn.Header.Initiator = *(*[32]byte)(sig.Metadata().Hash())
 	} else {
-		init, err := sig.Initiator()
+		init, err := sig.(protocol.InitiatorSignature).Initiator()
 		if err != nil {
 			return nil, err
 		}
