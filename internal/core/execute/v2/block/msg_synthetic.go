@@ -100,11 +100,12 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 
 	switch seq.Message.Type() {
 	case messaging.MessageTypeUserTransaction,
+		messaging.MessageTypeUserSignature,
 		messaging.MessageTypeSignatureRequest:
 		// Allowed
 
 	default:
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", syn.Message.Type())), nil
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", seq.Message.Type())), nil
 	}
 
 	st, err := ctx.callMessageExecutor(batch, syn.Message)
