@@ -75,31 +75,19 @@ func (SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (*pr
 		return nil, errors.UnknownError.WithFormat("store status: %w", err)
 	}
 
-	// This is a hack to make the account's BPT entry work. The fact that the
-	// BPT entry is hashing the binary-marshalled value of SigOrTxn is
-	// positively awful, but that's what it's doing.
+	// Get the transaction from the message bundle (or the database) and store
+	// it into the database. This is a hack to make the account's BPT entry
+	// work. The fact that the BPT entry is hashing the binary-marshalled value
+	// of SigOrTxn is positively awful, but that's what it's doing.
 	//
 	// FIXME... but not today
-	_, err = batch.Message(req.TxID.Hash()).Main().Get()
-	switch {
-	case err == nil:
-		// Ok
-	case !errors.Is(err, errors.NotFound):
-		return nil, errors.UnknownError.WithFormat("load placeholder: %w", err)
-	default:
-		err = batch.Message(req.TxID.Hash()).Main().Put(&messaging.UserTransaction{
-			Transaction: &protocol.Transaction{
-				Header: protocol.TransactionHeader{
-					Principal: req.TxID.Account(),
-				},
-				Body: &protocol.RemoteTransaction{
-					Hash: req.TxID.Hash(),
-				},
-			},
-		})
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store transaction placeholder: %w", err)
-		}
+	txn, err := ctx.getTransaction(batch, req.TxID.Hash())
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+	}
+	err = batch.Message(req.TxID.Hash()).Main().Put(&messaging.UserTransaction{Transaction: txn})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
 
 	err = batch.Commit()

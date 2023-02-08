@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -450,6 +451,23 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 				Message: seq,
 				Proof:   receipt,
 			},
+		}
+
+		// Send the transaction along with the signature request
+		//
+		// TODO Make this smarter, only send it the first time?
+		var txid *url.TxID
+		switch msg := seq.Message.(type) {
+		case *messaging.SignatureRequest:
+			txid = msg.TxID
+		}
+		if txid != nil {
+			var txn messaging.MessageWithTransaction
+			err := batch.Message(txid.Hash()).Main().GetAs(&txn)
+			if err != nil {
+				return errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
+			}
+			messages = append(messages, txn)
 		}
 
 		// Only send synthetic transactions from the leader
