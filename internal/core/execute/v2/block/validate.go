@@ -17,14 +17,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// ValidateEnvelope verifies that the envelope is valid. It checks the basics,
+// validateEnvelope verifies that the envelope is valid. It checks the basics,
 // like the envelope has signatures and a hash and/or a transaction. It
 // validates signatures, ensuring they match the transaction hash, reference a
 // signator, etc. And more.
 //
-// ValidateEnvelope should not modify anything. Right now it updates signer
+// validateEnvelope should not modify anything. Right now it updates signer
 // timestamps and credits, but that will be moved to ProcessSignature.
-func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (protocol.TransactionResult, error) {
+func (x *Executor) validateEnvelope(batch *database.Batch, delivery *chain.Delivery, ctx *TransactionContext) (protocol.TransactionResult, error) {
 	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body == nil {
 		return nil, errors.BadRequest.WithFormat("missing body")
 	}
@@ -38,8 +38,9 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		return nil, errors.BadRequest.WithFormat("unsupported transaction type: %v", txnType)
 	}
 	if txnType != protocol.TransactionTypeRemote {
-		_, ok := x.executors[txnType]
-		if !ok {
+		_, ok1 := x.transactionExecutors[txnType]
+		_, ok2 := x.executors[txnType]
+		if !(ok1 || ok2) {
 			return nil, errors.BadRequest.WithFormat("unsupported transaction type: %v", txnType)
 		}
 	}
@@ -141,23 +142,9 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		}
 	}
 
-	// Set up the state manager
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
-	defer st.Discard()
-	st.Pretend = true
-
-	// Execute the transaction
-	executor, ok := x.executors[delivery.Transaction.Body.Type()]
-	if !ok {
-		return nil, errors.InternalError.WithFormat("missing executor for %v", delivery.Transaction.Body.Type())
-	}
-
-	result, err := executor.Validate(st, delivery)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	return result, nil
+	ctx.transaction = delivery.Transaction
+	result, err := ctx.validate(batch, status, principal)
+	return result, errors.UnknownError.Wrap(err)
 }
 
 func (x *Executor) ValidateSignature(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, signature protocol.Signature) error {

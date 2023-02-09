@@ -27,20 +27,22 @@ import (
 
 var messageExecutors []func(ExecutorOptions) (messaging.MessageType, MessageExecutor)
 var signatureExecutors []func(ExecutorOptions) (protocol.SignatureType, SignatureExecutor)
+var transactionExecutors []func(ExecutorOptions) (protocol.TransactionType, TransactionExecutor)
 
 type Executor struct {
 	ExecutorOptions
 	BlockTimers TimerSet
 
-	globals            *Globals
-	executors          map[protocol.TransactionType]chain.TransactionExecutor
-	messageExecutors   map[messaging.MessageType]MessageExecutor
-	signatureExecutors map[protocol.SignatureType]SignatureExecutor
-	logger             logging.OptionalLogger
-	db                 database.Beginner
-	isValidator        bool
-	isGenesis          bool
-	mainDispatcher     Dispatcher
+	globals              *Globals
+	executors            map[protocol.TransactionType]chain.TransactionExecutor
+	messageExecutors     map[messaging.MessageType]MessageExecutor
+	signatureExecutors   map[protocol.SignatureType]SignatureExecutor
+	transactionExecutors map[protocol.TransactionType]TransactionExecutor
+	logger               logging.OptionalLogger
+	db                   database.Beginner
+	isValidator          bool
+	isGenesis            bool
+	mainDispatcher       Dispatcher
 }
 
 type ExecutorOptions = execute.Options
@@ -60,7 +62,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.CreateToken{},
 		chain.CreateTokenAccount{},
 		chain.IssueTokens{},
-		chain.LockAccount{},
 		chain.SendTokens{},
 		chain.UpdateAccountAuth{},
 		chain.UpdateKey{},
@@ -113,6 +114,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
 	m.messageExecutors = newExecutorMap(opts, messageExecutors)
 	m.signatureExecutors = newExecutorMap(opts, signatureExecutors)
+	m.transactionExecutors = newExecutorMap(opts, transactionExecutors)
 	m.db = opts.Database
 	m.mainDispatcher = opts.NewDispatcher()
 	m.isGenesis = false

@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -23,9 +24,23 @@ import (
 // ProcessTransaction processes a transaction. It will not return an error if
 // the transaction fails - in that case the status code will be non zero. It
 // only returns an error in cases like a database failure.
-func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) processTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	r := x.BlockTimers.Start(BlockTimerTypeProcessTransaction)
 	defer x.BlockTimers.Stop(r)
+
+	delivery := &chain.Delivery{
+		Transaction: ctx.transaction,
+		Internal:    ctx.isWithin(internal.MessageTypeNetworkUpdate),
+		Forwarded:   ctx.isWithin(internal.MessageTypeForwardedMessage),
+	}
+	if typ := ctx.transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
+		// Load sequence info (nil bundle is a hack)
+		var err error
+		delivery.Sequence, err = (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
+		if err != nil {
+			return nil, nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
+		}
+	}
 
 	// Load the status
 	status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
@@ -65,36 +80,8 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordPendingTransaction(&x.Describe, batch, delivery)
 	}
 
-	// Set up the state manager
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
-	defer st.Discard()
-
-	// Execute the transaction
-	executor, ok := x.executors[delivery.Transaction.Body.Type()]
-	if !ok {
-		// An invalid transaction should not make it to this point
-		err = errors.InternalError.WithFormat("missing executor for %v", delivery.Transaction.Body.Type())
-		return x.recordFailedTransaction(batch, delivery, err)
-	}
-
-	r2 := x.BlockTimers.Start(executor.Type())
-	result, err := executor.Execute(st, &chain.Delivery{Transaction: delivery.Transaction})
-	x.BlockTimers.Stop(r2)
+	result, state, err := ctx.callTransactionExecutor(batch, status, principal)
 	if err != nil {
-		err = errors.UnknownError.Wrap(err)
-		return x.recordFailedTransaction(batch, delivery, err)
-	}
-
-	// Do extra processing for special network accounts
-	err = x.processNetworkAccountUpdates(st.GetBatch(), delivery, principal)
-	if err != nil {
-		return x.recordFailedTransaction(batch, delivery, err)
-	}
-
-	// Commit changes, queue state creates for synthetic transactions
-	state, err := st.Commit()
-	if err != nil {
-		err = fmt.Errorf("commit: %w", err)
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 

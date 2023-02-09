@@ -7,7 +7,6 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -208,20 +207,7 @@ func (UserTransaction) executeTransaction(batch *database.Batch, ctx *Transactio
 		return status, nil
 	}
 
-	delivery := &chain.Delivery{
-		Transaction: ctx.transaction,
-		Internal:    ctx.isWithin(internal.MessageTypeNetworkUpdate),
-		Forwarded:   ctx.isWithin(internal.MessageTypeForwardedMessage),
-	}
-	if typ := ctx.transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
-		// Load sequence info (nil bundle is a hack)
-		delivery.Sequence, err = (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
-		}
-	}
-
-	status, state, err := ctx.Executor.ProcessTransaction(batch, delivery)
+	status, state, err := ctx.Executor.processTransaction(batch, ctx)
 	if err != nil {
 		return nil, err
 	}
