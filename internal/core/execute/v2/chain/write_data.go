@@ -75,13 +75,20 @@ func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, trans
 		return false, false, errors.UnknownError.Wrap(err)
 	}
 
-	// Writing to a lite data account only requires one signature
-	if lite {
-		return len(status.Signers) > 0, false, nil
+	// Fallback to general authorization if not lite
+	if !lite {
+		return false, true, nil
 	}
 
-	// Fallback to general authorization
-	return false, true, nil
+	// Writing to a lite data account only requires one signature
+	voters, err := batch.Account(transaction.Header.Principal).
+		Transaction(transaction.ID().Hash()).
+		Voters().
+		Get()
+	if err != nil {
+		return false, false, errors.UnknownError.WithFormat("load voters: %w", err)
+	}
+	return len(voters) > 0, false, nil
 }
 
 func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
