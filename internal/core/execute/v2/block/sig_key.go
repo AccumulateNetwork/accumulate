@@ -84,8 +84,7 @@ func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*pr
 
 	// Collect delegators and the inner signature
 	var delegators []*url.URL
-	sig := ctx.signature
-	for {
+	for sig := ctx.signature; ; {
 		del, ok := sig.(*protocol.DelegatedSignature)
 		if !ok {
 			break
@@ -99,44 +98,48 @@ func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*pr
 	}
 
 	// If the signer's authority is satisfied, send the next authority signature
-	txst, err := batch.Transaction(ctx.transaction.GetHash()).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-
-	signerAuth := sig.GetSigner()
-	if key, _ := protocol.ParseLiteIdentity(signerAuth); key != nil {
-		// Ok
-	} else if key, _, _ := protocol.ParseLiteTokenAddress(signerAuth); key != nil {
-		signerAuth = signerAuth.RootIdentity()
-	} else {
-		signerAuth = signerAuth.Identity()
-	}
-
-	ok, err := ctx.Executor.AuthorityIsSatisfied(batch, ctx.transaction, txst, signerAuth)
+	signerAuth := ctx.getAuthority()
+	ok, err := ctx.authorityIsSatisfied(batch, signerAuth)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	if ok {
-		// TODO Add payment if initiator
-		sig := &protocol.AuthoritySignature{
-			Signer:    sig.GetSigner(),
-			Authority: signerAuth,
-			Vote:      protocol.VoteTypeAccept,
-			TxID:      ctx.transaction.ID(),
-			Initiator: protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil),
-			Delegator: delegators,
-		}
-
-		// TODO Deduplicate
-		ctx.didProduce(
-			sig.RoutingLocation(),
-			&messaging.UserSignature{
-				Signature: sig,
-				TxID:      ctx.transaction.ID(),
-			},
-		)
+	if !ok {
+		return status, nil
 	}
+
+	// TODO Add payment if initiator
+	auth := &protocol.AuthoritySignature{
+		Signer:    ctx.getSigner(),
+		Authority: signerAuth,
+		Vote:      protocol.VoteTypeAccept,
+		TxID:      ctx.transaction.ID(),
+		Delegator: delegators,
+	}
+
+	// TODO Deduplicate
+	ctx.didProduce(
+		auth.RoutingLocation(),
+		&messaging.UserSignature{
+			Signature: auth,
+			TxID:      ctx.transaction.ID(),
+		},
+	)
+
+	// Send a payment
+	didInit, err := ctx.didInitiate(batch)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	ctx.didProduce(
+		ctx.transaction.Header.Principal,
+		&messaging.CreditPayment{
+			// TODO Add amount paid
+			Payer:     ctx.getSigner(),
+			TxID:      ctx.transaction.ID(),
+			Cause:     ctx.message.ID(),
+			Initiator: didInit,
+		},
+	)
 
 	return status, nil
 }

@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -48,6 +49,22 @@ func (UpdateKey) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch
 	}
 
 	return false, errors.Unauthorized.WithFormat("%v is not authorized to sign %v for %v", signer.GetUrl(), transaction.Body.Type(), transaction.Header.Principal)
+}
+
+func (x UpdateKey) AuthorityIsSatisfied(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authority *url.URL) (satisfied, fallback bool, err error) {
+	book, _, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
+	if !ok {
+		return false, false, errors.BadRequest.With("principal is not a key page")
+	}
+
+	// If the authority is a delegate, fallback to the normal logic
+	if !authority.Equal(book) {
+		return false, true, nil
+	}
+
+	// Otherwise, the principal must submit at least one signature
+	_, ok = status.GetSigner(transaction.Header.Principal)
+	return ok, false, nil
 }
 
 func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {

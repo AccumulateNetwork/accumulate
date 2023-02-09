@@ -50,12 +50,7 @@ func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (*
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	// If the message has already been processed, return its recorded status.
-	//
-	// Do this check on the _sequence_ message's status, not the inner message's
-	// status. Some messages, such as authority signatures, may end up being
-	// duplicates. To preserve the integrity of the sequence, those still need
-	// to be processed even if the executor simply returns the existing status.
+	// If the message has already been processed, return its recorded status
 	status, err := batch.Transaction2(req.Hash()).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)

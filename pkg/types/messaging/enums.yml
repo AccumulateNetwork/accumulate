@@ -17,3 +17,6 @@ MessageType:
   SignatureRequest:
     value: 6
     description: is a request for additional signatures
+  CreditPayment:
+    value: 7
+    description: is a payment of credits towards a transaction's fee

@@ -172,27 +172,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		sigToStore = signature
 	}
 
-	// Record the initiator (but only if we're at the final destination)
-	shouldRecordInit := md.IsInitiator
-	if md.Delegated {
-		shouldRecordInit = false
-	} else if !delivery.Transaction.Header.Principal.LocalTo(md.Location) {
-		shouldRecordInit = false
-	}
-	if shouldRecordInit {
-		initUrl := signer.GetUrl()
-		if key, _, _ := protocol.ParseLiteTokenAddress(initUrl); key != nil {
-			initUrl = initUrl.RootIdentity()
-		}
-		if status.Initiator != nil && !status.Initiator.Equal(initUrl) {
-			// This should be impossible
-			return nil, errors.InternalError.WithFormat("initiator is already set and does not match the signature")
-		}
-
-		statusDirty = true
-		status.Initiator = initUrl
-	}
-
 	if statusDirty {
 		err = batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
 		if err != nil {

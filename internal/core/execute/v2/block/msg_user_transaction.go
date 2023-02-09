@@ -149,8 +149,8 @@ func (UserTransaction) checkTransaction(batch *database.Batch, ctx *TransactionC
 		for _, other := range ctx.messages {
 		again:
 			switch m := other.(type) {
-			case *messaging.UserSignature:
-				if m.TxID.Hash() == ctx.transaction.ID().Hash() {
+			case messaging.MessageForTransaction:
+				if m.GetTxID().Hash() == ctx.transaction.ID().Hash() {
 					signed = true
 				}
 			case interface{ Unwrap() messaging.Message }:
