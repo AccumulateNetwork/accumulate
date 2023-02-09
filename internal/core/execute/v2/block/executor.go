@@ -55,7 +55,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.AddCredits{},
 		chain.BurnTokens{},
 		chain.CreateDataAccount{},
-		chain.CreateIdentity{},
 		chain.CreateKeyBook{},
 		chain.CreateKeyPage{},
 		chain.CreateLiteTokenAccount{},

@@ -49,8 +49,6 @@ type TransactionExecutor interface {
 
 // SignerValidator validates signatures for a specific type of transaction.
 type SignerValidator interface {
-	TransactionExecutor
-
 	// SignerIsAuthorized checks if the signature is authorized for the
 	// transaction.
 	SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error)
@@ -65,8 +63,6 @@ type AuthorityValidator interface {
 
 // PrincipalValidator validates the principal for a specific type of transaction.
 type PrincipalValidator interface {
-	TransactionExecutor
-
 	AllowMissingPrincipal(*protocol.Transaction) bool
 }
 

@@ -4,23 +4,27 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package chain
+package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type CreateIdentity struct{}
+func init() {
+	registerSimpleExec[CreateIdentity](&transactionExecutors, protocol.TransactionTypeCreateIdentity)
+}
 
-var _ SignerValidator = (*CreateIdentity)(nil)
-var _ PrincipalValidator = (*CreateIdentity)(nil)
+type CreateIdentity struct{ txnCreate }
 
-func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
+var _ chain.SignerValidator = (*CreateIdentity)(nil)
+var _ chain.PrincipalValidator = (*CreateIdentity)(nil)
 
-func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
+func (x CreateIdentity) SignerIsAuthorized(delegate chain.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md chain.SignatureValidationMetadata) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return false, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
@@ -32,17 +36,17 @@ func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.
 	}
 
 	// Check additional authorities
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
+	return x.txnCreate.SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
-func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (x CreateIdentity) TransactionIsReady(delegate chain.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return false, false, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
 	}
 
 	// Check additional authorities
-	ready, fallback, err = additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+	ready, fallback, err = x.txnCreate.TransactionIsReady(delegate, batch, transaction, status)
 	if !fallback || err != nil {
 		return ready, fallback, err
 	}
@@ -61,14 +65,10 @@ func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) b
 	return transaction.Header.Principal.IsRootIdentity()
 }
 
-func (CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (CreateIdentity{}).Validate(st, tx)
-}
-
-func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	body, ok := tx.Transaction.Body.(*protocol.CreateIdentity)
+func (x CreateIdentity) Process(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
+	body, ok := ctx.transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
+		return nil, errors.InternalError.WithFormat("invalid transaction: want %v, got %v", protocol.TransactionTypeCreateIdentity, ctx.transaction)
 	}
 
 	if body.Url == nil {
@@ -83,7 +83,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 
 	// TODO Require the principal to be the ADI when creating a root identity?
 	if !body.Url.IsRootIdentity() {
-		err := checkCreateAdiAccount(st, body.Url)
+		err := x.checkCreateAdiAccount(batch, ctx, body.Url)
 		if err != nil {
 			return nil, err
 		}
@@ -140,22 +140,20 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	}
 
 	// Add additional authorities or inherit
-	err = st.SetAuth(identity, body.Authorities)
+	err = x.setAuth(batch, ctx, identity)
 	if err != nil {
 		return nil, err
 	}
 
-	// If the ADI is remote, use a synthetic transaction
-	if !tx.Transaction.Header.Principal.LocalTo(body.Url) {
-		st.Submit(body.Url, &protocol.SyntheticCreateIdentity{Accounts: accounts})
-		return nil, nil
-	}
-
-	// If the ADI is local, create it directly
-	err = st.Create(accounts...)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("failed to create %v: %v", body.Url, err)
-	}
+	// Produce a SyntheticCreateIdentity
+	ctx.didProduce(body.Url, &messaging.UserTransaction{
+		Transaction: &protocol.Transaction{
+			Header: protocol.TransactionHeader{
+				Principal: body.Url,
+			},
+			Body: &protocol.SyntheticCreateIdentity{Accounts: accounts},
+		},
+	})
 
 	return nil, nil
 }
