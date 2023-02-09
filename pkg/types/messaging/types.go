@@ -68,6 +68,10 @@ func (m *SignatureRequest) ID() *url.TxID {
 	return m.Authority.WithTxID(m.Hash())
 }
 
+func (m *CreditPayment) ID() *url.TxID {
+	return m.Payer.WithTxID(m.Hash())
+}
+
 func (m *SyntheticMessage) Unwrap() Message { return m.Message }
 func (m *SequencedMessage) Unwrap() Message { return m.Message }
 
@@ -78,19 +82,31 @@ type MessageWithTransaction interface {
 
 func (m *UserTransaction) GetTransaction() *protocol.Transaction { return m.Transaction }
 
-type MessageWithSignature interface {
+type MessageForTransaction interface {
 	Message
-	GetSignature() protocol.Signature
 	GetTxID() *url.TxID
+}
+
+func (m *UserSignature) GetTxID() *url.TxID    { return m.TxID }
+func (m *SignatureRequest) GetTxID() *url.TxID { return m.TxID }
+func (m *CreditPayment) GetTxID() *url.TxID    { return m.TxID }
+
+func (m *BlockAnchor) GetTxID() *url.TxID {
+	if seq, ok := m.Anchor.(*SequencedMessage); ok {
+		return seq.Message.ID()
+	}
+
+	// Should never happen
+	return m.Anchor.ID()
+}
+
+type MessageWithSignature interface {
+	MessageForTransaction
+	GetSignature() protocol.Signature
 }
 
 func (m *UserSignature) GetSignature() protocol.Signature { return m.Signature }
 func (m *BlockAnchor) GetSignature() protocol.Signature   { return m.Signature }
-func (m *UserSignature) GetTxID() *url.TxID               { return m.TxID }
-
-func (m *BlockAnchor) GetTxID() *url.TxID {
-	return protocol.UnknownUrl().WithTxID(m.Signature.GetTransactionHash())
-}
 
 func (m *UserTransaction) Hash() [32]byte {
 	return *(*[32]byte)(m.Transaction.GetHash())
@@ -132,6 +148,15 @@ func (m *BlockAnchor) Hash() [32]byte {
 }
 
 func (m *SignatureRequest) Hash() [32]byte {
+	// If this fails something is seriously wrong
+	b, err := m.MarshalBinary()
+	if err != nil {
+		panic(errors.InternalError.WithFormat("marshaling signature request: %w", err))
+	}
+	return sha256.Sum256(b)
+}
+
+func (m *CreditPayment) Hash() [32]byte {
 	// If this fails something is seriously wrong
 	b, err := m.MarshalBinary()
 	if err != nil {
