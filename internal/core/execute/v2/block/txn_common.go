@@ -101,3 +101,68 @@ func (x *TransactionContext) callTransactionExecutor(batch *database.Batch, stat
 
 	return nil, nil, errors.InternalError.WithFormat("missing executor for %v", x.transaction.Body.Type())
 }
+
+type storeAccountFlags int
+
+const (
+	mustExist storeAccountFlags = 1 << iota
+	mustNotExist
+)
+
+func (x *TransactionContext) storeAccount(batch *database.Batch, flag storeAccountFlags, accounts ...protocol.Account) error {
+	for _, account := range accounts {
+		// Check the path for invalid characters
+		err := protocol.IsValidAccountPath(account.GetUrl().Path)
+		if err != nil {
+			return errors.BadRequest.WithFormat("invalid account path: %w", err)
+		}
+
+		// Check the path length
+		if len(account.GetUrl().String()) > protocol.AccountUrlMaxLength {
+			return errors.BadUrlLength.Wrap(fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
+		}
+
+		record := batch.Account(account.GetUrl())
+		_, err = record.GetState()
+		switch {
+		case err == nil:
+			if flag&mustNotExist != 0 {
+				return errors.Conflict.WithFormat("account %v already exists", account.GetUrl())
+			}
+		case errors.Is(err, errors.NotFound):
+			if flag&mustExist != 0 {
+				return errors.Conflict.WithFormat("account %v already exists", account.GetUrl())
+			}
+
+			// Add it to the directory
+			identity, ok := account.GetUrl().Parent()
+			if !ok {
+				break
+			}
+			err = batch.Account(identity).Directory().Add(account.GetUrl())
+			if err != nil {
+				return errors.UnknownError.WithFormat("add %v directory entry: %w", identity, err)
+			}
+		default:
+			return errors.UnknownError.WithFormat("load account %v: %w", account.GetUrl(), err)
+		}
+
+		// if st.Pretend {
+		// 	continue
+		// }
+
+		// Update/Create the state
+		err = record.PutState(account)
+		if err != nil {
+			return errors.UnknownError.WithFormat("failed to update state of %q: %w", account.GetUrl(), err)
+		}
+
+		// Add to the account's main chain
+		err = record.MainChain().Inner().AddHash(x.transaction.GetHash(), true)
+		if err != nil {
+			return errors.UnknownError.WithFormat("failed to update main chain of %q: %w", account.GetUrl(), err)
+		}
+	}
+
+	return nil
+}

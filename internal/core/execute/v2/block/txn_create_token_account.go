@@ -4,13 +4,13 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package chain
+package block
 
 import (
 	"bytes"
 	"crypto/sha256"
-	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -18,40 +18,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type CreateTokenAccount struct{}
+type CreateTokenAccount struct{ txnCreate }
 
-var _ SignerValidator = (*CreateTokenAccount)(nil)
+var _ chain.SignerValidator = (*CreateTokenAccount)(nil)
 
 func (CreateTokenAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateTokenAccount
 }
 
-func (CreateTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
-	body, ok := transaction.Body.(*protocol.CreateTokenAccount)
+func (x CreateTokenAccount) Process(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
+	body, ok := ctx.transaction.Body.(*protocol.CreateTokenAccount)
 	if !ok {
-		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), transaction.Body)
-	}
-
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
-}
-
-func (CreateTokenAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
-	body, ok := transaction.Body.(*protocol.CreateTokenAccount)
-	if !ok {
-		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), transaction.Body)
-	}
-
-	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
-}
-
-func (CreateTokenAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (CreateTokenAccount{}).Validate(st, tx)
-}
-
-func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	body, ok := tx.Transaction.Body.(*protocol.CreateTokenAccount)
-	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), tx.Transaction.Body)
+		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), ctx.transaction.Body)
 	}
 
 	if body.Url == nil {
@@ -64,7 +42,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		}
 	}
 
-	err := checkCreateAdiAccount(st, body.Url)
+	err := x.checkCreateAdiAccount(batch, ctx, body.Url)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +51,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, errors.BadRequest.WithFormat("token URL is missing")
 	}
 
-	err = verifyCreateTokenAccountProof(st.Describe, st.batch, tx.Transaction.Header.Principal, body)
+	err = verifyCreateTokenAccountProof(&ctx.Executor.Describe, batch, ctx.transaction.Header.Principal, body)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -81,12 +59,12 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	account := new(protocol.TokenAccount)
 	account.Url = body.Url
 	account.TokenUrl = body.TokenUrl
-	err = st.SetAuth(account, body.Authorities)
+	err = x.setAuth(batch, ctx, account)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("set auth: %w", err)
 	}
 
-	err = st.Create(account)
+	err = ctx.storeAccount(batch, mustNotExist, account)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("create account: %w", err)
 	}
