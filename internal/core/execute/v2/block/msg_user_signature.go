@@ -66,15 +66,11 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	}
 
 	// Always record the signature and status
-	signature := sig.Signature
-	if sig, ok := signature.(*protocol.RemoteSignature); ok {
-		signature = sig.Signature
-	}
-	err = batch.Message2(signature.Hash()).Main().Put(sig)
+	err = batch.Message2(sig.Signature.Hash()).Main().Put(sig)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
 	}
-	err = batch.Transaction(signature.Hash()).Status().Put(status)
+	err = batch.Transaction(sig.Signature.Hash()).Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature status: %w", err)
 	}
