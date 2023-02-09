@@ -8,7 +8,6 @@ package block
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -27,10 +26,6 @@ func init() {
 
 		// TODO Remove?
 		protocol.SignatureTypeDelegated,
-
-		// TODO Remove
-		protocol.SignatureTypeRemote,
-		protocol.SignatureTypeSet,
 	)
 }
 
@@ -45,7 +40,6 @@ func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*pr
 	// Process the signature
 	s, err := ctx.Executor.processSignature2(batch, &chain.Delivery{
 		Transaction: ctx.transaction,
-		Forwarded:   ctx.isWithin(internal.MessageTypeForwardedMessage),
 	}, ctx.signature)
 	ctx.Block.State.MergeSignature(s)
 	if err == nil {
@@ -57,9 +51,8 @@ func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*pr
 		return status, nil
 	}
 
-	// If this is the initiator signature (and it's not forwarded)
-	if !ctx.isWithin(internal.MessageTypeForwardedMessage) &&
-		protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
+	// If this is the initiator signature
+	if protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
 		// Send a notice to the principal
 		msg := new(messaging.SignatureRequest)
 		msg.Authority = ctx.transaction.Header.Principal
