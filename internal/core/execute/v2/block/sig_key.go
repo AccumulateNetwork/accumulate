@@ -57,10 +57,17 @@ func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*pr
 		return status, nil
 	}
 
-	// If this is the initiator signature (and it's not forwarded) and the
-	// transaction requests additional authorities, send out signature requests
+	// If this is the initiator signature (and it's not forwarded)
 	if !ctx.isWithin(internal.MessageTypeForwardedMessage) &&
 		protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
+		// Send a notice to the principal
+		msg := new(messaging.SignatureRequest)
+		msg.Authority = ctx.transaction.Header.Principal
+		msg.Cause = ctx.message.ID()
+		msg.TxID = ctx.transaction.ID()
+		ctx.didProduce(msg.Authority, msg)
+
+		// If transaction requests additional authorities, send out signature requests
 		for _, auth := range ctx.transaction.GetAdditionalAuthorities() {
 			msg := new(messaging.SignatureRequest)
 			msg.Authority = auth
