@@ -74,9 +74,13 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 	}
 
 	// Did the principal sign?
-	_, ok := status.GetSigner(transaction.Header.Principal)
+	signer, ok := status.GetSigner(transaction.Header.Principal)
 	if ok {
-		return true, false, nil
+		if ok, err := x.didVote(batch, transaction, signer.GetAuthority()); err != nil {
+			return false, false, errors.UnknownError.Wrap(err)
+		} else if ok {
+			return true, false, nil
+		}
 	}
 
 	// Did a delegate sign?
@@ -89,12 +93,30 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 		if entry.Delegate == nil {
 			continue
 		}
-		if len(status.FindSigners(entry.Delegate)) > 0 {
+		if ok, err := x.didVote(batch, transaction, entry.Delegate); err != nil {
+			return false, false, errors.UnknownError.Wrap(err)
+		} else if ok {
 			return true, false, nil
 		}
 	}
 
 	return false, false, nil
+}
+
+func (UpdateKey) didVote(batch *database.Batch, transaction *protocol.Transaction, book *url.URL) (bool, error) {
+	// The book must vote
+	_, err := batch.Account(transaction.Header.Principal).
+		Transaction(transaction.ID().Hash()).
+		Vote(book).
+		Get()
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errors.NotFound):
+		return false, nil
+	default:
+		return false, errors.UnknownError.WithFormat("load vote: %w", err)
+	}
 }
 
 func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, *protocol.KeyPage, *protocol.KeyBook, error) {
@@ -178,6 +200,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 			if !ok {
 				return nil, errors.InternalError.WithFormat("invalid initiator: expected key signature, got %v", initiator.Type())
 			}
+			break
 		}
 		if theSig == nil {
 			return nil, errors.InternalError.WithFormat("unable to locate initiator signature")

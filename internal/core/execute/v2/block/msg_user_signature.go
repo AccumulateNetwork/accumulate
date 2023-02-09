@@ -79,15 +79,6 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 		return nil, errors.UnknownError.WithFormat("store signature status: %w", err)
 	}
 
-	// Process the transaction if the signature does not fail and is local to
-	// the principal
-	if !status.Failed() && sig.Signature.RoutingLocation().LocalTo(txn.Header.Principal) {
-		_, err := ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: txn})
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
 	err = batch.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)

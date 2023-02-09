@@ -77,11 +77,6 @@ func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*pr
 		}
 	}
 
-	// DELETE Temporarily, don't produce authority signatures for forwarded signatures
-	if ctx.isWithin(internal.MessageTypeForwardedMessage) {
-		return status, nil
-	}
-
 	// Collect delegators and the inner signature
 	var delegators []*url.URL
 	for sig := ctx.signature; ; {

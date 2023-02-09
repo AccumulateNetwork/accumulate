@@ -133,7 +133,9 @@ func TestRefundFailedUserTransaction_Remote(t *testing.T) {
 
 	// The transaction fails (insufficient balance) and issues a refund
 	sim.StepUntil(
-		Txn(st.TxID).Fails(),
+		Txn(st.TxID).Fails())
+
+	sim.StepUntil(
 		Txn(st.TxID).Produced().Succeeds())
 
 	// The transaction produces a refund for the signer
