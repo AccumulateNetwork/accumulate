@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -313,16 +314,17 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 			return 0, nil, nil, fmt.Errorf("failed to parse url from network info %s, %v", addr, err)
 		}
 		//check the health of the peer
-		peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
+		saddr := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+		peerClient, err := rpchttp.New(saddr, saddr+"/websocket")
 		if err != nil {
 			return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", u.String(), err)
 		}
 
-		peerStatus, err := peerClient.Status(context.Background())
-		if err != nil {
-			warnf("ignoring peer: not healthy %s", u.String())
-			continue
-		}
+		// peerStatus, err := peerClient.Status(context.Background())
+		// if err != nil {
+		// 	warnf("ignoring peer: not healthy %s", u.String())
+		// 	continue
+		// }
 
 		lastHealthyTmPeer = peerClient
 
@@ -337,39 +339,27 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 			return 0, nil, nil, fmt.Errorf("failed to create accumulate client for %s, %v", u.String(), err)
 		}
 
-		//if we have a healthy node with a matching id, add it as a bootstrap peer
-		if config.P2P.BootstrapPeers != "" {
-			config.P2P.BootstrapPeers += ","
-		}
-		u, err = cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetTendermintP2P))
-		if err != nil {
-			return 0, nil, nil, err
-		}
-		config.P2P.BootstrapPeers += peerStatus.NodeInfo.NodeID.AddressString(u.String())
+		// //if we have a healthy node with a matching id, add it as a bootstrap peer
+		// if config.P2P.BootstrapPeers != "" {
+		// 	config.P2P.BootstrapPeers += ","
+		// }
+		// u, err = cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetTendermintP2P))
+		// if err != nil {
+		// 	return 0, nil, nil, err
+		// }
+		// config.P2P.BootstrapPeers += peerStatus.NodeInfo.NodeID.AddressString(u.String())
 	}
 
 	if lastHealthyAccPeer == nil || lastHealthyTmPeer == nil {
 		return 0, nil, nil, fmt.Errorf("no healthy peers, cannot continue")
 	}
-	var genDoc *types.GenesisDoc
-	if cmd.Flag("genesis-doc").Changed {
-		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
-		}
-	} else {
-		if lastHealthyTmPeer == nil {
-			return 0, nil, nil, fmt.Errorf("no healthy tendermint peers, cannot fetch genesis document")
-		}
-		warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
-		rgen, err := lastHealthyTmPeer.Genesis(context.Background())
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to get genesis from %s, %v", args[0], err)
-		}
-		genDoc = rgen.Genesis
+
+	genDoc, err := getGenesis(args[0], lastHealthyTmPeer)
+	if err != nil {
+		return 0, nil, nil, err
 	}
 
-	//now check the resigtry keybook to make sure the proxy is a registered proxy
+	//now check the registry keybook to make sure the proxy is a registered proxy
 	kp := new(protocol.KeyPage)
 	res := new(api.ChainQueryResponse)
 	res.Data = kp
@@ -435,7 +425,8 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("failed to create API client for %s, %v", args[0], err)
 	}
 
-	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc)))
+	saddr := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
+	tmClient, err := rpchttp.New(saddr, saddr+"/websocket")
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
 	}
@@ -455,19 +446,9 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
 	}
 
-	var genDoc *types.GenesisDoc
-	if cmd.Flag("genesis-doc").Changed {
-		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
-		}
-	} else {
-		warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
-		rgen, err := tmClient.Genesis(context.Background())
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to get genesis from %s, %v", args[0], err)
-		}
-		genDoc = rgen.Genesis
+	genDoc, err := getGenesis(args[0], tmClient)
+	if err != nil {
+		return 0, nil, nil, err
 	}
 
 	status, err := tmClient.Status(context.Background())
@@ -476,58 +457,91 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	}
 
 	config := cfg.Default(description.Network.Id, description.NetworkType, getNodeTypeFromFlag(), description.PartitionId)
-	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
+	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.DefaultNodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 
-	//otherwise make the best out of what we have to establish our bootstrap peers
-	netInfo, err := tmClient.NetInfo(context.Background())
-	checkf(err, "failed to get network info from node")
+	// //otherwise make the best out of what we have to establish our bootstrap peers
+	// netInfo, err := tmClient.NetInfo(context.Background())
+	// checkf(err, "failed to get network info from node")
 
-	for _, peer := range netInfo.Peers {
-		u, err := url.Parse(peer.URL)
-		checkf(err, "failed to parse url from network info %s", peer.URL)
+	// for _, peer := range netInfo.Peers {
+	// 	u, err := url.Parse(peer.RemoteIP)
+	// 	checkf(err, "failed to parse url from network info %s", peer.RemoteIP)
 
-		port, err := strconv.ParseInt(u.Port(), 10, 64)
-		checkf(err, "failed to parse port for peer: %q", u.Port())
+	// 	port, err := strconv.ParseInt(u.Port(), 10, 64)
+	// 	checkf(err, "failed to parse port for peer: %q", u.Port())
 
-		clientUrl := fmt.Sprintf("tcp://%s:%d", u.Hostname(), port+int64(cfg.PortOffsetTendermintRpc))
+	// 	clientUrl := fmt.Sprintf("tcp://%s:%d", u.Hostname(), port+int64(cfg.PortOffsetTendermintRpc))
 
-		if !flagInitNode.AllowUnhealthyPeers {
-			//check the health of the peer
-			peerClient, err := rpchttp.New(clientUrl)
-			checkf(err, "failed to create Tendermint client for %s", u.String())
+	// 	if !flagInitNode.AllowUnhealthyPeers {
+	// 		//check the health of the peer
+	// 		peerClient, err := rpchttp.New(clientUrl, clientUrl+"/websocket")
+	// 		checkf(err, "failed to create Tendermint client for %s", u.String())
 
-			peerStatus, err := peerClient.Status(context.Background())
-			if err != nil {
-				warnf("ignoring peer: not healthy %s", clientUrl)
-				continue
-			}
+	// 		peerStatus, err := peerClient.Status(context.Background())
+	// 		if err != nil {
+	// 			warnf("ignoring peer: not healthy %s", clientUrl)
+	// 			continue
+	// 		}
 
-			statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
-			if err != nil {
-				warnf("ignoring healthy peer %s because peer id is invalid", u.String())
-				continue
-			}
+	// 		if peerStatus.NodeInfo.DefaultNodeID != peer.NodeInfo.ID() {
+	// 			warnf("ignoring stale peer %s", u.String())
+	// 			continue
+	// 		}
+	// 	}
 
-			peerBytes, err := peer.ID.Bytes()
-			if err != nil {
-				warnf("ignoring peer %s because node id is not valid", u.String())
-				continue
-			}
-
-			if !bytes.Equal(statBytes, peerBytes) {
-				warnf("ignoring stale peer %s", u.String())
-				continue
-			}
-		}
-
-		//if we have a healthy node with a matching id, add it as a bootstrap peer
-		config.P2P.BootstrapPeers += "," + u.String()
-	}
+	// 	//if we have a healthy node with a matching id, add it as a bootstrap peer
+	// 	config.P2P.BootstrapPeers += "," + u.String()
+	// }
 
 	config.Accumulate.Describe = cfg.Describe{
 		NetworkType: description.NetworkType, PartitionId: description.PartitionId,
 		LocalAddress: "", Network: description.Network}
 	return netPort, config, genDoc, nil
+}
+
+func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error) {
+	if flagInitNode.GenesisDoc != "" {
+		genDoc, err := types.GenesisDocFromFile(flagInitNode.GenesisDoc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
+		}
+		return genDoc, nil
+	}
+
+	if tmClient == nil {
+		return nil, fmt.Errorf("no healthy tendermint peers, cannot fetch genesis document")
+	}
+	warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", server)
+
+	buf := new(bytes.Buffer)
+	var total int
+	for i := uint(0); ; i++ {
+		if total == 0 {
+			fmt.Printf("Get genesis chunk %d/? from %s\n", i+1, server)
+		} else {
+			fmt.Printf("Get genesis chunk %d/%d from %s\n", i+1, total, server)
+		}
+		rgen, err := tmClient.GenesisChunked(context.Background(), i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get genesis chunk %d from %s, %v", i, server, err)
+		}
+		total = rgen.TotalChunks
+		b, err := base64.StdEncoding.DecodeString(rgen.Data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode genesis chunk %d from %s, %v", i, server, err)
+		}
+		_, _ = buf.Write(b)
+		if i+1 >= uint(rgen.TotalChunks) {
+			break
+		}
+	}
+
+	doc, err := types.GenesisDocFromJSON(buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode genesis from %s, %v", server, err)
+	}
+
+	return doc, nil
 }
 
 func initNode(cmd *cobra.Command, args []string) (string, error) {
@@ -603,6 +617,7 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		}
 		//local address expect ip:port only with no scheme for connection manager to work
 		config.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", localAddr, port)
+		config.P2P.ExternalAddress = config.Accumulate.LocalAddress
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
@@ -634,11 +649,11 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		AdvertizeAddress: listenUrl.Hostname(),
 		ListenAddress:    listenUrl.Hostname(),
 		BasePort:         uint64(basePort),
-	}, config, 0)
+	}, config, config.Accumulate.Describe.NetworkType)
 
-	config.PrivValidator.Key = "../priv_validator_key.json"
+	config.PrivValidatorKey = "../priv_validator_key.json"
 
-	privValKey, err := accumulated.LoadOrGenerateTmPrivKey(config.PrivValidator.KeyFile())
+	privValKey, err := accumulated.LoadOrGenerateTmPrivKey(config.PrivValidatorKeyFile())
 	DidError = err
 	if err != nil {
 		return "", fmt.Errorf("load/generate private key files, %v", err)
@@ -741,7 +756,7 @@ func resolveAddr(addr string) (string, error) {
 
 func getNodeTypeFromFlag() cfg.NodeType {
 	nodeType := cfg.Validator
-	if flagInitNode.Follower {
+	if flagInitNode.Follower || flagInitDualNode.Follower {
 		nodeType = cfg.Follower
 	}
 	return nodeType
@@ -760,31 +775,4 @@ func versionCheck(version *api.VersionResponse, peer string) error {
 		}
 	}
 	return nil
-}
-
-func ensureNodeOnPartition(partition *cfg.Partition, addr string, t cfg.NodeType) (*url.URL, error) {
-	testAddr, err := resolveIp(addr)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, n := range partition.Nodes {
-		nodeAddr, err := resolveAddr(n.Address)
-		if err != nil {
-			return nil, err
-		}
-
-		if strings.EqualFold(nodeAddr, testAddr) {
-			return url.Parse(testAddr)
-		}
-	}
-
-	//set port on url for partition, we need to add it to keep the connection mgr sane
-	u, err := cfg.OffsetPort(testAddr, int(partition.BasePort), int(cfg.PortOffsetTendermintP2P))
-	if err != nil {
-		return nil, err
-	}
-
-	partition.Nodes = append(partition.Nodes, cfg.Node{Address: u.String(), Type: t})
-	return u, nil
 }

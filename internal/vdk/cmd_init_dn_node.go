@@ -1,22 +1,16 @@
 package vdk
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net"
+	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var cmdInitDNNode = &cobra.Command{
@@ -77,7 +71,7 @@ func initDNNodeFromSeed(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot configure the directory node, %v", err)
 	}
 
-	c, err := finalizeDnn(partitionName)
+	_, err = finalizeDnn(partitionName)
 	if err != nil {
 		return err
 	}
@@ -173,9 +167,58 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 func initDNNode(cmd *cobra.Command, args []string) {
 	var err error
 	if flagInitDualNode.SeedProxy != "" {
-		err = initDualNodeFromSeed(cmd, args)
+		err = initDNNodeFromSeed(cmd, args)
 	} else {
-		err = initDualNodeFromPeer(cmd, args)
+		// err = initDNNodeFromPeer(cmd, args)
 	}
 	check(err)
+}
+
+func ensureNodeOnPartition(partition *cfg.Partition, addr string, t cfg.NodeType) (*url.URL, error) {
+	testAddr, err := resolveIp(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, n := range partition.Nodes {
+		nodeAddr, err := resolveAddr(n.Address)
+		if err != nil {
+			return nil, err
+		}
+
+		if strings.EqualFold(nodeAddr, testAddr) {
+			return url.Parse(testAddr)
+		}
+	}
+
+	//set port on url for partition, we need to add it to keep the connection mgr sane
+	u, err := cfg.OffsetPort(testAddr, int(partition.BasePort), int(cfg.PortOffsetTendermintP2P))
+	if err != nil {
+		return nil, err
+	}
+
+	partition.Nodes = append(partition.Nodes, cfg.Node{Address: u.String(), Type: t})
+	return u, nil
+}
+
+func resolvePublicIp() (string, error) {
+	req, err := http.Get("http://ip-api.com/json/")
+	if err != nil {
+		return "", err
+	}
+	defer req.Body.Close()
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return "", err
+	}
+
+	ip := struct {
+		Query string
+	}{}
+	err = json.Unmarshal(body, &ip)
+	if err != nil {
+		return "", err
+	}
+	return ip.Query, nil
 }
