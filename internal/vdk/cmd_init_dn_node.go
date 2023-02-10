@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	cfg "gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 var cmdInitDNNode = &cobra.Command{
@@ -125,14 +125,14 @@ func initDNNodeFromSeed(cmd *cobra.Command, args []string) error {
 // 	return nil
 // }
 
-func finalizeDnn(bvnId string) (*cfg.Config, error) {
-	c, err := cfg.Load(filepath.Join(flagMain.WorkDir, "dnn"))
+func finalizeDnn(bvnId string) (*config.Config, error) {
+	c, err := config.Load(filepath.Join(flagMain.WorkDir, "dnn"))
 	if err != nil {
 		return nil, err
 	}
 
 	//make sure we have a block validator type
-	if c.Accumulate.NetworkType != cfg.Directory {
+	if c.Accumulate.NetworkType != config.Directory {
 		return nil, fmt.Errorf("expecting directory but received %v", c.Accumulate.NetworkType)
 	}
 
@@ -140,22 +140,22 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 		c.Consensus.CreateEmptyBlocks = false
 	}
 
-	if len(c.P2P.PersistentPeers) > 0 {
-		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
-		c.P2P.PersistentPeers = ""
-	}
+	// if len(c.P2P.PersistentPeers) > 0 {
+	// 	c.P2P.BootstrapPeers = c.P2P.PersistentPeers
+	// 	c.P2P.PersistentPeers = ""
+	// }
 
 	bvn := c.Accumulate.Network.GetPartitionByID(bvnId)
 	if bvn == nil {
 		return nil, fmt.Errorf("bvn partition not found in configuration, %s", bvnId)
 	}
 
-	_, err = ensureNodeOnPartition(bvn, c.Accumulate.LocalAddress, cfg.NodeTypeValidator)
+	_, err = ensureNodeOnPartition(bvn, c.Accumulate.LocalAddress, config.NodeTypeValidator)
 	if err != nil {
 		return nil, err
 	}
 
-	err = cfg.Store(c)
+	err = config.Store(c)
 	if err != nil {
 		return nil, fmt.Errorf("cannot store configuration file for node, %v", err)
 	}
@@ -174,7 +174,7 @@ func initDNNode(cmd *cobra.Command, args []string) {
 	check(err)
 }
 
-func ensureNodeOnPartition(partition *cfg.Partition, addr string, t cfg.NodeType) (*url.URL, error) {
+func ensureNodeOnPartition(partition *config.Partition, addr string, t config.NodeType) (*url.URL, error) {
 	testAddr, err := resolveIp(addr)
 	if err != nil {
 		return nil, err
@@ -192,12 +192,12 @@ func ensureNodeOnPartition(partition *cfg.Partition, addr string, t cfg.NodeType
 	}
 
 	//set port on url for partition, we need to add it to keep the connection mgr sane
-	u, err := cfg.OffsetPort(testAddr, int(partition.BasePort), int(cfg.PortOffsetTendermintP2P))
+	u, err := config.OffsetPort(testAddr, int(partition.BasePort), int(config.PortOffsetTendermintP2P))
 	if err != nil {
 		return nil, err
 	}
 
-	partition.Nodes = append(partition.Nodes, cfg.Node{Address: u.String(), Type: t})
+	partition.Nodes = append(partition.Nodes, config.Node{Address: u.String(), Type: t})
 	return u, nil
 }
 

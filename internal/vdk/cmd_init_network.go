@@ -11,11 +11,10 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	cfg "gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 )
@@ -55,7 +54,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		for _, node := range bvn.Nodes {
 			// TODO Check for existing keys?
 			node.PrivValKey = ed25519.GenPrivKey()
-			node.NodeKey = ed25519.GenPrivKey()
+			node.DnNodeKey = ed25519.GenPrivKey()
+			node.BvnNodeKey = ed25519.GenPrivKey()
 
 			if node.ListenAddress == "" {
 				node.ListenAddress = "0.0.0.0"
@@ -141,22 +141,18 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 					config.Consensus.CreateEmptyBlocks = false
 				}
 
-				if cmd.Flag("dn-stall-limit").Changed {
-					config.Accumulate.DnStallLimit = flagInit.DnStallLimit
-				}
-
 				if len(flagInit.Etcd) > 0 {
-					config.Accumulate.Storage.Type = cfg.EtcdStorage
+					// config.Accumulate.Storage.Type = config.EtcdStorage
 					config.Accumulate.Storage.Etcd = new(etcd.Config)
 					config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
 					config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 				}
 			}
-			configs[i][j][0].Config.PrivValidator.Key = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
+			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
+			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.DnNodeKey, dnGenDoc)
 			checkf(err, "write DNN files")
-			configs[i][j][1].Config.PrivValidator.Key = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
+			configs[i][j][1].Config.PrivValidatorKey = "../priv_validator_key.json"
+			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.BvnNodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
 
 		}
