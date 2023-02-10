@@ -9,6 +9,7 @@ package block
 import (
 	"bytes"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -23,7 +24,7 @@ func init() {
 // it.
 type SyntheticMessage struct{}
 
-func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SyntheticMessage, error) {
 	syn, ok := ctx.message.(*messaging.SyntheticMessage)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSynthetic, ctx.message.Type())
@@ -31,32 +32,29 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 
 	// Basic validation
 	if syn.Message == nil {
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing message")), nil
+		return nil, errors.BadRequest.With("missing message")
 	}
 	if syn.Proof == nil {
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing proof")), nil
+		return nil, errors.BadRequest.With("missing proof")
 	}
 	if syn.Proof.Receipt == nil {
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing proof receipt")), nil
+		return nil, errors.BadRequest.With("missing proof receipt")
 	}
 	if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing proof metadata")), nil
+		return nil, errors.BadRequest.With("missing proof metadata")
 	}
 
 	// A synthetic message must be sequenced (may change in the future)
 	seq, ok := syn.Message.(*messaging.SequencedMessage)
 	if !ok {
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("a synthetic message must be sequenced")), nil
+		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
 	}
 
 	// Verify the proof starts with the transaction hash
 	h := syn.Message.ID().Hash()
 	if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)), nil
+		return nil, errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)
 	}
-
-	batch = batch.Begin(true)
-	defer batch.Discard()
 
 	// Verify the proof ends with a DN anchor
 	_, err := batch.Account(ctx.Executor.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().IndexOf(syn.Proof.Receipt.Anchor)
@@ -64,9 +62,62 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 	case err == nil:
 		// Ok
 	case errors.Is(err, errors.NotFound):
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)), nil
+		return nil, errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)
 	default:
 		return nil, errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
+	}
+
+	// Verify the message within the sequenced message is an allowed type
+	switch seq.Message.Type() {
+	case messaging.MessageTypeUserTransaction,
+		messaging.MessageTypeUserSignature,
+		messaging.MessageTypeSignatureRequest,
+		messaging.MessageTypeCreditPayment:
+		// Allowed
+
+	default:
+		return nil, errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", seq.Message.Type())
+	}
+
+	return syn, nil
+}
+
+func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	// If the message has already been processed, return its recorded status
+	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
+	if status.Delivered() {
+		return status, nil
+	}
+
+	// Add a transaction state to ensure the block gets recorded
+	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
+
+	batch = batch.Begin(true)
+	defer batch.Discard()
+
+	// Process the message
+	status = new(protocol.TransactionStatus)
+	status.Received = ctx.Block.Index
+	status.TxID = ctx.message.ID()
+
+	syn, err := x.check(batch, ctx)
+	if err == nil {
+		_, err = ctx.callMessageExecutor(batch, syn.Message)
+	}
+
+	// Update the status
+	switch {
+	case err == nil:
+		status.Code = errors.Delivered
+
+	case errors.Code(err).IsClientError():
+		status.Set(err)
+
+	default:
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Record the synthetic message and it's cause/produced relation
@@ -85,39 +136,10 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 		return nil, errors.UnknownError.WithFormat("store message cause: %w", err)
 	}
 
-	// Record when the transaction was first received
-	status, err := batch.Transaction(h[:]).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	if status.Received == 0 {
-		status.Received = ctx.Block.Index
-		err = batch.Transaction(h[:]).Status().Put(status)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
-	switch seq.Message.Type() {
-	case messaging.MessageTypeUserTransaction,
-		messaging.MessageTypeUserSignature,
-		messaging.MessageTypeSignatureRequest,
-		messaging.MessageTypeCreditPayment:
-		// Allowed
-
-	default:
-		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v message", seq.Message.Type())), nil
-	}
-
-	st, err := ctx.callMessageExecutor(batch, syn.Message)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
 	err = batch.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return st, nil
+	return status, nil
 }

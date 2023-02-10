@@ -95,6 +95,29 @@ func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 	}
 }
 
+// getMessageContextAncestor returns the ancestor of the context that is the
+// given type.
+func getMessageContextAncestor[T any](m *MessageContext) (T, bool) {
+	for {
+		if m.parent == nil {
+			var z T
+			return z, false
+		}
+		m = m.parent
+		if x, ok := m.message.(T); ok {
+			return x, true
+		}
+
+		// For the same reasons as MessageContext.isWithin
+		switch m.message.Type() {
+		case messaging.MessageTypeUserSignature,
+			messaging.MessageTypeCreditPayment:
+			var z T
+			return z, false
+		}
+	}
+}
+
 // shouldExecuteTransaction checks if this context is one that is safe to
 // execute a transaction within.
 //
@@ -144,48 +167,11 @@ func (m *MessageContext) callMessageExecutor(batch *database.Batch, msg messagin
 	return st, nil
 }
 
-// getSequence gets the [message.SequencedMessage] cause of the given message, if one exists.
-func (b *bundle) getSequence(batch *database.Batch, id *url.TxID) (*messaging.SequencedMessage, error) {
-	// Look in the bundle
-	if b != nil {
-		for _, msg := range b.messages {
-			seq, ok := unwrapMessageAs[*messaging.SequencedMessage](msg)
-			if ok && seq.Message.ID().Hash() == id.Hash() {
-				return seq, nil
-			}
-		}
-	}
-
-	// Look in the database
-	causes, err := batch.Message(id.Hash()).Cause().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load causes: %w", err)
-	}
-
-	for _, id := range causes {
-		msg, err := batch.Message(id.Hash()).Main().Get()
-		switch {
-		case err == nil:
-			// Ok
-		case errors.Is(err, errors.NotFound):
-			continue
-		default:
-			return nil, errors.UnknownError.WithFormat("load message: %w", err)
-		}
-
-		if seq, ok := msg.(*messaging.SequencedMessage); ok {
-			return seq, nil
-		}
-	}
-
-	return nil, errors.NotFound.WithFormat("no cause of %v is a sequenced message", id)
-}
-
 // getTransaction loads a transaction from the database or from the message bundle.
 func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol.Transaction, error) {
 	// Look in the bundle
 	for _, msg := range b.messages {
-		txn, ok := unwrapMessageAs[messaging.MessageWithTransaction](msg)
+		txn, ok := messaging.UnwrapAs[messaging.MessageWithTransaction](msg)
 		if ok &&
 			txn.GetTransaction().Body.Type() != protocol.TransactionTypeRemote &&
 			txn.Hash() == hash {
