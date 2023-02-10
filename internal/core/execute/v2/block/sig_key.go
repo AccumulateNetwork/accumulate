@@ -17,15 +17,14 @@ import (
 
 func init() {
 	registerSimpleExec[KeySignature](&signatureExecutors,
+		protocol.SignatureTypeDelegated,
+
 		protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519,
 		protocol.SignatureTypeRCD1,
 		protocol.SignatureTypeBTC,
 		protocol.SignatureTypeBTCLegacy,
 		protocol.SignatureTypeETH,
-
-		// TODO Remove?
-		protocol.SignatureTypeDelegated,
 	)
 }
 

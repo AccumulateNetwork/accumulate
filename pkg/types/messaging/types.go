@@ -38,6 +38,21 @@ type Message interface {
 	Hash() [32]byte
 }
 
+// UnwrapAs returns the message as the given type, unwrapping any wrappers.
+func UnwrapAs[T any](msg Message) (T, bool) {
+	for {
+		switch m := msg.(type) {
+		case T:
+			return m, true
+		case interface{ Unwrap() Message }:
+			msg = m.Unwrap()
+		default:
+			var z T
+			return z, false
+		}
+	}
+}
+
 func (m *UserTransaction) ID() *url.TxID { return m.Transaction.ID() }
 
 func (m *SequencedMessage) ID() *url.TxID {
