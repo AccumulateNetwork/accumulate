@@ -1,4 +1,4 @@
-package main
+package vdk
 
 import (
 	"encoding/json"
