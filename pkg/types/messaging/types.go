@@ -138,44 +138,16 @@ func (m *SyntheticMessage) Hash() [32]byte {
 	return *(*[32]byte)(h.MerkleHash())
 }
 
-func (m *SequencedMessage) Hash() [32]byte {
-	var h hash.Hasher
-	h.AddHash2(m.Message.Hash())
-	h.AddUrl2(m.Source)
-	h.AddUrl2(m.Destination)
-	h.AddUint(m.Number)
-	return *(*[32]byte)(h.MerkleHash())
-}
+func (m *SequencedMessage) Hash() [32]byte { return marshalAndHash(m) }
+func (m *BlockAnchor) Hash() [32]byte      { return marshalAndHash(m) }
+func (m *SignatureRequest) Hash() [32]byte { return marshalAndHash(m) }
+func (m *CreditPayment) Hash() [32]byte    { return marshalAndHash(m) }
 
-func (m *BlockAnchor) Hash() [32]byte {
-	var h hash.Hasher
-	if m.Signature == nil {
-		h.AddHash2([32]byte{})
-	} else {
-		h.AddHash((*[32]byte)(m.Signature.Hash()))
-	}
-	if m.Anchor == nil {
-		h.AddHash2([32]byte{})
-	} else {
-		h.AddHash2(m.Anchor.Hash())
-	}
-	return *(*[32]byte)(h.MerkleHash())
-}
-
-func (m *SignatureRequest) Hash() [32]byte {
+func marshalAndHash(m Message) [32]byte {
 	// If this fails something is seriously wrong
 	b, err := m.MarshalBinary()
 	if err != nil {
-		panic(errors.InternalError.WithFormat("marshaling signature request: %w", err))
-	}
-	return sha256.Sum256(b)
-}
-
-func (m *CreditPayment) Hash() [32]byte {
-	// If this fails something is seriously wrong
-	b, err := m.MarshalBinary()
-	if err != nil {
-		panic(errors.InternalError.WithFormat("marshaling signature request: %w", err))
+		panic(errors.InternalError.WithFormat("marshaling message: %w", err))
 	}
 	return sha256.Sum256(b)
 }

@@ -15,10 +15,18 @@ import (
 
 type ExecutorFor[T any, V interface{ Type() T }] interface {
 	Process(*database.Batch, V) (*protocol.TransactionStatus, error)
+	Validate(*database.Batch, V) error
+}
+
+type ValidatorFor[T any, V interface{ Type() T }] interface {
+	Validate(*database.Batch, V) (*protocol.TransactionStatus, error)
 }
 
 type MessageExecutor = ExecutorFor[messaging.MessageType, *MessageContext]
 type SignatureExecutor = ExecutorFor[protocol.SignatureType, *SignatureContext]
+
+type MessageValidator = ValidatorFor[messaging.MessageType, *MessageContext]
+type SignatureValidator = ValidatorFor[protocol.SignatureType, *SignatureContext]
 
 // newExecutorMap creates a map of type to executor from a list of constructors.
 func newExecutorMap[T comparable, V interface{ Type() T }](opts ExecutorOptions, list []func(ExecutorOptions) (T, ExecutorFor[T, V])) map[T]ExecutorFor[T, V] {

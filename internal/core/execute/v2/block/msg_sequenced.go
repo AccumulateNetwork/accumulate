@@ -25,6 +25,11 @@ func init() {
 // inside.
 type SequencedMessage struct{ UserTransaction }
 
+func (x SequencedMessage) Validate(batch *database.Batch, ctx *MessageContext) error {
+	_, err := x.check(batch, ctx)
+	return errors.UnknownError.Wrap(err)
+}
+
 func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SequencedMessage, error) {
 	seq, ok := ctx.message.(*messaging.SequencedMessage)
 	if !ok {

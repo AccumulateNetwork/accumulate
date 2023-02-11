@@ -31,6 +31,10 @@ func init() {
 // KeySignature processes key signatures.
 type KeySignature struct{}
 
+func (KeySignature) Validate(batch *database.Batch, ctx *SignatureContext) error {
+	panic("not implemented")
+}
+
 func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
 	status := new(protocol.TransactionStatus)
 	status.TxID = ctx.message.ID()
