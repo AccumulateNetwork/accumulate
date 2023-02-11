@@ -25,6 +25,70 @@ func init() {
 // transaction messages.
 type UserTransaction struct{}
 
+func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	txn, err := x.check(batch, ctx)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	delivery := new(chain.Delivery)
+	delivery.Transaction = txn.Transaction
+	delivery.Internal = ctx.isWithin(internal.MessageTypeNetworkUpdate)
+	if ctx.isWithin(messaging.MessageTypeSequenced) {
+		delivery.Sequence, err = x.getSequence(ctx)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	if !ctx.isWithin(messaging.MessageTypeSynthetic) {
+		var signed bool
+		for _, msg := range ctx.messages {
+			msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg)
+			if !ok {
+				continue
+			}
+			if msg.GetTxID().Hash() != txn.Hash() {
+				continue
+			}
+
+			// Handles special types of 'signatures'
+			signed = true
+
+			sig, ok := msg.(*messaging.UserSignature)
+			if !ok || sig.Signature.Type() == protocol.SignatureTypeAuthority {
+				continue
+			}
+
+			delivery.Signatures = append(delivery.Signatures, sig.Signature)
+		}
+		if !signed {
+			return nil, errors.BadRequest.With("transaction is not signed")
+		}
+	}
+
+	// For now, don't validate the transaction that is sent along with an
+	// authority signature/signature request/credit payment
+	if len(delivery.Signatures) == 0 {
+		return nil, nil
+	}
+
+	result, err := ctx.Executor.ValidateEnvelope(batch, delivery)
+	switch {
+	case err == nil:
+		s := new(protocol.TransactionStatus)
+		s.TxID = ctx.message.ID()
+		s.Result = result
+		return s, nil
+	case errors.Code(err).IsKnownError():
+		return nil, err
+	default:
+		// If the error is not an Error, assume it is a client error, produced
+		// by old code not yet using the status codes
+		return nil, errors.BadRequest.Wrap(err)
+	}
+}
+
 func (UserTransaction) check(batch *database.Batch, ctx *MessageContext) (*messaging.UserTransaction, error) {
 	txn, ok := ctx.message.(*messaging.UserTransaction)
 	if !ok {

@@ -18,6 +18,9 @@ import (
 // Success returns true if the status represents success.
 func (s Status) Success() bool { return s < 300 }
 
+// IsKnownError returns true if the status is non-zero and not UnknownError.
+func (s Status) IsKnownError() bool { return s != 0 && s != UnknownError }
+
 // IsClientError returns true if the status is a server error.
 func (s Status) IsClientError() bool { return s >= 400 && s < 500 }
 
