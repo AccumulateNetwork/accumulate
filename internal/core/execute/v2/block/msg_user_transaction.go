@@ -25,10 +25,10 @@ func init() {
 // transaction messages.
 type UserTransaction struct{}
 
-func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) error {
+func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	txn, err := x.check(batch, ctx)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	delivery := new(chain.Delivery)
@@ -37,7 +37,7 @@ func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) er
 	if ctx.isWithin(messaging.MessageTypeSequenced) {
 		delivery.Sequence, err = x.getSequence(ctx)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -61,25 +61,28 @@ func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) er
 		delivery.Signatures = append(delivery.Signatures, sig.Signature)
 	}
 	if !signed {
-		return errors.BadRequest.With("transaction is not signed")
+		return nil, errors.BadRequest.With("transaction is not signed")
 	}
 
 	// For now, don't validate the transaction that is sent along with an
 	// authority signature/signature request/credit payment
 	if len(delivery.Signatures) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	_, err = ctx.Executor.ValidateEnvelope(batch, delivery)
+	result, err := ctx.Executor.ValidateEnvelope(batch, delivery)
 	switch {
 	case err == nil:
-		return nil
+		s := new(protocol.TransactionStatus)
+		s.TxID = ctx.message.ID()
+		s.Result = result
+		return s, nil
 	case errors.Code(err).IsKnownError():
-		return err
+		return nil, err
 	default:
 		// If the error is not an Error, assume it is a client error, produced
 		// by old code not yet using the status codes
-		return errors.BadRequest.Wrap(err)
+		return nil, errors.BadRequest.Wrap(err)
 	}
 }
 

@@ -35,14 +35,14 @@ func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Messag
 	// Process each message
 	statuses := make([]*protocol.TransactionStatus, len(messages))
 	for i, msg := range messages {
-		// Prepare the status
-		s := new(protocol.TransactionStatus)
-		s.TxID = msg.ID()
-		statuses[i] = s
-
 		// Validate the message
 		ctx := &MessageContext{bundle: d, message: msg}
-		err := d.callMessageValidator(batch, ctx)
+		s, err := d.callMessageValidator(batch, ctx)
+		if s == nil {
+			s = new(protocol.TransactionStatus)
+			s.TxID = msg.ID()
+		}
+		statuses[i] = s
 
 		// Set the status code
 		errCode := errors.Code(err)
@@ -62,11 +62,11 @@ func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Messag
 }
 
 // callMessageValidator finds the executor for the message and calls it.
-func (b *bundle) callMessageValidator(batch *database.Batch, ctx *MessageContext) error {
+func (b *bundle) callMessageValidator(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// Find the appropriate executor
 	x, ok := b.Executor.messageExecutors[ctx.Type()]
 	if !ok {
-		return errors.BadRequest.WithFormat("unsupported message type %v", ctx.Type())
+		return nil, errors.BadRequest.WithFormat("unsupported message type %v", ctx.Type())
 	}
 
 	// Validate the message

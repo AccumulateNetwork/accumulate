@@ -24,9 +24,9 @@ func init() {
 // it.
 type SyntheticMessage struct{}
 
-func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) error {
+func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	_, err := x.check(batch, ctx)
-	return errors.UnknownError.Wrap(err)
+	return nil, errors.UnknownError.Wrap(err)
 }
 
 func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SyntheticMessage, error) {

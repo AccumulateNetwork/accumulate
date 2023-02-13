@@ -31,7 +31,7 @@ func init() {
 // KeySignature processes key signatures.
 type KeySignature struct{}
 
-func (KeySignature) Validate(batch *database.Batch, ctx *SignatureContext) error {
+func (KeySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
 	panic("not implemented")
 }
 

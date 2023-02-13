@@ -22,8 +22,8 @@ func init() {
 // for processing.
 type NetworkUpdate struct{}
 
-func (NetworkUpdate) Validate(batch *database.Batch, ctx *MessageContext) error {
-	return errors.InternalError.With("invalid attempt to validate an internal message")
+func (NetworkUpdate) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	return nil, errors.InternalError.With("invalid attempt to validate an internal message")
 }
 
 func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {

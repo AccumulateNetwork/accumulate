@@ -22,9 +22,9 @@ func init() {
 // CreditPayment processes a credit payment
 type CreditPayment struct{}
 
-func (x CreditPayment) Validate(batch *database.Batch, ctx *MessageContext) error {
+func (x CreditPayment) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	_, _, err := x.check(batch, ctx)
-	return errors.UnknownError.Wrap(err)
+	return nil, errors.UnknownError.Wrap(err)
 }
 
 func (CreditPayment) check(batch *database.Batch, ctx *MessageContext) (*messaging.CreditPayment, *protocol.Transaction, error) {
