@@ -42,6 +42,11 @@ type Services interface {
 	api.NetworkService
 }
 
+// EnvelopeBuilder builds an envelope.
+type EnvelopeBuilder interface {
+	Done() (*messaging.Envelope, error)
+}
+
 // Stepper steps the simulation or waits for a block to complete.
 type Stepper interface {
 	Step() error
@@ -106,50 +111,86 @@ func (h *Harness) StepUntil(conditions ...Condition) {
 	}
 }
 
-// Submit submits an envelope and returns the status.
-func (h *Harness) Submit(envelope *messaging.Envelope) *protocol.TransactionStatus {
+// Submit submits the envelope.
+func (h *Harness) Submit(envelope *messaging.Envelope) []*protocol.TransactionStatus {
 	h.TB.Helper()
 	subs, err := h.services.Submit(context.Background(), envelope, api.SubmitOptions{})
 	require.NoError(h.TB, err)
-	require.Len(h.TB, subs, 1)
-	return subs[0].Status
-}
-
-// SubmitSuccessfully submits an envelope and returns the status.
-// SubmitSuccessfully fails if the transaction failed.
-func (h *Harness) SubmitSuccessfully(envelope *messaging.Envelope) *protocol.TransactionStatus {
-	h.TB.Helper()
-	status := h.Submit(envelope)
-	if status.Error != nil {
-		require.NoError(h.TB, status.Error)
+	status := make([]*protocol.TransactionStatus, len(subs))
+	for i, sub := range subs {
+		status[i] = sub.Status
 	}
 	return status
 }
 
-// EnvelopeBuilder builds an envelope.
-type EnvelopeBuilder interface {
-	Done() (*messaging.Envelope, error)
+// SubmitSuccessfully submits the envelope and asserts that all transactions and
+// signatures succeeded.
+func (h *Harness) SubmitSuccessfully(envelope *messaging.Envelope) []*protocol.TransactionStatus {
+	h.TB.Helper()
+	status := h.Submit(envelope)
+	for _, s := range status {
+		require.NoError(h.TB, s.AsError())
+	}
+	return status
 }
 
-// BuildAndSubmit calls the envelope builder and submits the envelope.
-func (h *Harness) BuildAndSubmit(b EnvelopeBuilder) *protocol.TransactionStatus {
+// BuildAndSubmit builds and submits the envelope.
+func (h *Harness) BuildAndSubmit(b EnvelopeBuilder) []*protocol.TransactionStatus {
 	h.TB.Helper()
 	env, err := b.Done()
 	require.NoError(h.TB, err)
-	require.Len(h.TB, env.Transaction, 1)
-	subs, err := h.services.Submit(context.Background(), env, api.SubmitOptions{})
-	require.NoError(h.TB, err)
-	require.Len(h.TB, subs, 1)
-	return subs[0].Status
+	return h.Submit(env)
 }
 
-// BuildAndSubmitSuccessfully calls the envelope builder and submits the
-// envelope. BuildAndSubmitSuccessfully fails if the transaction failed.
-func (h *Harness) BuildAndSubmitSuccessfully(b EnvelopeBuilder) *protocol.TransactionStatus {
+// BuildAndSubmitSuccessfully builds and submits the envelope and asserts that
+// all transactions and signatures succeeded.
+func (h *Harness) BuildAndSubmitSuccessfully(b EnvelopeBuilder) []*protocol.TransactionStatus {
 	h.TB.Helper()
 	status := h.BuildAndSubmit(b)
-	if status.Error != nil {
-		require.NoError(h.TB, status.Error)
+	for _, s := range status {
+		require.NoError(h.TB, s.AsError())
 	}
+	return status
+}
+
+// SubmitTxn submits a single transaction.
+func (h *Harness) SubmitTxn(envelope *messaging.Envelope) *protocol.TransactionStatus {
+	h.TB.Helper()
+	require.Len(h.TB, envelope.Transaction, 1)
+	id := envelope.Transaction[0].ID()
+	for _, s := range h.Submit(envelope) {
+		if s.TxID.Hash() == id.Hash() {
+			return s
+		}
+	}
+	h.TB.Fatalf("No status for %v", id)
+	panic("not reached")
+}
+
+// SubmitTxnSuccessfully submits a single transaction and asserts that it and
+// its signatures succeeded.
+func (h *Harness) SubmitTxnSuccessfully(envelope *messaging.Envelope) *protocol.TransactionStatus {
+	h.TB.Helper()
+	status := h.SubmitTxn(envelope)
+	require.NoError(h.TB, status.AsError())
+	return status
+}
+
+// BuildAndSubmitTxn builds and submits a single transaction.
+func (h *Harness) BuildAndSubmitTxn(b EnvelopeBuilder) *protocol.TransactionStatus {
+	h.TB.Helper()
+	env, err := b.Done()
+	require.NoError(h.TB, err)
+	return h.SubmitTxn(env)
+}
+
+// BuildAndSubmitTxnSuccessfully builds and submits a single transaction and
+// asserts that it and its signatures succeeded.
+func (h *Harness) BuildAndSubmitTxnSuccessfully(b EnvelopeBuilder) *protocol.TransactionStatus {
+	h.TB.Helper()
+	env, err := b.Done()
+	require.NoError(h.TB, err)
+	status := h.SubmitTxn(env)
+	require.NoError(h.TB, status.AsError())
 	return status
 }

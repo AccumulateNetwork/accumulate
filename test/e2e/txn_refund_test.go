@@ -39,7 +39,7 @@ func TestRefundCycle(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e12)})
 
 	// Send tokens
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "tokens").
 			SendTokens(1, AcmePrecisionPower).To("bob.acme", "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -85,7 +85,7 @@ func TestRefundFailedUserTransaction_Local(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e12)})
 
 	// Submit the transaction
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "tokens").
 			SendTokens(1, AcmePrecisionPower).To("bob.acme", "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -126,7 +126,7 @@ func TestRefundFailedUserTransaction_Remote(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl(), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: alice.JoinPath("book")}}}})
 
 	// Submit a transaction with a remote signature
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(bob, "tokens").
 			SendTokens(1, AcmePrecisionPower).To("charlie.acme", "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))

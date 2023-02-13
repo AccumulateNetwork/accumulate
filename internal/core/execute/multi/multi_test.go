@@ -45,7 +45,7 @@ func TestVersionSwitch(t *testing.T) {
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
 
 	// Attempting to use V2 logic fails
-	st := sim.Submit(MustBuild(t,
+	st := sim.SubmitTxn(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			Body(&PlaceholderTransaction{}).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
@@ -54,7 +54,7 @@ func TestVersionSwitch(t *testing.T) {
 	require.EqualError(t, st.Error, "unsupported transaction type: placeholder")
 
 	// Execute
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV1Halt).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
@@ -66,7 +66,7 @@ func TestVersionSwitch(t *testing.T) {
 	sim.StepN(10)
 
 	// Execute
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV2).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0))))
@@ -83,7 +83,7 @@ func TestVersionSwitch(t *testing.T) {
 	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
 
 	// Attempting to use V2 logic succeeds
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice).
 			Body(&PlaceholderTransaction{}).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))

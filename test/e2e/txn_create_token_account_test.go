@@ -32,7 +32,7 @@ func TestCreateTokenAccount(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.BuildAndSubmitSuccessfully(
+	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice).
 			CreateTokenAccount(alice, "tokens").ForToken(ACME).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))

@@ -40,7 +40,7 @@ func TestAnchorThreshold(t *testing.T) {
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
-	sim.SubmitSuccessfully(
+	sim.SubmitTxnSuccessfully(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -77,15 +77,15 @@ func TestAnchorThreshold(t *testing.T) {
 	})
 
 	// Submit one signature and verify it is pending
-	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
+	sim.SubmitTxnSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepUntil(Txn(txid).IsPending())
 
 	// Re-submit the first signature and verify it is still pending
-	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
+	sim.SubmitTxnSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepN(50)
 	require.True(t, sim.QueryTransaction(txid, nil).Status.Pending())
 
 	// Submit a second signature and verify it is delivered
-	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[1]}})
+	sim.SubmitTxnSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[1]}})
 	sim.StepUntil(Txn(txid).Succeeds())
 }
