@@ -25,7 +25,14 @@ func init() {
 type SyntheticMessage struct{}
 
 func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	_, err := x.check(batch, ctx)
+	// Check the wrapper
+	syn, err := x.check(batch, ctx)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Validate the inner message
+	_, err = ctx.callMessageValidator(batch, syn.Message)
 	return nil, errors.UnknownError.Wrap(err)
 }
 

@@ -26,7 +26,14 @@ func init() {
 type SequencedMessage struct{ UserTransaction }
 
 func (x SequencedMessage) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	_, err := x.check(batch, ctx)
+	// Check the wrapper
+	seq, err := x.check(batch, ctx)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Validate the inner message
+	_, err = ctx.callMessageValidator(batch, seq.Message)
 	return nil, errors.UnknownError.Wrap(err)
 }
 

@@ -23,8 +23,19 @@ func init() {
 type BlockAnchor struct{}
 
 func (x BlockAnchor) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	_, _, _, _, err := x.check(ctx, batch)
-	return nil, errors.UnknownError.Wrap(err)
+	msg, _, _, _, err := x.check(ctx, batch)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Validate the transaction
+	_, err = ctx.callMessageValidator(batch, msg.Anchor)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// TODO Validate the signature
+	return nil, nil
 }
 
 func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {

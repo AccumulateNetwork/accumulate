@@ -41,27 +41,29 @@ func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*
 		}
 	}
 
-	var signed bool
-	for _, msg := range ctx.messages {
-		msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg)
-		if !ok {
-			continue
+	if !ctx.isWithin(messaging.MessageTypeSynthetic) {
+		var signed bool
+		for _, msg := range ctx.messages {
+			msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg)
+			if !ok {
+				continue
+			}
+
+			// Handles special types of 'signatures'
+			signed = true
+
+			sig, ok := msg.(*messaging.UserSignature)
+			if !ok ||
+				sig.Signature.Type() == protocol.SignatureTypeAuthority ||
+				sig.TxID.Hash() != txn.Hash() {
+				continue
+			}
+
+			delivery.Signatures = append(delivery.Signatures, sig.Signature)
 		}
-
-		// Handles special types of 'signatures'
-		signed = true
-
-		sig, ok := msg.(*messaging.UserSignature)
-		if !ok ||
-			sig.Signature.Type() == protocol.SignatureTypeAuthority ||
-			sig.TxID.Hash() != txn.Hash() {
-			continue
+		if !signed {
+			return nil, errors.BadRequest.With("transaction is not signed")
 		}
-
-		delivery.Signatures = append(delivery.Signatures, sig.Signature)
-	}
-	if !signed {
-		return nil, errors.BadRequest.With("transaction is not signed")
 	}
 
 	// For now, don't validate the transaction that is sent along with an
