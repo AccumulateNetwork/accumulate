@@ -77,15 +77,15 @@ func TestAnchorThreshold(t *testing.T) {
 	})
 
 	// Submit one signature and verify it is pending
-	sim.SubmitTxnSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
+	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepUntil(Txn(txid).IsPending())
 
 	// Re-submit the first signature and verify it is still pending
-	sim.SubmitTxnSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
+	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepN(50)
 	require.True(t, sim.QueryTransaction(txid, nil).Status.Pending())
 
 	// Submit a second signature and verify it is delivered
-	sim.SubmitTxnSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[1]}})
+	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[1]}})
 	sim.StepUntil(Txn(txid).Succeeds())
 }
