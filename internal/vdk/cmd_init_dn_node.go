@@ -169,7 +169,7 @@ func initDNNode(cmd *cobra.Command, args []string) {
 	if flagInitDualNode.SeedProxy != "" {
 		err = initDNNodeFromSeed(cmd, args)
 	} else {
-		// err = initDNNodeFromPeer(cmd, args)
+		err = fmt.Errorf("Please provide seed to init the node.")
 	}
 	check(err)
 }

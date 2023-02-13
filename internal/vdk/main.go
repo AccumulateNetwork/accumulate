@@ -78,16 +78,16 @@ func warnf(format string, args ...interface{}) {
 	}
 }
 
-func composeArgs(fn cobra.PositionalArgs, fns ...cobra.PositionalArgs) cobra.PositionalArgs {
-	if len(fns) == 0 {
-		return fn
-	}
+// func composeArgs(fn cobra.PositionalArgs, fns ...cobra.PositionalArgs) cobra.PositionalArgs {
+// 	if len(fns) == 0 {
+// 		return fn
+// 	}
 
-	rest := composeArgs(fns[0], fns[1:]...)
-	return func(cmd *cobra.Command, args []string) error {
-		if err := fn(cmd, args); err != nil {
-			return err
-		}
-		return rest(cmd, args)
-	}
-}
+// 	rest := composeArgs(fns[0], fns[1:]...)
+// 	return func(cmd *cobra.Command, args []string) error {
+// 		if err := fn(cmd, args); err != nil {
+// 			return err
+// 		}
+// 		return rest(cmd, args)
+// 	}
+// }
