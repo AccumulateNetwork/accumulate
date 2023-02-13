@@ -452,13 +452,12 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotZero(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).CreditBalance)
 
 	s.TB.Log("Attempting to lock key page 2 using itself fails")
-	st = s.BuildAndSubmitTxn(
+	st = s.BuildAndSubmit(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
-			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))
+			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))[1]
 
-	_ = s.NotNil(st.Error) &&
-		s.Equal("signature 0: acc://test.acme/book/2 cannot modify its own allowed operations", st.Error.Message)
+	s.EqualError(st.AsError(), "acc://test.acme/book/2 cannot modify its own allowed operations")
 
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
@@ -473,13 +472,12 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
 	s.TB.Log("Attempting to update key page 3 using page 2 fails")
-	st = s.BuildAndSubmitTxn(
+	st = s.BuildAndSubmit(
 		build.Transaction().For(adi, "book", "3").
 			UpdateKeyPage().Add().Entry().Key(key31, SignatureTypeED25519).FinishEntry().FinishOperation().
-			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))
+			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))[1]
 
-	_ = s.NotNil(st.Error) &&
-		s.Equal("signature 0: page acc://test.acme/book/2 is not authorized to sign updateKeyPage", st.Error.Message)
+	s.EqualError(st.AsError(), "page acc://test.acme/book/2 is not authorized to sign updateKeyPage")
 
 	s.Len(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "3")).Keys, 1)
 
@@ -506,6 +504,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.TB.Log("Add keys to page 2")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
+			Memo("foo").
 			UpdateKeyPage().
 			Add().Entry().Key(key21, SignatureTypeED25519).FinishEntry().FinishOperation().
 			Add().Entry().Key(key22, SignatureTypeED25519).FinishEntry().FinishOperation().
