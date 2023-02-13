@@ -48,14 +48,15 @@ func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*
 			if !ok {
 				continue
 			}
+			if msg.GetTxID().Hash() != txn.Hash() {
+				continue
+			}
 
 			// Handles special types of 'signatures'
 			signed = true
 
 			sig, ok := msg.(*messaging.UserSignature)
-			if !ok ||
-				sig.Signature.Type() == protocol.SignatureTypeAuthority ||
-				sig.TxID.Hash() != txn.Hash() {
+			if !ok || sig.Signature.Type() == protocol.SignatureTypeAuthority {
 				continue
 			}
 
