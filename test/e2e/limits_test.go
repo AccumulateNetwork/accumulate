@@ -49,7 +49,7 @@ func TestCreateKeyPage_LimitBookPages(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -82,7 +82,7 @@ func TestCreateKeyPage_LimitPageEntries(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -115,7 +115,7 @@ func TestUpdateKeyPage_LimitPageEntries(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book", "1")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -152,7 +152,7 @@ func TestUpdateAccountAuth_LimitAccountAuthorities(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book2", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -192,7 +192,7 @@ func TestWriteData_LimitDataEntryParts(t *testing.T) {
 	// Execute
 	entry := new(AccumulateDataEntry)
 	entry.Data = [][]byte{{1}, {2}}
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -225,7 +225,7 @@ func TestCreateIdentity_LimitIdentityAccounts(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -257,7 +257,7 @@ func TestCreateIdentity_Directory(t *testing.T) {
 		CreditCredits(t, sim.DatabaseFor(lite), lite.RootIdentity(), 1e9)
 
 		// Execute
-		st := sim.SubmitSuccessfully(
+		st := sim.SubmitTxnSuccessfully(
 			acctesting.NewTransaction().
 				WithPrincipal(alice).
 				WithSigner(lite, 1).
@@ -292,7 +292,7 @@ func TestCreateIdentity_Directory(t *testing.T) {
 		CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 		// Execute
-		st := sim.SubmitSuccessfully(
+		st := sim.SubmitTxnSuccessfully(
 			acctesting.NewTransaction().
 				WithPrincipal(alice).
 				WithSigner(alice.JoinPath("book", "1"), 1).
@@ -334,7 +334,7 @@ func TestCreateTokenAccount_LimitIdentityAccounts(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -367,7 +367,7 @@ func TestCreateDataAccount_LimitIdentityAccounts(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -400,7 +400,7 @@ func TestCreateToken_LimitIdentityAccounts(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -433,7 +433,7 @@ func TestCreateKeyBook_LimitIdentityAccounts(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).

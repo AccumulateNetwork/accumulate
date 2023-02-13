@@ -41,7 +41,7 @@ func TestSimpleMultisig(t *testing.T) {
 	})
 
 	// Initiate
-	st := sim.BuildAndSubmitSuccessfully(
+	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice).
 			CreateTokenAccount(alice, "tokens").ForToken(ACME).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
@@ -63,7 +63,7 @@ func TestSimpleMultisig(t *testing.T) {
 	})
 
 	// Sign again
-	st = sim.BuildAndSubmitSuccessfully(
+	st = sim.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTxID(st.TxID).Load(sim.Query()).
 			Url(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
 

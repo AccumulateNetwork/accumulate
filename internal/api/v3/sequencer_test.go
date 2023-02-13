@@ -57,7 +57,7 @@ func TestSequencer(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.RootIdentity(), 1e9)
 	CreditTokens(t, sim.DatabaseFor(alice), alice, big.NewInt(1e12))
 
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice).
 			SendTokens(123, 0).To(bob).
 			SignWith(alice).Version(1).Timestamp(1).PrivateKey(aliceKey)))
