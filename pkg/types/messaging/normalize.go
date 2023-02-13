@@ -14,6 +14,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// Normalize converts an envelope into a normalized bundle of messages.
+//
+//   - Every transaction and signature is converted into a message.
+//   - If any transaction is not signed, the envelope is rejected.
+//   - If any signature does _not_ specify a transaction hash, the envelope is
+//     rejected unless the envelope specifies a default transaction hash or
+//     contains exactly one transaction.
+//   - If the transaction corresponding to a signature is not present, a
+//     placeholder transaction is added.
 func (e *Envelope) Normalize() ([]Message, error) {
 	// Validate the envelope's TxHash
 	var defaultTxID *url.TxID
@@ -26,26 +35,29 @@ func (e *Envelope) Normalize() ([]Message, error) {
 		return nil, fmt.Errorf("invalid hash length: want 32, got %d", len(e.TxHash))
 	}
 
-	// Convert transactions to messages
-	messages := e.Messages
+	// Convert everything to messages
+	messages := make([]Message, 0, len(e.Messages)+len(e.Transaction)+len(e.Signatures))
+	messages = append(messages, e.Messages...)
 	for _, txn := range e.Transaction {
 		messages = append(messages, &UserTransaction{Transaction: txn})
 	}
+	for _, sig := range e.Signatures {
+		messages = append(messages, &UserSignature{Signature: sig})
+	}
 
-	// Determine which transactions have a signature
+	// Collect a set of all transaction hashes
 	unsigned := map[[32]byte]struct{}{}
-	for i, msg := range e.Messages {
-		switch msg := msg.(type) {
-		case *UserTransaction:
-			hash, err := getTxnHash(msg.Transaction, defaultTxID)
-			if err != nil {
-				return nil, errors.UnknownError.WithFormat("message %d: %w", i, err)
-			}
-
-			if !msg.Transaction.Body.Type().IsSynthetic() {
-				unsigned[*(*[32]byte)(hash)] = struct{}{}
-			}
+	for i, msg := range messages {
+		txn, ok := msg.(*UserTransaction)
+		if !ok {
+			continue
 		}
+		hash, err := getTxnHash(txn.Transaction, defaultTxID)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("message %d: %w", i, err)
+		}
+
+		unsigned[*(*[32]byte)(hash)] = struct{}{}
 	}
 
 	// If envelope.TransactionHash is unset and there's exactly one transaction,
@@ -56,38 +68,53 @@ func (e *Envelope) Normalize() ([]Message, error) {
 		}
 	}
 
-	// Convert signatures to messages
-	for i, sig := range e.Signatures {
+	// Ensure every signature hash a transaction hash and collect a set of all
+	// signed transaction hashes
+	missing := map[[32]byte]struct{}{}
+	for i, msg := range messages {
+		sig, ok := msg.(*UserSignature)
+		if !ok {
+			continue
+		}
+
 		switch {
-		case sig.GetTransactionHash() != [32]byte{}:
+		case sig.TxID != nil:
+			// Message specifies the transaction ID
+			missing[sig.TxID.Hash()] = struct{}{}
+
+		case sig.Signature.GetTransactionHash() != [32]byte{}:
 			// Signature specifies the transaction hash
-			messages = append(messages, &UserSignature{
-				Signature: sig,
-				TxID:      protocol.UnknownUrl().WithTxID(sig.GetTransactionHash()),
-			})
+			sig.TxID = protocol.UnknownUrl().WithTxID(sig.Signature.GetTransactionHash())
+			missing[sig.Signature.GetTransactionHash()] = struct{}{}
 
 		case defaultTxID != nil:
 			// Use the default hash
-			messages = append(messages, &UserSignature{
-				Signature: sig,
-				TxID:      defaultTxID,
-			})
+			sig.TxID = defaultTxID
+			missing[defaultTxID.Hash()] = struct{}{}
 
 		default:
 			return nil, errors.BadRequest.WithFormat("signature %d: missing hash", i)
 		}
-
 	}
 
-	// A transaction with no signatures is invalid
+	// Add a placeholder for any signed transactions that are not present
+	for hash := range unsigned {
+		delete(missing, hash)
+	}
+	for hash := range missing {
+		messages = append(messages, &UserTransaction{
+			Transaction: &protocol.Transaction{
+				Body: &protocol.RemoteTransaction{
+					Hash: hash,
+				},
+			},
+		})
+	}
+
+	// Check for unsigned transactions
 	for _, msg := range messages {
-	again:
-		switch m := msg.(type) {
-		case MessageForTransaction:
-			delete(unsigned, m.GetTxID().Hash())
-		case interface{ Unwrap() Message }:
-			msg = m.Unwrap()
-			goto again
+		if msg, ok := UnwrapAs[MessageForTransaction](msg); ok {
+			delete(unsigned, msg.GetTxID().Hash())
 		}
 	}
 	for hash := range unsigned {
