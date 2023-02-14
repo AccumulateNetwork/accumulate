@@ -72,7 +72,7 @@ func TestMissingSynthTxn(t *testing.T) {
 					SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
 					SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
 		}
-		sim.StepUntil(func(*Harness) bool { return didDrop })
+		sim.StepUntil(True(func(*Harness) bool { return didDrop }))
 
 		for _, st := range st {
 			sim.StepUntil(
@@ -123,7 +123,7 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 		return drop, anchors < valCount*bvnCount
 	})
 
-	sim.StepUntil(func(*Harness) bool { return anchors >= valCount*bvnCount })
+	sim.StepUntil(True(func(*Harness) bool { return anchors >= valCount*bvnCount }))
 
 	// Cause a synthetic transaction
 	st := sim.BuildAndSubmitTxnSuccessfully(
@@ -172,7 +172,7 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 		return drop, anchors < valCount
 	})
 
-	sim.StepUntil(func(*Harness) bool { return anchors >= valCount })
+	sim.StepUntil(True(func(*Harness) bool { return anchors >= valCount }))
 
 	// Cause a synthetic transaction
 	st := sim.BuildAndSubmitTxnSuccessfully(

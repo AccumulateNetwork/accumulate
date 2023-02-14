@@ -678,7 +678,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 		defer func() {
 			// Wait for an anchor to be dropped
-			s.StepUntil(func(*Harness) bool { return dropped != nil })
+			s.StepUntil(True(func(*Harness) bool { return dropped != nil }))
 
 			// Wait for that anchor to be healed
 			s.StepUntil(Txn(dropped).Succeeds())
