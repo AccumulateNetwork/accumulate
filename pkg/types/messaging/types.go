@@ -84,7 +84,7 @@ func (m *SignatureRequest) ID() *url.TxID {
 }
 
 func (m *CreditPayment) ID() *url.TxID {
-	return m.Payer.WithTxID(m.Hash())
+	return m.TxID.Account().WithTxID(m.Hash())
 }
 
 func (m *SyntheticMessage) Unwrap() Message { return m.Message }
