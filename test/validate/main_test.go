@@ -20,10 +20,13 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tendermint/tendermint/libs/log"
+	tmp2p "github.com/tendermint/tendermint/p2p"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -61,9 +64,34 @@ func TestManualValidate(t *testing.T) {
 	if *validateNetwork == "" {
 		t.Skip()
 	}
-	addr, err := multiaddr.NewMultiaddr(*validateNetwork)
+
+	if addr, err := multiaddr.NewMultiaddr(*validateNetwork); err == nil {
+		suite.Run(t, &ValidationTestSuite{Network: []multiaddr.Multiaddr{addr}})
+		return
+	}
+
+	if st, err := os.Stat(*validateNetwork); err != nil || !st.IsDir() {
+		t.Fatalf("%q is neither an address nor a node directory", *validateNetwork)
+	}
+
+	// Load the node and derive its listening address
+	node, err := accumulated.Load(*validateNetwork, nil)
 	require.NoError(t, err)
-	suite.Run(t, &ValidationTestSuite{Network: []multiaddr.Multiaddr{addr}})
+	key, err := tmp2p.LoadNodeKey(node.Config.NodeKeyFile())
+	require.NoError(t, err)
+	ed := ed25519.PrivateKey(key.PrivKey.Bytes())
+	sk, _, err := crypto.KeyPairFromStdKey(&ed)
+	require.NoError(t, err)
+	id, err := peer.IDFromPrivateKey(sk)
+	require.NoError(t, err)
+	c, err := multiaddr.NewComponent("p2p", id.String())
+	require.NoError(t, err)
+
+	s := new(ValidationTestSuite)
+	for _, addr := range node.Config.Accumulate.P2P.Listen {
+		s.Network = append(s.Network, addr.Encapsulate(c))
+	}
+	suite.Run(t, s)
 }
 
 // TestValidate runs the validation test suite against the simulator.

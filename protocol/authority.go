@@ -170,6 +170,11 @@ func (*LiteIdentity) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
 	return -1, nil, false
 }
 
+// GetSigners returns the lite identity's URL.
+func (l *LiteIdentity) GetSigners() []*url.URL {
+	return []*url.URL{l.Url}
+}
+
 /* ***** ADI account auth ***** */
 
 // GetSigners returns URLs of the book's pages.

@@ -36,7 +36,10 @@ go test 1/2:
 go test 2/2:
   # Full devnet validation test
   extends: .go test
-  script: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./test/validate -test.validate.full
+  script:
+  - go run -tags testnet ./cmd/accumulated init devnet -w .nodes -b 3 -v 3 -f 0 --faucet-seed ci
+  - go run -tags testnet ./cmd/accumulated run devnet -w .nodes --faucet-seed ci &
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- ./test/validate -test.validate.network "$PWD/.nodes/node-1/dnn/" -run TestManualValidate
 
 .playbooks:
   stage: test
