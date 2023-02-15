@@ -341,7 +341,7 @@ func (b *bootstrap) maybeCreateAcme() {
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
-	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
+	if !protocol.IsTestNet {
 		return
 	}
 
@@ -349,6 +349,10 @@ func (b *bootstrap) maybeCreateFaucet() {
 	amount := new(big.Int)
 	amount.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 	b.acmeIssued.Add(b.acmeIssued, amount)
+
+	if !b.shouldCreate(protocol.FaucetUrl) {
+		return
+	}
 
 	liteId := new(protocol.LiteIdentity)
 	liteId.Url = protocol.FaucetUrl.RootIdentity()
