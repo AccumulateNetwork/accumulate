@@ -11,131 +11,9 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-// ValidateEnvelope verifies that the envelope is valid. It checks the basics,
-// like the envelope has signatures and a hash and/or a transaction. It
-// validates signatures, ensuring they match the transaction hash, reference a
-// signator, etc. And more.
-//
-// ValidateEnvelope should not modify anything. Right now it updates signer
-// timestamps and credits, but that will be moved to ProcessSignature.
-func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (protocol.TransactionResult, error) {
-	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() && delivery.Transaction.Body == nil {
-		return nil, errors.BadRequest.WithFormat("missing body")
-	}
-
-	// If the transaction is borked, the transaction type is probably invalid,
-	// so check that first. "Invalid transaction type" is a more useful error
-	// than "invalid signature" if the real error is the transaction got borked.
-	txnType := delivery.Transaction.Body.Type()
-	if txnType == protocol.TransactionTypeSystemWriteData {
-		// SystemWriteData transactions are purely internal transactions
-		return nil, errors.BadRequest.WithFormat("unsupported transaction type: %v", txnType)
-	}
-	if txnType != protocol.TransactionTypeRemote {
-		_, ok := x.executors[txnType]
-		if !ok {
-			return nil, errors.BadRequest.WithFormat("unsupported transaction type: %v", txnType)
-		}
-	}
-
-	// Load the transaction
-	_, err := delivery.LoadTransaction(batch)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	if x.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
-		if delivery.Transaction.Header.Principal == nil {
-			return nil, errors.BadRequest.WithFormat("missing principal")
-		}
-		if delivery.Transaction.Body.Type().IsUser() && delivery.Transaction.Header.Initiator == [32]byte{} {
-			return nil, errors.BadRequest.WithFormat("missing initiator")
-		}
-	}
-
-	switch {
-	case txnType.IsUser(), txnType.IsSynthetic():
-		err = nil
-	case txnType.IsSystem():
-		err = validateAnchorSignatures(delivery.Transaction, delivery.Signatures)
-	default:
-		// Should be unreachable
-		return nil, errors.InternalError.WithFormat("transaction type %v is not user, synthetic, or internal", txnType)
-	}
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Only validate the transaction when we first receive it
-	if delivery.Transaction.Body.Type() == protocol.TransactionTypeRemote {
-		return new(protocol.EmptyResult), nil
-	}
-
-	// Do not run transaction-specific validation for a synthetic transaction. A
-	// synthetic transaction will be rejected by `m.validate` unless it is
-	// signed by a BVN and can be proved to have been included in a DN block. If
-	// `m.validate` succeeeds, we know the transaction came from a BVN, thus it
-	// is safe and reasonable to allow the transaction to be delivered.
-	//
-	// This is important because if a synthetic transaction is rejected during
-	// CheckTx, it does not get recorded. If the synthetic transaction is not
-	// recorded, the BVN that sent it and the client that sent the original
-	// transaction cannot verify that the synthetic transaction was received.
-	if delivery.Transaction.Body.Type().IsSynthetic() {
-		return new(protocol.EmptyResult), nil
-	}
-
-	// Lite token address => lite identity
-	var signerUrl *url.URL
-	if delivery.Transaction.Body.Type().IsAnchor() {
-		signerUrl = x.Describe.OperatorsPage()
-	} else {
-		signerUrl = delivery.Signatures[0].GetSigner()
-	}
-
-	// Do not validate remote transactions
-	if !delivery.Transaction.Header.Principal.LocalTo(signerUrl) {
-		return new(protocol.EmptyResult), nil
-	}
-
-	// Load the principal
-	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
-	switch {
-	case err == nil:
-		// Ok
-	case !errors.Is(err, storage.ErrNotFound):
-		return nil, errors.UnknownError.WithFormat("load principal: %w", err)
-	case delivery.Transaction.Body.Type().IsUser():
-		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
-		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
-			return nil, errors.NotFound.WithFormat("missing principal: %v not found", delivery.Transaction.Header.Principal)
-		}
-	}
-
-	// Set up the state manager
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
-	defer st.Discard()
-	st.Pretend = true
-
-	// Execute the transaction
-	executor, ok := x.executors[delivery.Transaction.Body.Type()]
-	if !ok {
-		return nil, errors.InternalError.WithFormat("missing executor for %v", delivery.Transaction.Body.Type())
-	}
-
-	result, err := executor.Validate(st, delivery)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	return result, nil
-}
 
 func (x *Executor) validateSignature2(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) error {
 	status, err := batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
@@ -235,24 +113,6 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	}
 
 	return signer, nil
-}
-
-func validateAnchorSignatures(transaction *protocol.Transaction, signatures []protocol.Signature) error {
-	var gotED25519Sig bool
-	for _, sig := range signatures {
-		switch sig.(type) {
-		case *protocol.ED25519Signature, *protocol.LegacyED25519Signature:
-			gotED25519Sig = true
-
-		default:
-			return errors.BadRequest.WithFormat("synthetic transaction do not support %T signatures", sig)
-		}
-	}
-
-	if !gotED25519Sig {
-		return errors.Unauthenticated.WithFormat("missing ED25519 signature")
-	}
-	return nil
 }
 
 // checkRouting verifies that the signature was routed to the correct partition.
