@@ -97,6 +97,9 @@ func checkSequence2(a, b *protocol.PartitionInfo, bad map[Dir]bool, kind string,
 		color.Red("🗴 %s → %s has %d unreceived %s\n", a.ID, b.ID, ab.Produced-ba.Received, kind)
 		bad[Dir{From: a.ID, To: b.ID}] = true
 	}
+	if a == b {
+		return
+	}
 	if ba.Produced > ab.Received {
 		color.Red("🗴 %s → %s has %d unreceived %s\n", b.ID, a.ID, ba.Produced-ab.Received, kind)
 		bad[Dir{From: b.ID, To: a.ID}] = true

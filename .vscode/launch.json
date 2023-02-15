@@ -354,6 +354,19 @@
       ]
     },
     {
+      "name": "Debug sequence",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "sequence",
+        "mainnet",
+      ]
+    },
+    {
       "name": "Lint",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
