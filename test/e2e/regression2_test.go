@@ -653,8 +653,7 @@ func TestMissingPrincipal(t *testing.T) {
 	require.NoError(t, err)
 
 	st := sim.SubmitTxn(&messaging.Envelope{Transaction: []*Transaction{txn}, Signatures: []Signature{sig}})
-	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "missing principal")
+	require.EqualError(t, st.AsError(), "missing principal")
 }
 
 // TestOldExec runs a basic simulator test with the V1 executor to ensure that

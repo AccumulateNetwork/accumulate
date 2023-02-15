@@ -50,8 +50,7 @@ func TestVersionSwitch(t *testing.T) {
 			Body(&PlaceholderTransaction{}).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
 
-	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "unsupported transaction type: placeholder")
+	require.EqualError(t, st.AsError(), "unsupported transaction type: placeholder")
 
 	// Execute
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
