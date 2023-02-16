@@ -39,20 +39,21 @@ type Signature interface {
 	Metadata() Signature
 }
 
-// InitiatorSignature is a type of signature that can initiate transactions with
-// a special initiator hash. This type of initiator hash has been deprecated.
-type InitiatorSignature interface {
+// UserSignature is a type of signature that can initiate transactions with a
+// special initiator hash. This type of initiator hash has been deprecated.
+type UserSignature interface {
+	Signature
 	Initiator() (hash.Hasher, error)
+	Verify(sigMdHash, hash []byte) bool
 }
 
 type KeySignature interface {
-	Signature
+	UserSignature
 	GetSignature() []byte
 	GetPublicKeyHash() []byte
 	GetPublicKey() []byte
 	GetSignerVersion() uint64
 	GetTimestamp() uint64
-	Verify(sigMdHash, hash []byte) bool
 }
 
 // IsSystem returns true if the signature type is a system signature type.
@@ -176,7 +177,7 @@ func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signatur
 			return true
 		}
 
-		init, ok := sig.(InitiatorSignature)
+		init, ok := sig.(UserSignature)
 		if !ok {
 			continue
 		}
@@ -959,7 +960,7 @@ func (s *DelegatedSignature) Initiator() (hash.Hasher, error) {
 		return nil, ErrCannotInitiate
 	}
 
-	init, ok := s.Signature.(InitiatorSignature)
+	init, ok := s.Signature.(UserSignature)
 	if !ok {
 		return nil, ErrCannotInitiate
 	}
