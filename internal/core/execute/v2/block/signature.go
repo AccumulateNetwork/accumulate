@@ -8,6 +8,7 @@ package block
 
 import (
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -37,6 +38,25 @@ func (x *Executor) processSignature2(batch *database.Batch, delivery *chain.Deli
 	return &ProcessSignatureState{}, nil
 }
 
+// checkRouting verifies that the signature was routed to the correct partition.
+func (x *Executor) checkRouting(delivery *chain.Delivery, signature protocol.Signature) error {
+	if signature.Type().IsSystem() {
+		return nil
+	}
+
+	if delivery.Transaction.Body.Type().IsUser() {
+		partition, err := x.Router.RouteAccount(signature.RoutingLocation())
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if !strings.EqualFold(partition, x.Describe.PartitionId) {
+			return errors.BadRequest.WithFormat("signature submitted to %v instead of %v", x.Describe.PartitionId, partition)
+		}
+	}
+
+	return nil
+}
+
 type sigExecMetadata = chain.SignatureValidationMetadata
 
 func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer2, error) {
@@ -50,7 +70,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			return nil, errors.UnknownError.WithFormat("process delegated signature: %w", err)
 		}
 		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
-			return nil, errors.BadRequest.WithFormat("invalid signature")
+			return nil, errors.Unauthenticated.WithFormat("invalid signature")
 		}
 
 		if !signature.Delegator.LocalTo(md.Location) {
@@ -84,7 +104,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 		// Basic validation
 		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
-			return nil, errors.BadRequest.WithFormat("invalid signature")
+			return nil, errors.Unauthenticated.WithFormat("invalid signature")
 		}
 
 		// Do not store anything if the set is within a forwarded delegated transaction
@@ -436,39 +456,6 @@ func (x *Executor) computeSignerFee(transaction *protocol.Transaction, signature
 	return fee, nil
 }
 
-// validateKeySignature validates a private key signature.
-func (x *Executor) validateKeySignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.KeySignature, md sigExecMetadata, checkAuthz bool) (protocol.Signer, error) {
-	// Validate the signer
-	signer, err := x.validateSigner(batch, delivery.Transaction, signature.GetSigner(), signature.RoutingLocation(), checkAuthz, md)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Load the signer and validate the signature against it
-	_, err = validateKeySignature(delivery.Transaction, signer, signature)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Do not charge fees for synthetic transactions
-	if !delivery.Transaction.Body.Type().IsUser() {
-		return signer, nil
-	}
-
-	// Ensure the signer has sufficient credits for the fee
-	fee, err := x.computeSignerFee(delivery.Transaction, signature, md)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	if !signer.CanDebitCredits(fee.AsUInt64()) {
-		return nil, errors.InsufficientCredits.WithFormat("%v has insufficient credits: have %s, want %s", signer.GetUrl(),
-			protocol.FormatAmount(signer.GetCreditBalance(), protocol.CreditPrecisionPower),
-			protocol.FormatAmount(fee.AsUInt64(), protocol.CreditPrecisionPower))
-	}
-
-	return signer, nil
-}
-
 func (x *Executor) processSigner(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature, md sigExecMetadata, checkAuthz bool) (protocol.Signer, error) {
 	signer, err := x.validateSigner(batch, transaction, signature.GetSigner(), md.Location, checkAuthz, md)
 	if err != nil {
@@ -535,30 +522,6 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	err = batch.Account(signer.GetUrl()).PutState(signer)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signer: %w", err)
-	}
-
-	return signer, nil
-}
-
-// validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
-func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, transaction *protocol.Transaction, seq *messaging.SequencedMessage, status *protocol.TransactionStatus) (protocol.Signer2, error) {
-	if seq == nil {
-		return nil, errors.BadRequest.With("missing sequencing info")
-	}
-	partition, ok := protocol.ParsePartitionUrl(seq.Source)
-	if !ok {
-		return nil, errors.BadRequest.With("partition signature source is not a partition")
-	}
-
-	signer := x.globals.Active.AsSigner(partition)
-
-	// TODO: Consider checking the version. However this can get messy because
-	// it takes some time for changes to propagate, so we'd need an activation
-	// height or something.
-
-	_, _, ok = signer.EntryByKeyHash(signature.GetPublicKeyHash())
-	if !ok {
-		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
 	return signer, nil
