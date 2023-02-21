@@ -20,6 +20,8 @@ import (
 // NewMessage creates a new Message for the specified MessageType.
 func NewMessage(typ MessageType) (Message, error) {
 	switch typ {
+	case MessageTypeBlockAnchor:
+		return new(BlockAnchor), nil
 	case MessageTypeSequenced:
 		return new(SequencedMessage), nil
 	case MessageTypeSynthetic:
@@ -28,8 +30,6 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(UserSignature), nil
 	case MessageTypeUserTransaction:
 		return new(UserTransaction), nil
-	case MessageTypeValidatorSignature:
-		return new(ValidatorSignature), nil
 	default:
 		return nil, fmt.Errorf("unknown message %v", typ)
 	}
@@ -41,6 +41,12 @@ func EqualMessage(a, b Message) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *BlockAnchor:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BlockAnchor)
+		return ok && a.Equal(b)
 	case *SequencedMessage:
 		if a == nil {
 			return b == nil
@@ -65,12 +71,6 @@ func EqualMessage(a, b Message) bool {
 		}
 		b, ok := b.(*UserTransaction)
 		return ok && a.Equal(b)
-	case *ValidatorSignature:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*ValidatorSignature)
-		return ok && a.Equal(b)
 	default:
 		return false
 	}
@@ -79,6 +79,8 @@ func EqualMessage(a, b Message) bool {
 // CopyMessage copies a Message.
 func CopyMessage(v Message) Message {
 	switch v := v.(type) {
+	case *BlockAnchor:
+		return v.Copy()
 	case *SequencedMessage:
 		return v.Copy()
 	case *SyntheticMessage:
@@ -86,8 +88,6 @@ func CopyMessage(v Message) Message {
 	case *UserSignature:
 		return v.Copy()
 	case *UserTransaction:
-		return v.Copy()
-	case *ValidatorSignature:
 		return v.Copy()
 	default:
 		return v.CopyAsInterface().(Message)
