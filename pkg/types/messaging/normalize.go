@@ -42,7 +42,9 @@ func (e *Envelope) Normalize() ([]Message, error) {
 				return nil, errors.UnknownError.WithFormat("message %d: %w", i, err)
 			}
 
-			unsigned[*(*[32]byte)(hash)] = struct{}{}
+			if !msg.Transaction.Body.Type().IsSynthetic() {
+				unsigned[*(*[32]byte)(hash)] = struct{}{}
+			}
 		}
 	}
 
