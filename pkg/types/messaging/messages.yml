@@ -76,15 +76,15 @@ SyntheticMessage:
       marshal-as: reference
       pointer: true
 
-ValidatorSignature:
+BlockAnchor:
   union: { type: message }
   fields:
     - name: Signature
       type: protocol.KeySignature
       marshal-as: union
-    - name: Source
-      type: url
-      pointer: true
+    - name: Anchor
+      type: Message
+      marshal-as: union
 
 # AuthoritySignature:
 #   union: { type: message }
