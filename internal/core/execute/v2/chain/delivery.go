@@ -82,6 +82,9 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 	}
 
 	for _, delivery := range deliveries {
+		if delivery.Transaction.Body.Type().IsSynthetic() {
+			continue
+		}
 		if len(delivery.Signatures) == 0 {
 			return nil, errors.BadRequest.WithFormat("transaction %x has no signatures", delivery.Transaction.GetHash()[:4])
 		}
