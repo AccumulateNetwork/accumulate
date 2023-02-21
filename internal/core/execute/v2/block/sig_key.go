@@ -8,6 +8,7 @@ package block
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,7 +35,7 @@ func (KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*prot
 
 	s, err := ctx.Executor.processSignature2(batch, &chain.Delivery{
 		Transaction: ctx.transaction,
-		Forwarded:   ctx.forwarded.Has(ctx.message.ID().Hash()),
+		Forwarded:   ctx.isWithin(internal.MessageTypeForwardedMessage),
 	}, ctx.signature)
 	ctx.Block.State.MergeSignature(s)
 	if err == nil {
