@@ -41,12 +41,12 @@ type Partition struct {
 	blockIndex uint64
 	blockTime  time.Time
 
-	submitHook       SubmitHookFunc
-	routerSubmitHook RouterSubmitHookFunc
+	submitHook SubmitHookFunc
+	blockHook  BlockHookFunc
 }
 
 type SubmitHookFunc func([]messaging.Message) (drop, keepHook bool)
-type RouterSubmitHookFunc func([]messaging.Message) (_ []messaging.Message, keepHook bool)
+type BlockHookFunc func(execute.BlockParams, []messaging.Message) (_ []messaging.Message, keepHook bool)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -129,10 +129,10 @@ func (p *Partition) SetSubmitHook(fn SubmitHookFunc) {
 	p.submitHook = fn
 }
 
-func (p *Partition) SetRouterSubmitHook(fn RouterSubmitHookFunc) {
+func (p *Partition) SetBlockHook(fn BlockHookFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.routerSubmitHook = fn
+	p.blockHook = fn
 }
 
 func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
@@ -211,6 +211,25 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 	return results[0], nil
 }
 
+func (p *Partition) applyBlockHook(messages []messaging.Message) []messaging.Message {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.blockHook == nil {
+		return messages
+	}
+
+	messages, keep := p.blockHook(execute.BlockParams{
+		Context: context.Background(),
+		Index:   p.blockIndex,
+		Time:    p.blockTime,
+	}, messages)
+	if !keep {
+		p.blockHook = nil
+	}
+	return messages
+}
+
 func (p *Partition) execute() error {
 	// TODO: Limit how many transactions are added to the block? Call recheck?
 	p.mu.Lock()
@@ -250,6 +269,8 @@ func (p *Partition) execute() error {
 	}
 	p.logger.Debug("Stepping", "block", p.blockIndex)
 
+	messages = p.applyBlockHook(messages)
+
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)
 	blocks := make([]execute.Block, len(p.nodes))
@@ -270,7 +291,13 @@ func (p *Partition) execute() error {
 	var err error
 	results := make([][]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
-		results[i], err = node.deliverTx(blocks[i], messages)
+		// Copy the messages to avoid interference between nodes
+		m := make([]messaging.Message, len(messages))
+		for i, msg := range messages {
+			m[i] = messaging.CopyMessage(msg)
+		}
+
+		results[i], err = node.deliverTx(blocks[i], m)
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
