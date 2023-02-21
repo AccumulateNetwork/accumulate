@@ -44,6 +44,20 @@ func registerSimpleExec[X ExecutorFor[T, V], T any, V interface{ Type() T }](lis
 	}
 }
 
+func unwrapMessageAs[T any](msg messaging.Message) (T, bool) {
+	for {
+		switch m := msg.(type) {
+		case T:
+			return m, true
+		case interface{ Unwrap() messaging.Message }:
+			msg = m.Unwrap()
+		default:
+			var z T
+			return z, false
+		}
+	}
+}
+
 // SignatureContext is the context in which a message is executed.
 type SignatureContext struct {
 	*MessageContext
