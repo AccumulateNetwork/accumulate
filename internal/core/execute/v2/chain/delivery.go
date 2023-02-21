@@ -10,7 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -83,6 +82,9 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 	}
 
 	for _, delivery := range deliveries {
+		if delivery.Transaction.Body.Type().IsSynthetic() {
+			continue
+		}
 		if len(delivery.Signatures) == 0 {
 			return nil, errors.BadRequest.WithFormat("transaction %x has no signatures", delivery.Transaction.GetHash()[:4])
 		}
@@ -156,31 +158,4 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	}
 
 	return status, nil
-}
-
-// CLONE of the same function from block - TODO remove once chain and block
-// packages are merged
-func getSequence(batch *database.Batch, id *url.TxID) (*messaging.SequencedMessage, error) {
-	causes, err := batch.Message(id.Hash()).Cause().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load causes: %w", err)
-	}
-
-	for _, id := range causes {
-		msg, err := batch.Message(id.Hash()).Main().Get()
-		switch {
-		case err == nil:
-			// Ok
-		case errors.Is(err, errors.NotFound):
-			continue
-		default:
-			return nil, errors.UnknownError.WithFormat("load message: %w", err)
-		}
-
-		if seq, ok := msg.(*messaging.SequencedMessage); ok {
-			return seq, nil
-		}
-	}
-
-	return nil, errors.NotFound.WithFormat("no cause of %v is a sequenced message", id)
 }

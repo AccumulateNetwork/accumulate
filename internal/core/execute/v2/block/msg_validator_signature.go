@@ -127,9 +127,8 @@ func (x ValidatorSignature) check(ctx *MessageContext, batch *database.Batch, si
 		return nil, nil, errors.UnknownError.Wrap(err)
 	}
 
-	// A validator signature message is only allowed for synthetic and anchor
-	// transactions
-	if typ := txn.GetTransaction().Body.Type(); !typ.IsSynthetic() && !typ.IsAnchor() {
+	// A validator signature message is only allowed for anchors
+	if typ := txn.GetTransaction().Body.Type(); !typ.IsAnchor() {
 		return nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", typ, sig.Type())
 	}
 

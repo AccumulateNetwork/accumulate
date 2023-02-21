@@ -614,29 +614,3 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 
 	return signer, nil
 }
-
-func hasKeySignature(batch *database.Batch, status *protocol.TransactionStatus) (bool, error) {
-	h := status.TxID.Hash()
-	transaction := batch.Transaction(h[:])
-	for _, signer := range status.Signers {
-		// Load the signature set
-		sigset, err := transaction.ReadSignaturesForSigner(signer)
-		if err != nil {
-			return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
-		}
-
-		for _, e := range sigset.Entries() {
-			var sig messaging.MessageWithSignature
-			err = batch.Message(e.SignatureHash).Main().GetAs(&sig)
-			if err != nil {
-				return false, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
-			}
-
-			if _, ok := sig.GetSignature().(protocol.KeySignature); ok {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
