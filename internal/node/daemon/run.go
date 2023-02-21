@@ -228,6 +228,15 @@ func (d *Daemon) Start() (err error) {
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
+	chGlobals := make(chan *core.GlobalValues, 1)
+	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
+		select {
+		case chGlobals <- e.New:
+		default:
+		}
+		return nil
+	})
+
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
 	dialer := &dialer{ready: make(chan struct{})}
 	client := &message.Client{Dialer: dialer, Router: routing.MessageRouter{Router: router}}
@@ -320,6 +329,10 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
 
+	// Wait for the executor to finish loading everything
+	globals := <-chGlobals
+
+	// Initialize all the services
 	nodeSvc := tm.NewNodeService(tm.NodeServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
@@ -360,6 +373,14 @@ func (d *Daemon) Start() (err error) {
 		Partition: d.Config.Accumulate.PartitionId,
 		EventBus:  d.eventBus,
 	})
+	sequencerSvc := api.NewSequencer(api.SequencerParams{
+		Logger:       d.Logger.With("module", "acc-rpc"),
+		Database:     d.db,
+		EventBus:     d.eventBus,
+		Partition:    d.Config.Accumulate.PartitionId,
+		Globals:      globals,
+		ValidatorKey: d.Key().Bytes(),
+	})
 	messageHandler, err := message.NewHandler(
 		d.Logger.With("module", "acc-rpc"),
 		&message.NodeService{NodeService: nodeSvc},
@@ -369,11 +390,13 @@ func (d *Daemon) Start() (err error) {
 		&message.Submitter{Submitter: submitSvc},
 		&message.Validator{Validator: validateSvc},
 		&message.EventService{EventService: eventSvc},
+		&message.Sequencer{Sequencer: sequencerSvc},
 	)
 	if err != nil {
 		return fmt.Errorf("initialize P2P handler: %w", err)
 	}
 
+	// Setup the p2p node
 	d.p2pnode, err = p2p.New(p2p.Options{
 		Logger:         d.Logger.With("module", "acc-rpc"),
 		Listen:         d.Config.Accumulate.P2P.Listen,
@@ -391,6 +414,7 @@ func (d *Daemon) Start() (err error) {
 		submitSvc,
 		validateSvc,
 		eventSvc,
+		sequencerSvc,
 	}
 	for _, s := range services {
 		d.p2pnode.RegisterService(&v3.ServiceAddress{
