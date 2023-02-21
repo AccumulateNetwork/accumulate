@@ -816,6 +816,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			res := new(MultiResponse)
 			res.Type = "pending"
 			res.Total = r.Total
+			res.Items = make([]any, len(r.Records))
 			for i, txid := range r.Records {
 				txid := txid.Value.Hash()
 				res.Items[i] = hex.EncodeToString(txid[:])
