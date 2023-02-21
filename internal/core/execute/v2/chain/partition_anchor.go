@@ -8,12 +8,9 @@ package chain
 
 import (
 	"fmt"
-	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -111,37 +108,6 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 			st.State.MakeMajorBlockTime = ledger.MajorBlockTime
 		}
 		return nil, nil
-	}
-
-	// Process pending synthetic transactions sent to the DN
-	var txids []*url.TxID
-	var sequence = map[*url.TxID]int{}
-	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(body.RootChainAnchor)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
-	}
-	for _, txid := range synth {
-		var txn messaging.MessageWithTransaction
-		err = st.batch.Message(txid.Hash()).Main().GetAs(&txn)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-		}
-
-		seq, err := getSequence(st.batch, txid)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
-		}
-
-		sequence[txid] = int(seq.Number)
-		txids = append(txids, txid)
-	}
-
-	// Submit the transactions, sorted
-	sort.Slice(txids, func(i, j int) bool {
-		return sequence[txids[i]] < sequence[txids[j]]
-	})
-	for _, id := range txids {
-		st.State.ProcessTransaction(id)
 	}
 
 	return nil, nil
