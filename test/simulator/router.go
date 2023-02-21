@@ -127,16 +127,6 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *messagi
 		msgById[msg.ID().Hash()] = msg
 	}
 
-	p.mu.Lock()
-	if p.routerSubmitHook != nil {
-		var keep bool
-		messages, keep = p.routerSubmitHook(messages)
-		if !keep {
-			p.routerSubmitHook = nil
-		}
-	}
-	p.mu.Unlock()
-
 	resp := new(routing.ResponseSubmit)
 	results, err := p.Submit(messages, pretend)
 	if err != nil {
