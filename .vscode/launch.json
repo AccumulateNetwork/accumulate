@@ -403,14 +403,29 @@
       "port": 2345,
       "host": "127.0.0.1",
       "substitutePath": [
+        // // Full paths (GitLab Docker build)
+        // {
+        //   "to": "/go/",
+        //   "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
+        // },
+        // {
+        //   "to": "/root/",
+        //   "from": "${workspaceFolder}",
+        // },
+
+        // Trimmed paths
         {
-          "to": "/go/",
-          "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
+          "to": "gitlab.com/accumulatenetwork/accumulate/",
+          "from": "${workspaceFolder}/",
         },
         {
-          "to": "/root/",
-          "from": "${workspaceFolder}",
+          "to": "github.com/AccumulateNetwork/",
+          "from": "${env:HOME}/go/pkg/mod/github.com/!accumulate!network/", // <-- MODIFY THIS if you're not using the default GOPATH
         },
+        // {
+        //   "to": "",
+        //   "from": "${env:HOME}/go/pkg/mod/", // <-- MODIFY THIS if you're not using the default GOPATH
+        // },
       ],
     },
     {
