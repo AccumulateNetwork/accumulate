@@ -45,19 +45,20 @@ func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*p
 
 	batch = batch.Begin(true)
 	defer batch.Discard()
+
+	// Resolve and store the transaction
+	var err error
 	ctx2 := ctx.txnWith(txn.Transaction)
+	ctx2.transaction, err = x.storeTransaction(batch, ctx, txn)
+	if err != nil {
+		if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
+			return protocol.NewErrorStatus(txn.ID(), err), nil
+		}
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	// Check the transaction, but only if it was not internally produced
-	var err error
 	if !ctx.isWithin(internal.MessageTypeMessageIsReady, internal.MessageTypeNetworkUpdate) {
-		ctx2.transaction, err = storeTransaction(batch, ctx, txn)
-		if err != nil {
-			if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
-				return protocol.NewErrorStatus(txn.ID(), err), nil
-			}
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
 		st, err := x.checkTransaction(batch, ctx2)
 		if err != nil || st.Failed() {
 			return st, err
@@ -82,7 +83,7 @@ func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*p
 	return status, nil
 }
 
-func storeTransaction(batch *database.Batch, ctx *MessageContext, msg messaging.MessageWithTransaction) (*protocol.Transaction, error) {
+func (x UserTransaction) storeTransaction(batch *database.Batch, ctx *MessageContext, msg *messaging.UserTransaction) (*protocol.Transaction, error) {
 	txn := msg.GetTransaction()
 	record := batch.Message(txn.ID().Hash())
 
@@ -91,28 +92,12 @@ func storeTransaction(batch *database.Batch, ctx *MessageContext, msg messaging.
 		return nil, errors.BadRequest.WithFormat("a %v transaction must be sequenced", typ)
 	}
 
-	isRemote := txn.Body.Type() == protocol.TransactionTypeRemote
-	s, err := record.Main().Get()
-	s2, isTxn := s.(messaging.MessageWithTransaction)
-	switch {
-	case errors.Is(err, errors.NotFound) && !isRemote:
-		// Store the transaction
-
-	case err != nil:
-		// Unknown error or remote transaction with no local copy
-		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-
-	case !isTxn:
-		// It's not a transaction
-		return nil, errors.BadRequest.With("not a transaction")
-
-	case isRemote || s2.GetTransaction().Equal(txn):
-		// Transaction has already been recorded
-		return s2.GetTransaction(), nil
-
-	default:
-		// This should be impossible
-		return nil, errors.InternalError.WithFormat("submitted transaction does not match the locally stored transaction")
+	new, err := x.resolveTransaction(batch, msg)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if !new {
+		return txn, nil
 	}
 
 	// If we reach this point, Validate should have verified that there is a
@@ -123,6 +108,38 @@ func storeTransaction(batch *database.Batch, ctx *MessageContext, msg messaging.
 	}
 
 	return txn, nil
+}
+
+func (UserTransaction) resolveTransaction(batch *database.Batch, msg *messaging.UserTransaction) (bool, error) {
+	isRemote := msg.GetTransaction().Body.Type() == protocol.TransactionTypeRemote
+	s, err := batch.Message(msg.ID().Hash()).Main().Get()
+	s2, isTxn := s.(*messaging.UserTransaction)
+	switch {
+	case errors.Is(err, errors.NotFound) && !isRemote:
+		// Store the transaction
+		return true, nil
+
+	case err != nil:
+		// Unknown error or remote transaction with no local copy
+		return false, errors.UnknownError.WithFormat("load transaction: %w", err)
+
+	case !isTxn:
+		// It's not a transaction
+		return false, errors.BadRequest.With("not a transaction")
+
+	case isRemote:
+		// Resolved remote transaction from database
+		msg.Transaction = s2.GetTransaction()
+		return false, nil
+
+	case s2.Equal(msg):
+		// Transaction has already been recorded
+		return false, nil
+
+	default:
+		// This should be impossible
+		return false, errors.InternalError.WithFormat("submitted transaction does not match the locally stored transaction")
+	}
 }
 
 func (UserTransaction) checkTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
