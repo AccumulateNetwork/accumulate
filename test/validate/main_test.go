@@ -26,6 +26,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -667,23 +668,15 @@ func (s *ValidationTestSuite) TestMain() {
 	var dropped *url.TxID
 	if s.sim != nil {
 		s.TB.Log("Drop the next anchor")
-		s.sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop bool, keepHook bool) {
-			for _, msg := range messages {
-				seq, ok := msg.(*messaging.SequencedMessage)
-				if !ok {
-					continue
+		s.sim.SetBlockHook(Directory, func(_ execute.BlockParams, messages []messaging.Message) (_ []messaging.Message, keepHook bool) {
+			// Drop all block anchors, once
+			for i := 0; i < len(messages); i++ {
+				if anchor, ok := messages[i].(*messaging.BlockAnchor); ok {
+					messages = append(messages[:i], messages[i+1:]...)
+					dropped = anchor.Anchor.(*messaging.SequencedMessage).Message.ID()
 				}
-				txn, ok := seq.Message.(*messaging.UserTransaction)
-				if !ok {
-					continue
-				}
-				if !txn.Transaction.Body.Type().IsAnchor() {
-					continue
-				}
-				dropped = txn.ID()
-				return true, false
 			}
-			return false, true
+			return messages, dropped == nil
 		})
 
 		defer func() {

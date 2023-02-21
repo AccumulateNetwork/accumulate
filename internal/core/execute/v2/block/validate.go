@@ -237,14 +237,17 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		}
 
 	case protocol.KeySignature:
+		hash := delivery.Transaction.GetHash()
 		if delivery.Transaction.Body.Type().IsUser() {
 			signer, err = x.validateKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 		} else {
+			h := delivery.Sequence.Hash()
+			hash = h[:]
 			signer, err = x.validatePartitionSignature(signature, delivery.Transaction, delivery.Sequence, status)
 		}
 
 		// Basic validation
-		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(nil, hash) {
 			return nil, errors.BadRequest.With("invalid")
 		}
 
