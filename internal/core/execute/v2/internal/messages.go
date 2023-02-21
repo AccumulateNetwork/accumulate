@@ -30,9 +30,9 @@ const (
 	// partition.
 	MessageTypeForwardedMessage
 
-	// MessageTypeTransactionIsReady indicates that a transaction is ready to be
-	// executed.
-	MessageTypeTransactionIsReady
+	// MessageTypeMessageIsReady indicates that a message is ready to be
+	// processed.
+	MessageTypeMessageIsReady
 )
 
 // NetworkUpdate is an update to a network account that has been pushed from the
@@ -50,8 +50,8 @@ type ForwardedMessage struct {
 	Message messaging.Message
 }
 
-// TransactionIsReady indicates that ta transaction is ready to be executed.
-type TransactionIsReady struct {
+// MessageIsReady indicates that ta transaction is ready to be executed.
+type MessageIsReady struct {
 	internalMessage
 	TxID *url.TxID
 }
@@ -64,9 +64,9 @@ func (m *ForwardedMessage) Type() messaging.MessageType { return MessageTypeForw
 func (m *ForwardedMessage) ID() *url.TxID               { return m.Message.ID() }
 func (m *ForwardedMessage) CopyAsInterface() any        { return m }
 
-func (m *TransactionIsReady) Type() messaging.MessageType { return MessageTypeTransactionIsReady }
-func (m *TransactionIsReady) ID() *url.TxID               { return m.TxID }
-func (m *TransactionIsReady) CopyAsInterface() any        { return m }
+func (m *MessageIsReady) Type() messaging.MessageType { return MessageTypeMessageIsReady }
+func (m *MessageIsReady) ID() *url.TxID               { return m.TxID }
+func (m *MessageIsReady) CopyAsInterface() any        { return m }
 
 // internalMessage can be embedded in another type to implement an internal
 // [messaging.Message]. The message is internal in that it cannot be marshalled,

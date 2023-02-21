@@ -16,10 +16,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-func (s *TransactionStatus) Delivered() bool { return s.Code == errors.Delivered || s.Failed() }
-func (s *TransactionStatus) Remote() bool    { return s.Code == errors.Remote }
-func (s *TransactionStatus) Pending() bool   { return s.Code == errors.Pending }
-func (s *TransactionStatus) Failed() bool    { return !s.Code.Success() }
+func (s *TransactionStatus) Delivered() bool {
+	return s != nil && (s.Code == errors.Delivered || s.Failed())
+}
+
+func (s *TransactionStatus) Remote() bool    { return s != nil && s.Code == errors.Remote }
+func (s *TransactionStatus) Pending() bool   { return s != nil && s.Code == errors.Pending }
+func (s *TransactionStatus) Failed() bool    { return s != nil && !s.Code.Success() }
 func (s *TransactionStatus) CodeNum() uint64 { return uint64(s.Code) }
 
 // Set sets the status code and the error.
