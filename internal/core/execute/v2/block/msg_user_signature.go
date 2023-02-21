@@ -46,19 +46,14 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), sig.Type())
 	}
 
-	// Process the transaction if it is synthetic or system, or the signature is
-	// internal, or the signature is local to the principal
-	signature, transaction := sig.Signature, txn
-	if signature.RoutingLocation().LocalTo(transaction.Header.Principal) {
-		ctx.transactionsToProcess.Add(transaction.ID().Hash())
-	}
-
-	status, err := ctx.callSignatureExecutor(batch, ctx.sigWith(signature, transaction))
+	// Process the signature
+	status, err := ctx.callSignatureExecutor(batch, ctx.sigWith(sig.Signature, txn))
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Always record the signature and status
+	signature := sig.Signature
 	if sig, ok := signature.(*protocol.RemoteSignature); ok {
 		signature = sig.Signature
 	}
@@ -69,6 +64,15 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	err = batch.Transaction(signature.Hash()).Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature status: %w", err)
+	}
+
+	// Process the transaction if the signature does not fail and is local to
+	// the principal
+	if !status.Failed() && sig.Signature.RoutingLocation().LocalTo(txn.Header.Principal) {
+		_, err := ctx.callMessageExecutor(batch, ctx.childWith(&messaging.UserTransaction{Transaction: txn}))
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 	}
 
 	err = batch.Commit()
