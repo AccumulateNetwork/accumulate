@@ -33,6 +33,7 @@ PeerInfo:
 
 ServiceAddress:
   incomparable: true
+  non-binary: true
   fields:
     - name: Type
       type: ServiceType
@@ -40,3 +41,10 @@ ServiceAddress:
     - name: Partition
       type: string
       optional: true
+    - name: extraData
+      type: bytes
+      marshal-as: none
+    - name: fieldsSet
+      type: boolean
+      repeatable: true
+      marshal-as: none
