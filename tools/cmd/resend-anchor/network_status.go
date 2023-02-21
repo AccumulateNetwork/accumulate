@@ -12,7 +12,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
-	"net/url"
+	stdurl "net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -56,6 +57,28 @@ func (n NodeData) AccumulateAPI(offset uint64) *client.Client {
 	c, err := client.New(fmt.Sprintf("http://%s:%d", n.Hostname, n.BasePort+offset+uint64(config.PortOffsetAccumulateApi)))
 	checkf(err, "client for %s", n.Hostname)
 	return c
+}
+
+func (n NodeData) AccumulateAPIForPartition(id string) *client.Client {
+	// Get the port offset for the partition
+	var offset uint64
+	if strings.EqualFold(protocol.Directory, id) {
+		offset = config.PortOffsetDirectory
+	} else {
+		offset = config.PortOffsetBlockValidator
+	}
+
+	return n.AccumulateAPI(offset)
+}
+
+func (n NodeData) AccumulateAPIForUrl(u *url.URL) *client.Client {
+	// Get the partition ID
+	id, ok := protocol.ParsePartitionUrl(u)
+	if !ok {
+		fatalf("%v is not a partition", u)
+	}
+
+	return n.AccumulateAPIForPartition(id)
 }
 
 func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
@@ -160,7 +183,7 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 				if !strings.Contains(addr, "://") {
 					addr = "tcp://" + addr
 				}
-				u, err := url.Parse(addr)
+				u, err := stdurl.Parse(addr)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Invalid peer: bad listen address: %q", peer.NodeInfo.ListenAddr)
 					continue
@@ -209,7 +232,7 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 }
 
 func parseAddr(s string) (string, uint64) {
-	u, err := url.Parse(s)
+	u, err := stdurl.Parse(s)
 	checkf(err, "parse url %q", s)
 
 	port, err := strconv.ParseUint(u.Port(), 10, 64)
