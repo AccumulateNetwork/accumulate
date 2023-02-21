@@ -74,9 +74,6 @@ func (SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	if st != nil && st.Failed() {
-		return st, nil
-	}
 
 	err = batch.Commit()
 	if err != nil {

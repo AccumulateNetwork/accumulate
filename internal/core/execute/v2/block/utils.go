@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
@@ -32,34 +31,6 @@ func (s set[T]) Remove(v T) { delete(s, v) }
 
 // Hash checks if the set has the given value.
 func (s set[T]) Has(v T) bool { _, ok := s[v]; return ok }
-
-// hashSet is an ordered set of 32-byte hashes.
-type hashSet [][32]byte
-
-// Add inserts a hash into the set.
-func (l *hashSet) Add(v [32]byte) {
-	ptr, new := sortutil.BinaryInsert((*[][32]byte)(l), func(u [32]byte) int {
-		return bytes.Compare(u[:], v[:])
-	})
-	if new {
-		*ptr = v
-	}
-}
-
-// Remove removes a hash from the set.
-func (l *hashSet) Remove(v [32]byte) {
-	sortutil.Remove((*[][32]byte)(l), func(u [32]byte) int {
-		return bytes.Compare(u[:], v[:])
-	})
-}
-
-// Hash checks if the set has the given hash.
-func (l hashSet) Has(v [32]byte) bool {
-	_, ok := sortutil.Search(([][32]byte)(l), func(u [32]byte) int {
-		return bytes.Compare(u[:], v[:])
-	})
-	return ok
-}
 
 // orderedMap is an ordered map from K to V implemented with a builtin map,
 // slice of keys, and comparison function.

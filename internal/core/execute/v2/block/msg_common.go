@@ -32,7 +32,8 @@ func (m *MessageContext) childWith(msg messaging.Message) *MessageContext {
 	return n
 }
 
-// sigWith constructs a signature context from this message context for the given signature and transaction.
+// sigWith constructs a signature context from this message context for the
+// given signature and transaction.
 func (m *MessageContext) sigWith(sig protocol.Signature, txn *protocol.Transaction) *SignatureContext {
 	s := new(SignatureContext)
 	s.MessageContext = m
@@ -41,15 +42,46 @@ func (m *MessageContext) sigWith(sig protocol.Signature, txn *protocol.Transacti
 	return s
 }
 
+// txnWith constructs a transaction context from this message context for the
+// given transaction.
+func (m *MessageContext) txnWith(txn *protocol.Transaction) *TransactionContext {
+	t := new(TransactionContext)
+	t.MessageContext = m
+	t.transaction = txn
+	return t
+}
+
 // isWithin returns true if the given message type appears somewhere in the
 // message chain.
-func (m *MessageContext) isWithin(typ messaging.MessageType) bool {
+func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 	for m := m; m != nil; m = m.parent {
-		if m.message.Type() == typ {
-			return true
+		for _, typ := range typ {
+			if m.message.Type() == typ {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// shouldExecuteTransaction checks if this context is one that is safe to
+// execute a transaction within.
+//
+// This is some seriously questionable logic but I can't think of anything
+// better right now.
+func (m *MessageContext) shouldExecuteTransaction() bool {
+	for {
+		// Do not execute a transaction from within a bare transaction message
+		if m.parent == nil {
+			return false
+		}
+
+		// Do not execute a transaction from within a bare sequenced message
+		if m.parent.Type() != messaging.MessageTypeSequenced {
+			return true
+		}
+		m = m.parent
+	}
 }
 
 // getSequence gets the [message.SequencedMessage] cause of the given message, if one exists.
