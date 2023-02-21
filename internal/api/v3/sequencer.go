@@ -61,6 +61,8 @@ func NewSequencer(params SequencerParams) *Sequencer {
 	return s
 }
 
+func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
+
 func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
 	if !s.partition.URL.ParentOf(src) {
 		return nil, errors.BadRequest.WithFormat("requested source is %s but this partition is %s", src.RootIdentity(), s.partitionID)
