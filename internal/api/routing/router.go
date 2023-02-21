@@ -214,6 +214,9 @@ func routeMessage(routeAccount func(*url.URL) (string, error), route *string, ms
 	case *messaging.SequencedMessage:
 		r, err = routeAccount(msg.Destination)
 
+	case *messaging.BlockAnchor:
+		return routeMessage(routeAccount, route, msg.Anchor)
+
 	default:
 		return nil
 	}
