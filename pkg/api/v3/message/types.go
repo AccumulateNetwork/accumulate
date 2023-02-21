@@ -12,6 +12,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
+//go:generate go run github.com/vektra/mockery/v2
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w mocks
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package message enums.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --elide-package-type --package message messages.yml private.yml --reference ../options.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --elide-package-type --package message --language go-union --out unions_gen.go messages.yml private.yml --reference ../options.yml
