@@ -53,7 +53,18 @@ func (m *MessageContext) isWithin(typ messaging.MessageType) bool {
 }
 
 // getSequence gets the [message.SequencedMessage] cause of the given message, if one exists.
-func getSequence(batch *database.Batch, id *url.TxID) (*messaging.SequencedMessage, error) {
+func (b *bundle) getSequence(batch *database.Batch, id *url.TxID) (*messaging.SequencedMessage, error) {
+	// Look in the bundle
+	if b != nil {
+		for _, msg := range b.messages {
+			seq, ok := unwrapMessageAs[*messaging.SequencedMessage](msg)
+			if ok && seq.Message.ID().Hash() == id.Hash() {
+				return seq, nil
+			}
+		}
+	}
+
+	// Look in the database
 	causes, err := batch.Message(id.Hash()).Cause().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load causes: %w", err)
@@ -76,4 +87,26 @@ func getSequence(batch *database.Batch, id *url.TxID) (*messaging.SequencedMessa
 	}
 
 	return nil, errors.NotFound.WithFormat("no cause of %v is a sequenced message", id)
+}
+
+// getTransaction loads a transaction from the database or from the message bundle.
+func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol.Transaction, error) {
+	// Look in the bundle
+	for _, msg := range b.messages {
+		txn, ok := unwrapMessageAs[messaging.MessageWithTransaction](msg)
+		if ok &&
+			txn.GetTransaction().Body.Type() != protocol.TransactionTypeRemote &&
+			txn.Hash() == hash {
+			return txn.GetTransaction(), nil
+		}
+	}
+
+	// Look in the database
+	var txn messaging.MessageWithTransaction
+	err := batch.Message(hash).Main().GetAs(&txn)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return txn.GetTransaction(), nil
 }
