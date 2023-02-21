@@ -120,9 +120,9 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		service.Type = private.ServiceTypeSequencer
 
 		var ok bool
-		service.Partition, ok = protocol.ParsePartitionUrl(msg.Destination)
+		service.Partition, ok = protocol.ParsePartitionUrl(msg.Source)
 		if !ok {
-			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Destination)
+			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Source)
 		}
 
 	default:
