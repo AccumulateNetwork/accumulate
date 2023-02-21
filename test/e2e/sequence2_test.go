@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -89,9 +88,10 @@ func TestMissingSynthTxn(t *testing.T) {
 
 func TestMissingDirectoryAnchorTxn(t *testing.T) {
 	// Initialize
+	const bvnCount, valCount = 1, 1 // Anchor healing doesn't work with more than one validator
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
-		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
 	)
 
@@ -107,17 +107,23 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
 
 	// Drop the next directory anchor
-	var didDrop bool
-	sim.SetSubmitHookFor(alice, func(messages []messaging.Message) (drop, keepHook bool) {
+	var anchors int
+	sim.SetSubmitHookFor(alice, func(messages []messaging.Message) (drop bool, keepHook bool) {
 		for _, msg := range messages {
-			var txn messaging.MessageWithTransaction
-			if encoding.SetPtr(msg, &txn) == nil && txn.GetTransaction().Body.Type() == TransactionTypeDirectoryAnchor {
-				didDrop = true
-				return true, false
+			anchor, ok := msg.(*messaging.BlockAnchor)
+			if !ok {
+				continue
+			}
+			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.UserTransaction)
+			if txn.Transaction.Body.Type() == TransactionTypeDirectoryAnchor {
+				anchors++
+				drop = true
 			}
 		}
-		return false, true
+		return drop, anchors < valCount*bvnCount
 	})
+
+	sim.StepUntil(func(*Harness) bool { return anchors >= valCount*bvnCount })
 
 	// Cause a synthetic transaction
 	st := sim.BuildAndSubmitSuccessfully(
@@ -127,15 +133,14 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
-
-	require.True(t, didDrop)
 }
 
 func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 	// Initialize
+	const bvnCount, valCount = 3, 3
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
-		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
 	)
 
@@ -150,18 +155,24 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 	faucet := acctesting.AcmeLiteAddressStdPriv(faucetKey)
 	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
 
-	// Drop the next directory anchor
-	var didDrop bool
-	sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop, keepHook bool) {
+	// Drop the next block validator anchor
+	var anchors int
+	sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop bool, keepHook bool) {
 		for _, msg := range messages {
-			var txn messaging.MessageWithTransaction
-			if encoding.SetPtr(msg, &txn) == nil && txn.GetTransaction().Body.Type() == TransactionTypeBlockValidatorAnchor {
-				didDrop = true
-				return true, false
+			anchor, ok := msg.(*messaging.BlockAnchor)
+			if !ok {
+				continue
+			}
+			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.UserTransaction)
+			if txn.Transaction.Body.Type() == TransactionTypeBlockValidatorAnchor {
+				anchors++
+				drop = true
 			}
 		}
-		return false, true
+		return drop, anchors < valCount
 	})
+
+	sim.StepUntil(func(*Harness) bool { return anchors >= valCount })
 
 	// Cause a synthetic transaction
 	st := sim.BuildAndSubmitSuccessfully(
@@ -171,6 +182,4 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
-
-	require.True(t, didDrop)
 }

@@ -80,6 +80,16 @@ func (s *Sim) SetSubmitHookFor(account *url.URL, fn simulator.SubmitHookFunc) {
 	s.s.SetSubmitHookFor(account, fn)
 }
 
+// SetBlockHook calls Simulator.SetBlockHook.
+func (s *Sim) SetBlockHook(partition string, fn simulator.BlockHookFunc) {
+	s.s.SetBlockHook(partition, fn)
+}
+
+// SetBlockHookFor calls Simulator.SetBlockHookFor.
+func (s *Sim) SetBlockHookFor(account *url.URL, fn simulator.BlockHookFunc) {
+	s.s.SetBlockHookFor(account, fn)
+}
+
 // SignWithNode calls Simulator.SignWithNode.
 func (s *Sim) SignWithNode(partition string, i int) signing.Signer {
 	return s.s.SignWithNode(partition, i)

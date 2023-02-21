@@ -501,31 +501,27 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	txn.Header.Principal = destPartUrl.JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
 
+	seq := &messaging.SequencedMessage{
+		Message:     &messaging.UserTransaction{Transaction: txn},
+		Source:      x.Describe.NodeUrl(),
+		Destination: destPartUrl,
+		Number:      sequenceNumber,
+	}
+
 	// Create a key signature
-	keySig, err := x.signTransaction(txn.GetHash())
+	h := seq.Hash()
+	keySig, err := x.signTransaction(h[:])
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	messages := []messaging.Message{
-		// Since anchors don't require proofs, they're not synthetic so we
-		// pretend like they're user transactions
-		&messaging.SequencedMessage{
-			Message: &messaging.UserTransaction{
-				Transaction: txn,
-			},
-			Source:      x.Describe.NodeUrl(),
-			Destination: destPartUrl,
-			Number:      sequenceNumber,
-		},
-		&messaging.ValidatorSignature{
-			Signature: keySig,
-			Source:    x.Describe.NodeUrl(),
-		},
+	msg := &messaging.BlockAnchor{
+		Anchor:    seq,
+		Signature: keySig,
 	}
 
 	// Dispatch the envelope
-	env := &messaging.Envelope{Messages: messages}
+	env := &messaging.Envelope{Messages: []messaging.Message{msg}}
 	err = x.mainDispatcher.Submit(context.Background(), destPartUrl, env)
 	return errors.UnknownError.Wrap(err)
 }

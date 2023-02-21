@@ -23,6 +23,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type BlockAnchor struct {
+	fieldsSet []bool
+	Signature protocol.KeySignature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Anchor    Message               `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	extraData []byte
+}
+
 type Envelope struct {
 	fieldsSet   []bool
 	Signatures  []protocol.Signature    `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
@@ -64,12 +71,7 @@ type UserTransaction struct {
 	extraData   []byte
 }
 
-type ValidatorSignature struct {
-	fieldsSet []bool
-	Signature protocol.KeySignature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	Source    *url.URL              `json:"source,omitempty" form:"source" query:"source" validate:"required"`
-	extraData []byte
-}
+func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
 
 func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
 
@@ -79,7 +81,20 @@ func (*UserSignature) Type() MessageType { return MessageTypeUserSignature }
 
 func (*UserTransaction) Type() MessageType { return MessageTypeUserTransaction }
 
-func (*ValidatorSignature) Type() MessageType { return MessageTypeValidatorSignature }
+func (v *BlockAnchor) Copy() *BlockAnchor {
+	u := new(BlockAnchor)
+
+	if v.Signature != nil {
+		u.Signature = protocol.CopyKeySignature(v.Signature)
+	}
+	if v.Anchor != nil {
+		u.Anchor = CopyMessage(v.Anchor)
+	}
+
+	return u
+}
+
+func (v *BlockAnchor) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Envelope) Copy() *Envelope {
 	u := new(Envelope)
@@ -170,20 +185,16 @@ func (v *UserTransaction) Copy() *UserTransaction {
 
 func (v *UserTransaction) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *ValidatorSignature) Copy() *ValidatorSignature {
-	u := new(ValidatorSignature)
-
-	if v.Signature != nil {
-		u.Signature = protocol.CopyKeySignature(v.Signature)
+func (v *BlockAnchor) Equal(u *BlockAnchor) bool {
+	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
+		return false
 	}
-	if v.Source != nil {
-		u.Source = v.Source
+	if !(EqualMessage(v.Anchor, u.Anchor)) {
+		return false
 	}
 
-	return u
+	return true
 }
-
-func (v *ValidatorSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Envelope) Equal(u *Envelope) bool {
 	if len(v.Signatures) != len(u.Signatures) {
@@ -289,20 +300,57 @@ func (v *UserTransaction) Equal(u *UserTransaction) bool {
 	return true
 }
 
-func (v *ValidatorSignature) Equal(u *ValidatorSignature) bool {
-	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
-		return false
+var fieldNames_BlockAnchor = []string{
+	1: "Type",
+	2: "Signature",
+	3: "Anchor",
+}
+
+func (v *BlockAnchor) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
-	switch {
-	case v.Source == u.Source:
-		// equal
-	case v.Source == nil || u.Source == nil:
-		return false
-	case !((v.Source).Equal(u.Source)):
-		return false
+	if !(EqualMessage(v.Anchor, nil)) {
+		writer.WriteValue(3, v.Anchor.MarshalBinary)
 	}
 
-	return true
+	_, _, err := writer.Reset(fieldNames_BlockAnchor)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockAnchor) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Signature is missing")
+	} else if protocol.EqualKeySignature(v.Signature, nil) {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Anchor is missing")
+	} else if EqualMessage(v.Anchor, nil) {
+		errs = append(errs, "field Anchor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_Envelope = []string{
@@ -568,57 +616,50 @@ func (v *UserTransaction) IsValid() error {
 	}
 }
 
-var fieldNames_ValidatorSignature = []string{
-	1: "Type",
-	2: "Signature",
-	3: "Source",
+func (v *BlockAnchor) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *ValidatorSignature) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
+func (v *BlockAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
-	writer.WriteEnum(1, v.Type())
-	if !(protocol.EqualKeySignature(v.Signature, nil)) {
-		writer.WriteValue(2, v.Signature.MarshalBinary)
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-	if !(v.Source == nil) {
-		writer.WriteUrl(3, v.Source)
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 
-	_, _, err := writer.Reset(fieldNames_ValidatorSignature)
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BlockAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := protocol.UnmarshalKeySignatureFrom(r)
+		if err == nil {
+			v.Signature = x
+		}
+		return err
+	})
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Anchor = x
+		}
+		return err
+	})
+
+	seen, err := reader.Reset(fieldNames_BlockAnchor)
 	if err != nil {
-		return nil, encoding.Error{E: err}
+		return encoding.Error{E: err}
 	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *ValidatorSignature) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Type is missing")
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
 	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Signature is missing")
-	} else if protocol.EqualKeySignature(v.Signature, nil) {
-		errs = append(errs, "field Signature is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Source is missing")
-	} else if v.Source == nil {
-		errs = append(errs, "field Source is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
+	return nil
 }
 
 func (v *Envelope) UnmarshalBinary(data []byte) error {
@@ -842,46 +883,20 @@ func (v *UserTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func (v *ValidatorSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *ValidatorSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType MessageType
-	if x := new(MessageType); reader.ReadEnum(1, x) {
-		vType = *x
+func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType                                        `json:"type"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Anchor    *encoding.JsonUnmarshalWith[Message]               `json:"anchor,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	if !(EqualMessage(v.Anchor, nil)) {
+		u.Anchor = &encoding.JsonUnmarshalWith[Message]{Value: v.Anchor, Func: UnmarshalMessageJSON}
 	}
-
-	return v.UnmarshalFieldsFrom(reader)
-}
-
-func (v *ValidatorSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	reader.ReadValue(2, func(r io.Reader) error {
-		x, err := protocol.UnmarshalKeySignatureFrom(r)
-		if err == nil {
-			v.Signature = x
-		}
-		return err
-	})
-	if x, ok := reader.ReadUrl(3); ok {
-		v.Source = x
-	}
-
-	seen, err := reader.Reset(fieldNames_ValidatorSignature)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
+	return json.Marshal(&u)
 }
 
 func (v *Envelope) MarshalJSON() ([]byte, error) {
@@ -974,20 +989,30 @@ func (v *UserTransaction) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *ValidatorSignature) MarshalJSON() ([]byte, error) {
+func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      MessageType                                        `json:"type"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
-		Source    *url.URL                                           `json:"source,omitempty"`
+		Anchor    *encoding.JsonUnmarshalWith[Message]               `json:"anchor,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if !(protocol.EqualKeySignature(v.Signature, nil)) {
-		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Anchor = &encoding.JsonUnmarshalWith[Message]{Value: v.Anchor, Func: UnmarshalMessageJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
 	}
-	if !(v.Source == nil) {
-		u.Source = v.Source
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	return json.Marshal(&u)
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
+
+	if u.Anchor != nil {
+		v.Anchor = u.Anchor.Value
+	}
+
+	return nil
 }
 
 func (v *Envelope) UnmarshalJSON(data []byte) error {
@@ -1110,28 +1135,5 @@ func (v *UserTransaction) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Transaction = u.Transaction
-	return nil
-}
-
-func (v *ValidatorSignature) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type      MessageType                                        `json:"type"`
-		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
-		Source    *url.URL                                           `json:"source,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
-	u.Source = v.Source
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	if u.Signature != nil {
-		v.Signature = u.Signature.Value
-	}
-
-	v.Source = u.Source
 	return nil
 }

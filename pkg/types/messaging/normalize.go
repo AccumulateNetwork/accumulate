@@ -84,7 +84,7 @@ func (e *Envelope) Normalize() ([]Message, error) {
 		switch msg := msg.(type) {
 		case *UserSignature:
 			delete(unsigned, msg.TxID.Hash())
-		case *ValidatorSignature:
+		case *BlockAnchor:
 			delete(unsigned, msg.Signature.GetTransactionHash())
 		}
 	}
