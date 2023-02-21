@@ -9,7 +9,6 @@ package block
 import (
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -116,7 +115,7 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 		st, err = ctx.callMessageExecutor(batch, ctx.childWith(seq.Message))
 	} else {
 		// Mark the message as pending
-		st, err = x.recordPending(batch, ctx, seq)
+		st, err = ctx.recordPending(batch, ctx, seq.Message)
 	}
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -125,9 +124,6 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 		err = batch.Commit()
 		return nil, errors.UnknownError.Wrap(err)
 	}
-
-	// FIXME For anchors the ledger should not be updated until the anchor has
-	// enough signatures
 
 	// Update the ledger
 	ledger, err := x.updateLedger(batch, ctx, seq, st.Pending())
@@ -183,40 +179,6 @@ func (x SequencedMessage) isReady(batch *database.Batch, ctx *MessageContext, se
 	}
 
 	return true, nil
-}
-
-func (x SequencedMessage) recordPending(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (*protocol.TransactionStatus, error) {
-	h := seq.Message.Hash()
-	ctx.Executor.logger.Debug("Pending sequenced message", "hash", logging.AsHex(h).Slice(0, 4), "module", "synthetic")
-
-	// Store the message
-	err := batch.Message(h).Main().Put(seq.Message)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message: %w", err)
-	}
-
-	// Update the status
-	status, err := batch.Transaction(h[:]).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	status.TxID = seq.Message.ID()
-	status.Code = errors.Pending
-	if status.Received == 0 {
-		status.Received = ctx.Block.Index
-	}
-	err = batch.Transaction(h[:]).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store status: %w", err)
-	}
-
-	// Add a transaction state
-	_, ok := ctx.state.Get(seq.Message.Hash())
-	if !ok {
-		ctx.state.Set(seq.Message.Hash(), new(chain.ProcessTransactionState))
-	}
-
-	return status, nil
 }
 
 func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage, pending bool) (*protocol.PartitionSyntheticLedger, error) {
