@@ -13,6 +13,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
+type SequenceLedger interface {
+	Account
+	Partition(url *url.URL) *PartitionSyntheticLedger
+}
+
 func (e *BlockEntry) Compare(f *BlockEntry) int {
 	c := e.Account.Compare(f.Account)
 	if c != 0 {
@@ -45,4 +50,8 @@ func (s *AnchorLedger) Anchor(url *url.URL) *PartitionSyntheticLedger {
 		*ptr = &PartitionSyntheticLedger{Url: url}
 	}
 	return *ptr
+}
+
+func (s *AnchorLedger) Partition(url *url.URL) *PartitionSyntheticLedger {
+	return s.Anchor(url)
 }
