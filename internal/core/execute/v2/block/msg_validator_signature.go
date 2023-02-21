@@ -115,20 +115,19 @@ func (x ValidatorSignature) check(ctx *MessageContext, batch *database.Batch, si
 	}
 
 	// Load the transaction
-	var txn messaging.MessageWithTransaction
-	err := batch.Message(h).Main().GetAs(&txn)
+	txn, err := ctx.getTransaction(batch, h)
 	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
 
 	// Load the sequence
-	seq, err := getSequence(batch, txn.ID())
+	seq, err := ctx.getSequence(batch, txn.ID())
 	if err != nil {
 		return nil, nil, errors.UnknownError.Wrap(err)
 	}
 
 	// A validator signature message is only allowed for anchors
-	if typ := txn.GetTransaction().Body.Type(); !typ.IsAnchor() {
+	if typ := txn.Body.Type(); !typ.IsAnchor() {
 		return nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", typ, sig.Type())
 	}
 
@@ -158,7 +157,7 @@ func (x ValidatorSignature) check(ctx *MessageContext, batch *database.Batch, si
 		return nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
-	return txn.GetTransaction(), signer, nil
+	return txn, signer, nil
 }
 
 func (x ValidatorSignature) process(ctx *MessageContext, batch *database.Batch, sig *messaging.ValidatorSignature, txn *protocol.Transaction, signer protocol.Signer2) error {
