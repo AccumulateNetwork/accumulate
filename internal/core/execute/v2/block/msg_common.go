@@ -7,7 +7,9 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -141,4 +143,38 @@ func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol
 	}
 
 	return txn.GetTransaction(), nil
+}
+
+func (b *bundle) recordPending(batch *database.Batch, ctx *MessageContext, msg messaging.Message) (*protocol.TransactionStatus, error) {
+	h := msg.Hash()
+	ctx.Executor.logger.Debug("Pending sequenced message", "hash", logging.AsHex(h).Slice(0, 4), "module", "synthetic")
+
+	// Store the message
+	err := batch.Message(h).Main().Put(msg)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store message: %w", err)
+	}
+
+	// Update the status
+	status, err := batch.Transaction(h[:]).Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
+	status.TxID = msg.ID()
+	status.Code = errors.Pending
+	if status.Received == 0 {
+		status.Received = ctx.Block.Index
+	}
+	err = batch.Transaction(h[:]).Status().Put(status)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store status: %w", err)
+	}
+
+	// Add a transaction state
+	_, ok := ctx.state.Get(msg.Hash())
+	if !ok {
+		ctx.state.Set(msg.Hash(), new(chain.ProcessTransactionState))
+	}
+
+	return status, nil
 }
