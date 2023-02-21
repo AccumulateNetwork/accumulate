@@ -225,23 +225,6 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	return txn, nil
 }
 
-func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
-	// Check for a key signature
-	hasKeySig, err := hasKeySignature(batch, status)
-	if err != nil {
-		return err
-	}
-	if !hasKeySig {
-		return errors.Unauthenticated.WithFormat("missing key signature")
-	}
-
-	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
-		return nil
-	}
-
-	return nil
-}
-
 func putMessageWithStatus(batch *database.Batch, message messaging.Message, status *protocol.TransactionStatus) error {
 	// Store the transaction
 	h := message.Hash()
