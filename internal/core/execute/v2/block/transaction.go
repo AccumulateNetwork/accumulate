@@ -65,14 +65,6 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordPendingTransaction(&x.Describe, batch, delivery)
 	}
 
-	if delivery.Transaction.Body.Type().IsSynthetic() {
-		// Verify that the synthetic transaction has all the right signatures
-		err = processSyntheticTransaction(batch, delivery.Transaction, status)
-		if err != nil {
-			return x.recordFailedTransaction(batch, delivery, err)
-		}
-	}
-
 	// Set up the state manager
 	var st *chain.StateManager
 	if x.isGenesis {
