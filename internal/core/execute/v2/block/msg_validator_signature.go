@@ -78,20 +78,30 @@ func (x ValidatorSignature) Process(batch *database.Batch, ctx *MessageContext) 
 		return nil, errors.UnknownError.WithFormat("store status: %w", err)
 	}
 
+	if !status.Failed() {
+		// Update the block state
+		ctx.Block.State.MergeSignature(&ProcessSignatureState{})
+
+		// Get the sequence message
+		seq, err := ctx.getSequence(batch, txn.ID())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load sequence: %w", err)
+		}
+
+		// Process the transaction
+		st, err := ctx.callMessageExecutor(batch, ctx.childWith(seq))
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		// TODO Do something with the status
+		_ = st
+	}
+
 	err = batch.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-
-	if status.Failed() {
-		return status, nil
-	}
-
-	// Queue for execution
-	ctx.transactionsToProcess.Add(txn.ID().Hash())
-
-	// Update the block state
-	ctx.Block.State.MergeSignature(&ProcessSignatureState{})
 
 	return status, nil
 }
