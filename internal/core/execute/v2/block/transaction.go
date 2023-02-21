@@ -281,20 +281,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 		// Anchors must be sequenced
 	}
 
-	// Find the sequence (nil bundle is a hack)
-	seq, err := (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load sequence info: %w", err)
-	}
-
-	// Have we received enough signatures?
-	partition, ok := protocol.ParsePartitionUrl(seq.Source)
-	if !ok {
-		return false, errors.BadRequest.WithFormat("source %v is not a partition", seq.Source)
-	}
-	if uint64(len(status.AnchorSigners)) < x.globals.Active.ValidatorThreshold(partition) {
-		return false, nil
-	}
+	// Anchor signature checking code has been moved to the BlockAnchor executor
 
 	// Sequence checking code has been moved to the SequencedMessage executor
 

@@ -119,9 +119,13 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	r := new(api.TransactionRecord)
 	if globals.ExecutorVersion.V2() {
 		r.Sequence = new(messaging.SequencedMessage)
+		r.Sequence.Message = &messaging.UserTransaction{Transaction: txn}
 		r.Sequence.Source = s.partition.URL
 		r.Sequence.Destination = dst
 		r.Sequence.Number = num
+
+		h := r.Sequence.Hash()
+		hash = h[:]
 
 	} else {
 		// Create a partition signature
@@ -133,6 +137,8 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 			return nil, errors.InternalError.Wrap(err)
 		}
 		signatures = append(signatures, partSig)
+
+		hash = txn.GetHash()
 	}
 
 	// Create a key signature
@@ -143,7 +149,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 		SetUrl(signer.Url).
 		SetVersion(globals.Network.Version).
 		SetTimestamp(1).
-		Sign(txn.GetHash())
+		Sign(hash)
 	if err != nil {
 		return nil, errors.InternalError.Wrap(err)
 	}

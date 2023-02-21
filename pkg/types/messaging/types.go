@@ -45,7 +45,7 @@ func (m *SyntheticMessage) ID() *url.TxID {
 	return m.Message.ID().Account().WithTxID(m.Hash())
 }
 
-func (m *ValidatorSignature) ID() *url.TxID {
+func (m *BlockAnchor) ID() *url.TxID {
 	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
 }
 
@@ -77,11 +77,11 @@ type MessageWithSignature interface {
 	GetTxID() *url.TxID
 }
 
-func (m *UserSignature) GetSignature() protocol.Signature      { return m.Signature }
-func (m *ValidatorSignature) GetSignature() protocol.Signature { return m.Signature }
-func (m *UserSignature) GetTxID() *url.TxID                    { return m.TxID }
+func (m *UserSignature) GetSignature() protocol.Signature { return m.Signature }
+func (m *BlockAnchor) GetSignature() protocol.Signature   { return m.Signature }
+func (m *UserSignature) GetTxID() *url.TxID               { return m.TxID }
 
-func (m *ValidatorSignature) GetTxID() *url.TxID {
+func (m *BlockAnchor) GetTxID() *url.TxID {
 	return protocol.UnknownUrl().WithTxID(m.Signature.GetTransactionHash())
 }
 
@@ -112,9 +112,17 @@ func (m *SequencedMessage) Hash() [32]byte {
 	return *(*[32]byte)(h.MerkleHash())
 }
 
-func (m *ValidatorSignature) Hash() [32]byte {
+func (m *BlockAnchor) Hash() [32]byte {
 	var h hash.Hasher
-	h.AddHash((*[32]byte)(m.Signature.Hash()))
-	h.AddUrl2(m.Source)
+	if m.Signature == nil {
+		h.AddHash2([32]byte{})
+	} else {
+		h.AddHash((*[32]byte)(m.Signature.Hash()))
+	}
+	if m.Anchor == nil {
+		h.AddHash2([32]byte{})
+	} else {
+		h.AddHash2(m.Anchor.Hash())
+	}
 	return *(*[32]byte)(h.MerkleHash())
 }
