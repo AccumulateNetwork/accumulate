@@ -42,6 +42,9 @@ func (SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 	if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
 		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("missing proof metadata")), nil
 	}
+	if !syn.Proof.Receipt.Validate() {
+		return protocol.NewErrorStatus(syn.ID(), errors.BadRequest.With("proof is invalid")), nil
+	}
 
 	// A synthetic message must be sequenced (may change in the future)
 	seq, ok := syn.Message.(*messaging.SequencedMessage)

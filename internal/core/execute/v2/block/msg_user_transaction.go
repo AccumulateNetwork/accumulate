@@ -41,27 +41,29 @@ func (UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*pro
 		return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)), nil
 	}
 
-	// Ensure the transaction is signed
-	var signed bool
-	for _, other := range ctx.messages {
-		if fwd, ok := other.(*internal.ForwardedMessage); ok {
-			other = fwd.Message
-		}
-		switch sig := other.(type) {
-		case *messaging.UserSignature:
-			if sig.TxID.Hash() == txn.ID().Hash() {
-				signed = true
-				break
+	// Ensure the transaction is signed or is synthetic
+	if !ctx.isWithin(messaging.MessageTypeSynthetic) {
+		var signed bool
+		for _, other := range ctx.messages {
+			if fwd, ok := other.(*internal.ForwardedMessage); ok {
+				other = fwd.Message
 			}
-		case *messaging.ValidatorSignature:
-			if sig.Signature.GetTransactionHash() == txn.ID().Hash() {
-				signed = true
-				break
+			switch sig := other.(type) {
+			case *messaging.UserSignature:
+				if sig.TxID.Hash() == txn.ID().Hash() {
+					signed = true
+					break
+				}
+			case *messaging.ValidatorSignature:
+				if sig.Signature.GetTransactionHash() == txn.ID().Hash() {
+					signed = true
+					break
+				}
 			}
 		}
-	}
-	if !signed {
-		return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("%v is not signed", txn.ID())), nil
+		if !signed {
+			return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("%v is not signed", txn.ID())), nil
+		}
 	}
 
 	batch = batch.Begin(true)
