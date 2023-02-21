@@ -456,21 +456,10 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.UnknownError.WithFormat("combine receipts: %w", err)
 		}
 
-		// TODO Sign the sequenced message, not the transaction
-		keySig, err := x.signTransaction(txn.GetTransaction().GetHash())
-		// keySig, err := x.signTransaction(hash)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-
 		messages := []messaging.Message{
 			&messaging.SyntheticMessage{
 				Message: seq,
 				Proof:   receipt,
-			},
-			&messaging.ValidatorSignature{
-				Signature: keySig,
-				Source:    x.Describe.NodeUrl(),
 			},
 		}
 

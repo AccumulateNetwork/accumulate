@@ -415,8 +415,8 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 
 		}
 
-		if !gotKey {
-			x.logger.Error("Invalid synthetic transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
+		if !gotKey && anchor {
+			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
 			bad = true
 		}
 		if bad {
@@ -425,7 +425,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 
 		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
 		if err != nil {
-			x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
+			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Transaction.Body.Type())
 			continue
 		}
 	}
