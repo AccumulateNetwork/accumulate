@@ -26,7 +26,7 @@ func TestNodeService(t *testing.T) {
 	expect := &api.NodeStatus{Ok: true, Version: "asdf", ValidatorKeyHash: [32]byte{1, 2, 3}}
 	s := mocks.NewNodeService(t)
 	s.EXPECT().NodeStatus(mock.Anything, mock.Anything).Return(expect, nil)
-	c := setupTest(t, NodeService{NodeService: s})
+	c := SetupTest(t, NodeService{NodeService: s})
 	actual, err := c.NodeStatus(context.Background(), api.NodeStatusOptions{NodeID: "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN", Partition: "foo"})
 	require.NoError(t, err)
 	require.True(t, expect.Equal(actual))
@@ -37,7 +37,7 @@ func TestNetworkService(t *testing.T) {
 	expect := &api.NetworkStatus{Oracle: g.Oracle, Globals: g.Globals, Network: g.Network, Routing: g.Routing}
 	s := mocks.NewNetworkService(t)
 	s.EXPECT().NetworkStatus(mock.Anything, mock.Anything).Return(expect, nil)
-	c := setupTest(t, NetworkService{NetworkService: s})
+	c := SetupTest(t, NetworkService{NetworkService: s})
 	actual, err := c.NetworkStatus(context.Background(), api.NetworkStatusOptions{Partition: "foo"})
 	require.NoError(t, err)
 	require.True(t, expect.Equal(actual))
@@ -47,7 +47,7 @@ func TestMetrics(t *testing.T) {
 	expect := &api.Metrics{TPS: 10}
 	s := mocks.NewMetricsService(t)
 	s.EXPECT().Metrics(mock.Anything, mock.Anything).Return(expect, nil)
-	c := setupTest(t, MetricsService{MetricsService: s})
+	c := SetupTest(t, MetricsService{MetricsService: s})
 	actual, err := c.Metrics(context.Background(), api.MetricsOptions{Partition: "foo"})
 	require.NoError(t, err)
 	require.True(t, expect.Equal(actual))
@@ -57,7 +57,7 @@ func TestQuerier(t *testing.T) {
 	expect := &api.UrlRecord{Value: protocol.AccountUrl("foo")}
 	s := mocks.NewQuerier(t)
 	s.EXPECT().Query(mock.Anything, mock.Anything, mock.Anything).Return(expect, nil)
-	c := setupTest(t, Querier{Querier: s})
+	c := SetupTest(t, Querier{Querier: s})
 	actual, err := c.Query(context.Background(), protocol.AccountUrl("foo"), nil)
 	require.NoError(t, err)
 	require.True(t, api.EqualRecord(expect, actual))
@@ -67,7 +67,7 @@ func TestSubmitter(t *testing.T) {
 	expect := []*api.Submission{{Success: true, Status: &protocol.TransactionStatus{}}}
 	s := mocks.NewSubmitter(t)
 	s.EXPECT().Submit(mock.Anything, mock.Anything, mock.Anything).Return(expect, nil)
-	c := setupTest(t, Submitter{Submitter: s})
+	c := SetupTest(t, Submitter{Submitter: s})
 	sig := &protocol.ED25519Signature{Signer: protocol.AccountUrl("foo")}
 	actual, err := c.Submit(context.Background(), &messaging.Envelope{Signatures: []protocol.Signature{sig}}, api.SubmitOptions{})
 	require.NoError(t, err)
@@ -79,7 +79,7 @@ func TestValidator(t *testing.T) {
 	expect := []*api.Submission{{Success: true, Status: &protocol.TransactionStatus{}}}
 	s := mocks.NewValidator(t)
 	s.EXPECT().Validate(mock.Anything, mock.Anything, mock.Anything).Return(expect, nil)
-	c := setupTest(t, Validator{Validator: s})
+	c := SetupTest(t, Validator{Validator: s})
 	sig := &protocol.ED25519Signature{Signer: protocol.AccountUrl("foo")}
 	actual, err := c.Validate(context.Background(), &messaging.Envelope{Signatures: []protocol.Signature{sig}}, api.ValidateOptions{})
 	require.NoError(t, err)
@@ -102,7 +102,7 @@ func TestEvents(t *testing.T) {
 
 	s := mocks.NewEventService(t)
 	s.EXPECT().Subscribe(mock.Anything, mock.Anything).Return(ch, nil)
-	c := setupTest(t, EventService{EventService: s})
+	c := SetupTest(t, EventService{EventService: s})
 	ctx, cancel := context.WithCancel(context.Background())
 	events, err := c.Subscribe(ctx, api.SubscribeOptions{})
 	require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestEvents(t *testing.T) {
 	require.False(t, ok)
 }
 
-func setupTest(t testing.TB, services ...Service) *Client {
+func SetupTest(t testing.TB, services ...Service) *Client {
 	logger := logging.ConsoleLoggerForTest(t, "info")
 	handler, err := NewHandler(logger, services...)
 	require.NoError(t, err)

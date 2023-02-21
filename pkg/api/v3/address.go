@@ -7,10 +7,14 @@
 package api
 
 import (
+	"bytes"
+	"io"
+	"strconv"
 	"strings"
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 // N_ACC is the multicodec name for the acc protocol.
@@ -73,9 +77,15 @@ func ParseServiceAddress(s string) (*ServiceAddress, error) {
 		return nil, errors.BadRequest.With("too many parts")
 	}
 
+	// Parse as a known type or a number
 	typ, ok := ServiceTypeByName(parts[0])
 	if !ok {
-		return nil, errors.BadRequest.WithFormat("invalid service type %q", parts[0])
+		v, err := strconv.ParseUint(parts[0], 16, 64)
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("invalid service type %q", parts[0])
+		} else {
+			typ = ServiceType(v)
+		}
 	}
 
 	a := new(ServiceAddress)
@@ -88,7 +98,13 @@ func ParseServiceAddress(s string) (*ServiceAddress, error) {
 
 // String returns {type}:{partition}, or {type} if the partition is empty.
 func (s *ServiceAddress) String() string {
-	str := s.Type.String()
+	var str string
+	var x ServiceType
+	if x.SetEnumValue(s.Type.GetEnumValue()) {
+		str = s.Type.String()
+	} else {
+		str = strconv.FormatUint(s.Type.GetEnumValue(), 16)
+	}
 	if s.Partition != "" {
 		str += ":" + strings.ToLower(s.Partition)
 	}
@@ -113,4 +129,54 @@ func (s *ServiceAddress) Equal(r *ServiceAddress) bool {
 // Copy returns a copy of the address.
 func (s *ServiceAddress) Copy() *ServiceAddress {
 	return &ServiceAddress{Type: s.Type, Partition: s.Partition}
+}
+
+var fieldNames_ServiceAddress = []string{
+	1: "Type",
+	2: "Partition",
+}
+
+func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Type == 0) {
+		writer.WriteEnum(1, v.Type)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ServiceAddress)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ServiceAddress) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ServiceAddress) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Type = ServiceType(x)
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ServiceAddress)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
