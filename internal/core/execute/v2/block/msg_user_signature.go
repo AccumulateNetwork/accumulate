@@ -7,6 +7,7 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -69,7 +70,7 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	// Process the transaction if the signature does not fail and is local to
 	// the principal
 	if !status.Failed() && sig.Signature.RoutingLocation().LocalTo(txn.Header.Principal) {
-		_, err := ctx.callMessageExecutor(batch, ctx.childWith(&messaging.UserTransaction{Transaction: txn}))
+		_, err := ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: txn})
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -79,5 +80,23 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+
+	// Don't send out requests unless the transaction succeeds, was not
+	// forwarded, and is the initiator
+	if status.Failed() ||
+		ctx.isWithin(internal.MessageTypeForwardedMessage) ||
+		!protocol.SignatureDidInitiate(signature, txn.Header.Initiator[:], nil) {
+		return status, nil
+	}
+
+	// If the transaction requests additional authorities, send out requests
+	for _, auth := range txn.GetAdditionalAuthorities() {
+		msg := new(messaging.SignatureRequest)
+		msg.Authority = auth
+		msg.Cause = sig.ID()
+		msg.TxID = txn.ID()
+		ctx.didProduce(msg.Authority, msg)
+	}
+
 	return status, nil
 }

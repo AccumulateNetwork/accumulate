@@ -112,7 +112,7 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 	var st *protocol.TransactionStatus
 	if ready {
 		// Process the message within
-		st, err = ctx.callMessageExecutor(batch, ctx.childWith(seq.Message))
+		st, err = ctx.callMessageExecutor(batch, seq.Message)
 	} else {
 		// Mark the message as pending
 		st, err = ctx.recordPending(batch, ctx, seq.Message)
@@ -140,7 +140,7 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 	if st.Delivered() {
 		next, ok := ledger.Get(seq.Number + 1)
 		if ok {
-			ctx.additional = append(ctx.additional, &internal.MessageIsReady{TxID: next})
+			ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
 		}
 	}
 
