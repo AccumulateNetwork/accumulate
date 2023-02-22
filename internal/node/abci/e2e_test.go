@@ -1633,9 +1633,8 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 		send(newTxn("alice/book0/1").
 			WithBody(body).
 
-			// Sign with Charlie via Alice (one-layer delegation)
+			// Sign with Charlie
 			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
-			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
 			Initiate(protocol.SignatureTypeED25519, charlieKey).
 			Build())
 	})
