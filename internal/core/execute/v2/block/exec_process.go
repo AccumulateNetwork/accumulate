@@ -94,7 +94,8 @@ additional:
 	// Process each message
 	remote := set[[32]byte]{}
 	for _, msg := range messages {
-		st, err := d.callMessageExecutor(b.Block.Batch, &MessageContext{bundle: d, message: msg})
+		ctx := &MessageContext{bundle: d, message: msg}
+		st, err := d.callMessageExecutor(b.Block.Batch, ctx)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -103,6 +104,9 @@ additional:
 		if st != nil {
 			statuses = append(statuses, st)
 		}
+
+		d.additional = append(d.additional, ctx.additional...)
+		d.produced = append(d.produced, ctx.produced...)
 	}
 
 	// Record remote transactions (remove?)
@@ -164,11 +168,17 @@ func (b *BlockV2) checkForUnsignedTransactions(messages []messaging.Message) err
 		}
 	}
 	for _, msg := range messages {
-		switch msg := msg.(type) {
+	again:
+		switch m := msg.(type) {
 		case *messaging.UserSignature:
-			delete(unsigned, msg.TxID.Hash())
+			delete(unsigned, m.TxID.Hash())
 		case *messaging.BlockAnchor:
-			delete(unsigned, msg.Signature.GetTransactionHash())
+			delete(unsigned, m.Signature.GetTransactionHash())
+		case *messaging.SignatureRequest:
+			delete(unsigned, m.TxID.Hash())
+		case interface{ Unwrap() messaging.Message }:
+			msg = m.Unwrap()
+			goto again
 		}
 	}
 	if len(unsigned) > 0 {

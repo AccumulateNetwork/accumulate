@@ -81,11 +81,17 @@ func (e *Envelope) Normalize() ([]Message, error) {
 
 	// A transaction with no signatures is invalid
 	for _, msg := range messages {
-		switch msg := msg.(type) {
+	again:
+		switch m := msg.(type) {
 		case *UserSignature:
-			delete(unsigned, msg.TxID.Hash())
+			delete(unsigned, m.TxID.Hash())
 		case *BlockAnchor:
-			delete(unsigned, msg.Signature.GetTransactionHash())
+			delete(unsigned, m.Signature.GetTransactionHash())
+		case *SignatureRequest:
+			delete(unsigned, m.TxID.Hash())
+		case interface{ Unwrap() Message }:
+			msg = m.Unwrap()
+			goto again
 		}
 	}
 	for hash := range unsigned {
