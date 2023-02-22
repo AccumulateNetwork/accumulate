@@ -104,7 +104,8 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 	switch seq.Message.Type() {
 	case messaging.MessageTypeUserTransaction,
 		messaging.MessageTypeUserSignature,
-		messaging.MessageTypeSignatureRequest:
+		messaging.MessageTypeSignatureRequest,
+		messaging.MessageTypeCreditPayment:
 		// Allowed
 
 	default:

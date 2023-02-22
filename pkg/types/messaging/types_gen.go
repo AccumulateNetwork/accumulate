@@ -30,6 +30,17 @@ type BlockAnchor struct {
 	extraData []byte
 }
 
+type CreditPayment struct {
+	fieldsSet []bool
+	Paid      protocol.Fee `json:"paid,omitempty" form:"paid" query:"paid" validate:"required"`
+	Payer     *url.URL     `json:"payer,omitempty" form:"payer" query:"payer" validate:"required"`
+	// Initiator indicates whether the signature initiated the transaction.
+	Initiator bool      `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
+	TxID      *url.TxID `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Cause     *url.TxID `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	extraData []byte
+}
+
 type Envelope struct {
 	fieldsSet   []bool
 	Signatures  []protocol.Signature    `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
@@ -81,6 +92,8 @@ type UserTransaction struct {
 
 func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
 
+func (*CreditPayment) Type() MessageType { return MessageTypeCreditPayment }
+
 func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
 
 func (*SignatureRequest) Type() MessageType { return MessageTypeSignatureRequest }
@@ -105,6 +118,26 @@ func (v *BlockAnchor) Copy() *BlockAnchor {
 }
 
 func (v *BlockAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreditPayment) Copy() *CreditPayment {
+	u := new(CreditPayment)
+
+	u.Paid = v.Paid
+	if v.Payer != nil {
+		u.Payer = v.Payer
+	}
+	u.Initiator = v.Initiator
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+	if v.Cause != nil {
+		u.Cause = v.Cause
+	}
+
+	return u
+}
+
+func (v *CreditPayment) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Envelope) Copy() *Envelope {
 	u := new(Envelope)
@@ -218,6 +251,41 @@ func (v *BlockAnchor) Equal(u *BlockAnchor) bool {
 		return false
 	}
 	if !(EqualMessage(v.Anchor, u.Anchor)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CreditPayment) Equal(u *CreditPayment) bool {
+	if !(v.Paid == u.Paid) {
+		return false
+	}
+	switch {
+	case v.Payer == u.Payer:
+		// equal
+	case v.Payer == nil || u.Payer == nil:
+		return false
+	case !((v.Payer).Equal(u.Payer)):
+		return false
+	}
+	if !(v.Initiator == u.Initiator) {
+		return false
+	}
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	switch {
+	case v.Cause == u.Cause:
+		// equal
+	case v.Cause == nil || u.Cause == nil:
+		return false
+	case !((v.Cause).Equal(u.Cause)):
 		return false
 	}
 
@@ -398,6 +466,86 @@ func (v *BlockAnchor) IsValid() error {
 		errs = append(errs, "field Anchor is missing")
 	} else if EqualMessage(v.Anchor, nil) {
 		errs = append(errs, "field Anchor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_CreditPayment = []string{
+	1: "Type",
+	2: "Paid",
+	3: "Payer",
+	4: "Initiator",
+	5: "TxID",
+	6: "Cause",
+}
+
+func (v *CreditPayment) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Paid == 0) {
+		writer.WriteEnum(2, v.Paid)
+	}
+	if !(v.Payer == nil) {
+		writer.WriteUrl(3, v.Payer)
+	}
+	if !(!v.Initiator) {
+		writer.WriteBool(4, v.Initiator)
+	}
+	if !(v.TxID == nil) {
+		writer.WriteTxid(5, v.TxID)
+	}
+	if !(v.Cause == nil) {
+		writer.WriteTxid(6, v.Cause)
+	}
+
+	_, _, err := writer.Reset(fieldNames_CreditPayment)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *CreditPayment) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Paid is missing")
+	} else if v.Paid == 0 {
+		errs = append(errs, "field Paid is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Payer is missing")
+	} else if v.Payer == nil {
+		errs = append(errs, "field Payer is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Initiator is missing")
+	} else if !v.Initiator {
+		errs = append(errs, "field Initiator is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Cause is missing")
+	} else if v.Cause == nil {
+		errs = append(errs, "field Cause is not set")
 	}
 
 	switch len(errs) {
@@ -781,6 +929,53 @@ func (v *BlockAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *CreditPayment) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *CreditPayment) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreditPayment) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(protocol.Fee); reader.ReadEnum(2, x) {
+		v.Paid = *x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Payer = x
+	}
+	if x, ok := reader.ReadBool(4); ok {
+		v.Initiator = x
+	}
+	if x, ok := reader.ReadTxid(5); ok {
+		v.TxID = x
+	}
+	if x, ok := reader.ReadTxid(6); ok {
+		v.Cause = x
+	}
+
+	seen, err := reader.Reset(fieldNames_CreditPayment)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Envelope) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1059,6 +1254,34 @@ func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *CreditPayment) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType  `json:"type"`
+		Paid      protocol.Fee `json:"paid,omitempty"`
+		Payer     *url.URL     `json:"payer,omitempty"`
+		Initiator bool         `json:"initiator,omitempty"`
+		TxID      *url.TxID    `json:"txID,omitempty"`
+		Cause     *url.TxID    `json:"cause,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Paid == 0) {
+		u.Paid = v.Paid
+	}
+	if !(v.Payer == nil) {
+		u.Payer = v.Payer
+	}
+	if !(!v.Initiator) {
+		u.Initiator = v.Initiator
+	}
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
+	}
+	if !(v.Cause == nil) {
+		u.Cause = v.Cause
+	}
+	return json.Marshal(&u)
+}
+
 func (v *Envelope) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signatures  *encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
@@ -1192,6 +1415,35 @@ func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 		v.Anchor = u.Anchor.Value
 	}
 
+	return nil
+}
+
+func (v *CreditPayment) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType  `json:"type"`
+		Paid      protocol.Fee `json:"paid,omitempty"`
+		Payer     *url.URL     `json:"payer,omitempty"`
+		Initiator bool         `json:"initiator,omitempty"`
+		TxID      *url.TxID    `json:"txID,omitempty"`
+		Cause     *url.TxID    `json:"cause,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Paid = v.Paid
+	u.Payer = v.Payer
+	u.Initiator = v.Initiator
+	u.TxID = v.TxID
+	u.Cause = v.Cause
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Paid = u.Paid
+	v.Payer = u.Payer
+	v.Initiator = u.Initiator
+	v.TxID = u.TxID
+	v.Cause = u.Cause
 	return nil
 }
 
