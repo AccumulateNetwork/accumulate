@@ -94,9 +94,13 @@ KeyRecord:
 TransactionRecord:
   union: { type: record }
   fields:
+    # TODO Change this to MessageRecord. Merge with SignatureRecord?
     - name: TxID
       type: txid
       pointer: true
+    - name: Message
+      type: messaging.Message
+      marshal-as: union
     - name: Transaction
       type: protocol.Transaction
       marshal-as: reference
