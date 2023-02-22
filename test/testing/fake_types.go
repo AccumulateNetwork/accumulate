@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -63,6 +63,7 @@ func (f *FakeAccount) GetAuth() *protocol.AccountAuth { return &f.AccountAuth }
 
 var _ protocol.Signer = (*FakeSigner)(nil)
 
+func (f *FakeSigner) GetAuthority() *url.URL             { return f.Url }
 func (f *FakeSigner) GetVersion() uint64                 { return f.Version }
 func (f *FakeSigner) CreditCredits(amount uint64)        { f.CreditBalance = amount }
 func (f *FakeSigner) GetCreditBalance() uint64           { return f.CreditBalance }

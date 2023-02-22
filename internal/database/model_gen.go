@@ -249,6 +249,7 @@ type Account struct {
 	pending                record.Set[*url.TxID]
 	syntheticForAnchor     map[accountSyntheticForAnchorKey]record.Set[*url.TxID]
 	directory              record.Set[*url.URL]
+	transaction            map[accountTransactionKey]*AccountTransaction
 	mainChain              *Chain2
 	scratchChain           *Chain2
 	signatureChain         *Chain2
@@ -268,6 +269,14 @@ type accountSyntheticForAnchorKey struct {
 
 func keyForAccountSyntheticForAnchor(anchor [32]byte) accountSyntheticForAnchorKey {
 	return accountSyntheticForAnchorKey{anchor}
+}
+
+type accountTransactionKey struct {
+	Hash [32]byte
+}
+
+func keyForAccountTransaction(hash [32]byte) accountTransactionKey {
+	return accountTransactionKey{hash}
 }
 
 type accountSyntheticSequenceChainKey struct {
@@ -313,6 +322,18 @@ func (c *Account) SyntheticForAnchor(anchor [32]byte) record.Set[*url.TxID] {
 func (c *Account) Directory() record.Set[*url.URL] {
 	return getOrCreateField(&c.directory, func() record.Set[*url.URL] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" "+"directory", record.Wrapped(record.UrlWrapper), record.CompareUrl)
+	})
+}
+
+func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
+	return getOrCreateMap(&c.transaction, keyForAccountTransaction(hash), func() *AccountTransaction {
+		v := new(AccountTransaction)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = c.key.Append("Transaction", hash)
+		v.parent = c
+		v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(hash[:])
+		return v
 	})
 }
 
@@ -418,6 +439,16 @@ func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return v, key[2:], nil
 	case "Directory":
 		return c.Directory(), key[1:], nil
+	case "Transaction":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account")
+		}
+		hash, okHash := key[1].([32]byte)
+		if !okHash {
+			return nil, nil, errors.InternalError.With("bad key for account")
+		}
+		v := c.Transaction(hash)
+		return v, key[2:], nil
 	case "MainChain":
 		return c.MainChain(), key[1:], nil
 	case "ScratchChain":
@@ -482,6 +513,11 @@ func (c *Account) IsDirty() bool {
 	}
 	if fieldIsDirty(c.directory) {
 		return true
+	}
+	for _, v := range c.transaction {
+		if v.IsDirty() {
+			return true
+		}
 	}
 	if fieldIsDirty(c.mainChain) {
 		return true
@@ -560,6 +596,9 @@ func (c *Account) baseCommit() error {
 		commitField(&err, v)
 	}
 	commitField(&err, c.directory)
+	for _, v := range c.transaction {
+		commitField(&err, v)
+	}
 	commitField(&err, c.mainChain)
 	commitField(&err, c.scratchChain)
 	commitField(&err, c.signatureChain)
@@ -575,6 +614,91 @@ func (c *Account) baseCommit() error {
 	commitField(&err, c.chains)
 	commitField(&err, c.syntheticAnchors)
 	commitField(&err, c.data)
+
+	return err
+}
+
+type AccountTransaction struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    record.Key
+	label  string
+	parent *Account
+
+	vote   map[accountTransactionVoteKey]record.Value[[32]byte]
+	voters record.Set[*url.URL]
+}
+
+type accountTransactionVoteKey struct {
+	Authority [32]byte
+}
+
+func keyForAccountTransactionVote(authority *url.URL) accountTransactionVoteKey {
+	return accountTransactionVoteKey{record.MapKeyUrl(authority)}
+}
+
+func (c *AccountTransaction) getVote(authority *url.URL) record.Value[[32]byte] {
+	return getOrCreateMap(&c.vote, keyForAccountTransactionVote(authority), func() record.Value[[32]byte] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Vote", authority), c.label+" "+"vote"+" "+authority.RawString(), false, record.Wrapped(record.HashWrapper))
+	})
+}
+
+func (c *AccountTransaction) Voters() record.Set[*url.URL] {
+	return getOrCreateField(&c.voters, func() record.Set[*url.URL] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Voters"), c.label+" "+"voters", record.Wrapped(record.UrlWrapper), record.CompareUrl)
+	})
+}
+
+func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.InternalError.With("bad key for transaction")
+	}
+
+	switch key[0] {
+	case "Vote":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for transaction")
+		}
+		authority, okAuthority := key[1].(*url.URL)
+		if !okAuthority {
+			return nil, nil, errors.InternalError.With("bad key for transaction")
+		}
+		v := c.getVote(authority)
+		return v, key[2:], nil
+	case "Voters":
+		return c.Voters(), key[1:], nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for transaction")
+	}
+}
+
+func (c *AccountTransaction) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	for _, v := range c.vote {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	if fieldIsDirty(c.voters) {
+		return true
+	}
+
+	return false
+}
+
+func (c *AccountTransaction) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	for _, v := range c.vote {
+		commitField(&err, v)
+	}
+	commitField(&err, c.voters)
 
 	return err
 }
