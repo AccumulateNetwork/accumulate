@@ -289,12 +289,6 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 				continue
 			}
 
-			// Don't check if the owner is not changing
-			_, oldEntry, ok := findKeyPageEntry(page, &op.OldEntry)
-			if ok && oldEntry.Delegate != nil && oldEntry.Delegate.Equal(op.NewEntry.Delegate) {
-				continue
-			}
-
 			owners = append(owners, op.NewEntry.Delegate)
 
 		default:
