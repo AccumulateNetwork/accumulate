@@ -118,33 +118,14 @@ func (c condTxn) status(predicate func(h *Harness, c any, status *protocol.Trans
 	return func(h *Harness) bool {
 		// Query the transaction
 		h.TB.Helper()
-		r, err := h.Query().Query(context.Background(), c.id.AsUrl(), new(api.DefaultQuery))
-		switch {
-		case err == nil:
-			// Ok
-		case errors.Is(err, errors.NotFound):
-			// Wait
-			return false
-
-		default:
-			// Unknown error
-			require.NoError(h.TB, err)
-			panic("not reached")
+		status, _, ok := queryStatusAndProduced(h, c.id)
+		if !ok {
+			return false // Wait
 		}
 
-		switch r := r.(type) {
-		case *api.SignatureRecord:
-			// Evaluate the predicate
-			r.Status.TxID = c.id
-			return predicate(h, c, r.Status)
-		case *api.TransactionRecord:
-			// Evaluate the predicate
-			r.Status.TxID = c.id
-			return predicate(h, c, r.Status)
-		default:
-			h.TB.Fatalf("Unsupported record type %v", r.RecordType())
-			panic("not reached")
-		}
+		// Evaluate the predicate
+		status.TxID = c.id
+		return predicate(h, c, status)
 	}
 }
 
@@ -155,25 +136,18 @@ func (c condProduced) status(predicate func(h *Harness, c any, status *protocol.
 
 		// Wait for the transaction to resolve
 		if produced == nil {
-			r, err := h.Query().QueryTransaction(context.Background(), c.id, nil)
-			switch {
-			case err == nil:
-				// If the transaction is pending, wait
-				if !r.Status.Delivered() {
-					return false
-				}
-
-				// Record the produced transactions
-				produced = r.Produced.Records
-
-			case errors.Is(err, errors.NotFound):
-				// Wait
-				return false
-
-			default:
-				require.NoError(h.TB, err)
-				panic("not reached")
+			status, p, ok := queryStatusAndProduced(h, c.id)
+			if !ok {
+				return false // Wait
 			}
+
+			// If the transaction is pending, wait
+			if !status.Delivered() {
+				return false
+			}
+
+			// Record the produced transactions
+			produced = p
 		}
 
 		// Expect produced transactions
@@ -183,23 +157,15 @@ func (c condProduced) status(predicate func(h *Harness, c any, status *protocol.
 
 		// Wait for the produced transactions to be received
 		for _, r := range produced {
-			h.TB.Helper()
-			r, err := h.Query().QueryTransaction(context.Background(), r.Value, nil)
-			switch {
-			case err == nil:
-				// Evaluate the predicate
-				r.Status.TxID = r.TxID
-				if !predicate(h, c, r.Status) {
-					return false
-				}
+			status, _, ok := queryStatusAndProduced(h, r.Value)
+			if !ok {
+				return false // Wait
+			}
 
-			case errors.Is(err, errors.NotFound):
-				// Wait
+			// Evaluate the predicate
+			status.TxID = r.Value
+			if !predicate(h, c, status) {
 				return false
-
-			default:
-				require.NoError(h.TB, err)
-				panic("not reached")
 			}
 		}
 
@@ -217,26 +183,19 @@ func (c condRefund) status(predicate func(h *Harness, c any, status *protocol.Tr
 
 		// Wait for the transaction to resolve
 		if produced == nil {
-			r, err := h.Query().QueryTransaction(context.Background(), c.id, nil)
-			switch {
-			case err == nil:
-				// If the transaction is pending, wait
-				if !r.Status.Delivered() {
-					return false
-				}
-
-				// Record the produced transactions
-				produced = r.Produced.Records
-				refund = make([][]*api.TxIDRecord, r.Produced.Total)
-
-			case errors.Is(err, errors.NotFound):
-				// Wait
-				return false
-
-			default:
-				require.NoError(h.TB, err)
-				panic("not reached")
+			status, p, ok := queryStatusAndProduced(h, c.id)
+			if !ok {
+				return false // Wait
 			}
+
+			// If the transaction is pending, wait
+			if !status.Delivered() {
+				return false
+			}
+
+			// Record the produced transactions
+			produced = p
+			refund = make([][]*api.TxIDRecord, len(p))
 		}
 
 		// Expect produced transactions
@@ -247,27 +206,19 @@ func (c condRefund) status(predicate func(h *Harness, c any, status *protocol.Tr
 		// Wait for the produced transactions to complete
 		for i, r := range produced {
 			if refund[i] == nil {
-				h.TB.Helper()
-				r, err := h.Query().QueryTransaction(context.Background(), r.Value, nil)
-				switch {
-				case err == nil:
-					// If the transaction is pending, wait
-					if !r.Status.Delivered() {
-						return false
-					}
-
-					// Record the refund transactions
-					refund[i] = r.Produced.Records
-					refundCount += int(r.Produced.Total)
-
-				case errors.Is(err, errors.NotFound):
-					// Wait
-					return false
-
-				default:
-					require.NoError(h.TB, err)
-					panic("not reached")
+				status, p, ok := queryStatusAndProduced(h, r.Value)
+				if !ok {
+					return false // Wait
 				}
+
+				// If the transaction is pending, wait
+				if !status.Delivered() {
+					return false
+				}
+
+				// Record the refund transactions
+				refund[i] = p
+				refundCount += len(p)
 			}
 		}
 
@@ -279,29 +230,47 @@ func (c condRefund) status(predicate func(h *Harness, c any, status *protocol.Tr
 		// Wait for the refund transactions to be received
 		for _, r := range refund {
 			for _, r := range r {
-				h.TB.Helper()
-				r, err := h.Query().QueryTransaction(context.Background(), r.Value, nil)
-				switch {
-				case err == nil:
-					// Evaluate the predicate
-					r.Status.TxID = r.TxID
-					if !predicate(h, c, r.Status) {
-						return false
-					}
+				status, _, ok := queryStatusAndProduced(h, r.Value)
+				if !ok {
+					return false // Wait
+				}
 
-				case errors.Is(err, errors.NotFound):
-					// Wait
+				// Evaluate the predicate
+				status.TxID = r.Value
+				if !predicate(h, c, status) {
 					return false
-
-				default:
-					require.NoError(h.TB, err)
-					panic("not reached")
 				}
 			}
 		}
 
 		// All predicates passed
 		return true
+	}
+}
+
+func queryStatusAndProduced(h *Harness, id *url.TxID) (*protocol.TransactionStatus, []*api.TxIDRecord, bool) {
+	h.TB.Helper()
+	r, err := h.Query().Query(context.Background(), id.AsUrl(), new(api.DefaultQuery))
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		return nil, nil, false
+
+	default:
+		// Unknown error
+		require.NoError(h.TB, err)
+		panic("not reached")
+	}
+
+	switch r := r.(type) {
+	case *api.SignatureRecord:
+		return r.Status, r.Produced.Records, true
+	case *api.TransactionRecord:
+		return r.Status, r.Produced.Records, true
+	default:
+		h.TB.Fatalf("Unsupported record type %v", r.RecordType())
+		panic("not reached")
 	}
 }
 

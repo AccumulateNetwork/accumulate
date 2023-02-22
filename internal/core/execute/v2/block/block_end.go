@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -334,7 +333,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		// Sanity check: the response includes a transaction
-		if resp.Transaction == nil {
+		if resp.Message == nil {
 			x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
@@ -358,9 +357,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		seq := &messaging.SequencedMessage{
-			Message: &messaging.UserTransaction{
-				Transaction: resp.Transaction,
-			},
+			Message:     resp.Message,
 			Source:      resp.Sequence.Source,
 			Destination: resp.Sequence.Destination,
 			Number:      resp.Sequence.Number,
@@ -390,8 +387,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 
 		var bad bool
 		for _, signature := range resp.Signatures.Records {
-			h := signature.TxID.Hash()
-			if !bytes.Equal(h[:], resp.Transaction.GetHash()) {
+			if signature.TxID.Hash() != resp.Message.Hash() {
 				x.logger.Error("Signature from query-synth does not match the transaction hash", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "txid", signature.TxID, "signature", signature)
 				bad = true
 				continue
@@ -417,7 +413,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		if anchor.Signature == nil {
-			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
+			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Message.Hash()).Slice(0, 4))
 			bad = true
 		}
 		if bad {
@@ -426,7 +422,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 
 		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{anchor}})
 		if err != nil {
-			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Transaction.Body.Type())
+			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
 			continue
 		}
 	}

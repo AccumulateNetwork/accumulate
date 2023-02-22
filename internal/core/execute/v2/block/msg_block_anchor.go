@@ -94,7 +94,7 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	var st *protocol.TransactionStatus
 	if ready {
 		// Process the transaction
-		st, err = ctx.callMessageExecutor(batch, ctx.childWith(seq))
+		st, err = ctx.callMessageExecutor(batch, seq)
 	} else {
 		// Mark the message as pending
 		st, err = ctx.recordPending(batch, ctx, seq.Message)
