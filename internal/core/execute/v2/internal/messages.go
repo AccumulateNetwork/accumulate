@@ -26,10 +26,6 @@ const (
 	// pushed from the DN via an anchor.
 	MessageTypeNetworkUpdate
 
-	// MessageTypeForwardedMessage is a message forwarded from another
-	// partition.
-	MessageTypeForwardedMessage
-
 	// MessageTypeMessageIsReady indicates that a message is ready to be
 	// processed.
 	MessageTypeMessageIsReady
@@ -44,14 +40,6 @@ type NetworkUpdate struct {
 	Body    protocol.TransactionBody
 }
 
-// ForwardedMessage is a message forwarded from another partition.
-type ForwardedMessage struct {
-	internalMessage
-	Message messaging.Message
-}
-
-func (m *ForwardedMessage) Unwrap() messaging.Message { return m.Message }
-
 // MessageIsReady indicates that ta transaction is ready to be executed.
 type MessageIsReady struct {
 	internalMessage
@@ -61,10 +49,6 @@ type MessageIsReady struct {
 func (m *NetworkUpdate) Type() messaging.MessageType { return MessageTypeNetworkUpdate }
 func (m *NetworkUpdate) ID() *url.TxID               { return m.Account.WithTxID(m.Cause) }
 func (m *NetworkUpdate) CopyAsInterface() any        { return m }
-
-func (m *ForwardedMessage) Type() messaging.MessageType { return MessageTypeForwardedMessage }
-func (m *ForwardedMessage) ID() *url.TxID               { return m.Message.ID() }
-func (m *ForwardedMessage) CopyAsInterface() any        { return m }
 
 func (m *MessageIsReady) Type() messaging.MessageType { return MessageTypeMessageIsReady }
 func (m *MessageIsReady) ID() *url.TxID               { return m.TxID }
