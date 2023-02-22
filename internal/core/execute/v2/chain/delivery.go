@@ -62,6 +62,12 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 			}
 
 		case *messaging.UserSignature:
+			// For now don't validate auth signatures
+			if msg.Signature.Type() == protocol.SignatureTypeAuthority {
+				special[msg.TxID.Hash()] = true
+				return nil
+			}
+
 			d := get(msg.TxID.Hash())
 			d.Signatures = append(d.Signatures, msg.Signature)
 			if seq != nil {
@@ -98,7 +104,7 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 		}
 	}
 
-	// Remove entries that only have a signature request
+	// Remove entries that only have a signature request or auth signature
 	for i := 0; i < len(deliveries); i++ {
 		d := deliveries[i]
 		if len(d.Signatures) > 0 {

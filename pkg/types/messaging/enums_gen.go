@@ -30,7 +30,7 @@ const MessageTypeBlockAnchor MessageType = 4
 const MessageTypeSequenced MessageType = 5
 
 // MessageTypeSignatureRequest is a request for additional signatures.
-const MessageTypeSignatureRequest MessageType = 7
+const MessageTypeSignatureRequest MessageType = 6
 
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }

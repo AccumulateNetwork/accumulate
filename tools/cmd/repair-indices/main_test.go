@@ -26,6 +26,8 @@ import (
 )
 
 func TestRepairIndices(t *testing.T) {
+	acctesting.EnableDebugFeatures()
+
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 

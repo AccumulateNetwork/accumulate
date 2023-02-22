@@ -75,16 +75,22 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 		}
 	}
 
-	// Check the status
-	h := seq.Message.Hash()
-	status, err := batch.Transaction(h[:]).Status().Get()
+	// If the message has already been processed, return its recorded status.
+	//
+	// Do this check on the _sequence_ message's status, not the inner message's
+	// status. Some messages, such as authority signatures, may end up being
+	// duplicates. To preserve the integrity of the sequence, those still need
+	// to be processed even if the executor simply returns the existing status.
+	status, err := batch.Transaction2(seq.Hash()).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
-
-	// If the message has already been processed, return its recorded status
 	if status.Delivered() {
-		return status, nil
+		txst, err := batch.Transaction2(seq.Message.Hash()).Status().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load status: %w", err)
+		}
+		return txst, nil
 	}
 
 	// Record the message and it's cause/produced relation
@@ -129,6 +135,18 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 	ledger, err := x.updateLedger(batch, ctx, seq, st.Pending())
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Store a status for the sequence message (see the comment above where the
+	// status is checked)
+	if st.Delivered() {
+		err = batch.Transaction2(seq.Hash()).Status().Put(&protocol.TransactionStatus{
+			TxID: seq.ID(),
+			Code: errors.Delivered,
+		})
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("store status: %w", err)
+		}
 	}
 
 	err = batch.Commit()

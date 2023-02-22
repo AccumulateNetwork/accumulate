@@ -81,17 +81,6 @@ BlockAnchor:
       type: Message
       marshal-as: union
 
-# AuthoritySignature:
-#   union: { type: message }
-#   fields:
-#     - name: Signature
-#       type: protocol.Signature
-#       marshal-as: union
-#     - name: Proof
-#       type: protocol.AnnotatedReceipt
-#       marshal-as: reference
-#       pointer: true
-
 SignatureRequest:
   union: { type: message }
   fields:
