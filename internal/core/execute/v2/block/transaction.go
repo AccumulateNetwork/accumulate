@@ -160,6 +160,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	}
 
 	// For each authority
+	var authorized bool
 	authRequired := delivery.Transaction.Body.Type().RequireAuthorization()
 	for _, entry := range auth.Authorities {
 		// Do not check signers for disabled authorities
@@ -175,14 +176,39 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 		if !ok {
 			return false, nil
 		}
+		authorized = true
+	}
+	if authorized {
+		return true, nil
 	}
 
 	// If every authority is disabled, at least one signature is required
-	return len(status.Signers) > 0, nil
+	voters, err := batch.Account(delivery.Transaction.Header.Principal).
+		Transaction(delivery.Transaction.ID().Hash()).
+		Voters().Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load voters: %w", err)
+	}
+
+	return len(voters) > 0, nil
 }
 
 func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error) {
-	// Check if any signer has reached its threshold
+	_, err := batch.
+		Account(transaction.Header.Principal).
+		Transaction(transaction.ID().Hash()).
+		Vote(authUrl).
+		Get()
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errors.NotFound):
+		// return false, nil
+	default:
+		return false, errors.UnknownError.With("load vote: %w", err)
+	}
+
+	// Check if any signer has reached its threshold (TODO Remove)
 	for _, signer := range status.FindSigners(authUrl) {
 		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer)
 		if err != nil {
