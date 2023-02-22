@@ -84,25 +84,6 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, produced []*ProducedM
 		if err != nil {
 			return errors.UnknownError.WithFormat("add produced: %w", err)
 		}
-
-		// Record signature -> produced synthetic forwarded transaction, forwarded signature
-		sub, ok := p.Message.(messaging.MessageWithTransaction)
-		if !ok {
-			continue
-		}
-		fwd, ok := sub.GetTransaction().Body.(*protocol.SyntheticForwardTransaction)
-		if !ok {
-			continue
-		}
-		for _, sig := range fwd.Signatures {
-			sigId := sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
-			for _, hash := range sig.Cause {
-				err = batch.Transaction(hash[:]).Produced().Add(seq.Message.ID(), sigId) //nolint:rangevarref
-				if err != nil {
-					return err
-				}
-			}
-		}
 	}
 
 	err := batch.Commit()

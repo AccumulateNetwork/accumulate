@@ -44,32 +44,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var delegate protocol.Signer
 	var err error
 	switch signature := signature.(type) {
-	case *protocol.SignatureSet:
-		if !delivery.IsForwarded() {
-			return nil, errors.BadRequest.With("a signature set is not allowed outside of a forwarded transaction")
-		}
-		if !md.Forwarded {
-			return nil, errors.BadRequest.With("a signature set must be nested within another signature")
-		}
-		signer, err = x.processSigner(batch, delivery.Transaction, signature, md, !md.Delegated && md.Location.LocalTo(delivery.Transaction.Header.Principal))
-		if err != nil {
-			return nil, err
-		}
-
-		// Do not store anything if the set is within a delegated transaction
-		if md.Delegated {
-			return signer, nil
-		}
-
-	case *protocol.RemoteSignature:
-		if md.Nested() {
-			return nil, errors.BadRequest.With("a remote signature cannot be nested within another signature")
-		}
-		if !delivery.IsForwarded() {
-			return nil, errors.BadRequest.With("a remote signature is not allowed outside of a forwarded transaction")
-		}
-		return x.processSignature(batch, delivery, signature.Signature, md.SetForwarded())
-
 	case *protocol.DelegatedSignature:
 		s, err := x.processSignature(batch, delivery, signature.Signature, md.SetDelegated())
 		if err != nil {
@@ -226,10 +200,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	var index int
 	switch signature := signature.(type) {
-	case *protocol.RemoteSignature,
-		*protocol.SignatureSet:
-		index = 0
-
 	case *protocol.DelegatedSignature:
 		index, _, _ = signer.EntryByDelegate(delegate.GetUrl())
 

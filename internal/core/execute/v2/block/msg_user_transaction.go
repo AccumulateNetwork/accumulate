@@ -211,7 +211,6 @@ func (UserTransaction) executeTransaction(batch *database.Batch, ctx *Transactio
 	delivery := &chain.Delivery{
 		Transaction: ctx.transaction,
 		Internal:    ctx.isWithin(internal.MessageTypeNetworkUpdate),
-		Forwarded:   ctx.isWithin(internal.MessageTypeForwardedMessage),
 	}
 	if typ := ctx.transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
 		// Load sequence info (nil bundle is a hack)
