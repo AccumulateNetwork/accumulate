@@ -31,9 +31,34 @@ func loadTransactionOrSignature(batch *database.Batch, txid *url.TxID) (api.Reco
 		case interface{ Unwrap() messaging.Message }:
 			msg = m.Unwrap()
 		default:
-			return nil, errors.InternalError.WithFormat("unsupported message type %v", m.Type())
+			return loadOtherMessage(batch, msg)
 		}
 	}
+}
+
+func loadOtherMessage(batch *database.Batch, msg messaging.Message) (*api.TransactionRecord, error) {
+	// TODO Improve the API for messages
+
+	h := msg.Hash()
+	record := batch.Transaction(h[:])
+	status, err := record.Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
+
+	produced, err := record.Produced().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load produced: %w", err)
+	}
+
+	r := new(api.TransactionRecord)
+	r.TxID = msg.ID()
+	r.Message = msg
+	r.Status = status
+	r.Produced, _ = api.MakeRange(produced, 0, 0, func(x *url.TxID) (*api.TxIDRecord, error) {
+		return &api.TxIDRecord{Value: x}, nil
+	})
+	return r, nil
 }
 
 func loadTransaction(batch *database.Batch, txn *protocol.Transaction) (*api.TransactionRecord, error) {

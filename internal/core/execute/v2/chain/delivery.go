@@ -26,35 +26,46 @@ func NormalizeEnvelope(envelope *messaging.Envelope) ([]*Delivery, error) {
 func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 	var deliveries []*Delivery
 	txnIndex := map[[32]byte]int{}
+	special := map[[32]byte]bool{}
 
-	var process func(msg messaging.Message) error
-	process = func(msg messaging.Message) error {
+	get := func(hash [32]byte) *Delivery {
+		if i, ok := txnIndex[hash]; ok {
+			return deliveries[i]
+		}
+
+		d := new(Delivery)
+		d.Transaction = new(protocol.Transaction)
+		d.Transaction.Body = &protocol.RemoteTransaction{Hash: hash}
+
+		txnIndex[hash] = len(deliveries)
+		deliveries = append(deliveries, d)
+		return d
+	}
+
+	var process func(msg messaging.Message, seq *messaging.SequencedMessage) error
+	process = func(msg messaging.Message, seq *messaging.SequencedMessage) error {
 		switch msg := msg.(type) {
 		case *messaging.SequencedMessage:
-			hash := msg.Message.Hash()
-			if i, ok := txnIndex[hash]; ok {
-				deliveries[i].Sequence = msg
-			} else {
-				txnIndex[hash] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Sequence: msg})
-			}
-			return process(msg.Message)
+			return process(msg.Message, msg)
+
+		case *messaging.SignatureRequest:
+			// For now don't validate signature requests
+			special[msg.TxID.Hash()] = true
+			return nil
 
 		case *messaging.UserTransaction:
 			hash := *(*[32]byte)(msg.Transaction.GetHash())
-			if i, ok := txnIndex[hash]; ok {
-				deliveries[i].Transaction = msg.Transaction
-			} else {
-				txnIndex[hash] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Transaction: msg.Transaction})
+			d := get(hash)
+			d.Transaction = msg.Transaction
+			if seq != nil {
+				d.Sequence = seq
 			}
 
 		case *messaging.UserSignature:
-			if i, ok := txnIndex[msg.TxID.Hash()]; ok {
-				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
-			} else {
-				txnIndex[msg.TxID.Hash()] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
+			d := get(msg.TxID.Hash())
+			d.Signatures = append(d.Signatures, msg.Signature)
+			if seq != nil {
+				d.Sequence = seq
 			}
 
 		case *messaging.BlockAnchor:
@@ -67,16 +78,12 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 				return errors.BadRequest.With("anchor must contain a sequenced transaction")
 			}
 
-			if i, ok := txnIndex[txn.Hash()]; ok {
-				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
-			} else {
-				txnIndex[txn.Hash()] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
-			}
-			return process(msg.Anchor)
+			d := get(txn.Hash())
+			d.Signatures = append(d.Signatures, msg.Signature)
+			return process(msg.Anchor, seq)
 
 		case interface{ Unwrap() messaging.Message }:
-			return process(msg.Unwrap())
+			return process(msg.Unwrap(), seq)
 
 		default:
 			return errors.BadRequest.WithFormat("unsupported message type %v", msg.Type())
@@ -85,10 +92,23 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 	}
 
 	for _, msg := range messages {
-		err := process(msg)
+		err := process(msg, nil)
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	// Remove entries that only have a signature request
+	for i := 0; i < len(deliveries); i++ {
+		d := deliveries[i]
+		if len(d.Signatures) > 0 {
+			continue
+		}
+		if !special[d.Transaction.ID().Hash()] {
+			continue
+		}
+		deliveries = append(deliveries[:i], deliveries[i+1:]...)
+		i--
 	}
 
 	for _, delivery := range deliveries {
