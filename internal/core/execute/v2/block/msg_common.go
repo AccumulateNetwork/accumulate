@@ -67,14 +67,32 @@ func (m *MessageContext) txnWith(txn *protocol.Transaction) *TransactionContext 
 // isWithin returns true if the given message type appears somewhere in the
 // message chain.
 func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
-	for m := m; m != nil; m = m.parent {
+	for {
+		if m.parent == nil {
+			return false
+		}
+		m = m.parent
 		for _, typ := range typ {
 			if m.message.Type() == typ {
 				return true
 			}
 		}
+
+		// Break the chain when processing a signature. The signature itself
+		// might be synthetic, but that does not make the transaction synthetic.
+		//
+		// An authority signature necessarily must be executed from within a
+		// synthetic context - however the transaction is necessarily a user
+		// transaction, and user transactions cannot be executed within a
+		// synthetic context. Thus we break the chain so we can execute inline
+		// without the transaction executor complaining about a user transaction
+		// within a synthetic context.
+		switch m.message.Type() {
+		case messaging.MessageTypeUserSignature,
+			messaging.MessageTypeCreditPayment:
+			return false
+		}
 	}
-	return false
 }
 
 // shouldExecuteTransaction checks if this context is one that is safe to

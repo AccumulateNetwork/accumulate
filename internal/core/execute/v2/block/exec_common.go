@@ -57,12 +57,3 @@ func unwrapMessageAs[T any](msg messaging.Message) (T, bool) {
 		}
 	}
 }
-
-// SignatureContext is the context in which a message is executed.
-type SignatureContext struct {
-	*MessageContext
-	signature   protocol.Signature
-	transaction *protocol.Transaction
-}
-
-func (s *SignatureContext) Type() protocol.SignatureType { return s.signature.Type() }

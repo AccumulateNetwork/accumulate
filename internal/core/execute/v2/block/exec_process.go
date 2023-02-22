@@ -170,12 +170,8 @@ func (b *BlockV2) checkForUnsignedTransactions(messages []messaging.Message) err
 	for _, msg := range messages {
 	again:
 		switch m := msg.(type) {
-		case *messaging.UserSignature:
-			delete(unsigned, m.TxID.Hash())
-		case *messaging.BlockAnchor:
-			delete(unsigned, m.Signature.GetTransactionHash())
-		case *messaging.SignatureRequest:
-			delete(unsigned, m.TxID.Hash())
+		case messaging.MessageForTransaction:
+			delete(unsigned, m.GetTxID().Hash())
 		case interface{ Unwrap() messaging.Message }:
 			msg = m.Unwrap()
 			goto again
