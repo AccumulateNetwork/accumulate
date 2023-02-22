@@ -53,7 +53,7 @@ func (m *BlockAnchor) ID() *url.TxID {
 }
 
 func (m *UserSignature) ID() *url.TxID {
-	hash := *(*[32]byte)(m.Signature.Hash())
+	hash := m.Hash()
 	switch sig := m.Signature.(type) {
 	case *protocol.ReceiptSignature:
 		return sig.SourceNetwork.WithTxID(hash)

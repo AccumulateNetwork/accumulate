@@ -227,3 +227,49 @@ InternalSignature:
       type: hash
     - name: TransactionHash
       type: hash
+
+AuthoritySignature:
+  union: { type: signature }
+  description: is a signature produced by an authority
+  fields:
+    - name: Signer
+      description: is the signer that produced this signature
+      type: url
+      pointer: true
+    - name: Authority
+      description: is the authority that produced this signature
+      type: url
+      pointer: true
+    - name: Vote
+      description: is the authority's vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+    - name: TxID
+      description: is the ID of the transaction this was produced for
+      type: txid
+      pointer: true
+    - name: Initiator
+      description: indicates whether the authority initiated the transaction
+      type: bool
+    - name: Payments
+      description: lists fee payments made
+      type: FeePayment
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Delegator
+      type: url
+      pointer: true
+      repeatable: true
+
+# Other types
+
+FeePayment:
+  fields:
+    - name: Payed
+      type: Fee
+      marshal-as: enum
+    - name: Payer
+      type: url
+      pointer: true
