@@ -16,11 +16,22 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// MessageContext is the context in which a message is executed.
+// MessageContext is the context in which a message is processed.
 type MessageContext struct {
+	// bundle is the message bundle being processed.
 	*bundle
+
+	// parent is the parent message context, or nil.
+	parent *MessageContext
+
+	// message is the Message being processed.
 	message messaging.Message
-	parent  *MessageContext
+
+	// additional is additional messages that should be processed after this one.
+	additional []messaging.Message
+
+	// produced is other messages produced while processing the message.
+	produced []*ProducedMessage
 }
 
 func (m *MessageContext) Type() messaging.MessageType { return m.message.Type() }
@@ -84,6 +95,35 @@ func (m *MessageContext) shouldExecuteTransaction() bool {
 		}
 		m = m.parent
 	}
+}
+
+// queueAdditional queues an additional message for processing after the current
+// bundle.
+func (m *MessageContext) queueAdditional(msg messaging.Message) {
+	m.additional = append(m.additional, msg)
+}
+
+// didProduce queues a produced synthetic message for dispatch.
+func (m *MessageContext) didProduce(dest *url.URL, msg messaging.Message) {
+	m.produced = append(m.produced, &ProducedMessage{
+		Producer:    m.message.ID(),
+		Destination: dest,
+		Message:     msg,
+	})
+}
+
+// callMessageExecutor creates a child context for the given message and calls
+// the corresponding message executor.
+func (m *MessageContext) callMessageExecutor(batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
+	c := m.childWith(msg)
+	st, err := m.bundle.callMessageExecutor(batch, c)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	m.additional = append(m.additional, c.additional...)
+	m.produced = append(m.produced, c.produced...)
+	return st, nil
 }
 
 // getSequence gets the [message.SequencedMessage] cause of the given message, if one exists.

@@ -7,7 +7,10 @@
 package messaging
 
 import (
+	"crypto/sha256"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -61,6 +64,10 @@ func (m *UserSignature) ID() *url.TxID {
 	}
 }
 
+func (m *SignatureRequest) ID() *url.TxID {
+	return m.Authority.WithTxID(m.Hash())
+}
+
 func (m *SyntheticMessage) Unwrap() Message { return m.Message }
 func (m *SequencedMessage) Unwrap() Message { return m.Message }
 
@@ -90,10 +97,7 @@ func (m *UserTransaction) Hash() [32]byte {
 }
 
 func (m *UserSignature) Hash() [32]byte {
-	var h hash.Hasher
-	h.AddHash((*[32]byte)(m.Signature.Hash()))
-	h.AddTxID(m.TxID)
-	return *(*[32]byte)(h.MerkleHash())
+	return *(*[32]byte)(m.Signature.Hash())
 }
 
 func (m *SyntheticMessage) Hash() [32]byte {
@@ -125,4 +129,13 @@ func (m *BlockAnchor) Hash() [32]byte {
 		h.AddHash2(m.Anchor.Hash())
 	}
 	return *(*[32]byte)(h.MerkleHash())
+}
+
+func (m *SignatureRequest) Hash() [32]byte {
+	// If this fails something is seriously wrong
+	b, err := m.MarshalBinary()
+	if err != nil {
+		panic(errors.InternalError.WithFormat("marshaling signature request: %w", err))
+	}
+	return sha256.Sum256(b)
 }

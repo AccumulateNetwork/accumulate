@@ -29,6 +29,9 @@ const MessageTypeBlockAnchor MessageType = 4
 // MessageTypeSequenced is a message that is part of a sequence.
 const MessageTypeSequenced MessageType = 5
 
+// MessageTypeSignatureRequest is a request for additional signatures.
+const MessageTypeSignatureRequest MessageType = 7
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -36,7 +39,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced:
+	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest:
 		*v = u
 		return true
 	default:
@@ -57,6 +60,8 @@ func (v MessageType) String() string {
 		return "blockAnchor"
 	case MessageTypeSequenced:
 		return "sequenced"
+	case MessageTypeSignatureRequest:
+		return "signatureRequest"
 	default:
 		return fmt.Sprintf("MessageType:%d", v)
 	}
@@ -75,6 +80,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeBlockAnchor, true
 	case "sequenced":
 		return MessageTypeSequenced, true
+	case "signaturerequest":
+		return MessageTypeSignatureRequest, true
 	default:
 		return 0, false
 	}
