@@ -7,8 +7,10 @@
 package build
 
 import (
+	"context"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -32,6 +34,24 @@ func SignatureForTransaction(txn *protocol.Transaction) SignatureBuilder {
 
 func Transaction() TransactionBuilder {
 	return TransactionBuilder{}
+}
+
+// Load loads the transaction using the querier. Load panics if the existing
+// transaction is not remote.
+func (b SignatureBuilder) Load(q api.Querier) SignatureBuilder {
+	if !b.ok() {
+		return b
+	}
+	if _, ok := b.transaction.Body.(*protocol.RemoteTransaction); !ok {
+		panic("not a remote transaction")
+	}
+	r, err := api.Querier2{Querier: q}.QueryTransaction(context.Background(), b.transaction.ID(), nil)
+	if err != nil {
+		b.errs = append(b.errs, err)
+		return b
+	}
+	b.transaction = r.Transaction
+	return b
 }
 
 // UnixTimeNow returns the current time as a number of milliseconds since the
