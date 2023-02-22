@@ -75,9 +75,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.SyntheticDepositTokens{},
 		chain.SyntheticWriteData{},
 
-		// Forwarding
-		chain.SyntheticForwardTransaction{},
-
 		// Operator transactions
 		chain.ActivateProtocolVersion{},
 
