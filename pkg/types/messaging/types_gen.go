@@ -51,6 +51,14 @@ type SequencedMessage struct {
 	extraData []byte
 }
 
+type SignatureRequest struct {
+	fieldsSet []bool
+	Authority *url.URL  `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	TxID      *url.TxID `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Cause     *url.TxID `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	extraData []byte
+}
+
 type SyntheticMessage struct {
 	fieldsSet []bool
 	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
@@ -74,6 +82,8 @@ type UserTransaction struct {
 func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
 
 func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
+
+func (*SignatureRequest) Type() MessageType { return MessageTypeSignatureRequest }
 
 func (*SyntheticMessage) Type() MessageType { return MessageTypeSynthetic }
 
@@ -142,6 +152,24 @@ func (v *SequencedMessage) Copy() *SequencedMessage {
 }
 
 func (v *SequencedMessage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SignatureRequest) Copy() *SignatureRequest {
+	u := new(SignatureRequest)
+
+	if v.Authority != nil {
+		u.Authority = v.Authority
+	}
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+	if v.Cause != nil {
+		u.Cause = v.Cause
+	}
+
+	return u
+}
+
+func (v *SignatureRequest) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SyntheticMessage) Copy() *SyntheticMessage {
 	u := new(SyntheticMessage)
@@ -249,6 +277,35 @@ func (v *SequencedMessage) Equal(u *SequencedMessage) bool {
 		return false
 	}
 	if !(v.Number == u.Number) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SignatureRequest) Equal(u *SignatureRequest) bool {
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	switch {
+	case v.Cause == u.Cause:
+		// equal
+	case v.Cause == nil || u.Cause == nil:
+		return false
+	case !((v.Cause).Equal(u.Cause)):
 		return false
 	}
 
@@ -454,6 +511,68 @@ func (v *SequencedMessage) IsValid() error {
 		errs = append(errs, "field Message is missing")
 	} else if EqualMessage(v.Message, nil) {
 		errs = append(errs, "field Message is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SignatureRequest = []string{
+	1: "Type",
+	2: "Authority",
+	3: "TxID",
+	4: "Cause",
+}
+
+func (v *SignatureRequest) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Authority == nil) {
+		writer.WriteUrl(2, v.Authority)
+	}
+	if !(v.TxID == nil) {
+		writer.WriteTxid(3, v.TxID)
+	}
+	if !(v.Cause == nil) {
+		writer.WriteTxid(4, v.Cause)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SignatureRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SignatureRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Cause is missing")
+	} else if v.Cause == nil {
+		errs = append(errs, "field Cause is not set")
 	}
 
 	switch len(errs) {
@@ -764,6 +883,47 @@ func (v *SequencedMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *SignatureRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SignatureRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SignatureRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Authority = x
+	}
+	if x, ok := reader.ReadTxid(3); ok {
+		v.TxID = x
+	}
+	if x, ok := reader.ReadTxid(4); ok {
+		v.Cause = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SignatureRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SyntheticMessage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -945,6 +1105,26 @@ func (v *SequencedMessage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SignatureRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType `json:"type"`
+		Authority *url.URL    `json:"authority,omitempty"`
+		TxID      *url.TxID   `json:"txID,omitempty"`
+		Cause     *url.TxID   `json:"cause,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Authority == nil) {
+		u.Authority = v.Authority
+	}
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
+	}
+	if !(v.Cause == nil) {
+		u.Cause = v.Cause
+	}
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    MessageType                          `json:"type"`
@@ -1072,6 +1252,29 @@ func (v *SequencedMessage) UnmarshalJSON(data []byte) error {
 	v.Source = u.Source
 	v.Destination = u.Destination
 	v.Number = u.Number
+	return nil
+}
+
+func (v *SignatureRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType `json:"type"`
+		Authority *url.URL    `json:"authority,omitempty"`
+		TxID      *url.TxID   `json:"txID,omitempty"`
+		Cause     *url.TxID   `json:"cause,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
+	u.TxID = v.TxID
+	u.Cause = v.Cause
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Authority = u.Authority
+	v.TxID = u.TxID
+	v.Cause = u.Cause
 	return nil
 }
 

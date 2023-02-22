@@ -36,7 +36,7 @@ func (MessageIsReady) Process(batch *database.Batch, ctx *MessageContext) (*prot
 	}
 
 	// Process the message
-	st, err := ctx.callMessageExecutor(batch, ctx.childWith(msg))
+	st, err := ctx.callMessageExecutor(batch, msg)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
