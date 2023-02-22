@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -24,6 +24,7 @@ type Authority interface {
 type Signer interface {
 	AccountWithCredits
 	Signer2
+	GetAuthority() *url.URL
 }
 
 type Signer2 interface {
@@ -121,6 +122,7 @@ func MakeLiteSigner(signer Signer2) Signer {
 /* ***** Unknown signer ***** */
 
 func (s *UnknownSigner) GetUrl() *url.URL                                   { return s.Url }
+func (s *UnknownSigner) GetAuthority() *url.URL                             { return s.Url }
 func (s *UnknownSigner) StripUrl()                                          { s.Url = s.GetUrl().StripExtras() }
 func (s *UnknownSigner) GetVersion() uint64                                 { return s.Version }
 func (*UnknownSigner) GetSignatureThreshold() uint64                        { return math.MaxUint64 }
@@ -133,6 +135,10 @@ func (*UnknownSigner) DebitCredits(amount uint64) bool                      { re
 func (*UnknownSigner) CanDebitCredits(amount uint64) bool                   { return false }
 
 /* ***** Lite identity auth ***** */
+
+func (li *LiteIdentity) GetAuthority() *url.URL {
+	return li.Url
+}
 
 func (li *LiteIdentity) GetVersion() uint64 {
 	return 1
@@ -173,6 +179,11 @@ func (b *KeyBook) GetSigners() []*url.URL {
 		pages[i] = FormatKeyPageUrl(b.Url, i)
 	}
 	return pages
+}
+
+func (p *KeyPage) GetAuthority() *url.URL {
+	book, _, _ := ParseKeyPageUrl(p.Url)
+	return book
 }
 
 // GetVersion returns Version.
