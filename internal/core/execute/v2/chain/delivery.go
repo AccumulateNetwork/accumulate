@@ -48,11 +48,6 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 		case *messaging.SequencedMessage:
 			return process(msg.Message, msg)
 
-		case *messaging.SignatureRequest:
-			// For now don't validate signature requests
-			special[msg.TxID.Hash()] = true
-			return nil
-
 		case *messaging.UserTransaction:
 			hash := *(*[32]byte)(msg.Transaction.GetHash())
 			d := get(hash)
@@ -87,6 +82,11 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 			d := get(txn.Hash())
 			d.Signatures = append(d.Signatures, msg.Signature)
 			return process(msg.Anchor, seq)
+
+		case messaging.MessageForTransaction:
+			// For now don't validate signature requests
+			special[msg.GetTxID().Hash()] = true
+			return nil
 
 		case interface{ Unwrap() messaging.Message }:
 			return process(msg.Unwrap(), seq)
