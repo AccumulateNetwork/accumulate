@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -178,7 +179,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 	// If the previous block included a directory anchor, send synthetic
 	// transactions anchored by that anchor
-	err = x.sendSyntheticTransactions(block.Batch, block.IsLeader)
+	err = x.sendSyntheticTransactions(block, ledger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("build synthetic transaction receipts: %w", err)
 	}
@@ -288,9 +289,9 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader bool) error {
+func (x *Executor) sendSyntheticTransactions(block *Block, ledger *protocol.SystemLedger) error {
 	// Check for received anchors
-	anchorLedger := batch.Account(x.Describe.AnchorPool())
+	anchorLedger := block.Batch.Account(x.Describe.AnchorPool())
 	anchorIndexLast, anchorIndexPrev, err := indexing.LoadLastTwoIndexEntries(anchorLedger.MainChain().Index())
 	if err != nil {
 		return errors.InternalError.WithFormat("load last two anchor index chain entries: %w", err)
@@ -300,14 +301,8 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 	}
 	to := anchorIndexLast.Source
 
-	systemLedger := batch.Account(x.Describe.Ledger())
-	rootIndexPrev, err := indexing.LoadIndexEntryFromEnd(systemLedger.RootChain().Index(), 2)
-	if err != nil {
-		return errors.InternalError.WithFormat("load last root index chain entry: %w", err)
-	}
-
-	if rootIndexPrev != nil && anchorIndexLast.Source >= rootIndexPrev.Source {
-		return nil // Entries are from last block
+	if anchorIndexLast.BlockIndex < ledger.Index {
+		return nil // Last block did not have an anchor
 	}
 
 	var from uint64
@@ -326,7 +321,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 
 	for i, hash := range entries {
 		var msg messaging.MessageWithTransaction
-		err := batch.Message2(hash).Main().GetAs(&msg)
+		err := block.Batch.Message2(hash).Main().GetAs(&msg)
 		if err != nil {
 			return errors.InternalError.WithFormat("load transaction %d of the anchor main chain: %w", from+uint64(i), err)
 		}
@@ -338,7 +333,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 		}
 
 		if x.Describe.NetworkType == config.Directory {
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, anchor.MinorBlockIndex, nil)
+			err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, anchor.MinorBlockIndex, nil)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -350,7 +345,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt)
+			err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, receipt.Anchor.MinorBlockIndex, receipt)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -433,11 +428,6 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			return errors.InternalError.WithFormat("synthetic message stored as %X hashes to %X", hash[:4], h[:4])
 		}
 
-		txn, ok := seq.Message.(messaging.MessageWithTransaction)
-		if !ok {
-			return errors.InternalError.WithFormat("invalid synthetic transaction: expected %v, got %v", messaging.MessageTypeUserTransaction, seq.Message.Type())
-		}
-
 		// Get the synthetic main chain receipt
 		synthReceipt, err := synthMainChain.Receipt(int64(from)+int64(i), int64(to))
 		if err != nil {
@@ -463,10 +453,27 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			},
 		}
 
+		// Send the transaction along with the signature request
+		//
+		// TODO Make this smarter, only send it the first time?
+		var txid *url.TxID
+		switch msg := seq.Message.(type) {
+		case *messaging.SignatureRequest:
+			txid = msg.TxID
+		}
+		if txid != nil {
+			var txn messaging.MessageWithTransaction
+			err := batch.Message(txid.Hash()).Main().GetAs(&txn)
+			if err != nil {
+				return errors.UnknownError.WithFormat("load transaction for synthetic message: %w", err)
+			}
+			messages = append(messages, txn)
+		}
+
 		// Only send synthetic transactions from the leader
 		if isLeader {
 			env := &messaging.Envelope{Messages: messages}
-			err = x.mainDispatcher.Submit(context.Background(), txn.GetTransaction().Header.Principal, env)
+			err = x.mainDispatcher.Submit(context.Background(), seq.Destination, env)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send synthetic transaction %X: %w", hash[:4], err)
 			}

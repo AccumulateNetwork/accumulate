@@ -78,7 +78,7 @@ func (b *bundle) ProcessRemoteSignatures() error {
 		msg.Transaction = new(protocol.Transaction)
 		msg.Transaction.Header.Principal = fwd.Destination
 		msg.Transaction.Body = body
-		prod := &ProducedMessage{Producer: producer, Message: msg}
+		prod := &ProducedMessage{Producer: producer, Message: msg, Destination: fwd.Destination}
 		b.produced = append(b.produced, prod)
 	}
 

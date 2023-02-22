@@ -263,8 +263,7 @@ func (UserTransaction) executeTransaction(batch *database.Batch, ctx *Transactio
 
 	for _, newTxn := range state.ProducedTxns {
 		msg := &messaging.UserTransaction{Transaction: newTxn}
-		prod := &ProducedMessage{Producer: ctx.transaction.ID(), Message: msg}
-		ctx.produced = append(ctx.produced, prod)
+		ctx.didProduce(newTxn.Header.Principal, msg)
 	}
 	ctx.additional = append(ctx.additional, state.AdditionalMessages...)
 	ctx.state.Set(ctx.transaction.ID().Hash(), state)
