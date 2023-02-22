@@ -453,12 +453,15 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			},
 		}
 
-		// Send the transaction along with the signature request
+		// Send the transaction along with the signature request/authority
+		// signature
 		//
 		// TODO Make this smarter, only send it the first time?
 		var txid *url.TxID
 		switch msg := seq.Message.(type) {
 		case *messaging.SignatureRequest:
+			txid = msg.TxID
+		case *messaging.UserSignature:
 			txid = msg.TxID
 		}
 		if txid != nil {

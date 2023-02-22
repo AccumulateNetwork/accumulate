@@ -157,6 +157,10 @@ func (b *Batch) Transaction(id []byte) *Transaction {
 	return b.getTransaction(*(*[32]byte)(id))
 }
 
+func (b *Batch) Transaction2(id [32]byte) *Transaction {
+	return b.getTransaction(id)
+}
+
 func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 	v, err := record.NewValue(
 		b.logger.L,
