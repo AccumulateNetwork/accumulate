@@ -61,7 +61,7 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	}
 
 	// Execute the transaction
-	st, err := ctx.callMessageExecutor(batch, ctx.childWith(&messaging.UserTransaction{Transaction: txn}))
+	st, err := ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: txn})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
