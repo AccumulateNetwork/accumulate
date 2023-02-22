@@ -93,3 +93,22 @@ SignatureRequest:
     - name: Cause
       type: txid
       pointer: true
+
+CreditPayment:
+  union: { type: message }
+  fields:
+    - name: Paid
+      type: protocol.Fee
+      marshal-as: enum
+    - name: Payer
+      type: url
+      pointer: true
+    - name: Initiator
+      description: indicates whether the signature initiated the transaction
+      type: bool
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: Cause
+      type: txid
+      pointer: true

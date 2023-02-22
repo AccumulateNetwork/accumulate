@@ -59,6 +59,10 @@ type SignerValidator interface {
 	TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error)
 }
 
+type AuthorityValidator interface {
+	AuthorityIsSatisfied(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authority *url.URL) (satisfied, fallback bool, err error)
+}
+
 // PrincipalValidator validates the principal for a specific type of transaction.
 type PrincipalValidator interface {
 	TransactionExecutor

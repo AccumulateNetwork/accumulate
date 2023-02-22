@@ -83,12 +83,8 @@ func (e *Envelope) Normalize() ([]Message, error) {
 	for _, msg := range messages {
 	again:
 		switch m := msg.(type) {
-		case *UserSignature:
-			delete(unsigned, m.TxID.Hash())
-		case *BlockAnchor:
-			delete(unsigned, m.Signature.GetTransactionHash())
-		case *SignatureRequest:
-			delete(unsigned, m.TxID.Hash())
+		case MessageForTransaction:
+			delete(unsigned, m.GetTxID().Hash())
 		case interface{ Unwrap() Message }:
 			msg = m.Unwrap()
 			goto again
