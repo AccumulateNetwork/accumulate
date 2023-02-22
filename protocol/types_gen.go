@@ -19319,9 +19319,11 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TransactionHash = x
 	}
-	v.Signatures = make([]Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	v.Authority = u.Authority
 	return nil
@@ -19386,9 +19388,11 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
-	v.Accounts = make([]Account, len(u.Accounts.Value))
-	for i, x := range u.Accounts.Value {
-		v.Accounts[i] = x
+	if u.Accounts != nil {
+		v.Accounts = make([]Account, len(u.Accounts.Value))
+		for i, x := range u.Accounts.Value {
+			v.Accounts[i] = x
+		}
 	}
 	return nil
 }
@@ -19827,9 +19831,11 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 
 	v.Received = u.Received
 	v.Initiator = u.Initiator
-	v.Signers = make([]Signer, len(u.Signers.Value))
-	for i, x := range u.Signers.Value {
-		v.Signers[i] = x
+	if u.Signers != nil {
+		v.Signers = make([]Signer, len(u.Signers.Value))
+		for i, x := range u.Signers.Value {
+			v.Signers[i] = x
+		}
 	}
 	v.SourceNetwork = u.SourceNetwork
 	v.DestinationNetwork = u.DestinationNetwork
@@ -19909,9 +19915,11 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Operations = make([]AccountAuthOperation, len(u.Operations.Value))
-	for i, x := range u.Operations.Value {
-		v.Operations[i] = x
+	if u.Operations != nil {
+		v.Operations = make([]AccountAuthOperation, len(u.Operations.Value))
+		for i, x := range u.Operations.Value {
+			v.Operations[i] = x
+		}
 	}
 	return nil
 }
@@ -19990,9 +19998,11 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Operation = make([]KeyPageOperation, len(u.Operation.Value))
-	for i, x := range u.Operation.Value {
-		v.Operation[i] = x
+	if u.Operation != nil {
+		v.Operation = make([]KeyPageOperation, len(u.Operation.Value))
+		for i, x := range u.Operation.Value {
+			v.Operation[i] = x
+		}
 	}
 	return nil
 }

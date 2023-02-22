@@ -7039,9 +7039,11 @@ func (v *RecordRange[T]) UnmarshalJSON(data []byte) error {
 	if !(v.RecordType() == u.RecordType) {
 		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
 	}
-	v.Records = make([]T, len(u.Records.Value))
-	for i, x := range u.Records.Value {
-		v.Records[i] = x
+	if u.Records != nil {
+		v.Records = make([]T, len(u.Records.Value))
+		for i, x := range u.Records.Value {
+			v.Records[i] = x
+		}
 	}
 	v.Start = u.Start
 	v.Total = u.Total

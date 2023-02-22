@@ -549,9 +549,11 @@ func (v *AddrInfo) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Info.Services = u.Services
-	v.Addrs = make([]p2p.Multiaddr, len(u.Addrs.Value))
-	for i, x := range u.Addrs.Value {
-		v.Addrs[i] = x
+	if u.Addrs != nil {
+		v.Addrs = make([]p2p.Multiaddr, len(u.Addrs.Value))
+		for i, x := range u.Addrs.Value {
+			v.Addrs[i] = x
+		}
 	}
 	return nil
 }
