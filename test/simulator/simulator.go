@@ -193,8 +193,12 @@ func SnapshotMap(snapshots map[string][]byte) SnapshotFunc {
 
 func Genesis(time time.Time) SnapshotFunc {
 	// By default run tests with the new executor version
+	return GenesisWithVersion(time, protocol.ExecutorVersionLatest)
+}
+
+func GenesisWithVersion(time time.Time, version protocol.ExecutorVersion) SnapshotFunc {
 	values := new(core.GlobalValues)
-	values.ExecutorVersion = protocol.ExecutorVersionLatest
+	values.ExecutorVersion = version
 	return GenesisWith(time, values)
 }
 

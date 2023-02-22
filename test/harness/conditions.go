@@ -287,13 +287,12 @@ func isDelivered(h *Harness, _ any, status *protocol.TransactionStatus) bool {
 func isPending(h *Harness, c any, status *protocol.TransactionStatus) bool {
 	h.TB.Helper()
 
-	// Wait for a non-zero status
-	if status.Code == 0 {
-		return false
-	}
-
-	// Must be pending
-	if status.Code != errors.Pending {
+	// Check if the transaction is recorded as pending
+	if status.Code != 0 {
+		// Must be pending
+		if status.Code == errors.Pending {
+			return true
+		}
 		switch c.(type) {
 		case condProduced:
 			h.TB.Fatal("Expected produced transaction to be pending")
@@ -301,7 +300,24 @@ func isPending(h *Harness, c any, status *protocol.TransactionStatus) bool {
 			h.TB.Fatal("Expected transaction to be pending")
 		}
 	}
-	return true
+
+	// Check if the account lists the transaction as pending
+	r, err := h.Query().QueryPendingIds(context.Background(), status.TxID.Account(), nil)
+	switch {
+	case err == nil:
+		for _, r := range r.Records {
+			if r.Value.Hash() == status.TxID.Hash() {
+				return true
+			}
+		}
+
+	case !errors.Is(err, errors.NotFound):
+		// Unknown error
+		require.NoError(h.TB, err)
+		panic("not reached")
+	}
+
+	return false
 }
 
 func succeeds(h *Harness, c any, status *protocol.TransactionStatus) bool {
