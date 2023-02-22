@@ -44,14 +44,25 @@ func (s *Signature) Restore(header *Header, batch *database.Batch) error {
 }
 
 func CollectTransaction(batch *database.Batch, hash [32]byte) (*Transaction, error) {
-	var msg messaging.MessageWithTransaction
-	err := batch.Message(hash).Main().GetAs(&msg)
+	msg, err := batch.Message(hash).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	for {
+		if m, ok := msg.(interface{ Unwrap() messaging.Message }); ok {
+			msg = m.Unwrap()
+		} else {
+			break
+		}
+	}
 
 	txn := new(Transaction)
-	txn.Transaction = msg.GetTransaction()
+	if m, ok := msg.(*messaging.UserTransaction); ok {
+		txn.Transaction = m.GetTransaction()
+	} else {
+		return nil, errors.NotFound.WithFormat("%v is not a transaction", msg.Type())
+	}
+
 	txn.Status = loadState(&err, true, batch.Transaction(hash[:]).Status().Get)
 
 	if err != nil {
