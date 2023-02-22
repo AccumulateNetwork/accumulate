@@ -27,7 +27,7 @@ func (ForwardedMessage) Process(batch *database.Batch, ctx *MessageContext) (*pr
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeForwardedMessage, ctx.message.Type())
 	}
 
-	st, err := ctx.callMessageExecutor(batch, ctx.childWith(fwd.Message))
+	st, err := ctx.callMessageExecutor(batch, fwd.Message)
 	err = errors.UnknownError.Wrap(err)
 	return st, err
 }
