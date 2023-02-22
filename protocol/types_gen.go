@@ -145,12 +145,8 @@ type AuthoritySignature struct {
 	// Vote is the authority's vote.
 	Vote VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	// TxID is the ID of the transaction this was produced for.
-	TxID *url.TxID `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
-	// Initiator indicates whether the authority initiated the transaction.
-	Initiator bool `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
-	// Payments lists fee payments made.
-	Payments  []*FeePayment `json:"payments,omitempty" form:"payments" query:"payments" validate:"required"`
-	Delegator []*url.URL    `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
+	TxID      *url.TxID  `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Delegator []*url.URL `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
 	extraData []byte
 }
 
@@ -367,13 +363,6 @@ type FactomDataEntry struct {
 type FactomDataEntryWrapper struct {
 	fieldsSet []bool
 	FactomDataEntry
-	extraData []byte
-}
-
-type FeePayment struct {
-	fieldsSet []bool
-	Payed     Fee      `json:"payed,omitempty" form:"payed" query:"payed" validate:"required"`
-	Payer     *url.URL `json:"payer,omitempty" form:"payer" query:"payer" validate:"required"`
 	extraData []byte
 }
 
@@ -1374,13 +1363,6 @@ func (v *AuthoritySignature) Copy() *AuthoritySignature {
 	if v.TxID != nil {
 		u.TxID = v.TxID
 	}
-	u.Initiator = v.Initiator
-	u.Payments = make([]*FeePayment, len(v.Payments))
-	for i, v := range v.Payments {
-		if v != nil {
-			u.Payments[i] = (v).Copy()
-		}
-	}
 	u.Delegator = make([]*url.URL, len(v.Delegator))
 	for i, v := range v.Delegator {
 		if v != nil {
@@ -1783,19 +1765,6 @@ func (v *FactomDataEntryWrapper) Copy() *FactomDataEntryWrapper {
 }
 
 func (v *FactomDataEntryWrapper) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *FeePayment) Copy() *FeePayment {
-	u := new(FeePayment)
-
-	u.Payed = v.Payed
-	if v.Payer != nil {
-		u.Payer = v.Payer
-	}
-
-	return u
-}
-
-func (v *FeePayment) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *FeeSchedule) Copy() *FeeSchedule {
 	u := new(FeeSchedule)
@@ -3126,17 +3095,6 @@ func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
 	case !((v.TxID).Equal(u.TxID)):
 		return false
 	}
-	if !(v.Initiator == u.Initiator) {
-		return false
-	}
-	if len(v.Payments) != len(u.Payments) {
-		return false
-	}
-	for i := range v.Payments {
-		if !((v.Payments[i]).Equal(u.Payments[i])) {
-			return false
-		}
-	}
 	if len(v.Delegator) != len(u.Delegator) {
 		return false
 	}
@@ -3652,22 +3610,6 @@ func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
 
 func (v *FactomDataEntryWrapper) Equal(u *FactomDataEntryWrapper) bool {
 	if !v.FactomDataEntry.Equal(&u.FactomDataEntry) {
-		return false
-	}
-
-	return true
-}
-
-func (v *FeePayment) Equal(u *FeePayment) bool {
-	if !(v.Payed == u.Payed) {
-		return false
-	}
-	switch {
-	case v.Payer == u.Payer:
-		// equal
-	case v.Payer == nil || u.Payer == nil:
-		return false
-	case !((v.Payer).Equal(u.Payer)):
 		return false
 	}
 
@@ -5795,9 +5737,7 @@ var fieldNames_AuthoritySignature = []string{
 	3: "Authority",
 	4: "Vote",
 	5: "TxID",
-	6: "Initiator",
-	7: "Payments",
-	8: "Delegator",
+	6: "Delegator",
 }
 
 func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
@@ -5817,17 +5757,9 @@ func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
 	if !(v.TxID == nil) {
 		writer.WriteTxid(5, v.TxID)
 	}
-	if !(!v.Initiator) {
-		writer.WriteBool(6, v.Initiator)
-	}
-	if !(len(v.Payments) == 0) {
-		for _, v := range v.Payments {
-			writer.WriteValue(7, v.MarshalBinary)
-		}
-	}
 	if !(len(v.Delegator) == 0) {
 		for _, v := range v.Delegator {
-			writer.WriteUrl(8, v)
+			writer.WriteUrl(6, v)
 		}
 	}
 
@@ -5861,16 +5793,6 @@ func (v *AuthoritySignature) IsValid() error {
 		errs = append(errs, "field TxID is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Initiator is missing")
-	} else if !v.Initiator {
-		errs = append(errs, "field Initiator is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field Payments is missing")
-	} else if len(v.Payments) == 0 {
-		errs = append(errs, "field Payments is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field Delegator is missing")
 	} else if len(v.Delegator) == 0 {
 		errs = append(errs, "field Delegator is not set")
@@ -7257,54 +7179,6 @@ func (v *FactomDataEntryWrapper) IsValid() error {
 	}
 	if err := v.FactomDataEntry.IsValid(); err != nil {
 		errs = append(errs, err.Error())
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_FeePayment = []string{
-	1: "Payed",
-	2: "Payer",
-}
-
-func (v *FeePayment) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Payed == 0) {
-		writer.WriteEnum(1, v.Payed)
-	}
-	if !(v.Payer == nil) {
-		writer.WriteUrl(2, v.Payer)
-	}
-
-	_, _, err := writer.Reset(fieldNames_FeePayment)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *FeePayment) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Payed is missing")
-	} else if v.Payed == 0 {
-		errs = append(errs, "field Payed is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Payer is missing")
-	} else if v.Payer == nil {
-		errs = append(errs, "field Payer is not set")
 	}
 
 	switch len(errs) {
@@ -11953,18 +11827,8 @@ func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	if x, ok := reader.ReadTxid(5); ok {
 		v.TxID = x
 	}
-	if x, ok := reader.ReadBool(6); ok {
-		v.Initiator = x
-	}
 	for {
-		if x := new(FeePayment); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
-			v.Payments = append(v.Payments, x)
-		} else {
-			break
-		}
-	}
-	for {
-		if x, ok := reader.ReadUrl(8); ok {
+		if x, ok := reader.ReadUrl(6); ok {
 			v.Delegator = append(v.Delegator, x)
 		} else {
 			break
@@ -12965,32 +12829,6 @@ func (v *FactomDataEntryWrapper) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	reader.ReadValue(2, v.FactomDataEntry.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_FactomDataEntryWrapper)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *FeePayment) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *FeePayment) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(Fee); reader.ReadEnum(1, x) {
-		v.Payed = *x
-	}
-	if x, ok := reader.ReadUrl(2); ok {
-		v.Payer = x
-	}
-
-	seen, err := reader.Reset(fieldNames_FeePayment)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -15887,14 +15725,12 @@ func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 
 func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      SignatureType                  `json:"type"`
-		Signer    *url.URL                       `json:"signer,omitempty"`
-		Authority *url.URL                       `json:"authority,omitempty"`
-		Vote      VoteType                       `json:"vote,omitempty"`
-		TxID      *url.TxID                      `json:"txID,omitempty"`
-		Initiator bool                           `json:"initiator,omitempty"`
-		Payments  encoding.JsonList[*FeePayment] `json:"payments,omitempty"`
-		Delegator encoding.JsonList[*url.URL]    `json:"delegator,omitempty"`
+		Type      SignatureType               `json:"type"`
+		Signer    *url.URL                    `json:"signer,omitempty"`
+		Authority *url.URL                    `json:"authority,omitempty"`
+		Vote      VoteType                    `json:"vote,omitempty"`
+		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Signer == nil) {
@@ -15908,12 +15744,6 @@ func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TxID == nil) {
 		u.TxID = v.TxID
-	}
-	if !(!v.Initiator) {
-		u.Initiator = v.Initiator
-	}
-	if !(len(v.Payments) == 0) {
-		u.Payments = v.Payments
 	}
 	if !(len(v.Delegator) == 0) {
 		u.Delegator = v.Delegator
@@ -17991,22 +17821,18 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 
 func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      SignatureType                  `json:"type"`
-		Signer    *url.URL                       `json:"signer,omitempty"`
-		Authority *url.URL                       `json:"authority,omitempty"`
-		Vote      VoteType                       `json:"vote,omitempty"`
-		TxID      *url.TxID                      `json:"txID,omitempty"`
-		Initiator bool                           `json:"initiator,omitempty"`
-		Payments  encoding.JsonList[*FeePayment] `json:"payments,omitempty"`
-		Delegator encoding.JsonList[*url.URL]    `json:"delegator,omitempty"`
+		Type      SignatureType               `json:"type"`
+		Signer    *url.URL                    `json:"signer,omitempty"`
+		Authority *url.URL                    `json:"authority,omitempty"`
+		Vote      VoteType                    `json:"vote,omitempty"`
+		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Signer = v.Signer
 	u.Authority = v.Authority
 	u.Vote = v.Vote
 	u.TxID = v.TxID
-	u.Initiator = v.Initiator
-	u.Payments = v.Payments
 	u.Delegator = v.Delegator
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -18018,8 +17844,6 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	v.Authority = u.Authority
 	v.Vote = u.Vote
 	v.TxID = u.TxID
-	v.Initiator = u.Initiator
-	v.Payments = u.Payments
 	v.Delegator = u.Delegator
 	return nil
 }
