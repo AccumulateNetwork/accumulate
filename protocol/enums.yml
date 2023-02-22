@@ -81,6 +81,9 @@ SignatureType:
   Internal:
     value: 12
     description: is used for internally produced transactions
+  Authority:
+    value: 13
+    description: is a signature produced by an authority
 
 KeyPageOperationType:
   Unknown:

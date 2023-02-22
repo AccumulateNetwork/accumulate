@@ -50,6 +50,8 @@ type ForwardedMessage struct {
 	Message messaging.Message
 }
 
+func (m *ForwardedMessage) Unwrap() messaging.Message { return m.Message }
+
 // MessageIsReady indicates that ta transaction is ready to be executed.
 type MessageIsReady struct {
 	internalMessage
