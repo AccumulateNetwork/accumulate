@@ -185,12 +185,6 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	var signer protocol.Signer2
 	var delegate protocol.Signer
 	switch signature := signature.(type) {
-	case *protocol.RemoteSignature:
-		return nil, errors.BadRequest.With("a remote signature is not allowed outside of a forwarded transaction")
-
-	case *protocol.SignatureSet:
-		return nil, errors.BadRequest.With("a signature set is not allowed outside of a forwarded transaction")
-
 	case *protocol.DelegatedSignature:
 		if !md.Nested() {
 			// Limit delegation depth
