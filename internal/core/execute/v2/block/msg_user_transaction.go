@@ -25,7 +25,7 @@ func init() {
 // transaction messages.
 type UserTransaction struct{}
 
-func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (UserTransaction) check(batch *database.Batch, ctx *MessageContext) (*messaging.UserTransaction, error) {
 	txn, ok := ctx.message.(*messaging.UserTransaction)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserTransaction, ctx.message.Type())
@@ -40,14 +40,37 @@ func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*p
 
 	// TODO Can we remove this or do it a better way?
 	if txn.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
-		return protocol.NewErrorStatus(txn.ID(), errors.BadRequest.WithFormat("a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)), nil
+		return nil, errors.BadRequest.WithFormat("a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
 	}
 
+	return txn, nil
+}
+
+func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
+	txn, err := x.check(batch, ctx)
+	switch {
+	case err == nil:
+		// Ok
+
+	case errors.Code(err).IsClientError():
+		status := new(protocol.TransactionStatus)
+		status.Received = ctx.Block.Index
+		status.TxID = ctx.message.ID()
+		status.Set(err)
+		err = batch.Transaction2(txn.Hash()).Status().Put(status)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("store status: %w", err)
+		}
+		return status, nil
+
+	default:
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	// Resolve and store the transaction
-	var err error
 	ctx2 := ctx.txnWith(txn.Transaction)
 	ctx2.transaction, err = x.storeTransaction(batch, ctx, txn)
 	if err != nil {
@@ -186,7 +209,18 @@ func (UserTransaction) checkTransaction(batch *database.Batch, ctx *TransactionC
 	return nil, nil
 }
 
-func (UserTransaction) executeTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
+func (UserTransaction) getSequence(ctx *MessageContext) (*messaging.SequencedMessage, error) {
+	seq, ok := getMessageContextAncestor[*messaging.SequencedMessage](ctx)
+	if !ok {
+		return nil, errors.InternalError.With("not within a sequence message")
+	}
+	if seq.Message != ctx.message {
+		return nil, errors.InternalError.With("within a sequence message belonging to a different message")
+	}
+	return seq, nil
+}
+
+func (x UserTransaction) executeTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
@@ -212,9 +246,10 @@ func (UserTransaction) executeTransaction(batch *database.Batch, ctx *Transactio
 		Transaction: ctx.transaction,
 		Internal:    ctx.isWithin(internal.MessageTypeNetworkUpdate),
 	}
+
+	// Load sequence info
 	if typ := ctx.transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
-		// Load sequence info (nil bundle is a hack)
-		delivery.Sequence, err = (*bundle)(nil).getSequence(batch, delivery.Transaction.ID())
+		delivery.Sequence, err = x.getSequence(ctx.MessageContext)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
 		}
