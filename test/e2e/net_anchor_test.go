@@ -40,7 +40,7 @@ func TestAnchorThreshold(t *testing.T) {
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
-	sim.SubmitSuccessfully(
+	sim.SubmitTxnSuccessfully(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
