@@ -33,7 +33,7 @@ func TestCreateKeyBook_HashSize(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).

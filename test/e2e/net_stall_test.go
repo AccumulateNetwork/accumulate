@@ -43,7 +43,7 @@ func TestDnStall(t *testing.T) {
 	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
-	st := sim.SubmitSuccessfully(
+	st := sim.SubmitTxnSuccessfully(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("tokens")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -81,7 +81,7 @@ func TestDnStall(t *testing.T) {
 	}
 
 	// Trigger another block
-	sim.SubmitSuccessfully(
+	sim.SubmitTxnSuccessfully(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("tokens")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
