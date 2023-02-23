@@ -22,6 +22,11 @@ func init() {
 // CreditPayment processes a credit payment
 type CreditPayment struct{}
 
+func (x CreditPayment) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	_, _, err := x.check(batch, ctx)
+	return nil, errors.UnknownError.Wrap(err)
+}
+
 func (CreditPayment) check(batch *database.Batch, ctx *MessageContext) (*messaging.CreditPayment, *protocol.Transaction, error) {
 	pay, ok := ctx.message.(*messaging.CreditPayment)
 	if !ok {
@@ -45,13 +50,12 @@ func (CreditPayment) check(batch *database.Batch, ctx *MessageContext) (*messagi
 	}
 
 	// Load the transaction
-	var txn messaging.MessageWithTransaction
-	err := batch.Message(pay.TxID.Hash()).Main().GetAs(&txn)
+	txn, err := ctx.getTransaction(batch, pay.TxID.Hash())
 	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
 
-	return pay, txn.GetTransaction(), nil
+	return pay, txn, nil
 }
 
 func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {

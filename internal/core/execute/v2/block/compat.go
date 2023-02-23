@@ -11,13 +11,9 @@ import (
 
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // ExecutorV2 implements [execute.Executor] calls for a v1 executor.
@@ -41,31 +37,6 @@ func (x *ExecutorV2) RestoreSnapshot(batch database.Beginner, snapshot ioutil2.S
 
 func (x *ExecutorV2) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
 	return (*Executor)(x).InitChainValidators(initVal)
-}
-
-// Validate converts the message to a delivery and validates it. Validate
-// returns an error if the message is not a [message.LegacyMessage].
-func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	deliveries, err := chain.DeliveriesFromMessages(messages)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	st := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, delivery := range deliveries {
-		st[i] = new(protocol.TransactionStatus)
-		st[i].Result, err = (*Executor)(x).ValidateEnvelope(batch, delivery)
-
-		if err != nil {
-			st[i].Set(err)
-		}
-
-		// Wait until after ValidateEnvelope, because the transaction may get
-		// loaded by LoadTransaction
-		st[i].TxID = delivery.Transaction.ID()
-	}
-
-	return st, nil
 }
 
 // Begin constructs a [BlockV2] and calls [Executor.BeginBlock].
