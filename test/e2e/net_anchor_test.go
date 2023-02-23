@@ -61,7 +61,7 @@ func TestAnchorThreshold(t *testing.T) {
 		return drop, len(anchors) < valCount
 	})
 
-	sim.StepUntil(func(*Harness) bool { return len(anchors) >= valCount })
+	sim.StepUntil(True(func(*Harness) bool { return len(anchors) >= valCount }))
 
 	txid := anchors[0].Anchor.(*messaging.SequencedMessage).Message.ID()
 	for _, anchor := range anchors[1:] {
