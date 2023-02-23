@@ -46,7 +46,7 @@ func TestUpdateKey_Duplicate(t *testing.T) {
 		}).
 		Initiate(protocol.SignatureTypeED25519, otherKey).
 		Build()
-	st := sim.H.SubmitSuccessfully(env)
+	st := sim.H.SubmitTxnSuccessfully(env)
 	sim.H.StepUntil(
 		Txn(st.TxID).Fails())
 

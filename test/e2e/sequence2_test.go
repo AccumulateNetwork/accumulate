@@ -67,7 +67,7 @@ func TestMissingSynthTxn(t *testing.T) {
 		// Execute
 		st := make([]*protocol.TransactionStatus, 5)
 		for i := range st {
-			st[i] = sim.SubmitSuccessfully(MustBuild(t,
+			st[i] = sim.SubmitTxnSuccessfully(MustBuild(t,
 				build.Transaction().For(aliceUrl).
 					SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
 					SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
@@ -126,7 +126,7 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 	sim.StepUntil(func(*Harness) bool { return anchors >= valCount*bvnCount })
 
 	// Cause a synthetic transaction
-	st := sim.BuildAndSubmitSuccessfully(
+	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(faucet).
 			SendTokens(1, AcmeOraclePrecisionPower).To(lite).
 			SignWith(faucet).Timestamp(1).Version(1).PrivateKey(faucetKey))
@@ -175,7 +175,7 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 	sim.StepUntil(func(*Harness) bool { return anchors >= valCount })
 
 	// Cause a synthetic transaction
-	st := sim.BuildAndSubmitSuccessfully(
+	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(faucet).
 			SendTokens(1, AcmeOraclePrecisionPower).To(lite).
 			SignWith(faucet).Timestamp(1).Version(1).PrivateKey(faucetKey))
