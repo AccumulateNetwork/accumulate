@@ -25,7 +25,7 @@ func init() {
 // inside.
 type SequencedMessage struct{ UserTransaction }
 
-func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SequencedMessage, error) {
 	seq, ok := ctx.message.(*messaging.SequencedMessage)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSequenced, ctx.message.Type())
@@ -33,7 +33,7 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 
 	// Basic validation
 	if seq.Message == nil {
-		return protocol.NewErrorStatus(seq.ID(), errors.BadRequest.With("missing message")), nil
+		return nil, errors.BadRequest.With("missing message")
 	}
 
 	var missing []string
@@ -47,50 +47,74 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 		missing = append(missing, "sequence number")
 	}
 	if len(missing) > 0 {
-		return protocol.NewErrorStatus(seq.ID(), errors.BadRequest.WithFormat("invalid synthetic transaction: missing %s", strings.Join(missing, ", "))), nil
+		return nil, errors.BadRequest.WithFormat("invalid synthetic transaction: missing %s", strings.Join(missing, ", "))
 	}
 
 	if !ctx.Executor.Describe.NodeUrl().Equal(seq.Destination) {
-		return protocol.NewErrorStatus(seq.ID(), errors.BadRequest.WithFormat("invalid destination: expected %v, got %v", ctx.Executor.Describe.NodeUrl(), seq.Destination)), nil
+		return nil, errors.BadRequest.WithFormat("invalid destination: expected %v, got %v", ctx.Executor.Describe.NodeUrl(), seq.Destination)
 	}
 
 	// Sequenced messages must either be synthetic or anchors
 	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
 		if txn, ok := seq.Message.(*messaging.UserTransaction); !ok || !txn.Transaction.Body.Type().IsAnchor() {
-			return protocol.NewErrorStatus(seq.ID(), errors.BadRequest.WithFormat("invalid payload for sequenced message")), nil
+			return nil, errors.BadRequest.WithFormat("invalid payload for sequenced message")
 		}
 	}
-
-	batch = batch.Begin(true)
-	defer batch.Discard()
 
 	// Load the transaction
 	if txn, ok := seq.Message.(*messaging.UserTransaction); ok {
 		_, err := x.resolveTransaction(batch, txn)
 		if err != nil {
-			if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
-				return protocol.NewErrorStatus(txn.ID(), err), nil
-			}
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
+	return seq, nil
+}
+
+func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// If the message has already been processed, return its recorded status.
 	//
 	// Do this check on the _sequence_ message's status, not the inner message's
 	// status. Some messages, such as authority signatures, may end up being
 	// duplicates. To preserve the integrity of the sequence, those still need
 	// to be processed even if the executor simply returns the existing status.
-	status, err := batch.Transaction2(seq.Hash()).Status().Get()
+	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
 	if status.Delivered() {
-		txst, err := batch.Transaction2(seq.Message.Hash()).Status().Get()
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load status: %w", err)
+		return status, nil
+	}
+
+	batch = batch.Begin(true)
+	defer batch.Discard()
+
+	// Process the message
+	status = new(protocol.TransactionStatus)
+	status.Received = ctx.Block.Index
+	status.TxID = ctx.message.ID()
+
+	seq, err := x.check(batch, ctx)
+	var delivered bool
+	if err == nil {
+		delivered, err = x.process(batch, ctx, seq)
+	}
+
+	// Update the status
+	switch {
+	case err == nil:
+		if delivered {
+			status.Code = errors.Delivered
+		} else {
+			status.Code = errors.Pending
 		}
-		return txst, nil
+
+	case errors.Code(err).IsClientError():
+		status.Set(err)
+
+	default:
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Record the message and it's cause/produced relation
@@ -109,10 +133,26 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 		return nil, errors.UnknownError.WithFormat("store message cause: %w", err)
 	}
 
+	// Store a status for the sequence message (see the comment above where the
+	// status is checked)
+	err = batch.Transaction2(seq.Hash()).Status().Put(status)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store status: %w", err)
+	}
+
+	err = batch.Commit()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return status, nil
+}
+
+func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
 	// Check if the message is ready to process
 	ready, err := x.isReady(batch, ctx, seq)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return false, errors.UnknownError.Wrap(err)
 	}
 
 	var st *protocol.TransactionStatus
@@ -124,45 +164,30 @@ func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*
 		st, err = ctx.recordPending(batch, ctx, seq.Message)
 	}
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return false, errors.UnknownError.Wrap(err)
 	}
 	if st == nil {
 		err = batch.Commit()
-		return nil, errors.UnknownError.Wrap(err)
+		return false, errors.UnknownError.Wrap(err)
 	}
 
 	// Update the ledger
 	ledger, err := x.updateLedger(batch, ctx, seq, st.Pending())
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return false, errors.UnknownError.Wrap(err)
 	}
 
-	// Store a status for the sequence message (see the comment above where the
-	// status is checked)
-	if st.Delivered() {
-		err = batch.Transaction2(seq.Hash()).Status().Put(&protocol.TransactionStatus{
-			TxID: seq.ID(),
-			Code: errors.Delivered,
-		})
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store status: %w", err)
-		}
-	}
-
-	err = batch.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	if !st.Delivered() {
+		return false, nil
 	}
 
 	// Queue the next transaction in the sequence
-	if st.Delivered() {
-		next, ok := ledger.Get(seq.Number + 1)
-		if ok {
-			ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
-		}
+	next, ok := ledger.Get(seq.Number + 1)
+	if ok {
+		ctx.queueAdditional(&internal.MessageIsReady{TxID: next})
 	}
 
-	return st, nil
+	return true, nil
 }
 
 func (x SequencedMessage) isReady(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {

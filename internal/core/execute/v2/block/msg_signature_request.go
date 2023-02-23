@@ -22,7 +22,7 @@ func init() {
 // SignatureRequest lists a transaction as pending on an authority.
 type SignatureRequest struct{}
 
-func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (SignatureRequest) check(batch *database.Batch, ctx *MessageContext) (*messaging.SignatureRequest, error) {
 	req, ok := ctx.message.(*messaging.SignatureRequest)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSignatureRequest, ctx.message.Type())
@@ -30,28 +30,26 @@ func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (*
 
 	// Must be synthetic
 	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
-		return protocol.NewErrorStatus(req.ID(), errors.BadRequest.WithFormat("cannot execute %v outside of a synthetic message", req.Type())), nil
+		return nil, errors.BadRequest.WithFormat("cannot execute %v outside of a synthetic message", req.Type())
 	}
 
 	// Basic validation
 	if req.Authority == nil {
-		return protocol.NewErrorStatus(req.ID(), errors.BadRequest.With("missing authority")), nil
+		return nil, errors.BadRequest.With("missing authority")
 	}
 	if req.TxID == nil {
-		return protocol.NewErrorStatus(req.ID(), errors.BadRequest.With("missing transaction ID")), nil
+		return nil, errors.BadRequest.With("missing transaction ID")
 	}
 	if req.Cause == nil {
-		return protocol.NewErrorStatus(req.ID(), errors.BadRequest.With("missing cause")), nil
+		return nil, errors.BadRequest.With("missing cause")
 	}
 
-	// Add a transaction state to ensure the block gets recorded
-	ctx.state.Set(req.Hash(), new(chain.ProcessTransactionState))
+	return req, nil
+}
 
-	batch = batch.Begin(true)
-	defer batch.Discard()
-
+func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// If the message has already been processed, return its recorded status
-	status, err := batch.Transaction2(req.Hash()).Status().Get()
+	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
@@ -59,21 +57,32 @@ func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (*
 		return status, nil
 	}
 
-	// Check if the transaction has already been recorded
-	pending := batch.Account(req.Authority).Pending()
-	_, err = pending.Index(req.TxID)
+	// Add a transaction state to ensure the block gets recorded
+	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
+
+	batch = batch.Begin(true)
+	defer batch.Discard()
+
+	// Process the message
+	status = new(protocol.TransactionStatus)
+	status.Received = ctx.Block.Index
+	status.TxID = ctx.message.ID()
+
+	req, err := x.check(batch, ctx)
+	if err == nil {
+		err = x.record(batch, ctx, req)
+	}
+
+	// Update the status
 	switch {
 	case err == nil:
-		// Already recorded as pending
+		status.Code = errors.Delivered
 
-	case errors.Is(err, errors.NotFound):
-		err = x.record(batch, ctx, req)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
+	case errors.Code(err).IsClientError():
+		status.Set(err)
 
 	default:
-		return nil, errors.UnknownError.WithFormat("load pending: %w", err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Record the message
@@ -88,12 +97,7 @@ func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (*
 	}
 
 	// Record the status
-	status = new(protocol.TransactionStatus)
-	status.Received = ctx.Block.Index
-	status.TxID = req.ID()
-	status.Code = errors.Delivered
-	h := req.Hash()
-	err = batch.Transaction(h[:]).Status().Put(status)
+	err = batch.Transaction2(req.Hash()).Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store status: %w", err)
 	}
@@ -107,8 +111,23 @@ func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (*
 }
 
 func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *messaging.SignatureRequest) error {
+	// Check if the transaction has already been recorded
+	pending := batch.Account(req.Authority).Pending()
+	_, err := pending.Index(req.TxID)
+	switch {
+	case err == nil:
+		// Already recorded as pending
+		return nil
+
+	case errors.Is(err, errors.NotFound):
+		// Ok
+
+	default:
+		return errors.UnknownError.WithFormat("load pending: %w", err)
+	}
+
 	// Record the transaction as pending
-	err := batch.Account(req.Authority).Pending().Add(req.TxID)
+	err = batch.Account(req.Authority).Pending().Add(req.TxID)
 	if err != nil {
 		return errors.UnknownError.WithFormat("add pending: %w", err)
 	}
