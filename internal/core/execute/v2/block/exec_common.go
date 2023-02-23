@@ -15,6 +15,7 @@ import (
 
 type ExecutorFor[T any, V interface{ Type() T }] interface {
 	Process(*database.Batch, V) (*protocol.TransactionStatus, error)
+	Validate(*database.Batch, V) (*protocol.TransactionStatus, error)
 }
 
 type MessageExecutor = ExecutorFor[messaging.MessageType, *MessageContext]

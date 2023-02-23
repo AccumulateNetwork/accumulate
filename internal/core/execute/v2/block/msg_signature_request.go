@@ -22,6 +22,11 @@ func init() {
 // SignatureRequest lists a transaction as pending on an authority.
 type SignatureRequest struct{}
 
+func (x SignatureRequest) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	_, err := x.check(batch, ctx)
+	return nil, errors.UnknownError.Wrap(err)
+}
+
 func (SignatureRequest) check(batch *database.Batch, ctx *MessageContext) (*messaging.SignatureRequest, error) {
 	req, ok := ctx.message.(*messaging.SignatureRequest)
 	if !ok {
