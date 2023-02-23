@@ -37,6 +37,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -595,8 +596,7 @@ func (s *ValidationTestSuite) TestMain() {
 			UpdateKeyPage().SetThreshold(0).
 			SignWith(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key20))
 
-	_ = s.NotNil(st.Error) &&
-		s.Equal("cannot require 0 signatures on a key page", st.Error.Message)
+	s.EqualError(st.AsError(), "cannot require 0 signatures on a key page")
 
 	s.TB.Log("Update a key with only that key's signature")
 	st = s.BuildAndSubmitTxnSuccessfully(
@@ -660,10 +660,7 @@ func (s *ValidationTestSuite) TestMain() {
 	st = s.BuildAndSubmitTxn(
 		build.SignatureForTxID(st.TxID).
 			Url(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key22))
-
-	h := st.TxID.Hash()
-	_ = s.NotNil(st.Error) &&
-		s.Equal(fmt.Sprintf("transaction %x (sendTokens) has been delivered", h[:4]), st.Error.Message)
+	s.Equal(errors.Delivered, st.Code)
 
 	var dropped *url.TxID
 	if s.sim != nil {

@@ -44,7 +44,7 @@ func (b *BlockV2) Process(messages []messaging.Message) ([]*protocol.Transaction
 	var statuses []*protocol.TransactionStatus
 
 	// Make sure every transaction is signed
-	err := b.checkForUnsignedTransactions(messages)
+	err := checkForUnsignedTransactions(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -81,6 +81,7 @@ additional:
 		}
 	}
 
+	// Set up the bundle
 	d := new(bundle)
 	d.BlockV2 = b
 	d.pass = pass
@@ -130,7 +131,7 @@ additional:
 
 // checkForUnsignedTransactions returns an error if the message bundle includes
 // any unsigned transactions.
-func (b *BlockV2) checkForUnsignedTransactions(messages []messaging.Message) error {
+func checkForUnsignedTransactions(messages []messaging.Message) error {
 	unsigned := set[[32]byte]{}
 	for _, msg := range messages {
 		if msg, ok := msg.(*messaging.UserTransaction); ok {
