@@ -22,36 +22,41 @@ func init() {
 // CreditPayment processes a credit payment
 type CreditPayment struct{}
 
-func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (CreditPayment) check(batch *database.Batch, ctx *MessageContext) (*messaging.CreditPayment, *protocol.Transaction, error) {
 	pay, ok := ctx.message.(*messaging.CreditPayment)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeCreditPayment, ctx.message.Type())
+		return nil, nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeCreditPayment, ctx.message.Type())
 	}
 
 	// Must be synthetic
 	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
-		return protocol.NewErrorStatus(pay.ID(), errors.BadRequest.WithFormat("cannot execute %v outside of a synthetic message", pay.Type())), nil
+		return nil, nil, errors.BadRequest.WithFormat("cannot execute %v outside of a synthetic message", pay.Type())
 	}
 
 	// Basic validation
 	if pay.Payer == nil {
-		return protocol.NewErrorStatus(pay.ID(), errors.BadRequest.With("missing authority")), nil
+		return nil, nil, errors.BadRequest.With("missing authority")
 	}
 	if pay.TxID == nil {
-		return protocol.NewErrorStatus(pay.ID(), errors.BadRequest.With("missing transaction ID")), nil
+		return nil, nil, errors.BadRequest.With("missing transaction ID")
 	}
 	if pay.Cause == nil {
-		return protocol.NewErrorStatus(pay.ID(), errors.BadRequest.With("missing cause")), nil
+		return nil, nil, errors.BadRequest.With("missing cause")
 	}
 
-	// Add a transaction state to ensure the block gets recorded
-	ctx.state.Set(pay.Hash(), new(chain.ProcessTransactionState))
+	// Load the transaction
+	var txn messaging.MessageWithTransaction
+	err := batch.Message(pay.TxID.Hash()).Main().GetAs(&txn)
+	if err != nil {
+		return nil, nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+	}
 
-	batch = batch.Begin(true)
-	defer batch.Discard()
+	return pay, txn.GetTransaction(), nil
+}
 
+func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// If the message has already been processed, return its recorded status
-	status, err := batch.Transaction2(pay.Hash()).Status().Get()
+	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
@@ -59,18 +64,28 @@ func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (*pro
 		return status, nil
 	}
 
-	// Record the payment
+	// Add a transaction state to ensure the block gets recorded
+	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
+
+	batch = batch.Begin(true)
+	defer batch.Discard()
+
+	// Process the message
 	status = new(protocol.TransactionStatus)
 	status.Received = ctx.Block.Index
-	status.TxID = pay.ID()
+	status.TxID = ctx.message.ID()
 
-	txn, err := x.record(batch, ctx, pay)
-	var err2 *errors.Error
+	pay, txn, err := x.check(batch, ctx)
+	if err == nil {
+		err = x.record(batch, ctx, pay)
+	}
+
+	// Update the status
 	switch {
 	case err == nil:
 		status.Code = errors.Delivered
 
-	case errors.As(err, &err2) && err2.Code.IsClientError():
+	case errors.Code(err).IsClientError():
 		status.Set(err)
 
 	default:
@@ -89,52 +104,47 @@ func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (*pro
 	}
 
 	// Record the status
-	h := pay.Hash()
-	err = batch.Transaction(h[:]).Status().Put(status)
+	err = batch.Transaction2(pay.Hash()).Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store status: %w", err)
 	}
 
 	// The transaction may be ready so process it
-	_, err = ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: txn})
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	if !status.Failed() {
+		_, err = ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: txn})
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 	}
 
 	err = batch.Commit()
 	return status, errors.UnknownError.Wrap(err)
 }
 
-func (CreditPayment) record(batch *database.Batch, ctx *MessageContext, pay *messaging.CreditPayment) (*protocol.Transaction, error) {
+func (CreditPayment) record(batch *database.Batch, ctx *MessageContext, pay *messaging.CreditPayment) error {
 	// TODO Record payment
-
-	var txn messaging.MessageWithTransaction
-	err := batch.Message(pay.TxID.Hash()).Main().GetAs(&txn)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
-	}
 
 	// Record the initiator on the transaction status
 	if !pay.Initiator {
-		return txn.GetTransaction(), nil
+		return nil
 	}
 
 	status, err := batch.Transaction2(pay.TxID.Hash()).Status().Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+		return errors.UnknownError.WithFormat("load status: %w", err)
 	}
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load transaction status: %w", err)
+		return errors.UnknownError.WithFormat("load transaction status: %w", err)
 	}
 	if status.Initiator == nil {
 		status.Initiator = pay.Payer
 		err = batch.Transaction2(pay.TxID.Hash()).Status().Put(status)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store transaction status: %w", err)
+			return errors.UnknownError.WithFormat("store transaction status: %w", err)
 		}
 	} else if !status.Initiator.Equal(pay.Payer) {
-		return nil, errors.Conflict.WithFormat("conflicting initiator for %v", pay.TxID)
+		return errors.Conflict.WithFormat("conflicting initiator for %v", pay.TxID)
 	}
 
-	return txn.GetTransaction(), nil
+	return nil
 }
