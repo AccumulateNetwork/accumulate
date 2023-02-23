@@ -46,12 +46,12 @@ func TestRepairIndices(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
 
 	// Execute
-	tx1 := sim.BuildAndSubmitSuccessfully(
+	tx1 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("foo")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
-	tx2 := sim.BuildAndSubmitSuccessfully(
+	tx2 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("bar")).Scratch().
 			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey))
@@ -60,7 +60,7 @@ func TestRepairIndices(t *testing.T) {
 		Txn(tx1.TxID).Succeeds(),
 		Txn(tx2.TxID).Succeeds())
 
-	tx3 := sim.BuildAndSubmitSuccessfully(
+	tx3 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("baz")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(3).PrivateKey(aliceKey))
