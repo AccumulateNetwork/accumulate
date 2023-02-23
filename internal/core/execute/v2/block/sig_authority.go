@@ -22,6 +22,10 @@ func init() {
 // AuthoritySignature processes delegated signatures.
 type AuthoritySignature struct{}
 
+func (AuthoritySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+	panic("not implemented")
+}
+
 func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
 	sig, ok := ctx.signature.(*protocol.AuthoritySignature)
 	if !ok {
