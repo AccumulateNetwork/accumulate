@@ -47,7 +47,7 @@ func TestSimpleMultisig(t *testing.T) {
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
 	// Wait until the principal lists the transaction as pending
-	sim.StepUntil(func(h *Harness) bool {
+	sim.StepUntil(True(func(h *Harness) bool {
 		r, err := h.Query().QueryPendingIds(context.Background(), st.TxID.Account(), nil)
 		switch {
 		case err == nil:
@@ -60,7 +60,7 @@ func TestSimpleMultisig(t *testing.T) {
 			require.NoError(h.TB, err)
 		}
 		return false
-	})
+	}))
 
 	// Sign again
 	st = sim.BuildAndSubmitTxnSuccessfully(
