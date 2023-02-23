@@ -89,7 +89,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 	MakeLiteTokenAccount(s.T(), sim.DatabaseFor(s.faucet), faucetKey[32:], AcmeUrl())
 	CreditTokens(s.T(), sim.DatabaseFor(s.faucet), s.faucet, big.NewInt(1000*AcmePrecision))
 
-	st := sim.SubmitSuccessfully(MustBuild(s.T(),
+	st := sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			AddCredits().To(s.faucet).WithOracle(InitialAcmeOracle).Spend(10).
 			SignWith(s.faucet).Version(1).Timestamp(1).PrivateKey(faucetKey)))
@@ -97,7 +97,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
-	st = sim.SubmitSuccessfully(MustBuild(s.T(),
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			CreateIdentity(s.alice).WithKey(s.aliceKey, SignatureTypeED25519).WithKeyBook(s.alice, "book").
 			SignWith(s.faucet).Version(1).Timestamp(2).PrivateKey(faucetKey)))
@@ -106,7 +106,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		Txn(st.TxID).Produced().Succeeds())
 	s.createAlice = st
 
-	st = sim.SubmitSuccessfully(MustBuild(s.T(),
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			AddCredits().To(s.alice, "book", "1").WithOracle(InitialAcmeOracle).Spend(10).
 			SignWith(s.faucet).Version(1).Timestamp(3).PrivateKey(faucetKey)))
@@ -114,7 +114,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
-	st = sim.SubmitSuccessfully(MustBuild(s.T(),
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.alice).
 			CreateDataAccount(s.alice, "data").
 			SignWith(s.alice, "book", "1").Version(1).Timestamp(1).PrivateKey(s.aliceKey)))
@@ -122,7 +122,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		Txn(st.TxID).Succeeds())
 	s.writeData = st
 
-	st = sim.SubmitSuccessfully(MustBuild(s.T(),
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.alice, "data").
 			WriteData([]byte("foo")).
 			SignWith(s.alice, "book", "1").Version(1).Timestamp(2).PrivateKey(s.aliceKey)))

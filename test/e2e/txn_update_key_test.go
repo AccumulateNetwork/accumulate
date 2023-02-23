@@ -104,7 +104,7 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 	updateAccount(sim, alice.JoinPath("book3", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 
 	// Update the key
-	st := sim.H.Submit(
+	st := sim.H.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book", "1")).
 			WithSigner(alice.JoinPath("book3", "1"), 1).
