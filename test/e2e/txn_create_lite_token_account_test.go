@@ -51,7 +51,7 @@ func TestCreateLiteTokenAccount(t *testing.T) {
 		MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 		UpdateAccount(t, sim.DatabaseFor(alice), alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
 
-		st := sim.SubmitSuccessfully(MustBuild(t,
+		st := sim.SubmitTxnSuccessfully(MustBuild(t,
 			build.Transaction().For(subject).
 				CreateLiteTokenAccount().
 				SignWith(c.SignerUrl).Version(1).Timestamp(&timestamp).PrivateKey(c.SignerKey)))
