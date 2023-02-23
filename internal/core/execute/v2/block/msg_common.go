@@ -167,6 +167,14 @@ func (m *MessageContext) callMessageExecutor(batch *database.Batch, msg messagin
 	return st, nil
 }
 
+// callMessageValidator creates a child context for the given message and calls
+// the corresponding message executor.
+func (m *MessageContext) callMessageValidator(batch *database.Batch, msg messaging.Message) (*protocol.TransactionStatus, error) {
+	c := m.childWith(msg)
+	st, err := m.bundle.callMessageValidator(batch, c)
+	return st, errors.UnknownError.Wrap(err)
+}
+
 // getTransaction loads a transaction from the database or from the message bundle.
 func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol.Transaction, error) {
 	// Look in the bundle
