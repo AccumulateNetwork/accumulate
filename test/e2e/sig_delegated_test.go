@@ -80,6 +80,7 @@ func TestSingleDelegated(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2),
 	)
+	sim.VerboseConditions = true
 
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN1")
@@ -96,13 +97,20 @@ func TestSingleDelegated(t *testing.T) {
 		p.CreditBalance = 1e9
 	})
 
-	st := sim.SubmitTxnSuccessfully(MustBuild(t,
+	st := sim.SubmitSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "tokens").
 			BurnTokens(1, protocol.AcmePrecisionPower).
 			SignWith(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey).
 			Delegator(alice, "book", "1")))
 
 	sim.StepUntil(
-		Txn(st.TxID).Succeeds(),
-		Txn(st.TxID).Produced().Succeeds())
+		Txn(st[0].TxID).Succeeds(),
+		Txn(st[0].TxID).Produced().Succeeds(),
+		Sig(st[1].TxID).Succeeds(),
+		Sig(st[1].TxID).AuthoritySignature().Succeeds(),
+		Sig(st[1].TxID).AuthoritySignature().Produced().Succeeds(),
+		Sig(st[1].TxID).SignatureRequest().Succeeds(),
+		Sig(st[1].TxID).SignatureRequest().Produced().Succeeds(),
+		Sig(st[1].TxID).CreditPayment().Succeeds(),
+	)
 }
