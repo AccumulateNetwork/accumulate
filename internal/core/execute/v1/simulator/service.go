@@ -29,6 +29,10 @@ type simService Simulator
 // Services returns the simulator's API v3 implementation.
 func (s *Simulator) Services() *simService { return (*simService)(s) }
 
+func (s *simService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return nil, errors.NotAllowed.With("not implemented")
+}
+
 // Private returns the service, because it implements [private.Sequencer]
 // directly.
 func (s *simService) Private() private.Sequencer { return s }
@@ -136,6 +140,10 @@ func newExecService(x *ExecEntry, logger log.Logger) *partService {
 		ValidatorKey: x.Executor.Key,
 	})
 	return s
+}
+
+func (s *partService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return nil, errors.NotAllowed.With("not implemented")
 }
 
 // Private returns the service, because it implements [private.Sequencer]
