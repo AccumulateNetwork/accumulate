@@ -21,22 +21,26 @@ func init() {
 type MessageIsReady struct{}
 
 func (MessageIsReady) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	txn, ok := ctx.message.(*internal.MessageIsReady)
+	msg, ok := ctx.message.(*internal.MessageIsReady)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeMessageIsReady, ctx.message.Type())
 	}
 
+	if msg.TxID == nil {
+		return nil, errors.InternalError.With("missing message ID")
+	}
+
 	// Load the message
-	msg, err := batch.Message(txn.TxID.Hash()).Main().Get()
+	loaded, err := batch.Message(msg.TxID.Hash()).Main().Get()
 	switch {
 	case errors.Is(err, errors.NotFound):
-		return protocol.NewErrorStatus(txn.TxID, err), nil
+		return protocol.NewErrorStatus(msg.TxID, err), nil
 	case err != nil:
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
 
 	// Process the message
-	st, err := ctx.callMessageExecutor(batch, msg)
+	st, err := ctx.callMessageExecutor(batch, loaded)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
