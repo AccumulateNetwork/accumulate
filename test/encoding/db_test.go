@@ -65,7 +65,7 @@ func TestGenerateDbTestdata(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &protocol.TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl()})
 
 	// Execute
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "tokens").
 			SendTokens(123, 0).To(bob, "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
