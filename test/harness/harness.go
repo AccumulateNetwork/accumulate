@@ -33,6 +33,8 @@ type Harness struct {
 	TB       testing.TB
 	services Services
 	stepper  Stepper
+
+	VerboseConditions bool
 }
 
 // Services defines the services required by the harness.
@@ -90,25 +92,38 @@ func (h *Harness) StepN(n int) {
 	}
 }
 
-// StepUntil calls the stepper until all conditions are met. StepUntil fails if
-// the conditions are not met within 50 steps.
+// StepUntil calls the stepper until all conditions are satisfied. StepUntil
+// fails if the conditions are not met within 50 steps.
 func (h *Harness) StepUntil(conditions ...Condition) {
 	h.TB.Helper()
-	for i := 0; ; i++ {
-		if i >= 50 {
-			h.TB.Fatal(color.RedString("Condition not met after 50 blocks"))
+
+outer:
+	for i := 0; i < 50; i++ {
+		// Step (except for the first time)
+		if i > 0 {
+			h.Step()
 		}
-		ok := true
+
+		// Check every condition
 		for _, c := range conditions {
-			if !c(h) {
-				ok = false
+			if !c.Satisfied(h) {
+				continue outer
 			}
 		}
-		if ok {
-			break
-		}
-		h.Step()
+
+		// Conditions have been satisfied
+		return
 	}
+
+	// List all the unsatisfied conditions
+	s := "Condition(s) not satisfied after 50 blocks:"
+	for _, c := range conditions {
+		if !c.Satisfied(h) {
+			s += "\n  " + c.String()
+		}
+	}
+
+	h.TB.Fatal(color.RedString(s))
 }
 
 // Submit submits the envelope.
