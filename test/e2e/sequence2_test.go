@@ -115,7 +115,7 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 			if !ok {
 				continue
 			}
-			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.UserTransaction)
+			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
 			if txn.Transaction.Body.Type() == TransactionTypeDirectoryAnchor {
 				anchors++
 				drop = true
@@ -166,7 +166,7 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 			if !ok {
 				continue
 			}
-			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.UserTransaction)
+			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
 			if txn.Transaction.Body.Type() == TransactionTypeBlockValidatorAnchor {
 				anchors++
 				messages = append(messages[:i], messages[i+1:]...)

@@ -84,8 +84,8 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 
 	// Verify the message within the sequenced message is an allowed type
 	switch seq.Message.Type() {
-	case messaging.MessageTypeUserTransaction,
-		messaging.MessageTypeUserSignature,
+	case messaging.MessageTypeTransaction,
+		messaging.MessageTypeSignature,
 		messaging.MessageTypeSignatureRequest,
 		messaging.MessageTypeCreditPayment:
 		// Allowed

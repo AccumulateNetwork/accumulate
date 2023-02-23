@@ -119,11 +119,11 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	r := new(api.TransactionRecord)
 	if globals.ExecutorVersion.V2() {
 		r.Sequence = new(messaging.SequencedMessage)
-		r.Sequence.Message = &messaging.UserTransaction{Transaction: txn}
+		r.Sequence.Message = &messaging.TransactionMessage{Transaction: txn}
 		r.Sequence.Source = s.partition.URL
 		r.Sequence.Destination = dst
 		r.Sequence.Number = num
-		r.Message = &messaging.UserTransaction{Transaction: txn}
+		r.Message = &messaging.TransactionMessage{Transaction: txn}
 
 		h := r.Sequence.Hash()
 		hash = h[:]

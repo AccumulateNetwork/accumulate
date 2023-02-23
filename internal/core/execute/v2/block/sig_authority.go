@@ -131,7 +131,7 @@ func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext
 	// TODO Don't do this unless all authorities are satisfied
 
 	// Process the transaction
-	_, err = ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: ctx.transaction})
+	_, err = ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: ctx.transaction})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -238,7 +238,7 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 	// TODO Deduplicate
 	ctx.didProduce(
 		auth.RoutingLocation(),
-		&messaging.UserSignature{
+		&messaging.SignatureMessage{
 			Signature: auth,
 			TxID:      ctx.transaction.ID(),
 		},

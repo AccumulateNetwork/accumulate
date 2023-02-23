@@ -504,7 +504,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		var sigId *url.TxID
 		sim.SetSubmitHook("BVN1", func(messages []messaging.Message) (dropTx bool, keepHook bool) {
 			for _, msg := range messages {
-				msg, ok := msg.(*messaging.UserTransaction)
+				msg, ok := msg.(*messaging.TransactionMessage)
 				if !ok {
 					continue
 				}

@@ -48,7 +48,7 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 		case *messaging.SequencedMessage:
 			return process(msg.Message, msg)
 
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			hash := *(*[32]byte)(msg.Transaction.GetHash())
 			d := get(hash)
 			d.Transaction = msg.Transaction
@@ -56,7 +56,7 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 				d.Sequence = seq
 			}
 
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			// For now don't validate auth signatures
 			if msg.Signature.Type() == protocol.SignatureTypeAuthority {
 				special[msg.TxID.Hash()] = true
@@ -74,7 +74,7 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 			if !ok {
 				return errors.BadRequest.With("anchor must contain a sequenced transaction")
 			}
-			txn, ok := seq.Message.(*messaging.UserTransaction)
+			txn, ok := seq.Message.(*messaging.TransactionMessage)
 			if !ok {
 				return errors.BadRequest.With("anchor must contain a sequenced transaction")
 			}

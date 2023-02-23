@@ -191,7 +191,7 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*messag
 			}
 		}
 		for _, sig := range env.Signatures {
-			err := routeMessage(routeAccount, &route, &messaging.UserSignature{Signature: sig})
+			err := routeMessage(routeAccount, &route, &messaging.SignatureMessage{Signature: sig})
 			if err != nil {
 				return "", errors.UnknownError.With("cannot route message(s): %w", err)
 			}
@@ -208,7 +208,7 @@ func routeMessage(routeAccount func(*url.URL) (string, error), route *string, ms
 	var r string
 	var err error
 	switch msg := msg.(type) {
-	case *messaging.UserSignature:
+	case *messaging.SignatureMessage:
 		r, err = routeAccount(msg.Signature.RoutingLocation())
 
 	case *messaging.SequencedMessage:
