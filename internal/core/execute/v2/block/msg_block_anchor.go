@@ -7,6 +7,7 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -22,89 +23,66 @@ func init() {
 type BlockAnchor struct{}
 
 func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	sig, ok := ctx.message.(*messaging.BlockAnchor)
-	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBlockAnchor, ctx.message.Type())
+	// If the message has already been processed, return its recorded status
+	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
+	if status.Delivered() {
+		return status, nil
+	}
+
+	// Add a transaction state to ensure the block gets recorded
+	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
 
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	status, err := batch.Transaction(sig.Signature.Hash()).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-
-	// If the signature has already been processed, return the stored status
-	if status.Code != 0 {
-		return status, nil //nolint:nilerr // False positive
-	}
-
-	status.TxID = sig.ID()
+	// Process the message
+	status = new(protocol.TransactionStatus)
 	status.Received = ctx.Block.Index
+	status.TxID = ctx.message.ID()
 
-	// Check the message for basic validity
-	txn, seq, signer, err := x.check(ctx, batch, sig)
-	var err2 *errors.Error
+	msg, txn, seq, signer, err := x.check(ctx, batch)
+	if err == nil {
+		err = x.process(batch, ctx, msg, txn, seq, signer)
+	}
+
+	// Update the status
 	switch {
 	case err == nil:
-		// Process the signature (update the transaction status)
-		err = x.processSignature(ctx, batch, sig, txn, signer)
-		if err != nil {
-			// A system error occurred
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
 		status.Code = errors.Delivered
 
-	case errors.As(err, &err2) && err2.Code.IsClientError():
-		// Record the error
+	case errors.Code(err).IsClientError():
 		status.Set(err)
 
 	default:
-		// A system error occurred
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Once a signature has been included in the block, record the signature and
-	// its status not matter what, unless there is a system error
-	err = batch.Message2(sig.Signature.Hash()).Main().Put(sig)
+	// Record the message
+	err = batch.Message(ctx.message.Hash()).Main().Put(ctx.message)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
+		return nil, errors.UnknownError.WithFormat("store message: %w", err)
 	}
 
-	err = batch.Transaction(sig.Signature.Hash()).Status().Put(status)
+	if status.Delivered() {
+		err = batch.Message(ctx.message.Hash()).Produced().Add(txn.ID())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("add cause: %w", err)
+		}
+
+		err = batch.Message2(txn.GetHash()).Cause().Add(ctx.message.ID())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("add cause: %w", err)
+		}
+	}
+
+	// Record the status
+	err = batch.Transaction2(ctx.message.Hash()).Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store status: %w", err)
 	}
-
-	if status.Failed() {
-		err = batch.Commit()
-		return status, errors.UnknownError.Wrap(err)
-	}
-
-	// Update the block state
-	ctx.Block.State.MergeSignature(&ProcessSignatureState{})
-
-	ready, err := x.txnIsReady(batch, ctx, seq)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	var st *protocol.TransactionStatus
-	if ready {
-		// Process the transaction
-		st, err = ctx.callMessageExecutor(batch, seq)
-	} else {
-		// Mark the message as pending
-		st, err = ctx.recordPending(batch, ctx, seq.Message)
-	}
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// TODO Do something with the status
-	_ = st
 
 	err = batch.Commit()
 	if err != nil {
@@ -114,45 +92,77 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	return status, nil
 }
 
+func (x BlockAnchor) process(batch *database.Batch, ctx *MessageContext, msg *messaging.BlockAnchor, txn *protocol.Transaction, seq *messaging.SequencedMessage, signer protocol.Signer2) error {
+	// Process the signature (update the transaction status)
+	err := x.processSignature(ctx, batch, msg, txn, signer)
+	if err != nil {
+		// A system error occurred
+		return errors.UnknownError.Wrap(err)
+	}
+
+	ready, err := x.txnIsReady(batch, ctx, seq)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	if ready {
+		// Process the transaction
+		_, err = ctx.callMessageExecutor(batch, seq)
+	} else {
+		// Mark the message as pending
+		_, err = ctx.recordPending(batch, ctx, seq.Message)
+	}
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	return nil
+}
+
 // check checks if the message is garbage or not.
-func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch, anchor *messaging.BlockAnchor) (*protocol.Transaction, *messaging.SequencedMessage, protocol.Signer2, error) {
+func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messaging.BlockAnchor, *protocol.Transaction, *messaging.SequencedMessage, protocol.Signer2, error) {
+	anchor, ok := ctx.message.(*messaging.BlockAnchor)
+	if !ok {
+		return nil, nil, nil, nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBlockAnchor, ctx.message.Type())
+	}
+
 	if anchor.Signature == nil {
-		return nil, nil, nil, errors.BadRequest.With("missing signature")
+		return nil, nil, nil, nil, errors.BadRequest.With("missing signature")
 	}
 	if anchor.Anchor == nil {
-		return nil, nil, nil, errors.BadRequest.With("missing anchor")
+		return nil, nil, nil, nil, errors.BadRequest.With("missing anchor")
 	}
 	if anchor.Signature.GetTransactionHash() == ([32]byte{}) {
-		return nil, nil, nil, errors.BadRequest.With("missing transaction hash")
+		return nil, nil, nil, nil, errors.BadRequest.With("missing transaction hash")
 	}
 
 	// Verify the anchor is a sequenced anchor transaction
 	seq, ok := anchor.Anchor.(*messaging.SequencedMessage)
 	if !ok {
-		return nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeSequenced, anchor.Anchor.Type())
+		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeSequenced, anchor.Anchor.Type())
 	}
 	txn, ok := seq.Message.(*messaging.UserTransaction)
 	if !ok {
-		return nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeUserTransaction, seq.Message.Type())
+		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeUserTransaction, seq.Message.Type())
 	}
 	if typ := txn.GetTransaction().Body.Type(); !typ.IsAnchor() {
-		return nil, nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", typ, anchor.Type())
+		return nil, nil, nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", typ, anchor.Type())
 	}
 
 	if seq.Source == nil {
-		return nil, nil, nil, errors.InternalError.WithFormat("sequence is missing source")
+		return nil, nil, nil, nil, errors.InternalError.WithFormat("sequence is missing source")
 	}
 
 	// Basic validation
 	h := seq.Hash()
 	if !anchor.Signature.Verify(nil, h[:]) {
-		return nil, nil, nil, errors.BadRequest.WithFormat("invalid signature")
+		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid signature")
 	}
 
 	// Verify the signer is a validator of this partition
 	partition, ok := protocol.ParsePartitionUrl(seq.Source)
 	if !ok {
-		return nil, nil, nil, errors.BadRequest.WithFormat("signature source is not a partition")
+		return nil, nil, nil, nil, errors.BadRequest.WithFormat("signature source is not a partition")
 	}
 
 	// TODO: Consider checking the version. However this can get messy because
@@ -162,10 +172,10 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch, anchor *m
 	signer := ctx.Executor.globals.Active.AsSigner(partition)
 	_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
 	if !ok {
-		return nil, nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
+		return nil, nil, nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
-	return txn.GetTransaction(), seq, signer, nil
+	return anchor, txn.GetTransaction(), seq, signer, nil
 }
 
 func (x BlockAnchor) processSignature(ctx *MessageContext, batch *database.Batch, sig *messaging.BlockAnchor, txn *protocol.Transaction, signer protocol.Signer2) error {
