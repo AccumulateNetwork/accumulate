@@ -20,6 +20,10 @@ func init() {
 // MessageIsReady executes a message.
 type MessageIsReady struct{}
 
+func (MessageIsReady) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	return nil, errors.InternalError.With("invalid attempt to validate an internal message")
+}
+
 func (MessageIsReady) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	msg, ok := ctx.message.(*internal.MessageIsReady)
 	if !ok {

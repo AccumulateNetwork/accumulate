@@ -22,6 +22,22 @@ func init() {
 // when appropriate.
 type BlockAnchor struct{}
 
+func (x BlockAnchor) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	msg, _, _, _, err := x.check(ctx, batch)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Validate the transaction
+	_, err = ctx.callMessageValidator(batch, msg.Anchor)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// TODO Validate the signature
+	return nil, nil
+}
+
 func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// If the message has already been processed, return its recorded status
 	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
