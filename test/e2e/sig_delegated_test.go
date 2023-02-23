@@ -56,7 +56,7 @@ func TestDoubleDelegated(t *testing.T) {
 		p.CreditBalance = 1e9
 	})
 
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "tokens").
 			BurnTokens(1, protocol.AcmePrecisionPower).
 			SignWith(charlie, "book", "1").Version(1).Timestamp(1).PrivateKey(charlieKey).
@@ -96,7 +96,7 @@ func TestSingleDelegated(t *testing.T) {
 		p.CreditBalance = 1e9
 	})
 
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "tokens").
 			BurnTokens(1, protocol.AcmePrecisionPower).
 			SignWith(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey).

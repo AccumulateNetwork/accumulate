@@ -69,7 +69,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 				WriteData().Entry(fde.Wrap()).
 				SignWith(c.SignerUrl).Version(1).Timestamp(&timestamp).PrivateKey(c.SignerKey)
 		}
-		st := sim.BuildAndSubmitSuccessfully(bld)
+		st := sim.BuildAndSubmitTxnSuccessfully(bld)
 		sim.StepUntil(
 			Txn(st.TxID).Succeeds())
 	})
