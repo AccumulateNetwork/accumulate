@@ -21,6 +21,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -250,17 +252,10 @@ func TestSigningDeliveredTxnDoesNothing(t *testing.T) {
 	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, bob).Balance.Int64()))
 
 	// Send another signature
-	_, err := sim.SubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithSigner(alice, 1).
-			WithTxnHash(txns[0].GetHash()).
-			Sign(SignatureTypeED25519, aliceKey).
-			Build(),
-	)
-
-	// It should fail
-	require.Error(t, err)
+	status := sim.H.BuildAndSubmitTxn(
+		build.SignatureForHash(txns[0].GetHash()).
+			Url(alice).Version(1).PrivateKey(aliceKey))
+	require.Equal(t, errors.Delivered, status.Code)
 
 	// Verify no double-spend
 	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, alice).Balance.Int64()))

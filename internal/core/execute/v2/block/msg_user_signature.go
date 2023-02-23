@@ -22,6 +22,42 @@ func init() {
 // when appropriate.
 type UserSignature struct{}
 
+func (UserSignature) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	sig, ok := ctx.message.(*messaging.UserSignature)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserSignature, ctx.message.Type())
+	}
+
+	// Basic validation
+	if sig.Signature == nil {
+		return nil, errors.BadRequest.With("missing signature")
+	}
+	if sig.TxID == nil {
+		return nil, errors.BadRequest.With("missing transaction ID")
+	}
+
+	// Verify the bundle contains the transaction
+	var hasTxn bool
+	for _, msg := range ctx.messages {
+		txn, ok := msg.(*messaging.UserTransaction)
+		if !ok {
+			continue
+		}
+		if txn.Hash() == sig.TxID.Hash() {
+			hasTxn = true
+			break
+		}
+	}
+	if !hasTxn {
+		return nil, errors.BadRequest.With("cannot process a signature without its transaction")
+	}
+
+	// Given the check above for the transaction, this signature is guaranteed
+	// to be validated via the UserTransaction executor. But TODO signature
+	// validation needs to be split out to here.
+	return nil, nil
+}
+
 func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	sig, ok := ctx.message.(*messaging.UserSignature)
 	if !ok {
