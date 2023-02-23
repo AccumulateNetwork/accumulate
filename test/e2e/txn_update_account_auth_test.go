@@ -50,7 +50,7 @@ func TestUpdateAccountAuth_SignatureRequest(t *testing.T) {
 		SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey).
 		Done()
 	require.NoError(t, err)
-	sim.SubmitSuccessfully(env)
+	sim.SubmitTxnSuccessfully(env)
 
 	sig := &messaging.UserSignature{Signature: env.Signatures[0]}
 	sim.StepUntil(
@@ -87,7 +87,7 @@ func TestUpdateAccountAuth(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.BuildAndSubmitSuccessfully(
+	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "tokens").
 			UpdateAccountAuth().Add(bob, "book").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
@@ -97,7 +97,7 @@ func TestUpdateAccountAuth(t *testing.T) {
 
 	// Sign with the second authority
 	r := sim.QueryTransaction(st.TxID, nil)
-	st = sim.BuildAndSubmitSuccessfully(
+	st = sim.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTransaction(r.Transaction).
 			Url(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
 

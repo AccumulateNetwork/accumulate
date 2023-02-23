@@ -162,7 +162,7 @@ func TestInitWithOtherKeys(t *testing.T) {
 			require.Equal(t, env.Transaction[0].Header.Initiator[:], env.Signatures[0].Metadata().Hash())
 
 			// Execute
-			st := sim.SubmitSuccessfully(env)
+			st := sim.SubmitTxnSuccessfully(env)
 			sim.StepUntil(
 				Txn(st.TxID).Succeeds())
 
