@@ -53,7 +53,7 @@ func NewExecutor(opts Options) (Executor, error) {
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("create v2 executor: %w", err)
 		}
-		return (*v2.ExecutorV2)(exec), nil
+		return exec, nil
 	}
 
 	exec, err := v1.NewNodeExecutor(opts)
@@ -110,7 +110,7 @@ func (m *Multi) updateActive() error {
 		return errors.UnknownError.WithFormat("create v2 executor: %w", err)
 	}
 
-	m.setActive((*v2.ExecutorV2)(exec))
+	m.setActive(exec)
 	return nil
 }
 
