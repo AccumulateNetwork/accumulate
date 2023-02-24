@@ -354,7 +354,7 @@ func transactionV3(r *api.TransactionRecord) (*TransactionQueryResponse, error) 
 
 	switch payload := r.Transaction.Body.(type) {
 	case *protocol.SendTokens:
-		if r.Produced != nil && len(r.Produced.Records) != len(payload.To) {
+		if len(res.Produced) > 0 && len(r.Produced.Records) != len(payload.To) {
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(r.Produced.Records))
 		}
 
@@ -365,7 +365,7 @@ func transactionV3(r *api.TransactionRecord) (*TransactionQueryResponse, error) 
 		for i, to := range payload.To {
 			data.To[i].Url = to.Url
 			data.To[i].Amount = to.Amount
-			if r.Produced != nil {
+			if len(res.Produced) > 0 {
 				h := r.Produced.Records[i].Value.Hash()
 				data.To[i].Txid = h[:]
 			}
@@ -677,33 +677,21 @@ func (m *JrpcMethods) QueryTxLocal(ctx context.Context, params json.RawMessage) 
 		return accumulateError(err)
 	}
 
-	id, err := getTxId(req)
-	if err != nil {
-		return accumulateError(err)
+	var txid *url.TxID
+	switch {
+	case len(req.Txid) == 32:
+		txid = (&url.URL{Authority: protocol.Unknown}).WithTxID(*(*[32]byte)(req.Txid))
+	case req.TxIdUrl != nil:
+		txid = req.TxIdUrl
+	case len(req.Txid) != 0:
+		return accumulateError(errors.BadRequest.WithFormat("invalid transaction hash length: want 32, got %d", len(req.Txid)))
+	default:
+		return accumulateError(errors.BadRequest.WithFormat("no transaction ID present in request"))
 	}
 
-	if len(id) != 32 {
-		return accumulateError(fmt.Errorf("invalid TX ID: wanted 32 bytes, got %d", len(id)))
-	}
-
-	txid := (&url.URL{Authority: protocol.Unknown}).WithTxID(*(*[32]byte)(id))
 	return jrpcFormatResponse(waitFor(func() (*TransactionQueryResponse, error) {
 		return queryTx(m.LocalV3, ctx, txid, req.Prove, req.IgnorePending, true)
 	}, req.Wait, m.TxMaxWaitTime))
-}
-
-func getTxId(req *TxnQuery) ([]byte, error) {
-	switch {
-	case len(req.Txid) == 32:
-		return req.Txid, nil
-	case req.TxIdUrl != nil:
-		hash := req.TxIdUrl.Hash()
-		return hash[:], nil
-	case len(req.Txid) != 0:
-		return nil, errors.BadRequest.WithFormat("invalid transaction hash length: want 32, got %d", len(req.Txid))
-	default:
-		return nil, errors.BadRequest.WithFormat("no transaction ID present in request")
-	}
 }
 
 // Query queries an account or account chain by URL.
@@ -816,6 +804,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			res := new(MultiResponse)
 			res.Type = "pending"
 			res.Total = r.Total
+			res.Items = make([]any, len(r.Records))
 			for i, txid := range r.Records {
 				txid := txid.Value.Hash()
 				res.Items[i] = hex.EncodeToString(txid[:])

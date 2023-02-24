@@ -299,10 +299,10 @@ type RecordRange[T Record] struct {
 }
 
 type ServiceAddress struct {
-	fieldsSet []bool
 	Type      ServiceType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Partition string      `json:"partition,omitempty" form:"partition" query:"partition"`
 	extraData []byte
+	fieldsSet []bool
 }
 
 type SignatureRecord struct {
@@ -344,6 +344,7 @@ type SubscribeOptions struct {
 type TransactionRecord struct {
 	fieldsSet   []bool
 	TxID        *url.TxID                      `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Message     messaging.Message              `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Transaction *protocol.Transaction          `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Status      *protocol.TransactionStatus    `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
@@ -990,6 +991,9 @@ func (v *TransactionRecord) Copy() *TransactionRecord {
 
 	if v.TxID != nil {
 		u.TxID = v.TxID
+	}
+	if v.Message != nil {
+		u.Message = messaging.CopyMessage(v.Message)
 	}
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
@@ -1801,6 +1805,9 @@ func (v *TransactionRecord) Equal(u *TransactionRecord) bool {
 	case v.TxID == nil || u.TxID == nil:
 		return false
 	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	if !(messaging.EqualMessage(v.Message, u.Message)) {
 		return false
 	}
 	switch {
@@ -3749,49 +3756,6 @@ func (v *RecordRange[T]) IsValid() error {
 	}
 }
 
-var fieldNames_ServiceAddress = []string{
-	1: "Type",
-	2: "Partition",
-}
-
-func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Type == 0) {
-		writer.WriteEnum(1, v.Type)
-	}
-	if !(len(v.Partition) == 0) {
-		writer.WriteString(2, v.Partition)
-	}
-
-	_, _, err := writer.Reset(fieldNames_ServiceAddress)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *ServiceAddress) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Type is missing")
-	} else if v.Type == 0 {
-		errs = append(errs, "field Type is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_SignatureRecord = []string{
 	1: "RecordType",
 	2: "Signature",
@@ -4006,11 +3970,12 @@ func (v *SubscribeOptions) IsValid() error {
 var fieldNames_TransactionRecord = []string{
 	1: "RecordType",
 	2: "TxID",
-	3: "Transaction",
-	4: "Status",
-	5: "Produced",
-	6: "Signatures",
-	7: "Sequence",
+	3: "Message",
+	4: "Transaction",
+	5: "Status",
+	6: "Produced",
+	7: "Signatures",
+	8: "Sequence",
 }
 
 func (v *TransactionRecord) MarshalBinary() ([]byte, error) {
@@ -4021,20 +3986,23 @@ func (v *TransactionRecord) MarshalBinary() ([]byte, error) {
 	if !(v.TxID == nil) {
 		writer.WriteTxid(2, v.TxID)
 	}
+	if !(messaging.EqualMessage(v.Message, nil)) {
+		writer.WriteValue(3, v.Message.MarshalBinary)
+	}
 	if !(v.Transaction == nil) {
-		writer.WriteValue(3, v.Transaction.MarshalBinary)
+		writer.WriteValue(4, v.Transaction.MarshalBinary)
 	}
 	if !(v.Status == nil) {
-		writer.WriteValue(4, v.Status.MarshalBinary)
+		writer.WriteValue(5, v.Status.MarshalBinary)
 	}
 	if !(v.Produced == nil) {
-		writer.WriteValue(5, v.Produced.MarshalBinary)
+		writer.WriteValue(6, v.Produced.MarshalBinary)
 	}
 	if !(v.Signatures == nil) {
-		writer.WriteValue(6, v.Signatures.MarshalBinary)
+		writer.WriteValue(7, v.Signatures.MarshalBinary)
 	}
 	if !(v.Sequence == nil) {
-		writer.WriteValue(7, v.Sequence.MarshalBinary)
+		writer.WriteValue(8, v.Sequence.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionRecord)
@@ -4057,26 +4025,31 @@ func (v *TransactionRecord) IsValid() error {
 		errs = append(errs, "field TxID is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Message is missing")
+	} else if messaging.EqualMessage(v.Message, nil) {
+		errs = append(errs, "field Message is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Transaction is missing")
 	} else if v.Transaction == nil {
 		errs = append(errs, "field Transaction is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Status is missing")
 	} else if v.Status == nil {
 		errs = append(errs, "field Status is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Produced is missing")
 	} else if v.Produced == nil {
 		errs = append(errs, "field Produced is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Signatures is missing")
 	} else if v.Signatures == nil {
 		errs = append(errs, "field Signatures is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field Sequence is missing")
 	} else if v.Sequence == nil {
 		errs = append(errs, "field Sequence is not set")
@@ -5461,32 +5434,6 @@ func (v *RecordRange[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func (v *ServiceAddress) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *ServiceAddress) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(ServiceType); reader.ReadEnum(1, x) {
-		v.Type = *x
-	}
-	if x, ok := reader.ReadString(2); ok {
-		v.Partition = x
-	}
-
-	seen, err := reader.Reset(fieldNames_ServiceAddress)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *SignatureRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -5645,19 +5592,26 @@ func (v *TransactionRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadTxid(2); ok {
 		v.TxID = x
 	}
-	if x := new(protocol.Transaction); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := messaging.UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Message = x
+		}
+		return err
+	})
+	if x := new(protocol.Transaction); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
-	if x := new(protocol.TransactionStatus); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+	if x := new(protocol.TransactionStatus); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.Status = x
 	}
-	if x := new(RecordRange[*TxIDRecord]); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+	if x := new(RecordRange[*TxIDRecord]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Produced = x
 	}
-	if x := new(RecordRange[*SignatureRecord]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+	if x := new(RecordRange[*SignatureRecord]); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
 		v.Signatures = x
 	}
-	if x := new(messaging.SequencedMessage); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+	if x := new(messaging.SequencedMessage); reader.ReadValue(8, x.UnmarshalBinaryFrom) {
 		v.Sequence = x
 	}
 
@@ -6310,6 +6264,24 @@ func (v *RecordRange[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ServiceAddress) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType `json:"type,omitempty"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	if !(v.Type == 0) {
+		u.Type = v.Type
+	}
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(len(v.extraData) == 0) {
+	}
+	if !(len(v.fieldsSet) == 0) {
+	}
+	return json.Marshal(&u)
+}
+
 func (v *SignatureRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		RecordType RecordType                                      `json:"recordType"`
@@ -6340,17 +6312,21 @@ func (v *SignatureRecord) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType  RecordType                     `json:"recordType"`
-		TxID        *url.TxID                      `json:"txID,omitempty"`
-		Transaction *protocol.Transaction          `json:"transaction,omitempty"`
-		Status      *protocol.TransactionStatus    `json:"status,omitempty"`
-		Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty"`
-		Signatures  *RecordRange[*SignatureRecord] `json:"signatures,omitempty"`
-		Sequence    *messaging.SequencedMessage    `json:"sequence,omitempty"`
+		RecordType  RecordType                                     `json:"recordType"`
+		TxID        *url.TxID                                      `json:"txID,omitempty"`
+		Message     *encoding.JsonUnmarshalWith[messaging.Message] `json:"message,omitempty"`
+		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
+		Status      *protocol.TransactionStatus                    `json:"status,omitempty"`
+		Produced    *RecordRange[*TxIDRecord]                      `json:"produced,omitempty"`
+		Signatures  *RecordRange[*SignatureRecord]                 `json:"signatures,omitempty"`
+		Sequence    *messaging.SequencedMessage                    `json:"sequence,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.TxID == nil) {
 		u.TxID = v.TxID
+	}
+	if !(messaging.EqualMessage(v.Message, nil)) {
+		u.Message = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Message, Func: messaging.UnmarshalMessageJSON}
 	}
 	if !(v.Transaction == nil) {
 		u.Transaction = v.Transaction
@@ -7072,6 +7048,21 @@ func (v *RecordRange[T]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ServiceAddress) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType `json:"type,omitempty"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type
+	u.Partition = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Type = u.Type
+	v.Partition = u.Partition
+	return nil
+}
+
 func (v *SignatureRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		RecordType RecordType                                      `json:"recordType"`
@@ -7109,16 +7100,18 @@ func (v *SignatureRecord) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType  RecordType                     `json:"recordType"`
-		TxID        *url.TxID                      `json:"txID,omitempty"`
-		Transaction *protocol.Transaction          `json:"transaction,omitempty"`
-		Status      *protocol.TransactionStatus    `json:"status,omitempty"`
-		Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty"`
-		Signatures  *RecordRange[*SignatureRecord] `json:"signatures,omitempty"`
-		Sequence    *messaging.SequencedMessage    `json:"sequence,omitempty"`
+		RecordType  RecordType                                     `json:"recordType"`
+		TxID        *url.TxID                                      `json:"txID,omitempty"`
+		Message     *encoding.JsonUnmarshalWith[messaging.Message] `json:"message,omitempty"`
+		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
+		Status      *protocol.TransactionStatus                    `json:"status,omitempty"`
+		Produced    *RecordRange[*TxIDRecord]                      `json:"produced,omitempty"`
+		Signatures  *RecordRange[*SignatureRecord]                 `json:"signatures,omitempty"`
+		Sequence    *messaging.SequencedMessage                    `json:"sequence,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.TxID = v.TxID
+	u.Message = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Message, Func: messaging.UnmarshalMessageJSON}
 	u.Transaction = v.Transaction
 	u.Status = v.Status
 	u.Produced = v.Produced
@@ -7131,6 +7124,10 @@ func (v *TransactionRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
 	}
 	v.TxID = u.TxID
+	if u.Message != nil {
+		v.Message = u.Message.Value
+	}
+
 	v.Transaction = u.Transaction
 	v.Status = u.Status
 	v.Produced = u.Produced

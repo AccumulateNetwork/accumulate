@@ -23,11 +23,17 @@ const MessageTypeUserSignature MessageType = 2
 // MessageTypeSynthetic is a message produced by the protocol, requiring proof.
 const MessageTypeSynthetic MessageType = 3
 
-// MessageTypeValidatorSignature is a key signature from a validator.
-const MessageTypeValidatorSignature MessageType = 4
+// MessageTypeBlockAnchor is a block anchor signed by validator.
+const MessageTypeBlockAnchor MessageType = 4
 
 // MessageTypeSequenced is a message that is part of a sequence.
 const MessageTypeSequenced MessageType = 5
+
+// MessageTypeSignatureRequest is a request for additional signatures.
+const MessageTypeSignatureRequest MessageType = 6
+
+// MessageTypeCreditPayment is a payment of credits towards a transaction's fee.
+const MessageTypeCreditPayment MessageType = 7
 
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
@@ -36,7 +42,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSynthetic, MessageTypeValidatorSignature, MessageTypeSequenced:
+	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment:
 		*v = u
 		return true
 	default:
@@ -53,10 +59,14 @@ func (v MessageType) String() string {
 		return "userSignature"
 	case MessageTypeSynthetic:
 		return "synthetic"
-	case MessageTypeValidatorSignature:
-		return "validatorSignature"
+	case MessageTypeBlockAnchor:
+		return "blockAnchor"
 	case MessageTypeSequenced:
 		return "sequenced"
+	case MessageTypeSignatureRequest:
+		return "signatureRequest"
+	case MessageTypeCreditPayment:
+		return "creditPayment"
 	default:
 		return fmt.Sprintf("MessageType:%d", v)
 	}
@@ -71,10 +81,14 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeUserSignature, true
 	case "synthetic":
 		return MessageTypeSynthetic, true
-	case "validatorsignature":
-		return MessageTypeValidatorSignature, true
+	case "blockanchor":
+		return MessageTypeBlockAnchor, true
 	case "sequenced":
 		return MessageTypeSequenced, true
+	case "signaturerequest":
+		return MessageTypeSignatureRequest, true
+	case "creditpayment":
+		return MessageTypeCreditPayment, true
 	default:
 		return 0, false
 	}

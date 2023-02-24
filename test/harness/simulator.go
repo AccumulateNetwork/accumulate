@@ -42,49 +42,59 @@ func NewSimWith(tb testing.TB, s *simulator.Simulator) *Sim {
 // Sim is a Harness with some extra simulator-specific features.
 type Sim struct {
 	Harness
-	s *simulator.Simulator
+	S *simulator.Simulator
 }
 
 // Router calls Simulator.Router.
 func (s *Sim) Router() routing.Router {
-	return s.s.Router()
+	return s.S.Router()
 }
 
 // Partitions calls Simulator.Partitions.
 func (s *Sim) Partitions() []*protocol.PartitionInfo {
-	return s.s.Partitions()
+	return s.S.Partitions()
 }
 
 // Database calls Simulator.Database.
 func (s *Sim) Database(partition string) database.Updater {
-	return s.s.Database(partition)
+	return s.S.Database(partition)
 }
 
 // DatabaseFor calls Simulator.DatabaseFor.
 func (s *Sim) DatabaseFor(account *url.URL) database.Updater {
-	return s.s.DatabaseFor(account)
+	return s.S.DatabaseFor(account)
 }
 
 // SetRoute calls Simulator.SetRoute.
 func (s *Sim) SetRoute(account *url.URL, partition string) {
-	s.s.SetRoute(account, partition)
+	s.S.SetRoute(account, partition)
 }
 
 // SetSubmitHook calls Simulator.SetSubmitHook.
 func (s *Sim) SetSubmitHook(partition string, fn simulator.SubmitHookFunc) {
-	s.s.SetSubmitHook(partition, fn)
+	s.S.SetSubmitHook(partition, fn)
 }
 
 // SetSubmitHookFor calls Simulator.SetSubmitHookFor.
 func (s *Sim) SetSubmitHookFor(account *url.URL, fn simulator.SubmitHookFunc) {
-	s.s.SetSubmitHookFor(account, fn)
+	s.S.SetSubmitHookFor(account, fn)
+}
+
+// SetBlockHook calls Simulator.SetBlockHook.
+func (s *Sim) SetBlockHook(partition string, fn simulator.BlockHookFunc) {
+	s.S.SetBlockHook(partition, fn)
+}
+
+// SetBlockHookFor calls Simulator.SetBlockHookFor.
+func (s *Sim) SetBlockHookFor(account *url.URL, fn simulator.BlockHookFunc) {
+	s.S.SetBlockHookFor(account, fn)
 }
 
 // SignWithNode calls Simulator.SignWithNode.
 func (s *Sim) SignWithNode(partition string, i int) signing.Signer {
-	return s.s.SignWithNode(partition, i)
+	return s.S.SignWithNode(partition, i)
 }
 
 func (s *Sim) SubmitTo(partition string, message []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	return s.s.SubmitTo(partition, message)
+	return s.S.SubmitTo(partition, message)
 }

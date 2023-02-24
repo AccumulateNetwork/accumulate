@@ -26,6 +26,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -36,6 +37,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -350,7 +352,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotZero(QueryAccountAs[*LiteTokenAccount](s.Harness, liteAcme).Balance)
 
 	s.TB.Log("Add credits to lite account")
-	st := s.BuildAndSubmitSuccessfully(
+	st := s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			AddCredits().To(liteId).WithOracle(oracle).Purchase(1e6).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -361,7 +363,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotZero(QueryAccountAs[*LiteIdentity](s.Harness, liteId).CreditBalance)
 
 	s.TB.Log("Create an ADI")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			CreateIdentity(adi).WithKey(key10, SignatureTypeED25519).WithKeyBook(adi, "book").
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -372,7 +374,7 @@ func (s *ValidationTestSuite) TestMain() {
 	QueryAccountAs[*ADI](s.Harness, adi)
 
 	s.TB.Log("Recreating an ADI fails and the synthetic transaction is recorded")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			CreateIdentity(adi).WithKey(key10, SignatureTypeED25519).WithKeyBook(adi, "book").
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -381,7 +383,7 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Produced().Fails())
 
 	s.TB.Log("Add credits to the ADI's key page 1")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			AddCredits().To(adi, "book", "1").WithOracle(oracle).Purchase(6e4).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -392,7 +394,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotZero(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "1")).CreditBalance)
 
 	s.TB.Log("Create additional Key Pages")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book").
 			CreateKeyPage().WithEntry().Key(key20, SignatureTypeED25519).FinishEntry().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -401,7 +403,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 	QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2"))
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book").
 			CreateKeyPage().WithEntry().Key(key30, SignatureTypeED25519).FinishEntry().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -411,7 +413,7 @@ func (s *ValidationTestSuite) TestMain() {
 	QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "3"))
 
 	s.TB.Log("Add credits to the ADI's key page 2")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			AddCredits().To(adi, "book", "2").WithOracle(oracle).Purchase(1e3).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -422,7 +424,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotZero(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).CreditBalance)
 
 	s.TB.Log("Attempting to lock key page 2 using itself fails")
-	st = s.BuildAndSubmit(
+	st = s.BuildAndSubmitTxn(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
 			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))
@@ -433,7 +435,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
 	s.TB.Log("Lock key page 2 using page 1")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -443,7 +445,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
 	s.TB.Log("Attempting to update key page 3 using page 2 fails")
-	st = s.BuildAndSubmit(
+	st = s.BuildAndSubmitTxn(
 		build.Transaction().For(adi, "book", "3").
 			UpdateKeyPage().Add().Entry().Key(key31, SignatureTypeED25519).FinishEntry().FinishOperation().
 			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))
@@ -454,7 +456,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Len(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "3")).Keys, 1)
 
 	s.TB.Log("Unlock key page 2 using page 1")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().UpdateAllowed().Allow(TransactionTypeUpdateKeyPage).FinishOperation().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -464,7 +466,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
 	s.TB.Log("Update key page 3 using page 2")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "3").
 			UpdateKeyPage().Add().Entry().Key(key31, SignatureTypeED25519).FinishEntry().FinishOperation().
 			SignWith(adi, "book", "2").Version(3).Timestamp(&s.nonce).PrivateKey(key20))
@@ -474,7 +476,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Len(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "3")).Keys, 2)
 
 	s.TB.Log("Add keys to page 2")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().
 			Add().Entry().Key(key21, SignatureTypeED25519).FinishEntry().FinishOperation().
@@ -487,7 +489,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Len(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).Keys, 4)
 
 	s.TB.Log("Update key page entry with same keyhash different delegate")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi).
 			CreateKeyBook(adi, "book2").WithKey(key20, SignatureTypeED25519).
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -496,7 +498,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 	QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book2", "1"))
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			AddCredits().To(adi, "book2", "1").WithOracle(oracle).Purchase(1e3).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -506,7 +508,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.NotZero(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book2", "1")).CreditBalance)
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book2", "1").
 			UpdateKeyPage().Update().
 			Entry().Key(key20, SignatureTypeED25519).FinishEntry().
@@ -516,7 +518,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.StepUntil(
 		Txn(st.TxID).IsPending())
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTxID(st.TxID).
 			Url(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
@@ -525,14 +527,14 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book2", "1")).Keys[0].Delegate)
 
 	s.TB.Log("Set KeyBook2 as authority for adi token account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi).
 			CreateTokenAccount(adi, "acmetokens").ForToken(ACME).WithAuthority(adi, "book2").
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
 		Txn(st.TxID).IsPending())
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTxID(st.TxID).
 			Url(adi, "book2", "1").Version(2).Timestamp(&s.nonce).PrivateKey(key20))
 	s.StepUntil(
@@ -541,7 +543,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Equal(adi.JoinPath("book2").String(), QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("acmetokens")).Authorities[0].Url.String())
 
 	s.TB.Log("Burn Tokens (?) for adi token account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			SendTokens(0.01, AcmePrecisionPower).To(adi, "acmetokens").
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -551,7 +553,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.NotZero(QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("acmetokens")).Balance)
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "acmetokens").
 			BurnTokens(0.01, AcmePrecisionPower).
 			SignWith(adi, "book2", "1").Version(2).Timestamp(&s.nonce).PrivateKey(key20))
@@ -561,14 +563,14 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Zero(QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("acmetokens")).Balance)
 
 	s.TB.Log("Set KeyBook2 as authority for adi data account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi).
 			CreateTokenAccount(adi, "testdata1").ForToken(ACME).WithAuthority(adi, "book2").
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
 		Txn(st.TxID).IsPending())
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTxID(st.TxID).
 			Url(adi, "book2", "1").Version(2).Timestamp(&s.nonce).PrivateKey(key20))
 	s.StepUntil(
@@ -579,7 +581,7 @@ func (s *ValidationTestSuite) TestMain() {
 	_, _ = key24, keymgr
 
 	s.TB.Log("Set threshold to 2 of 2")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().SetThreshold(2).
 			SignWith(adi, "book", "2").Version(4).Timestamp(&s.nonce).PrivateKey(key20))
@@ -589,16 +591,15 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Equal(2, int(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).AcceptThreshold))
 
 	s.TB.Log("Set threshold to 0 of 0")
-	st = s.BuildAndSubmit(
+	st = s.BuildAndSubmitTxn(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().SetThreshold(0).
 			SignWith(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key20))
 
-	_ = s.NotNil(st.Error) &&
-		s.Equal("cannot require 0 signatures on a key page", st.Error.Message)
+	s.EqualError(st.AsError(), "cannot require 0 signatures on a key page")
 
 	s.TB.Log("Update a key with only that key's signature")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "book", "2").
 			UpdateKey(key24, SignatureTypeED25519).
 			SignWith(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key23))
@@ -610,7 +611,7 @@ func (s *ValidationTestSuite) TestMain() {
 	hasKey(s.T(), page, key24, SignatureTypeED25519)
 
 	s.TB.Log("Create an ADI Token Account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi).
 			CreateTokenAccount(adi, "tokens").ForToken(ACME).
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -620,7 +621,7 @@ func (s *ValidationTestSuite) TestMain() {
 	QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("tokens"))
 
 	s.TB.Log("Send tokens from the lite token account to the ADI token account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			SendTokens(5, AcmePrecisionPower).To(adi, "tokens").
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -631,7 +632,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().Equal("5.00000000", FormatBigAmount(&QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("tokens")).Balance, AcmePrecisionPower))
 
 	s.TB.Log("Send tokens from the ADI token account to the lite token account using the multisig page")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "tokens").
 			SendTokens(1, AcmePrecisionPower).To(liteAcme).
 			SignWith(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key20))
@@ -639,7 +640,7 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).IsPending())
 
 	s.TB.Log("Signing the transaction with the same key does not deliver it")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTxID(st.TxID).
 			Url(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key20))
 	s.StepUntil(
@@ -648,7 +649,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().NotZero(s.QueryPending(adi.JoinPath("tokens"), nil).Total)
 
 	s.TB.Log("Sign the pending transaction using the other key")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTxID(st.TxID).
 			Url(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key21))
 	s.StepUntil(
@@ -656,39 +657,28 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Produced().Succeeds())
 
 	s.TB.Log("Signing the transaction after it has been delivered fails")
-	st = s.BuildAndSubmit(
+	st = s.BuildAndSubmitTxn(
 		build.SignatureForTxID(st.TxID).
 			Url(adi, "book", "2").Version(5).Timestamp(&s.nonce).PrivateKey(key22))
-
-	h := st.TxID.Hash()
-	_ = s.NotNil(st.Error) &&
-		s.Equal(fmt.Sprintf("transaction %x (sendTokens) has been delivered", h[:4]), st.Error.Message)
+	s.Equal(errors.Delivered, st.Code)
 
 	var dropped *url.TxID
 	if s.sim != nil {
 		s.TB.Log("Drop the next anchor")
-		s.sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop bool, keepHook bool) {
-			for _, msg := range messages {
-				seq, ok := msg.(*messaging.SequencedMessage)
-				if !ok {
-					continue
+		s.sim.SetBlockHook(Directory, func(_ execute.BlockParams, messages []messaging.Message) (_ []messaging.Message, keepHook bool) {
+			// Drop all block anchors, once
+			for i := 0; i < len(messages); i++ {
+				if anchor, ok := messages[i].(*messaging.BlockAnchor); ok {
+					messages = append(messages[:i], messages[i+1:]...)
+					dropped = anchor.Anchor.(*messaging.SequencedMessage).Message.ID()
 				}
-				txn, ok := seq.Message.(*messaging.UserTransaction)
-				if !ok {
-					continue
-				}
-				if !txn.Transaction.Body.Type().IsAnchor() {
-					continue
-				}
-				dropped = txn.ID()
-				return true, false
 			}
-			return false, true
+			return messages, dropped == nil
 		})
 
 		defer func() {
 			// Wait for an anchor to be dropped
-			s.StepUntil(func(*Harness) bool { return dropped != nil })
+			s.StepUntil(True(func(*Harness) bool { return dropped != nil }))
 
 			// Wait for that anchor to be healed
 			s.StepUntil(Txn(dropped).Succeeds())
@@ -696,7 +686,7 @@ func (s *ValidationTestSuite) TestMain() {
 	}
 
 	s.TB.Log("Create a token issuer")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi).
 			CreateToken(adi, "token-issuer").WithSymbol("TOK").WithPrecision(10).WithSupplyLimit(1000000).
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -707,7 +697,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.TB.Log("Issue tokens")
 	liteTok := liteId.JoinPath(adi.Authority, "token-issuer")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "token-issuer").
 			IssueTokens("123.0123456789", 10).To(liteTok).
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -718,7 +708,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().Equal("123.0123456789", FormatBigAmount(&QueryAccountAs[*LiteTokenAccount](s.Harness, liteTok).Balance, 10))
 
 	s.TB.Log("Burn tokens")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteTok).
 			BurnTokens(100, 10).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -734,7 +724,7 @@ func (s *ValidationTestSuite) TestMain() {
 	lda, err := LiteDataAddress(fde.AccountId[:])
 	s.Require().NoError(err)
 	s.Require().Equal("acc://b36c1c4073305a41edc6353a094329c24ffa54c0a47fb56227a04477bcb78923", lda.String(), "Account ID is wrong")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(lda).
 			WriteData().Entry(fde.Wrap()).
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -749,7 +739,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().NotEmpty(wdr.AccountID)
 
 	s.TB.Log("Create ADI Data Account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi).
 			CreateDataAccount(adi, "data").
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -757,7 +747,7 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Succeeds())
 
 	s.TB.Log("Write data to ADI Data Account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "data").
 			WriteData([]byte("foo"), []byte("bar")).Scratch().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -770,7 +760,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().NotZero(wdr.EntryHash)
 
 	s.TB.Log("Create a sub ADI")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi).
 			CreateIdentity(adi, "sub1").WithKeyBook(adi, "sub1", "book").WithKey(key10, SignatureTypeED25519).
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
@@ -779,7 +769,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.TB.Log("Create another ADI (manager)")
 	manager := AccountUrl("manager")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			CreateIdentity(manager).WithKey(keymgr, SignatureTypeED25519).WithKeyBook(manager, "book").
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -788,7 +778,7 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Produced().Succeeds())
 
 	s.TB.Log("Add credits to manager's key page 1")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			AddCredits().To(manager, "book", "1").WithOracle(oracle).Purchase(1e3).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -797,14 +787,14 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Produced().Succeeds())
 
 	s.TB.Log("Create token account with manager")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi).
 			CreateTokenAccount(adi, "managed-tokens").ForToken(ACME).WithAuthority(adi, "book").WithAuthority(manager, "book").
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
 		Txn(st.TxID).IsPending())
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Transaction).
 			Url(manager, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(keymgr))
 	s.StepUntil(
@@ -813,14 +803,14 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().Len(QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("managed-tokens")).Authorities, 2)
 
 	s.TB.Log("Remove manager from token account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "managed-tokens").
 			UpdateAccountAuth().Remove(manager, "book").
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
 		Txn(st.TxID).IsPending())
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Transaction).
 			Url(manager, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(keymgr))
 	s.StepUntil(
@@ -829,14 +819,14 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().Len(QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("managed-tokens")).Authorities, 1)
 
 	s.TB.Log("Add manager to token account")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "managed-tokens").
 			UpdateAccountAuth().Add(manager, "book").
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
 		Txn(st.TxID).IsPending())
 
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Transaction).
 			Url(manager, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(keymgr))
 	s.StepUntil(
@@ -845,7 +835,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().Len(QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("managed-tokens")).Authorities, 2)
 
 	s.TB.Log("Transaction with Memo")
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			Memo("hello world").
 			SendTokens(1, AcmePrecisionPower).To(adi, "tokens").
@@ -858,7 +848,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.TB.Log("Refund on expensive synthetic txn failure")
 	creditsBefore := QueryAccountAs[*LiteIdentity](s.Harness, liteId).CreditBalance
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			CreateIdentity(adi).WithKey(key10, SignatureTypeED25519).WithKeyBook(adi, "book").
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
@@ -870,7 +860,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().Equal(100, int(creditsBefore-creditsAfter))
 
 	tokensBefore := QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("tokens")).Balance.Int64()
-	st = s.BuildAndSubmitSuccessfully(
+	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			SendTokens(5, AcmePrecisionPower).To("invalid-account").
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))

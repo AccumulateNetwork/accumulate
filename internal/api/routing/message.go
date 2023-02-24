@@ -8,9 +8,11 @@ package routing
 
 import (
 	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // MessageRouter routes messages using a Router.
@@ -114,15 +116,21 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	case *message.FaucetRequest:
 		service.Type = api.ServiceTypeFaucet
 
+	case *message.PrivateSequenceRequest:
+		service.Type = private.ServiceTypeSequencer
+
+		var ok bool
+		service.Partition, ok = protocol.ParsePartitionUrl(msg.Source)
+		if !ok {
+			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Source)
+		}
+
 	default:
 		return nil, errors.BadRequest.WithFormat("%v is not routable", msg.Type())
 	}
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("cannot route request: %w", err)
 	}
-
-	_ = "/acc/query:apollo"
-	_ = "/acc/node:apollo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
 
 	// Return /acc/{service}:{partition}
 	ma, err := multiaddr.NewComponent(api.N_ACC, service.String())

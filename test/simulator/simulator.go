@@ -193,8 +193,12 @@ func SnapshotMap(snapshots map[string][]byte) SnapshotFunc {
 
 func Genesis(time time.Time) SnapshotFunc {
 	// By default run tests with the new executor version
+	return GenesisWithVersion(time, protocol.ExecutorVersionLatest)
+}
+
+func GenesisWithVersion(time time.Time, version protocol.ExecutorVersion) SnapshotFunc {
 	values := new(core.GlobalValues)
-	values.ExecutorVersion = protocol.ExecutorVersionLatest
+	values.ExecutorVersion = version
 	return GenesisWith(time, values)
 }
 
@@ -264,16 +268,16 @@ func (s *Simulator) SetSubmitHook(partition string, fn SubmitHookFunc) {
 	s.partitions[partition].SetSubmitHook(fn)
 }
 
-func (s *Simulator) SetRouterSubmitHookFor(account *url.URL, fn RouterSubmitHookFunc) {
+func (s *Simulator) SetBlockHookFor(account *url.URL, fn BlockHookFunc) {
 	partition, err := s.router.RouteAccount(account)
 	if err != nil {
 		panic(err)
 	}
-	s.partitions[partition].SetRouterSubmitHook(fn)
+	s.partitions[partition].SetBlockHook(fn)
 }
 
-func (s *Simulator) SetRouterSubmitHook(partition string, fn RouterSubmitHookFunc) {
-	s.partitions[partition].SetRouterSubmitHook(fn)
+func (s *Simulator) SetBlockHook(partition string, fn BlockHookFunc) {
+	s.partitions[partition].SetBlockHook(fn)
 }
 
 func (s *Simulator) Submit(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {

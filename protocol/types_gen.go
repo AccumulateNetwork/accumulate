@@ -135,6 +135,21 @@ type AuthorityEntry struct {
 	extraData []byte
 }
 
+// AuthoritySignature is a signature produced by an authority.
+type AuthoritySignature struct {
+	fieldsSet []bool
+	// Signer is the signer that produced this signature.
+	Signer *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	// Authority is the authority that produced this signature.
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	// Vote is the authority's vote.
+	Vote VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	// TxID is the ID of the transaction this was produced for.
+	TxID      *url.TxID  `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Delegator []*url.URL `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
+	extraData []byte
+}
+
 type BTCLegacySignature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -1004,6 +1019,8 @@ func (*AddKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTyp
 
 func (*AnchorLedger) Type() AccountType { return AccountTypeAnchorLedger }
 
+func (*AuthoritySignature) Type() SignatureType { return SignatureTypeAuthority }
+
 func (*BTCLegacySignature) Type() SignatureType { return SignatureTypeBTCLegacy }
 
 func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
@@ -1332,6 +1349,31 @@ func (v *AuthorityEntry) Copy() *AuthorityEntry {
 }
 
 func (v *AuthorityEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AuthoritySignature) Copy() *AuthoritySignature {
+	u := new(AuthoritySignature)
+
+	if v.Signer != nil {
+		u.Signer = v.Signer
+	}
+	if v.Authority != nil {
+		u.Authority = v.Authority
+	}
+	u.Vote = v.Vote
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+	u.Delegator = make([]*url.URL, len(v.Delegator))
+	for i, v := range v.Delegator {
+		if v != nil {
+			u.Delegator[i] = v
+		}
+	}
+
+	return u
+}
+
+func (v *AuthoritySignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BTCLegacySignature) Copy() *BTCLegacySignature {
 	u := new(BTCLegacySignature)
@@ -3020,6 +3062,46 @@ func (v *AuthorityEntry) Equal(u *AuthorityEntry) bool {
 	}
 	if !(v.Disabled == u.Disabled) {
 		return false
+	}
+
+	return true
+}
+
+func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	if len(v.Delegator) != len(u.Delegator) {
+		return false
+	}
+	for i := range v.Delegator {
+		if !((v.Delegator[i]).Equal(u.Delegator[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -5637,6 +5719,83 @@ func (v *AuthorityEntry) IsValid() error {
 		errs = append(errs, "field Disabled is missing")
 	} else if !v.Disabled {
 		errs = append(errs, "field Disabled is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AuthoritySignature = []string{
+	1: "Type",
+	2: "Signer",
+	3: "Authority",
+	4: "Vote",
+	5: "TxID",
+	6: "Delegator",
+}
+
+func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Signer == nil) {
+		writer.WriteUrl(2, v.Signer)
+	}
+	if !(v.Authority == nil) {
+		writer.WriteUrl(3, v.Authority)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(4, v.Vote)
+	}
+	if !(v.TxID == nil) {
+		writer.WriteTxid(5, v.TxID)
+	}
+	if !(len(v.Delegator) == 0) {
+		for _, v := range v.Delegator {
+			writer.WriteUrl(6, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_AuthoritySignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *AuthoritySignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Delegator is missing")
+	} else if len(v.Delegator) == 0 {
+		errs = append(errs, "field Delegator is not set")
 	}
 
 	switch len(errs) {
@@ -11637,6 +11796,57 @@ func (v *AuthorityEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *AuthoritySignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AuthoritySignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Authority = x
+	}
+	if x := new(VoteType); reader.ReadEnum(4, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadTxid(5); ok {
+		v.TxID = x
+	}
+	for {
+		if x, ok := reader.ReadUrl(6); ok {
+			v.Delegator = append(v.Delegator, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_AuthoritySignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BTCLegacySignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -15513,6 +15723,34 @@ func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      SignatureType               `json:"type"`
+		Signer    *url.URL                    `json:"signer,omitempty"`
+		Authority *url.URL                    `json:"authority,omitempty"`
+		Vote      VoteType                    `json:"vote,omitempty"`
+		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Signer == nil) {
+		u.Signer = v.Signer
+	}
+	if !(v.Authority == nil) {
+		u.Authority = v.Authority
+	}
+	if !(v.Vote == 0) {
+		u.Vote = v.Vote
+	}
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
+	}
+	if !(len(v.Delegator) == 0) {
+		u.Delegator = v.Delegator
+	}
+	return json.Marshal(&u)
+}
+
 func (v *BTCLegacySignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -17578,6 +17816,35 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Entry = x
 	}
+	return nil
+}
+
+func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      SignatureType               `json:"type"`
+		Signer    *url.URL                    `json:"signer,omitempty"`
+		Authority *url.URL                    `json:"authority,omitempty"`
+		Vote      VoteType                    `json:"vote,omitempty"`
+		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Signer = v.Signer
+	u.Authority = v.Authority
+	u.Vote = v.Vote
+	u.TxID = v.TxID
+	u.Delegator = v.Delegator
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Signer = u.Signer
+	v.Authority = u.Authority
+	v.Vote = u.Vote
+	v.TxID = u.TxID
+	v.Delegator = u.Delegator
 	return nil
 }
 

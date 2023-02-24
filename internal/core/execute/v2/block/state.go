@@ -51,6 +51,9 @@ type ProducedMessage struct {
 	// Producer is the ID of the producer.
 	Producer *url.TxID
 
+	// Destination is the account that the message should be routed to.
+	Destination *url.URL
+
 	// Message is the produced message.
 	Message messaging.Message
 }

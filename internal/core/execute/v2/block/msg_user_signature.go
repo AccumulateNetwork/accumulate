@@ -7,6 +7,7 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -21,6 +22,42 @@ func init() {
 // when appropriate.
 type UserSignature struct{}
 
+func (UserSignature) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	sig, ok := ctx.message.(*messaging.UserSignature)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserSignature, ctx.message.Type())
+	}
+
+	// Basic validation
+	if sig.Signature == nil {
+		return nil, errors.BadRequest.With("missing signature")
+	}
+	if sig.TxID == nil {
+		return nil, errors.BadRequest.With("missing transaction ID")
+	}
+
+	// Verify the bundle contains the transaction
+	var hasTxn bool
+	for _, msg := range ctx.messages {
+		txn, ok := msg.(*messaging.UserTransaction)
+		if !ok {
+			continue
+		}
+		if txn.Hash() == sig.TxID.Hash() {
+			hasTxn = true
+			break
+		}
+	}
+	if !hasTxn {
+		return nil, errors.BadRequest.With("cannot process a signature without its transaction")
+	}
+
+	// Given the check above for the transaction, this signature is guaranteed
+	// to be validated via the UserTransaction executor. But TODO signature
+	// validation needs to be split out to here.
+	return nil, nil
+}
+
 func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	sig, ok := ctx.message.(*messaging.UserSignature)
 	if !ok {
@@ -30,12 +67,23 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 		return nil, errors.BadRequest.WithFormat("cannot submit a %v signature with a %v message", sig.Signature.Type(), sig.Type())
 	}
 
+	// Only allow authority signatures within a synthetic message and don't
+	// allow them outside of one
+	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
+		if sig.Signature.Type() != protocol.SignatureTypeAuthority {
+			return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v signature", sig.Signature.Type())), nil
+		}
+	} else {
+		if sig.Signature.Type() == protocol.SignatureTypeAuthority {
+			return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v signature", sig.Signature.Type())), nil
+		}
+	}
+
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
 	// Load the transaction
-	var txn messaging.MessageWithTransaction
-	err := batch.Message(sig.TxID.Hash()).Main().GetAs(&txn)
+	txn, err := ctx.getTransaction(batch, sig.TxID.Hash())
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
@@ -43,31 +91,22 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	// Use the full transaction ID (since normalization uses unknown.acme)
 	sig.TxID = txn.ID()
 
-	if !txn.GetTransaction().Body.Type().IsUser() {
-		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.GetTransaction().Body.Type(), sig.Type())
+	if !txn.Body.Type().IsUser() {
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), sig.Type())
 	}
 
-	// Process the transaction if it is synthetic or system, or the signature is
-	// internal, or the signature is local to the principal
-	signature, transaction := sig.Signature, txn.GetTransaction()
-	if signature.RoutingLocation().LocalTo(transaction.Header.Principal) {
-		ctx.transactionsToProcess.Add(transaction.ID().Hash())
-	}
-
-	status, err := ctx.callSignatureExecutor(batch, ctx.sigWith(signature, transaction))
+	// Process the signature
+	status, err := ctx.callSignatureExecutor(batch, ctx.sigWith(sig.Signature, txn))
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Always record the signature and status
-	if sig, ok := signature.(*protocol.RemoteSignature); ok {
-		signature = sig.Signature
-	}
-	err = batch.Message2(signature.Hash()).Main().Put(sig)
+	err = batch.Message2(sig.Signature.Hash()).Main().Put(sig)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
 	}
-	err = batch.Transaction(signature.Hash()).Status().Put(status)
+	err = batch.Transaction(sig.Signature.Hash()).Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature status: %w", err)
 	}
@@ -76,5 +115,6 @@ func (UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+
 	return status, nil
 }

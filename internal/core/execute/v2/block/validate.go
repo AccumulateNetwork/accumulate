@@ -74,10 +74,10 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	switch {
-	case txnType.IsUser():
+	case txnType.IsUser(), txnType.IsSynthetic():
 		err = nil
-	case txnType.IsSynthetic(), txnType.IsSystem():
-		err = validateSyntheticTransactionSignatures(delivery.Transaction, delivery.Signatures)
+	case txnType.IsSystem():
+		err = validateAnchorSignatures(delivery.Transaction, delivery.Signatures)
 	default:
 		// Should be unreachable
 		return nil, errors.InternalError.WithFormat("transaction type %v is not user, synthetic, or internal", txnType)
@@ -185,12 +185,6 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	var signer protocol.Signer2
 	var delegate protocol.Signer
 	switch signature := signature.(type) {
-	case *protocol.RemoteSignature:
-		return nil, errors.BadRequest.With("a remote signature is not allowed outside of a forwarded transaction")
-
-	case *protocol.SignatureSet:
-		return nil, errors.BadRequest.With("a signature set is not allowed outside of a forwarded transaction")
-
 	case *protocol.DelegatedSignature:
 		if !md.Nested() {
 			// Limit delegation depth
@@ -237,14 +231,17 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		}
 
 	case protocol.KeySignature:
+		hash := delivery.Transaction.GetHash()
 		if delivery.Transaction.Body.Type().IsUser() {
 			signer, err = x.validateKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 		} else {
+			h := delivery.Sequence.Hash()
+			hash = h[:]
 			signer, err = x.validatePartitionSignature(signature, delivery.Transaction, delivery.Sequence, status)
 		}
 
 		// Basic validation
-		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(nil, hash) {
 			return nil, errors.BadRequest.With("invalid")
 		}
 
@@ -258,24 +255,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	return signer, nil
 }
 
-func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, signatures []protocol.Signature) error {
-	// // Validate the synthetic transaction header
-	// if transaction.Body.Type().IsSynthetic() {
-	// 	var missing []string
-	// 	if transaction.Header.Source == nil {
-	// 		missing = append(missing, "source")
-	// 	}
-	// 	if transaction.Header.Destination == nil {
-	// 		missing = append(missing, "destination")
-	// 	}
-	// 	if transaction.Header.SequenceNumber == 0 {
-	// 		missing = append(missing, "sequence number")
-	// 	}
-	// 	if len(missing) > 0 {
-	// 		return errors.BadRequest.WithFormat("invalid synthetic transaction: missing %s", strings.Join(missing, ", "))
-	// 	}
-	// }
-
+func validateAnchorSignatures(transaction *protocol.Transaction, signatures []protocol.Signature) error {
 	var gotED25519Sig bool
 	for _, sig := range signatures {
 		switch sig.(type) {
@@ -289,9 +269,6 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 
 	if !gotED25519Sig {
 		return errors.Unauthenticated.WithFormat("missing ED25519 signature")
-	}
-	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
-		return nil
 	}
 	return nil
 }

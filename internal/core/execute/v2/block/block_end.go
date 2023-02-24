@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -334,7 +333,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		// Sanity check: the response includes a transaction
-		if resp.Transaction == nil {
+		if resp.Message == nil {
 			x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
@@ -358,19 +357,15 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		seq := &messaging.SequencedMessage{
-			Message: &messaging.UserTransaction{
-				Transaction: resp.Transaction,
-			},
+			Message:     resp.Message,
 			Source:      resp.Sequence.Source,
 			Destination: resp.Sequence.Destination,
 			Number:      resp.Sequence.Number,
 		}
 
-		var messages []messaging.Message
-		if anchor {
-			messages = []messaging.Message{seq}
-		} else {
-			messages = []messaging.Message{
+		// Don't include signatures if the transaction is synthetic
+		if !anchor {
+			messages := []messaging.Message{
 				&messaging.SyntheticMessage{
 					Message: seq,
 					Proof: &protocol.AnnotatedReceipt{
@@ -381,12 +376,18 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 					},
 				},
 			}
+			err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
+			if err != nil {
+				x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Transaction.Body.Type())
+			}
+			continue
 		}
 
-		var gotKey, bad bool
+		anchor := &messaging.BlockAnchor{Anchor: seq}
+
+		var bad bool
 		for _, signature := range resp.Signatures.Records {
-			h := signature.TxID.Hash()
-			if !bytes.Equal(h[:], resp.Transaction.GetHash()) {
+			if signature.TxID.Hash() != resp.Message.Hash() {
 				x.logger.Error("Signature from query-synth does not match the transaction hash", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "txid", signature.TxID, "signature", signature)
 				bad = true
 				continue
@@ -406,26 +407,22 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 					bad = true
 					continue
 				}
-				gotKey = true
-				messages = append(messages, &messaging.ValidatorSignature{
-					Signature: keySig,
-					Source:    partition.Url,
-				})
+				anchor.Signature = keySig
 			}
 
 		}
 
-		if !gotKey {
-			x.logger.Error("Invalid synthetic transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
+		if anchor.Signature == nil {
+			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Message.Hash()).Slice(0, 4))
 			bad = true
 		}
 		if bad {
 			continue
 		}
 
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
+		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{anchor}})
 		if err != nil {
-			x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
+			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
 			continue
 		}
 	}

@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -30,6 +29,8 @@ func TestUpdateKey(t *testing.T) {
 	sim.CreateIdentity(alice, aliceKey[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
+		page.AddKeySpec(&KeySpec{Delegate: AccountUrl("foo")})
+		page.AcceptThreshold = 2
 	})
 
 	// Update the key
@@ -46,8 +47,8 @@ func TestUpdateKey(t *testing.T) {
 
 	// Verify the key changed
 	page := simulator.GetAccount[*KeyPage](sim, alice.JoinPath("book", "1"))
-	require.Len(t, page.Keys, 1)
-	require.Equal(t, hash(otherKey[32:]), page.Keys[0].PublicKeyHash)
+	_, _, ok := page.EntryByKey(otherKey[32:])
+	require.True(t, ok)
 }
 
 func TestUpdateKey_HasDelegate(t *testing.T) {
@@ -103,18 +104,19 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 	updateAccount(sim, alice.JoinPath("book3", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 
 	// Update the key
-	st := sim.H.SubmitSuccessfully(
+	st := sim.H.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book", "1")).
 			WithSigner(alice.JoinPath("book3", "1"), 1).
 			WithDelegator(alice.JoinPath("book2", "1")).
-			WithDelegator(alice.JoinPath("book", "1")).
 			WithTimestampVar(&timestamp).
 			WithBody(&UpdateKey{NewKeyHash: hash(newKey[32:])}).
 			Initiate(SignatureTypeED25519, otherKey).
 			Build())
-	sim.H.StepUntil(Txn(st.TxID).Fails())
-	st = sim.H.QueryTransaction(st.TxID, nil).Status
 	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "cannot UpdateKey with a multi-level delegated signature")
+	err := st.Error
+	for err.Cause != nil {
+		err = err.Cause
+	}
+	require.EqualError(t, err, "cannot updateKey with a delegated signature")
 }

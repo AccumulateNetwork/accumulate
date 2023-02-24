@@ -44,32 +44,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var delegate protocol.Signer
 	var err error
 	switch signature := signature.(type) {
-	case *protocol.SignatureSet:
-		if !delivery.IsForwarded() {
-			return nil, errors.BadRequest.With("a signature set is not allowed outside of a forwarded transaction")
-		}
-		if !md.Forwarded {
-			return nil, errors.BadRequest.With("a signature set must be nested within another signature")
-		}
-		signer, err = x.processSigner(batch, delivery.Transaction, signature, md, !md.Delegated && md.Location.LocalTo(delivery.Transaction.Header.Principal))
-		if err != nil {
-			return nil, err
-		}
-
-		// Do not store anything if the set is within a delegated transaction
-		if md.Delegated {
-			return signer, nil
-		}
-
-	case *protocol.RemoteSignature:
-		if md.Nested() {
-			return nil, errors.BadRequest.With("a remote signature cannot be nested within another signature")
-		}
-		if !delivery.IsForwarded() {
-			return nil, errors.BadRequest.With("a remote signature is not allowed outside of a forwarded transaction")
-		}
-		return x.processSignature(batch, delivery, signature.Signature, md.SetForwarded())
-
 	case *protocol.DelegatedSignature:
 		s, err := x.processSignature(batch, delivery, signature.Signature, md.SetDelegated())
 		if err != nil {
@@ -172,27 +146,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		sigToStore = signature
 	}
 
-	// Record the initiator (but only if we're at the final destination)
-	shouldRecordInit := md.IsInitiator
-	if md.Delegated {
-		shouldRecordInit = false
-	} else if !delivery.Transaction.Header.Principal.LocalTo(md.Location) {
-		shouldRecordInit = false
-	}
-	if shouldRecordInit {
-		initUrl := signer.GetUrl()
-		if key, _, _ := protocol.ParseLiteTokenAddress(initUrl); key != nil {
-			initUrl = initUrl.RootIdentity()
-		}
-		if status.Initiator != nil && !status.Initiator.Equal(initUrl) {
-			// This should be impossible
-			return nil, errors.InternalError.WithFormat("initiator is already set and does not match the signature")
-		}
-
-		statusDirty = true
-		status.Initiator = initUrl
-	}
-
 	if statusDirty {
 		err = batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
 		if err != nil {
@@ -247,10 +200,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	var index int
 	switch signature := signature.(type) {
-	case *protocol.RemoteSignature,
-		*protocol.SignatureSet:
-		index = 0
-
 	case *protocol.DelegatedSignature:
 		index, _, _ = signer.EntryByDelegate(delegate.GetUrl())
 
@@ -613,30 +562,4 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 	}
 
 	return signer, nil
-}
-
-func hasKeySignature(batch *database.Batch, status *protocol.TransactionStatus) (bool, error) {
-	h := status.TxID.Hash()
-	transaction := batch.Transaction(h[:])
-	for _, signer := range status.Signers {
-		// Load the signature set
-		sigset, err := transaction.ReadSignaturesForSigner(signer)
-		if err != nil {
-			return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
-		}
-
-		for _, e := range sigset.Entries() {
-			var sig messaging.MessageWithSignature
-			err = batch.Message(e.SignatureHash).Main().GetAs(&sig)
-			if err != nil {
-				return false, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
-			}
-
-			if _, ok := sig.GetSignature().(protocol.KeySignature); ok {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
 }
