@@ -52,6 +52,7 @@ type IndexRecord struct {
 	EmptyIfMissing bool           `json:"emptyIfMissing,omitempty" form:"emptyIfMissing" query:"emptyIfMissing" validate:"required"`
 	Union          bool           `json:"union,omitempty" form:"union" query:"union" validate:"required"`
 	Collection     CollectionType `json:"collection,omitempty" form:"collection" query:"collection" validate:"required"`
+	Comparator     string         `json:"comparator,omitempty" form:"comparator" query:"comparator" validate:"required"`
 }
 
 type OtherRecord struct {
@@ -76,6 +77,7 @@ type StateRecord struct {
 	EmptyIfMissing bool           `json:"emptyIfMissing,omitempty" form:"emptyIfMissing" query:"emptyIfMissing" validate:"required"`
 	Union          bool           `json:"union,omitempty" form:"union" query:"union" validate:"required"`
 	Collection     CollectionType `json:"collection,omitempty" form:"collection" query:"collection" validate:"required"`
+	Comparator     string         `json:"comparator,omitempty" form:"comparator" query:"comparator" validate:"required"`
 }
 
 func (*ChainRecord) Type() RecordType { return RecordTypeChain }
@@ -189,6 +191,7 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 		EmptyIfMissing bool                      `json:"emptyIfMissing,omitempty"`
 		Union          bool                      `json:"union,omitempty"`
 		Collection     CollectionType            `json:"collection,omitempty"`
+		Comparator     string                    `json:"comparator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
@@ -220,6 +223,9 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Collection == 0) {
 		u.Collection = v.Collection
+	}
+	if !(len(v.Comparator) == 0) {
+		u.Comparator = v.Comparator
 	}
 	return json.Marshal(&u)
 }
@@ -277,6 +283,7 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 		EmptyIfMissing bool                      `json:"emptyIfMissing,omitempty"`
 		Union          bool                      `json:"union,omitempty"`
 		Collection     CollectionType            `json:"collection,omitempty"`
+		Comparator     string                    `json:"comparator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
@@ -308,6 +315,9 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Collection == 0) {
 		u.Collection = v.Collection
+	}
+	if !(len(v.Comparator) == 0) {
+		u.Comparator = v.Comparator
 	}
 	return json.Marshal(&u)
 }
@@ -412,6 +422,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 		EmptyIfMissing bool                      `json:"emptyIfMissing,omitempty"`
 		Union          bool                      `json:"union,omitempty"`
 		Collection     CollectionType            `json:"collection,omitempty"`
+		Comparator     string                    `json:"comparator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
@@ -424,6 +435,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	u.EmptyIfMissing = v.EmptyIfMissing
 	u.Union = v.Union
 	u.Collection = v.Collection
+	u.Comparator = v.Comparator
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -440,6 +452,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	v.EmptyIfMissing = u.EmptyIfMissing
 	v.Union = u.Union
 	v.Collection = u.Collection
+	v.Comparator = u.Comparator
 	return nil
 }
 
@@ -494,6 +507,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 		EmptyIfMissing bool                      `json:"emptyIfMissing,omitempty"`
 		Union          bool                      `json:"union,omitempty"`
 		Collection     CollectionType            `json:"collection,omitempty"`
+		Comparator     string                    `json:"comparator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
@@ -506,6 +520,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	u.EmptyIfMissing = v.EmptyIfMissing
 	u.Union = v.Union
 	u.Collection = v.Collection
+	u.Comparator = v.Comparator
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -522,5 +537,6 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	v.EmptyIfMissing = u.EmptyIfMissing
 	v.Union = u.Union
 	v.Collection = u.Collection
+	v.Comparator = u.Comparator
 	return nil
 }

@@ -67,14 +67,17 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *pro
 }
 
 func (x BlockAnchor) process(batch *database.Batch, ctx *MessageContext, msg *messaging.BlockAnchor, txn *protocol.Transaction, seq *messaging.SequencedMessage, signer protocol.Signer2) error {
-	// Process the signature (update the transaction status)
-	err := x.processSignature(ctx, batch, msg, txn, signer)
+	// Record the anchor signature
+	err := batch.Account(txn.Header.Principal).
+		Transaction(txn.ID().Hash()).
+		AnchorSignatures().
+		Add(msg.Signature)
 	if err != nil {
 		// A system error occurred
 		return errors.UnknownError.Wrap(err)
 	}
 
-	ready, err := x.txnIsReady(batch, ctx, seq)
+	ready, err := x.txnIsReady(batch, ctx, txn, seq)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -152,40 +155,13 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 	return anchor, txn.GetTransaction(), seq, signer, nil
 }
 
-func (x BlockAnchor) processSignature(ctx *MessageContext, batch *database.Batch, sig *messaging.BlockAnchor, txn *protocol.Transaction, signer protocol.Signer2) error {
-	// Add the anchor signer to the transaction status
-	if txn.Body.Type().IsAnchor() {
-		txst, err := batch.Transaction(txn.GetHash()).Status().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load transaction status: %w", err)
-		}
-		txst.AddAnchorSigner(sig.Signature)
-		err = batch.Transaction(txn.GetHash()).Status().Put(txst)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store transaction status: %w", err)
-		}
-	}
-
-	// Add the signature to the transaction's signature set
-	sigSet, err := batch.Transaction(txn.GetHash()).SignaturesForSigner(signer)
+func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *MessageContext, txn *protocol.Transaction, seq *messaging.SequencedMessage) (bool, error) {
+	sigs, err := batch.Account(txn.Header.Principal).
+		Transaction(txn.ID().Hash()).
+		AnchorSignatures().
+		Get()
 	if err != nil {
-		return errors.UnknownError.WithFormat("load signatures: %w", err)
-	}
-
-	index, _, _ := signer.EntryByKeyHash(sig.Signature.GetPublicKeyHash())
-	_, err = sigSet.Add(uint64(index), sig.Signature)
-	if err != nil {
-		return errors.UnknownError.WithFormat("store signature: %w", err)
-	}
-
-	return nil
-}
-
-func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
-	h := seq.Message.ID().Hash()
-	status, err := batch.Transaction(h[:]).Status().Get()
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load status: %w", err)
+		return false, errors.UnknownError.WithFormat("load anchor signatures: %w", err)
 	}
 
 	// Have we received enough signatures?
@@ -193,7 +169,7 @@ func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *MessageContext, seq 
 	if !ok {
 		return false, errors.BadRequest.WithFormat("source %v is not a partition", seq.Source)
 	}
-	if uint64(len(status.AnchorSigners)) < ctx.Executor.globals.Active.ValidatorThreshold(partition) {
+	if uint64(len(sigs)) < ctx.Executor.globals.Active.ValidatorThreshold(partition) {
 		return false, nil
 	}
 
