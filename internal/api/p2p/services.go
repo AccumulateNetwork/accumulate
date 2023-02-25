@@ -7,6 +7,8 @@
 package p2p
 
 import (
+	"time"
+
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -59,6 +61,6 @@ func (s *service) info() *ServiceInfo {
 // will return once the service is registered on the current node or until the
 // node is informed of a peer with the given service. WaitForService will return
 // immediately if the service is already registered or known.
-func (s *Node) WaitForService(sa *api.ServiceAddress) {
-	s.peermgr.waitFor(sa)
+func (s *Node) WaitForService(sa *api.ServiceAddress, timeout time.Duration) bool {
+	return s.peermgr.waitFor(sa, timeout)
 }

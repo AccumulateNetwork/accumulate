@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -64,6 +64,7 @@ var flagInit struct {
 	EnableTimingLogs bool
 	FactomAddresses  string
 	Snapshots        []string
+	FaucetSeed       string
 }
 
 var flagInitNode struct {
@@ -123,6 +124,7 @@ func initInitFlags() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	cmdInit.PersistentFlags().StringVar(&flagInit.FactomAddresses, "factom-addresses", "", "A text file containing Factoid addresses to import")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Snapshots, "snapshot", nil, "A snapshot of accounts to import")
+	cmdInit.PersistentFlags().StringVar(&flagInit.FaucetSeed, "faucet-seed", "", "If specified, generates a faucet account using the given seed and includes it in genesis")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.ResetFlags()
