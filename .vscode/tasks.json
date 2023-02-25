@@ -6,7 +6,7 @@
         {
             "label": "Init DevNet",
             "type": "shell",
-            "command": "go run ./cmd/accumulated init devnet -w .nodes --reset -f 0 -v 1 -b 1"
+            "command": "go run ./cmd/accumulated init devnet -w .nodes --reset -f 0 -v 1 -b 1 --faucet-seed ci"
         }
     ]
 }
