@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -312,25 +313,36 @@ func (m *peerManager) advertizeNewService() error {
 }
 
 // waitFor blocks until the node has a peer that provides the given address.
-func (m *peerManager) waitFor(sa *api.ServiceAddress) {
+func (m *peerManager) waitFor(sa *api.ServiceAddress, timeout time.Duration) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for {
+	var abort atomic.Bool
+	if timeout > 0 {
+		go func() {
+			time.Sleep(timeout)
+			abort.Store(true)
+			m.waiter.Broadcast()
+		}()
+	}
+
+	for !abort.Load() {
 		// Do we have the service?
 		_, ok := sortutil.Search(m.getServices(), func(s *service) int { return s.address.Compare(sa) })
 		if ok {
-			return
+			return true
 		}
 
 		// Does a peer have the service?
 		for _, p := range m.peers {
 			if p.info.HasService(sa) {
-				return
+				return true
 			}
 		}
 
 		// Wait
 		m.waiter.Wait()
 	}
+
+	return false
 }
