@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -173,22 +174,16 @@ func (h *Harness) SubmitTxn(envelope *messaging.Envelope) *protocol.TransactionS
 	h.TB.Helper()
 	require.Len(h.TB, envelope.Transaction, 1)
 	id := envelope.Transaction[0].ID()
-	for _, s := range h.Submit(envelope) {
-		if s.TxID.Hash() == id.Hash() {
-			return s
-		}
-	}
-	h.TB.Fatalf("No status for %v", id)
-	panic("not reached")
+	return pickStatusForTxn(h.TB, id, h.Submit(envelope))
 }
 
 // SubmitTxnSuccessfully submits a single transaction and asserts that it and
 // its signatures succeeded.
 func (h *Harness) SubmitTxnSuccessfully(envelope *messaging.Envelope) *protocol.TransactionStatus {
 	h.TB.Helper()
-	status := h.SubmitTxn(envelope)
-	require.NoError(h.TB, status.AsError())
-	return status
+	require.Len(h.TB, envelope.Transaction, 1)
+	id := envelope.Transaction[0].ID()
+	return pickStatusForTxn(h.TB, id, h.SubmitSuccessfully(envelope))
 }
 
 // BuildAndSubmitTxn builds and submits a single transaction.
@@ -205,7 +200,16 @@ func (h *Harness) BuildAndSubmitTxnSuccessfully(b EnvelopeBuilder) *protocol.Tra
 	h.TB.Helper()
 	env, err := b.Done()
 	require.NoError(h.TB, err)
-	status := h.SubmitTxn(env)
-	require.NoError(h.TB, status.AsError())
-	return status
+	return h.SubmitTxnSuccessfully(env)
+}
+
+func pickStatusForTxn(t testing.TB, id *url.TxID, statuses []*protocol.TransactionStatus) *protocol.TransactionStatus {
+	t.Helper()
+	for _, s := range statuses {
+		if s.TxID.Hash() == id.Hash() {
+			return s
+		}
+	}
+	t.Fatalf("No status for %v", id)
+	panic("not reached")
 }
