@@ -118,7 +118,11 @@ func (x UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*pro
 	sig, txn, err := x.check(batch, ctx)
 	switch {
 	case err == nil:
-		// Ok
+		// Process the signature
+		status, err = ctx.callSignatureExecutor(batch, ctx.sigWith(sig.Signature, txn))
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 
 	case errors.Code(err).IsClientError():
 		status.Set(err)
@@ -127,20 +131,12 @@ func (x UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*pro
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Process the signature
-	if !status.Failed() {
-		status, err = ctx.callSignatureExecutor(batch, ctx.sigWith(sig.Signature, txn))
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
 	// Always record the signature and status
-	err = batch.Message(sig.Hash()).Main().Put(sig)
+	err = batch.Message(ctx.message.Hash()).Main().Put(ctx.message)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
 	}
-	err = batch.Transaction2(sig.Hash()).Status().Put(status)
+	err = batch.Transaction2(ctx.message.Hash()).Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signature status: %w", err)
 	}
