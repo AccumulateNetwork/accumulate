@@ -41,6 +41,5 @@ func TestCreateKeyPage_HashSize(t *testing.T) {
 			WithBody(&CreateKeyPage{Keys: []*KeySpecParams{{KeyHash: []byte{1}}}}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
-	require.NotZero(t, st.Code)
-	require.EqualError(t, st.Error, "public key hash length is invalid")
+	require.EqualError(t, st.AsError(), "public key hash length is invalid")
 }
