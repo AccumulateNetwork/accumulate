@@ -32,7 +32,10 @@ func init() {
 type KeySignature struct{}
 
 func (KeySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
-	panic("not implemented")
+	err := ctx.Executor.validateSignature2(batch, &chain.Delivery{
+		Transaction: ctx.transaction,
+	}, ctx.signature)
+	return nil, errors.UnknownError.Wrap(err)
 }
 
 func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
