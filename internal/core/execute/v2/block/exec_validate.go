@@ -48,7 +48,9 @@ func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Messag
 		errCode := errors.Code(err)
 		switch {
 		case err == nil:
-			s.Code = errors.OK
+			if s.Code == 0 {
+				s.Code = errors.OK
+			}
 		case errCode.Success():
 			s.Code = errCode
 		case errCode.IsClientError():
