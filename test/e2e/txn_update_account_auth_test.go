@@ -104,3 +104,78 @@ func TestUpdateAccountAuth(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
 }
+
+func TestUpdateAccountAuth2(t *testing.T) {
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	bob := AccountUrl("bob")
+	bobKey := acctesting.GenerateKey(bob)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1 * AcmePrecision)})
+
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+
+	// Disable auth
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			UpdateAccountAuth().Disable(alice, "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// An unauthorized signer must not be allowed to enable auth
+	sts := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			UpdateAccountAuth().Enable("alice", "book").
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
+	sim.StepUntil(
+		Sig(sts[1].TxID).Succeeds(),
+		Sig(sts[1].TxID).AuthoritySignature().Capture(&st).Fails())
+	require.EqualError(t, st.AsError(), "acc://bob.acme/book/1 is not authorized to sign transactions for acc://alice.acme/tokens")
+
+	// An unauthorized signer should be able to send tokens
+	st = sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			SendTokens(68, 0).To(bob, "tokens").
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	require.Equal(t, int64(AcmePrecision-68), GetAccount[*TokenAccount](t, sim.DatabaseFor(alice), alice.JoinPath("tokens")).Balance.Int64())
+	require.Equal(t, int64(68), GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens")).Balance.Int64())
+
+	// Enable auth
+	st = sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			UpdateAccountAuth().Enable(alice, "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// An unauthorized signer should no longer be able to send tokens
+	sts = sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			SendTokens(68, 0).To(bob, "tokens").
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
+	sim.StepUntil(
+		Sig(sts[1].TxID).Succeeds(),
+		Sig(sts[1].TxID).AuthoritySignature().Capture(&st).Fails())
+	require.EqualError(t, st.AsError(), "acc://bob.acme/book/1 is not authorized to sign transactions for acc://alice.acme/tokens")
+	sim.StepUntil(
+		Sig(sts[1].TxID).Succeeds(),
+		Sig(sts[1].TxID).AuthoritySignature().Capture(&st).Fails())
+	require.EqualError(t, st.AsError(), "acc://bob.acme/book/1 is not authorized to sign transactions for acc://alice.acme/tokens")
+}
