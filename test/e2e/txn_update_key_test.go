@@ -104,7 +104,7 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 	updateAccount(sim, alice.JoinPath("book3", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 
 	// Update the key
-	st := sim.H.SubmitTxn(
+	st := sim.H.Submit(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book", "1")).
 			WithSigner(alice.JoinPath("book3", "1"), 1).
@@ -113,10 +113,5 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 			WithBody(&UpdateKey{NewKeyHash: hash(newKey[32:])}).
 			Initiate(SignatureTypeED25519, otherKey).
 			Build())
-	require.NotNil(t, st.Error)
-	err := st.Error
-	for err.Cause != nil {
-		err = err.Cause
-	}
-	require.EqualError(t, err, "cannot updateKey with a delegated signature")
+	require.EqualError(t, st[1].AsError(), "validate delegated signature: cannot updateKey with a delegated signature")
 }
