@@ -59,20 +59,6 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		}
 	}
 
-	// Get a temp status - DO NOT STORE THIS
-	status, err := batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-
-	// Check that the signatures are valid
-	for i, signature := range delivery.Signatures {
-		err = x.ValidateSignature(batch, delivery, status, signature)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("signature %d: %w", i, err)
-		}
-	}
-
 	switch {
 	case txnType.IsUser(), txnType.IsSynthetic():
 		err = nil
@@ -111,19 +97,10 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		signerUrl = x.Describe.OperatorsPage()
 	} else {
 		signerUrl = delivery.Signatures[0].GetSigner()
-		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
-			signerUrl = signerUrl.RootIdentity()
-		}
-	}
-
-	var signer protocol.Signer
-	err = batch.Account(signerUrl).GetStateAs(&signer)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load signer: %w", err)
 	}
 
 	// Do not validate remote transactions
-	if !delivery.Transaction.Header.Principal.LocalTo(signer.GetUrl()) {
+	if !delivery.Transaction.Header.Principal.LocalTo(signerUrl) {
 		return new(protocol.EmptyResult), nil
 	}
 
@@ -160,13 +137,18 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	return result, nil
 }
 
-func (x *Executor) ValidateSignature(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, signature protocol.Signature) error {
+func (x *Executor) validateSignature2(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) error {
+	status, err := batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load status: %w", err)
+	}
+
 	var md sigExecMetadata
 	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
 	if !signature.Type().IsSystem() {
 		md.Location = signature.RoutingLocation()
 	}
-	_, err := x.validateSignature(batch, delivery, status, signature, md)
+	_, err = x.validateSignature(batch, delivery, status, signature, md)
 	return errors.UnknownError.Wrap(err)
 }
 
