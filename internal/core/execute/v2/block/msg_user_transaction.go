@@ -26,27 +26,127 @@ func init() {
 type UserTransaction struct{}
 
 func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	// Create a batch and discard it without committing so any changes made by
-	// the executor are not exposed to other message executors
-	batch = batch.Begin(true)
+	// If the message has already been processed, return its recorded status
+	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
+	if status.Delivered() {
+		return status, nil
+	}
+
+	// Discard changes (why is this necessary?)
+	batch = batch.Begin(false)
 	defer batch.Discard()
 
-	txn, err := x.check(batch, ctx)
+	// As long as the transaction is well-formed, let it into the block. There
+	// are many cases where we cannot safely evaluate the transaction at this
+	// point. If we are evaluating a synthetic transaction, we _must not_ reject
+	// it as long as it is properly formed and has a proof, since rejecting it
+	// otherwise would cause problems for sequencing. If Alice initiates a
+	// transaction for Bob, Bob may not be on this partition so we cannot
+	// evaluate the transaction. And even in cases where we could safely
+	// evaluate the transaction, doing so would cause inconsistencies: the
+	// authority a user uses to initiate a transaction and which partitions the
+	// accounts are on would become a factor in whether or not a transaction
+	// makes it into the block. Besides that, there's the argument FairyProof
+	// made that the previous approach (rejecting the transaction due to things
+	// like an insufficient balance) could be considered a replay attack vector.
+	// Thus, as long as the transaction is well-formed, signed, and the signer
+	// can be charged _something_, we will let the transaction into the block.
+	//
+	// And don't resolve remote transactions here, since that would make
+	// validation dependent on what has and has not been pruned, which is a
+	// dangerous game to play.
+	txn, err := x.check(batch, ctx, false)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	delivery := new(chain.Delivery)
-	delivery.Transaction = txn.Transaction
-	delivery.Internal = ctx.isWithin(internal.MessageTypeNetworkUpdate)
-	if ctx.isWithin(messaging.MessageTypeSequenced) {
-		delivery.Sequence, err = x.getSequence(ctx)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+	// This is a temporary hack. The transaction executors need to be updated to
+	// make validation stateless. For now, if the bundle includes a user
+	// signature that's local to the transaction, validate the transaction.
+	if !txn.Transaction.Body.Type().IsUser() {
+		return nil, nil
+	}
+	var hasLocalSigner bool
+	for _, msg := range ctx.messages {
+		sig, ok := messaging.UnwrapAs[*messaging.UserSignature](msg)
+		if !ok || sig.Signature.Type() == protocol.SignatureTypeAuthority {
+			continue
+		}
+		if sig.Signature.GetSigner().LocalTo(txn.Transaction.Header.Principal) {
+			hasLocalSigner = true
+		}
+	}
+	if !hasLocalSigner {
+		return nil, nil
+	}
+	exec, ok := ctx.Executor.executors[txn.Transaction.Body.Type()]
+	if !ok {
+		return nil, nil
+	}
+
+	principal, err := batch.Account(txn.Transaction.Header.Principal).Main().Get()
+	switch {
+	case err == nil:
+		// Ok
+	case !errors.Is(err, errors.NotFound):
+		return nil, errors.UnknownError.WithFormat("load principal: %w", err)
+	default:
+		val, ok := getValidator[chain.PrincipalValidator](ctx.Executor, txn.Transaction.Body.Type())
+		if !ok || !val.AllowMissingPrincipal(txn.Transaction) {
+			return nil, errors.NotFound.WithFormat("missing principal: %v not found", txn.Transaction.Header.Principal)
 		}
 	}
 
-	if !ctx.isWithin(messaging.MessageTypeSynthetic) {
+	st := chain.NewStateManager(&ctx.Executor.Describe, &ctx.Executor.globals.Active, batch.Begin(false), principal, txn.Transaction, ctx.Executor.logger.With("operation", "ValidateEnvelope"))
+	defer st.Discard()
+	st.Pretend = true
+
+	r, err := exec.Validate(st, &chain.Delivery{Transaction: txn.Transaction})
+	if err != nil {
+		if !errors.Code(err).IsKnownError() {
+			// Assume errors with no code are user errors
+			return nil, errors.BadRequest.Wrap(err)
+		}
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if r == nil {
+		return nil, nil
+	}
+	s := new(protocol.TransactionStatus)
+	s.TxID = txn.ID()
+	s.Result = r
+	return s, nil
+}
+
+func (x UserTransaction) check(batch *database.Batch, ctx *MessageContext, resolve bool) (*messaging.UserTransaction, error) {
+	txn, ok := ctx.message.(*messaging.UserTransaction)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserTransaction, ctx.message.Type())
+	}
+
+	// Basic validation
+	if txn.Transaction == nil {
+		return nil, errors.BadRequest.With("missing transaction")
+	}
+	if txn.Transaction.Body == nil {
+		return nil, errors.BadRequest.With("missing transaction body")
+	}
+
+	isRemote := txn.Transaction.Body.Type() == protocol.TransactionTypeRemote
+	if !isRemote {
+		if txn.Transaction.Header.Principal == nil {
+			return nil, errors.BadRequest.With("missing principal")
+		}
+		if txn.Transaction.Body.Type().IsUser() && txn.Transaction.Header.Initiator == ([32]byte{}) {
+			return nil, errors.BadRequest.With("missing initiator")
+		}
+	}
+
+	// Make sure the transaction is signed
+	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypeNetworkUpdate) {
 		var signed bool
 		for _, msg := range ctx.messages {
 			msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg)
@@ -56,55 +156,11 @@ func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*
 			if msg.GetTxID().Hash() != txn.Hash() {
 				continue
 			}
-
-			// Handles special types of 'signatures'
 			signed = true
-
-			sig, ok := msg.(*messaging.UserSignature)
-			if !ok || sig.Signature.Type() == protocol.SignatureTypeAuthority {
-				continue
-			}
-
-			delivery.Signatures = append(delivery.Signatures, sig.Signature)
 		}
 		if !signed {
 			return nil, errors.BadRequest.With("transaction is not signed")
 		}
-	}
-
-	// For now, don't validate the transaction that is sent along with an
-	// authority signature/signature request/credit payment
-	if len(delivery.Signatures) == 0 {
-		return nil, nil
-	}
-
-	result, err := ctx.Executor.ValidateEnvelope(batch, delivery)
-	switch {
-	case err == nil:
-		s := new(protocol.TransactionStatus)
-		s.TxID = ctx.message.ID()
-		s.Result = result
-		return s, nil
-	case errors.Code(err).IsKnownError():
-		return nil, err
-	default:
-		// If the error is not an Error, assume it is a client error, produced
-		// by old code not yet using the status codes
-		return nil, errors.BadRequest.Wrap(err)
-	}
-}
-
-func (UserTransaction) check(batch *database.Batch, ctx *MessageContext) (*messaging.UserTransaction, error) {
-	txn, ok := ctx.message.(*messaging.UserTransaction)
-	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserTransaction, ctx.message.Type())
-	}
-
-	if txn.Transaction == nil {
-		return nil, errors.BadRequest.With("missing transaction")
-	}
-	if txn.Transaction.Body == nil {
-		return nil, errors.BadRequest.With("missing transaction body")
 	}
 
 	// TODO Can we remove this or do it a better way?
@@ -112,14 +168,68 @@ func (UserTransaction) check(batch *database.Batch, ctx *MessageContext) (*messa
 		return nil, errors.BadRequest.WithFormat("a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
 	}
 
+	// Resolve a remote transaction to the locally stored copy (or not)
+	if resolve {
+		_, err := x.resolveTransaction(batch, txn)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+	} else if isRemote {
+		return txn, nil
+	}
+
+	// Verify the transaction type is recognized
+	//
+	// If the transaction is borked, the transaction type is probably invalid,
+	// so check that first. "Invalid transaction type" is a more useful error
+	// than "invalid signature" if the real error is the transaction got borked.
+	_, ok = ctx.Executor.executors[txn.Transaction.Body.Type()]
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("unsupported transaction type: %v", txn.Transaction.Body.Type())
+	}
+
+	// Verify proper wrapping
+	err := x.checkWrapper(ctx, txn.Transaction)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	return txn, nil
+}
+
+func (UserTransaction) checkWrapper(ctx *MessageContext, txn *protocol.Transaction) error {
+	if ctx.isWithin(internal.MessageTypeMessageIsReady) {
+		return nil
+	}
+
+	// Only allow synthetic transactions within a synthetic message, anchor
+	// transactions within a block anchor, and don't allow other transactions to
+	// be wrapped in either
+	if ctx.isWithin(messaging.MessageTypeSynthetic) {
+		if !txn.Body.Type().IsSynthetic() {
+			return errors.BadRequest.WithFormat("a synthetic message cannot carry a %v transaction", txn.Body.Type())
+		}
+	} else if ctx.isWithin(messaging.MessageTypeBlockAnchor) {
+		if !txn.Body.Type().IsAnchor() {
+			return errors.BadRequest.WithFormat("a block anchor cannot carry a %v transaction", txn.Body.Type())
+		}
+	} else {
+		if typ := txn.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
+			return errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v transaction", txn.Body.Type())
+		}
+	}
+	return nil
 }
 
 func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	txn, err := x.check(batch, ctx)
+	// Verify the transaction is well-formed. Only resolve a remote transaction
+	// if we're going to execute it.
+	shouldExecute := ctx.shouldExecuteTransaction()
+	txn, err := x.check(batch, ctx, shouldExecute)
 	switch {
 	case err == nil:
 		// Ok
@@ -129,7 +239,7 @@ func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*p
 		status.Received = ctx.Block.Index
 		status.TxID = ctx.message.ID()
 		status.Set(err)
-		err = batch.Transaction2(txn.Hash()).Status().Put(status)
+		err = batch.Transaction2(ctx.message.Hash()).Status().Put(status)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("store status: %w", err)
 		}
@@ -139,29 +249,19 @@ func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*p
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Resolve and store the transaction
-	ctx2 := ctx.txnWith(txn.Transaction)
-	ctx2.transaction, err = x.storeTransaction(batch, ctx, txn)
-	if err != nil {
-		if err, ok := err.(*errors.Error); ok && err.Code.IsClientError() {
-			return protocol.NewErrorStatus(txn.ID(), err), nil
-		}
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Check the transaction, but only if it was not internally produced
-	if !ctx.isWithin(internal.MessageTypeMessageIsReady, internal.MessageTypeNetworkUpdate) {
-		st, err := x.checkTransaction(batch, ctx2)
-		if err != nil || st.Failed() {
-			return st, err
+	// Store the transaction
+	if txn.Transaction.Body.Type() != protocol.TransactionTypeRemote {
+		err = batch.Message(txn.Hash()).Main().Put(txn)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 		}
 	}
 
 	// Execute the transaction, but ONLY if this is a nested context - DO NOT
 	// attempt to execute a bare user transaction
 	var status *protocol.TransactionStatus
-	if ctx.shouldExecuteTransaction() {
-		status, err = x.executeTransaction(batch, ctx2)
+	if shouldExecute {
+		status, err = x.executeTransaction(batch, ctx.txnWith(txn.Transaction))
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -173,33 +273,6 @@ func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*p
 	}
 
 	return status, nil
-}
-
-func (x UserTransaction) storeTransaction(batch *database.Batch, ctx *MessageContext, msg *messaging.UserTransaction) (*protocol.Transaction, error) {
-	txn := msg.GetTransaction()
-	record := batch.Message(txn.ID().Hash())
-
-	// Validate the synthetic transaction header
-	if typ := txn.Body.Type(); (typ.IsSynthetic() || typ.IsAnchor()) && !ctx.isWithin(messaging.MessageTypeSequenced) {
-		return nil, errors.BadRequest.WithFormat("a %v transaction must be sequenced", typ)
-	}
-
-	new, err := x.resolveTransaction(batch, msg)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	if !new {
-		return txn, nil
-	}
-
-	// If we reach this point, Validate should have verified that there is a
-	// signer that can be charged for this recording
-	err = record.Main().Put(msg)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
-	}
-
-	return txn, nil
 }
 
 func (UserTransaction) resolveTransaction(batch *database.Batch, msg *messaging.UserTransaction) (bool, error) {
@@ -232,50 +305,6 @@ func (UserTransaction) resolveTransaction(batch *database.Batch, msg *messaging.
 		// This should be impossible
 		return false, errors.InternalError.WithFormat("submitted transaction does not match the locally stored transaction")
 	}
-}
-
-func (UserTransaction) checkTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
-	// Ensure the transaction is signed, is synthetic, or was internally queued
-	if !ctx.isWithin(messaging.MessageTypeSynthetic, messaging.MessageTypeBlockAnchor, messaging.MessageTypeUserSignature) {
-		var signed bool
-		for _, other := range ctx.messages {
-		again:
-			switch m := other.(type) {
-			case messaging.MessageForTransaction:
-				if m.GetTxID().Hash() == ctx.transaction.ID().Hash() {
-					signed = true
-				}
-			case interface{ Unwrap() messaging.Message }:
-				other = m.Unwrap()
-				goto again
-			}
-			if signed {
-				break
-			}
-		}
-		if !signed {
-			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("%v is not signed", ctx.transaction.ID())), nil
-		}
-	}
-
-	// Only allow synthetic transactions within a synthetic message, anchor
-	// transactions within a block anchor, and don't allow other transactions to
-	// be wrapped in either
-	if ctx.isWithin(messaging.MessageTypeSynthetic) {
-		if !ctx.transaction.Body.Type().IsSynthetic() {
-			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("a synthetic message cannot carry a %v transaction", ctx.transaction.Body.Type())), nil
-		}
-	} else if ctx.isWithin(messaging.MessageTypeBlockAnchor) {
-		if !ctx.transaction.Body.Type().IsAnchor() {
-			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("a block anchor cannot carry a %v transaction", ctx.transaction.Body.Type())), nil
-		}
-	} else {
-		if typ := ctx.transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
-			return protocol.NewErrorStatus(ctx.transaction.ID(), errors.BadRequest.WithFormat("a non-synthetic message cannot carry a %v transaction", ctx.transaction.Body.Type())), nil
-		}
-	}
-
-	return nil, nil
 }
 
 func (UserTransaction) getSequence(ctx *MessageContext) (*messaging.SequencedMessage, error) {
