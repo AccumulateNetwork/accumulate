@@ -94,6 +94,7 @@ type msgCond struct {
 	id        *url.TxID
 	modifiers []predicateModifier
 	message   []string
+	capture   **protocol.TransactionStatus
 }
 
 func (c msgCond) with(message string, mod ...predicateModifier) msgCond {
@@ -120,7 +121,19 @@ func (c msgCond) make(message string, predicate statusPredicate) Condition {
 	for _, mod := range c.modifiers {
 		predicate = mod(predicate)
 	}
-	return newMessageCond(c.id, predicate, parts)
+	return &condition{
+		predicate: waitFor(c.id)(predicate),
+		message:   parts,
+		capture:   c.capture,
+	}
+}
+
+// Capture captures the status of the message in the given pointer. If the
+// condition involves multiple messages, the captured status will be the status
+// of the last message.
+func (c msgCond) Capture(ptr **protocol.TransactionStatus) msgCond {
+	c.capture = ptr
+	return c
 }
 
 // Received waits until the transaction has been received.
@@ -162,6 +175,7 @@ type predicateModifier func(statusPredicate) statusPredicate
 type condition struct {
 	predicate  statusPredicate
 	lastResult *msgResult
+	capture    **protocol.TransactionStatus
 	message    []string
 }
 
@@ -222,15 +236,6 @@ func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
 	return &res, true
 }
 
-func newMessageCond(id *url.TxID, predicate statusPredicate, message []string) *condition {
-	// parts := make([]string, len(message)+1)
-	// n := copy(parts, message)
-	// h := id.Hash()
-	// parts[n] = fmt.Sprintf("(%x@%s)", h[:4], id.Account())
-
-	return &condition{predicate: waitFor(id)(predicate), message: message}
-}
-
 func waitFor(id *url.TxID) predicateModifier {
 	return func(predicate statusPredicate) statusPredicate {
 		return func(h *Harness, c *condition, _ *msgResult) bool {
@@ -242,6 +247,9 @@ func waitFor(id *url.TxID) predicateModifier {
 			}
 
 			c.lastResult = r
+			if c.capture != nil {
+				*c.capture = r.Status
+			}
 
 			// Evaluate the predicate (only replace if the status is final)
 			if r.Status.Delivered() {
@@ -276,7 +284,11 @@ func produced(predicate statusPredicate) statusPredicate {
 
 		conditions := make([]*condition, len(r.Produced))
 		for i, id := range r.Produced {
-			conditions[i] = newMessageCond(id, predicate, c.message)
+			conditions[i] = &condition{
+				predicate: waitFor(id)(predicate),
+				message:   c.message,
+				capture:   c.capture,
+			}
 		}
 
 		if len(conditions) == 1 {
