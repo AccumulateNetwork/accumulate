@@ -72,3 +72,17 @@ func (b *bundle) callMessageValidator(batch *database.Batch, ctx *MessageContext
 	// Validate the message
 	return x.Validate(batch, ctx)
 }
+
+// callSignatureValidator finds the executor for the signature and calls it.
+func (b *bundle) callSignatureValidator(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+	// Find the appropriate executor
+	x, ok := b.Executor.signatureExecutors[ctx.Type()]
+	if !ok {
+		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("unsupported signature type %v", ctx.Type())), nil
+	}
+
+	// Validate the message
+	st, err := x.Validate(batch, ctx)
+	err = errors.UnknownError.Wrap(err)
+	return st, err
+}

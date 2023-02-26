@@ -36,8 +36,10 @@ go test 1/2:
 .go test 2/2:
   # Full devnet validation test
   extends: .go test
+  variables:
+    GLOBALS: '{"executorVersion": "v2"}'
   script:
-  - go run -tags testnet ./cmd/accumulated init devnet -w .nodes -b 1 -v 1 -f 0 --faucet-seed ci
+  - go run -tags testnet ./cmd/accumulated init devnet -w .nodes -b 1 -v 1 -f 0 --faucet-seed ci --globals "${GLOBALS}"
   - go run -tags testnet ./cmd/accumulated run devnet -w .nodes --faucet-seed ci &
   - sleep 10
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m ./test/validate -test.validate.network "$PWD/.nodes/node-1/dnn/" -run TestManualValidate

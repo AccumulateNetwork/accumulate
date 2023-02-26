@@ -22,21 +22,40 @@ func init() {
 // AuthoritySignature processes delegated signatures.
 type AuthoritySignature struct{}
 
-func (AuthoritySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
-	panic("not implemented")
+func (x AuthoritySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+	// An authority signature must be synthetic, so only do enough validation to
+	// make sure its valid. Properly produced synthetic messages should _always_
+	// be recorded, even if the accounts involved don't exist or are invalid.
+	_, err := x.check(batch, ctx)
+	return nil, errors.UnknownError.Wrap(err)
 }
 
-func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+func (AuthoritySignature) check(batch *database.Batch, ctx *SignatureContext) (*protocol.AuthoritySignature, error) {
 	sig, ok := ctx.signature.(*protocol.AuthoritySignature)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid signature type: expected %v, got %v", protocol.SignatureTypeAuthority, ctx.signature.Type())
 	}
 
-	// An authority signature MUST NOT be submitted directly
-	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
-		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("a non-synthetic message cannot carry an %v signature", ctx.signature.Type())), nil
+	if sig.Signer == nil {
+		return nil, errors.BadRequest.With("missing signer")
+	}
+	if sig.TxID == nil {
+		return nil, errors.BadRequest.With("missing transaction ID")
 	}
 
+	if !ctx.transaction.Body.Type().IsUser() {
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with an authority signature", ctx.transaction.Body.Type())
+	}
+
+	// An authority signature MUST NOT be submitted directly
+	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
+		return nil, errors.BadRequest.WithFormat("a non-synthetic message cannot carry an %v signature", ctx.signature.Type())
+	}
+
+	return sig, nil
+}
+
+func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
 	// Make sure the block gets recorded
 	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
 
@@ -44,7 +63,7 @@ func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext
 	defer batch.Discard()
 
 	// If the signature has already been processed, return the stored status
-	hash := sig.Hash()
+	hash := ctx.signature.Hash()
 	status, err := batch.Transaction(hash).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
@@ -59,7 +78,7 @@ func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext
 	status.Received = ctx.Block.Index
 
 	// Check the message for basic validity
-	err = x.check(batch, ctx, sig)
+	sig, err := x.check(batch, ctx)
 	var err2 *errors.Error
 	switch {
 	case err == nil:
@@ -123,21 +142,6 @@ func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext
 	}
 
 	return status, nil
-}
-
-func (AuthoritySignature) check(batch *database.Batch, ctx *SignatureContext, sig *protocol.AuthoritySignature) error {
-	if sig.Signer == nil {
-		return errors.BadRequest.With("missing signer")
-	}
-	if sig.TxID == nil {
-		return errors.BadRequest.With("missing transaction ID")
-	}
-
-	if !ctx.transaction.Body.Type().IsUser() {
-		return errors.BadRequest.WithFormat("cannot sign a %v transaction with an authority signature", ctx.transaction.Body.Type())
-	}
-
-	return nil
 }
 
 // processDirect processes a direct authority's signature.

@@ -214,8 +214,7 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 	// Submit the transaction directly to the wrong BVN
 	st, err := sim.SubmitTo(badBvn, deliveries)
 	require.NoError(t, err)
-	require.NotNil(t, st[0].Error)
-	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvn, goodBvn), st[0].Error.Message)
+	require.EqualError(t, st[1].AsError(), fmt.Sprintf("signature submitted to %s instead of %s", badBvn, goodBvn))
 }
 
 func TestAnchoring(t *testing.T) {
