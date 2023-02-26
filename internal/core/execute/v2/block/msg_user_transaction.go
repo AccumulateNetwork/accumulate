@@ -26,6 +26,11 @@ func init() {
 type UserTransaction struct{}
 
 func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	// Create a batch and discard it without committing so any changes made by
+	// the executor are not exposed to other message executors
+	batch = batch.Begin(true)
+	defer batch.Discard()
+
 	txn, err := x.check(batch, ctx)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
