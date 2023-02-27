@@ -37,6 +37,17 @@ func init() {
 	}
 }
 
+// Address constructs a ServiceAddress for the service type.
+func (s ServiceType) Address() *ServiceAddress {
+	return &ServiceAddress{Type: s}
+}
+
+// AddressFor constructs a ServiceAddress for the service type and given
+// argument.
+func (s ServiceType) AddressFor(arg string) *ServiceAddress {
+	return &ServiceAddress{Type: s, Partition: arg}
+}
+
 type transcoder struct{}
 
 // StringToBytes implements [multiaddr.Transcoder].
