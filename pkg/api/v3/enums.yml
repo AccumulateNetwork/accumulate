@@ -1,21 +1,30 @@
 ServiceType:
   Unknown:
+    description: indicates an unknown service type
     value: 0
-  Node:
+  Consensus:
+    description: is the type of [ConsensusService]
     value: 1
   Network:
+    description: is the type of [NetworkService]
     value: 2
   Metrics:
+    description: is the type of [MetricsService]
     value: 3
   Query:
+    description: is the type of [Querier]
     value: 4
   Event:
+    description: is the type of [EventService]
     value: 5
   Submit:
+    description: is the type of [Submitter]
     value: 6
   Validate:
+    description: is the type of [Validator]
     value: 7
   Faucet:
+    description: is the type of [Faucet]
     value: 8
 
 QueryType:

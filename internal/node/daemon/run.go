@@ -339,7 +339,7 @@ func (d *Daemon) Start() (err error) {
 	globals := <-chGlobals
 
 	// Initialize all the services
-	nodeSvc := tm.NewNodeService(tm.NodeServiceParams{
+	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
 		Database:         d.db,
@@ -389,7 +389,7 @@ func (d *Daemon) Start() (err error) {
 	})
 	messageHandler, err := message.NewHandler(
 		d.Logger.With("module", "acc-rpc"),
-		&message.NodeService{NodeService: nodeSvc},
+		&message.ConsensusService{ConsensusService: nodeSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
 		&message.NetworkService{NetworkService: netSvc},
 		&message.Querier{Querier: querySvc},

@@ -25,7 +25,7 @@ type Client struct {
 	Server string
 }
 
-var _ api.NodeService = (*Client)(nil)
+var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
@@ -41,8 +41,8 @@ func NewClient(server string) *Client {
 	return c
 }
 
-func (c *Client) NodeStatus(ctx context.Context, opts NodeStatusOptions) (*api.NodeStatus, error) {
-	return sendRequestUnmarshalAs[*api.NodeStatus](c, ctx, "node-status", &message.NodeStatusRequest{NodeStatusOptions: opts})
+func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return sendRequestUnmarshalAs[*api.ConsensusStatus](c, ctx, "consensus-status", &message.ConsensusStatusRequest{ConsensusStatusOptions: opts})
 }
 
 func (c *Client) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {

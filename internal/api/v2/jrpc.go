@@ -96,7 +96,7 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
-	ns, err := m.LocalV3.NodeStatus(ctx, api.NodeStatusOptions{})
+	ns, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -119,7 +119,7 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 }
 
 func (m *JrpcMethods) Version(ctx context.Context, _ json.RawMessage) interface{} {
-	node, err := m.LocalV3.NodeStatus(ctx, api.NodeStatusOptions{})
+	node, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
 	}
