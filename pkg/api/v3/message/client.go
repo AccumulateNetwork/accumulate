@@ -19,6 +19,10 @@ import (
 
 // Client is a binary message transport client for API v3.
 type Client struct {
+	// Network to query. Some queries are only available when a network is
+	// specified.
+	Network string
+
 	// Dialer dials connections to a given address. The client indicates that
 	// the stream can be closed by canceling the context passed to Dial.
 	Dialer Dialer
@@ -249,18 +253,10 @@ func (c *Client) roundTrip(ctx context.Context, req []Message, callback func(res
 
 	// Process each request
 	for _, req := range req {
-		addr := AddressOf(req)
-
 		// Route it
-		var err error
-		if addr == nil {
-			if c.Router == nil {
-				return errors.BadRequest.With("cannot route message: router is missing")
-			}
-			addr, err = c.Router.Route(req)
-			if err != nil {
-				return errors.UnknownError.Wrap(err)
-			}
+		addr, err := c.routeRequest(req)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
 		}
 
 		// Dial the address
@@ -286,6 +282,54 @@ func (c *Client) roundTrip(ctx context.Context, req []Message, callback func(res
 		}
 	}
 	return nil
+}
+
+func (c *Client) routeRequest(req Message) (multiaddr.Multiaddr, error) {
+	var err error
+
+	// Does the message already have an address?
+	addr := AddressOf(req)
+	if addr != nil {
+		goto routed // Skip routing
+	}
+
+	// Can we route it?
+	if c.Router == nil {
+		return nil, errors.BadRequest.With("cannot route message: router is missing")
+	}
+
+	// Ask the router to route the request
+	addr, err = c.Router.Route(req)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+routed:
+	// Check if the address specifies a network or p2p node
+	var complete bool
+	for _, p := range addr.Protocols() {
+		switch p.Code {
+		case multiaddr.P_P2P, api.P_ACC:
+			complete = true
+		}
+	}
+	if complete {
+		return addr, nil
+	}
+
+	// Did the caller specify a network?
+	if c.Network == "" {
+		return nil, errors.BadRequest.With("cannot route message: network is unspecified")
+	}
+
+	// Add the network
+	net, err := multiaddr.NewComponent(api.N_ACC, c.Network)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("build network address: %w", err)
+	}
+
+	// Encapsulate the address with /acc/{network}
+	return net.Encapsulate(addr), nil
 }
 
 // dial dials a given address and calls send with the stream, returning the
@@ -345,10 +389,15 @@ func (c *Client) dial(ctx context.Context, addr multiaddr.Multiaddr, streams map
 }
 
 // GetNetInfo queries the directory network for the network status. GetNetInfo
-// is intended to be used to initialize the message router.
+// is intended to be used to initialize the message router. GetNetInfo returns
+// an error if the network is not specified.
 func (c *Client) GetNetInfo(ctx context.Context) (*api.NetworkStatus, error) {
+	if c.Network == "" {
+		return nil, errors.BadRequest.With("network is unspecified")
+	}
+
 	// Route the message to /acc/directory
-	dirMa, err := multiaddr.NewComponent(api.N_ACC, (&api.ServiceAddress{Type: api.ServiceTypeNetwork, Partition: protocol.Directory}).String())
+	dirMa, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(c.Network)
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
 	}
@@ -386,10 +435,7 @@ func (c *Client) getParts(ctx context.Context, service api.ServiceType) ([]multi
 	// /acc/{partition}
 	ma := make([]multiaddr.Multiaddr, len(ns.Network.Partitions))
 	for i, part := range ns.Network.Partitions {
-		sa := new(api.ServiceAddress)
-		sa.Type = service
-		sa.Partition = part.ID
-		ma[i], err = multiaddr.NewComponent(api.N_ACC, sa.String())
+		ma[i], err = service.AddressFor(part.ID).MultiaddrFor(c.Network)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
 		}

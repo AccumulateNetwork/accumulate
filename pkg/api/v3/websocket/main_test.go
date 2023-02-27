@@ -124,7 +124,7 @@ func setupTest(t testing.TB, services ...message.Service) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	p, q := message.DuplexPipeOf[Message](ctx)
 	go handler.handle(p, ctx, cancel)
-	c := newClient(q, logger)
+	c := newClient("foo", q, logger)
 	go func() { <-c.Done(); cancel() }()
 	return c
 }

@@ -50,13 +50,15 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	// Message clients
 	selfClient := &message.Client{
-		Router: unrouter(opts.Network.PartitionId),
-		Dialer: opts.Node.SelfDialer(),
+		Network: opts.Network.Network.Id,
+		Router:  unrouter(opts.Network.PartitionId),
+		Dialer:  opts.Node.SelfDialer(),
 	}
 
 	client := &message.Client{
-		Router: routing.MessageRouter{Router: opts.Router},
-		Dialer: opts.Node.Dialer(),
+		Network: opts.Network.Network.Id,
+		Router:  routing.MessageRouter{Router: opts.Router},
+		Dialer:  opts.Node.Dialer(),
 	}
 
 	// JSON-RPC API v3
@@ -125,11 +127,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }
 
+// unrouter routes everything to the same partition
 type unrouter string
 
 func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	service := new(api.ServiceAddress)
-	service.Partition = string(r)
+	service.Argument = string(r)
 	var err error
 	switch msg := msg.(type) {
 	case *message.NetworkStatusRequest:
@@ -155,10 +158,6 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		return nil, errors.BadRequest.WithFormat("cannot route request: %w", err)
 	}
 
-	// Return /acc/{service}:{partition}
-	ma, err := multiaddr.NewComponent(api.N_ACC, service.String())
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
-	}
-	return ma, nil
+	// Return /acc/{network}/acc-svc/{service}:{partition}
+	return service.Multiaddr(), nil
 }
