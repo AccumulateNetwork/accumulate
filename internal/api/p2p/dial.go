@@ -30,7 +30,7 @@ var _ message.MultiDialer = (*dialer)(nil)
 // support testing with mocks.
 type dialerHost interface {
 	selfID() peer.ID
-	getOwnService(network string, sa *api.ServiceAddress) (*service, bool)
+	getOwnService(network string, sa *api.ServiceAddress) (*serviceHandler, bool)
 	getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error)
 }
 
@@ -108,14 +108,17 @@ func unpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *api.ServiceAddre
 		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
-	switch {
-	case cPeer != nil:
-		return "", peer.ID(cPeer.RawValue()), sa, nil
-	case cNetwork != nil:
-		return string(cNetwork.RawValue()), "", sa, nil
-	default:
-		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
+	var peerID peer.ID
+	if cPeer != nil {
+		peerID = peer.ID(cPeer.RawValue())
 	}
+
+	var net string
+	if cNetwork != nil {
+		net = string(cNetwork.RawValue())
+	}
+
+	return net, peerID, sa, nil
 }
 
 // BadDial notifies the dialer that a transport error was encountered while
@@ -150,7 +153,11 @@ func (d dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer 
 	}
 
 	// Open a new stream
-	s, err := d.host.getPeerService(ctx, peer, sa)
+	return openStreamFor(ctx, d.host, peer, sa)
+}
+
+func openStreamFor(ctx context.Context, host dialerHost, peer peer.ID, sa *api.ServiceAddress) (message.Stream, error) {
+	s, err := host.getPeerService(ctx, peer, sa)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -199,15 +206,10 @@ func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, ne
 	// Try each peer in descending priority
 	for p := range peers {
 		// Open a stream
-		s, err := d.host.getPeerService(ctx, p.ID, sa)
+		s, err := openStreamFor(ctx, d.host, p.ID, sa)
 		switch {
 		case err == nil:
-			// Close the stream once the context is done
-			go func() { <-ctx.Done(); _ = s.Close() }()
-
-			ps := new(stream)
-			ps.stream = message.NewStream(s)
-			return ps, nil
+			return s, nil
 
 		case errors.Is(err, network.ErrNoConn),
 			errors.Is(err, network.ErrNoRemoteAddrs):
@@ -235,7 +237,8 @@ func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (messag
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	if peer != "" && peer != d.host.ID() {
-		return nil, errors.NotFound.With("dialed self but asked for a different peer")
+		s, err := openStreamFor(ctx, (*Node)(d), peer, sa)
+		return s, errors.UnknownError.Wrap(err)
 	}
 
 	// Check if we provide the service

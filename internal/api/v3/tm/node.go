@@ -119,9 +119,9 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, _ api.ConsensusS
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get net info: %w", err)
 	}
-	res.Peers = make([]*api.PeerInfo, len(netInfo.Peers))
+	res.Peers = make([]*api.ConsensusPeerInfo, len(netInfo.Peers))
 	for i, src := range netInfo.Peers {
-		peer := new(api.PeerInfo)
+		peer := new(api.ConsensusPeerInfo)
 		peer.NodeID = string(src.NodeInfo.ID())
 		res.Peers[i] = peer
 

@@ -41,15 +41,42 @@ func formatResponse(res interface{}, err error) interface{} {
 	return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Error(), (*Error)(err2))
 }
 
+type NodeService struct {
+	api.NodeService
+}
+
+func (s NodeService) methods() jsonrpc2.MethodMap {
+	return jsonrpc2.MethodMap{
+		"node-info":    s.nodeInfo,
+		"find-service": s.findService,
+	}
+}
+
+func (s NodeService) nodeInfo(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.NodeInfoRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.NodeService.NodeInfo(ctx, req.NodeInfoOptions))
+}
+
+func (s NodeService) findService(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.FindServiceRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.NodeService.FindService(ctx, req.FindServiceOptions))
+}
+
 type ConsensusService struct{ api.ConsensusService }
 
 func (s ConsensusService) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"consensus-status": s.ConsensusStatus,
+		"consensus-status": s.consensusStatus,
 	}
 }
 
-func (s ConsensusService) ConsensusStatus(ctx context.Context, params json.RawMessage) interface{} {
+func (s ConsensusService) consensusStatus(ctx context.Context, params json.RawMessage) interface{} {
 	req, err := parseRequest[*message.ConsensusStatusRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
@@ -61,11 +88,11 @@ type NetworkService struct{ api.NetworkService }
 
 func (s NetworkService) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"network-status": s.NetworkStatus,
+		"network-status": s.networkStatus,
 	}
 }
 
-func (s NetworkService) NetworkStatus(ctx context.Context, params json.RawMessage) interface{} {
+func (s NetworkService) networkStatus(ctx context.Context, params json.RawMessage) interface{} {
 	req, err := parseRequest[*message.NetworkStatusRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
@@ -77,11 +104,11 @@ type MetricsService struct{ api.MetricsService }
 
 func (s MetricsService) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"metrics": s.Metrics,
+		"metrics": s.metrics,
 	}
 }
 
-func (s MetricsService) Metrics(ctx context.Context, params json.RawMessage) interface{} {
+func (s MetricsService) metrics(ctx context.Context, params json.RawMessage) interface{} {
 	req, err := parseRequest[*message.MetricsRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
@@ -93,11 +120,11 @@ type Querier struct{ api.Querier }
 
 func (s Querier) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"query": s.Query,
+		"query": s.query,
 	}
 }
 
-func (s Querier) Query(ctx context.Context, params json.RawMessage) interface{} {
+func (s Querier) query(ctx context.Context, params json.RawMessage) interface{} {
 	req, err := parseRequest[*message.QueryRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
@@ -109,11 +136,11 @@ type Submitter struct{ api.Submitter }
 
 func (s Submitter) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"submit": s.Submit,
+		"submit": s.submit,
 	}
 }
 
-func (s Submitter) Submit(ctx context.Context, params json.RawMessage) interface{} {
+func (s Submitter) submit(ctx context.Context, params json.RawMessage) interface{} {
 	req, err := parseRequest[*message.SubmitRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
@@ -125,11 +152,11 @@ type Validator struct{ api.Validator }
 
 func (s Validator) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"validate": s.Validate,
+		"validate": s.validate,
 	}
 }
 
-func (s Validator) Validate(ctx context.Context, params json.RawMessage) interface{} {
+func (s Validator) validate(ctx context.Context, params json.RawMessage) interface{} {
 	req, err := parseRequest[*message.ValidateRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)

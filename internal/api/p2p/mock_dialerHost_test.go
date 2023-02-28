@@ -25,15 +25,15 @@ func (_m *mockDialerHost) EXPECT() *mockDialerHost_Expecter {
 }
 
 // getOwnService provides a mock function with given fields: network, sa
-func (_m *mockDialerHost) getOwnService(network string, sa *api.ServiceAddress) (*service, bool) {
+func (_m *mockDialerHost) getOwnService(network string, sa *api.ServiceAddress) (*serviceHandler, bool) {
 	ret := _m.Called(network, sa)
 
-	var r0 *service
-	if rf, ok := ret.Get(0).(func(string, *api.ServiceAddress) *service); ok {
+	var r0 *serviceHandler
+	if rf, ok := ret.Get(0).(func(string, *api.ServiceAddress) *serviceHandler); ok {
 		r0 = rf(network, sa)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*service)
+			r0 = ret.Get(0).(*serviceHandler)
 		}
 	}
 
@@ -66,7 +66,7 @@ func (_c *mockDialerHost_getOwnService_Call) Run(run func(network string, sa *ap
 	return _c
 }
 
-func (_c *mockDialerHost_getOwnService_Call) Return(_a0 *service, _a1 bool) *mockDialerHost_getOwnService_Call {
+func (_c *mockDialerHost_getOwnService_Call) Return(_a0 *serviceHandler, _a1 bool) *mockDialerHost_getOwnService_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }

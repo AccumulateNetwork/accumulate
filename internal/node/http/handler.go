@@ -64,6 +64,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	// JSON-RPC API v3
 	v3, err := jsonrpc.NewHandler(
 		opts.Logger,
+		jsonrpc.NodeService{NodeService: selfClient},
 		jsonrpc.ConsensusService{ConsensusService: selfClient},
 		jsonrpc.NetworkService{NetworkService: client},
 		jsonrpc.MetricsService{MetricsService: client},
@@ -79,6 +80,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	// WebSocket API v3
 	ws, err := websocket.NewHandler(
 		opts.Logger,
+		message.NodeService{NodeService: selfClient},
 		message.ConsensusService{ConsensusService: selfClient},
 		message.NetworkService{NetworkService: client},
 		message.MetricsService{MetricsService: client},
@@ -135,10 +137,41 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	service.Argument = string(r)
 	var err error
 	switch msg := msg.(type) {
+	case *message.NodeInfoRequest:
+		if msg.PeerID == "" {
+			return api.ServiceTypeNode.Address().Multiaddr(), nil
+		}
+
+		c1, err := multiaddr.NewComponent("p2p", msg.PeerID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := api.ServiceTypeNode.Address().Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
+	case *message.FindServiceRequest:
+		return api.ServiceTypeNode.Address().Multiaddr(), nil
+
+	case *message.ConsensusStatusRequest:
+		if msg.NodeID == "" {
+			service.Type = api.ServiceTypeConsensus
+			break
+		}
+		if msg.Partition == "" {
+			return nil, errors.BadRequest.WithFormat("missing partition")
+		}
+
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID)
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := api.ServiceTypeConsensus.AddressFor(msg.Partition).Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
 	case *message.NetworkStatusRequest:
 		service.Type = api.ServiceTypeNetwork
-	case *message.ConsensusStatusRequest:
-		service.Type = api.ServiceTypeConsensus
 	case *message.MetricsRequest:
 		service.Type = api.ServiceTypeMetrics
 	case *message.QueryRequest:

@@ -31,6 +31,24 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	service := new(api.ServiceAddress)
 	var err error
 	switch msg := msg.(type) {
+	case *message.NodeInfoRequest:
+		service.Type = api.ServiceTypeNode
+		if msg.PeerID == "" {
+			return service.Multiaddr(), nil
+		}
+
+		// Return /p2p/{id}/acc/{service}:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.PeerID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := service.Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
+	case *message.FindServiceRequest:
+		service.Type = api.ServiceTypeNode
+
 	case *message.NetworkStatusRequest:
 		service.Type = api.ServiceTypeNetwork
 
@@ -57,10 +75,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
 		}
-		c2, err := multiaddr.NewComponent(api.N_ACC_SVC, service.String())
-		if err != nil {
-			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
-		}
+		c2 := service.Multiaddr()
 
 		return c1.Encapsulate(c2), nil
 

@@ -28,7 +28,7 @@ type peerManager struct {
 	context     context.Context
 	host        host.Host
 	network     string
-	getServices func() []*service
+	getServices func() []*serviceHandler
 	dht         *dht.IpfsDHT
 	routing     *routing.RoutingDiscovery
 	sendEvent   chan<- Event
@@ -38,7 +38,7 @@ type peerManager struct {
 
 // newPeerManager constructs a new [peerManager] for the given host with the
 // given options.
-func newPeerManager(ctx context.Context, host host.Host, getServices func() []*service, opts Options) (*peerManager, error) {
+func newPeerManager(ctx context.Context, host host.Host, getServices func() []*serviceHandler, opts Options) (*peerManager, error) {
 	// Setup the basics
 	m := new(peerManager)
 	m.host = host
@@ -101,13 +101,21 @@ func (m *peerManager) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limi
 
 // advertizeNewService advertizes new whoami info to everyone.
 func (m *peerManager) advertizeNewService(sa *api.ServiceAddress) error {
-	ma, err := sa.MultiaddrFor(m.network)
-	if err != nil {
-		return errors.UnknownError.WithFormat("format multiaddr: %w", err)
+	var addr multiaddr.Multiaddr
+	var err error
+	switch {
+	case sa.Type == api.ServiceTypeNode,
+		m.network == "":
+		addr = sa.Multiaddr()
+
+	default:
+		addr, err = sa.MultiaddrFor(m.network)
+		if err != nil {
+			return errors.UnknownError.WithFormat("format multiaddr: %w", err)
+		}
 	}
 
-	s := ma.String()
-	util.Advertise(m.context, m.routing, s)
+	util.Advertise(m.context, m.routing, addr.String())
 
 	m.sendEvent <- &ServiceRegisteredEvent{
 		PeerID:  m.host.ID(),
@@ -133,8 +141,7 @@ func (m *peerManager) waitFor(ctx context.Context, addr multiaddr.Multiaddr) err
 		wait := <-m.wait
 
 		// Look for a peer
-		s := addr.String()
-		ch, err := m.routing.FindPeers(ctx, s, discovery.Limit(1))
+		ch, err := m.routing.FindPeers(ctx, addr.String(), discovery.Limit(1))
 		if err != nil {
 			return err
 		}

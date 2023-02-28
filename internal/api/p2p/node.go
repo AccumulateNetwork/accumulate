@@ -18,11 +18,14 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Node implements peer-to-peer routing of API v3 messages over via binary
@@ -33,7 +36,7 @@ type Node struct {
 	cancel   context.CancelFunc
 	peermgr  *peerManager
 	host     host.Host
-	services []*service
+	services []*serviceHandler
 }
 
 // Options are options for creating a [Node].
@@ -100,9 +103,25 @@ func New(opts Options) (_ *Node, err error) {
 	}()
 
 	// Create a peer manager
-	n.peermgr, err = newPeerManager(n.context, n.host, func() []*service { return n.services }, opts)
+	n.peermgr, err = newPeerManager(n.context, n.host, func() []*serviceHandler { return n.services }, opts)
 	if err != nil {
 		return nil, err
+	}
+
+	// Register the node service
+	mh, err := message.NewHandler(n.logger, &message.NodeService{NodeService: (*nodeService)(n)})
+	if err != nil {
+		return nil, err
+	}
+	n.RegisterService(api.ServiceTypeNode.Address(), mh.Handle)
+
+	// List the node as part of the network
+	if opts.Network != "" {
+		c, err := multiaddr.NewComponent(api.N_ACC, opts.Network)
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("create network multiaddr: %w", err)
+		}
+		util.Advertise(n.context, n.peermgr.routing, c.String())
 	}
 
 	return n, nil
@@ -149,11 +168,11 @@ func (n *Node) getPeerService(ctx context.Context, peer peer.ID, service *api.Se
 }
 
 // getOwnService returns a service of this node.
-func (n *Node) getOwnService(network string, sa *api.ServiceAddress) (*service, bool) {
+func (n *Node) getOwnService(network string, sa *api.ServiceAddress) (*serviceHandler, bool) {
 	if network != "" && !strings.EqualFold(network, n.peermgr.network) {
 		return nil, false
 	}
-	i, ok := sortutil.Search(n.services, func(s *service) int { return s.address.Compare(sa) })
+	i, ok := sortutil.Search(n.services, func(s *serviceHandler) int { return s.address.Compare(sa) })
 	if !ok {
 		return nil, false
 	}
