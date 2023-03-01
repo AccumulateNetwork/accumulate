@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -31,11 +31,13 @@ var listCmd = &cobra.Command{
 
 var listFlag = struct {
 	Serve string
+	CSV   bool
 }{}
 
 func init() {
 	cmd.AddCommand(listCmd)
 	listCmd.Flags().StringVarP(&listFlag.Serve, "serve", "s", "", "Run a server")
+	listCmd.Flags().BoolVar(&listFlag.CSV, "csv", false, "Output as a CSV")
 }
 
 func listSnapshots(_ *cobra.Command, args []string) {
@@ -54,10 +56,16 @@ func listSnapshots(_ *cobra.Command, args []string) {
 	entries, err := os.ReadDir(snapDir)
 	checkf(err, "read directory")
 
-	wr := tabwriter.NewWriter(os.Stdout, 3, 4, 2, ' ', 0)
-	defer wr.Flush()
+	var wr *tabwriter.Writer
+	if listFlag.CSV {
+		fmt.Print("Height, Hash, File\n")
+	} else {
+		wr = tabwriter.NewWriter(os.Stdout, 3, 4, 2, ' ', 0)
+		defer wr.Flush()
 
-	fmt.Fprint(wr, "HEIGHT\tHASH\tFILE\n")
+		fmt.Fprint(wr, "HEIGHT\tHASH\tFILE\n")
+	}
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -74,7 +82,11 @@ func listSnapshots(_ *cobra.Command, args []string) {
 		header, _, err := snapshot.Open(f)
 		checkf(err, "open snapshot %s", entry.Name())
 
-		fmt.Fprintf(wr, "%d\t%x\t%s\n", header.Height, header.RootHash, entry.Name())
+		if listFlag.CSV {
+			fmt.Printf("%d, %x, %s\n", header.Height, header.RootHash, entry.Name())
+		} else {
+			fmt.Fprintf(wr, "%d\t%x\t%s\n", header.Height, header.RootHash, entry.Name())
+		}
 	}
 }
 
