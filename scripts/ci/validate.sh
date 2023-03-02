@@ -11,7 +11,7 @@ source ${SCRIPT_DIR}/validate-commons.sh
 section "Setup"
 if which go > /dev/null && ! which accumulate > /dev/null ; then
     echo "Installing CLI"
-    go install gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate
+    go install gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate@v0.3.4
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
 init-wallet
