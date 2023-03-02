@@ -59,11 +59,11 @@ func TestDialAddress(t *testing.T) {
 		Addr string
 	}{
 		"peer":           {false, "/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"},
-		"partition":      {true, "/acc/query:foo"},
-		"partition-peer": {true, "/acc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"},
-		"peer-partition": {true, "/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N/acc/query:foo"},
-		"partition-tcp":  {false, "/acc/query:foo/tcp/123"},
-		"tcp-partition":  {false, "/tcp/123/acc/query:foo"},
+		"partition":      {true, "/acc-svc/query:foo"},
+		"partition-peer": {true, "/acc-svc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"},
+		"peer-partition": {true, "/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N/acc-svc/query:foo"},
+		"partition-tcp":  {false, "/acc-svc/query:foo/tcp/123"},
+		"tcp-partition":  {false, "/tcp/123/acc-svc/query:foo"},
 	}
 
 	dialer := &dialer{host, peers}
@@ -92,7 +92,7 @@ func TestDialSelfPeer(t *testing.T) {
 	host.EXPECT().getOwnService(mock.Anything).Return(&service{handler: handler.Execute}, true)
 
 	dialer := &dialer{host, nil}
-	_, err := dialer.Dial(context.Background(), addr(t, "/acc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
+	_, err := dialer.Dial(context.Background(), addr(t, "/acc-svc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
 	require.NoError(t, err)
 	<-done
 }
@@ -108,7 +108,7 @@ func TestDialSelfPartition(t *testing.T) {
 	host.EXPECT().getOwnService(mock.Anything).Return(&service{handler: handler.Execute}, true)
 
 	dialer := &dialer{host, nil}
-	_, err := dialer.Dial(context.Background(), addr(t, "/acc/query:foo"))
+	_, err := dialer.Dial(context.Background(), addr(t, "/acc-svc/query:foo"))
 	require.NoError(t, err)
 	<-done
 }
@@ -122,7 +122,7 @@ func TestDialPartition(t *testing.T) {
 		{priority: 0, info: &Info{ID: peerId(t, "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt")}},
 	}
 
-	_sa := &api.ServiceAddress{Type: api.ServiceTypeQuery, Partition: "foo"}
+	_sa := &api.ServiceAddress{Type: api.ServiceTypeQuery, Argument: "foo"}
 	sa := mock.MatchedBy(func(other *api.ServiceAddress) bool { return _sa.Equal(other) })
 	peers := newMockDialerPeers(t)
 	peers.EXPECT().getPeers(sa).Return(append(make([]*peerState, 0, len(peerList)), peerList...)) // Copy
@@ -138,6 +138,6 @@ func TestDialPartition(t *testing.T) {
 	peers.EXPECT().adjustPriority(peerList[1], mock.Anything).NotBefore(c1.Call)
 
 	dialer := &dialer{host, peers}
-	_, err := dialer.Dial(context.Background(), addr(t, "/acc/query:foo"))
+	_, err := dialer.Dial(context.Background(), addr(t, "/acc-svc/query:foo"))
 	require.NoError(t, err)
 }

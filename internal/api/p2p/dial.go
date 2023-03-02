@@ -79,11 +79,13 @@ func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Str
 // include an /acc component and may include a /p2p component. unpackAddress
 // will return an error if the address includes any other components.
 func unpackAddress(addr multiaddr.Multiaddr) (peer.ID, *api.ServiceAddress, error) {
-	var saBytes, peerID []byte
+	var netBytes, saBytes, peerID []byte
 	var bad bool
 	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
 		switch c.Protocol().Code {
 		case api.P_ACC:
+			netBytes = c.RawValue()
+		case api.P_ACC_SVC:
 			saBytes = c.RawValue()
 		case multiaddr.P_P2P:
 			peerID = c.RawValue()
@@ -92,6 +94,7 @@ func unpackAddress(addr multiaddr.Multiaddr) (peer.ID, *api.ServiceAddress, erro
 		}
 		return true
 	})
+	_ = netBytes
 
 	if bad || saBytes == nil {
 		return "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)

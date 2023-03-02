@@ -38,6 +38,10 @@ type Node struct {
 type Options struct {
 	Logger log.Logger
 
+	// Network is the network the node is a part of. An empty Network indicates
+	// the node is not part of any network.
+	Network string
+
 	// Listen is an array of addresses to listen on.
 	Listen []multiaddr.Multiaddr
 
