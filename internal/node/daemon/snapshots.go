@@ -7,7 +7,6 @@
 package accumulated
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -27,6 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
@@ -172,7 +172,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 
 	err = exec.RestoreSnapshot(db, file)
 	if err != nil {
-		return fmt.Errorf("failed to restore snapshot: %v", err)
+		return errors.UnknownError.WithFormat("failed to restore snapshot: %w", err)
 	}
 
 	return nil
