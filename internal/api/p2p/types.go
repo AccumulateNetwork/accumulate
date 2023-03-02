@@ -7,19 +7,18 @@
 package p2p
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
-//go:generate go run github.com/vektra/mockery/v2
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package p2p types.yml
-//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w .
+type EventType uint64
 
-// HasService returns true if Info includes the given Service.
-func (i *Info) HasService(service *api.ServiceAddress) bool {
-	for _, s := range i.Services {
-		if s.Address.Equal(service) {
-			return true
-		}
-	}
-	return false
+type Event interface {
+	encoding.UnionValue
+	Type() EventType
 }
+
+//go:generate go run github.com/vektra/mockery/v2
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package p2p enums.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package p2p types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --language go-union --package p2p --out unions_gen.go types.yml
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w .
