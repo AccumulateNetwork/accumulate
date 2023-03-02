@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -19,9 +20,11 @@ import (
 // LoadKey attempts to parse the given string as a secret key address or file.
 func LoadKey(s string) ed25519.PrivateKey {
 	// Parse the key
-	sk := parseKey(s)
-	if sk != nil {
-		return sk
+	if !strings.ContainsRune(s, '/') {
+		sk := parseKey(s)
+		if sk != nil {
+			return sk
+		}
 	}
 
 	// If a recognized format, try interpreting it as a file name
@@ -33,7 +36,7 @@ func LoadKey(s string) ed25519.PrivateKey {
 		Checkf(err, "read key file")
 	}
 
-	sk = parseKey(string(b))
+	sk := parseKey(string(b))
 	if sk == nil {
 		Fatalf("%q is not a valid key", s)
 	}
