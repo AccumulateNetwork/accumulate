@@ -30,6 +30,10 @@ type FieldType struct {
 	Name string
 }
 
+func (t TypeCode) Title() string {
+	return TitleCase(t.String())
+}
+
 func (f *FieldType) Equal(g *FieldType) bool {
 	if f == g {
 		return true
@@ -102,6 +106,25 @@ func (f *FieldType) UnmarshalJSON(data []byte) error {
 	} else {
 		f.SetNamed(s)
 	}
+	return nil
+}
+
+func (f TypeCode) MarshalYAML() (interface{}, error) {
+	return f.String(), nil
+}
+
+func (f *TypeCode) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	err := value.Decode(&s)
+	if err != nil {
+		return err
+	}
+
+	code, ok := TypeCodeByName(s)
+	if !ok {
+		return fmt.Errorf("cannot unmarshal %q as TypeCode", s)
+	}
+	*f = code
 	return nil
 }
 
@@ -289,6 +312,8 @@ type Field struct {
 	Type FieldType
 	// MarshalAs specifies how to marshal the field.
 	MarshalAs MarshalAs `yaml:"marshal-as"`
+	// MarshalType specifies that the field should be marshalled as the given type.
+	MarshalAsType TypeCode `yaml:"marshal-as-type"`
 	// Repeatable specifies whether the the field is repeatable (represented as a slice).
 	Repeatable bool
 	// Pointer specifies whether the field is a pointer.
