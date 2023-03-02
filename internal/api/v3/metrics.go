@@ -20,7 +20,7 @@ import (
 
 type MetricsService struct {
 	logger  logging.OptionalLogger
-	node    api.NodeService
+	node    api.ConsensusService
 	querier api.Querier2
 }
 
@@ -28,7 +28,7 @@ var _ api.MetricsService = (*MetricsService)(nil)
 
 type MetricsServiceParams struct {
 	Logger  log.Logger
-	Node    api.NodeService
+	Node    api.ConsensusService
 	Querier api.Querier
 }
 
@@ -43,7 +43,7 @@ func NewMetricsService(params MetricsServiceParams) *MetricsService {
 func (s *MetricsService) Type() api.ServiceType { return api.ServiceTypeMetrics }
 
 func (s *MetricsService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
-	status, err := s.node.NodeStatus(ctx, api.NodeStatusOptions{})
+	status, err := s.node.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get status: %w", err)
 	}

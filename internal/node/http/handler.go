@@ -64,7 +64,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	// JSON-RPC API v3
 	v3, err := jsonrpc.NewHandler(
 		opts.Logger,
-		jsonrpc.NodeService{NodeService: selfClient},
+		jsonrpc.ConsensusService{ConsensusService: selfClient},
 		jsonrpc.NetworkService{NetworkService: client},
 		jsonrpc.MetricsService{MetricsService: client},
 		jsonrpc.Querier{Querier: client},
@@ -79,7 +79,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	// WebSocket API v3
 	ws, err := websocket.NewHandler(
 		opts.Logger,
-		message.NodeService{NodeService: selfClient},
+		message.ConsensusService{ConsensusService: selfClient},
 		message.NetworkService{NetworkService: client},
 		message.MetricsService{MetricsService: client},
 		message.Querier{Querier: client},
@@ -137,8 +137,8 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	switch msg := msg.(type) {
 	case *message.NetworkStatusRequest:
 		service.Type = api.ServiceTypeNetwork
-	case *message.NodeStatusRequest:
-		service.Type = api.ServiceTypeNode
+	case *message.ConsensusStatusRequest:
+		service.Type = api.ServiceTypeConsensus
 	case *message.MetricsRequest:
 		service.Type = api.ServiceTypeMetrics
 	case *message.QueryRequest:

@@ -86,7 +86,7 @@ func (n *Node) RegisterService(sa *api.ServiceAddress, handler func(message.Stre
 	return n.node.RegisterService(sa, handler)
 }
 
-var _ api.NodeService = (*Node)(nil)
+var _ api.ConsensusService = (*Node)(nil)
 var _ api.NetworkService = (*Node)(nil)
 var _ api.MetricsService = (*Node)(nil)
 var _ api.Querier = (*Node)(nil)
@@ -94,9 +94,9 @@ var _ api.Submitter = (*Node)(nil)
 var _ api.Validator = (*Node)(nil)
 var _ api.Faucet = (*Node)(nil)
 
-// NodeStatus implements [api.NodeService.NodeStatus].
-func (n *Node) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
-	return n.client.NodeStatus(ctx, opts)
+// ConsensusStatus implements [api.ConsensusService.ConsensusStatus].
+func (n *Node) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return n.client.ConsensusStatus(ctx, opts)
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
