@@ -3932,9 +3932,11 @@ func (v *SignaturePage) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Signer = u.Signer
-	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	return nil
 }
@@ -4131,9 +4133,11 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	}
 	v.Txid = u.Txid
 	v.Transaction = u.Transaction
-	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	v.Status = u.Status
 	if !(len(u.Produced) == 0) {
