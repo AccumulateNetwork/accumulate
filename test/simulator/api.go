@@ -24,6 +24,7 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	testhttp "gitlab.com/accumulatenetwork/accumulate/test/util/http"
 )
 
 // Services returns the simulator's API v3 implementation.
@@ -32,6 +33,19 @@ func (s *Simulator) Services() *simService { return (*simService)(s) }
 // ClientV2 returns an API V2 client for the given partition.
 func (s *Simulator) ClientV2(part string) *client.Client {
 	return s.partitions[part].nodes[0].clientV2
+}
+
+// NewDirectClientWithHook creates a direct HTTP client and applies the given
+// hook.
+func (s *Simulator) NewDirectClientWithHook(hook func(http.Handler) http.Handler) *client.Client {
+	c, err := client.New("http://direct-jrpc-client")
+	if err != nil {
+		panic(err)
+	}
+
+	h := s.partitions[protocol.Directory].nodes[0].apiV2.NewMux()
+	c.Client.Client = *testhttp.DirectHttpClient(hook(h))
+	return c
 }
 
 // ListenOptions are options for [Simulator.ListenAndServe].
