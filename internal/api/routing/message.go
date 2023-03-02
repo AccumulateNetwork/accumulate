@@ -40,8 +40,8 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		}
 		service.Argument = msg.Partition
 
-	case *message.NodeStatusRequest:
-		service.Type = api.ServiceTypeNode
+	case *message.ConsensusStatusRequest:
+		service.Type = api.ServiceTypeConsensus
 		service.Argument = msg.Partition
 
 		// Route to the requested node and partition

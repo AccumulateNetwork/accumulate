@@ -100,6 +100,27 @@ type ChainRecord struct {
 	extraData []byte
 }
 
+type ConsensusStatus struct {
+	fieldsSet        []bool
+	Ok               bool                   `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
+	LastBlock        *LastBlock             `json:"lastBlock,omitempty" form:"lastBlock" query:"lastBlock" validate:"required"`
+	Version          string                 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit           string                 `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
+	NodeKeyHash      [32]byte               `json:"nodeKeyHash,omitempty" form:"nodeKeyHash" query:"nodeKeyHash" validate:"required"`
+	ValidatorKeyHash [32]byte               `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
+	PartitionID      string                 `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
+	PartitionType    protocol.PartitionType `json:"partitionType,omitempty" form:"partitionType" query:"partitionType" validate:"required"`
+	Peers            []*PeerInfo            `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
+	extraData        []byte
+}
+
+type ConsensusStatusOptions struct {
+	fieldsSet []bool
+	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	extraData []byte
+}
+
 type DataQuery struct {
 	fieldsSet []bool
 	Index     *uint64       `json:"index,omitempty" form:"index" query:"index"`
@@ -217,27 +238,6 @@ type NetworkStatus struct {
 
 type NetworkStatusOptions struct {
 	fieldsSet []bool
-	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-	extraData []byte
-}
-
-type NodeStatus struct {
-	fieldsSet        []bool
-	Ok               bool                   `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
-	LastBlock        *LastBlock             `json:"lastBlock,omitempty" form:"lastBlock" query:"lastBlock" validate:"required"`
-	Version          string                 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
-	Commit           string                 `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
-	NodeKeyHash      [32]byte               `json:"nodeKeyHash,omitempty" form:"nodeKeyHash" query:"nodeKeyHash" validate:"required"`
-	ValidatorKeyHash [32]byte               `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
-	PartitionID      string                 `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
-	PartitionType    protocol.PartitionType `json:"partitionType,omitempty" form:"partitionType" query:"partitionType" validate:"required"`
-	Peers            []*PeerInfo            `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
-	extraData        []byte
-}
-
-type NodeStatusOptions struct {
-	fieldsSet []bool
-	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	extraData []byte
 }
@@ -563,6 +563,42 @@ func (v *ChainRecord) Copy() *ChainRecord {
 
 func (v *ChainRecord) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ConsensusStatus) Copy() *ConsensusStatus {
+	u := new(ConsensusStatus)
+
+	u.Ok = v.Ok
+	if v.LastBlock != nil {
+		u.LastBlock = (v.LastBlock).Copy()
+	}
+	u.Version = v.Version
+	u.Commit = v.Commit
+	u.NodeKeyHash = v.NodeKeyHash
+	u.ValidatorKeyHash = v.ValidatorKeyHash
+	u.PartitionID = v.PartitionID
+	u.PartitionType = v.PartitionType
+	u.Peers = make([]*PeerInfo, len(v.Peers))
+	for i, v := range v.Peers {
+		if v != nil {
+			u.Peers[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *ConsensusStatus) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ConsensusStatusOptions) Copy() *ConsensusStatusOptions {
+	u := new(ConsensusStatusOptions)
+
+	u.NodeID = v.NodeID
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *ConsensusStatusOptions) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *DataQuery) Copy() *DataQuery {
 	u := new(DataQuery)
 
@@ -787,42 +823,6 @@ func (v *NetworkStatusOptions) Copy() *NetworkStatusOptions {
 }
 
 func (v *NetworkStatusOptions) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *NodeStatus) Copy() *NodeStatus {
-	u := new(NodeStatus)
-
-	u.Ok = v.Ok
-	if v.LastBlock != nil {
-		u.LastBlock = (v.LastBlock).Copy()
-	}
-	u.Version = v.Version
-	u.Commit = v.Commit
-	u.NodeKeyHash = v.NodeKeyHash
-	u.ValidatorKeyHash = v.ValidatorKeyHash
-	u.PartitionID = v.PartitionID
-	u.PartitionType = v.PartitionType
-	u.Peers = make([]*PeerInfo, len(v.Peers))
-	for i, v := range v.Peers {
-		if v != nil {
-			u.Peers[i] = (v).Copy()
-		}
-	}
-
-	return u
-}
-
-func (v *NodeStatus) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *NodeStatusOptions) Copy() *NodeStatusOptions {
-	u := new(NodeStatusOptions)
-
-	u.NodeID = v.NodeID
-	u.Partition = v.Partition
-
-	return u
-}
-
-func (v *NodeStatusOptions) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PeerInfo) Copy() *PeerInfo {
 	u := new(PeerInfo)
@@ -1265,6 +1265,59 @@ func (v *ChainRecord) Equal(u *ChainRecord) bool {
 	return true
 }
 
+func (v *ConsensusStatus) Equal(u *ConsensusStatus) bool {
+	if !(v.Ok == u.Ok) {
+		return false
+	}
+	switch {
+	case v.LastBlock == u.LastBlock:
+		// equal
+	case v.LastBlock == nil || u.LastBlock == nil:
+		return false
+	case !((v.LastBlock).Equal(u.LastBlock)):
+		return false
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Commit == u.Commit) {
+		return false
+	}
+	if !(v.NodeKeyHash == u.NodeKeyHash) {
+		return false
+	}
+	if !(v.ValidatorKeyHash == u.ValidatorKeyHash) {
+		return false
+	}
+	if !(v.PartitionID == u.PartitionID) {
+		return false
+	}
+	if !(v.PartitionType == u.PartitionType) {
+		return false
+	}
+	if len(v.Peers) != len(u.Peers) {
+		return false
+	}
+	for i := range v.Peers {
+		if !((v.Peers[i]).Equal(u.Peers[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *ConsensusStatusOptions) Equal(u *ConsensusStatusOptions) bool {
+	if !(v.NodeID == u.NodeID) {
+		return false
+	}
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
 func (v *DataQuery) Equal(u *DataQuery) bool {
 	switch {
 	case v.Index == u.Index:
@@ -1538,59 +1591,6 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 }
 
 func (v *NetworkStatusOptions) Equal(u *NetworkStatusOptions) bool {
-	if !(v.Partition == u.Partition) {
-		return false
-	}
-
-	return true
-}
-
-func (v *NodeStatus) Equal(u *NodeStatus) bool {
-	if !(v.Ok == u.Ok) {
-		return false
-	}
-	switch {
-	case v.LastBlock == u.LastBlock:
-		// equal
-	case v.LastBlock == nil || u.LastBlock == nil:
-		return false
-	case !((v.LastBlock).Equal(u.LastBlock)):
-		return false
-	}
-	if !(v.Version == u.Version) {
-		return false
-	}
-	if !(v.Commit == u.Commit) {
-		return false
-	}
-	if !(v.NodeKeyHash == u.NodeKeyHash) {
-		return false
-	}
-	if !(v.ValidatorKeyHash == u.ValidatorKeyHash) {
-		return false
-	}
-	if !(v.PartitionID == u.PartitionID) {
-		return false
-	}
-	if !(v.PartitionType == u.PartitionType) {
-		return false
-	}
-	if len(v.Peers) != len(u.Peers) {
-		return false
-	}
-	for i := range v.Peers {
-		if !((v.Peers[i]).Equal(u.Peers[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (v *NodeStatusOptions) Equal(u *NodeStatusOptions) bool {
-	if !(v.NodeID == u.NodeID) {
-		return false
-	}
 	if !(v.Partition == u.Partition) {
 		return false
 	}
@@ -2374,6 +2374,167 @@ func (v *ChainRecord) IsValid() error {
 		errs = append(errs, "field State is missing")
 	} else if len(v.State) == 0 {
 		errs = append(errs, "field State is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ConsensusStatus = []string{
+	1: "Ok",
+	2: "LastBlock",
+	3: "Version",
+	4: "Commit",
+	5: "NodeKeyHash",
+	6: "ValidatorKeyHash",
+	7: "PartitionID",
+	8: "PartitionType",
+	9: "Peers",
+}
+
+func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(!v.Ok) {
+		writer.WriteBool(1, v.Ok)
+	}
+	if !(v.LastBlock == nil) {
+		writer.WriteValue(2, v.LastBlock.MarshalBinary)
+	}
+	if !(len(v.Version) == 0) {
+		writer.WriteString(3, v.Version)
+	}
+	if !(len(v.Commit) == 0) {
+		writer.WriteString(4, v.Commit)
+	}
+	if !(v.NodeKeyHash == ([32]byte{})) {
+		writer.WriteHash(5, &v.NodeKeyHash)
+	}
+	if !(v.ValidatorKeyHash == ([32]byte{})) {
+		writer.WriteHash(6, &v.ValidatorKeyHash)
+	}
+	if !(len(v.PartitionID) == 0) {
+		writer.WriteString(7, v.PartitionID)
+	}
+	if !(v.PartitionType == 0) {
+		writer.WriteEnum(8, v.PartitionType)
+	}
+	if !(len(v.Peers) == 0) {
+		for _, v := range v.Peers {
+			writer.WriteValue(9, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ConsensusStatus)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ConsensusStatus) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Ok is missing")
+	} else if !v.Ok {
+		errs = append(errs, "field Ok is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field LastBlock is missing")
+	} else if v.LastBlock == nil {
+		errs = append(errs, "field LastBlock is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Version is missing")
+	} else if len(v.Version) == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Commit is missing")
+	} else if len(v.Commit) == 0 {
+		errs = append(errs, "field Commit is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field NodeKeyHash is missing")
+	} else if v.NodeKeyHash == ([32]byte{}) {
+		errs = append(errs, "field NodeKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field ValidatorKeyHash is missing")
+	} else if v.ValidatorKeyHash == ([32]byte{}) {
+		errs = append(errs, "field ValidatorKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field PartitionID is missing")
+	} else if len(v.PartitionID) == 0 {
+		errs = append(errs, "field PartitionID is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field PartitionType is missing")
+	} else if v.PartitionType == 0 {
+		errs = append(errs, "field PartitionType is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field Peers is missing")
+	} else if len(v.Peers) == 0 {
+		errs = append(errs, "field Peers is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ConsensusStatusOptions = []string{
+	1: "NodeID",
+	2: "Partition",
+}
+
+func (v *ConsensusStatusOptions) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.NodeID) == 0) {
+		writer.WriteString(1, v.NodeID)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ConsensusStatusOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ConsensusStatusOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field NodeID is missing")
+	} else if len(v.NodeID) == 0 {
+		errs = append(errs, "field NodeID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
 	}
 
 	switch len(errs) {
@@ -3219,167 +3380,6 @@ func (v *NetworkStatusOptions) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Partition is missing")
-	} else if len(v.Partition) == 0 {
-		errs = append(errs, "field Partition is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_NodeStatus = []string{
-	1: "Ok",
-	2: "LastBlock",
-	3: "Version",
-	4: "Commit",
-	5: "NodeKeyHash",
-	6: "ValidatorKeyHash",
-	7: "PartitionID",
-	8: "PartitionType",
-	9: "Peers",
-}
-
-func (v *NodeStatus) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(!v.Ok) {
-		writer.WriteBool(1, v.Ok)
-	}
-	if !(v.LastBlock == nil) {
-		writer.WriteValue(2, v.LastBlock.MarshalBinary)
-	}
-	if !(len(v.Version) == 0) {
-		writer.WriteString(3, v.Version)
-	}
-	if !(len(v.Commit) == 0) {
-		writer.WriteString(4, v.Commit)
-	}
-	if !(v.NodeKeyHash == ([32]byte{})) {
-		writer.WriteHash(5, &v.NodeKeyHash)
-	}
-	if !(v.ValidatorKeyHash == ([32]byte{})) {
-		writer.WriteHash(6, &v.ValidatorKeyHash)
-	}
-	if !(len(v.PartitionID) == 0) {
-		writer.WriteString(7, v.PartitionID)
-	}
-	if !(v.PartitionType == 0) {
-		writer.WriteEnum(8, v.PartitionType)
-	}
-	if !(len(v.Peers) == 0) {
-		for _, v := range v.Peers {
-			writer.WriteValue(9, v.MarshalBinary)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_NodeStatus)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *NodeStatus) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Ok is missing")
-	} else if !v.Ok {
-		errs = append(errs, "field Ok is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field LastBlock is missing")
-	} else if v.LastBlock == nil {
-		errs = append(errs, "field LastBlock is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Version is missing")
-	} else if len(v.Version) == 0 {
-		errs = append(errs, "field Version is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Commit is missing")
-	} else if len(v.Commit) == 0 {
-		errs = append(errs, "field Commit is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field NodeKeyHash is missing")
-	} else if v.NodeKeyHash == ([32]byte{}) {
-		errs = append(errs, "field NodeKeyHash is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field ValidatorKeyHash is missing")
-	} else if v.ValidatorKeyHash == ([32]byte{}) {
-		errs = append(errs, "field ValidatorKeyHash is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field PartitionID is missing")
-	} else if len(v.PartitionID) == 0 {
-		errs = append(errs, "field PartitionID is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
-		errs = append(errs, "field PartitionType is missing")
-	} else if v.PartitionType == 0 {
-		errs = append(errs, "field PartitionType is not set")
-	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
-		errs = append(errs, "field Peers is missing")
-	} else if len(v.Peers) == 0 {
-		errs = append(errs, "field Peers is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_NodeStatusOptions = []string{
-	1: "NodeID",
-	2: "Partition",
-}
-
-func (v *NodeStatusOptions) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.NodeID) == 0) {
-		writer.WriteString(1, v.NodeID)
-	}
-	if !(len(v.Partition) == 0) {
-		writer.WriteString(2, v.Partition)
-	}
-
-	_, _, err := writer.Reset(fieldNames_NodeStatusOptions)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *NodeStatusOptions) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field NodeID is missing")
-	} else if len(v.NodeID) == 0 {
-		errs = append(errs, "field NodeID is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Partition is missing")
 	} else if len(v.Partition) == 0 {
 		errs = append(errs, "field Partition is not set")
@@ -4575,6 +4575,83 @@ func (v *ChainRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ConsensusStatus) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ConsensusStatus) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBool(1); ok {
+		v.Ok = x
+	}
+	if x := new(LastBlock); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.LastBlock = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadString(4); ok {
+		v.Commit = x
+	}
+	if x, ok := reader.ReadHash(5); ok {
+		v.NodeKeyHash = *x
+	}
+	if x, ok := reader.ReadHash(6); ok {
+		v.ValidatorKeyHash = *x
+	}
+	if x, ok := reader.ReadString(7); ok {
+		v.PartitionID = x
+	}
+	if x := new(protocol.PartitionType); reader.ReadEnum(8, x) {
+		v.PartitionType = *x
+	}
+	for {
+		if x := new(PeerInfo); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
+			v.Peers = append(v.Peers, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ConsensusStatus)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ConsensusStatusOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ConsensusStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.NodeID = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ConsensusStatusOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *DataQuery) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -5140,83 +5217,6 @@ func (v *NetworkStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkStatusOptions)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *NodeStatus) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *NodeStatus) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadBool(1); ok {
-		v.Ok = x
-	}
-	if x := new(LastBlock); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.LastBlock = x
-	}
-	if x, ok := reader.ReadString(3); ok {
-		v.Version = x
-	}
-	if x, ok := reader.ReadString(4); ok {
-		v.Commit = x
-	}
-	if x, ok := reader.ReadHash(5); ok {
-		v.NodeKeyHash = *x
-	}
-	if x, ok := reader.ReadHash(6); ok {
-		v.ValidatorKeyHash = *x
-	}
-	if x, ok := reader.ReadString(7); ok {
-		v.PartitionID = x
-	}
-	if x := new(protocol.PartitionType); reader.ReadEnum(8, x) {
-		v.PartitionType = *x
-	}
-	for {
-		if x := new(PeerInfo); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
-			v.Peers = append(v.Peers, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_NodeStatus)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *NodeStatusOptions) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *NodeStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadString(1); ok {
-		v.NodeID = x
-	}
-	if x, ok := reader.ReadString(2); ok {
-		v.Partition = x
-	}
-
-	seen, err := reader.Reset(fieldNames_NodeStatusOptions)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -5985,6 +5985,48 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Ok               bool                         `json:"ok,omitempty"`
+		LastBlock        *LastBlock                   `json:"lastBlock,omitempty"`
+		Version          string                       `json:"version,omitempty"`
+		Commit           string                       `json:"commit,omitempty"`
+		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
+		PartitionID      string                       `json:"partitionID,omitempty"`
+		PartitionType    protocol.PartitionType       `json:"partitionType,omitempty"`
+		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
+	}{}
+	if !(!v.Ok) {
+		u.Ok = v.Ok
+	}
+	if !(v.LastBlock == nil) {
+		u.LastBlock = v.LastBlock
+	}
+	if !(len(v.Version) == 0) {
+		u.Version = v.Version
+	}
+	if !(len(v.Commit) == 0) {
+		u.Commit = v.Commit
+	}
+	if !(v.NodeKeyHash == ([32]byte{})) {
+		u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
+	}
+	if !(v.ValidatorKeyHash == ([32]byte{})) {
+		u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+	}
+	if !(len(v.PartitionID) == 0) {
+		u.PartitionID = v.PartitionID
+	}
+	if !(v.PartitionType == 0) {
+		u.PartitionType = v.PartitionType
+	}
+	if !(len(v.Peers) == 0) {
+		u.Peers = v.Peers
+	}
+	return json.Marshal(&u)
+}
+
 func (v *DataQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType QueryType     `json:"queryType"`
@@ -6183,48 +6225,6 @@ func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Entries == nil) {
 		u.Entries = v.Entries
-	}
-	return json.Marshal(&u)
-}
-
-func (v *NodeStatus) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Ok               bool                         `json:"ok,omitempty"`
-		LastBlock        *LastBlock                   `json:"lastBlock,omitempty"`
-		Version          string                       `json:"version,omitempty"`
-		Commit           string                       `json:"commit,omitempty"`
-		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
-		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
-		PartitionID      string                       `json:"partitionID,omitempty"`
-		PartitionType    protocol.PartitionType       `json:"partitionType,omitempty"`
-		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
-	}{}
-	if !(!v.Ok) {
-		u.Ok = v.Ok
-	}
-	if !(v.LastBlock == nil) {
-		u.LastBlock = v.LastBlock
-	}
-	if !(len(v.Version) == 0) {
-		u.Version = v.Version
-	}
-	if !(len(v.Commit) == 0) {
-		u.Commit = v.Commit
-	}
-	if !(v.NodeKeyHash == ([32]byte{})) {
-		u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
-	}
-	if !(v.ValidatorKeyHash == ([32]byte{})) {
-		u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
-	}
-	if !(len(v.PartitionID) == 0) {
-		u.PartitionID = v.PartitionID
-	}
-	if !(v.PartitionType == 0) {
-		u.PartitionType = v.PartitionType
-	}
-	if !(len(v.Peers) == 0) {
-		u.Peers = v.Peers
 	}
 	return json.Marshal(&u)
 }
@@ -6659,6 +6659,50 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Ok               bool                         `json:"ok,omitempty"`
+		LastBlock        *LastBlock                   `json:"lastBlock,omitempty"`
+		Version          string                       `json:"version,omitempty"`
+		Commit           string                       `json:"commit,omitempty"`
+		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
+		PartitionID      string                       `json:"partitionID,omitempty"`
+		PartitionType    protocol.PartitionType       `json:"partitionType,omitempty"`
+		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
+	}{}
+	u.Ok = v.Ok
+	u.LastBlock = v.LastBlock
+	u.Version = v.Version
+	u.Commit = v.Commit
+	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
+	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+	u.PartitionID = v.PartitionID
+	u.PartitionType = v.PartitionType
+	u.Peers = v.Peers
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Ok = u.Ok
+	v.LastBlock = u.LastBlock
+	v.Version = u.Version
+	v.Commit = u.Commit
+	if x, err := encoding.ChainFromJSON(u.NodeKeyHash); err != nil {
+		return fmt.Errorf("error decoding NodeKeyHash: %w", err)
+	} else {
+		v.NodeKeyHash = x
+	}
+	if x, err := encoding.ChainFromJSON(u.ValidatorKeyHash); err != nil {
+		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
+	} else {
+		v.ValidatorKeyHash = x
+	}
+	v.PartitionID = u.PartitionID
+	v.PartitionType = u.PartitionType
+	v.Peers = u.Peers
+	return nil
+}
+
 func (v *DataQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		QueryType QueryType     `json:"queryType"`
@@ -6916,50 +6960,6 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	v.Index = u.Index
 	v.Time = u.Time
 	v.Entries = u.Entries
-	return nil
-}
-
-func (v *NodeStatus) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Ok               bool                         `json:"ok,omitempty"`
-		LastBlock        *LastBlock                   `json:"lastBlock,omitempty"`
-		Version          string                       `json:"version,omitempty"`
-		Commit           string                       `json:"commit,omitempty"`
-		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
-		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
-		PartitionID      string                       `json:"partitionID,omitempty"`
-		PartitionType    protocol.PartitionType       `json:"partitionType,omitempty"`
-		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
-	}{}
-	u.Ok = v.Ok
-	u.LastBlock = v.LastBlock
-	u.Version = v.Version
-	u.Commit = v.Commit
-	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
-	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
-	u.PartitionID = v.PartitionID
-	u.PartitionType = v.PartitionType
-	u.Peers = v.Peers
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Ok = u.Ok
-	v.LastBlock = u.LastBlock
-	v.Version = u.Version
-	v.Commit = u.Commit
-	if x, err := encoding.ChainFromJSON(u.NodeKeyHash); err != nil {
-		return fmt.Errorf("error decoding NodeKeyHash: %w", err)
-	} else {
-		v.NodeKeyHash = x
-	}
-	if x, err := encoding.ChainFromJSON(u.ValidatorKeyHash); err != nil {
-		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
-	} else {
-		v.ValidatorKeyHash = x
-	}
-	v.PartitionID = u.PartitionID
-	v.PartitionType = u.PartitionType
-	v.Peers = u.Peers
 	return nil
 }
 

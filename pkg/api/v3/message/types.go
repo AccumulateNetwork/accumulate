@@ -37,11 +37,11 @@ func AddressOf(msg Message) multiaddr.Multiaddr {
 
 // Shims for code gen
 type (
-	NodeStatusOptions    = api.NodeStatusOptions
-	NetworkStatusOptions = api.NetworkStatusOptions
-	MetricsOptions       = api.MetricsOptions
-	SubscribeOptions     = api.SubscribeOptions
-	SubmitOptions        = api.SubmitOptions
-	ValidateOptions      = api.ValidateOptions
-	FaucetOptions        = api.FaucetOptions
+	ConsensusStatusOptions = api.ConsensusStatusOptions
+	NetworkStatusOptions   = api.NetworkStatusOptions
+	MetricsOptions         = api.MetricsOptions
+	SubscribeOptions       = api.SubscribeOptions
+	SubmitOptions          = api.SubmitOptions
+	ValidateOptions        = api.ValidateOptions
+	FaucetOptions          = api.FaucetOptions
 )

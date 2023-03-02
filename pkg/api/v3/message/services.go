@@ -76,23 +76,23 @@ func (c *call[T]) Write(msg Message) bool {
 	return true
 }
 
-// NodeService forwards [NodeStatusRequest]s to a [api.NodeService].
-type NodeService struct {
-	api.NodeService
+// ConsensusService forwards [NodeStatusRequest]s to a [api.ConsensusService].
+type ConsensusService struct {
+	api.ConsensusService
 }
 
-func (s NodeService) methods() serviceMethodMap {
+func (s ConsensusService) methods() serviceMethodMap {
 	typ, fn := makeServiceMethod(s.nodeStatus)
 	return serviceMethodMap{typ: fn}
 }
 
-func (s NodeService) nodeStatus(c *call[*NodeStatusRequest]) {
-	res, err := s.NodeService.NodeStatus(c.context, c.params.NodeStatusOptions)
+func (s ConsensusService) nodeStatus(c *call[*ConsensusStatusRequest]) {
+	res, err := s.ConsensusService.ConsensusStatus(c.context, c.params.ConsensusStatusOptions)
 	if err != nil {
 		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
 		return
 	}
-	c.Write(&NodeStatusResponse{Value: res})
+	c.Write(&ConsensusStatusResponse{Value: res})
 }
 
 // NetworkService forwards [NetworkStatusRequest]s to a [api.NetworkService].

@@ -51,9 +51,9 @@ type Event interface {
 	EventType() EventType
 }
 
-type NodeService interface {
-	// NodeStatus returns the status of the node.
-	NodeStatus(ctx context.Context, opts NodeStatusOptions) (*NodeStatus, error)
+type ConsensusService interface {
+	// ConsensusStatus returns the status of the node.
+	ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*ConsensusStatus, error)
 }
 
 type NetworkService interface {
