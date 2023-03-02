@@ -43,11 +43,14 @@ func New(opts Options) (*Node, error) {
 		return nil, errors.UnknownError.WithFormat("initialize node: %w", err)
 	}
 
-	// Wait (forever) for the directory service
-	node.WaitForService(&api.ServiceAddress{Type: api.ServiceTypeNetwork, Partition: protocol.Directory}, 0)
+	// Wait for the directory service
+	node.WaitForService(&api.ServiceAddress{Type: api.ServiceTypeNetwork, Argument: protocol.Directory}, 0)
 
 	// Query the network status
-	client := &message.Client{Dialer: node.Dialer()}
+	client := &message.Client{
+		Network: opts.Network,
+		Dialer:  node.Dialer(),
+	}
 	ns, err := client.GetNetInfo(context.Background())
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("query network status: %w", err)

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -44,7 +44,7 @@ func (s EventService) Subscribe(c *call[*SubscribeRequest]) {
 
 func (c *Client) Subscribe(ctx context.Context, opts SubscribeOptions) (<-chan api.Event, error) {
 	req := &SubscribeRequest{SubscribeOptions: opts}
-	addr, err := c.Router.Route(req)
+	addr, err := c.routeRequest(req)
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("route request: %w", err)
 	}

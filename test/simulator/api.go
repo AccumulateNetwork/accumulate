@@ -253,6 +253,7 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, bootstrap []mu
 
 	p2p, err := p2p.New(p2p.Options{
 		Logger:         n.logger.With("module", "acc"),
+		Network:        n.simulator.init.Id,
 		Listen:         []multiaddr.Multiaddr{addr1, addr2},
 		BootstrapPeers: bootstrap,
 		Key:            n.nodeKey,
