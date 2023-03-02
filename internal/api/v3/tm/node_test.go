@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -24,7 +24,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-func TestNodeStatus(t *testing.T) {
+func TestConsensusStatus(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
 	net := simulator.SimpleNetwork(t.Name(), 1, 1)
 	sim, err := simulator.New(
@@ -35,7 +35,7 @@ func TestNodeStatus(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	svc := NewNodeService(NodeServiceParams{
+	svc := NewConsensusService(ConsensusServiceParams{
 		Logger:           logger,
 		Local:            staticClient{},
 		Database:         sim.Database(protocol.Directory),
@@ -46,7 +46,7 @@ func TestNodeStatus(t *testing.T) {
 		ValidatorKeyHash: sha256.Sum256(net.Bvns[0].Nodes[0].PrivValKey[32:]),
 	})
 
-	s, err := svc.NodeStatus(context.Background(), api.NodeStatusOptions{})
+	s, err := svc.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{})
 	require.NoError(t, err)
 
 	require.Len(t, s.Peers, 2)

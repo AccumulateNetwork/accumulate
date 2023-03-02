@@ -14,8 +14,8 @@ import (
 	"strings"
 )
 
-// TypeNodeStatusRequest .
-const TypeNodeStatusRequest Type = 1
+// TypeConsensusStatusRequest .
+const TypeConsensusStatusRequest Type = 1
 
 // TypeNetworkStatusRequest .
 const TypeNetworkStatusRequest Type = 2
@@ -41,8 +41,8 @@ const TypeFaucetRequest Type = 8
 // TypeErrorResponse .
 const TypeErrorResponse Type = 32
 
-// TypeNodeStatusResponse .
-const TypeNodeStatusResponse Type = 33
+// TypeConsensusStatusResponse .
+const TypeConsensusStatusResponse Type = 33
 
 // TypeNetworkStatusResponse .
 const TypeNetworkStatusResponse Type = 34
@@ -84,7 +84,7 @@ func (v Type) GetEnumValue() uint64 { return uint64(v) }
 func (v *Type) SetEnumValue(id uint64) bool {
 	u := Type(id)
 	switch u {
-	case TypeNodeStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeErrorResponse, TypeNodeStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
+	case TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeErrorResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
 		*v = u
 		return true
 	default:
@@ -95,8 +95,8 @@ func (v *Type) SetEnumValue(id uint64) bool {
 // String returns the name of the Type.
 func (v Type) String() string {
 	switch v {
-	case TypeNodeStatusRequest:
-		return "nodeStatusRequest"
+	case TypeConsensusStatusRequest:
+		return "consensusStatusRequest"
 	case TypeNetworkStatusRequest:
 		return "networkStatusRequest"
 	case TypeMetricsRequest:
@@ -113,8 +113,8 @@ func (v Type) String() string {
 		return "faucetRequest"
 	case TypeErrorResponse:
 		return "errorResponse"
-	case TypeNodeStatusResponse:
-		return "nodeStatusResponse"
+	case TypeConsensusStatusResponse:
+		return "consensusStatusResponse"
 	case TypeNetworkStatusResponse:
 		return "networkStatusResponse"
 	case TypeMetricsResponse:
@@ -145,8 +145,8 @@ func (v Type) String() string {
 // TypeByName returns the named Type.
 func TypeByName(name string) (Type, bool) {
 	switch strings.ToLower(name) {
-	case "nodestatusrequest":
-		return TypeNodeStatusRequest, true
+	case "consensusstatusrequest":
+		return TypeConsensusStatusRequest, true
 	case "networkstatusrequest":
 		return TypeNetworkStatusRequest, true
 	case "metricsrequest":
@@ -163,8 +163,8 @@ func TypeByName(name string) (Type, bool) {
 		return TypeFaucetRequest, true
 	case "errorresponse":
 		return TypeErrorResponse, true
-	case "nodestatusresponse":
-		return TypeNodeStatusResponse, true
+	case "consensusstatusresponse":
+		return TypeConsensusStatusResponse, true
 	case "networkstatusresponse":
 		return TypeNetworkStatusResponse, true
 	case "metricsresponse":

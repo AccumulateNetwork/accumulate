@@ -2,7 +2,7 @@ Type:
   Addressed:
     value: 0xFF
 
-  NodeStatusRequest:
+  ConsensusStatusRequest:
     value: 0x01
   NetworkStatusRequest:
     value: 0x02
@@ -21,7 +21,7 @@ Type:
 
   ErrorResponse:
     value: 0x20
-  NodeStatusResponse:
+  ConsensusStatusResponse:
     value: 0x21
   NetworkStatusResponse:
     value: 0x22
