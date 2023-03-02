@@ -10,34 +10,23 @@ import (
 	"context"
 	"crypto/ed25519"
 	"flag"
-	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tendermint/tendermint/libs/log"
 	tmp2p "github.com/tendermint/tendermint/p2p"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -52,46 +41,9 @@ import (
 )
 
 var validateNetwork = flag.String("test.validate.network", "", "Validate a network")
-var fullValidate = flag.Bool("test.validate.full", false, "Enable TestValidateFull")
 
 func init() {
 	acctesting.EnableDebugFeatures()
-}
-
-// TestManualValidate is intended to be used to manually validate a deployed
-// network.
-func TestManualValidate(t *testing.T) {
-	if *validateNetwork == "" {
-		t.Skip()
-	}
-
-	if addr, err := multiaddr.NewMultiaddr(*validateNetwork); err == nil {
-		suite.Run(t, &ValidationTestSuite{Network: []multiaddr.Multiaddr{addr}})
-		return
-	}
-
-	if st, err := os.Stat(*validateNetwork); err != nil || !st.IsDir() {
-		t.Fatalf("%q is neither an address nor a node directory", *validateNetwork)
-	}
-
-	// Load the node and derive its listening address
-	node, err := accumulated.Load(*validateNetwork, nil)
-	require.NoError(t, err)
-	key, err := tmp2p.LoadNodeKey(node.Config.NodeKeyFile())
-	require.NoError(t, err)
-	ed := ed25519.PrivateKey(key.PrivKey.Bytes())
-	sk, _, err := crypto.KeyPairFromStdKey(&ed)
-	require.NoError(t, err)
-	id, err := peer.IDFromPrivateKey(sk)
-	require.NoError(t, err)
-	c, err := multiaddr.NewComponent("p2p", id.String())
-	require.NoError(t, err)
-
-	s := new(ValidationTestSuite)
-	for _, addr := range node.Config.Accumulate.P2P.Listen {
-		s.Network = append(s.Network, addr.Encapsulate(c))
-	}
-	suite.Run(t, s)
 }
 
 // TestValidate runs the validation test suite against the simulator.
@@ -99,168 +51,100 @@ func TestValidate(t *testing.T) {
 	suite.Run(t, new(ValidationTestSuite))
 }
 
-// TestValidate runs the validation test suite against a full network.
-func TestValidateFull(t *testing.T) {
-	if !*fullValidate {
-		t.Skip()
-	}
+// TestValidateAPI runs the validation test suite against the simulator via API
+// v2 over P2P.
+func TestValidateAPI(t *testing.T) {
+	acctesting.SkipCI(t, "Not sufficiently reliable yet")
 
-	// Tendermint is stupid and doesn't properly shut down its databases. So we
-	// have no way to ensure Tendermint is completely shut down, which leads to
-	// race conditions. Instead of forking Tendermint or dumping a bunch of time
-	// into some other solution, we're just going to leave Tendermint running.
-	// That means this test cannot be run in the same process as any other test
-	// that needs 127.0.1.X.
-	dir, err := os.MkdirTemp("", "Accumulate-"+t.Name())
-	require.NoError(t, err)
-	// dir := t.TempDir()
+	net := simulator.LocalNetwork(t.Name(), 3, 1, net.ParseIP("127.0.1.1"), 12345)
 
-	// Put the faucet on the DN
-	faucet := AccountUrl("faucet")
-	faucetKey := acctesting.GenerateKey(faucet)
-	values := new(core.GlobalValues)
-	values.Routing = new(RoutingTable)
-	values.Routing.AddOverride(faucet, Directory)
+	// Set up the simulator
+	s := new(ValidationTestSuite)
+	s.sim, s.faucetSvc = setupSim(t, net)
 
-	// Create a snapshot with the faucet
-	db := database.OpenInMemory(nil)
-	MakeIdentity(t, db, faucet, faucetKey[32:])
-	UpdateAccount(t, db, faucet.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e12 })
-	MakeAccount(t, db, &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
-	batch := db.Begin(false)
-	buf := new(ioutil2.Buffer)
-	_, err = snapshot.Collect(batch, new(snapshot.Header), buf, snapshot.CollectOptions{})
-	require.NoError(t, err)
-
-	// Initialize the network configs
-	netInit := simulator.LocalNetwork(t.Name(), 3, 3, net.ParseIP("127.0.1.1"), 30000)
-	logger := acctesting.NewTestLogger(t)
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), logger, nil, []func() (ioutil2.SectionReader, error){
-		func() (ioutil2.SectionReader, error) {
-			return ioutil2.NewBuffer(buf.Bytes()), nil
-		},
+	// Start listening
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := s.sim.ListenAndServe(ctx, simulator.ListenOptions{
+		ListenP2Pv3: true,
 	})
 	require.NoError(t, err)
-	configs := accumulated.BuildNodesConfig(netInit, nil)
 
-	newWriter := func(c *config.Config) (io.Writer, error) {
-		// return logging.NewConsoleWriter(c.LogFormat)
-		return logging.TestLogWriter(t)(c.LogFormat)
-	}
-
-	// Initialize the nodes
-	var count int
-	nodes := make([][][2]*accumulated.Daemon, len(configs))
-	for i, configs := range configs {
-		nodes[i] = make([][2]*accumulated.Daemon, len(configs))
-		for j, configs := range configs {
-			count++
-			for k, cfg := range configs {
-				// Use an in-memory database
-				cfg.Accumulate.Storage.Type = config.MemoryStorage
-
-				// Disable prometheus
-				cfg.Instrumentation.Prometheus = false
-
-				// Ignore Tendermint p2p errors
-				cfg.LogLevel = config.LogLevel{}.
-					Parse(config.DefaultLogLevels).
-					SetModule("p2p", "fatal").
-					String()
-
-				// Set paths
-				cfg.SetRoot(filepath.Join(dir, fmt.Sprintf("node-%d", count), cfg.Accumulate.PartitionId))
-
-				// Write files so Tendermint can load them
-				node := netInit.Bvns[i].Nodes[j]
-				var nodeKey []byte
-				if cfg.Accumulate.NetworkType == config.Directory {
-					nodeKey = node.DnNodeKey
-				} else {
-					nodeKey = node.BvnNodeKey
-				}
-				err = accumulated.WriteNodeFiles(cfg, node.PrivValKey, nodeKey, genDocs[cfg.Accumulate.PartitionId])
-				require.NoError(t, err)
-
-				// Initialize the node
-				nodes[i][j][k], err = accumulated.New(cfg, newWriter)
-				require.NoError(t, err)
-			}
-		}
-	}
-
-	// // Don't complete until every node has been torn down
-	// t.Cleanup(func() {
-	// 	for _, nodes := range nodes {
-	// 		for _, nodes := range nodes {
-	// 			for _, node := range nodes {
-	// 				<-node.Done()
-	// 			}
-	// 		}
-	// 	}
-
-	// 	// Give Tendermint a second to shut down
-	// 	time.Sleep(10 * time.Second)
-	// })
-
-	// Start the nodes
-	for _, nodes := range nodes {
-		for _, nodes := range nodes {
-			for _, node := range nodes {
-				node := node
-				require.NoError(t, node.Start())
-
-				// Tendermint doesn't properly stop itself 😡
-				// t.Cleanup(func() { _ = node.Stop() })
-			}
-		}
-	}
-
-	// Set up direct connections
-	for _, nodes := range nodes {
-		for _, nodes := range nodes {
-			require.NoError(t, nodes[0].ConnectDirectly(nodes[1]))
-		}
-	}
-
-	// Create the faucet service
-	createFaucet(t, logger, faucetKey, configs[0][0][0].Accumulate.P2P.BootstrapPeers, faucet)
-
-	color.HiBlack("----- Started -----")
-	defer color.HiBlack("----- Stopping -----")
-	suite.Run(t, &ValidationTestSuite{Network: []multiaddr.Multiaddr{nodes[0][0][0].P2P_TESTONLY().Addrs()[0]}})
-}
-
-func createFaucet(t *testing.T, logger log.Logger, faucetKey []byte, peers []multiaddr.Multiaddr, faucet *url.URL) {
-	// Create the faucet node
+	// Set up the P2P client node
+	t.Log("Create the client")
 	node, err := p2p.New(p2p.Options{
-		Logger:         logger,
-		BootstrapPeers: peers,
+		Logger: logging.ConsoleLoggerForTest(t, "info"),
+		BootstrapPeers: []multiaddr.Multiaddr{
+			net.Bvns[0].Nodes[0].Listen().Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr(),
+		},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = node.Close() })
 
-	// Create the faucet service
-	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
-		Logger:    logger.With("module", "faucet"),
-		Account:   faucet.JoinPath("tokens"),
-		Key:       build.ED25519PrivateKey(faucetKey),
-		Submitter: node,
-		Querier:   node,
-		Events:    node,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { faucetSvc.Stop() })
+	// Wait for each partition
+	waitFor(t, node, api.ServiceTypeSubmit.AddressFor(Directory), time.Minute)
+	for _, b := range net.Bvns {
+		waitFor(t, node, api.ServiceTypeSubmit.AddressFor(b.Id), time.Minute)
+	}
 
-	// Register it
-	handler, err := message.NewHandler(logger, message.Faucet{Faucet: faucetSvc})
-	require.NoError(t, err)
-	require.True(t, node.RegisterService(&api.ServiceAddress{Type: faucetSvc.Type()}, handler.Handle))
+	// Create a harness that uses the P2P client node for services but steps the
+	// simulator directly
+	s.Harness = New(s.T(), node, s.sim)
+
+	suite.Run(t, s)
+}
+
+// TestValidateNetwork is intended to be used to manually validate a deployed
+// network.
+func TestValidateNetwork(t *testing.T) {
+	if *validateNetwork == "" {
+		t.Skip()
+	}
+
+	var bootstrap []multiaddr.Multiaddr
+	if addr, err := multiaddr.NewMultiaddr(*validateNetwork); err == nil {
+		bootstrap = append(bootstrap, addr)
+	} else {
+		if st, err := os.Stat(*validateNetwork); err != nil || !st.IsDir() {
+			t.Fatalf("%q is neither an address nor a node directory", *validateNetwork)
+		}
+
+		// Load the node and derive its listening address
+		node, err := accumulated.Load(*validateNetwork, nil)
+		require.NoError(t, err)
+		key, err := tmp2p.LoadNodeKey(node.Config.NodeKeyFile())
+		require.NoError(t, err)
+		ed := ed25519.PrivateKey(key.PrivKey.Bytes())
+		sk, _, err := crypto.KeyPairFromStdKey(&ed)
+		require.NoError(t, err)
+		id, err := peer.IDFromPrivateKey(sk)
+		require.NoError(t, err)
+		c, err := multiaddr.NewComponent("p2p", id.String())
+		require.NoError(t, err)
+		for _, addr := range node.Config.Accumulate.P2P.Listen {
+			bootstrap = append(bootstrap, addr.Encapsulate(c))
+		}
+	}
+
+	harness, node := setupNetClient(t, bootstrap...)
+	waitFor(t, node, api.ServiceTypeFaucet.Address(), time.Minute)
+
+	s := new(ValidationTestSuite)
+	s.Harness, s.faucetSvc = harness, node
+	suite.Run(t, s)
+}
+
+func waitFor(t *testing.T, node *p2p.Node, sa *api.ServiceAddress, timeout time.Duration) {
+	t.Logf("Wait for %v", sa)
+	if node.WaitForService(sa, timeout) {
+		return
+	}
+
+	// Fail after some time instead of timing out the test
+	t.Fatalf("%v did not appear within %v", sa, timeout)
 }
 
 type ValidationTestSuite struct {
-	Network []multiaddr.Multiaddr
-
 	suite.Suite
 	*Harness
 	sim       *simulator.Simulator
@@ -269,35 +153,32 @@ type ValidationTestSuite struct {
 }
 
 func (s *ValidationTestSuite) SetupSuite() {
-	if s.Network == nil {
-		s.setupForSim()
-	} else {
-		s.setupForNet()
+	if s.Harness != nil {
+		return
 	}
+
+	s.sim, s.faucetSvc = setupSim(s.T(), simulator.SimpleNetwork(s.T().Name(), 3, 1))
+	s.Harness = New(s.T(), s.sim.Services(), s.sim)
 }
 
-func (s *ValidationTestSuite) setupForSim() {
+func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator, api.Faucet) {
 	// Set up the simulator and harness
-	logger := acctesting.NewTestLogger(s.T())
-	net := simulator.SimpleNetwork(s.T().Name(), 3, 1)
+	logger := acctesting.NewTestLogger(t)
 	sim, err := simulator.New(
 		logger,
 		simulator.MemoryDatabase,
 		net,
 		simulator.Genesis(GenesisTime),
 	)
-	s.Require().NoError(err)
-
-	s.sim = sim
-	s.Harness = New(s.T(), sim.Services(), sim)
+	require.NoError(t, err)
 
 	// Set up the faucet
 	faucet := AccountUrl("faucet")
 	faucetKey := acctesting.GenerateKey(faucet)
 
-	MakeIdentity(s.T(), sim.DatabaseFor(faucet), faucet, faucetKey[32:])
-	UpdateAccount(s.T(), sim.DatabaseFor(faucet), faucet.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e12 })
-	MakeAccount(s.T(), sim.DatabaseFor(faucet), &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
+	MakeIdentity(t, sim.DatabaseFor(faucet), faucet, faucetKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(faucet), faucet.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e12 })
+	MakeAccount(t, sim.DatabaseFor(faucet), &TokenAccount{Url: faucet.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e14)})
 
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
 		Logger:    logger.With("module", "faucet"),
@@ -307,37 +188,30 @@ func (s *ValidationTestSuite) setupForSim() {
 		Querier:   sim.Services(),
 		Events:    sim.Services(),
 	})
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { faucetSvc.Stop() })
+	require.NoError(t, err)
+	t.Cleanup(func() { faucetSvc.Stop() })
 
-	s.faucetSvc = faucetSvc
+	return sim, faucetSvc
 }
 
-func (s *ValidationTestSuite) setupForNet() {
+func setupNetClient(t *testing.T, addrs ...multiaddr.Multiaddr) (*Harness, *p2p.Node) {
 	// Set up the client
-	s.T().Log("Create the client the harness")
+	t.Log("Create the client")
 	node, err := p2p.New(p2p.Options{
-		Logger:         logging.ConsoleLoggerForTest(s.T(), "info"),
-		BootstrapPeers: s.Network,
+		Logger:         logging.ConsoleLoggerForTest(t, "info"),
+		BootstrapPeers: addrs,
 	})
-	s.Require().NoError(err)
-	s.T().Cleanup(func() { _ = node.Close() })
-
-	s.T().Log("Wait for the faucet")
-	if !node.WaitForService(&api.ServiceAddress{Type: api.ServiceTypeFaucet}, time.Minute) {
-		// Fail after 1 minute instead of timing out the test
-		s.T().Fatal("Faucet did not appear within 1 minute")
-	}
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = node.Close() })
 
 	// Set up the harness
 	ctx, cancel := context.WithCancel(context.Background())
-	s.T().Cleanup(cancel)
+	t.Cleanup(cancel)
 	events, err := node.Subscribe(ctx, api.SubscribeOptions{Partition: protocol.Directory})
-	s.Require().NoError(err)
-	s.Harness = New(s.T(), node, BlockStep(events))
+	require.NoError(t, err)
 
-	// Faucet via faucet
-	s.faucetSvc = node
+	h := New(t, node, BlockStep(events))
+	return h, node
 }
 
 func (s *ValidationTestSuite) SetupTest() {
