@@ -22,7 +22,7 @@ LastBlock:
     - name: DirectoryAnchorHeight
       type: uint
 
-PeerInfo:
+ConsensusPeerInfo:
   fields:
     - name: NodeID
       type: string

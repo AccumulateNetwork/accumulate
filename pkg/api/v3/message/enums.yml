@@ -2,41 +2,49 @@ Type:
   Addressed:
     value: 0xFF
 
-  ConsensusStatusRequest:
+  NodeInfoRequest:
     value: 0x01
-  NetworkStatusRequest:
+  FindServiceRequest:
     value: 0x02
-  MetricsRequest:
+  ConsensusStatusRequest:
     value: 0x03
-  QueryRequest:
+  NetworkStatusRequest:
     value: 0x04
-  SubmitRequest:
+  MetricsRequest:
     value: 0x05
-  ValidateRequest:
+  QueryRequest:
     value: 0x06
-  SubscribeRequest:
+  SubmitRequest:
     value: 0x07
-  FaucetRequest:
+  ValidateRequest:
     value: 0x08
+  SubscribeRequest:
+    value: 0x09
+  FaucetRequest:
+    value: 0x0A
 
   ErrorResponse:
     value: 0x20
-  ConsensusStatusResponse:
+  NodeInfoResponse:
     value: 0x21
-  NetworkStatusResponse:
+  FindServiceResponse:
     value: 0x22
-  MetricsResponse:
+  ConsensusStatusResponse:
     value: 0x23
-  RecordResponse:
+  NetworkStatusResponse:
     value: 0x24
-  SubmitResponse:
+  MetricsResponse:
     value: 0x25
-  ValidateResponse:
+  RecordResponse:
     value: 0x26
-  SubscribeResponse:
+  SubmitResponse:
     value: 0x27
-  FaucetResponse:
+  ValidateResponse:
     value: 0x28
+  SubscribeResponse:
+    value: 0x29
+  FaucetResponse:
+    value: 0x2A
 
   Event:
     value: 0x40

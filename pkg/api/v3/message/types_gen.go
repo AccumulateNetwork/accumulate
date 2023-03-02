@@ -70,6 +70,18 @@ type FaucetResponse struct {
 	extraData []byte
 }
 
+type FindServiceRequest struct {
+	fieldsSet []bool
+	FindServiceOptions
+	extraData []byte
+}
+
+type FindServiceResponse struct {
+	fieldsSet []bool
+	Value     []*api.FindServiceResult `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type MetricsRequest struct {
 	fieldsSet []bool
 	MetricsOptions
@@ -91,6 +103,18 @@ type NetworkStatusRequest struct {
 type NetworkStatusResponse struct {
 	fieldsSet []bool
 	Value     *api.NetworkStatus `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type NodeInfoRequest struct {
+	fieldsSet []bool
+	NodeInfoOptions
+	extraData []byte
+}
+
+type NodeInfoResponse struct {
+	fieldsSet []bool
+	Value     *api.NodeInfo `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -172,6 +196,10 @@ func (*FaucetRequest) Type() Type { return TypeFaucetRequest }
 
 func (*FaucetResponse) Type() Type { return TypeFaucetResponse }
 
+func (*FindServiceRequest) Type() Type { return TypeFindServiceRequest }
+
+func (*FindServiceResponse) Type() Type { return TypeFindServiceResponse }
+
 func (*MetricsRequest) Type() Type { return TypeMetricsRequest }
 
 func (*MetricsResponse) Type() Type { return TypeMetricsResponse }
@@ -179,6 +207,10 @@ func (*MetricsResponse) Type() Type { return TypeMetricsResponse }
 func (*NetworkStatusRequest) Type() Type { return TypeNetworkStatusRequest }
 
 func (*NetworkStatusResponse) Type() Type { return TypeNetworkStatusResponse }
+
+func (*NodeInfoRequest) Type() Type { return TypeNodeInfoRequest }
+
+func (*NodeInfoResponse) Type() Type { return TypeNodeInfoResponse }
 
 func (*PrivateSequenceRequest) Type() Type { return TypePrivateSequenceRequest }
 
@@ -289,6 +321,31 @@ func (v *FaucetResponse) Copy() *FaucetResponse {
 
 func (v *FaucetResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *FindServiceRequest) Copy() *FindServiceRequest {
+	u := new(FindServiceRequest)
+
+	u.FindServiceOptions = *v.FindServiceOptions.Copy()
+
+	return u
+}
+
+func (v *FindServiceRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FindServiceResponse) Copy() *FindServiceResponse {
+	u := new(FindServiceResponse)
+
+	u.Value = make([]*api.FindServiceResult, len(v.Value))
+	for i, v := range v.Value {
+		if v != nil {
+			u.Value[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *FindServiceResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
 
@@ -332,6 +389,28 @@ func (v *NetworkStatusResponse) Copy() *NetworkStatusResponse {
 }
 
 func (v *NetworkStatusResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NodeInfoRequest) Copy() *NodeInfoRequest {
+	u := new(NodeInfoRequest)
+
+	u.NodeInfoOptions = *v.NodeInfoOptions.Copy()
+
+	return u
+}
+
+func (v *NodeInfoRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NodeInfoResponse) Copy() *NodeInfoResponse {
+	u := new(NodeInfoResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+
+	return u
+}
+
+func (v *NodeInfoResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PrivateSequenceRequest) Copy() *PrivateSequenceRequest {
 	u := new(PrivateSequenceRequest)
@@ -549,6 +628,27 @@ func (v *FaucetResponse) Equal(u *FaucetResponse) bool {
 	return true
 }
 
+func (v *FindServiceRequest) Equal(u *FindServiceRequest) bool {
+	if !v.FindServiceOptions.Equal(&u.FindServiceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *FindServiceResponse) Equal(u *FindServiceResponse) bool {
+	if len(v.Value) != len(u.Value) {
+		return false
+	}
+	for i := range v.Value {
+		if !((v.Value[i]).Equal(u.Value[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	if !v.MetricsOptions.Equal(&u.MetricsOptions) {
 		return false
@@ -579,6 +679,27 @@ func (v *NetworkStatusRequest) Equal(u *NetworkStatusRequest) bool {
 }
 
 func (v *NetworkStatusResponse) Equal(u *NetworkStatusResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
+func (v *NodeInfoRequest) Equal(u *NodeInfoRequest) bool {
+	if !v.NodeInfoOptions.Equal(&u.NodeInfoOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NodeInfoResponse) Equal(u *NodeInfoResponse) bool {
 	switch {
 	case v.Value == u.Value:
 		// equal
@@ -1043,6 +1164,92 @@ func (v *FaucetResponse) IsValid() error {
 	}
 }
 
+var fieldNames_FindServiceRequest = []string{
+	1: "Type",
+	2: "FindServiceOptions",
+}
+
+func (v *FindServiceRequest) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.FindServiceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_FindServiceRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FindServiceRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.FindServiceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FindServiceResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *FindServiceResponse) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		for _, v := range v.Value {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_FindServiceResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FindServiceResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_MetricsRequest = []string{
 	1: "Type",
 	2: "MetricsOptions",
@@ -1190,6 +1397,90 @@ func (v *NetworkStatusResponse) MarshalBinary() ([]byte, error) {
 }
 
 func (v *NetworkStatusResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_NodeInfoRequest = []string{
+	1: "Type",
+	2: "NodeInfoOptions",
+}
+
+func (v *NodeInfoRequest) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.NodeInfoOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_NodeInfoRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *NodeInfoRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.NodeInfoOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_NodeInfoResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *NodeInfoResponse) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_NodeInfoResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *NodeInfoResponse) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -1938,6 +2229,78 @@ func (v *FaucetResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *FindServiceRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FindServiceRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *FindServiceRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.FindServiceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_FindServiceRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *FindServiceResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FindServiceResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *FindServiceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(api.FindServiceResult); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Value = append(v.Value, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_FindServiceResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2063,6 +2426,74 @@ func (v *NetworkStatusResponse) UnmarshalFieldsFrom(reader *encoding.Reader) err
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkStatusResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *NodeInfoRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NodeInfoRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *NodeInfoRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.NodeInfoOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_NodeInfoRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *NodeInfoResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NodeInfoResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *NodeInfoResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.NodeInfo); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_NodeInfoResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -2540,6 +2971,36 @@ func (v *FaucetResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    Type                `json:"type"`
+		Network string              `json:"network,omitempty"`
+		Service *api.ServiceAddress `json:"service,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.FindServiceOptions.Network) == 0) {
+
+		u.Network = v.FindServiceOptions.Network
+	}
+	if !(v.FindServiceOptions.Service == nil) {
+
+		u.Service = v.FindServiceOptions.Service
+	}
+	return json.Marshal(&u)
+}
+
+func (v *FindServiceResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  Type                                      `json:"type"`
+		Value encoding.JsonList[*api.FindServiceResult] `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Value) == 0) {
+		u.Value = v.Value
+	}
+	return json.Marshal(&u)
+}
+
 func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      Type   `json:"type"`
@@ -2587,6 +3048,31 @@ func (v *NetworkStatusResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  Type               `json:"type"`
 		Value *api.NetworkStatus `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	return json.Marshal(&u)
+}
+
+func (v *NodeInfoRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   Type                                    `json:"type"`
+		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.NodeInfoOptions.PeerID == ("")) {
+
+		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeInfoOptions.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *NodeInfoResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  Type          `json:"type"`
+		Value *api.NodeInfo `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -2880,6 +3366,43 @@ func (v *FaucetResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    Type                `json:"type"`
+		Network string              `json:"network,omitempty"`
+		Service *api.ServiceAddress `json:"service,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Network = v.FindServiceOptions.Network
+	u.Service = v.FindServiceOptions.Service
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.FindServiceOptions.Network = u.Network
+	v.FindServiceOptions.Service = u.Service
+	return nil
+}
+
+func (v *FindServiceResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  Type                                      `json:"type"`
+		Value encoding.JsonList[*api.FindServiceResult] `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      Type   `json:"type"`
@@ -2938,6 +3461,43 @@ func (v *NetworkStatusResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  Type               `json:"type"`
 		Value *api.NetworkStatus `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	return nil
+}
+
+func (v *NodeInfoRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   Type                                    `json:"type"`
+		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeInfoOptions.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.PeerID != nil {
+		v.NodeInfoOptions.PeerID = u.PeerID.Value
+	}
+
+	return nil
+}
+
+func (v *NodeInfoResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  Type          `json:"type"`
+		Value *api.NodeInfo `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
