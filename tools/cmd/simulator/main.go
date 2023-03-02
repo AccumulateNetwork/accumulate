@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -109,8 +109,16 @@ func run(*cobra.Command, []string) {
 	check(err)
 
 	if flag.Step == "on-wait" {
-		check(sim.ListenAndServe(context.Background(), onWaitHook))
-		return
+		check(sim.ListenAndServe(context.Background(), simulator.ListenOptions{
+			ListenHTTPv2: true,
+			ListenHTTPv3: true,
+			ServeError:   check,
+			HookHTTP: func(h http.Handler, w http.ResponseWriter, r *http.Request) {
+				onWaitHook(sim, h, w, r)
+			},
+		}))
+
+		select {}
 	}
 
 	step, err := time.ParseDuration(flag.Step)
@@ -123,7 +131,11 @@ func run(*cobra.Command, []string) {
 		}
 	}()
 
-	check(sim.ListenAndServe(context.Background(), nil))
+	check(sim.ListenAndServe(context.Background(), simulator.ListenOptions{
+		ServeError: check,
+	}))
+
+	select {}
 }
 
 func fatalf(format string, args ...interface{}) {
@@ -143,55 +155,53 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-func onWaitHook(sim *simulator.Simulator, h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v2" {
-			h.ServeHTTP(w, r)
-			return
-		}
-
-		// Copy the body
-		body, err := io.ReadAll(r.Body)
-		check(err)
-		r2 := *r
-		r = &r2
-		r.Body = io.NopCloser(bytes.NewBuffer(body))
-
-		var req jsonrpc2.Request
-		if err := json.Unmarshal(body, &req); err != nil {
-			h.ServeHTTP(w, r)
-			return
-		}
-
-		if req.Method != "query-tx" {
-			h.ServeHTTP(w, r)
-			return
-		}
-
-		var params api.TxnQuery
-		if err := json.Unmarshal(req.Params.(json.RawMessage), &params); err != nil {
-			h.ServeHTTP(w, r)
-			return
-		}
-
-		if params.Wait == 0 {
-			h.ServeHTTP(w, r)
-			return
-		}
-
-		if params.TxIdUrl == nil {
-			waitForHash(sim, params.Txid, params.IgnorePending)
-		} else {
-			waitForTxID(sim, params.TxIdUrl, params.IgnorePending)
-		}
-
-		params.Wait = 0
-		req.Params = &params
-		body, err = json.Marshal(req)
-		check(err)
-		r.Body = io.NopCloser(bytes.NewBuffer(body))
+func onWaitHook(sim *simulator.Simulator, h http.Handler, w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/v2" {
 		h.ServeHTTP(w, r)
-	})
+		return
+	}
+
+	// Copy the body
+	body, err := io.ReadAll(r.Body)
+	check(err)
+	r2 := *r
+	r = &r2
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	var req jsonrpc2.Request
+	if err := json.Unmarshal(body, &req); err != nil {
+		h.ServeHTTP(w, r)
+		return
+	}
+
+	if req.Method != "query-tx" {
+		h.ServeHTTP(w, r)
+		return
+	}
+
+	var params api.TxnQuery
+	if err := json.Unmarshal(req.Params.(json.RawMessage), &params); err != nil {
+		h.ServeHTTP(w, r)
+		return
+	}
+
+	if params.Wait == 0 {
+		h.ServeHTTP(w, r)
+		return
+	}
+
+	if params.TxIdUrl == nil {
+		waitForHash(sim, params.Txid, params.IgnorePending)
+	} else {
+		waitForTxID(sim, params.TxIdUrl, params.IgnorePending)
+	}
+
+	params.Wait = 0
+	req.Params = &params
+	body, err = json.Marshal(req)
+	check(err)
+	r.Body = io.NopCloser(bytes.NewBuffer(body))
+	h.ServeHTTP(w, r)
 }
 
 func waitForHash(sim *simulator.Simulator, hash []byte, ignorePending bool) {
