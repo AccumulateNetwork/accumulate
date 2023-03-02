@@ -1461,9 +1461,11 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	if x, err := encoding.BytesFromJSON(u.TxHash); err != nil {
 		return fmt.Errorf("error decoding TxHash: %w", err)
@@ -1471,9 +1473,11 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 		v.TxHash = x
 	}
 	v.Transaction = u.Transaction
-	v.Messages = make([]Message, len(u.Messages.Value))
-	for i, x := range u.Messages.Value {
-		v.Messages[i] = x
+	if u.Messages != nil {
+		v.Messages = make([]Message, len(u.Messages.Value))
+		for i, x := range u.Messages.Value {
+			v.Messages[i] = x
+		}
 	}
 	return nil
 }
