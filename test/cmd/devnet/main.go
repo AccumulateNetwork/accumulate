@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -128,7 +128,7 @@ func launch() *exec.Cmd {
 func runScript() bool {
 	// Build tools
 	assertInModuleRoot()
-	build("gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate")
+	build("gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate@v0.3.4")
 	build("./cmd/accumulated")
 
 	// Launch the devnet
