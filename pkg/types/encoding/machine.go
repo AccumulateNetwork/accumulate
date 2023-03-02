@@ -8,6 +8,7 @@ package encoding
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -76,6 +77,65 @@ func (m *Machine[T]) UnmarshalFrom(rd io.Reader, v T) error {
 		return Error{E: err}
 	}
 	return nil
+}
+
+// ToJSON writes the value's fields as JSON to the builder.
+func (m *Machine[T]) ToJSON(w *bytes.Buffer, v T) error {
+	w.WriteRune('{')
+	w2 := new(bytes.Buffer)
+	for i, f := range m.Fields {
+		err := f.ToJSON(w2, v)
+		if err != nil {
+			return err
+		}
+		if w2.Len() == 0 {
+			continue
+		}
+		if i > 0 {
+			w.WriteRune(',')
+		}
+		_, _ = w2.WriteTo(w)
+		w2.Reset()
+	}
+	w.WriteRune('}')
+	return nil
+}
+
+func (m *Machine[T]) JSONMarshal(v T) ([]byte, error) {
+	w := new(bytes.Buffer)
+	err := m.ToJSON(w, v)
+	return w.Bytes(), err
+}
+
+// FromJSON reads the value's fields as JSON from bytes.
+func (m *Machine[T]) FromJSON(b []byte, v T) error {
+	var u map[string]json.RawMessage
+	err := json.Unmarshal(b, &u)
+	if err != nil {
+		return err
+	}
+
+	w := make(map[string]json.RawMessage, len(u))
+	for k, v := range u {
+		w[strings.ToLower(k)] = v
+	}
+
+	for _, f := range m.Fields {
+		b, ok := w[strings.ToLower(f.Name)]
+		if !ok {
+			continue
+		}
+		err = f.FromJSON(b, v)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *Machine[T]) JSONUnmarshal(b []byte, v T) error {
+	return m.FromJSON(b, v)
 }
 
 // IsValid checks if the value's fields are valid.
