@@ -26,7 +26,7 @@ type TxFetchMode uint64
 type BlockFilterMode uint64
 
 type V3 interface {
-	api.NodeService
+	api.ConsensusService
 	api.NetworkService
 	api.MetricsService
 	api.Querier

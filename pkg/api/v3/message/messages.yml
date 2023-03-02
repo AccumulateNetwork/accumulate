@@ -9,10 +9,10 @@ Addressed:
       type: p2p.Multiaddr
       marshal-as: union
 
-NodeStatusRequest:
+ConsensusStatusRequest:
   union: { type: message }
   fields:
-    - type: NodeStatusOptions
+    - type: ConsensusStatusOptions
       marshal-as: reference
 
 NetworkStatusRequest:
@@ -81,11 +81,11 @@ ErrorResponse:
       marshal-as: reference
       pointer: true
 
-NodeStatusResponse:
+ConsensusStatusResponse:
   union: { type: message }
   fields:
     - name: Value
-      type: api.NodeStatus
+      type: api.ConsensusStatus
       marshal-as: reference
       pointer: true
 

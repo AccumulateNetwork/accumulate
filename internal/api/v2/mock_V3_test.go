@@ -25,6 +25,53 @@ func (_m *MockV3) EXPECT() *MockV3_Expecter {
 	return &MockV3_Expecter{mock: &_m.Mock}
 }
 
+// ConsensusStatus provides a mock function with given fields: ctx, opts
+func (_m *MockV3) ConsensusStatus(ctx context.Context, opts v3.ConsensusStatusOptions) (*v3.ConsensusStatus, error) {
+	ret := _m.Called(ctx, opts)
+
+	var r0 *v3.ConsensusStatus
+	if rf, ok := ret.Get(0).(func(context.Context, v3.ConsensusStatusOptions) *v3.ConsensusStatus); ok {
+		r0 = rf(ctx, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*v3.ConsensusStatus)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, v3.ConsensusStatusOptions) error); ok {
+		r1 = rf(ctx, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockV3_ConsensusStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ConsensusStatus'
+type MockV3_ConsensusStatus_Call struct {
+	*mock.Call
+}
+
+// ConsensusStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - opts v3.ConsensusStatusOptions
+func (_e *MockV3_Expecter) ConsensusStatus(ctx interface{}, opts interface{}) *MockV3_ConsensusStatus_Call {
+	return &MockV3_ConsensusStatus_Call{Call: _e.mock.On("ConsensusStatus", ctx, opts)}
+}
+
+func (_c *MockV3_ConsensusStatus_Call) Run(run func(ctx context.Context, opts v3.ConsensusStatusOptions)) *MockV3_ConsensusStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(v3.ConsensusStatusOptions))
+	})
+	return _c
+}
+
+func (_c *MockV3_ConsensusStatus_Call) Return(_a0 *v3.ConsensusStatus, _a1 error) *MockV3_ConsensusStatus_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
 // Metrics provides a mock function with given fields: ctx, opts
 func (_m *MockV3) Metrics(ctx context.Context, opts v3.MetricsOptions) (*v3.Metrics, error) {
 	ret := _m.Called(ctx, opts)
@@ -115,53 +162,6 @@ func (_c *MockV3_NetworkStatus_Call) Run(run func(ctx context.Context, opts v3.N
 }
 
 func (_c *MockV3_NetworkStatus_Call) Return(_a0 *v3.NetworkStatus, _a1 error) *MockV3_NetworkStatus_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-// NodeStatus provides a mock function with given fields: ctx, opts
-func (_m *MockV3) NodeStatus(ctx context.Context, opts v3.NodeStatusOptions) (*v3.NodeStatus, error) {
-	ret := _m.Called(ctx, opts)
-
-	var r0 *v3.NodeStatus
-	if rf, ok := ret.Get(0).(func(context.Context, v3.NodeStatusOptions) *v3.NodeStatus); ok {
-		r0 = rf(ctx, opts)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*v3.NodeStatus)
-		}
-	}
-
-	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, v3.NodeStatusOptions) error); ok {
-		r1 = rf(ctx, opts)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockV3_NodeStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NodeStatus'
-type MockV3_NodeStatus_Call struct {
-	*mock.Call
-}
-
-// NodeStatus is a helper method to define mock.On call
-//   - ctx context.Context
-//   - opts v3.NodeStatusOptions
-func (_e *MockV3_Expecter) NodeStatus(ctx interface{}, opts interface{}) *MockV3_NodeStatus_Call {
-	return &MockV3_NodeStatus_Call{Call: _e.mock.On("NodeStatus", ctx, opts)}
-}
-
-func (_c *MockV3_NodeStatus_Call) Run(run func(ctx context.Context, opts v3.NodeStatusOptions)) *MockV3_NodeStatus_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(v3.NodeStatusOptions))
-	})
-	return _c
-}
-
-func (_c *MockV3_NodeStatus_Call) Return(_a0 *v3.NodeStatus, _a1 error) *MockV3_NodeStatus_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
