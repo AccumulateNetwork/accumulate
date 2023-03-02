@@ -29,7 +29,7 @@ type NodeStatusClient interface {
 	NetInfo(context.Context) (*coretypes.ResultNetInfo, error)
 }
 
-type NodeService struct {
+type ConsensusService struct {
 	logger        logging.OptionalLogger
 	local         NodeStatusClient
 	db            database.Viewer
@@ -40,9 +40,9 @@ type NodeService struct {
 	valKeyHash    [32]byte
 }
 
-var _ api.NodeService = (*NodeService)(nil)
+var _ api.ConsensusService = (*ConsensusService)(nil)
 
-type NodeServiceParams struct {
+type ConsensusServiceParams struct {
 	Logger           log.Logger
 	Local            NodeStatusClient
 	Database         database.Viewer
@@ -53,8 +53,8 @@ type NodeServiceParams struct {
 	ValidatorKeyHash [32]byte
 }
 
-func NewNodeService(params NodeServiceParams) *NodeService {
-	s := new(NodeService)
+func NewConsensusService(params ConsensusServiceParams) *ConsensusService {
+	s := new(ConsensusService)
 	s.logger.L = params.Logger
 	s.local = params.Local
 	s.db = params.Database
@@ -66,11 +66,11 @@ func NewNodeService(params NodeServiceParams) *NodeService {
 	return s
 }
 
-func (s *NodeService) Type() api.ServiceType { return api.ServiceTypeNode }
+func (s *ConsensusService) Type() api.ServiceType { return api.ServiceTypeConsensus }
 
-func (s *NodeService) NodeStatus(ctx context.Context, _ api.NodeStatusOptions) (*api.NodeStatus, error) {
+func (s *ConsensusService) ConsensusStatus(ctx context.Context, _ api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	// Basic data
-	res := new(api.NodeStatus)
+	res := new(api.ConsensusStatus)
 	res.Ok = true
 	res.Version = accumulate.Version
 	res.Commit = accumulate.Commit
