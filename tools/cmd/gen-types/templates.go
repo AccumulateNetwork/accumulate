@@ -297,6 +297,13 @@ func (f *Field) IsOptional() bool        { return f.Optional }
 func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
 
+func (f *Field) EffectiveMarshalType() typegen.TypeCode {
+	if f.MarshalAsType == typegen.TypeCodeUnknown {
+		return f.Type.Code
+	}
+	return f.MarshalAsType
+}
+
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"lcName":              typegen.LowerFirstWord,
 	"upper":               strings.ToUpper,
