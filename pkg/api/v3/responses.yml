@@ -1,4 +1,4 @@
-NodeStatus:
+ConsensusStatus:
   fields:
     - name: Ok
       type: bool

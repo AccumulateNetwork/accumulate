@@ -27,8 +27,8 @@ type simService Simulator
 // Private returns the private sequencer service.
 func (s *simService) Private() private.Sequencer { return s }
 
-// NodeStatus finds the specified node and returns its NodeStatus.
-func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
+// ConsensusStatus finds the specified node and returns its ConsensusStatus.
+func (s *simService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	if opts.NodeID == "" {
 		return nil, errors.BadRequest.WithFormat("node ID is missing")
 	}
@@ -43,7 +43,7 @@ func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions)
 				continue
 			}
 			if id.MatchesPrivateKey(sk) {
-				return (*nodeService)(n).NodeStatus(ctx, opts)
+				return (*nodeService)(n).ConsensusStatus(ctx, opts)
 			}
 		}
 	}
@@ -166,9 +166,9 @@ type nodeService Node
 // Private returns the private sequencer service.
 func (s *nodeService) Private() private.Sequencer { return s.seqSvc }
 
-// NodeStatus implements [api.NodeService].
-func (s *nodeService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
-	return &api.NodeStatus{
+// ConsensusStatus implements [api.ConsensusService].
+func (s *nodeService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return &api.ConsensusStatus{
 		Ok: true,
 		LastBlock: &api.LastBlock{
 			Height: int64(s.partition.blockIndex),
