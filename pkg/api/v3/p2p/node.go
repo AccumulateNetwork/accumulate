@@ -8,7 +8,6 @@ package p2p
 
 import (
 	"context"
-	"time"
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
@@ -44,7 +43,14 @@ func New(opts Options) (*Node, error) {
 	}
 
 	// Wait for the directory service
-	node.WaitForService(&api.ServiceAddress{Type: api.ServiceTypeNetwork, Argument: protocol.Directory}, 0)
+	dnAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(opts.Network)
+	if err != nil {
+		return nil, err
+	}
+	err = node.WaitForService(context.Background(), dnAddr)
+	if err != nil {
+		return nil, err
+	}
 
 	// Query the network status
 	client := &message.Client{
@@ -76,8 +82,8 @@ func (n *Node) Addresses() []multiaddr.Multiaddr { return n.node.Addrs() }
 // will return once the service is registered on the current node or until the
 // node is informed of a peer with the given service. WaitForService will return
 // immediately if the service is already registered or known.
-func (n *Node) WaitForService(sa *api.ServiceAddress, timeout time.Duration) bool {
-	return n.node.WaitForService(sa, timeout)
+func (n *Node) WaitForService(ctx context.Context, addr multiaddr.Multiaddr) error {
+	return n.node.WaitForService(ctx, addr)
 }
 
 // RegisterService registers a service handler and registers the service with
