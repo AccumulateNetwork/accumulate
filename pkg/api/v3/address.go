@@ -7,14 +7,12 @@
 package api
 
 import (
-	"bytes"
-	"io"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 // N_ACC is the multicodec name for the acc protocol.
@@ -23,19 +21,11 @@ const N_ACC = "acc"
 // P_ACC is the multicodec code for the acc protocol.
 const P_ACC = 0x300000
 
-func init() {
-	// Register the acc protocol
-	err := multiaddr.AddProtocol(multiaddr.Protocol{
-		Name:       N_ACC,
-		Code:       P_ACC,
-		VCode:      multiaddr.CodeToVarint(P_ACC),
-		Size:       -1,
-		Transcoder: transcoder{},
-	})
-	if err != nil {
-		panic(err)
-	}
-}
+// N_ACC_SVC is the multicodec name for the acc-svc protocol.
+const N_ACC_SVC = "acc-svc"
+
+// P_ACC_SVC is the multicodec code for the acc-svc protocol.
+const P_ACC_SVC = 0x300001
 
 // Address constructs a ServiceAddress for the service type.
 func (s ServiceType) Address() *ServiceAddress {
@@ -45,65 +35,32 @@ func (s ServiceType) Address() *ServiceAddress {
 // AddressFor constructs a ServiceAddress for the service type and given
 // argument.
 func (s ServiceType) AddressFor(arg string) *ServiceAddress {
-	return &ServiceAddress{Type: s, Partition: arg}
-}
-
-type transcoder struct{}
-
-// StringToBytes implements [multiaddr.Transcoder].
-func (transcoder) StringToBytes(s string) ([]byte, error) {
-	v, err := ParseServiceAddress(s)
-	if err != nil {
-		return nil, errors.BadRequest.Wrap(err)
-	}
-	b, err := v.MarshalBinary()
-	if err != nil {
-		return nil, errors.EncodingError.Wrap(err)
-	}
-	return b, nil
-}
-
-// BytesToString implements [multiaddr.Transcoder].
-func (transcoder) BytesToString(b []byte) (string, error) {
-	v := new(ServiceAddress)
-	err := v.UnmarshalBinary(b)
-	if err != nil {
-		return "", errors.EncodingError.Wrap(err)
-	}
-	return v.String(), nil
-}
-
-// ValidateBytes implements [multiaddr.Transcoder].
-func (transcoder) ValidateBytes(b []byte) error {
-	v := new(ServiceAddress)
-	err := v.UnmarshalBinary(b)
-	return errors.EncodingError.Wrap(err)
+	return &ServiceAddress{Type: s, Argument: arg}
 }
 
 // ParseServiceAddress parses a string as a [ServiceAddress]. See
 // [ServiceAddress.String].
 func ParseServiceAddress(s string) (*ServiceAddress, error) {
-	parts := strings.Split(s, ":")
-	if len(parts) > 2 {
-		return nil, errors.BadRequest.With("too many parts")
-	}
-
-	// Parse as a known type or a number
-	typ, ok := ServiceTypeByName(parts[0])
-	if !ok {
-		v, err := strconv.ParseUint(parts[0], 16, 64)
-		if err != nil {
-			return nil, errors.BadRequest.WithFormat("invalid service type %q", parts[0])
-		} else {
-			typ = ServiceType(v)
-		}
-	}
-
 	a := new(ServiceAddress)
-	a.Type = typ
+	parts := strings.SplitN(s, ":", 2)
 	if len(parts) > 1 {
-		a.Partition = parts[1]
+		a.Argument = parts[1]
 	}
+
+	// Parse as a known type
+	var ok bool
+	a.Type, ok = ServiceTypeByName(parts[0])
+	if ok {
+		return a, nil
+	}
+
+	// Or as a hex number
+	v, err := strconv.ParseUint(parts[0], 16, 64)
+	if err == nil {
+		a.Type = ServiceType(v)
+		return a, nil
+	}
+
 	return a, nil
 }
 
@@ -116,20 +73,21 @@ func (s *ServiceAddress) String() string {
 	} else {
 		str = strconv.FormatUint(s.Type.GetEnumValue(), 16)
 	}
-	if s.Partition != "" {
-		str += ":" + strings.ToLower(s.Partition)
+	if s.Argument != "" {
+		str += ":" + strings.ToLower(s.Argument)
 	}
 	return str
 }
 
 // Compare this address to another.
 func (s *ServiceAddress) Compare(r *ServiceAddress) int {
+	// https://github.com/golang/go/issues/57314
+
 	if s.Type != r.Type {
 		return int(s.Type - r.Type)
 	}
 
-	// https://github.com/golang/go/issues/57314
-	return strings.Compare(strings.ToLower(s.Partition), strings.ToLower(r.Partition))
+	return strings.Compare(strings.ToLower(s.Argument), strings.ToLower(r.Argument))
 }
 
 // Equal returns true if the addresses are the same.
@@ -139,55 +97,114 @@ func (s *ServiceAddress) Equal(r *ServiceAddress) bool {
 
 // Copy returns a copy of the address.
 func (s *ServiceAddress) Copy() *ServiceAddress {
-	return &ServiceAddress{Type: s.Type, Partition: s.Partition}
+	return &ServiceAddress{Type: s.Type, Argument: s.Argument}
 }
 
-var fieldNames_ServiceAddress = []string{
-	1: "Type",
-	2: "Partition",
-}
-
-func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Type == 0) {
-		writer.WriteEnum(1, v.Type)
-	}
-	if !(len(v.Partition) == 0) {
-		writer.WriteString(2, v.Partition)
-	}
-
-	_, _, err := writer.Reset(fieldNames_ServiceAddress)
+// Multiaddr returns `/acc-svc/<type>[:<argument>]` as a multiaddr component.
+func (s *ServiceAddress) Multiaddr() *multiaddr.Component {
+	c, err := multiaddr.NewComponent(N_ACC_SVC, s.String())
 	if err != nil {
-		return nil, encoding.Error{E: err}
+		// This only fails if the service isn't registered or parsing the string
+		// fails. The service is registered by init() in this file, so that must
+		// not fail. String and the parsing function are reciprocal, so that
+		// must not fail. Thus if something fails it means the developers of
+		// this code failed.
+		panic(err)
 	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+	return c
 }
 
-func (v *ServiceAddress) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+// MultiaddrFor returns `/acc/<network>/acc-svc/<type>[:<argument>]` as a
+// multiaddr. MultiaddrFor returns an error if the network argument is not a
+// valid UTF-8 string.
+func (s *ServiceAddress) MultiaddrFor(network string) (multiaddr.Multiaddr, error) {
+	c, err := multiaddr.NewComponent(N_ACC, network)
+	if err != nil {
+		return nil, err
+	}
+	return c.Encapsulate(s.Multiaddr()), nil
 }
 
-func (v *ServiceAddress) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUint(1); ok {
-		v.Type = ServiceType(x)
-	}
-	if x, ok := reader.ReadString(2); ok {
-		v.Partition = x
-	}
-
-	seen, err := reader.Reset(fieldNames_ServiceAddress)
+func init() {
+	// Register the acc protocol
+	err := multiaddr.AddProtocol(multiaddr.Protocol{
+		Name:       N_ACC,
+		Code:       P_ACC,
+		VCode:      multiaddr.CodeToVarint(P_ACC),
+		Size:       multiaddr.LengthPrefixedVarSize,
+		Transcoder: stringTranscoder{},
+	})
 	if err != nil {
-		return encoding.Error{E: err}
+		panic(err)
 	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
+
+	// Register the acc-svc protocol
+	err = multiaddr.AddProtocol(multiaddr.Protocol{
+		Name:       N_ACC_SVC,
+		Code:       P_ACC_SVC,
+		VCode:      multiaddr.CodeToVarint(P_ACC_SVC),
+		Size:       multiaddr.LengthPrefixedVarSize,
+		Transcoder: serviceAddressTranscoder{},
+	})
 	if err != nil {
-		return encoding.Error{E: err}
+		panic(err)
+	}
+}
+
+type stringTranscoder struct{}
+
+// StringToBytes implements [multiaddr.Transcoder].
+func (stringTranscoder) StringToBytes(s string) ([]byte, error) {
+	if !utf8.ValidString(s) {
+		return nil, errors.EncodingError.With("invalid UTF-8 string")
+	}
+	return []byte(s), nil
+}
+
+// BytesToString implements [multiaddr.Transcoder].
+func (stringTranscoder) BytesToString(b []byte) (string, error) {
+	if !utf8.Valid(b) {
+		return "", errors.EncodingError.With("invalid UTF-8 string")
+	}
+	return string(b), nil
+}
+
+// ValidateBytes implements [multiaddr.Transcoder].
+func (stringTranscoder) ValidateBytes(b []byte) error {
+	if !utf8.Valid(b) {
+		return errors.EncodingError.With("invalid UTF-8 string")
 	}
 	return nil
+}
+
+type serviceAddressTranscoder struct{}
+
+// StringToBytes implements [multiaddr.Transcoder].
+func (serviceAddressTranscoder) StringToBytes(s string) ([]byte, error) {
+	v, err := ParseServiceAddress(s)
+	if err != nil {
+		return nil, errors.BadRequest.Wrap(err)
+	}
+	b, err := v.MarshalBinary()
+	if err != nil {
+		return nil, errors.EncodingError.Wrap(err)
+	}
+	return b, nil
+}
+
+// BytesToString implements [multiaddr.Transcoder].
+func (serviceAddressTranscoder) BytesToString(b []byte) (string, error) {
+	v := new(ServiceAddress)
+	err := v.UnmarshalBinary(b)
+	if err != nil {
+		return "", errors.EncodingError.Wrap(err)
+	}
+	return v.String(), nil
+}
+
+// ValidateBytes implements [multiaddr.Transcoder].
+func (serviceAddressTranscoder) ValidateBytes(b []byte) error {
+	v := new(ServiceAddress)
+	err := v.UnmarshalBinary(b)
+	return errors.EncodingError.Wrap(err)
 }

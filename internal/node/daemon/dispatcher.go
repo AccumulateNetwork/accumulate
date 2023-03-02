@@ -25,6 +25,7 @@ import (
 
 // dispatcher implements [block.Dispatcher].
 type dispatcher struct {
+	network  string
 	router   routing.Router
 	dialer   message.Dialer
 	messages []message.Message
@@ -33,8 +34,9 @@ type dispatcher struct {
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // newDispatcher creates a new dispatcher.
-func newDispatcher(router routing.Router, dialer message.Dialer) *dispatcher {
+func newDispatcher(network string, router routing.Router, dialer message.Dialer) *dispatcher {
 	d := new(dispatcher)
+	d.network = network
 	d.router = router
 	d.dialer = dialer
 	return d
@@ -49,8 +51,8 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 		return err
 	}
 
-	// Construct the multiaddr, /acc/submit:{partition}
-	addr, err := multiaddr.NewComponent(api.N_ACC, (&api.ServiceAddress{Type: api.ServiceTypeSubmit, Partition: partition}).String())
+	// Construct the multiaddr, /acc/{network}/acc-svc/submit:{partition}
+	addr, err := api.ServiceTypeSubmit.AddressFor(partition).MultiaddrFor(d.network)
 	if err != nil {
 		return err
 	}
