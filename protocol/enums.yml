@@ -6,6 +6,10 @@ ExecutorVersion:
     value: 2
     label: v1-signatureAnchoring
     description: introduces anchoring of signature chains into the root chain
+  V1ActivationFix:
+    value: 3
+    label: v1-activationFix
+    description: fixes a problem that prevented v1-signatureAnchoring from being activated correctly
 
 PartitionType:
   Directory:
