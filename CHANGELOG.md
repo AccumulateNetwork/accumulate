@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+
+- Allow the latest protocol version to be reactivated (#3228, !754)
+
 ## 1.0.2
 
 - Implement versioning of the core executor code (#3152, !684)
