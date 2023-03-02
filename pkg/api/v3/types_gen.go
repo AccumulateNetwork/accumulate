@@ -299,10 +299,10 @@ type RecordRange[T Record] struct {
 }
 
 type ServiceAddress struct {
-	Type      ServiceType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Partition string      `json:"partition,omitempty" form:"partition" query:"partition"`
-	extraData []byte
 	fieldsSet []bool
+	Type      ServiceType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Argument  string      `json:"argument,omitempty" form:"argument" query:"argument"`
+	extraData []byte
 }
 
 type SignatureRecord struct {
@@ -3756,6 +3756,49 @@ func (v *RecordRange[T]) IsValid() error {
 	}
 }
 
+var fieldNames_ServiceAddress = []string{
+	1: "Type",
+	2: "Argument",
+}
+
+func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Type == 0) {
+		writer.WriteUint(1, (uint64)(v.Type))
+	}
+	if !(len(v.Argument) == 0) {
+		writer.WriteString(2, v.Argument)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ServiceAddress)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ServiceAddress) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SignatureRecord = []string{
 	1: "RecordType",
 	2: "Signature",
@@ -5434,6 +5477,32 @@ func (v *RecordRange[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ServiceAddress) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ServiceAddress) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Type = (ServiceType)(x)
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Argument = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ServiceAddress)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SignatureRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -6264,24 +6333,6 @@ func (v *RecordRange[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *ServiceAddress) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type      ServiceType `json:"type,omitempty"`
-		Partition string      `json:"partition,omitempty"`
-	}{}
-	if !(v.Type == 0) {
-		u.Type = v.Type
-	}
-	if !(len(v.Partition) == 0) {
-		u.Partition = v.Partition
-	}
-	if !(len(v.extraData) == 0) {
-	}
-	if !(len(v.fieldsSet) == 0) {
-	}
-	return json.Marshal(&u)
-}
-
 func (v *SignatureRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		RecordType RecordType                                      `json:"recordType"`
@@ -7045,21 +7096,6 @@ func (v *RecordRange[T]) UnmarshalJSON(data []byte) error {
 	}
 	v.Start = u.Start
 	v.Total = u.Total
-	return nil
-}
-
-func (v *ServiceAddress) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type      ServiceType `json:"type,omitempty"`
-		Partition string      `json:"partition,omitempty"`
-	}{}
-	u.Type = v.Type
-	u.Partition = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Type = u.Type
-	v.Partition = u.Partition
 	return nil
 }
 
