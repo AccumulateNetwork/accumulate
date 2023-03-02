@@ -55,7 +55,7 @@ func (c clientConn) Write(msg *Message) error {
 }
 
 // NewClient returns a new WebSocket API client for the given server.
-func NewClient(server string, logger log.Logger) (*Client, error) {
+func NewClient(server, network string, logger log.Logger) (*Client, error) {
 	// Dial the websocket server
 	conn, _, err := websocket.DefaultDialer.Dial(server, nil)
 	if err != nil {
@@ -63,7 +63,7 @@ func NewClient(server string, logger log.Logger) (*Client, error) {
 	}
 
 	// Create a new client
-	c := newClient(clientConn{conn}, logger)
+	c := newClient(network, clientConn{conn}, logger)
 
 	// Close the websocket once the client is done
 	go func() { <-c.Done(); conn.Close() }()
@@ -72,9 +72,10 @@ func NewClient(server string, logger log.Logger) (*Client, error) {
 }
 
 // newClient is separate from [NewClient] purely to facilitate testing.
-func newClient(s message.StreamOf[*Message], logger log.Logger) *Client {
+func newClient(network string, s message.StreamOf[*Message], logger log.Logger) *Client {
 	c := new(Client)
 	c.logger.Set(logger)
+	c.inner.Network = network
 	c.inner.Dialer = (*clientDialer)(c)
 	c.inner.Router = clientRouter{}
 	c.inner.DisableFanout = true
