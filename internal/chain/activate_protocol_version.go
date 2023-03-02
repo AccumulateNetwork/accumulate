@@ -41,8 +41,8 @@ func (ActivateProtocolVersion) Validate(st *StateManager, tx *Delivery) (protoco
 	}
 
 	// Verify the version number is higher than the current number
-	if body.Version <= ledger.ExecutorVersion {
-		return nil, errors.Format(errors.BadRequest, "new version (%d) <= old version (%d)", body.Version, ledger.ExecutorVersion)
+	if body.Version < ledger.ExecutorVersion {
+		return nil, errors.Format(errors.BadRequest, "new version (%d) < old version (%d)", body.Version, ledger.ExecutorVersion)
 	}
 
 	// Update the version number
