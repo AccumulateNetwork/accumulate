@@ -642,9 +642,11 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 			return fmt.Sprintf("\tif %s != nil { %s = %[1]s.Value }\n", srcName, tgtName), nil
 		}
 		return fmt.Sprintf(
-			"	%s = make(%s, len(%s.Value));\n"+
-				"	for i, x := range %[3]s.Value {\n"+
-				"		%[1]s[i] = x\n"+
+			"	if %[3]s != nil {\n"+
+				"		%[1]s = make(%s, len(%s.Value));\n"+
+				"		for i, x := range %[3]s.Value {\n"+
+				"			%[1]s[i] = x\n"+
+				"		}\n"+
 				"	}",
 			tgtName, GoResolveType(field, false, false), srcName), nil
 	}

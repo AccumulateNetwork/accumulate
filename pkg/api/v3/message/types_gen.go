@@ -2800,9 +2800,11 @@ func (v *EventMessage) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Value = make([]api.Event, len(u.Value.Value))
-	for i, x := range u.Value.Value {
-		v.Value[i] = x
+	if u.Value != nil {
+		v.Value = make([]api.Event, len(u.Value.Value))
+		for i, x := range u.Value.Value {
+			v.Value[i] = x
+		}
 	}
 	return nil
 }
