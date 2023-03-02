@@ -121,10 +121,11 @@ func SetupTest(t testing.TB, services ...Service) *Client {
 	logger := logging.ConsoleLoggerForTest(t, "info")
 	handler, err := NewHandler(logger, services...)
 	require.NoError(t, err)
-	addr, err := multiaddr.NewComponent(api.N_ACC, "unknown:foo")
+	addr, err := multiaddr.NewComponent(api.N_ACC_SVC, "unknown:foo")
 	require.NoError(t, err)
 	return &Client{
-		Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil }),
+		Network: "foo",
+		Router:  routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil }),
 		Dialer: dialerFunc(func(ctx context.Context, _ multiaddr.Multiaddr) (Stream, error) {
 			s := Pipe(ctx)
 			go func() { <-ctx.Done(); s.Close() }()

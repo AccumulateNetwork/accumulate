@@ -239,17 +239,23 @@ func (d *Daemon) Start() (err error) {
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
 	dialer := &dialer{ready: make(chan struct{})}
-	client := &message.Client{Dialer: dialer, Router: routing.MessageRouter{Router: router}}
+	client := &message.Client{
+		Network: d.Config.Accumulate.Network.Id,
+		Dialer:  dialer,
+		Router:  routing.MessageRouter{Router: router},
+	}
 	execOpts := execute.Options{
-		Logger:        d.Logger,
-		Database:      d.db,
-		Key:           d.Key().Bytes(),
-		Describe:      d.Config.Accumulate.Describe,
-		Router:        router,
-		EventBus:      d.eventBus,
-		NewDispatcher: func() execute.Dispatcher { return newDispatcher(router, client.Dialer) },
-		Sequencer:     client.Private(),
-		Querier:       client,
+		Logger:    d.Logger,
+		Database:  d.db,
+		Key:       d.Key().Bytes(),
+		Describe:  d.Config.Accumulate.Describe,
+		Router:    router,
+		EventBus:  d.eventBus,
+		Sequencer: client.Private(),
+		Querier:   client,
+		NewDispatcher: func() execute.Dispatcher {
+			return newDispatcher(d.Config.Accumulate.Network.Id, router, dialer)
+		},
 	}
 
 	// On DNs initialize the major block scheduler
@@ -399,6 +405,7 @@ func (d *Daemon) Start() (err error) {
 	// Setup the p2p node
 	d.p2pnode, err = p2p.New(p2p.Options{
 		Logger:         d.Logger.With("module", "acc-rpc"),
+		Network:        d.Config.Accumulate.Network.Id,
 		Listen:         d.Config.Accumulate.P2P.Listen,
 		BootstrapPeers: app.Accumulate.P2P.BootstrapPeers,
 		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
@@ -418,8 +425,8 @@ func (d *Daemon) Start() (err error) {
 	}
 	for _, s := range services {
 		d.p2pnode.RegisterService(&v3.ServiceAddress{
-			Type:      s.Type(),
-			Partition: d.Config.Accumulate.PartitionId,
+			Type:     s.Type(),
+			Argument: d.Config.Accumulate.PartitionId,
 		}, messageHandler.Handle)
 	}
 
