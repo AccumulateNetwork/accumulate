@@ -808,13 +808,17 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
-	for i, x := range u.Listen.Value {
-		v.Listen[i] = x
+	if u.Listen != nil {
+		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
+		for i, x := range u.Listen.Value {
+			v.Listen[i] = x
+		}
 	}
-	v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
-	for i, x := range u.BootstrapPeers.Value {
-		v.BootstrapPeers[i] = x
+	if u.BootstrapPeers != nil {
+		v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
+		for i, x := range u.BootstrapPeers.Value {
+			v.BootstrapPeers[i] = x
+		}
 	}
 	return nil
 }
