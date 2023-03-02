@@ -34,6 +34,10 @@ func New(typ Type) (Message, error) {
 		return new(FaucetRequest), nil
 	case TypeFaucetResponse:
 		return new(FaucetResponse), nil
+	case TypeFindServiceRequest:
+		return new(FindServiceRequest), nil
+	case TypeFindServiceResponse:
+		return new(FindServiceResponse), nil
 	case TypeMetricsRequest:
 		return new(MetricsRequest), nil
 	case TypeMetricsResponse:
@@ -42,6 +46,10 @@ func New(typ Type) (Message, error) {
 		return new(NetworkStatusRequest), nil
 	case TypeNetworkStatusResponse:
 		return new(NetworkStatusResponse), nil
+	case TypeNodeInfoRequest:
+		return new(NodeInfoRequest), nil
+	case TypeNodeInfoResponse:
+		return new(NodeInfoResponse), nil
 	case TypePrivateSequenceRequest:
 		return new(PrivateSequenceRequest), nil
 	case TypePrivateSequenceResponse:
@@ -115,6 +123,18 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*FaucetResponse)
 		return ok && a.Equal(b)
+	case *FindServiceRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*FindServiceRequest)
+		return ok && a.Equal(b)
+	case *FindServiceResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*FindServiceResponse)
+		return ok && a.Equal(b)
 	case *MetricsRequest:
 		if a == nil {
 			return b == nil
@@ -138,6 +158,18 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*NetworkStatusResponse)
+		return ok && a.Equal(b)
+	case *NodeInfoRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*NodeInfoRequest)
+		return ok && a.Equal(b)
+	case *NodeInfoResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*NodeInfoResponse)
 		return ok && a.Equal(b)
 	case *PrivateSequenceRequest:
 		if a == nil {
@@ -221,6 +253,10 @@ func Copy(v Message) Message {
 		return v.Copy()
 	case *FaucetResponse:
 		return v.Copy()
+	case *FindServiceRequest:
+		return v.Copy()
+	case *FindServiceResponse:
+		return v.Copy()
 	case *MetricsRequest:
 		return v.Copy()
 	case *MetricsResponse:
@@ -228,6 +264,10 @@ func Copy(v Message) Message {
 	case *NetworkStatusRequest:
 		return v.Copy()
 	case *NetworkStatusResponse:
+		return v.Copy()
+	case *NodeInfoRequest:
+		return v.Copy()
+	case *NodeInfoResponse:
 		return v.Copy()
 	case *PrivateSequenceRequest:
 		return v.Copy()

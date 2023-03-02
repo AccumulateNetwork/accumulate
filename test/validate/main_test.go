@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"flag"
+	"fmt"
 	"math/big"
 	"net"
 	"os"
@@ -91,6 +92,7 @@ func TestValidateAPI(t *testing.T) {
 	// Create a harness that uses the P2P client node for services but steps the
 	// simulator directly
 	s.Harness = New(s.T(), node, s.sim)
+	s.nodeSvc = node
 
 	suite.Run(t, s)
 }
@@ -131,7 +133,7 @@ func TestValidateNetwork(t *testing.T) {
 	// waitFor(t, node, "network?", api.ServiceTypeFaucet.Address(), time.Minute)
 
 	s := new(ValidationTestSuite)
-	s.Harness, s.faucetSvc = harness, node
+	s.Harness, s.faucetSvc, s.nodeSvc = harness, node, node
 	suite.Run(t, s)
 }
 
@@ -153,6 +155,7 @@ type ValidationTestSuite struct {
 	sim       *simulator.Simulator
 	nonce     uint64
 	faucetSvc api.Faucet
+	nodeSvc   api.NodeService
 }
 
 func (s *ValidationTestSuite) SetupSuite() {
@@ -777,6 +780,28 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Refund().Succeeds())
 	tokensAfter := QueryAccountAs[*TokenAccount](s.Harness, adi.JoinPath("tokens")).Balance.Int64()
 	s.Require().Equal(int(tokensBefore), int(tokensAfter))
+}
+
+func (s *ValidationTestSuite) TestNodeService() {
+	if s.nodeSvc == nil {
+		s.TB.Skip()
+	}
+
+	info, err := s.nodeSvc.NodeInfo(context.Background(), api.NodeInfoOptions{})
+	s.Require().NoError(err)
+	s.Require().NotEmpty(info.Network)
+	s.Require().Len(info.Services, 1)
+
+	nodes, err := s.nodeSvc.FindService(context.Background(), api.FindServiceOptions{Network: info.Network})
+	s.Require().NoError(err)
+	for _, n := range nodes {
+		info, err := s.nodeSvc.NodeInfo(context.Background(), api.NodeInfoOptions{PeerID: n.PeerID})
+		s.Require().NoError(err)
+		fmt.Printf("%v has %d service(s)\n", info.PeerID, len(info.Services))
+		for _, svc := range info.Services {
+			fmt.Printf("  %v\n", svc)
+		}
+	}
 }
 
 func hasKey(tb testing.TB, page *KeyPage, key ed25519.PrivateKey, typ SignatureType) {
