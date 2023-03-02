@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"io"
+	"strings"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -33,7 +34,6 @@ type Node struct {
 	peermgr  *peerManager
 	host     host.Host
 	services []*service
-	dht      *dht.IpfsDHT
 }
 
 // Options are options for creating a [Node].
@@ -99,14 +99,8 @@ func New(opts Options) (_ *Node, err error) {
 		}
 	}()
 
-	// Setup the DHT
-	n.dht, err = n.startDHT(n.context, opts.DiscoveryMode, opts.BootstrapPeers)
-	if err != nil {
-		return nil, err
-	}
-
 	// Create a peer manager
-	n.peermgr, err = newPeerManager(n.host, func() []*service { return n.services }, opts)
+	n.peermgr, err = newPeerManager(n.context, n.host, func() []*service { return n.services }, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -131,39 +125,17 @@ func (n *Node) Addrs() []multiaddr.Multiaddr {
 	return addrs
 }
 
-// Peers lists the node's known peers.
-func (n *Node) Peers() []*Info {
-	peers := make([]*Info, 0, len(n.peermgr.peers))
-	for _, p := range n.peermgr.getPeers(nil) {
-		peers = append(peers, p.info)
-	}
-	return peers
-}
-
 // ConnectDirectly connects this node directly to another node.
 func (n *Node) ConnectDirectly(m *Node) error {
-	// TODO Keep the Node around so we can create direct connections that avoid
-	// the TCP/IP overhead
-	n.peermgr.addKnown(m.info())
-	return n.peermgr.connectTo(&peer.AddrInfo{
-		ID:    m.host.ID(),
-		Addrs: m.host.Addrs(),
-	})
+	// TODO Keep the [Node] around so we can create direct connections that
+	// avoid the TCP/IP overhead
+	return nil
 }
 
 // Close shuts down the host and topics.
 func (n *Node) Close() error {
 	n.cancel()
 	return n.host.Close()
-}
-
-// info returns the Info for this node.
-func (n *Node) info() *Info {
-	info := &Info{ID: n.host.ID()}
-	for _, p := range n.services {
-		info.Services = append(info.Services, p.info())
-	}
-	return info
 }
 
 // selfID returns the node's ID.
@@ -177,7 +149,10 @@ func (n *Node) getPeerService(ctx context.Context, peer peer.ID, service *api.Se
 }
 
 // getOwnService returns a service of this node.
-func (n *Node) getOwnService(sa *api.ServiceAddress) (*service, bool) {
+func (n *Node) getOwnService(network string, sa *api.ServiceAddress) (*service, bool) {
+	if network != "" && !strings.EqualFold(network, n.peermgr.network) {
+		return nil, false
+	}
 	i, ok := sortutil.Search(n.services, func(s *service) int { return s.address.Compare(sa) })
 	if !ok {
 		return nil, false
