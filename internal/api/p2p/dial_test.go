@@ -90,7 +90,7 @@ func TestDialSelfPeer(t *testing.T) {
 	pid := peerId(t, "QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
 	host := newMockDialerHost(t)
 	host.EXPECT().selfID().Return(pid)
-	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&service{handler: handler.Execute}, true)
+	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
 	dialer := &dialer{host, nil}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
@@ -106,7 +106,7 @@ func TestDialSelfPartition(t *testing.T) {
 	handler.EXPECT().Execute(mock.Anything).Run(func(message.Stream) { close(done) })
 
 	host := newMockDialerHost(t)
-	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&service{handler: handler.Execute}, true)
+	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
 	dialer := &dialer{host, nil}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo"))

@@ -160,6 +160,16 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// NodeInfo implements [api.NodeService.NodeInfo].
+func (c *Client) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
+	return c.inner.NodeInfo(ctx, opts)
+}
+
+// FindService implements [api.NodeService.FindService].
+func (c *Client) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
+	return c.inner.FindService(ctx, opts)
+}
+
 // ConsensusStatus implements [api.ConsensusService.ConsensusStatus].
 func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	return c.inner.ConsensusStatus(ctx, opts)

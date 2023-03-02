@@ -101,7 +101,7 @@ func (s *ServiceAddress) Copy() *ServiceAddress {
 }
 
 // Multiaddr returns `/acc-svc/<type>[:<argument>]` as a multiaddr component.
-func (s *ServiceAddress) Multiaddr() *multiaddr.Component {
+func (s *ServiceAddress) Multiaddr() multiaddr.Multiaddr {
 	c, err := multiaddr.NewComponent(N_ACC_SVC, s.String())
 	if err != nil {
 		// This only fails if the service isn't registered or parsing the string

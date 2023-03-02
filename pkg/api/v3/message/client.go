@@ -41,6 +41,7 @@ type Router interface {
 }
 
 // Ensure Client satisfies the service definitions.
+var _ api.NodeService = (*Client)(nil)
 var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
@@ -48,6 +49,20 @@ var _ api.Querier = (*Client)(nil)
 var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
 var _ api.Faucet = (*Client)(nil)
+
+// NodeInfo implements [api.NodeService.NodeInfo].
+func (c *Client) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
+	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
+	// which is unpacked into a NodeInfo
+	return typedRequest[*NodeInfoResponse, *api.NodeInfo](c, ctx, &NodeInfoRequest{NodeInfoOptions: opts})
+}
+
+// FindService implements [api.NodeService.FindService].
+func (c *Client) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
+	// which is unpacked into a FindServiceResult
+	return typedRequest[*FindServiceResponse, []*api.FindServiceResult](c, ctx, &FindServiceRequest{FindServiceOptions: opts})
+}
 
 // ConsensusStatus implements [api.NodeService.ConsensusStatus].
 func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
@@ -136,6 +151,8 @@ type response[T any] interface {
 	rval() T
 }
 
+func (r *NodeInfoResponse) rval() *api.NodeInfo                 { return r.Value } //nolint:unused
+func (r *FindServiceResponse) rval() []*api.FindServiceResult   { return r.Value } //nolint:unused
 func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus   { return r.Value } //nolint:unused
 func (r *NetworkStatusResponse) rval() *api.NetworkStatus       { return r.Value } //nolint:unused
 func (r *MetricsResponse) rval() *api.Metrics                   { return r.Value } //nolint:unused
@@ -305,13 +322,23 @@ func (c *Client) routeRequest(req Message) (multiaddr.Multiaddr, error) {
 	}
 
 routed:
-	// Check if the address specifies a network or p2p node
+	// Check if the address specifies a network or p2p node or is /acc-svc/node
 	var complete bool
-	for _, p := range addr.Protocols() {
-		switch p.Code {
+	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+		switch c.Protocol().Code {
 		case multiaddr.P_P2P, api.P_ACC:
 			complete = true
+		case api.P_ACC_SVC:
+			sa := new(api.ServiceAddress)
+			err = sa.UnmarshalBinary(c.RawValue())
+			if err == nil && sa.Type == api.ServiceTypeNode {
+				complete = true
+			}
 		}
+		return !complete
+	})
+	if err != nil {
+		return nil, errors.InternalError.WithFormat("parse routed address: %w", err)
 	}
 	if complete {
 		return addr, nil
