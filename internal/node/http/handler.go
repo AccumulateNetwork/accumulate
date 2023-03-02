@@ -138,10 +138,13 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	var err error
 	switch msg := msg.(type) {
 	case *message.NodeInfoRequest:
+		// If no peer is specified, don't attach anything else to the address so
+		// it's sent to us
 		if msg.PeerID == "" {
 			return api.ServiceTypeNode.Address().Multiaddr(), nil
 		}
 
+		// Send the request to /p2p/{id}/node
 		c1, err := multiaddr.NewComponent("p2p", msg.PeerID.String())
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
@@ -154,14 +157,18 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		return api.ServiceTypeNode.Address().Multiaddr(), nil
 
 	case *message.ConsensusStatusRequest:
+		// If no node ID is specified, route normally
 		if msg.NodeID == "" {
 			service.Type = api.ServiceTypeConsensus
 			break
 		}
+
+		// If a node ID is specified, a partition ID must also be specified
 		if msg.Partition == "" {
 			return nil, errors.BadRequest.WithFormat("missing partition")
 		}
 
+		// Send the request to /p2p/{id}/acc-svc/consensus:{partition}
 		c1, err := multiaddr.NewComponent("p2p", msg.NodeID)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
@@ -191,6 +198,6 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		return nil, errors.BadRequest.WithFormat("cannot route request: %w", err)
 	}
 
-	// Return /acc/{network}/acc-svc/{service}:{partition}
+	// Send the request to /acc-svc/{service}:{partition}
 	return service.Multiaddr(), nil
 }

@@ -32,12 +32,14 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	var err error
 	switch msg := msg.(type) {
 	case *message.NodeInfoRequest:
+		// If no peer ID is specified, return /acc-svc/node so the request is
+		// sent to this node
 		service.Type = api.ServiceTypeNode
 		if msg.PeerID == "" {
 			return service.Multiaddr(), nil
 		}
 
-		// Return /p2p/{id}/acc/{service}:{partition}
+		// Send the request to /p2p/{id}/acc-svc/{service}:{partition}
 		c1, err := multiaddr.NewComponent("p2p", msg.PeerID.String())
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
