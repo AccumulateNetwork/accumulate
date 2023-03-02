@@ -132,7 +132,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	if opts.ListenHTTPv3 {
 		jrpc, err := jsonrpc.NewHandler(
 			n.logger.With("module", "api"),
-			jsonrpc.NodeService{NodeService: (*nodeService)(n)},
+			jsonrpc.ConsensusService{ConsensusService: (*nodeService)(n)},
 			jsonrpc.NetworkService{NetworkService: services},
 			jsonrpc.MetricsService{MetricsService: services},
 			jsonrpc.Querier{Querier: services},
@@ -148,7 +148,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	if opts.ListenWSv3 {
 		ws, err := websocket.NewHandler(
 			n.logger.With("module", "api"),
-			message.NodeService{NodeService: (*nodeService)(n)},
+			message.ConsensusService{ConsensusService: (*nodeService)(n)},
 			message.NetworkService{NetworkService: services},
 			message.MetricsService{MetricsService: services},
 			message.Querier{Querier: services},
@@ -238,7 +238,7 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, bootstrap []mu
 
 	h, err := message.NewHandler(
 		n.logger.With("module", "acc"),
-		&message.NodeService{NodeService: (*nodeService)(n)},
+		&message.ConsensusService{ConsensusService: (*nodeService)(n)},
 		&message.MetricsService{MetricsService: (*nodeService)(n)},
 		&message.NetworkService{NetworkService: (*nodeService)(n)},
 		&message.Querier{Querier: (*nodeService)(n)},
@@ -266,7 +266,7 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, bootstrap []mu
 		_ = p2p.Close()
 	}()
 
-	p2p.RegisterService(api.ServiceTypeNode.AddressFor(n.partition.ID), h.Handle)
+	p2p.RegisterService(api.ServiceTypeConsensus.AddressFor(n.partition.ID), h.Handle)
 	p2p.RegisterService(api.ServiceTypeMetrics.AddressFor(n.partition.ID), h.Handle)
 	p2p.RegisterService(api.ServiceTypeNetwork.AddressFor(n.partition.ID), h.Handle)
 	p2p.RegisterService(api.ServiceTypeQuery.AddressFor(n.partition.ID), h.Handle)

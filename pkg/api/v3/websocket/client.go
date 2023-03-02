@@ -160,9 +160,9 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// NodeStatus implements [api.NodeService.NodeStatus].
-func (c *Client) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
-	return c.inner.NodeStatus(ctx, opts)
+// ConsensusStatus implements [api.ConsensusService.ConsensusStatus].
+func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return c.inner.ConsensusStatus(ctx, opts)
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
