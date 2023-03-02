@@ -41,20 +41,20 @@ func formatResponse(res interface{}, err error) interface{} {
 	return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Error(), (*Error)(err2))
 }
 
-type NodeService struct{ api.NodeService }
+type ConsensusService struct{ api.ConsensusService }
 
-func (s NodeService) methods() jsonrpc2.MethodMap {
+func (s ConsensusService) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"node-status": s.NodeStatus,
+		"consensus-status": s.ConsensusStatus,
 	}
 }
 
-func (s NodeService) NodeStatus(ctx context.Context, params json.RawMessage) interface{} {
-	req, err := parseRequest[*message.NodeStatusRequest](params)
+func (s ConsensusService) ConsensusStatus(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.ConsensusStatusRequest](params)
 	if err != nil {
 		return formatResponse(nil, err)
 	}
-	return formatResponse(s.NodeService.NodeStatus(ctx, req.NodeStatusOptions))
+	return formatResponse(s.ConsensusService.ConsensusStatus(ctx, req.ConsensusStatusOptions))
 }
 
 type NetworkService struct{ api.NetworkService }

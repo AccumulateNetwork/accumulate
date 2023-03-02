@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -29,12 +29,12 @@ func setupTest(t testing.TB, services ...Service) *Client {
 	return client
 }
 
-func TestNodeService(t *testing.T) {
-	expect := &api.NodeStatus{Ok: true, Version: "asdf", ValidatorKeyHash: [32]byte{1, 2, 3}}
-	s := mocks.NewNodeService(t)
-	s.EXPECT().NodeStatus(mock.Anything, mock.Anything).Return(expect, nil)
-	c := setupTest(t, NodeService{NodeService: s})
-	actual, err := c.NodeStatus(context.Background(), api.NodeStatusOptions{})
+func TestConsensusService(t *testing.T) {
+	expect := &api.ConsensusStatus{Ok: true, Version: "asdf", ValidatorKeyHash: [32]byte{1, 2, 3}}
+	s := mocks.NewConsensusService(t)
+	s.EXPECT().ConsensusStatus(mock.Anything, mock.Anything).Return(expect, nil)
+	c := setupTest(t, ConsensusService{ConsensusService: s})
+	actual, err := c.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{})
 	require.NoError(t, err)
 	require.Equal(t, expect, actual)
 }

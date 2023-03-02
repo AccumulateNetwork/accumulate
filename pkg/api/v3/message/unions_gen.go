@@ -22,6 +22,10 @@ func New(typ Type) (Message, error) {
 	switch typ {
 	case TypeAddressed:
 		return new(Addressed), nil
+	case TypeConsensusStatusRequest:
+		return new(ConsensusStatusRequest), nil
+	case TypeConsensusStatusResponse:
+		return new(ConsensusStatusResponse), nil
 	case TypeErrorResponse:
 		return new(ErrorResponse), nil
 	case TypeEvent:
@@ -38,10 +42,6 @@ func New(typ Type) (Message, error) {
 		return new(NetworkStatusRequest), nil
 	case TypeNetworkStatusResponse:
 		return new(NetworkStatusResponse), nil
-	case TypeNodeStatusRequest:
-		return new(NodeStatusRequest), nil
-	case TypeNodeStatusResponse:
-		return new(NodeStatusResponse), nil
 	case TypePrivateSequenceRequest:
 		return new(PrivateSequenceRequest), nil
 	case TypePrivateSequenceResponse:
@@ -78,6 +78,18 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*Addressed)
+		return ok && a.Equal(b)
+	case *ConsensusStatusRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ConsensusStatusRequest)
+		return ok && a.Equal(b)
+	case *ConsensusStatusResponse:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ConsensusStatusResponse)
 		return ok && a.Equal(b)
 	case *ErrorResponse:
 		if a == nil {
@@ -126,18 +138,6 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*NetworkStatusResponse)
-		return ok && a.Equal(b)
-	case *NodeStatusRequest:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*NodeStatusRequest)
-		return ok && a.Equal(b)
-	case *NodeStatusResponse:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*NodeStatusResponse)
 		return ok && a.Equal(b)
 	case *PrivateSequenceRequest:
 		if a == nil {
@@ -209,6 +209,10 @@ func Copy(v Message) Message {
 	switch v := v.(type) {
 	case *Addressed:
 		return v.Copy()
+	case *ConsensusStatusRequest:
+		return v.Copy()
+	case *ConsensusStatusResponse:
+		return v.Copy()
 	case *ErrorResponse:
 		return v.Copy()
 	case *EventMessage:
@@ -224,10 +228,6 @@ func Copy(v Message) Message {
 	case *NetworkStatusRequest:
 		return v.Copy()
 	case *NetworkStatusResponse:
-		return v.Copy()
-	case *NodeStatusRequest:
-		return v.Copy()
-	case *NodeStatusResponse:
 		return v.Copy()
 	case *PrivateSequenceRequest:
 		return v.Copy()

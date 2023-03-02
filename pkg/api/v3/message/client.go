@@ -41,7 +41,7 @@ type Router interface {
 }
 
 // Ensure Client satisfies the service definitions.
-var _ api.NodeService = (*Client)(nil)
+var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
@@ -49,11 +49,11 @@ var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
 var _ api.Faucet = (*Client)(nil)
 
-// NodeStatus implements [api.NodeService.NodeStatus].
-func (c *Client) NodeStatus(ctx context.Context, opts NodeStatusOptions) (*api.NodeStatus, error) {
+// ConsensusStatus implements [api.NodeService.ConsensusStatus].
+func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
-	// which is unpacked into a NodeStatus
-	return typedRequest[*NodeStatusResponse, *api.NodeStatus](c, ctx, &NodeStatusRequest{NodeStatusOptions: opts})
+	// which is unpacked into a ConsensusStatus
+	return typedRequest[*ConsensusStatusResponse, *api.ConsensusStatus](c, ctx, &ConsensusStatusRequest{ConsensusStatusOptions: opts})
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
@@ -136,7 +136,7 @@ type response[T any] interface {
 	rval() T
 }
 
-func (r *NodeStatusResponse) rval() *api.NodeStatus             { return r.Value } //nolint:unused
+func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus   { return r.Value } //nolint:unused
 func (r *NetworkStatusResponse) rval() *api.NetworkStatus       { return r.Value } //nolint:unused
 func (r *MetricsResponse) rval() *api.Metrics                   { return r.Value } //nolint:unused
 func (r *RecordResponse) rval() api.Record                      { return r.Value } //nolint:unused
