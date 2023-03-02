@@ -97,7 +97,7 @@ func TestAPIv2Consistency(t *testing.T) {
 	for i, c := range testData.Cases {
 		t.Run(fmt.Sprintf("Call/%d", i), func(t *testing.T) {
 			var res map[string]any
-			err := sim.API().RequestAPIv2(context.Background(), c.Method, c.Request, &res)
+			err := sim.ClientV2(protocol.Directory).RequestAPIv2(context.Background(), c.Method, c.Request, &res)
 			if err != nil {
 				t.Logf("Case %d", i)
 				req, _ := json.Marshal(c.Request)
