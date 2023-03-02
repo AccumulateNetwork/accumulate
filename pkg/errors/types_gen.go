@@ -11,7 +11,6 @@ package errors
 //lint:file-ignore S1001,S1002,S1008,SA4013 generated code
 
 import (
-	"encoding/json"
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -44,6 +43,8 @@ func (v *CallSite) UnmarshalBinary(data []byte) error { return machine_CallSite.
 func (v *CallSite) UnmarshalBinaryFrom(rd io.Reader) error {
 	return machine_CallSite.UnmarshalFrom(rd, v)
 }
+func (v *CallSite) MarshalJSON() ([]byte, error) { return machine_CallSite.JSONMarshal(v) }
+func (v *CallSite) UnmarshalJSON(b []byte) error { return machine_CallSite.JSONUnmarshal(b, v) }
 
 type Error struct {
 	fieldsSet []bool
@@ -72,42 +73,5 @@ func (v *Error) Equal(u *Error) bool                    { return machine_Error.E
 func (v *Error) MarshalBinary() ([]byte, error)         { return machine_Error.MarshalBinary(v) }
 func (v *Error) UnmarshalBinary(data []byte) error      { return machine_Error.Unmarshal(data, v) }
 func (v *Error) UnmarshalBinaryFrom(rd io.Reader) error { return machine_Error.UnmarshalFrom(rd, v) }
-
-func (v *Error) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Message   string                       `json:"message,omitempty"`
-		Code      Status                       `json:"code,omitempty"`
-		CodeID    uint64                       `json:"codeID,omitempty"`
-		Cause     *Error                       `json:"cause,omitempty"`
-		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
-	}{}
-	u.Message = v.Message
-	u.Code = v.Code
-	u.CodeID = v.CodeID()
-	u.Cause = v.Cause
-	u.CallStack = v.CallStack
-	return json.Marshal(&u)
-}
-
-func (v *Error) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Message   string                       `json:"message,omitempty"`
-		Code      Status                       `json:"code,omitempty"`
-		CodeID    uint64                       `json:"codeID,omitempty"`
-		Cause     *Error                       `json:"cause,omitempty"`
-		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
-	}{}
-	u.Message = v.Message
-	u.Code = v.Code
-	u.CodeID = v.CodeID()
-	u.Cause = v.Cause
-	u.CallStack = v.CallStack
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Message = u.Message
-	v.Code = u.Code
-	v.Cause = u.Cause
-	v.CallStack = u.CallStack
-	return nil
-}
+func (v *Error) MarshalJSON() ([]byte, error)           { return machine_Error.JSONMarshal(v) }
+func (v *Error) UnmarshalJSON(b []byte) error           { return machine_Error.JSONUnmarshal(b, v) }
