@@ -9,6 +9,18 @@ Addressed:
       type: p2p.Multiaddr
       marshal-as: union
 
+NodeInfoRequest:
+  union: { type: message }
+  fields:
+    - type: NodeInfoOptions
+      marshal-as: reference
+
+FindServiceRequest:
+  union: { type: message }
+  fields:
+    - type: FindServiceOptions
+      marshal-as: reference
+
 ConsensusStatusRequest:
   union: { type: message }
   fields:
@@ -80,6 +92,23 @@ ErrorResponse:
       type: errors2.Error
       marshal-as: reference
       pointer: true
+
+NodeInfoResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.NodeInfo
+      marshal-as: reference
+      pointer: true
+
+FindServiceResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.FindServiceResult
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 ConsensusStatusResponse:
   union: { type: message }
