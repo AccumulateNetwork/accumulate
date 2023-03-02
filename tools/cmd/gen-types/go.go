@@ -39,15 +39,19 @@ const (
 	Union     = typegen.MarshalAsUnion
 )
 
-//go:embed go.go.tmpl
+//go:embed types.go.tmpl
 var goSrc string
 
 //go:embed union.go.tmpl
 var goUnionSrc string
 
+//go:embed types.machine.go.tmpl
+var goMachineSrc string
+
 func init() {
 	Templates.Register(goSrc, "go", goFuncs, "Go")
 	Templates.Register(goUnionSrc, "go-union", goFuncs)
+	Templates.Register(goMachineSrc, "go-alt", goFuncs)
 }
 
 var goFuncs = template.FuncMap{
@@ -79,6 +83,9 @@ var goFuncs = template.FuncMap{
 
 	"resolveType": func(field *Field, forNew bool) string {
 		return GoResolveType(field, forNew, false)
+	},
+	"resolveElemType": func(field *Field, forNew bool) string {
+		return GoResolveType(field, forNew, true)
 	},
 
 	"jsonType": func(field *Field) string {
@@ -140,6 +147,8 @@ var goFuncs = template.FuncMap{
 		}
 		return fmt.Sprintf(` validate:"%s"`, strings.Join(flags, ","))
 	},
+
+	"accessor": goFieldAccessor,
 }
 
 func GoGetField(field *Field) string {
@@ -152,6 +161,32 @@ func GoGetField(field *Field) string {
 func GoFieldError(op, name string, args ...string) string {
 	args = append(args, "err")
 	return fmt.Sprintf("fmt.Errorf(\"error %s %s: %%w\", %s)", op, name, strings.Join(args, ","))
+}
+
+func goFieldAccessor(field *Field) (string, error) {
+	var ptr1 string
+	if field.Pointer {
+		ptr1 = "Ptr"
+	}
+
+	typ := "*" + field.ParentType.Name
+	if field.Repeatable {
+		typ = "encoding.SliceIndex[*" + field.Type.Name + "]"
+	}
+
+	switch field.Type.Code {
+	case Hash, Int, Uint, Float, Bool, Time, Bytes, String, Duration, BigInt, Url, TxID:
+		return fmt.Sprintf("encoding.%s%sField[%s]", typegen.TitleCase(field.Type.Code.String()), ptr1, typ), nil
+	}
+
+	switch field.MarshalAs {
+	case Reference:
+		return fmt.Sprintf("encoding.Struct%sField[%s, *%s, %[3]s]", ptr1, typ, GoResolveType(field, true, true)), nil
+	case Enum:
+		return fmt.Sprintf("encoding.Enum%sField[%s, *%s, %[3]s]", ptr1, typ, GoResolveType(field, true, true)), nil
+	}
+
+	return "nil", nil
 }
 
 func goUnionMethod(field *Field, name string) string {
