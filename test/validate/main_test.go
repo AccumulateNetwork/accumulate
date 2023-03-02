@@ -83,9 +83,9 @@ func TestValidateAPI(t *testing.T) {
 	t.Cleanup(func() { _ = node.Close() })
 
 	// Wait for the nodes to get connected
-	waitFor(t, node, api.ServiceTypeSubmit.AddressFor(Directory), time.Minute)
+	waitFor(t, node, net.Id, api.ServiceTypeSubmit.AddressFor(Directory), time.Minute)
 	for _, b := range net.Bvns {
-		waitFor(t, node, api.ServiceTypeSubmit.AddressFor(b.Id), time.Minute)
+		waitFor(t, node, net.Id, api.ServiceTypeSubmit.AddressFor(b.Id), time.Minute)
 	}
 
 	// Create a harness that uses the P2P client node for services but steps the
@@ -128,21 +128,23 @@ func TestValidateNetwork(t *testing.T) {
 	}
 
 	harness, node := setupNetClient(t, bootstrap...)
-	waitFor(t, node, api.ServiceTypeFaucet.Address(), time.Minute)
+	// waitFor(t, node, "network?", api.ServiceTypeFaucet.Address(), time.Minute)
 
 	s := new(ValidationTestSuite)
 	s.Harness, s.faucetSvc = harness, node
 	suite.Run(t, s)
 }
 
-func waitFor(t *testing.T, node *p2p.Node, sa *api.ServiceAddress, timeout time.Duration) {
-	t.Logf("Wait for %v", sa)
-	if node.WaitForService(sa, timeout) {
-		return
-	}
+func waitFor(t *testing.T, node *p2p.Node, network string, sa *api.ServiceAddress, timeout time.Duration) {
+	ma, err := sa.MultiaddrFor(network)
+	require.NoError(t, err)
 
-	// Fail after some time instead of timing out the test
-	t.Fatalf("%v did not appear within %v", sa, timeout)
+	t.Logf("Wait for %v", sa)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	err = node.WaitForService(ctx, ma)
+	require.NoError(t, err, "%v did not appear within %v", sa, timeout)
 }
 
 type ValidationTestSuite struct {

@@ -22,6 +22,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/fatih/color"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
@@ -409,6 +410,7 @@ func (d *Daemon) Start() (err error) {
 		Listen:         d.Config.Accumulate.P2P.Listen,
 		BootstrapPeers: app.Accumulate.P2P.BootstrapPeers,
 		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+		DiscoveryMode:  dht.ModeServer,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize P2P: %w", err)
