@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -6,10 +6,8 @@
 
 package typegen
 
-func (f FieldType) GoType() string {
-	switch f.Code {
-	case TypeCodeUnknown:
-		return f.Name
+func (t TypeCode) GoType() string {
+	switch t {
 	case TypeCodeBytes:
 		return "[]byte"
 	case TypeCodeRawJson:
@@ -35,6 +33,13 @@ func (f FieldType) GoType() string {
 	case TypeCodeFloat:
 		return "float64"
 	default:
-		return f.Code.String()
+		return t.String()
 	}
+}
+
+func (f FieldType) GoType() string {
+	if f.Code == TypeCodeUnknown {
+		return f.Name
+	}
+	return f.Code.GoType()
 }

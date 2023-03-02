@@ -73,7 +73,8 @@ func TestValidateAPI(t *testing.T) {
 	// Set up the P2P client node
 	t.Log("Create the client")
 	node, err := p2p.New(p2p.Options{
-		Logger: logging.ConsoleLoggerForTest(t, "info"),
+		Network: net.Id,
+		Logger:  logging.ConsoleLoggerForTest(t, "info"),
 		BootstrapPeers: []multiaddr.Multiaddr{
 			net.Bvns[0].Nodes[0].Listen().Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr(),
 		},
@@ -81,7 +82,7 @@ func TestValidateAPI(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = node.Close() })
 
-	// Wait for each partition
+	// Wait for the nodes to get connected
 	waitFor(t, node, api.ServiceTypeSubmit.AddressFor(Directory), time.Minute)
 	for _, b := range net.Bvns {
 		waitFor(t, node, api.ServiceTypeSubmit.AddressFor(b.Id), time.Minute)
