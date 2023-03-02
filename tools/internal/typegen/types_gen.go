@@ -390,9 +390,11 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	v.Parameters = u.Parameters
 	v.Root = u.Root
 	v.Interface = u.Interface
-	v.Attributes = make([]Record, len(u.Attributes.Value))
-	for i, x := range u.Attributes.Value {
-		v.Attributes[i] = x
+	if u.Attributes != nil {
+		v.Attributes = make([]Record, len(u.Attributes.Value))
+		for i, x := range u.Attributes.Value {
+			v.Attributes[i] = x
+		}
 	}
 	return nil
 }

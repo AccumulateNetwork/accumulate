@@ -642,7 +642,9 @@ func (s *Querier) queryMajorBlockRange(ctx context.Context, batch *database.Batc
 		return nil, errors.UnknownError.WithFormat("load major block chain: %w", err)
 	}
 	if chain.Height() == 0 {
-		return nil, errors.NotFound.WithFormat("no major blocks exist")
+		r := new(api.RecordRange[*api.MajorBlockRecord])
+		r.Records = []*api.MajorBlockRecord{}
+		return r, nil
 	}
 
 	r := new(api.RecordRange[*api.MajorBlockRecord])
