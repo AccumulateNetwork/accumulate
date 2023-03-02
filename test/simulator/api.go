@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -257,6 +258,7 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, bootstrap []mu
 		Listen:         []multiaddr.Multiaddr{addr1, addr2},
 		BootstrapPeers: bootstrap,
 		Key:            n.nodeKey,
+		DiscoveryMode:  dht.ModeServer,
 	})
 	if err != nil {
 		return err
