@@ -7,10 +7,11 @@
 package p2p
 
 import (
-	"time"
+	"context"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/multiformats/go-multiaddr"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -37,7 +38,7 @@ func (n *Node) RegisterService(sa *api.ServiceAddress, handler MessageStreamHand
 		handler(message.NewStream(s))
 	})
 
-	err := n.peermgr.advertizeNewService()
+	err := n.peermgr.advertizeNewService(sa)
 	if err != nil {
 		n.logger.Error("Advertizing failed", "error", err)
 	}
@@ -50,17 +51,10 @@ type service struct {
 	handler MessageStreamHandler
 }
 
-// info returns the PartitionInfo for this partition.
-func (s *service) info() *ServiceInfo {
-	return &ServiceInfo{
-		Address: s.address,
-	}
-}
-
 // WaitForService blocks until the given service is available. WaitForService
 // will return once the service is registered on the current node or until the
 // node is informed of a peer with the given service. WaitForService will return
 // immediately if the service is already registered or known.
-func (s *Node) WaitForService(sa *api.ServiceAddress, timeout time.Duration) bool {
-	return s.peermgr.waitFor(sa, timeout)
+func (s *Node) WaitForService(ctx context.Context, addr multiaddr.Multiaddr) error {
+	return s.peermgr.waitFor(ctx, addr)
 }
