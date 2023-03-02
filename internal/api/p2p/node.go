@@ -12,6 +12,7 @@ import (
 	"io"
 
 	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/config"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -32,6 +33,7 @@ type Node struct {
 	peermgr  *peerManager
 	host     host.Host
 	services []*service
+	dht      *dht.IpfsDHT
 }
 
 // Options are options for creating a [Node].
@@ -52,15 +54,10 @@ type Options struct {
 	// Key is the node's private key. If Key is omitted, the node will
 	// generate a new key.
 	Key ed25519.PrivateKey
-}
 
-// PartitionOptions defines a [Node]'s involvement in a partition.
-type PartitionOptions struct {
-	// ID is the ID of the partition.
-	ID string
-
-	// Moniker is the Tendermint node's moniker.
-	Moniker string
+	// DiscoveryMode determines how the node responds to peer discovery
+	// requests.
+	DiscoveryMode dht.ModeOpt
 }
 
 // New creates a node with the given [Options].
@@ -102,6 +99,12 @@ func New(opts Options) (_ *Node, err error) {
 		}
 	}()
 
+	// Setup the DHT
+	n.dht, err = n.startDHT(n.context, opts.DiscoveryMode, opts.BootstrapPeers)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create a peer manager
 	n.peermgr, err = newPeerManager(n.host, func() []*service { return n.services }, opts)
 	if err != nil {
@@ -130,10 +133,8 @@ func (n *Node) Addrs() []multiaddr.Multiaddr {
 
 // Peers lists the node's known peers.
 func (n *Node) Peers() []*Info {
-	n.peermgr.mu.RLock()
-	defer n.peermgr.mu.RUnlock()
 	peers := make([]*Info, 0, len(n.peermgr.peers))
-	for _, p := range n.peermgr.peers {
+	for _, p := range n.peermgr.getPeers(nil) {
 		peers = append(peers, p.info)
 	}
 	return peers
