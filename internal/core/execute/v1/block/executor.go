@@ -135,7 +135,9 @@ func newExecutor(opts ExecutorOptions, isGenesis bool, executors ...chain.Transa
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
 	m.db = opts.Database
-	m.mainDispatcher = opts.NewDispatcher()
+	if opts.NewDispatcher != nil {
+		m.mainDispatcher = opts.NewDispatcher()
+	}
 	m.isGenesis = isGenesis
 
 	if opts.Logger != nil {
