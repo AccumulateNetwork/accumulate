@@ -77,7 +77,6 @@ var machine_{{.Name}} = &encoding.Machine[*{{.Name}}]{
 	},
 }
 
-
 func (v *{{.FullName true false}}) IsValid() error                         { return machine_{{.Name}}.IsValid(v) }
 func (v *{{.FullName true false}}) Copy() *{{.FullName true false}}        { return encoding.Copy(machine_{{.Name}}, v) }
 func (v *{{.FullName true false}}) CopyAsInterface() interface{}           { return v.Copy() }
@@ -85,117 +84,12 @@ func (v *{{.FullName true false}}) Equal(u *{{.FullName true false}}) bool { ret
 func (v *{{.FullName true false}}) MarshalBinary() ([]byte, error)         { return machine_{{.Name}}.MarshalBinary(v) }
 func (v *{{.FullName true false}}) UnmarshalBinary(data []byte) error      { return machine_{{.Name}}.Unmarshal(data, v) }
 func (v *{{.FullName true false}}) UnmarshalBinaryFrom(rd io.Reader) error { return machine_{{.Name}}.UnmarshalFrom(rd, v) }
+func (v *{{.FullName true false}}) MarshalJSON() ([]byte, error)           { return machine_{{.Name}}.JSONMarshal(v) }
+func (v *{{.FullName true false}}) UnmarshalJSON(b []byte) error           { return machine_{{.Name}}.JSONUnmarshal(b, v) }
 
 {{end}}
 
 {{ $lud := .LongUnionDiscriminator }}
 {{range .Types}}{{if .IsUnion}}
 func (*{{.FullName true false}}) {{if $lud}}{{.UnionType}}{{else}}Type{{end}}() {{.UnionType}} { return {{.UnionType}}{{.UnionValue}} }
-{{end}}{{end}}
-
-{{define "jsonField"}}
-{{- if .IsMarshalled}}
-{{.Name}} {{jsonType .}}{{if .IsMarshalled}} `json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}"`{{end}}
-{{- if .AlternativeName}}
-{{.AlternativeName}} {{jsonType .}}{{if .IsMarshalled}} `json:"{{lcName .AlternativeName}}{{if .OmitEmpty}},omitempty{{end}}"`{{end}}
-{{- end}}
-{{- end}}
-{{- end}}
-
-{{define "jsonType"}}struct {
-	{{- range .Fields}}
-	{{- if .IsEmbedded}}
-	{{- range .TypeRef.Fields}}
-	{{- template "jsonField" .}}
-	{{- end}}
-	{{- else}}
-	{{- template "jsonField" .}}
-	{{- end}}
-	{{- end}}
-}
-{{- end}}
-
-{{define "valueToJson"}}
-{{- if .Field.IsMarshalled}}
-{{valueToJson .Field (print .Dst "." .Field.Name) (print .Src "." (get .Field))}}
-{{- if .Field.AlternativeName}}
-{{valueToJson .Field (print .Dst "." .Field.AlternativeName) (print .Src "." (get .Field))}}
-{{- end}}
-{{- end}}
-{{- end}}
-
-{{define "jsonAltIsZero"}}
-{{- if .Field.Repeatable -}}
-len({{.Src}}.{{get .Field}}) == 0
-{{- else if and .Field.AsReference (not .Field.Pointer) -}}
-{{.Src}}.{{get .Field}}.Equal(&{{resolveType .Field false}}{})
-{{- else -}}
-{{.Src}}.{{get .Field}} == {{jsonZeroValue .Field}}
-{{- end}}
-{{- end}}
-
-{{define "valueFromJson"}}
-{{- if and .Field.IsMarshalled (not (and .Field.NonBinary .Field.Virtual))}}
-{{- if .Field.Virtual}}
-{{areEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (errVirtualFieldNotEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name))}}
-{{- else if .Field.AlternativeName}}
-if !({{template "jsonAltIsZero" .}}) {
-	{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (get .Field)}}
-} else {
-	{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.AlternativeName) (get .Field)}}
-}
-{{- else}}
-{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (get .Field)}}
-{{- end}}
-{{- end}}
-{{- end}}
-
-{{range .Types}}{{if needsCustomJSON .}}
-func (v *{{.FullName true false}}) MarshalJSON() ([]byte, error) {
-	u := {{template "jsonType" .}}{}
-
-	{{- range .Fields}}
-	{{- if .IsEmbedded}}
-	{{- $name := get .}}
-	{{- range .TypeRef.Fields}}
-	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
-	{{- end}}
-	{{- else}}
-	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
-	{{- end}}
-	{{- end}}
-	return json.Marshal(&u)
-}
-{{end}}{{end}}
-
-{{range .Types}}{{if needsCustomJSON .}}
-func (v *{{.FullName true false}}) UnmarshalJSON(data []byte) error {
-	u := {{template "jsonType" .}}{}
-
-	{{- range .Fields}}
-	{{- if .IsEmbedded}}
-	{{- $name := get .}}
-	{{- range .TypeRef.Fields}}
-	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
-	{{- end}}
-	{{- else}}
-	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
-	{{- end}}
-	{{- end}}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-
-	{{- range .Fields}}
-	{{- if .IsEmbedded}}
-	{{- $name := get .}}
-	{{- range .TypeRef.Fields}}
-	{{- template "valueFromJson" map "Field" . "Src" "u" "Dst" (print "v." $name)}}
-	{{- end}}
-	{{- else}}
-	{{- template "valueFromJson" map "Field" . "Src" "u" "Dst" "v"}}
-	{{- end}}
-	{{- end}}
-	return nil
-}
 {{end}}{{end}}
