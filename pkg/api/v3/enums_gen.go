@@ -92,31 +92,31 @@ const RecordTypeTxID RecordType = 130
 // RecordTypeIndexEntry .
 const RecordTypeIndexEntry RecordType = 131
 
-// ServiceTypeUnknown .
+// ServiceTypeUnknown indicates an unknown service type.
 const ServiceTypeUnknown ServiceType = 0
 
-// ServiceTypeNode .
-const ServiceTypeNode ServiceType = 1
+// ServiceTypeConsensus is the type of [ConsensusService].
+const ServiceTypeConsensus ServiceType = 1
 
-// ServiceTypeNetwork .
+// ServiceTypeNetwork is the type of [NetworkService].
 const ServiceTypeNetwork ServiceType = 2
 
-// ServiceTypeMetrics .
+// ServiceTypeMetrics is the type of [MetricsService].
 const ServiceTypeMetrics ServiceType = 3
 
-// ServiceTypeQuery .
+// ServiceTypeQuery is the type of [Querier].
 const ServiceTypeQuery ServiceType = 4
 
-// ServiceTypeEvent .
+// ServiceTypeEvent is the type of [EventService].
 const ServiceTypeEvent ServiceType = 5
 
-// ServiceTypeSubmit .
+// ServiceTypeSubmit is the type of [Submitter].
 const ServiceTypeSubmit ServiceType = 6
 
-// ServiceTypeValidate .
+// ServiceTypeValidate is the type of [Validator].
 const ServiceTypeValidate ServiceType = 7
 
-// ServiceTypeFaucet .
+// ServiceTypeFaucet is the type of [Faucet].
 const ServiceTypeFaucet ServiceType = 8
 
 // GetEnumValue returns the value of the Event Type
@@ -386,7 +386,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet:
+	case ServiceTypeUnknown, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet:
 		*v = u
 		return true
 	default:
@@ -399,8 +399,8 @@ func (v ServiceType) String() string {
 	switch v {
 	case ServiceTypeUnknown:
 		return "unknown"
-	case ServiceTypeNode:
-		return "node"
+	case ServiceTypeConsensus:
+		return "consensus"
 	case ServiceTypeNetwork:
 		return "network"
 	case ServiceTypeMetrics:
@@ -425,8 +425,8 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 	switch strings.ToLower(name) {
 	case "unknown":
 		return ServiceTypeUnknown, true
-	case "node":
-		return ServiceTypeNode, true
+	case "consensus":
+		return ServiceTypeConsensus, true
 	case "network":
 		return ServiceTypeNetwork, true
 	case "metrics":
