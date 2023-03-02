@@ -45,10 +45,10 @@ func TestTransport(t *testing.T) {
 		return s, nil
 	})
 
-	addr, err := multiaddr.NewComponent(api.N_ACC, "query:foo")
+	addr, err := multiaddr.NewComponent(api.N_ACC_SVC, "query:foo")
 	require.NoError(t, err)
 
-	c := &Client{Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
+	c := &Client{Network: "foo", Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
 	err = c.roundTrip(context.Background(), []Message{
 		&Addressed{Address: addr},
 		&Addressed{Address: addr},
