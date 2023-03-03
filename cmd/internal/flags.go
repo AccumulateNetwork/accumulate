@@ -12,11 +12,33 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
-type MultiaddrFlag []multiaddr.Multiaddr
+type MultiaddrFlag struct {
+	Value *multiaddr.Multiaddr
+}
 
 func (m MultiaddrFlag) Type() string { return "multiaddr" }
 
 func (m MultiaddrFlag) String() string {
+	if *m.Value == nil {
+		return "nil"
+	}
+	return (*m.Value).String()
+}
+
+func (m MultiaddrFlag) Set(s string) error {
+	a, err := multiaddr.NewMultiaddr(s)
+	if err != nil {
+		return err
+	}
+	*m.Value = a
+	return nil
+}
+
+type MultiaddrSliceFlag []multiaddr.Multiaddr
+
+func (m MultiaddrSliceFlag) Type() string { return "multiaddr-slice" }
+
+func (m MultiaddrSliceFlag) String() string {
 	var s []string
 	for _, m := range m {
 		s = append(s, m.String())
@@ -24,7 +46,7 @@ func (m MultiaddrFlag) String() string {
 	return strings.Join(s, ",")
 }
 
-func (m *MultiaddrFlag) Set(s string) error {
+func (m *MultiaddrSliceFlag) Set(s string) error {
 	a, err := multiaddr.NewMultiaddr(s)
 	if err != nil {
 		return err
