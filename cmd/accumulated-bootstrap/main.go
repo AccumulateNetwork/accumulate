@@ -40,12 +40,14 @@ var flag = struct {
 	LogLevel string
 	Listen   []multiaddr.Multiaddr
 	Peers    []multiaddr.Multiaddr
+	External multiaddr.Multiaddr
 }{}
 
 func init() {
 	cmd.Flags().StringVar(&flag.Key, "key", "", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
-	cmd.Flags().VarP((*MultiaddrFlag)(&flag.Listen), "listen", "l", "Listening address")
-	cmd.Flags().VarP((*MultiaddrFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
+	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Listen), "listen", "l", "Listening address")
+	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
+	cmd.Flags().Var(MultiaddrFlag{Value: &flag.External}, "external", "External address to advertize")
 	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
 }
 
@@ -63,6 +65,7 @@ func run(*cobra.Command, []string) {
 		Listen:         flag.Listen,
 		BootstrapPeers: flag.Peers,
 		DiscoveryMode:  dht.ModeAutoServer,
+		External:       flag.External,
 	})
 	Check(err)
 	defer func() { _ = node.Close() }()
