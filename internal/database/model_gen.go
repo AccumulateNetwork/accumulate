@@ -742,15 +742,8 @@ type AccountTransactionSignatures struct {
 	label  string
 	parent *AccountTransaction
 
-	initiator record.Value[[32]byte]
-	active    record.Set[*SignatureSetEntry]
-	history   record.Set[uint64]
-}
-
-func (c *AccountTransactionSignatures) Initiator() record.Value[[32]byte] {
-	return getOrCreateField(&c.initiator, func() record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Initiator"), c.label+" "+"initiator", false, record.Wrapped(record.HashWrapper))
-	})
+	active  record.Set[*SignatureSetEntry]
+	history record.Set[uint64]
 }
 
 func (c *AccountTransactionSignatures) getActive() record.Set[*SignatureSetEntry] {
@@ -771,8 +764,6 @@ func (c *AccountTransactionSignatures) Resolve(key record.Key) (record.Record, r
 	}
 
 	switch key[0] {
-	case "Initiator":
-		return c.Initiator(), key[1:], nil
 	case "Active":
 		return c.getActive(), key[1:], nil
 	case "History":
@@ -787,9 +778,6 @@ func (c *AccountTransactionSignatures) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.initiator) {
-		return true
-	}
 	if fieldIsDirty(c.active) {
 		return true
 	}
@@ -806,7 +794,6 @@ func (c *AccountTransactionSignatures) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.initiator)
 	commitField(&err, c.active)
 	commitField(&err, c.history)
 

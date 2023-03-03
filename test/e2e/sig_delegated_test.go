@@ -68,7 +68,7 @@ func TestDoubleDelegated(t *testing.T) {
 	sim.StepUntil(
 		Txn(st[0].TxID).Succeeds(),
 		Txn(st[0].TxID).Produced().Succeeds(),
-		Sig(st[1].TxID).Completes())
+		Sig(st[1].TxID).SingleCompletes())
 }
 
 func TestSingleDelegated(t *testing.T) {
