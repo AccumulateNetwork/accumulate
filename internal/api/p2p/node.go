@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"io"
+	"net"
 	"strings"
 
 	"github.com/libp2p/go-libp2p"
@@ -61,6 +62,9 @@ type Options struct {
 	// DiscoveryMode determines how the node responds to peer discovery
 	// requests.
 	DiscoveryMode dht.ModeOpt
+
+	// External is the node's external address
+	External multiaddr.Multiaddr
 }
 
 // New creates a node with the given [Options].
@@ -80,6 +84,26 @@ func New(opts Options) (_ *Node, err error) {
 	// Configure libp2p host options
 	options := []config.Option{
 		libp2p.ListenAddrs(opts.Listen...),
+		libp2p.EnableNATService(),
+		libp2p.EnableRelay(),
+		libp2p.EnableHolePunching(),
+	}
+
+	// If an external address is specified, replace external IPs with that address
+	if opts.External != nil {
+		options = append(options, libp2p.AddrsFactory(func(addrs []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+			for i, addr := range addrs {
+				first, rest := multiaddr.SplitFirst(addr)
+				switch first.Protocol().Code {
+				case multiaddr.P_IP4:
+					ip := net.ParseIP(first.Value())
+					if !ip.IsLoopback() {
+						addrs[i] = opts.External.Encapsulate(rest)
+					}
+				}
+			}
+			return addrs
+		}))
 	}
 
 	// Use the given key if specified
