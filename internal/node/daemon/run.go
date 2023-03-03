@@ -461,7 +461,7 @@ func (d *Daemon) Start() (err error) {
 		for i := 0; i < d.Config.Accumulate.API.ConnectionLimit; i++ {
 			pool <- struct{}{}
 		}
-		l = &rateLimitedListener{Listener: l, Pool: pool}
+		l = &RateLimitedListener{Listener: l, Pool: pool}
 	}
 
 	go func() {
