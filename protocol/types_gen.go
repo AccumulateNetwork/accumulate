@@ -138,8 +138,8 @@ type AuthorityEntry struct {
 // AuthoritySignature is a signature produced by an authority.
 type AuthoritySignature struct {
 	fieldsSet []bool
-	// Signer is the signer that produced this signature.
-	Signer *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	// Origin is the signer that produced this signature.
+	Origin *url.URL `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 	// Authority is the authority that produced this signature.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 	// Vote is the authority's vote.
@@ -1353,8 +1353,8 @@ func (v *AuthorityEntry) CopyAsInterface() interface{} { return v.Copy() }
 func (v *AuthoritySignature) Copy() *AuthoritySignature {
 	u := new(AuthoritySignature)
 
-	if v.Signer != nil {
-		u.Signer = v.Signer
+	if v.Origin != nil {
+		u.Origin = v.Origin
 	}
 	if v.Authority != nil {
 		u.Authority = v.Authority
@@ -3069,11 +3069,11 @@ func (v *AuthorityEntry) Equal(u *AuthorityEntry) bool {
 
 func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
 	switch {
-	case v.Signer == u.Signer:
+	case v.Origin == u.Origin:
 		// equal
-	case v.Signer == nil || u.Signer == nil:
+	case v.Origin == nil || u.Origin == nil:
 		return false
-	case !((v.Signer).Equal(u.Signer)):
+	case !((v.Origin).Equal(u.Origin)):
 		return false
 	}
 	switch {
@@ -5733,7 +5733,7 @@ func (v *AuthorityEntry) IsValid() error {
 
 var fieldNames_AuthoritySignature = []string{
 	1: "Type",
-	2: "Signer",
+	2: "Origin",
 	3: "Authority",
 	4: "Vote",
 	5: "TxID",
@@ -5745,8 +5745,8 @@ func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Signer == nil) {
-		writer.WriteUrl(2, v.Signer)
+	if !(v.Origin == nil) {
+		writer.WriteUrl(2, v.Origin)
 	}
 	if !(v.Authority == nil) {
 		writer.WriteUrl(3, v.Authority)
@@ -5778,9 +5778,9 @@ func (v *AuthoritySignature) IsValid() error {
 		errs = append(errs, "field Type is missing")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Signer is missing")
-	} else if v.Signer == nil {
-		errs = append(errs, "field Signer is not set")
+		errs = append(errs, "field Origin is missing")
+	} else if v.Origin == nil {
+		errs = append(errs, "field Origin is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Authority is missing")
@@ -11816,7 +11816,7 @@ func (v *AuthoritySignature) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
-		v.Signer = x
+		v.Origin = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Authority = x
@@ -15726,15 +15726,15 @@ func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      SignatureType               `json:"type"`
-		Signer    *url.URL                    `json:"signer,omitempty"`
+		Origin    *url.URL                    `json:"origin,omitempty"`
 		Authority *url.URL                    `json:"authority,omitempty"`
 		Vote      VoteType                    `json:"vote,omitempty"`
 		TxID      *url.TxID                   `json:"txID,omitempty"`
 		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if !(v.Signer == nil) {
-		u.Signer = v.Signer
+	if !(v.Origin == nil) {
+		u.Origin = v.Origin
 	}
 	if !(v.Authority == nil) {
 		u.Authority = v.Authority
@@ -17822,14 +17822,14 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      SignatureType               `json:"type"`
-		Signer    *url.URL                    `json:"signer,omitempty"`
+		Origin    *url.URL                    `json:"origin,omitempty"`
 		Authority *url.URL                    `json:"authority,omitempty"`
 		Vote      VoteType                    `json:"vote,omitempty"`
 		TxID      *url.TxID                   `json:"txID,omitempty"`
 		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Signer = v.Signer
+	u.Origin = v.Origin
 	u.Authority = v.Authority
 	u.Vote = v.Vote
 	u.TxID = v.TxID
@@ -17840,7 +17840,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Signer = u.Signer
+	v.Origin = u.Origin
 	v.Authority = u.Authority
 	v.Vote = u.Vote
 	v.TxID = u.TxID

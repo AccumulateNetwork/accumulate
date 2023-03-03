@@ -36,6 +36,7 @@ func TestDoubleDelegated(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2),
 	)
+	sim.VerboseConditions = true
 
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN1")
@@ -58,15 +59,16 @@ func TestDoubleDelegated(t *testing.T) {
 		p.CreditBalance = 1e9
 	})
 
-	st := sim.SubmitTxnSuccessfully(MustBuild(t,
+	st := sim.SubmitSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "tokens").
 			BurnTokens(1, AcmePrecisionPower).
 			SignWith(charlie, "book", "1").Version(1).Timestamp(1).PrivateKey(charlieKey).
 			Delegator(bob, "book", "1").Delegator(alice, "book", "1")))
 
 	sim.StepUntil(
-		Txn(st.TxID).Succeeds(),
-		Txn(st.TxID).Produced().Succeeds())
+		Txn(st[0].TxID).Succeeds(),
+		Txn(st[0].TxID).Produced().Succeeds(),
+		Sig(st[1].TxID).Completes())
 }
 
 func TestSingleDelegated(t *testing.T) {
@@ -117,6 +119,7 @@ func TestSingleDelegated(t *testing.T) {
 		Sig(st[1].TxID).CreditPayment().Capture(&cap).Succeeds(),
 	)
 
+	require.NotNil(t, cap)
 	pay := sim.QueryTransaction(cap.TxID, nil).Message.(*messaging.CreditPayment)
 	require.NotZero(t, pay.Paid)
 	fmt.Printf("Paid %s credits\n", FormatAmount(pay.Paid.AsUInt64(), CreditPrecisionPower))
