@@ -94,10 +94,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 		}
 	}()
 
-	bootstrap := []multiaddr.Multiaddr{
-		s.partitions[protocol.Directory].nodes[0].init.Listen().Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr(),
-	}
-
+	var nodes []*p2p.Node
 	for _, part := range s.partitions {
 		for _, node := range part.nodes {
 			err := node.listenAndServeHTTP(ctx, opts, s.Services())
@@ -105,7 +102,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 				return err
 			}
 
-			err = node.listenP2P(ctx, opts, bootstrap)
+			err = node.listenP2P(ctx, opts, &nodes)
 			if err != nil {
 				return err
 			}
@@ -223,7 +220,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	return nil
 }
 
-func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, bootstrap []multiaddr.Multiaddr) error {
+func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.Node) error {
 	if !opts.ListenP2Pv3 {
 		return nil
 	}
@@ -253,12 +250,11 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, bootstrap []mu
 	}
 
 	p2p, err := p2p.New(p2p.Options{
-		Logger:         n.logger.With("module", "acc"),
-		Network:        n.simulator.init.Id,
-		Listen:         []multiaddr.Multiaddr{addr1, addr2},
-		BootstrapPeers: bootstrap,
-		Key:            n.nodeKey,
-		DiscoveryMode:  dht.ModeServer,
+		Logger:        n.logger.With("module", "acc"),
+		Network:       n.simulator.init.Id,
+		Listen:        []multiaddr.Multiaddr{addr1, addr2},
+		Key:           n.nodeKey,
+		DiscoveryMode: dht.ModeServer,
 	})
 	if err != nil {
 		return err
@@ -267,6 +263,14 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, bootstrap []mu
 		<-ctx.Done()
 		_ = p2p.Close()
 	}()
+
+	for _, n := range *nodes {
+		err = p2p.ConnectDirectly(n)
+		if err != nil {
+			return err
+		}
+	}
+	*nodes = append(*nodes, p2p)
 
 	p2p.RegisterService(api.ServiceTypeConsensus.AddressFor(n.partition.ID), h.Handle)
 	p2p.RegisterService(api.ServiceTypeMetrics.AddressFor(n.partition.ID), h.Handle)
