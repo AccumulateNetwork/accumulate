@@ -51,6 +51,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	txnX := []chain.TransactionExecutor{
 		// User transactions
 		chain.AddCredits{},
+		chain.BurnCredits{},
 		chain.BurnTokens{},
 		chain.CreateDataAccount{},
 		chain.CreateIdentity{},
@@ -77,9 +78,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 
 		// Operator transactions
 		chain.ActivateProtocolVersion{},
-
-		// For testing
-		chain.Placeholder{},
 	}
 
 	switch opts.Describe.NetworkType {
