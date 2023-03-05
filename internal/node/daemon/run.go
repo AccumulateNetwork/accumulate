@@ -135,6 +135,18 @@ func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
 func (d *Daemon) P2P_TESTONLY() *p2p.Node         { return d.p2pnode }
 func (d *Daemon) API() *nodeapi.Handler           { return d.api }
 
+// StartSecondary starts this daemon as a secondary process of the given daemon
+// (which must already be running).
+func (d *Daemon) StartSecondary(e *Daemon) error {
+	if e.done == nil {
+		return errors.BadRequest.WithFormat("not started")
+	}
+
+	// Reuse the P2P node. Otherwise, start everything normally.
+	d.p2pnode = e.p2pnode
+	return d.Start()
+}
+
 func (d *Daemon) Start() (err error) {
 	if d.Config.Accumulate.API.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
@@ -485,16 +497,18 @@ func (d *Daemon) startAPI() error {
 
 	// Setup the p2p node
 	var err error
-	d.p2pnode, err = p2p.New(p2p.Options{
-		Logger:         d.Logger.With("module", "acc-rpc"),
-		Network:        d.Config.Accumulate.Network.Id,
-		Listen:         d.Config.Accumulate.P2P.Listen,
-		BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
-		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
-		DiscoveryMode:  dht.ModeServer,
-	})
-	if err != nil {
-		return errors.UnknownError.WithFormat("initialize P2P: %w", err)
+	if d.p2pnode == nil {
+		d.p2pnode, err = p2p.New(p2p.Options{
+			Logger:         d.Logger.With("module", "acc-rpc"),
+			Network:        d.Config.Accumulate.Network.Id,
+			Listen:         d.Config.Accumulate.P2P.Listen,
+			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
+			Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+			DiscoveryMode:  dht.ModeServer,
+		})
+		if err != nil {
+			return errors.UnknownError.WithFormat("initialize P2P: %w", err)
+		}
 	}
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{

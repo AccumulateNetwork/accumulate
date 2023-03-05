@@ -101,6 +101,7 @@ func runDevNet(*cobra.Command, []string) {
 	logWriter := newLogWriter(nil)
 
 	var peers []multiaddr.Multiaddr
+	var daemons []*accumulated.Daemon
 	started := new(sync.WaitGroup)
 	for _, node := range nodes {
 		if skip[node] {
@@ -142,18 +143,19 @@ func runDevNet(*cobra.Command, []string) {
 		)
 		check(err)
 
-		startDevNetNode(dnn, started, done, stop, didStop)
-		startDevNetNode(bvnn, started, done, stop, didStop)
+		startDevNetNode(dnn, bvnn, started, done, stop, didStop)
 
-		// Connect once everything is setup
-		go func() {
-			started.Wait()
-			check(dnn.ConnectDirectly(bvnn))
-		}()
-
+		daemons = append(daemons, dnn, bvnn)
 	}
 
 	started.Wait()
+
+	// Connect every node to every other node
+	for i, d := range daemons {
+		for _, e := range daemons[i+1:] {
+			check(d.ConnectDirectly(e))
+		}
+	}
 
 	if flagRunDevnet.FaucetSeed != "" {
 		w, err := logWriter("plain", func(w io.Writer, format string, color bool) io.Writer {
@@ -164,7 +166,7 @@ func runDevNet(*cobra.Command, []string) {
 		check(err)
 		logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
 		check(err)
-		startDevnetFaucet(peers, logger, done, stop)
+		startDevnetFaucet(daemons[0].Config.Accumulate.Network.Id, peers, logger, done, stop)
 	}
 
 	color.HiBlack("----- Started -----")
@@ -191,29 +193,40 @@ func runDevNet(*cobra.Command, []string) {
 	done.Wait()
 }
 
-func startDevNetNode(daemon *accumulated.Daemon, started, done *sync.WaitGroup, stop, didStop chan struct{}) {
+func startDevNetNode(primary, secondary *accumulated.Daemon, started, done *sync.WaitGroup, stop, didStop chan struct{}) {
 	// Disable features not compatible with multi-node, single-process
-	daemon.Config.Instrumentation.Prometheus = false
+	primary.Config.Instrumentation.Prometheus = false
+	secondary.Config.Instrumentation.Prometheus = false
 
 	started.Add(1)
 	go func() {
 		defer started.Done()
 
 		// Start it
-		check(daemon.Start())
+		check(primary.Start())
+		check(secondary.StartSecondary(primary))
 
 		// On stop, send the signal
 		go func() {
-			<-daemon.Done()
+			<-primary.Done()
+			didStop <- struct{}{}
+		}()
+		go func() {
+			<-secondary.Done()
 			didStop <- struct{}{}
 		}()
 
 		// On signal, stop the node
-		done.Add(1)
+		done.Add(2)
 		go func() {
 			defer done.Done()
 			<-stop
-			check(daemon.Stop())
+			check(primary.Stop())
+		}()
+		go func() {
+			defer done.Done()
+			<-stop
+			check(secondary.Stop())
 		}()
 	}()
 }
@@ -242,7 +255,7 @@ func getNodeDirs(dir string) []int {
 	return nodes
 }
 
-func startDevnetFaucet(peers []multiaddr.Multiaddr, logger log.Logger, done *sync.WaitGroup, stop chan struct{}) {
+func startDevnetFaucet(network string, peers []multiaddr.Multiaddr, logger log.Logger, done *sync.WaitGroup, stop chan struct{}) {
 	var seed storage.Key
 	for _, s := range strings.Split(flagRunDevnet.FaucetSeed, " ") {
 		seed = seed.Append(s)
@@ -253,6 +266,7 @@ func startDevnetFaucet(peers []multiaddr.Multiaddr, logger log.Logger, done *syn
 
 	// Create the faucet node
 	node, err := p2p.New(p2p.Options{
+		Network:        network,
 		Key:            sk,
 		Logger:         logger,
 		BootstrapPeers: peers,

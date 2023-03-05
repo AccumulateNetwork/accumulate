@@ -105,7 +105,9 @@ func TestValidateNetwork(t *testing.T) {
 	}
 
 	var bootstrap []multiaddr.Multiaddr
-	if addr, err := multiaddr.NewMultiaddr(*validateNetwork); err == nil {
+	var network string
+	if addr, err := multiaddr.NewMultiaddr(*validateNetwork); err == nil { //nolint
+		t.Fatalf("Not supported - we have to figure out how to get the network")
 		bootstrap = append(bootstrap, addr)
 	} else {
 		if st, err := os.Stat(*validateNetwork); err != nil || !st.IsDir() {
@@ -115,6 +117,7 @@ func TestValidateNetwork(t *testing.T) {
 		// Load the node and derive its listening address
 		node, err := accumulated.Load(*validateNetwork, nil)
 		require.NoError(t, err)
+		network = node.Config.Accumulate.Network.Id
 		key, err := tmp2p.LoadNodeKey(node.Config.NodeKeyFile())
 		require.NoError(t, err)
 		ed := ed25519.PrivateKey(key.PrivKey.Bytes())
@@ -129,8 +132,8 @@ func TestValidateNetwork(t *testing.T) {
 		}
 	}
 
-	harness, node := setupNetClient(t, bootstrap...)
-	// waitFor(t, node, "network?", api.ServiceTypeFaucet.Address(), time.Minute)
+	harness, node := setupNetClient(t, network, bootstrap...)
+	waitFor(t, node, network, api.ServiceTypeFaucet.Address(), time.Minute)
 
 	s := new(ValidationTestSuite)
 	s.Harness, s.faucetSvc, s.nodeSvc = harness, node, node
@@ -200,10 +203,11 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 	return sim, faucetSvc
 }
 
-func setupNetClient(t *testing.T, addrs ...multiaddr.Multiaddr) (*Harness, *p2p.Node) {
+func setupNetClient(t *testing.T, network string, addrs ...multiaddr.Multiaddr) (*Harness, *p2p.Node) {
 	// Set up the client
 	t.Log("Create the client")
 	node, err := p2p.New(p2p.Options{
+		Network:        network,
 		Logger:         logging.ConsoleLoggerForTest(t, "info"),
 		BootstrapPeers: addrs,
 	})
@@ -435,6 +439,11 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Succeeds())
 
 	s.NotNil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book2", "1")).Keys[0].Delegate)
+
+	// Stop early if the -short flag is specified
+	if testing.Short() {
+		return
+	}
 
 	s.TB.Log("Set KeyBook2 as authority for adi token account")
 	st = s.BuildAndSubmitTxnSuccessfully(
