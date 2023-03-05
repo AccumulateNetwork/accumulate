@@ -63,6 +63,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.IssueTokens{},
 		chain.LockAccount{},
 		chain.SendTokens{},
+		chain.TransferCredits{},
 		chain.UpdateAccountAuth{},
 		chain.UpdateKey{},
 		chain.UpdateKeyPage{},

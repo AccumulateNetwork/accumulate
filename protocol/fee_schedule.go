@@ -42,6 +42,9 @@ const (
 	// FeeCreateToken $50.00
 	FeeCreateToken Fee = 500000
 
+	// FeeGeneralTiny $0.001
+	FeeGeneralTiny Fee = 1
+
 	// FeeGeneralSmall $0.001
 	FeeGeneralSmall Fee = 10
 
@@ -187,6 +190,9 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	case *BurnTokens,
 		*LockAccount:
 		fee = FeeGeneralSmall + FeeData*Fee(count-1)
+
+	case *TransferCredits:
+		fee = FeeGeneralTiny + FeeScratchData*Fee(count-1)
 
 	case *WriteData:
 		fee = Fee(count)

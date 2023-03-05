@@ -174,7 +174,12 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		}
 
 		// Add to the account's main chain
-		err = st.State.ChainUpdates.AddChainEntry(st.batch, rec.MainChain(), st.txHash[:], 0, 0)
+		chain := rec.MainChain()
+		switch st.txType {
+		case protocol.TransactionTypeTransferCredits:
+			chain = rec.ScratchChain()
+		}
+		err = st.State.ChainUpdates.AddChainEntry(st.batch, chain, st.txHash[:], 0, 0)
 		if err != nil {
 			return errors.UnknownError.WithFormat("failed to update main chain of %q: %w", account.GetUrl(), err)
 		}
