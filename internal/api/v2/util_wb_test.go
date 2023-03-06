@@ -16,7 +16,7 @@ import (
 type Package struct{}
 
 func (Package) ConstructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
-	return constructFaucetTxn(req)
+	return constructFaucetTxnV1(req)
 }
 
 func (Package) ProcessExecuteRequest(req *TxRequest, payload []byte) (*messaging.Envelope, error) {
