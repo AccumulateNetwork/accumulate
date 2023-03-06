@@ -229,13 +229,6 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 	}
 
-	// Check if the signature set includes a completed set
-	for _, e := range signatures.Entries() {
-		if e.Type == protocol.SignatureTypeSet {
-			return true, nil
-		}
-	}
-
 	// Check if the threshold has been reached
 	if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
 		return true, nil
