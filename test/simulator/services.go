@@ -27,6 +27,10 @@ type simService Simulator
 // Private returns the private sequencer service.
 func (s *simService) Private() private.Sequencer { return s }
 
+func (s *simService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return nil, errors.NotAllowed.With("not implemented")
+}
+
 // ConsensusStatus finds the specified node and returns its ConsensusStatus.
 func (s *simService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	if opts.NodeID == "" {
@@ -165,6 +169,10 @@ type nodeService Node
 
 // Private returns the private sequencer service.
 func (s *nodeService) Private() private.Sequencer { return s.seqSvc }
+
+func (s *nodeService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return nil, errors.NotAllowed.With("not implemented")
+}
 
 // ConsensusStatus implements [api.ConsensusService].
 func (s *nodeService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
