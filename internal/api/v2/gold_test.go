@@ -7,6 +7,8 @@
 //go:build ignore
 // +build ignore
 
+// Checkout on top of b5b2a48d4a97c809a50dfddf097158de57738be1 to run
+
 package api_test
 
 import (
@@ -24,11 +26,10 @@ import (
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -43,9 +44,16 @@ import (
 
 func (s *ValidationTestSuite) testApi(method string, req any) {
 	var res json.RawMessage
-	err := s.sim.API().RequestAPIv2(context.Background(), method, req, &res)
+
+	err := s.sim.NewDirectClient().RequestAPIv2(context.Background(), method, req, &res)
 	s.Require().NoError(err)
 	s.methods = append(s.methods, TestCall{Method: method, Request: req, Response: res})
+}
+
+type TestData struct {
+	Network *accumulated.NetworkInit `json:"network"`
+	State   map[string]*memory.DB    `json:"state"`
+	Cases   []TestCall               `json:"rpcCalls"`
 }
 
 type TestCall struct {
@@ -54,21 +62,13 @@ type TestCall struct {
 	Response json.RawMessage `json:"response"`
 }
 
-type Submission struct {
-	Block    uint64    `json:"block"`
-	Envelope *Envelope `json:"envelope"`
-	Pending  bool      `json:"pending"`
-	Produces bool      `json:"produces"`
-}
-
 type ValidationTestSuite struct {
 	suite.Suite
 	*Harness
 	sim   *simulator.Simulator
 	nonce uint64
 
-	methods     []TestCall
-	submissions []Submission
+	methods []TestCall
 }
 
 // Submit calls the envelope builder and submits the
@@ -78,18 +78,8 @@ func (s *ValidationTestSuite) Submit(b EnvelopeBuilder, pending, produces bool) 
 	env, err := b.Done()
 	s.Require().NoError(err)
 	s.Require().Len(env.Transaction, 1)
-	d, err := chain.NormalizeEnvelope(env)
-	s.Require().NoError(err)
-	s.Require().Len(d, 1)
 
-	s.submissions = append(s.submissions, Submission{
-		Block:    s.sim.BlockIndex(Directory),
-		Envelope: env,
-		Pending:  pending,
-		Produces: produces,
-	})
-
-	status := s.SubmitSuccessfully(d[0])
+	status := s.SubmitSuccessfully(env)
 	if status.Error != nil {
 		s.Require().NoError(status.Error)
 	}
@@ -97,17 +87,7 @@ func (s *ValidationTestSuite) Submit(b EnvelopeBuilder, pending, produces bool) 
 }
 
 func (s *ValidationTestSuite) TestMain() {
-	testData := struct {
-		FinalHeight uint64                   `json:"finalHeight"`
-		Network     *accumulated.NetworkInit `json:"network"`
-		Genesis     map[string][]byte        `json:"genesis"`
-		Roots       map[string][]byte        `json:"snapshots"`
-		Submissions []Submission             `json:"submissions"`
-		Cases       []TestCall               `json:"rpcCalls"`
-	}{
-		Genesis: map[string][]byte{},
-		Roots:   map[string][]byte{},
-	}
+	var testData TestData
 
 	// Set up lite addresses
 	liteKey := acctesting.GenerateKey("Lite")
@@ -151,11 +131,20 @@ func (s *ValidationTestSuite) TestMain() {
 		return ioutil2.NewBuffer(snapshot), nil
 	}
 
+	testData.State = map[string]*memory.DB{}
+	var openDb simulator.OpenDatabaseFunc = func(partition string, node int, logger log.Logger) database.Beginner {
+		mem := memory.New(logger)
+		if node == 0 {
+			testData.State[partition] = mem
+		}
+		return database.New(mem, logger)
+	}
+
 	// Set up the simulator and harness
 	net := simulator.SimpleNetwork("Gold/1.0.0", 3, 1)
 	sim, err := simulator.New(
 		logging.NewTestLogger(s.T(), "plain", "error", false),
-		simulator.MemoryDatabase,
+		openDb,
 		net,
 		genesis,
 	)
@@ -184,21 +173,6 @@ func (s *ValidationTestSuite) TestMain() {
 
 	ns := s.NetworkStatus(api.NetworkStatusOptions{Partition: Directory})
 	oracle := float64(ns.Oracle.Price) / AcmeOraclePrecision
-
-	for _, part := range ns.Network.Partitions {
-		partUrl := PartitionUrl(part.ID)
-		helpers.View(s.T(), s.sim.Database(part.ID), func(batch *database.Batch) {
-			var ledger *SystemLedger
-			err := batch.Account(partUrl.JoinPath(Ledger)).Main().GetAs(&ledger)
-			s.Require().NoError(err)
-
-			buf := new(ioutil2.Buffer)
-			err = snapshot.FullCollect(batch, buf, config.NetworkUrl{URL: partUrl}, acctesting.NewTestLogger(s.T()), true)
-			s.Require().NoError(err)
-
-			testData.Genesis[part.ID] = buf.Bytes()
-		})
-	}
 
 	s.NotZero(QueryAccountAs[*LiteTokenAccount](s.Harness, liteAcme).Balance)
 
@@ -313,6 +287,9 @@ func (s *ValidationTestSuite) TestMain() {
 	// s.StepUntil(
 	// 	Txn(pending.TxID).IsPending())
 
+	// Add some steps to settle the system
+	s.StepN(100)
+
 	/*
 	 * **************************************************************************
 	 * **************************************************************************
@@ -353,7 +330,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.testApi("query", &v2.GeneralQuery{UrlQuery: v2.UrlQuery{Url: txr.TxID.AsUrl()}, QueryOptions: v2.QueryOptions{Prove: true}})
 	s.testApi("query", &v2.GeneralQuery{UrlQuery: v2.UrlQuery{Url: liteId.WithQuery(fmt.Sprintf("txid=%x", sig.Hash()))}})
 	s.testApi("query", &v2.GeneralQuery{UrlQuery: v2.UrlQuery{Url: liteId.WithTxID(*(*[32]byte)(sig.Hash())).AsUrl()}})
-	s.testApi("query-tx", &v2.TxnQuery{Txid: sig.Hash()})
+	s.testApi("query-tx", &v2.TxnQuery{TxIdUrl: sig.GetSigner().WithTxID(*(*[32]byte)(sig.Hash()))})
 
 	s.testApi("query", &v2.GeneralQuery{UrlQuery: v2.UrlQuery{Url: DnUrl().JoinPath(AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", bvn0_genesis_root))}})
 	// s.testApi("query", &v2.GeneralQuery{UrlQuery: v2.UrlQuery{Url: pending.TxID.Account().WithFragment("pending")}})
@@ -384,15 +361,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.testApi("query-minor-blocks", &v2.MinorBlocksQuery{UrlQuery: v2.UrlQuery{Url: adi}, QueryPagination: v2.QueryPagination{Count: 10}, TxFetchMode: query.TxFetchModeIds, BlockFilterMode: query.BlockFilterModeExcludeNone})
 	s.testApi("query-minor-blocks", &v2.MinorBlocksQuery{UrlQuery: v2.UrlQuery{Url: adi}, QueryPagination: v2.QueryPagination{Count: 10}, TxFetchMode: query.TxFetchModeOmit, BlockFilterMode: query.BlockFilterModeExcludeNone})
 
-	testData.Submissions = s.submissions
 	testData.Cases = s.methods
-	testData.FinalHeight = s.sim.BlockIndex(Directory)
-
-	for _, part := range ns.Network.Partitions {
-		helpers.View(s.T(), s.sim.Database(part.ID), func(batch *database.Batch) {
-			testData.Roots[part.ID] = batch.BptRoot()
-		})
-	}
 
 	f, err := os.Create("../../../test/testdata/api-v2-consistency.json")
 	s.Require().NoError(err)
@@ -404,6 +373,6 @@ func (s *ValidationTestSuite) TestMain() {
 }
 
 // TestValidate runs the validation test suite against the simulator.
-func TestValidate(t *testing.T) {
+func TestMakeGoldFile(t *testing.T) {
 	suite.Run(t, new(ValidationTestSuite))
 }
