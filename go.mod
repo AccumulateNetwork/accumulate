@@ -55,6 +55,7 @@ require (
 	github.com/multiformats/go-multihash v0.2.1
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/sergi/go-diff v1.0.0
+	github.com/ulikunitz/xz v0.5.11
 	github.com/vektra/mockery/v2 v2.14.0
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.10.0
