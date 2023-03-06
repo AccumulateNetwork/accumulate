@@ -72,6 +72,54 @@ func (_c *MockV3_ConsensusStatus_Call) Return(_a0 *v3.ConsensusStatus, _a1 error
 	return _c
 }
 
+// Faucet provides a mock function with given fields: ctx, account, opts
+func (_m *MockV3) Faucet(ctx context.Context, account *url.URL, opts v3.FaucetOptions) (*v3.Submission, error) {
+	ret := _m.Called(ctx, account, opts)
+
+	var r0 *v3.Submission
+	if rf, ok := ret.Get(0).(func(context.Context, *url.URL, v3.FaucetOptions) *v3.Submission); ok {
+		r0 = rf(ctx, account, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*v3.Submission)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *url.URL, v3.FaucetOptions) error); ok {
+		r1 = rf(ctx, account, opts)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockV3_Faucet_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Faucet'
+type MockV3_Faucet_Call struct {
+	*mock.Call
+}
+
+// Faucet is a helper method to define mock.On call
+//   - ctx context.Context
+//   - account *url.URL
+//   - opts v3.FaucetOptions
+func (_e *MockV3_Expecter) Faucet(ctx interface{}, account interface{}, opts interface{}) *MockV3_Faucet_Call {
+	return &MockV3_Faucet_Call{Call: _e.mock.On("Faucet", ctx, account, opts)}
+}
+
+func (_c *MockV3_Faucet_Call) Run(run func(ctx context.Context, account *url.URL, opts v3.FaucetOptions)) *MockV3_Faucet_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*url.URL), args[2].(v3.FaucetOptions))
+	})
+	return _c
+}
+
+func (_c *MockV3_Faucet_Call) Return(_a0 *v3.Submission, _a1 error) *MockV3_Faucet_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
 // Metrics provides a mock function with given fields: ctx, opts
 func (_m *MockV3) Metrics(ctx context.Context, opts v3.MetricsOptions) (*v3.Metrics, error) {
 	ret := _m.Called(ctx, opts)

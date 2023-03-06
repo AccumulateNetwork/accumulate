@@ -98,9 +98,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		return nil, errors.InternalError.WithFormat("invalid partition type %v", opts.Describe.NetworkType)
 	}
 
-	// This is a no-op in dev
-	txnX = addTestnetExecutors(txnX)
-
 	if opts.BackgroundTaskLauncher == nil {
 		opts.BackgroundTaskLauncher = func(f func()) { go f() }
 	}
