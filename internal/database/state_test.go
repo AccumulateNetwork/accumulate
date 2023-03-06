@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -27,7 +28,7 @@ var delivered = (*protocol.TransactionStatus).Delivered
 func TestState(t *testing.T) {
 	// Create some state
 	sim := simulator.New(t, 1)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1})
 	alice := acctesting.GenerateTmKey(t.Name(), "Alice")
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 	faucet := protocol.Faucet.Signer()
