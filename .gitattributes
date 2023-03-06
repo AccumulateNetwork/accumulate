@@ -1,2 +1,4 @@
 # Render playbooks as markdown
 *.play gitlab-language=markdown
+test/testdata/executor-v1-consistency.json filter=lfs merge=lfs -text
+test/testdata/api-v2-consistency.json filter=lfs merge=lfs -text
