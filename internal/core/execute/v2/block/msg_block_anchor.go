@@ -157,9 +157,9 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 	if !ok {
 		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeSequenced, anchor.Anchor.Type())
 	}
-	txn, ok := seq.Message.(*messaging.UserTransaction)
+	txn, ok := seq.Message.(*messaging.TransactionMessage)
 	if !ok {
-		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeUserTransaction, seq.Message.Type())
+		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeTransaction, seq.Message.Type())
 	}
 	if typ := txn.GetTransaction().Body.Type(); !typ.IsAnchor() {
 		return nil, nil, nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", typ, anchor.Type())

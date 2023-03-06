@@ -31,7 +31,7 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 
 	for _, msg := range messages {
 		switch msg := msg.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			hash := *(*[32]byte)(msg.Transaction.GetHash())
 			if i, ok := txnIndex[hash]; ok {
 				deliveries[i].Transaction = msg.Transaction
@@ -40,7 +40,7 @@ func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
 				deliveries = append(deliveries, &Delivery{Transaction: msg.Transaction})
 			}
 
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			if i, ok := txnIndex[msg.TxID.Hash()]; ok {
 				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
 			} else {

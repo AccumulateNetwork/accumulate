@@ -322,8 +322,8 @@ func (p *Partition) execute() error {
 		}
 	}
 	for _, msg := range messages {
-		if msg.Type() == messaging.MessageTypeUserTransaction ||
-			msg.Type() == messaging.MessageTypeUserSignature {
+		if msg.Type() == messaging.MessageTypeTransaction ||
+			msg.Type() == messaging.MessageTypeSignature {
 			continue
 		}
 		for {
@@ -404,12 +404,12 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 	sysTxnOrder := map[[32]byte]int{}
 	for i, msg := range messages {
 		switch msg := msg.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			if msg.Transaction.Body.Type().IsUser() {
 				userTxnOrder[msg.ID().Hash()] = i
 			}
 
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			if sig, ok := msg.Signature.(*protocol.PartitionSignature); ok {
 				sysTxnOrder[sig.TransactionHash] = int(sig.SequenceNumber)
 			}
@@ -425,9 +425,9 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 		}
 
 		switch a := a.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			// Sort user transactions first, then anchors, then synthetic
-			b := b.(*messaging.UserTransaction)
+			b := b.(*messaging.TransactionMessage)
 			if x := txnOrder(a) - txnOrder(b); x != 0 {
 				return x < 0
 			}
@@ -443,9 +443,9 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 			}
 			return a.ID().Compare(b.ID()) < 0
 
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			// Sort partition signatures first
-			b := b.(*messaging.UserSignature)
+			b := b.(*messaging.SignatureMessage)
 			c, d := a.Signature.Type() == protocol.SignatureTypePartition, b.Signature.Type() == protocol.SignatureTypePartition
 			switch {
 			case c && !d:
@@ -467,7 +467,7 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 // txnOrder returns an order parameter for the given user transaction. Sorting
 // with this will sort user transactions first, then anchors, then synthetic
 // transactions.
-func txnOrder(msg *messaging.UserTransaction) int {
+func txnOrder(msg *messaging.TransactionMessage) int {
 	switch {
 	case msg.Transaction.Body.Type().IsUser():
 		return 0
