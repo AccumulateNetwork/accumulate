@@ -17,15 +17,15 @@ import (
 )
 
 func init() {
-	registerSimpleExec[UserTransaction](&messageExecutors, messaging.MessageTypeUserTransaction)
+	registerSimpleExec[TransactionMessage](&messageExecutors, messaging.MessageTypeTransaction)
 }
 
-// UserTransaction records the transaction but does not execute it. Transactions
+// TransactionMessage records the transaction but does not execute it. Transactions
 // are executed in response to _authority signature_ messages, not user
 // transaction messages.
-type UserTransaction struct{}
+type TransactionMessage struct{}
 
-func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// If the message has already been processed, return its recorded status
 	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
 	if err != nil {
@@ -71,7 +71,7 @@ func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*
 	}
 	var hasLocalSigner bool
 	for _, msg := range ctx.messages {
-		sig, ok := messaging.UnwrapAs[*messaging.UserSignature](msg)
+		sig, ok := messaging.UnwrapAs[*messaging.SignatureMessage](msg)
 		if !ok || sig.Signature.Type() == protocol.SignatureTypeAuthority {
 			continue
 		}
@@ -121,10 +121,10 @@ func (x UserTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*
 	return s, nil
 }
 
-func (x UserTransaction) check(batch *database.Batch, ctx *MessageContext, resolve bool) (*messaging.UserTransaction, error) {
-	txn, ok := ctx.message.(*messaging.UserTransaction)
+func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, resolve bool) (*messaging.TransactionMessage, error) {
+	txn, ok := ctx.message.(*messaging.TransactionMessage)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserTransaction, ctx.message.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeTransaction, ctx.message.Type())
 	}
 
 	// Basic validation
@@ -198,7 +198,7 @@ func (x UserTransaction) check(batch *database.Batch, ctx *MessageContext, resol
 	return txn, nil
 }
 
-func (UserTransaction) checkWrapper(ctx *MessageContext, txn *protocol.Transaction) error {
+func (TransactionMessage) checkWrapper(ctx *MessageContext, txn *protocol.Transaction) error {
 	if ctx.isWithin(internal.MessageTypeMessageIsReady) {
 		return nil
 	}
@@ -222,7 +222,7 @@ func (UserTransaction) checkWrapper(ctx *MessageContext, txn *protocol.Transacti
 	return nil
 }
 
-func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x TransactionMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
@@ -275,10 +275,10 @@ func (x UserTransaction) Process(batch *database.Batch, ctx *MessageContext) (*p
 	return status, nil
 }
 
-func (UserTransaction) resolveTransaction(batch *database.Batch, msg *messaging.UserTransaction) (bool, error) {
+func (TransactionMessage) resolveTransaction(batch *database.Batch, msg *messaging.TransactionMessage) (bool, error) {
 	isRemote := msg.GetTransaction().Body.Type() == protocol.TransactionTypeRemote
 	s, err := batch.Message(msg.ID().Hash()).Main().Get()
-	s2, isTxn := s.(*messaging.UserTransaction)
+	s2, isTxn := s.(*messaging.TransactionMessage)
 	switch {
 	case errors.Is(err, errors.NotFound) && !isRemote:
 		// Store the transaction
@@ -307,7 +307,7 @@ func (UserTransaction) resolveTransaction(batch *database.Batch, msg *messaging.
 	}
 }
 
-func (UserTransaction) getSequence(ctx *MessageContext) (*messaging.SequencedMessage, error) {
+func (TransactionMessage) getSequence(ctx *MessageContext) (*messaging.SequencedMessage, error) {
 	seq, ok := getMessageContextAncestor[*messaging.SequencedMessage](ctx)
 	if !ok {
 		return nil, errors.InternalError.With("not within a sequence message")
@@ -318,7 +318,7 @@ func (UserTransaction) getSequence(ctx *MessageContext) (*messaging.SequencedMes
 	return seq, nil
 }
 
-func (x UserTransaction) executeTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
+func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
@@ -399,7 +399,7 @@ func (x UserTransaction) executeTransaction(batch *database.Batch, ctx *Transact
 	}
 
 	for _, newTxn := range state.ProducedTxns {
-		msg := &messaging.UserTransaction{Transaction: newTxn}
+		msg := &messaging.TransactionMessage{Transaction: newTxn}
 		ctx.didProduce(newTxn.Header.Principal, msg)
 	}
 	ctx.additional = append(ctx.additional, state.AdditionalMessages...)

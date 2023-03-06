@@ -426,9 +426,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	seq := map[[32]byte]uint64{}
 	for _, msg := range messages {
 		switch msg := msg.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			txns[*(*[32]byte)(msg.Transaction.GetHash())] = msg.Transaction.Body.Type()
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			sig, ok := msg.Signature.(*protocol.PartitionSignature)
 			if !ok {
 				continue

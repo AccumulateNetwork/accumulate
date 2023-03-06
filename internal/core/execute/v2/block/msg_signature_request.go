@@ -147,7 +147,7 @@ func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *
 	if err != nil {
 		return errors.UnknownError.WithFormat("load transaction: %w", err)
 	}
-	err = batch.Message(req.TxID.Hash()).Main().Put(&messaging.UserTransaction{Transaction: txn})
+	err = batch.Message(req.TxID.Hash()).Main().Put(&messaging.TransactionMessage{Transaction: txn})
 	if err != nil {
 		return errors.UnknownError.WithFormat("store transaction: %w", err)
 	}

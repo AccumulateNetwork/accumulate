@@ -76,7 +76,7 @@ func (c sigCond) SignatureRequest() sigCond2 {
 // a signature.
 func (c sigCond) AuthoritySignature() sigCond2 {
 	return sigCond2{c.with("authority signature", deliveredThen, produced2(func(r *msgResult) bool {
-		msg, ok := messaging.UnwrapAs[*messaging.UserSignature](r.Message)
+		msg, ok := messaging.UnwrapAs[*messaging.SignatureMessage](r.Message)
 		return ok && msg.Signature.Type() == protocol.SignatureTypeAuthority
 	}))}
 }
@@ -214,13 +214,13 @@ func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
 	switch qr := qr.(type) {
 	case *api.SignatureRecord:
 		res.Status, produced = qr.Status, qr.Produced.Records
-		res.Message = &messaging.UserSignature{Signature: qr.Signature}
+		res.Message = &messaging.SignatureMessage{Signature: qr.Signature}
 	case *api.TransactionRecord:
 		res.Status, produced = qr.Status, qr.Produced.Records
 		if qr.Message != nil {
 			res.Message = qr.Message
 		} else {
-			res.Message = &messaging.UserTransaction{Transaction: qr.Transaction}
+			res.Message = &messaging.TransactionMessage{Transaction: qr.Transaction}
 		}
 	default:
 		h.TB.Fatalf("Unsupported record type %v", qr.RecordType())

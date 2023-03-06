@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	registerSimpleExec[KeySignature](&signatureExecutors,
+	registerSimpleExec[UserSignature](&signatureExecutors,
 		protocol.SignatureTypeDelegated,
 
 		protocol.SignatureTypeLegacyED25519,
@@ -30,12 +30,12 @@ func init() {
 	)
 }
 
-// KeySignature processes key signatures.
-type KeySignature struct{}
+// UserSignature processes user signatures.
+type UserSignature struct{}
 
-// keySigContext collects all the bits of data needed to validate and execute a
+// userSigContext collects all the bits of data needed to validate and execute a
 // signature.
-type keySigContext struct {
+type userSigContext struct {
 	*SignatureContext
 
 	// keySig is the innermost signature, which must be a key signature. If the
@@ -65,14 +65,14 @@ type keySigContext struct {
 }
 
 // Validate validates a signature.
-func (x KeySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
-	err := x.check(batch, &keySigContext{SignatureContext: ctx})
+func (x UserSignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+	err := x.check(batch, &userSigContext{SignatureContext: ctx})
 	return nil, errors.UnknownError.Wrap(err)
 }
 
 // check validates the signature and collects all the pieces needed for
 // execution.
-func (x KeySignature) check(batch *database.Batch, ctx *keySigContext) error {
+func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	sig, ok := ctx.signature.(protocol.UserSignature)
 	if !ok {
 		return errors.BadRequest.WithFormat("invalid user signature: expected delegated or key, got %v", ctx.signature.Type())
@@ -125,7 +125,7 @@ func (x KeySignature) check(batch *database.Batch, ctx *keySigContext) error {
 // within and the list of delegators. unwrapDelegated returns an error if the
 // innermost signature is not a key signature, or if the delegation depth
 // exceeds the limit.
-func (KeySignature) unwrapDelegated(ctx *keySigContext) error {
+func (UserSignature) unwrapDelegated(ctx *userSigContext) error {
 	// Collect delegators and the inner signature
 	for sig := ctx.signature; ctx.keySig == nil; {
 		switch s := sig.(type) {
@@ -155,7 +155,7 @@ func (KeySignature) unwrapDelegated(ctx *keySigContext) error {
 
 // verifySigner loads the key signature's signer and checks it against the
 // signature and the transaction.
-func (KeySignature) verifySigner(batch *database.Batch, ctx *keySigContext) error {
+func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) error {
 	// If the user specifies a lite token address, convert it to a lite
 	// identity
 	signerUrl := ctx.signature.GetSigner()
@@ -209,7 +209,7 @@ func (KeySignature) verifySigner(batch *database.Batch, ctx *keySigContext) erro
 
 // verifyCanPay verifies the signer can be charged for recording the signature,
 // and verifies the signature and transaction do not exceed certain limits.
-func (KeySignature) verifyCanPay(batch *database.Batch, ctx *keySigContext) error {
+func (UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) error {
 	// Operators don't have to pay when signing directly with the operators page
 	if protocol.DnUrl().LocalTo(ctx.signer.GetUrl()) {
 		return nil
@@ -270,7 +270,7 @@ func (KeySignature) verifyCanPay(batch *database.Batch, ctx *keySigContext) erro
 }
 
 // Process processes a signature.
-func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
 	status := new(protocol.TransactionStatus)
 	status.TxID = ctx.message.ID()
 	status.Received = ctx.Block.Index
@@ -282,7 +282,7 @@ func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*pr
 	ctx.Block.State.MergeSignature(&ProcessSignatureState{})
 
 	// Process the signature
-	ctx2 := &keySigContext{SignatureContext: ctx}
+	ctx2 := &userSigContext{SignatureContext: ctx}
 	err := x.check(batch, ctx2)
 	if err == nil {
 		err = x.process(batch, ctx2)
@@ -326,7 +326,7 @@ func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*pr
 }
 
 // process processes the signature.
-func (KeySignature) process(batch *database.Batch, ctx *keySigContext) error {
+func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 	// Charge the fee. If that fails, attempt to charge 0.01 for recording the
 	// failure.
 	if !ctx.signer.DebitCredits(ctx.fee.AsUInt64()) {
@@ -376,7 +376,7 @@ func (KeySignature) process(batch *database.Batch, ctx *keySigContext) error {
 
 // sendSignatureRequests sends signature requests so that the transaction
 // will appear on the appropriate pending lists.
-func (KeySignature) sendSignatureRequests(batch *database.Batch, ctx *keySigContext) {
+func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigContext) {
 	// If this is the initiator signature
 	if !ctx.isInitiator {
 		return
@@ -400,7 +400,7 @@ func (KeySignature) sendSignatureRequests(batch *database.Batch, ctx *keySigCont
 }
 
 // sendAuthoritySignature sends the authority signature for the signer.
-func (KeySignature) sendAuthoritySignature(batch *database.Batch, ctx *keySigContext) {
+func (UserSignature) sendAuthoritySignature(batch *database.Batch, ctx *userSigContext) {
 	auth := &protocol.AuthoritySignature{
 		Signer:    ctx.getSigner(),
 		Authority: ctx.getAuthority(),
@@ -412,7 +412,7 @@ func (KeySignature) sendAuthoritySignature(batch *database.Batch, ctx *keySigCon
 	// TODO Deduplicate
 	ctx.didProduce(
 		auth.RoutingLocation(),
-		&messaging.UserSignature{
+		&messaging.SignatureMessage{
 			Signature: auth,
 			TxID:      ctx.transaction.ID(),
 		},
@@ -421,7 +421,7 @@ func (KeySignature) sendAuthoritySignature(batch *database.Batch, ctx *keySigCon
 
 // sendCreditPayment sends the principal a notice that the signer paid and (if
 // the signature is the initiator) the transaction was initiated.
-func (KeySignature) sendCreditPayment(batch *database.Batch, ctx *keySigContext) error {
+func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContext) error {
 	didInit, err := ctx.didInitiate(batch)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)

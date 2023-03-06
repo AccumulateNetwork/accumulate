@@ -39,16 +39,16 @@ func (e *Envelope) Normalize() ([]Message, error) {
 	messages := make([]Message, 0, len(e.Messages)+len(e.Transaction)+len(e.Signatures))
 	messages = append(messages, e.Messages...)
 	for _, txn := range e.Transaction {
-		messages = append(messages, &UserTransaction{Transaction: txn})
+		messages = append(messages, &TransactionMessage{Transaction: txn})
 	}
 	for _, sig := range e.Signatures {
-		messages = append(messages, &UserSignature{Signature: sig})
+		messages = append(messages, &SignatureMessage{Signature: sig})
 	}
 
 	// Collect a set of all transaction hashes
 	unsigned := map[[32]byte]struct{}{}
 	for i, msg := range messages {
-		txn, ok := msg.(*UserTransaction)
+		txn, ok := msg.(*TransactionMessage)
 		if !ok {
 			continue
 		}
@@ -72,7 +72,7 @@ func (e *Envelope) Normalize() ([]Message, error) {
 	// signed transaction hashes
 	missing := map[[32]byte]struct{}{}
 	for i, msg := range messages {
-		sig, ok := msg.(*UserSignature)
+		sig, ok := msg.(*SignatureMessage)
 		if !ok {
 			continue
 		}
@@ -102,7 +102,7 @@ func (e *Envelope) Normalize() ([]Message, error) {
 		delete(missing, hash)
 	}
 	for hash := range missing {
-		messages = append(messages, &UserTransaction{
+		messages = append(messages, &TransactionMessage{
 			Transaction: &protocol.Transaction{
 				Body: &protocol.RemoteTransaction{
 					Hash: hash,

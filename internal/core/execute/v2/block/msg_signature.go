@@ -15,14 +15,14 @@ import (
 )
 
 func init() {
-	registerSimpleExec[UserSignature](&messageExecutors, messaging.MessageTypeUserSignature)
+	registerSimpleExec[SignatureMessage](&messageExecutors, messaging.MessageTypeSignature)
 }
 
-// UserSignature executes the signature, queuing the transaction for processing
+// SignatureMessage executes the signature, queuing the transaction for processing
 // when appropriate.
-type UserSignature struct{}
+type SignatureMessage struct{}
 
-func (x UserSignature) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x SignatureMessage) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	sig, txn, err := x.check(batch, ctx)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -32,10 +32,10 @@ func (x UserSignature) Validate(batch *database.Batch, ctx *MessageContext) (*pr
 	return status, errors.UnknownError.Wrap(err)
 }
 
-func (UserSignature) check(batch *database.Batch, ctx *MessageContext) (*messaging.UserSignature, *protocol.Transaction, error) {
-	sig, ok := ctx.message.(*messaging.UserSignature)
+func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SignatureMessage, *protocol.Transaction, error) {
+	sig, ok := ctx.message.(*messaging.SignatureMessage)
 	if !ok {
-		return nil, nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeUserSignature, ctx.message.Type())
+		return nil, nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSignature, ctx.message.Type())
 	}
 
 	// Basic validation
@@ -49,7 +49,7 @@ func (UserSignature) check(batch *database.Batch, ctx *MessageContext) (*messagi
 	// Verify the bundle contains the transaction
 	var hasTxn bool
 	for _, msg := range ctx.messages {
-		txn, ok := msg.(*messaging.UserTransaction)
+		txn, ok := msg.(*messaging.TransactionMessage)
 		if !ok {
 			continue
 		}
@@ -95,7 +95,7 @@ func (UserSignature) check(batch *database.Batch, ctx *MessageContext) (*messagi
 	return sig, txn, nil
 }
 
-func (x UserSignature) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x SignatureMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
