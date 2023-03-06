@@ -60,7 +60,7 @@ func TestDnStall(t *testing.T) {
 	for _, p := range sim.Partitions() {
 		sim.SetSubmitHook(p.ID, func(messages []messaging.Message) (dropTx bool, keepHook bool) {
 			for _, msg := range messages {
-				msg, ok := msg.(*messaging.UserSignature)
+				msg, ok := msg.(*messaging.SignatureMessage)
 				if !ok {
 					continue
 				}
