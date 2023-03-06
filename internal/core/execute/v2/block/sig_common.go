@@ -85,12 +85,17 @@ func (s *SignatureContext) didInitiate(batch *database.Batch) (bool, error) {
 
 	record := batch.Transaction(s.transaction.GetHash())
 	for _, signer := range status.FindSigners(s.getAuthority()) {
-		sigs, err := database.GetSignaturesForSigner(record, signer)
+		sigs, err := record.ReadSignaturesForSigner(signer)
 		if err != nil {
-			return false, errors.UnknownError.WithFormat("load signatures: %w", err)
+			return false, errors.UnknownError.WithFormat("load signatures set %v: %w", signer.GetUrl(), err)
 		}
 
-		for _, sig := range sigs {
+		for _, e := range sigs.Entries() {
+			sig, err := s.getSignature(batch, e.SignatureHash)
+			if err != nil {
+				return false, errors.UnknownError.WithFormat("load signature entry %X: %w", e.SignatureHash, err)
+			}
+
 			if protocol.SignatureDidInitiate(sig, s.transaction.Header.Initiator[:], nil) {
 				return true, nil
 			}
