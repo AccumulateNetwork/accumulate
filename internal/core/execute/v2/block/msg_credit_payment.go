@@ -115,7 +115,7 @@ func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (*pro
 
 	// The transaction may be ready so process it
 	if !status.Failed() {
-		_, err = ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: txn})
+		_, err = ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: txn})
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
