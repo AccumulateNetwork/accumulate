@@ -37,6 +37,7 @@ func TestVersionSwitch(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Version is unset
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)

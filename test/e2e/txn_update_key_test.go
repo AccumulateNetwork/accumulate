@@ -113,5 +113,5 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 			WithBody(&UpdateKey{NewKeyHash: hash(newKey[32:])}).
 			Initiate(SignatureTypeED25519, otherKey).
 			Build())
-	require.EqualError(t, st[1].AsError(), "validate delegated signature: cannot updateKey with a delegated signature")
+	require.EqualError(t, st[1].AsError(), "cannot updateKey with a delegated signature")
 }
