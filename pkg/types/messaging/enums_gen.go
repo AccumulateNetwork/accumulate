@@ -14,11 +14,11 @@ import (
 	"strings"
 )
 
-// MessageTypeUserTransaction is a transaction from a user.
-const MessageTypeUserTransaction MessageType = 1
+// MessageTypeTransaction is a transaction.
+const MessageTypeTransaction MessageType = 1
 
-// MessageTypeUserSignature is a key signature from a user.
-const MessageTypeUserSignature MessageType = 2
+// MessageTypeSignature is a signature.
+const MessageTypeSignature MessageType = 2
 
 // MessageTypeSynthetic is a message produced by the protocol, requiring proof.
 const MessageTypeSynthetic MessageType = 3
@@ -42,7 +42,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment:
 		*v = u
 		return true
 	default:
@@ -53,10 +53,10 @@ func (v *MessageType) SetEnumValue(id uint64) bool {
 // String returns the name of the Message Type.
 func (v MessageType) String() string {
 	switch v {
-	case MessageTypeUserTransaction:
-		return "userTransaction"
-	case MessageTypeUserSignature:
-		return "userSignature"
+	case MessageTypeTransaction:
+		return "transaction"
+	case MessageTypeSignature:
+		return "signature"
 	case MessageTypeSynthetic:
 		return "synthetic"
 	case MessageTypeBlockAnchor:
@@ -75,10 +75,10 @@ func (v MessageType) String() string {
 // MessageTypeByName returns the named Message Type.
 func MessageTypeByName(name string) (MessageType, bool) {
 	switch strings.ToLower(name) {
-	case "usertransaction":
-		return MessageTypeUserTransaction, true
-	case "usersignature":
-		return MessageTypeUserSignature, true
+	case "transaction":
+		return MessageTypeTransaction, true
+	case "signature":
+		return MessageTypeSignature, true
 	case "synthetic":
 		return MessageTypeSynthetic, true
 	case "blockanchor":

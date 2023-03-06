@@ -713,9 +713,9 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
-				messages = append(messages, &messaging.UserTransaction{Transaction: deliveries[i].Transaction})
+				messages = append(messages, &messaging.TransactionMessage{Transaction: deliveries[i].Transaction})
 				for _, sig := range deliveries[i].Signatures {
-					messages = append(messages, &messaging.UserSignature{Signature: sig, TxID: deliveries[i].Transaction.ID()})
+					messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: deliveries[i].Transaction.ID()})
 				}
 				continue
 			}

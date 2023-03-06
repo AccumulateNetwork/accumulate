@@ -33,7 +33,7 @@ func mustDurationFromJSON(t *testing.T, v interface{}) time.Duration {
 func TestSetPtrUnwrap(t *testing.T) {
 	var target messaging.MessageWithTransaction
 	value := new(messaging.SequencedMessage)
-	value.Message = new(messaging.UserTransaction)
+	value.Message = new(messaging.TransactionMessage)
 
 	require.NoError(t, SetPtr(value, &target))
 	require.True(t, value.Message == target)
