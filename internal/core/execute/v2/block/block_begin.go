@@ -144,7 +144,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
 
 	err = putMessageWithStatus(batch,
-		&messaging.UserTransaction{Transaction: txn},
+		&messaging.TransactionMessage{Transaction: txn},
 		&protocol.TransactionStatus{Code: errors.Delivered})
 	if err != nil {
 		return err
@@ -225,7 +225,7 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 
 	// Record the anchor
 	err = putMessageWithStatus(block.Batch,
-		&messaging.UserTransaction{Transaction: anchorTxn},
+		&messaging.TransactionMessage{Transaction: anchorTxn},
 		&protocol.TransactionStatus{Code: errors.Remote})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -505,7 +505,7 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	txn.Body = anchor
 
 	seq := &messaging.SequencedMessage{
-		Message:     &messaging.UserTransaction{Transaction: txn},
+		Message:     &messaging.TransactionMessage{Transaction: txn},
 		Source:      x.Describe.NodeUrl(),
 		Destination: destPartUrl,
 		Number:      sequenceNumber,
