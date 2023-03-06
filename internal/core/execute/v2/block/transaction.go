@@ -296,7 +296,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	// Store the transaction state (without signatures)
 	//
 	// TODO This should not always be a UserTransaction
-	err := batch.Message(delivery.Transaction.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: delivery.Transaction})
+	err := batch.Message(delivery.Transaction.ID().Hash()).Main().Put(&messaging.TransactionMessage{Transaction: delivery.Transaction})
 	if err != nil {
 		return nil, fmt.Errorf("store transaction: %w", err)
 	}

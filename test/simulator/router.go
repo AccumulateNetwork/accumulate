@@ -147,20 +147,20 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *messagi
 		}
 
 		switch msg := msg.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			// If a user transaction fails, fail
 			if msg.Transaction.Body.Type().IsUser() {
 				goto failed
 			}
 
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			// If there's no message with the transaction ID, or that message is
 			// not a transaction, or its a user transaction, fail
 			msg2, ok := msgById[msg.TxID.Hash()]
 			if !ok {
 				goto failed
 			}
-			txn, ok := msg2.(*messaging.UserTransaction)
+			txn, ok := msg2.(*messaging.TransactionMessage)
 			if !ok {
 				goto failed
 			}
