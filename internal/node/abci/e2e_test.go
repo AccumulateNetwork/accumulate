@@ -38,7 +38,7 @@ type Tx = messaging.Envelope
 func init() { acctesting.EnableDebugFeatures() }
 
 func TestCreateLiteAccount(t *testing.T) {
-	n := simulator.NewFakeNode(t, nil)
+	n := simulator.NewFakeNodeV1(t, nil)
 
 	const N, M = 11, 1
 	const count = N * M
@@ -100,7 +100,7 @@ func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*
 }
 
 func TestFaucet(t *testing.T) {
-	n := simulator.NewFakeNode(t, nil)
+	n := simulator.NewFakeNodeV1(t, nil)
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
