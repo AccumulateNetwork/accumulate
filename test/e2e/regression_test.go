@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -192,9 +193,9 @@ func TestFaucetMultiNetwork(t *testing.T) {
 		t.Skip("Not a testnet")
 	}
 
-	// Initialize
+	// Initialize v1 (v2 does not support the faucet)
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: ExecutorVersionV1})
 
 	// Setup
 	liteKey := acctesting.GenerateKey("Lite")
@@ -212,6 +213,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	// Execute
 	resp, err := sim.Partition(Directory).API.Faucet(context.Background(), &AcmeFaucet{Url: lite})
 	require.NoError(t, err)
+	assert.Zero(t, resp.Code, resp.Message)
 	sim.WaitForTransactionFlow(delivered, resp.TransactionHash)
 
 	// Verify

@@ -226,9 +226,11 @@ func (m *JrpcMethods) submit(v3 V3, ctx context.Context, env *messaging.Envelope
 	// Build the response
 	simpleHash := sha256.Sum256(txData)
 	res := new(TxResponse)
-	if len(resp) > 0 && !resp[0].Success {
-		res.Code = 1
-		res.Message = resp[0].Message
+	for _, r := range resp {
+		if !r.Success {
+			res.Code = 1
+			res.Message = r.Message + "; "
+		}
 	}
 	res.Txid = env.Transaction[0].ID()
 	res.TransactionHash = env.Transaction[0].GetHash()
