@@ -45,6 +45,9 @@ type Simulator struct {
 	// Deterministic attempts to run the simulator in a fully deterministic,
 	// repeatable way
 	Deterministic bool
+
+	// DropDispatchedMessages drops all internally dispatched messages
+	DropDispatchedMessages bool
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) database.Beginner
@@ -222,7 +225,9 @@ func (s *Simulator) Router() routing.Router { return s.router }
 func (s *Simulator) EventBus() *events.Bus  { return s.partitions[protocol.Directory].nodes[0].eventBus }
 
 func (s *Simulator) BlockIndex(partition string) uint64 {
-	return s.partitions[partition].blockIndex
+	p := s.partitions[partition]
+	p.loadBlockIndex()
+	return p.blockIndex
 }
 
 // Step executes a single simulator step
