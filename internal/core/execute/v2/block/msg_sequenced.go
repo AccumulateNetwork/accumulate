@@ -23,7 +23,7 @@ func init() {
 
 // SequencedMessage records the sequence metadata and executes the message
 // inside.
-type SequencedMessage struct{ UserTransaction }
+type SequencedMessage struct{ TransactionMessage }
 
 func (x SequencedMessage) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	// Check the wrapper
@@ -68,13 +68,13 @@ func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*me
 
 	// Sequenced messages must either be synthetic or anchors
 	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
-		if txn, ok := seq.Message.(*messaging.UserTransaction); !ok || !txn.Transaction.Body.Type().IsAnchor() {
+		if txn, ok := seq.Message.(*messaging.TransactionMessage); !ok || !txn.Transaction.Body.Type().IsAnchor() {
 			return nil, errors.BadRequest.WithFormat("invalid payload for sequenced message")
 		}
 	}
 
 	// Load the transaction
-	if txn, ok := seq.Message.(*messaging.UserTransaction); ok {
+	if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
 		_, err := x.resolveTransaction(batch, txn)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
@@ -268,7 +268,7 @@ func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContex
 func (SequencedMessage) loadLedger(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, protocol.SequenceLedger, error) {
 	var isAnchor bool
 	u := ctx.Executor.Describe.Synthetic()
-	if txn, ok := seq.Message.(*messaging.UserTransaction); ok && txn.Transaction.Body.Type().IsAnchor() {
+	if txn, ok := seq.Message.(*messaging.TransactionMessage); ok && txn.Transaction.Body.Type().IsAnchor() {
 		isAnchor = true
 		u = ctx.Executor.Describe.AnchorPool()
 	}
