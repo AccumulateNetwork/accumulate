@@ -26,6 +26,19 @@ import (
 
 var ErrCannotInitiate = errors.BadRequest.With("signature cannot initiate a transaction: values are missing")
 
+// VerifyUserSignature verifies that the user signature signs the given message.
+func VerifyUserSignature(sig UserSignature, message []byte) bool {
+	if sig.Verify(sig.Metadata().Hash(), message) {
+		return true
+	}
+
+	h, err := sig.Initiator()
+	if err != nil {
+		return false
+	}
+	return sig.Verify(h.MerkleHash(), message)
+}
+
 type Signature interface {
 	encoding.UnionValue
 	Type() SignatureType
@@ -39,20 +52,21 @@ type Signature interface {
 	Metadata() Signature
 }
 
-// InitiatorSignature is a type of signature that can initiate transactions with
-// a special initiator hash. This type of initiator hash has been deprecated.
-type InitiatorSignature interface {
+// UserSignature is a type of signature that can initiate transactions with a
+// special initiator hash. This type of initiator hash has been deprecated.
+type UserSignature interface {
+	Signature
 	Initiator() (hash.Hasher, error)
+	Verify(sigMdHash, hash []byte) bool
 }
 
 type KeySignature interface {
-	Signature
+	UserSignature
 	GetSignature() []byte
 	GetPublicKeyHash() []byte
 	GetPublicKey() []byte
 	GetSignerVersion() uint64
 	GetTimestamp() uint64
-	Verify(sigMdHash, hash []byte) bool
 }
 
 // IsSystem returns true if the signature type is a system signature type.
@@ -176,7 +190,7 @@ func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signatur
 			return true
 		}
 
-		init, ok := sig.(InitiatorSignature)
+		init, ok := sig.(UserSignature)
 		if !ok {
 			continue
 		}
@@ -959,7 +973,7 @@ func (s *DelegatedSignature) Initiator() (hash.Hasher, error) {
 		return nil, ErrCannotInitiate
 	}
 
-	init, ok := s.Signature.(InitiatorSignature)
+	init, ok := s.Signature.(UserSignature)
 	if !ok {
 		return nil, ErrCannotInitiate
 	}
