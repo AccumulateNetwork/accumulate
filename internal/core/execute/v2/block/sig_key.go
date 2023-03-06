@@ -7,6 +7,8 @@
 package block
 
 import (
+	"strings"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -31,11 +33,192 @@ func init() {
 // KeySignature processes key signatures.
 type KeySignature struct{}
 
-func (KeySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
-	err := ctx.Executor.validateSignature2(batch, &chain.Delivery{
-		Transaction: ctx.transaction,
-	}, ctx.signature)
+func (x KeySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+	err := x.check(batch, ctx)
 	return nil, errors.UnknownError.Wrap(err)
+}
+
+func (x KeySignature) check(batch *database.Batch, ctx *SignatureContext) error {
+	sig, ok := ctx.signature.(protocol.UserSignature)
+	if !ok {
+		return errors.BadRequest.WithFormat("invalid user signature: expected delegated or key, got %v", ctx.signature.Type())
+	}
+
+	// Unwrap delegated signatures
+	keySig, delegators, err := x.unwrapDelegated(ctx)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Check routing
+	partition, err := ctx.Executor.Router.RouteAccount(ctx.signature.GetSigner())
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if !strings.EqualFold(partition, ctx.Executor.Describe.PartitionId) {
+		return errors.BadRequest.WithFormat("signature submitted to %v instead of %v", ctx.Executor.Describe.PartitionId, partition)
+	}
+
+	// Verify the signature signs the transaction
+	if !protocol.VerifyUserSignature(sig, ctx.transaction.GetHash()) {
+		return errors.Unauthenticated.WithFormat("invalid signature")
+	}
+
+	// The initiator must have a timestamp
+	if protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
+		if keySig.GetTimestamp() == 0 {
+			return errors.BadTimestamp.WithFormat("initial signature does not have a timestamp")
+		}
+	}
+
+	// Load the signer and verify the signature against it
+	signer, err := x.verifySigner(batch, ctx, keySig)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Verify the signer can pay
+	err = x.verifyCanPay(batch, ctx, signer)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	_ = delegators
+	return nil
+}
+
+func (KeySignature) unwrapDelegated(ctx *SignatureContext) (protocol.KeySignature, []*url.URL, error) {
+	// Collect delegators and the inner signature
+	var delegators []*url.URL
+	var keySig protocol.KeySignature
+	for sig := ctx.signature; keySig == nil; {
+		switch s := sig.(type) {
+		case *protocol.DelegatedSignature:
+			delegators = append(delegators, s.Delegator)
+			sig = s.Signature
+		case protocol.KeySignature:
+			keySig = s
+		default:
+			return nil, nil, errors.BadRequest.WithFormat("invalid user signature: expected delegated or key, got %v", s.Type())
+		}
+
+		// Limit delegation depth
+		if len(delegators) > protocol.DelegationDepthLimit {
+			return nil, nil, errors.BadRequest.WithFormat("delegated signature exceeded the depth limit (%d)", protocol.DelegationDepthLimit)
+		}
+	}
+
+	// Reverse the list since the structure nesting is effectively inverted
+	for i, n := 0, len(delegators); i < n/2; i++ {
+		j := n - 1 - i
+		delegators[i], delegators[j] = delegators[j], delegators[i]
+	}
+
+	return keySig, delegators, nil
+}
+
+func (KeySignature) verifySigner(batch *database.Batch, ctx *SignatureContext, keySig protocol.KeySignature) (protocol.Signer, error) {
+	// If the user specifies a lite token address, convert it to a lite
+	// identity
+	signerUrl := ctx.signature.GetSigner()
+	if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
+		signerUrl = signerUrl.RootIdentity()
+	}
+
+	signer, err := loadSigner(batch, signerUrl)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Verify that the signer is authorized
+	val, ok := getValidator[chain.SignerValidator](ctx.Executor, ctx.transaction.Body.Type())
+	var fallback bool
+	if ok {
+		var md chain.SignatureValidationMetadata
+		md.Location = signerUrl
+		md.Delegated = ctx.signature.Type() == protocol.SignatureTypeDelegated
+		fallback, err = val.SignerIsAuthorized(ctx.Executor, batch, ctx.transaction, signer, md)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+	if !ok || fallback {
+		err = ctx.Executor.SignerIsAuthorized(batch, ctx.transaction, signer, false)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// Check the signer version
+	if ctx.transaction.Body.Type().IsUser() && keySig.GetSignerVersion() != signer.GetVersion() {
+		return nil, errors.BadSignerVersion.WithFormat("invalid version: have %d, got %d", signer.GetVersion(), keySig.GetSignerVersion())
+	}
+
+	// Find the key entry
+	_, entry, ok := signer.EntryByKeyHash(keySig.GetPublicKeyHash())
+	if !ok {
+		return nil, errors.Unauthorized.With("key does not belong to signer")
+	}
+
+	// Check the timestamp
+	if keySig.GetTimestamp() != 0 && entry.GetLastUsedOn() >= keySig.GetTimestamp() {
+		return nil, errors.BadTimestamp.WithFormat("invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), keySig.GetTimestamp())
+	}
+
+	return signer, nil
+}
+
+func (KeySignature) verifyCanPay(batch *database.Batch, ctx *SignatureContext, signer protocol.Signer) error {
+	// Operators don't have to pay when signing directly with the operators page
+	if protocol.DnUrl().LocalTo(signer.GetUrl()) {
+		return nil
+	}
+
+	// In the case of a locally signed, non-delegated, non-remote add credits
+	// transaction, verify the token account has a sufficient balance
+	body, isAddCredits := ctx.transaction.Body.(*protocol.AddCredits)
+	isLocal := signer.GetUrl().LocalTo(ctx.transaction.Header.Principal)
+	isDirect := ctx.signature.Type() != protocol.SignatureTypeDelegated
+	checkBalance := isAddCredits && isLocal && isDirect
+
+	// In all other cases, verify the signer has at least 0.01 credits
+	if !checkBalance {
+		fee := protocol.FeeSignature.GetEnumValue()
+		if !signer.CanDebitCredits(fee) {
+			return errors.InsufficientCredits.WithFormat(
+				"insufficient credits: have %s, want %s",
+				protocol.FormatAmount(signer.GetCreditBalance(), protocol.CreditPrecisionPower),
+				protocol.FormatAmount(fee, protocol.CreditPrecisionPower))
+		}
+		return nil
+	}
+
+	// Load the principal
+	account, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load transaction principal: %w", err)
+	}
+
+	// Verify it is a token account
+	tokens, ok := account.(protocol.AccountWithTokens)
+	if !ok {
+		return errors.NotAllowed.WithFormat("%v is not a token account", ctx.transaction.Header.Principal)
+	}
+
+	// Verify it is an ACME token account
+	if !protocol.AcmeUrl().Equal(tokens.GetTokenUrl()) {
+		return errors.NotAllowed.WithFormat("invalid token account: have %v, want %v", tokens.GetTokenUrl(), protocol.AcmeUrl())
+	}
+
+	// Verify it has a sufficient balance
+	if !tokens.CanDebitTokens(&body.Amount) {
+		return errors.InsufficientBalance.WithFormat(
+			"insufficient tokens: have %s, want %s",
+			protocol.FormatBigAmount(tokens.TokenBalance(), protocol.AcmePrecisionPower),
+			protocol.FormatBigAmount(&body.Amount, protocol.AcmePrecisionPower))
+	}
+
+	return nil
 }
 
 func (x KeySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
