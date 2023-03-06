@@ -52,7 +52,7 @@ func TestUpdateAccountAuth_SignatureRequest(t *testing.T) {
 	require.NoError(t, err)
 	sim.SubmitTxnSuccessfully(env)
 
-	sig := &messaging.UserSignature{Signature: env.Signatures[0]}
+	sig := &messaging.SignatureMessage{Signature: env.Signatures[0]}
 	sim.StepUntil(
 		Txn(sig.ID()).Succeeds(),
 		Txn(sig.ID()).Produced().Succeeds())

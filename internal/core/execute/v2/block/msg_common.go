@@ -90,7 +90,7 @@ func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 		// without the transaction executor complaining about a user transaction
 		// within a synthetic context.
 		switch m.message.Type() {
-		case messaging.MessageTypeUserSignature,
+		case messaging.MessageTypeSignature,
 			messaging.MessageTypeCreditPayment:
 			return false
 		}
@@ -112,7 +112,7 @@ func getMessageContextAncestor[T any](m *MessageContext) (T, bool) {
 
 		// For the same reasons as MessageContext.isWithin
 		switch m.message.Type() {
-		case messaging.MessageTypeUserSignature,
+		case messaging.MessageTypeSignature,
 			messaging.MessageTypeCreditPayment:
 			var z T
 			return z, false
