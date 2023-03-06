@@ -547,6 +547,10 @@ func (x *Executor) shouldPrepareAnchor(block *Block) {
 			OpenMajorBlockTime:   openMajorBlockTime,
 		}
 	}
+	if x.Describe.PartitionId == "BVN1" {
+		print("")
+	}
+
 }
 
 func (x *Executor) shouldOpenMajorBlock(batch *database.Batch, blockTime time.Time) (bool, time.Time) {
