@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -38,6 +39,26 @@ func NewFakeNode(t testing.TB, errorHandler func(err error)) *FakeNode {
 		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
+	)
+	if errorHandler == nil {
+		errorHandler = func(err error) {
+			t.Helper()
+
+			var err2 *errors.Error
+			if errors.As(err, &err2) && err2.Code == errors.Delivered {
+				return
+			}
+			assert.NoError(t, err)
+		}
+	}
+	return &FakeNode{H: sim, onErr: errorHandler}
+}
+
+func NewFakeNodeV1(t testing.TB, errorHandler func(err error)) *FakeNode {
+	sim := harness.NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1}),
 	)
 	if errorHandler == nil {
 		errorHandler = func(err error) {
