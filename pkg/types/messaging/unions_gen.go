@@ -26,14 +26,14 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(CreditPayment), nil
 	case MessageTypeSequenced:
 		return new(SequencedMessage), nil
+	case MessageTypeSignature:
+		return new(SignatureMessage), nil
 	case MessageTypeSignatureRequest:
 		return new(SignatureRequest), nil
 	case MessageTypeSynthetic:
 		return new(SyntheticMessage), nil
-	case MessageTypeUserSignature:
-		return new(UserSignature), nil
-	case MessageTypeUserTransaction:
-		return new(UserTransaction), nil
+	case MessageTypeTransaction:
+		return new(TransactionMessage), nil
 	default:
 		return nil, fmt.Errorf("unknown message %v", typ)
 	}
@@ -63,6 +63,12 @@ func EqualMessage(a, b Message) bool {
 		}
 		b, ok := b.(*SequencedMessage)
 		return ok && a.Equal(b)
+	case *SignatureMessage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SignatureMessage)
+		return ok && a.Equal(b)
 	case *SignatureRequest:
 		if a == nil {
 			return b == nil
@@ -75,17 +81,11 @@ func EqualMessage(a, b Message) bool {
 		}
 		b, ok := b.(*SyntheticMessage)
 		return ok && a.Equal(b)
-	case *UserSignature:
+	case *TransactionMessage:
 		if a == nil {
 			return b == nil
 		}
-		b, ok := b.(*UserSignature)
-		return ok && a.Equal(b)
-	case *UserTransaction:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*UserTransaction)
+		b, ok := b.(*TransactionMessage)
 		return ok && a.Equal(b)
 	default:
 		return false
@@ -101,13 +101,13 @@ func CopyMessage(v Message) Message {
 		return v.Copy()
 	case *SequencedMessage:
 		return v.Copy()
+	case *SignatureMessage:
+		return v.Copy()
 	case *SignatureRequest:
 		return v.Copy()
 	case *SyntheticMessage:
 		return v.Copy()
-	case *UserSignature:
-		return v.Copy()
-	case *UserTransaction:
+	case *TransactionMessage:
 		return v.Copy()
 	default:
 		return v.CopyAsInterface().(Message)

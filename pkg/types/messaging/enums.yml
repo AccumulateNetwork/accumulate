@@ -1,10 +1,10 @@
 MessageType:
-  UserTransaction:
+  Transaction:
     value: 1
-    description: is a transaction from a user
-  UserSignature:
+    description: is a transaction
+  Signature:
     value: 2
-    description: is a key signature from a user
+    description: is a signature
   Synthetic:
     value: 3
     description: is a message produced by the protocol, requiring proof

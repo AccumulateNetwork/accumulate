@@ -56,7 +56,7 @@ additional:
 
 	// Do this now for the sake of comparing logs
 	for _, msg := range messages {
-		msg, ok := msg.(*messaging.UserTransaction)
+		msg, ok := msg.(*messaging.TransactionMessage)
 		if !ok {
 			continue
 		}
@@ -134,7 +134,7 @@ additional:
 func checkForUnsignedTransactions(messages []messaging.Message) error {
 	unsigned := set[[32]byte]{}
 	for _, msg := range messages {
-		if msg, ok := msg.(*messaging.UserTransaction); ok {
+		if msg, ok := msg.(*messaging.TransactionMessage); ok {
 			unsigned[msg.ID().Hash()] = struct{}{}
 		}
 	}

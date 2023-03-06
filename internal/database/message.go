@@ -54,13 +54,13 @@ func (m *messageMain) Get() (messaging.Message, error) {
 
 	case s.Transaction != nil:
 		// It's a transaction so return a UserTransaction
-		return &messaging.UserTransaction{
+		return &messaging.TransactionMessage{
 			Transaction: s.Transaction,
 		}, nil
 
 	case s.Signature != nil:
 		// It's a signature so return a UserSignature
-		return &messaging.UserSignature{
+		return &messaging.SignatureMessage{
 			Signature: s.Signature,
 			TxID:      s.Txid,
 		}, nil
