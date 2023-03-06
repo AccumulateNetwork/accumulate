@@ -34,7 +34,7 @@ func (x BlockAnchor) Validate(batch *database.Batch, ctx *MessageContext) (*prot
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// TODO Validate the signature
+	// TODO Validate the signature (but NOT using the user signature executor)
 	return nil, nil
 }
 
@@ -172,7 +172,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 	// Basic validation
 	h := seq.Hash()
 	if !anchor.Signature.Verify(nil, h[:]) {
-		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid signature")
+		return nil, nil, nil, nil, errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
 	// Verify the signer is a validator of this partition
