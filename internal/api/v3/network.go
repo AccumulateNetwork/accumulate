@@ -71,5 +71,6 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 	res.Network = values.Network
 	res.Oracle = values.Oracle
 	res.Routing = values.Routing
+	res.ExecutorVersion = values.ExecutorVersion
 	return res, nil
 }
