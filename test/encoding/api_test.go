@@ -17,35 +17,25 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/libs/log"
+	"github.com/ulikunitz/xz"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"gopkg.in/src-d/go-git.v4/utils/diff"
 )
 
 func TestAPIv2Consistency(t *testing.T) {
-	t.Skip("FIXME once 1.1 is done")
-
 	jsonrpc2.DebugMethodFunc = true
 
 	// Load test data
 	var testData struct {
-		FinalHeight uint64                   `json:"finalHeight"`
-		Network     *accumulated.NetworkInit `json:"network"`
-		Genesis     map[string][]byte        `json:"genesis"`
-		Roots       map[string][]byte        `json:"roots"`
-
-		Submissions []struct {
-			Block    uint64              `json:"block"`
-			Envelope *messaging.Envelope `json:"envelope"`
-			Pending  bool                `json:"pending"`
-			Produces bool                `json:"produces"`
-		} `json:"submissions"`
+		Network *accumulated.NetworkInit   `json:"network"`
+		State   map[string]json.RawMessage `json:"state"`
 
 		Cases []struct {
 			Method   string         `json:"method"`
@@ -53,45 +43,25 @@ func TestAPIv2Consistency(t *testing.T) {
 			Response map[string]any `json:"response"`
 		} `json:"rpcCalls"`
 	}
-	b, err := os.ReadFile("../testdata/api-v2-consistency.json")
+	b, err := os.ReadFile("../testdata/api-v2-consistency.json.xz")
 	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(b, &testData))
+	r, err := xz.NewReader(bytes.NewBuffer(b))
+	require.NoError(t, err)
+	require.NoError(t, json.NewDecoder(r).Decode(&testData))
 
 	// Start the simulator
 	sim, err := simulator.New(
 		acctesting.NewTestLogger(t),
-		simulator.MemoryDatabase,
+		func(partition string, node int, logger log.Logger) database.Beginner {
+			mem := memory.New(logger)
+			require.NoError(t, json.Unmarshal(testData.State[partition], mem))
+			return database.New(mem, logger)
+		},
 		testData.Network,
-		simulator.SnapshotMap(testData.Genesis),
+		simulator.EmptySnapshots,
 	)
 	require.NoError(t, err)
 	sim.Deterministic = true
-
-	// Resubmit every user transaction
-	for _, sub := range testData.Submissions {
-		require.LessOrEqual(t, sim.BlockIndex(protocol.Directory), sub.Block)
-		for sim.BlockIndex(protocol.Directory) < sub.Block {
-			require.NoError(t, sim.Step())
-		}
-
-		messages, err := sub.Envelope.Normalize()
-		require.NoError(t, err)
-		_, err = sim.Submit(messages)
-		require.NoError(t, err)
-	}
-
-	// Run the simulator until the final height matches
-	require.LessOrEqual(t, sim.BlockIndex(protocol.Directory), testData.FinalHeight)
-	for sim.BlockIndex(protocol.Directory) < testData.FinalHeight {
-		require.NoError(t, sim.Step())
-	}
-
-	// Verify the root hashes of each partition
-	for part, root := range testData.Roots {
-		View(t, sim.Database(part), func(batch *database.Batch) {
-			require.Equal(t, root, batch.BptRoot())
-		})
-	}
 
 	// Validate RPC calls
 	for i, c := range testData.Cases {
@@ -107,17 +77,6 @@ func TestAPIv2Consistency(t *testing.T) {
 
 			// Patch the results due to weird behavior of OG API v2
 			switch c.Method {
-			case "query":
-				switch {
-				case res["transaction"] != nil,
-					res["type"] == "chainEntry":
-					// OG API v2 adds empty values for these fields for some reason
-					if _, ok := res["mainChain"]; !ok {
-						res["mainChain"] = map[string]any{}
-						res["merkleState"] = map[string]any{}
-					}
-				}
-
 			case "query-major-blocks":
 				// OG API v2 query-major-blocks is buggy and reports too few minor
 				// blocks
@@ -136,6 +95,9 @@ func TestAPIv2Consistency(t *testing.T) {
 				delete(r, "majorBlock")
 			}
 
+			jsonDeleteEmpty(c.Response)
+			jsonDeleteEmpty(res)
+
 			expect, _ := json.MarshalIndent(c.Response, "", "  ")
 			actual, _ := json.MarshalIndent(res, "", "  ")
 			if !bytes.Equal(expect, actual) {
@@ -147,4 +109,37 @@ func TestAPIv2Consistency(t *testing.T) {
 			}
 		})
 	}
+}
+
+func jsonDeleteEmpty(v any) bool {
+	if v == nil {
+		return true
+	}
+
+	switch v := v.(type) {
+	case string:
+		return v == "0000000000000000000000000000000000000000000000000000000000000000"
+
+	case []any:
+		for i := len(v) - 1; i >= 0; i-- {
+			if jsonDeleteEmpty(v[i]) {
+				v = append(v[:i], v[i+1:]...)
+			}
+		}
+		return len(v) == 0
+
+	case map[string]any:
+		var empty []string
+		for k, v := range v {
+			if jsonDeleteEmpty(v) {
+				empty = append(empty, k)
+			}
+		}
+		for _, k := range empty {
+			delete(v, k)
+		}
+		return len(v) == 0
+	}
+
+	return false
 }
