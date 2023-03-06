@@ -230,6 +230,31 @@ func (p *Partition) applyBlockHook(messages []messaging.Message) []messaging.Mes
 	return messages
 }
 
+func (p *Partition) loadBlockIndex() {
+	if p.blockIndex > 0 {
+		return
+	}
+
+	err := p.View(func(batch *database.Batch) error {
+		record := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger))
+		c, err := record.RootChain().Index().Get()
+		if err != nil {
+			return errors.FatalError.WithFormat("load root index chain: %w", err)
+		}
+		entry := new(protocol.IndexEntry)
+		err = c.EntryAs(c.Height()-1, entry)
+		if err != nil {
+			return errors.FatalError.WithFormat("load root index chain entry 0: %w", err)
+		}
+		p.blockIndex = entry.BlockIndex
+		p.blockTime = *entry.BlockTime
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (p *Partition) execute() error {
 	// TODO: Limit how many transactions are added to the block? Call recheck?
 	p.mu.Lock()
@@ -244,29 +269,9 @@ func (p *Partition) execute() error {
 	}
 
 	// Initialize block index
-	if p.blockIndex > 0 {
-		p.blockIndex++
-		p.blockTime = p.blockTime.Add(time.Second)
-	} else {
-		err := p.View(func(batch *database.Batch) error {
-			record := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger))
-			c, err := record.RootChain().Index().Get()
-			if err != nil {
-				return errors.FatalError.WithFormat("load root index chain: %w", err)
-			}
-			entry := new(protocol.IndexEntry)
-			err = c.EntryAs(c.Height()-1, entry)
-			if err != nil {
-				return errors.FatalError.WithFormat("load root index chain entry 0: %w", err)
-			}
-			p.blockIndex = entry.BlockIndex + 1
-			p.blockTime = entry.BlockTime.Add(time.Second)
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	}
+	p.loadBlockIndex()
+	p.blockIndex++
+	p.blockTime = p.blockTime.Add(time.Second)
 	p.logger.Debug("Stepping", "block", p.blockIndex)
 
 	messages = p.applyBlockHook(messages)
