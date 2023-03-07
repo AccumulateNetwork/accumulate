@@ -30,7 +30,31 @@ func (s Status) IsServerError() bool { return s >= 500 }
 // Error implements error.
 func (s Status) Error() string { return s.String() }
 
+// Skip skips N frames when locating the call site.
+func (s Status) Skip(n int) Skip { return Skip{n, s} }
+
 func (s Status) Wrap(err error) error {
+	return s.Skip(1).Wrap(err)
+}
+
+func (s Status) With(v ...interface{}) *Error {
+	return s.Skip(1).With(v...)
+}
+
+func (s Status) WithFormat(format string, args ...interface{}) *Error {
+	return s.Skip(1).WithFormat(format, args...)
+}
+
+func (s Status) WithCauseAndFormat(cause error, format string, args ...interface{}) *Error {
+	return s.Skip(1).WithCauseAndFormat(cause, format, args...)
+}
+
+type Skip struct {
+	n      int
+	status Status
+}
+
+func (s Skip) Wrap(err error) error {
 	if err == nil {
 		// The return type must be `error` - otherwise this returns statement
 		// can cause strange errors
@@ -38,7 +62,7 @@ func (s Status) Wrap(err error) error {
 	}
 
 	// If err is an Error and we're not going to add anything, return it
-	if !trackLocation && s == UnknownError {
+	if !trackLocation && s.status == UnknownError {
 		if _, ok := err.(*Error); ok {
 			return err
 		}
@@ -49,20 +73,20 @@ func (s Status) Wrap(err error) error {
 	return e
 }
 
-func (s Status) With(v ...interface{}) *Error {
+func (s Skip) With(v ...interface{}) *Error {
 	e := s.new()
 	e.Message = fmt.Sprint(v...)
 	return e
 }
 
-func (s Status) WithCauseAndFormat(cause error, format string, args ...interface{}) *Error {
+func (s Skip) WithCauseAndFormat(cause error, format string, args ...interface{}) *Error {
 	e := s.new()
 	e.Message = fmt.Sprintf(format, args...)
 	e.setCause(convert(cause))
 	return e
 }
 
-func (s Status) WithFormat(format string, args ...interface{}) *Error {
+func (s Skip) WithFormat(format string, args ...interface{}) *Error {
 	err := fmt.Errorf(format, args...)
 
 	u, ok := err.(interface{ Unwrap() error })
@@ -74,15 +98,15 @@ func (s Status) WithFormat(format string, args ...interface{}) *Error {
 	}
 
 	e := convert(err)
-	e.Code = s
+	e.Code = s.status
 	e.recordCallSite(2)
 	return e
 }
 
-func (s Status) new() *Error {
+func (s Skip) new() *Error {
 	e := new(Error)
-	e.Code = s
-	e.recordCallSite(3)
+	e.Code = s.status
+	e.recordCallSite(3 + s.n)
 	return e
 }
 
