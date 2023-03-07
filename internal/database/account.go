@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package database
 
 import (
+	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -160,4 +161,8 @@ func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
 
 func (r *Account) GetSyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
 	return r.SyntheticForAnchor(anchor).Get()
+}
+
+func compareAnchorSignatures(a, b protocol.KeySignature) int {
+	return bytes.Compare(a.GetPublicKey(), b.GetPublicKey())
 }
