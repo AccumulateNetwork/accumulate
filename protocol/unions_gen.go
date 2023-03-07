@@ -406,6 +406,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SystemGenesis), nil
 	case TransactionTypeSystemWriteData:
 		return new(SystemWriteData), nil
+	case TransactionTypeTransferCredits:
+		return new(TransferCredits), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
@@ -583,6 +585,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*SystemWriteData)
 		return ok && a.Equal(b)
+	case *TransferCredits:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*TransferCredits)
+		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
 		if a == nil {
 			return b == nil
@@ -672,6 +680,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *SystemGenesis:
 		return v.Copy()
 	case *SystemWriteData:
+		return v.Copy()
+	case *TransferCredits:
 		return v.Copy()
 	case *UpdateAccountAuth:
 		return v.Copy()
