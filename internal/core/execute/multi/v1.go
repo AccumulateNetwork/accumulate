@@ -55,7 +55,12 @@ func (x *ExecutorV1) Validate(batch *database.Batch, messages []messaging.Messag
 	st := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
 		st[i] = new(protocol.TransactionStatus)
-		st[i].Result, err = (*block.Executor)(x).ValidateEnvelope(batch, delivery)
+
+		if isHalted((*block.Executor)(x), delivery) {
+			err = errors.NotAllowed.WithFormat("user messages are not being accepted: an upgrade is in progress")
+		} else {
+			st[i].Result, err = (*block.Executor)(x).ValidateEnvelope(batch, delivery)
+		}
 
 		if err != nil {
 			st[i].Set(err)
@@ -91,6 +96,16 @@ type BlockV1 struct {
 
 func (b *BlockV1) Params() execute.BlockParams { return b.Block.BlockMeta }
 
+func isHalted(x *block.Executor, delviery *chain.Delivery) bool {
+	if !delviery.Transaction.Body.Type().IsUser() {
+		return false
+	}
+	if !x.ActiveGlobals().ExecutorVersion.HaltV1() {
+		return false
+	}
+	return delviery.Transaction.Body.Type() != protocol.TransactionTypeActivateProtocolVersion
+}
+
 // Process converts the message to a delivery and processes it. Process returns
 // an error if the message is not a [message.LegacyMessage].
 func (b *BlockV1) Process(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
@@ -101,7 +116,11 @@ func (b *BlockV1) Process(messages []messaging.Message) ([]*protocol.Transaction
 
 	st := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
-		st[i], err = b.Executor.ExecuteEnvelope(b.Block, delivery)
+		if isHalted(b.Executor, delivery) {
+			err = errors.NotAllowed.WithFormat("user messages are not being accepted: an upgrade is in progress")
+		} else {
+			st[i], err = b.Executor.ExecuteEnvelope(b.Block, delivery)
+		}
 		if st[i] == nil {
 			st[i] = new(protocol.TransactionStatus)
 		}
