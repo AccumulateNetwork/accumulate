@@ -95,53 +95,27 @@ func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	return sig, txn, nil
 }
 
-func (x SignatureMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x SignatureMessage) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
 	batch = batch.Begin(true)
-	defer batch.Discard()
+	defer func() { commitOrDiscard(batch, &err) }()
 
 	// Check if the message has already been processed
-	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	if status.Delivered() {
-		return status, nil
+	status, err := ctx.checkStatus(batch)
+	if err != nil || status.Delivered() {
+		return status, err
 	}
 
-	// Record when the message was first received
-	if status.Received == 0 {
-		status.Received = ctx.Block.Index
-		status.TxID = ctx.message.ID()
-	}
+	// Make sure the block is recorded
+	ctx.Block.State.MergeSignature(&ProcessSignatureState{})
 
-	// Check the message
+	// Process the message
 	sig, txn, err := x.check(batch, ctx)
-	switch {
-	case err == nil:
-		// Process the signature
-		status, err = ctx.callSignatureExecutor(batch, ctx.sigWith(sig.Signature, txn))
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-	case errors.Code(err).IsClientError():
-		status.Set(err)
-
-	default:
-		return nil, errors.UnknownError.Wrap(err)
+	if err == nil {
+		_, err = ctx.callSignatureExecutor(batch, ctx.sigWith(sig.Signature, txn))
 	}
 
-	// Always record the signature and status
-	err = batch.Message(ctx.message.Hash()).Main().Put(ctx.message)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
-	}
-	err = batch.Transaction2(ctx.message.Hash()).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store signature status: %w", err)
-	}
-
-	err = batch.Commit()
+	// Record the message and its status
+	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
