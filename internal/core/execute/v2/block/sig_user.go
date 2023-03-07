@@ -7,6 +7,7 @@
 package block
 
 import (
+	"math/big"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -209,7 +210,7 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 
 // verifyCanPay verifies the signer can be charged for recording the signature,
 // and verifies the signature and transaction do not exceed certain limits.
-func (UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) error {
+func (x UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) error {
 	// Operators don't have to pay when signing directly with the operators page
 	if protocol.DnUrl().LocalTo(ctx.signer.GetUrl()) {
 		return nil
@@ -222,25 +223,33 @@ func (UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) er
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// In the case of a locally signed, non-delegated, non-remote add credits
-	// transaction, verify the token account has a sufficient balance
-	body, isAddCredits := ctx.transaction.Body.(*protocol.AddCredits)
+	// In the case of a locally signed, non-delegated, non-remote add or burn
+	// credits transaction, verify the account has a sufficient balance
 	isLocal := ctx.signer.GetUrl().LocalTo(ctx.transaction.Header.Principal)
 	isDirect := ctx.signature.Type() != protocol.SignatureTypeDelegated
-	checkBalance := isAddCredits && isLocal && isDirect
 
-	// In all other cases, verify the signer has at least 0.01 credits
-	if !checkBalance {
-		minFee := protocol.FeeSignature.GetEnumValue()
-		if !ctx.signer.CanDebitCredits(minFee) {
-			return errors.InsufficientCredits.WithFormat(
-				"insufficient credits: have %s, want %s",
-				protocol.FormatAmount(ctx.signer.GetCreditBalance(), protocol.CreditPrecisionPower),
-				protocol.FormatAmount(minFee, protocol.CreditPrecisionPower))
+	if isLocal && isDirect {
+		switch body := ctx.transaction.Body.(type) {
+		case *protocol.AddCredits:
+			return x.verifyTokenBalance(batch, ctx, &body.Amount)
+
+		case *protocol.BurnCredits:
+			return x.verifyCreditBalance(batch, ctx, body.Amount)
 		}
-		return nil
 	}
 
+	// In all other cases, verify the signer has at least 0.01 credits
+	minFee := protocol.FeeSignature.GetEnumValue()
+	if !ctx.signer.CanDebitCredits(minFee) {
+		return errors.InsufficientCredits.WithFormat(
+			"insufficient credits: have %s, want %s",
+			protocol.FormatAmount(ctx.signer.GetCreditBalance(), protocol.CreditPrecisionPower),
+			protocol.FormatAmount(minFee, protocol.CreditPrecisionPower))
+	}
+	return nil
+}
+
+func (UserSignature) verifyTokenBalance(batch *database.Batch, ctx *userSigContext, amount *big.Int) error {
 	// Load the principal
 	account, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
 	if err != nil {
@@ -259,11 +268,42 @@ func (UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) er
 	}
 
 	// Verify it has a sufficient balance
-	if !tokens.CanDebitTokens(&body.Amount) {
+	if !tokens.CanDebitTokens(amount) {
 		return errors.InsufficientBalance.WithFormat(
 			"insufficient tokens: have %s, want %s",
 			protocol.FormatBigAmount(tokens.TokenBalance(), protocol.AcmePrecisionPower),
-			protocol.FormatBigAmount(&body.Amount, protocol.AcmePrecisionPower))
+			protocol.FormatBigAmount(amount, protocol.AcmePrecisionPower))
+	}
+
+	return nil
+}
+func (UserSignature) verifyCreditBalance(batch *database.Batch, ctx *userSigContext, amount uint64) error {
+	// Load the principal
+	account, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load transaction principal: %w", err)
+	}
+
+	// Verify it is a credit account
+	var credits protocol.AccountWithCredits
+	switch account := account.(type) {
+	case protocol.AccountWithCredits:
+		credits = account
+	case *protocol.LiteTokenAccount:
+		err := batch.Account(account.Url.RootIdentity()).Main().GetAs(&account)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load lite identity: %w", err)
+		}
+	default:
+		return errors.BadRequest.WithFormat("invalid principal: want a signer, got %v", account.Type())
+	}
+
+	// Verify it has a sufficient balance
+	if !credits.CanDebitCredits(amount) {
+		return errors.InsufficientBalance.WithFormat(
+			"insufficient credits: have %s, want %s",
+			protocol.FormatAmount(credits.GetCreditBalance(), protocol.CreditPrecisionPower),
+			protocol.FormatAmount(amount, protocol.CreditPrecisionPower))
 	}
 
 	return nil
