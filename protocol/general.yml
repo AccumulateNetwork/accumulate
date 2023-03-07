@@ -131,6 +131,14 @@ TokenRecipient:
     - name: Amount
       type: bigint
 
+CreditRecipient:
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Amount
+      type: uint
+
 ChainParams:
   fields:
     - name: Data

@@ -286,6 +286,13 @@ type CreateTokenAccount struct {
 	extraData   []byte
 }
 
+type CreditRecipient struct {
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Amount    uint64   `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
+}
+
 type DataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -908,6 +915,12 @@ type TransactionStatus struct {
 	extraData     []byte
 }
 
+type TransferCredits struct {
+	fieldsSet []bool
+	To        []*CreditRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	extraData []byte
+}
+
 type TxIdSet struct {
 	fieldsSet []bool
 	Entries   []*url.TxID `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
@@ -1136,6 +1149,8 @@ func (*SystemWriteData) Type() TransactionType { return TransactionTypeSystemWri
 func (*TokenAccount) Type() AccountType { return AccountTypeTokenAccount }
 
 func (*TokenIssuer) Type() AccountType { return AccountTypeTokenIssuer }
+
+func (*TransferCredits) Type() TransactionType { return TransactionTypeTransferCredits }
 
 func (*UnknownAccount) Type() AccountType { return AccountTypeUnknown }
 
@@ -1629,6 +1644,19 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 }
 
 func (v *CreateTokenAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreditRecipient) Copy() *CreditRecipient {
+	u := new(CreditRecipient)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.Amount = v.Amount
+
+	return u
+}
+
+func (v *CreditRecipient) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *DataAccount) Copy() *DataAccount {
 	u := new(DataAccount)
@@ -2659,6 +2687,21 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 
 func (v *TransactionStatus) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *TransferCredits) Copy() *TransferCredits {
+	u := new(TransferCredits)
+
+	u.To = make([]*CreditRecipient, len(v.To))
+	for i, v := range v.To {
+		if v != nil {
+			u.To[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *TransferCredits) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *TxIdSet) Copy() *TxIdSet {
 	u := new(TxIdSet)
 
@@ -3435,6 +3478,22 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 	case v.Proof == nil || u.Proof == nil:
 		return false
 	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+
+	return true
+}
+
+func (v *CreditRecipient) Equal(u *CreditRecipient) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Amount == u.Amount) {
 		return false
 	}
 
@@ -4800,6 +4859,19 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	}
 	for i := range v.AnchorSigners {
 		if !(bytes.Equal(v.AnchorSigners[i], u.AnchorSigners[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *TransferCredits) Equal(u *TransferCredits) bool {
+	if len(v.To) != len(u.To) {
+		return false
+	}
+	for i := range v.To {
+		if !((v.To[i]).Equal(u.To[i])) {
 			return false
 		}
 	}
@@ -6713,6 +6785,54 @@ func (v *CreateTokenAccount) IsValid() error {
 		errs = append(errs, "field TokenUrl is missing")
 	} else if v.TokenUrl == nil {
 		errs = append(errs, "field TokenUrl is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_CreditRecipient = []string{
+	1: "Url",
+	2: "Amount",
+}
+
+func (v *CreditRecipient) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	if !(v.Amount == 0) {
+		writer.WriteUint(2, v.Amount)
+	}
+
+	_, _, err := writer.Reset(fieldNames_CreditRecipient)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *CreditRecipient) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Amount is missing")
+	} else if v.Amount == 0 {
+		errs = append(errs, "field Amount is not set")
 	}
 
 	switch len(errs) {
@@ -10664,6 +10784,52 @@ func (v *TransactionStatus) IsValid() error {
 	}
 }
 
+var fieldNames_TransferCredits = []string{
+	1: "Type",
+	2: "To",
+}
+
+func (v *TransferCredits) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.To) == 0) {
+		for _, v := range v.To {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_TransferCredits)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *TransferCredits) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field To is missing")
+	} else if len(v.To) == 0 {
+		errs = append(errs, "field To is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_TxIdSet = []string{
 	1: "Entries",
 }
@@ -12499,6 +12665,32 @@ func (v *CreateTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateTokenAccount)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *CreditRecipient) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *CreditRecipient) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Amount = x
+	}
+
+	seen, err := reader.Reset(fieldNames_CreditRecipient)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -15045,6 +15237,45 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *TransferCredits) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TransferCredits) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *TransferCredits) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(CreditRecipient); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.To = append(v.To, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_TransferCredits)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *TxIdSet) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -17405,6 +17636,18 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		for i, x := range v.AnchorSigners {
 			u.AnchorSigners[i] = encoding.BytesToJSON(x)
 		}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *TransferCredits) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type TransactionType                     `json:"type"`
+		To   encoding.JsonList[*CreditRecipient] `json:"to,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.To) == 0) {
+		u.To = v.To
 	}
 	return json.Marshal(&u)
 }
@@ -19874,6 +20117,23 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 			v.AnchorSigners[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *TransferCredits) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type TransactionType                     `json:"type"`
+		To   encoding.JsonList[*CreditRecipient] `json:"to,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.To = v.To
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.To = u.To
 	return nil
 }
 
