@@ -180,12 +180,15 @@
     },
     {
       "name": "Validate: Go test (devnet)",
+      "presentation": { "group": "80-Validate" },
       "type": "go",
       "request": "launch",
       "mode": "test",
       "program": "${workspaceFolder}/test/validate",
       "args": [
-        "-test.validate", "http://127.0.1.1:26660/v3",
+        "-test.v",
+        "-test.validate.network", "${workspaceFolder}/.nodes/node-1/dnn",
+        "-test.run", "TestValidateNetwork",
       ]
     },
 
