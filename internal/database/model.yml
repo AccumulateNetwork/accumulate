@@ -79,6 +79,12 @@
         dataType: url
         pointer: true
         collection: set
+      - name: AnchorSignatures
+        type: state
+        dataType: protocol.KeySignature
+        union: true
+        collection: set
+        comparator: compareAnchorSignatures
 
     # Chains
     - name: MainChain
