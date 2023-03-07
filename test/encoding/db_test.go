@@ -103,6 +103,7 @@ func TestDbEncoding(t *testing.T) {
 	require.NoError(t, err)
 
 	db := database.New(store, logger)
+	// db.SetObserver(block.NewDatabaseObserver())
 	batch := db.Begin(false)
 	defer batch.Discard()
 	buf := new(ioutil2.Buffer)

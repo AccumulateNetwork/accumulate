@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -32,6 +32,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 
 	// Create a chain with 300 entries
 	db := database.OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
 	batch := db.Begin(true)
 	defer batch.Discard()
 
@@ -66,6 +67,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	// Restore the snapshot to a new database
 	store := memory.New(nil)
 	db = database.New(store, nil)
+	db.SetObserver(acctesting.NullObserver{})
 	require.NoError(t, snapshot.Restore(db, buf, nil))
 
 	// Verify the account chain
@@ -88,6 +90,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 	// Create a chain with 300 entries
 	for n := 1; n < 300; n++ {
 		db := database.OpenInMemory(nil)
+		db.SetObserver(acctesting.NullObserver{})
 		batch := db.Begin(true)
 		defer batch.Discard()
 
@@ -118,6 +121,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 		// Restore the snapshot to a new database
 		store := memory.New(nil)
 		db = database.New(store, nil)
+		db.SetObserver(acctesting.NullObserver{})
 		require.NoError(t, snapshot.Restore(db, buf, nil))
 
 		// Verify the account chain
