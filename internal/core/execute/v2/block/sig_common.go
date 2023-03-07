@@ -76,14 +76,6 @@ func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.
 	signerUrl := ctx.getSigner()
 	set := batch.Account(signerUrl).Transaction(ctx.transaction.ID().Hash()).Signatures()
 
-	// Record the initiator
-	if protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
-		err := set.Initiator().Put(ctx.message.Hash())
-		if err != nil {
-			return errors.UnknownError.WithFormat("store initiator hash: %w", err)
-		}
-	}
-
 	// Grab the version from an entry
 	all, err := set.Active().Get()
 	if err != nil {
@@ -139,16 +131,6 @@ func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext) error {
 	err := batch.Account(authUrl).Pending().Remove(ctx.transaction.ID())
 	if err != nil {
 		return errors.UnknownError.WithFormat("update the pending list: %w", err)
-	}
-
-	// Clear the initiator
-	sigs := batch.
-		Account(ctx.getSigner()).
-		Transaction(ctx.transaction.ID().Hash()).
-		Signatures()
-	err = sigs.Initiator().Put([32]byte{})
-	if err != nil {
-		return errors.UnknownError.WithFormat("clear the initiator hash: %w", err)
 	}
 
 	// Load the authority
