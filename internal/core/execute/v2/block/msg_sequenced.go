@@ -84,75 +84,32 @@ func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*me
 	return seq, nil
 }
 
-func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	// If the message has already been processed, return its recorded status.
-	//
-	// Do this check on the _sequence_ message's status, not the inner message's
-	// status. Some messages, such as authority signatures, may end up being
-	// duplicates. To preserve the integrity of the sequence, those still need
-	// to be processed even if the executor simply returns the existing status.
-	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	if status.Delivered() {
-		return status, nil
+func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
+	batch = batch.Begin(true)
+	defer func() { commitOrDiscard(batch, &err) }()
+
+	// Check if the message has already been processed
+	status, err := ctx.checkStatus(batch)
+	if err != nil || status.Delivered() {
+		return status, err
 	}
 
-	batch = batch.Begin(true)
-	defer batch.Discard()
+	// TODO Update the block state?
 
 	// Process the message
-	status = new(protocol.TransactionStatus)
-	status.Received = ctx.Block.Index
-	status.TxID = ctx.message.ID()
-
 	seq, err := x.check(batch, ctx)
 	var delivered bool
 	if err == nil {
 		delivered, err = x.process(batch, ctx, seq)
 	}
 
-	// Update the status
-	switch {
-	case err == nil:
-		if delivered {
-			status.Code = errors.Delivered
-		} else {
-			status.Code = errors.Pending
-		}
-
-	case errors.Code(err).IsClientError():
-		status.Set(err)
-
-	default:
-		return nil, errors.UnknownError.Wrap(err)
+	s := errors.Delivered
+	if !delivered {
+		s = errors.Pending
 	}
 
-	// Record the message and it's cause/produced relation
-	err = batch.Message(seq.Hash()).Main().Put(seq)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message: %w", err)
-	}
-
-	err = batch.Message(seq.Hash()).Produced().Add(seq.Message.ID())
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message produced: %w", err)
-	}
-
-	err = batch.Message(seq.Message.Hash()).Cause().Add(seq.ID())
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message cause: %w", err)
-	}
-
-	// Store a status for the sequence message (see the comment above where the
-	// status is checked)
-	err = batch.Transaction2(seq.Hash()).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store status: %w", err)
-	}
-
-	err = batch.Commit()
+	// Record the message and its status
+	err = ctx.recordMessageAndStatus(batch, status, s, err)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
