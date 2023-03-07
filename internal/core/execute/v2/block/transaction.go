@@ -384,10 +384,13 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 }
 
 func selectTargetChain(account *database.Account, body protocol.TransactionBody) *database.Chain2 {
-	if writeData, ok := body.(*protocol.WriteData); ok {
-		if writeData.Scratch {
+	switch body := body.(type) {
+	case *protocol.WriteData:
+		if body.Scratch {
 			return account.ScratchChain()
 		}
+	case *protocol.TransferCredits:
+		return account.ScratchChain()
 	}
 	return account.MainChain()
 }
