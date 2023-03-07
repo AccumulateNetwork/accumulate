@@ -199,6 +199,12 @@ type BlockValidatorAnchor struct {
 	extraData []byte
 }
 
+type BurnCredits struct {
+	fieldsSet []bool
+	Amount    uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
+}
+
 type BurnTokens struct {
 	fieldsSet []bool
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
@@ -617,12 +623,6 @@ type PartitionSyntheticLedger struct {
 	extraData []byte
 }
 
-// PlaceholderTransaction is a placeholder for some observable change in V2 logic.
-type PlaceholderTransaction struct {
-	fieldsSet []bool
-	extraData []byte
-}
-
 type RCD1Signature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -1029,6 +1029,8 @@ func (*BlockLedger) Type() AccountType { return AccountTypeBlockLedger }
 
 func (*BlockValidatorAnchor) Type() TransactionType { return TransactionTypeBlockValidatorAnchor }
 
+func (*BurnCredits) Type() TransactionType { return TransactionTypeBurnCredits }
+
 func (*BurnTokens) Type() TransactionType { return TransactionTypeBurnTokens }
 
 func (*CreateDataAccount) Type() TransactionType { return TransactionTypeCreateDataAccount }
@@ -1086,8 +1088,6 @@ func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount
 func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
 
 func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
-
-func (*PlaceholderTransaction) Type() TransactionType { return TransactionTypePlaceholder }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
@@ -1455,6 +1455,16 @@ func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 }
 
 func (v *BlockValidatorAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BurnCredits) Copy() *BurnCredits {
+	u := new(BurnCredits)
+
+	u.Amount = v.Amount
+
+	return u
+}
+
+func (v *BurnCredits) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BurnTokens) Copy() *BurnTokens {
 	u := new(BurnTokens)
@@ -2142,14 +2152,6 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 }
 
 func (v *PartitionSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *PlaceholderTransaction) Copy() *PlaceholderTransaction {
-	u := new(PlaceholderTransaction)
-
-	return u
-}
-
-func (v *PlaceholderTransaction) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RCD1Signature) Copy() *RCD1Signature {
 	u := new(RCD1Signature)
@@ -3226,6 +3228,14 @@ func (v *BlockValidatorAnchor) Equal(u *BlockValidatorAnchor) bool {
 	return true
 }
 
+func (v *BurnCredits) Equal(u *BurnCredits) bool {
+	if !(v.Amount == u.Amount) {
+		return false
+	}
+
+	return true
+}
+
 func (v *BurnTokens) Equal(u *BurnTokens) bool {
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
@@ -4125,11 +4135,6 @@ func (v *PartitionSyntheticLedger) Equal(u *PartitionSyntheticLedger) bool {
 			return false
 		}
 	}
-
-	return true
-}
-
-func (v *PlaceholderTransaction) Equal(u *PlaceholderTransaction) bool {
 
 	return true
 }
@@ -6137,6 +6142,50 @@ func (v *BlockValidatorAnchor) IsValid() error {
 		errs = append(errs, "field AcmeBurnt is missing")
 	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field AcmeBurnt is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BurnCredits = []string{
+	1: "Type",
+	2: "Amount",
+}
+
+func (v *BurnCredits) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Amount == 0) {
+		writer.WriteUint(2, v.Amount)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BurnCredits)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BurnCredits) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Amount is missing")
+	} else if v.Amount == 0 {
+		errs = append(errs, "field Amount is not set")
 	}
 
 	switch len(errs) {
@@ -8708,41 +8757,6 @@ func (v *PartitionSyntheticLedger) IsValid() error {
 		errs = append(errs, "field Pending is missing")
 	} else if len(v.Pending) == 0 {
 		errs = append(errs, "field Pending is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_PlaceholderTransaction = []string{
-	1: "Type",
-}
-
-func (v *PlaceholderTransaction) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-
-	_, _, err := writer.Reset(fieldNames_PlaceholderTransaction)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *PlaceholderTransaction) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Type is missing")
 	}
 
 	switch len(errs) {
@@ -12066,6 +12080,41 @@ func (v *BlockValidatorAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) erro
 	return nil
 }
 
+func (v *BurnCredits) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BurnCredits) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BurnCredits) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.Amount = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BurnCredits)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BurnTokens) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13717,38 +13766,6 @@ func (v *PartitionSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_PartitionSyntheticLedger)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *PlaceholderTransaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *PlaceholderTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-
-	return v.UnmarshalFieldsFrom(reader)
-}
-
-func (v *PlaceholderTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-
-	seen, err := reader.Reset(fieldNames_PlaceholderTransaction)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -15889,6 +15906,18 @@ func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BurnCredits) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Amount uint64          `json:"amount,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Amount == 0) {
+		u.Amount = v.Amount
+	}
+	return json.Marshal(&u)
+}
+
 func (v *BurnTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type   TransactionType `json:"type"`
@@ -16707,14 +16736,6 @@ func (v *PartitionSyntheticLedger) MarshalJSON() ([]byte, error) {
 	if !(len(v.Pending) == 0) {
 		u.Pending = v.Pending
 	}
-	return json.Marshal(&u)
-}
-
-func (v *PlaceholderTransaction) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type TransactionType `json:"type"`
-	}{}
-	u.Type = v.Type()
 	return json.Marshal(&u)
 }
 
@@ -18015,6 +18036,23 @@ func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *BurnCredits) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Amount uint64          `json:"amount,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Amount = v.Amount
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Amount = u.Amount
+	return nil
+}
+
 func (v *BurnTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type   TransactionType `json:"type"`
@@ -19050,20 +19088,6 @@ func (v *PartitionSyntheticLedger) UnmarshalJSON(data []byte) error {
 	v.Received = u.Received
 	v.Delivered = u.Delivered
 	v.Pending = u.Pending
-	return nil
-}
-
-func (v *PlaceholderTransaction) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type TransactionType `json:"type"`
-	}{}
-	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
 	return nil
 }
 
