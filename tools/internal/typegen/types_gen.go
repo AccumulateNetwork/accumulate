@@ -19,6 +19,7 @@ import (
 
 type ChainRecord struct {
 	Parent       *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	Description  string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
 	OmitAccessor bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
 	Private      bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
 	Name         string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -28,6 +29,7 @@ type ChainRecord struct {
 
 type EntityRecord struct {
 	Parent        *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	Description   string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
 	OmitAccessor  bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
 	Private       bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
 	Name          string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -43,6 +45,7 @@ type EntityRecord struct {
 
 type IndexRecord struct {
 	Parent         *EntityRecord  `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	Description    string         `json:"description,omitempty" form:"description" query:"description" validate:"required"`
 	OmitAccessor   bool           `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
 	Private        bool           `json:"private,omitempty" form:"private" query:"private" validate:"required"`
 	Name           string         `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -57,6 +60,7 @@ type IndexRecord struct {
 
 type OtherRecord struct {
 	Parent       *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	Description  string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
 	OmitAccessor bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
 	Private      bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
 	Name         string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -68,6 +72,7 @@ type OtherRecord struct {
 
 type StateRecord struct {
 	Parent         *EntityRecord  `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	Description    string         `json:"description,omitempty" form:"description" query:"description" validate:"required"`
 	OmitAccessor   bool           `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
 	Private        bool           `json:"private,omitempty" form:"private" query:"private" validate:"required"`
 	Name           string         `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -94,6 +99,7 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type         RecordType                `json:"type"`
 		Parent       *EntityRecord             `json:"parent,omitempty"`
+		Description  string                    `json:"description,omitempty"`
 		OmitAccessor bool                      `json:"omitAccessor,omitempty"`
 		Private      bool                      `json:"private,omitempty"`
 		Name         string                    `json:"name,omitempty"`
@@ -103,6 +109,9 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
 		u.Parent = v.Parent
+	}
+	if !(len(v.Description) == 0) {
+		u.Description = v.Description
 	}
 	if !(!v.OmitAccessor) {
 		u.OmitAccessor = v.OmitAccessor
@@ -126,6 +135,7 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type          RecordType                              `json:"type"`
 		Parent        *EntityRecord                           `json:"parent,omitempty"`
+		Description   string                                  `json:"description,omitempty"`
 		OmitAccessor  bool                                    `json:"omitAccessor,omitempty"`
 		Private       bool                                    `json:"private,omitempty"`
 		Name          string                                  `json:"name,omitempty"`
@@ -141,6 +151,9 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
 		u.Parent = v.Parent
+	}
+	if !(len(v.Description) == 0) {
+		u.Description = v.Description
 	}
 	if !(!v.OmitAccessor) {
 		u.OmitAccessor = v.OmitAccessor
@@ -182,6 +195,7 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type           RecordType                `json:"type"`
 		Parent         *EntityRecord             `json:"parent,omitempty"`
+		Description    string                    `json:"description,omitempty"`
 		OmitAccessor   bool                      `json:"omitAccessor,omitempty"`
 		Private        bool                      `json:"private,omitempty"`
 		Name           string                    `json:"name,omitempty"`
@@ -196,6 +210,9 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
 		u.Parent = v.Parent
+	}
+	if !(len(v.Description) == 0) {
+		u.Description = v.Description
 	}
 	if !(!v.OmitAccessor) {
 		u.OmitAccessor = v.OmitAccessor
@@ -234,6 +251,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type         RecordType                `json:"type"`
 		Parent       *EntityRecord             `json:"parent,omitempty"`
+		Description  string                    `json:"description,omitempty"`
 		OmitAccessor bool                      `json:"omitAccessor,omitempty"`
 		Private      bool                      `json:"private,omitempty"`
 		Name         string                    `json:"name,omitempty"`
@@ -245,6 +263,9 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
 		u.Parent = v.Parent
+	}
+	if !(len(v.Description) == 0) {
+		u.Description = v.Description
 	}
 	if !(!v.OmitAccessor) {
 		u.OmitAccessor = v.OmitAccessor
@@ -274,6 +295,7 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type           RecordType                `json:"type"`
 		Parent         *EntityRecord             `json:"parent,omitempty"`
+		Description    string                    `json:"description,omitempty"`
 		OmitAccessor   bool                      `json:"omitAccessor,omitempty"`
 		Private        bool                      `json:"private,omitempty"`
 		Name           string                    `json:"name,omitempty"`
@@ -288,6 +310,9 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
 		u.Parent = v.Parent
+	}
+	if !(len(v.Description) == 0) {
+		u.Description = v.Description
 	}
 	if !(!v.OmitAccessor) {
 		u.OmitAccessor = v.OmitAccessor
@@ -326,6 +351,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type         RecordType                `json:"type"`
 		Parent       *EntityRecord             `json:"parent,omitempty"`
+		Description  string                    `json:"description,omitempty"`
 		OmitAccessor bool                      `json:"omitAccessor,omitempty"`
 		Private      bool                      `json:"private,omitempty"`
 		Name         string                    `json:"name,omitempty"`
@@ -334,6 +360,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
+	u.Description = v.Description
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
 	u.Name = v.Name
@@ -346,6 +373,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Parent = u.Parent
+	v.Description = u.Description
 	v.OmitAccessor = u.OmitAccessor
 	v.Private = u.Private
 	v.Name = u.Name
@@ -358,6 +386,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type          RecordType                              `json:"type"`
 		Parent        *EntityRecord                           `json:"parent,omitempty"`
+		Description   string                                  `json:"description,omitempty"`
 		OmitAccessor  bool                                    `json:"omitAccessor,omitempty"`
 		Private       bool                                    `json:"private,omitempty"`
 		Name          string                                  `json:"name,omitempty"`
@@ -372,6 +401,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
+	u.Description = v.Description
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
 	u.Name = v.Name
@@ -390,6 +420,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Parent = u.Parent
+	v.Description = u.Description
 	v.OmitAccessor = u.OmitAccessor
 	v.Private = u.Private
 	v.Name = u.Name
@@ -413,6 +444,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type           RecordType                `json:"type"`
 		Parent         *EntityRecord             `json:"parent,omitempty"`
+		Description    string                    `json:"description,omitempty"`
 		OmitAccessor   bool                      `json:"omitAccessor,omitempty"`
 		Private        bool                      `json:"private,omitempty"`
 		Name           string                    `json:"name,omitempty"`
@@ -426,6 +458,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
+	u.Description = v.Description
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
 	u.Name = v.Name
@@ -443,6 +476,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Parent = u.Parent
+	v.Description = u.Description
 	v.OmitAccessor = u.OmitAccessor
 	v.Private = u.Private
 	v.Name = u.Name
@@ -460,6 +494,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type         RecordType                `json:"type"`
 		Parent       *EntityRecord             `json:"parent,omitempty"`
+		Description  string                    `json:"description,omitempty"`
 		OmitAccessor bool                      `json:"omitAccessor,omitempty"`
 		Private      bool                      `json:"private,omitempty"`
 		Name         string                    `json:"name,omitempty"`
@@ -470,6 +505,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
+	u.Description = v.Description
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
 	u.Name = v.Name
@@ -484,6 +520,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Parent = u.Parent
+	v.Description = u.Description
 	v.OmitAccessor = u.OmitAccessor
 	v.Private = u.Private
 	v.Name = u.Name
@@ -498,6 +535,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type           RecordType                `json:"type"`
 		Parent         *EntityRecord             `json:"parent,omitempty"`
+		Description    string                    `json:"description,omitempty"`
 		OmitAccessor   bool                      `json:"omitAccessor,omitempty"`
 		Private        bool                      `json:"private,omitempty"`
 		Name           string                    `json:"name,omitempty"`
@@ -511,6 +549,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
+	u.Description = v.Description
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
 	u.Name = v.Name
@@ -528,6 +567,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Parent = u.Parent
+	v.Description = u.Description
 	v.OmitAccessor = u.OmitAccessor
 	v.Private = u.Private
 	v.Name = u.Name

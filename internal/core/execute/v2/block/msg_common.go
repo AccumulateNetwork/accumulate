@@ -7,8 +7,6 @@
 package block
 
 import (
-	"bytes"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -197,26 +195,6 @@ func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol
 	}
 
 	return txn.GetTransaction(), nil
-}
-
-// getSignature loads a signature from the database or from the message bundle.
-func (b *bundle) getSignature(batch *database.Batch, hash [32]byte) (protocol.Signature, error) {
-	// Look in the bundle
-	for _, msg := range b.messages {
-		msg, ok := messaging.UnwrapAs[messaging.MessageWithSignature](msg)
-		if ok && bytes.Equal(msg.GetSignature().Hash(), hash[:]) {
-			return msg.GetSignature(), nil
-		}
-	}
-
-	// Look in the database
-	var msg messaging.MessageWithSignature
-	err := batch.Message(hash).Main().GetAs(&msg)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	return msg.GetSignature(), nil
 }
 
 func (b *bundle) recordPending(batch *database.Batch, ctx *MessageContext, msg messaging.Message) (*protocol.TransactionStatus, error) {

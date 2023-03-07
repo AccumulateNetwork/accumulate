@@ -6,6 +6,8 @@ EntityRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -45,6 +47,8 @@ ChainRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -67,6 +71,8 @@ StateRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -101,6 +107,8 @@ IndexRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -135,6 +143,8 @@ OtherRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
