@@ -54,10 +54,28 @@ func (c txnCond) Refund() msgCond {
 // sigCond provides methods to define conditions on a signature.
 type sigCond struct{ msgCond }
 
+func (c sigCond) Completes() Condition {
+	conditions := []Condition{
+		c.Succeeds(),
+		c.CreditPayment().Succeeds(),
+		// c.SignatureRequest().make("succeeds", deliveredThen(producedRecursive(succeeds))),
+		c.AuthoritySignature().make("succeeds", deliveredThen(producedRecursive(succeeds))),
+	}
+	return c.make("completes", func(h *Harness, _ *condition, _ *msgResult) bool {
+		ok := true
+		for _, c := range conditions {
+			if !c.Satisfied(h) {
+				ok = false
+			}
+		}
+		return ok
+	})
+}
+
 // CreditPayment defines a condition on the credit payment produced by a
 // signature.
 func (c sigCond) CreditPayment() msgCond {
-	return c.with("credit payment", deliveredThen, produced2(func(r *msgResult) bool {
+	return c.with("credit payment", deliveredThen, producedFiltered(func(r *msgResult) bool {
 		_, ok := messaging.UnwrapAs[*messaging.CreditPayment](r.Message)
 		return ok
 	}))
@@ -66,7 +84,7 @@ func (c sigCond) CreditPayment() msgCond {
 // SignatureRequest defines a condition on signature requests produced by a
 // signature.
 func (c sigCond) SignatureRequest() sigCond2 {
-	return sigCond2{c.with("signature request", deliveredThen, produced2(func(r *msgResult) bool {
+	return sigCond2{c.with("signature request", deliveredThen, producedFiltered(func(r *msgResult) bool {
 		_, ok := messaging.UnwrapAs[*messaging.SignatureRequest](r.Message)
 		return ok
 	}))}
@@ -75,7 +93,7 @@ func (c sigCond) SignatureRequest() sigCond2 {
 // AuthoritySignature defines a condition on the authority signature produced by
 // a signature.
 func (c sigCond) AuthoritySignature() sigCond2 {
-	return sigCond2{c.with("authority signature", deliveredThen, produced2(func(r *msgResult) bool {
+	return sigCond2{c.with("authority signature", deliveredThen, producedFiltered(func(r *msgResult) bool {
 		msg, ok := messaging.UnwrapAs[*messaging.SignatureMessage](r.Message)
 		return ok && msg.Signature.Type() == protocol.SignatureTypeAuthority
 	}))}
@@ -163,6 +181,7 @@ func (c msgCond) FailsWithCode(code errors.Status) Condition {
 }
 
 type msgResult struct {
+	Type     string
 	Message  messaging.Message
 	Status   *protocol.TransactionStatus
 	Produced []*url.TxID
@@ -177,19 +196,33 @@ type condition struct {
 	lastResult *msgResult
 	capture    **protocol.TransactionStatus
 	message    []string
+	prodMsg    *string
 }
 
 func (c *condition) String() string {
 	return strings.Join(c.message, " ")
 }
 
+func (c *condition) messageReplaceEnd(s string) string {
+	t := strings.Join(c.message[:len(c.message)-1], " ")
+	return t + " " + s
+}
+
 func (c *condition) Satisfied(h *Harness) bool {
+	h.TB.Helper()
 	return c.predicate(h, c, c.lastResult)
 }
 
 func (c *condition) replace(h *Harness, new statusPredicate) bool {
+	h.TB.Helper()
 	c.predicate = new
 	return c.Satisfied(h)
+}
+
+func (c *condition) replaceWith(h *Harness, d *condition) bool {
+	c.message = d.message
+	c.prodMsg = d.prodMsg
+	return c.replace(h, d.predicate)
 }
 
 func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
@@ -215,12 +248,15 @@ func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
 	case *api.SignatureRecord:
 		res.Status, produced = qr.Status, qr.Produced.Records
 		res.Message = &messaging.SignatureMessage{Signature: qr.Signature}
+		res.Type = qr.Signature.Type().String() + " signature"
 	case *api.TransactionRecord:
 		res.Status, produced = qr.Status, qr.Produced.Records
 		if qr.Message != nil {
 			res.Message = qr.Message
+			res.Type = qr.Message.Type().String()
 		} else {
 			res.Message = &messaging.TransactionMessage{Transaction: qr.Transaction}
+			res.Type = qr.Transaction.Body.Type().String() + " transaction"
 		}
 	default:
 		h.TB.Fatalf("Unsupported record type %v", qr.RecordType())
@@ -249,6 +285,11 @@ func waitFor(id *url.TxID) predicateModifier {
 			c.lastResult = r
 			if c.capture != nil {
 				*c.capture = r.Status
+			}
+
+			if c.prodMsg != nil {
+				*c.prodMsg = "produced " + r.Type
+				c.prodMsg = nil
 			}
 
 			// Evaluate the predicate (only replace if the status is final)
@@ -282,17 +323,31 @@ func produced(predicate statusPredicate) statusPredicate {
 			h.TB.Fatalf("%v did not produce transactions", r.Status.TxID)
 		}
 
+		nProd := len(c.message) - 2
+		if nProd < 0 || c.message[nProd] != "produced" {
+			nProd = -1
+		}
+
 		conditions := make([]*condition, len(r.Produced))
 		for i, id := range r.Produced {
-			conditions[i] = &condition{
+			c := &condition{
 				predicate: waitFor(id)(predicate),
 				message:   c.message,
 				capture:   c.capture,
 			}
+			conditions[i] = c
+			if nProd < 0 {
+				continue
+			}
+
+			m := make([]string, len(c.message))
+			copy(m, c.message)
+			c.message = m
+			c.prodMsg = &m[nProd]
 		}
 
 		if len(conditions) == 1 {
-			return c.replace(h, conditions[0].predicate)
+			return c.replaceWith(h, conditions[0])
 		}
 
 		return c.replace(h, func(h *Harness, _ *condition, _ *msgResult) bool {
@@ -307,7 +362,50 @@ func produced(predicate statusPredicate) statusPredicate {
 	}
 }
 
-func produced2(filter func(*msgResult) bool) predicateModifier {
+func producedRecursive(predicate statusPredicate) statusPredicate {
+	var recursive statusPredicate
+	recursive = func(h *Harness, c *condition, r *msgResult) bool {
+		h.TB.Helper()
+
+		conditions := make([]*condition, len(r.Produced)+1)
+		conditions[0] = &condition{
+			predicate:  predicate,
+			message:    c.message,
+			capture:    c.capture,
+			lastResult: r,
+		}
+
+		for i, id := range r.Produced {
+			m := make([]string, len(c.message)+1)
+			n := copy(m, c.message[:len(c.message)-1])
+			m[n] = "produced"
+			m[n+1] = c.message[n]
+			conditions[i+1] = &condition{
+				predicate: waitFor(id)(deliveredThen(recursive)),
+				message:   m,
+				capture:   c.capture,
+				prodMsg:   &m[n],
+			}
+		}
+
+		if len(conditions) == 1 {
+			return c.replaceWith(h, conditions[0])
+		}
+
+		return c.replace(h, func(h *Harness, _ *condition, _ *msgResult) bool {
+			ok := true
+			for _, c := range conditions {
+				if !c.Satisfied(h) {
+					ok = false
+				}
+			}
+			return ok
+		})
+	}
+	return recursive
+}
+
+func producedFiltered(filter func(*msgResult) bool) predicateModifier {
 	return func(predicate statusPredicate) statusPredicate {
 		return func(h *Harness, c *condition, r *msgResult) bool {
 			h.TB.Helper()
@@ -328,6 +426,10 @@ func produced2(filter func(*msgResult) bool) predicateModifier {
 				// Is it the one we want?
 				if !filter(r) {
 					continue
+				}
+
+				if n := len(c.message) - 2; n >= 0 && c.message[n] == "produced" {
+					c.prodMsg = &c.message[n]
 				}
 
 				// Found it, delegate to the predicate
@@ -363,7 +465,7 @@ func isPending(h *Harness, c *condition, r *msgResult) bool {
 		if r.Status.Code == errors.Pending {
 			return true
 		}
-		h.TB.Fatal("Expected transaction to be pending")
+		h.TB.Fatal(c.messageReplaceEnd("is not pending"), "🗴")
 	}
 
 	// Check if the account lists the transaction as pending
@@ -390,7 +492,8 @@ func succeeds(h *Harness, c *condition, r *msgResult) bool {
 
 	// Must be success
 	if r.Status.Failed() {
-		h.TB.Fatal("Expected transaction to succeed")
+		h.TB.Logf("%v\n", r.Status.AsError())
+		h.TB.Fatal(c.messageReplaceEnd("did not succeed"), "🗴")
 	}
 	if h.VerboseConditions {
 		fmt.Println(c, "✔")
@@ -403,7 +506,7 @@ func fails(h *Harness, c *condition, r *msgResult) bool {
 
 	// Must be failure
 	if !r.Status.Failed() {
-		h.TB.Fatal("Expected transaction to fail")
+		h.TB.Fatal(c.messageReplaceEnd("did not fail"), "🗴")
 	}
 	return true
 }
@@ -414,11 +517,12 @@ func failsWithCode(code errors.Status) statusPredicate {
 
 		// Must be failure
 		if !r.Status.Failed() {
-			h.TB.Fatal("Expected transaction to fail")
+			h.TB.Fatal(c.messageReplaceEnd("did not fail"), "🗴")
 		}
 
 		if r.Status.Code != code {
-			h.TB.Fatalf("Expected code %v, got %v", code, r.Status.Code)
+			m := fmt.Sprintf("failed with %v, not %v", r.Status.Code, code)
+			h.TB.Fatal(c.messageReplaceEnd(m), "🗴")
 		}
 		return true
 	}
