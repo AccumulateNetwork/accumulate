@@ -59,6 +59,19 @@ type SigSetEntry struct {
 	extraData        []byte
 }
 
+type SignatureSetEntry struct {
+	fieldsSet []bool
+	// ChainIndex is the index of the entry on the signer's signature chain.
+	ChainIndex uint64 `json:"chainIndex" form:"chainIndex" query:"chainIndex" validate:"required"`
+	// KeyIndex is the index of the public key entry in the signer.
+	KeyIndex uint64 `json:"keyIndex" form:"keyIndex" query:"keyIndex" validate:"required"`
+	// Version is the signer version.
+	Version uint64 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	// Hash is the hash of the signature.
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
 type TransactionChainEntry struct {
 	fieldsSet []bool
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
@@ -147,6 +160,19 @@ func (v *SigSetEntry) Copy() *SigSetEntry {
 }
 
 func (v *SigSetEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SignatureSetEntry) Copy() *SignatureSetEntry {
+	u := new(SignatureSetEntry)
+
+	u.ChainIndex = v.ChainIndex
+	u.KeyIndex = v.KeyIndex
+	u.Version = v.Version
+	u.Hash = v.Hash
+
+	return u
+}
+
+func (v *SignatureSetEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
 	u := new(TransactionChainEntry)
@@ -273,6 +299,23 @@ func (v *SigSetEntry) Equal(u *SigSetEntry) bool {
 	case v.ValidatorKeyHash == nil || u.ValidatorKeyHash == nil:
 		return false
 	case !(*v.ValidatorKeyHash == *u.ValidatorKeyHash):
+		return false
+	}
+
+	return true
+}
+
+func (v *SignatureSetEntry) Equal(u *SignatureSetEntry) bool {
+	if !(v.ChainIndex == u.ChainIndex) {
+		return false
+	}
+	if !(v.KeyIndex == u.KeyIndex) {
+		return false
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Hash == u.Hash) {
 		return false
 	}
 
@@ -565,6 +608,64 @@ func (v *SigSetEntry) IsValid() error {
 	}
 }
 
+var fieldNames_SignatureSetEntry = []string{
+	1: "ChainIndex",
+	2: "KeyIndex",
+	3: "Version",
+	4: "Hash",
+}
+
+func (v *SignatureSetEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, v.ChainIndex)
+	writer.WriteUint(2, v.KeyIndex)
+	if !(v.Version == 0) {
+		writer.WriteUint(3, v.Version)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(4, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SignatureSetEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SignatureSetEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field ChainIndex is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field KeyIndex is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_TransactionChainEntry = []string{
 	1: "Account",
 	2: "Chain",
@@ -811,6 +912,38 @@ func (v *SigSetEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *SignatureSetEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SignatureSetEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.ChainIndex = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.KeyIndex = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_SignatureSetEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -958,6 +1091,24 @@ func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SignatureSetEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ChainIndex uint64 `json:"chainIndex"`
+		KeyIndex   uint64 `json:"keyIndex"`
+		Version    uint64 `json:"version,omitempty"`
+		Hash       string `json:"hash,omitempty"`
+	}{}
+	u.ChainIndex = v.ChainIndex
+	u.KeyIndex = v.KeyIndex
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(v.Hash)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *sigSetData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Version uint64                         `json:"version,omitempty"`
@@ -1073,6 +1224,31 @@ func (v *SigSetEntry) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
 	} else {
 		v.ValidatorKeyHash = &x
+	}
+	return nil
+}
+
+func (v *SignatureSetEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ChainIndex uint64 `json:"chainIndex"`
+		KeyIndex   uint64 `json:"keyIndex"`
+		Version    uint64 `json:"version,omitempty"`
+		Hash       string `json:"hash,omitempty"`
+	}{}
+	u.ChainIndex = v.ChainIndex
+	u.KeyIndex = v.KeyIndex
+	u.Version = v.Version
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainIndex = u.ChainIndex
+	v.KeyIndex = u.KeyIndex
+	v.Version = u.Version
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
 	}
 	return nil
 }

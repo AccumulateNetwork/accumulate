@@ -9,6 +9,7 @@ package block
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -71,35 +72,104 @@ func (s *SignatureContext) authorityIsSatisfied(batch *database.Batch, authority
 	return ok, errors.UnknownError.Wrap(err)
 }
 
-// didInitiate checks if this signature or its authority initiated the
-// transaction.
-func (s *SignatureContext) didInitiate(batch *database.Batch) (bool, error) {
-	if protocol.SignatureDidInitiate(s.signature, s.transaction.Header.Initiator[:], nil) {
-		return true, nil
-	}
+func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.Signer, entry *database.SignatureSetEntry) error {
+	signerUrl := ctx.getSigner()
+	set := batch.Account(signerUrl).Transaction(ctx.transaction.ID().Hash()).Signatures()
 
-	status, err := batch.Transaction(s.transaction.GetHash()).Status().Get()
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-
-	record := batch.Transaction(s.transaction.GetHash())
-	for _, signer := range status.FindSigners(s.getAuthority()) {
-		sigs, err := record.ReadSignaturesForSigner(signer)
+	// Record the initiator
+	if protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
+		err := set.Initiator().Put(ctx.message.Hash())
 		if err != nil {
-			return false, errors.UnknownError.WithFormat("load signatures set %v: %w", signer.GetUrl(), err)
-		}
-
-		for _, e := range sigs.Entries() {
-			sig, err := s.getSignature(batch, e.SignatureHash)
-			if err != nil {
-				return false, errors.UnknownError.WithFormat("load signature entry %X: %w", e.SignatureHash, err)
-			}
-
-			if protocol.SignatureDidInitiate(sig, s.transaction.Header.Initiator[:], nil) {
-				return true, nil
-			}
+			return errors.UnknownError.WithFormat("store initiator hash: %w", err)
 		}
 	}
-	return false, nil
+
+	// Grab the version from an entry
+	all, err := set.Active().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load signature set version: %w", err)
+	}
+	var version uint64
+	if len(all) > 0 {
+		version = all[0].Version
+	}
+
+	switch {
+	case version == entry.Version:
+		// Ignore repeated signatures
+		_, ok := sortutil.Search(all, func(e *database.SignatureSetEntry) int { return int(e.KeyIndex) - int(entry.KeyIndex) })
+		if ok {
+			return nil
+		}
+
+		// Add to the active set if the signature's signer version is the same
+		err = set.Active().Add(entry)
+
+	case version < entry.Version:
+		// Replace the active set if the signature's signer version is more recent
+		err = set.Active().Put([]*database.SignatureSetEntry{entry})
+
+	default: // version > entry.Version
+		// This should be caught elsewhere
+		return errors.InternalError.WithFormat("invalid signer version: want %v, got %v", version, entry.Version)
+	}
+	if err != nil {
+		return errors.UnknownError.WithFormat("update active signature set: %w", err)
+	}
+
+	// Add the transaction to the authority's pending list if the signer is not
+	// yet satisfied
+	all, err = set.Active().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load signature set version: %w", err)
+	}
+	if len(all) < int(signer.GetSignatureThreshold()) {
+		err = batch.Account(ctx.getAuthority()).Pending().Add(ctx.transaction.ID())
+		if err != nil {
+			return errors.UnknownError.WithFormat("update the pending list: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext) error {
+	// Remove the transaction from the pending list
+	authUrl := ctx.getAuthority()
+	err := batch.Account(authUrl).Pending().Remove(ctx.transaction.ID())
+	if err != nil {
+		return errors.UnknownError.WithFormat("update the pending list: %w", err)
+	}
+
+	// Clear the initiator
+	sigs := batch.
+		Account(ctx.getSigner()).
+		Transaction(ctx.transaction.ID().Hash()).
+		Signatures()
+	err = sigs.Initiator().Put([32]byte{})
+	if err != nil {
+		return errors.UnknownError.WithFormat("clear the initiator hash: %w", err)
+	}
+
+	// Load the authority
+	var authority protocol.Authority
+	err = batch.Account(authUrl).Main().GetAs(&authority)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load the authority: %w", err)
+	}
+
+	// Clear the active signature set of every signer
+	for _, signer := range authority.GetSigners() {
+		err := batch.
+			Account(signer).
+			Transaction(ctx.transaction.ID().Hash()).
+			Signatures().
+			Active().
+			Put(nil)
+		if err != nil {
+			return errors.UnknownError.WithFormat("clear active signature set: %w", err)
+		}
+	}
+
+	return nil
 }
