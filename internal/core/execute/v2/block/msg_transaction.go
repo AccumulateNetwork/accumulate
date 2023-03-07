@@ -222,54 +222,56 @@ func (TransactionMessage) checkWrapper(ctx *MessageContext, txn *protocol.Transa
 	return nil
 }
 
-func (x TransactionMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+func (x TransactionMessage) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
 	batch = batch.Begin(true)
-	defer batch.Discard()
+	defer func() { commitOrDiscard(batch, &err) }()
 
-	// Verify the transaction is well-formed. Only resolve a remote transaction
-	// if we're going to execute it.
+	// Check if the message has already been processed
+	status, err := ctx.checkStatus(batch)
+	if err != nil || status.Delivered() {
+		return status, err
+	}
+
+	// Process the transaction
 	shouldExecute := ctx.shouldExecuteTransaction()
 	txn, err := x.check(batch, ctx, shouldExecute)
+	if err == nil {
+		// Record the message if it is valid and not remote
+		if txn.Transaction.Body.Type() != protocol.TransactionTypeRemote {
+			err = batch.Message(ctx.message.Hash()).Main().Put(ctx.message)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("store message: %w", err)
+			}
+		}
+
+		// Execute if it's time
+		if shouldExecute {
+			var s2 *protocol.TransactionStatus
+			s2, err = x.executeTransaction(batch, ctx.txnWith(txn.Transaction))
+			if err == nil && shouldExecute {
+				s2.TxID = ctx.message.ID()
+				s2.Received = status.Received
+				status = s2
+			}
+		}
+	}
+
+	// Update the status
 	switch {
 	case err == nil:
-		// Ok
+		// DO NOT update the status code. The status code should only be updated
+		// when the transaction is executed.
 
 	case errors.Code(err).IsClientError():
-		status := new(protocol.TransactionStatus)
-		status.Received = ctx.Block.Index
-		status.TxID = ctx.message.ID()
 		status.Set(err)
-		err = batch.Transaction2(ctx.message.Hash()).Status().Put(status)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store status: %w", err)
-		}
-		return status, nil
 
 	default:
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Store the transaction
-	if txn.Transaction.Body.Type() != protocol.TransactionTypeRemote {
-		err = batch.Message(txn.Hash()).Main().Put(txn)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
-		}
-	}
-
-	// Execute the transaction, but ONLY if this is a nested context - DO NOT
-	// attempt to execute a bare user transaction
-	var status *protocol.TransactionStatus
-	if shouldExecute {
-		status, err = x.executeTransaction(batch, ctx.txnWith(txn.Transaction))
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
-	err = batch.Commit()
+	err = batch.Transaction2(ctx.message.Hash()).Status().Put(status)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.WithFormat("store status: %w", err)
 	}
 
 	return status, nil

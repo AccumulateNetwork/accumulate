@@ -55,77 +55,30 @@ func (AuthoritySignature) check(batch *database.Batch, ctx *SignatureContext) (*
 	return sig, nil
 }
 
-func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
-	// Make sure the block gets recorded
-	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
-
+func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext) (_ *protocol.TransactionStatus, err error) {
 	batch = batch.Begin(true)
-	defer batch.Discard()
-
-	// If the signature has already been processed, return the stored status
-	hash := ctx.signature.Hash()
-	status, err := batch.Transaction(hash).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-
-	if status.Code != 0 {
-		return status, nil //nolint:nilerr // False positive
-	}
-
-	// Initialize the status
-	status.TxID = ctx.message.ID()
-	status.Received = ctx.Block.Index
+	defer func() { commitOrDiscard(batch, &err) }()
 
 	// Check the message for basic validity
 	sig, err := x.check(batch, ctx)
-	var err2 *errors.Error
-	switch {
-	case err == nil:
-		// Process the signature (update the transaction status)
-		if len(sig.Delegator) > 0 {
-			err = x.processDelegated(batch, ctx, sig)
-		} else {
-			err = x.processDirect(batch, ctx, sig)
-		}
-		switch {
-		case err == nil:
-			// Ok
-			status.Code = errors.Delivered
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
-		case errors.As(err, &err2) && err2.Code.IsClientError():
-			// Record the error
-			status.Set(err)
-
-		default:
-			// A system error occurred
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-	case errors.As(err, &err2) && err2.Code.IsClientError():
-		// Record the error
-		status.Set(err)
-
-	default:
-		// A system error occurred
+	// Process the signature (update the transaction status)
+	if len(sig.Delegator) > 0 {
+		err = x.processDelegated(batch, ctx, sig)
+	} else {
+		err = x.processDirect(batch, ctx, sig)
+	}
+	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Once a signature has been included in the block, record the signature and
 	// its status not matter what, unless there is a system error
-	err = batch.Message2(hash).Main().Put(ctx.message)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
-	}
-
-	err = batch.Transaction(hash).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store status: %w", err)
-	}
-
-	if status.Failed() || len(sig.Delegator) > 0 {
-		err = batch.Commit()
-		return status, errors.UnknownError.Wrap(err)
+	if len(sig.Delegator) > 0 {
+		return nil, nil
 	}
 
 	// TODO Don't do this unless all authorities are satisfied
@@ -136,12 +89,7 @@ func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	err = batch.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	return status, nil
+	return nil, nil
 }
 
 // processDirect processes a direct authority's signature.
