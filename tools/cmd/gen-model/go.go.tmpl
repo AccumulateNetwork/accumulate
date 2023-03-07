@@ -70,6 +70,8 @@ record.Struct[{{stateType . true}}]()
 return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}},
 	{{- if .Wrapped -}}
 	record.Compare{{title .DataType.String}}
+	{{- else if .Comparator -}}
+	{{.Comparator}}
 	{{- else -}}
 	func(u, v {{stateType . false}}) int { return u.Compare(v) }
 	{{- end -}}
