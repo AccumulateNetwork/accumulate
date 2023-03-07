@@ -9,9 +9,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/tendermint/tendermint/types"
-
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -247,7 +246,7 @@ func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error
 func versionCheck(version *api.VersionResponse, peer string) error {
 	switch {
 	case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
-		fmt.Println("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.", peer)
+		fmt.Printf("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.\n", peer)
 
 	case accumulate.Commit != version.Commit:
 		return fmt.Errorf("wrong version: network is %s, we are %s", formatVersion(version.Version, version.VersionIsKnown), formatVersion(accumulate.Version, accumulate.IsVersionKnown()))
