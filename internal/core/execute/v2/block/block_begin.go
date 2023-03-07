@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -28,8 +29,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// BeginBlock implements ./Chain
-func (x *Executor) BeginBlock(block *Block) error {
+// Begin constructs a [Block] and calls [Executor.BeginBlock].
+func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error) {
+	block := new(Block)
+	block.BlockParams = params
+	block.Executor = x
+	block.Batch = x.Database.Begin(true)
+
+	defer func() {
+		if err != nil {
+			block.Batch.Discard()
+		}
+	}()
+
 	//clear the timers
 	x.BlockTimers.Reset()
 
@@ -39,9 +51,9 @@ func (x *Executor) BeginBlock(block *Block) error {
 	x.logger.Debug("Begin block", "module", "block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
 	// Finalize the previous block
-	err := x.finalizeBlock(block)
+	err = x.finalizeBlock(block)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	errs := x.mainDispatcher.Send(context.Background())
@@ -71,7 +83,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 		// OK
 
 	default:
-		return fmt.Errorf("cannot load ledger: %w", err)
+		return nil, fmt.Errorf("cannot load ledger: %w", err)
 	}
 	lastBlockWasEmpty := ledgerState.Index < block.Index-1
 
@@ -84,7 +96,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 
 	err = ledger.PutState(ledgerState)
 	if err != nil {
-		return fmt.Errorf("cannot write ledger: %w", err)
+		return nil, fmt.Errorf("cannot write ledger: %w", err)
 	}
 
 	if !lastBlockWasEmpty {
@@ -102,7 +114,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 		}
 	}
 
-	return nil
+	return block, nil
 }
 
 func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccountPath string, value interface{}) error {
