@@ -204,7 +204,7 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 
 	case *ActivateProtocolVersion,
 		*AddCredits,
-		*PlaceholderTransaction,
+		*BurnCredits,
 		*AcmeFaucet:
 		fee = 0
 
