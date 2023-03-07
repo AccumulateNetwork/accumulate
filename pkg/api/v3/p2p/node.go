@@ -37,6 +37,10 @@ type Options = p2p.Options
 // network to be available and queries it to determine the routing table. Thus
 // New must not be used by the core nodes themselves.
 func New(opts Options) (*Node, error) {
+	if opts.Network == "" {
+		return nil, errors.BadRequest.With("missing network")
+	}
+
 	node, err := p2p.New(opts)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize node: %w", err)
