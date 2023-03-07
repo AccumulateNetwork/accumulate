@@ -90,6 +90,8 @@ StateRecord:
     - name: Collection
       type: CollectionType
       marshal-as: enum
+    - name: Comparator
+      type: string
 
 IndexRecord:
   non-binary: true
@@ -122,6 +124,8 @@ IndexRecord:
     - name: Collection
       type: CollectionType
       marshal-as: enum
+    - name: Comparator
+      type: string
 
 OtherRecord:
   non-binary: true
