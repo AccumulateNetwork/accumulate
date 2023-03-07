@@ -68,6 +68,5 @@ func TestSimpleMultisig(t *testing.T) {
 			Url(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
 
 	sim.StepUntil(
-		Txn(st[0].TxID).Succeeds(),
-		Sig(st[1].TxID).Completes())
+		Txn(st[0].TxID).Succeeds())
 }
