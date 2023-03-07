@@ -50,13 +50,12 @@ func TestConsensusStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, s.Peers, 2)
-	p0, p1 := s.Peers[0], s.Peers[1]
-	require.Equal(t, "82e8cf34c37159f5379f8dfc96c3f01ba15cda77", p0.NodeID)
-	require.Equal(t, 16591, int(p0.Port))
-	require.Equal(t, "bvn1-seed.testnet.accumulatenetwork.io", p0.Host)
-	require.Equal(t, "7883dec6a840fc9c115554fb73ce532e17ccddb0", p1.NodeID)
-	require.Equal(t, 16591, int(p1.Port))
-	require.Equal(t, "bvn2-seed.testnet.accumulatenetwork.io", p1.Host)
+	require.Equal(t, "82e8cf34c37159f5379f8dfc96c3f01ba15cda77", s.Peers[0].NodeID)
+	require.Equal(t, 16591, int(s.Peers[0].Port))
+	require.Equal(t, "bvn1-seed.testnet.accumulatenetwork.io", s.Peers[0].Host)
+	require.Equal(t, "7883dec6a840fc9c115554fb73ce532e17ccddb0", s.Peers[1].NodeID)
+	require.Equal(t, 16591, int(s.Peers[1].Port))
+	require.Equal(t, "bvn2-seed.testnet.accumulatenetwork.io", s.Peers[1].Host)
 }
 
 type staticClient struct{}
