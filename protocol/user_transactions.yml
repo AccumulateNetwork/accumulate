@@ -208,6 +208,15 @@ BurnCredits:
     - name: Amount
       type: uint
 
+TransferCredits:
+  union: { type: transaction }
+  fields:
+    - name: To
+      repeatable: true
+      type: CreditRecipient
+      marshal-as: reference
+      pointer: true
+
 UpdateKeyPage:
   union: { type: transaction }
   fields:
