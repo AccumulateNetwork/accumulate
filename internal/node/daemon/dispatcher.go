@@ -10,7 +10,6 @@ import (
 	"context"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/mempool"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -162,26 +161,4 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 	// Let the caller wait for errors
 	return errs
-}
-
-// dialer is a wrapper around the p2p node's dialer to account for the order of
-// initialization.
-type dialer struct {
-	ready  chan struct{}
-	dialer message.MultiDialer
-}
-
-var _ message.MultiDialer = (*dialer)(nil)
-
-func (d *dialer) d() message.MultiDialer {
-	<-d.ready // wait until ready
-	return d.dialer
-}
-
-func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	return d.d().Dial(ctx, addr)
-}
-
-func (d *dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, stream message.Stream, err error) bool {
-	return d.d().BadDial(ctx, addr, stream, err)
 }
