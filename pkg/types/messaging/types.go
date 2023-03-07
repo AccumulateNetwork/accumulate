@@ -123,6 +123,27 @@ type MessageWithSignature interface {
 func (m *SignatureMessage) GetSignature() protocol.Signature { return m.Signature }
 func (m *BlockAnchor) GetSignature() protocol.Signature      { return m.Signature }
 
+type MessageWithCauses interface {
+	Message
+	GetCauses() []*url.TxID
+}
+
+func (m *SignatureRequest) GetCauses() []*url.TxID { return []*url.TxID{m.Cause} }
+
+type MessageWithProduced interface {
+	Message
+	GetProduced() []*url.TxID
+}
+
+func (m *SequencedMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
+func (m *SyntheticMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
+func (m *SignatureRequest) GetProduced() []*url.TxID { return []*url.TxID{m.TxID} }
+
+func (m *BlockAnchor) GetProduced() []*url.TxID {
+	id := m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
+	return []*url.TxID{id, m.Anchor.ID()}
+}
+
 func (m *TransactionMessage) Hash() [32]byte {
 	return *(*[32]byte)(m.Transaction.GetHash())
 }
