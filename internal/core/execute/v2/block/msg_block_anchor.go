@@ -38,69 +38,27 @@ func (x BlockAnchor) Validate(batch *database.Batch, ctx *MessageContext) (*prot
 	return nil, nil
 }
 
-func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	// If the message has already been processed, return its recorded status
-	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	if status.Delivered() {
-		return status, nil
+func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
+	batch = batch.Begin(true)
+	defer func() { commitOrDiscard(batch, &err) }()
+
+	// Check if the message has already been processed
+	status, err := ctx.checkStatus(batch)
+	if err != nil || status.Delivered() {
+		return status, err
 	}
 
 	// Add a transaction state to ensure the block gets recorded
 	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
 
-	batch = batch.Begin(true)
-	defer batch.Discard()
-
 	// Process the message
-	status = new(protocol.TransactionStatus)
-	status.Received = ctx.Block.Index
-	status.TxID = ctx.message.ID()
-
 	msg, txn, seq, signer, err := x.check(ctx, batch)
 	if err == nil {
 		err = x.process(batch, ctx, msg, txn, seq, signer)
 	}
 
-	// Update the status
-	switch {
-	case err == nil:
-		status.Code = errors.Delivered
-
-	case errors.Code(err).IsClientError():
-		status.Set(err)
-
-	default:
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Record the message
-	err = batch.Message(ctx.message.Hash()).Main().Put(ctx.message)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message: %w", err)
-	}
-
-	if status.Delivered() {
-		err = batch.Message(ctx.message.Hash()).Produced().Add(txn.ID())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("add cause: %w", err)
-		}
-
-		err = batch.Message2(txn.GetHash()).Cause().Add(ctx.message.ID())
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("add cause: %w", err)
-		}
-	}
-
-	// Record the status
-	err = batch.Transaction2(ctx.message.Hash()).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store status: %w", err)
-	}
-
-	err = batch.Commit()
+	// Record the message and its status
+	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
