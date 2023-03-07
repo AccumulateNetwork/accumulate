@@ -18,7 +18,23 @@ RangeOptions:
       type: bool
       optional: true
 
-NodeStatusOptions:
+NodeInfoOptions:
+  fields:
+    - name: PeerID
+      type: p2p.PeerID
+      marshal-as: union
+      zero-value: '""'
+
+FindServiceOptions:
+  fields:
+    - name: Network
+      type: string
+    - name: Service
+      type: ServiceAddress
+      marshal-as: reference
+      pointer: true
+
+ConsensusStatusOptions:
   fields:
     - name: NodeID
       type: string

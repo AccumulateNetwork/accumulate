@@ -52,8 +52,16 @@ type Event interface {
 }
 
 type NodeService interface {
-	// NodeStatus returns the status of the node.
-	NodeStatus(ctx context.Context, opts NodeStatusOptions) (*NodeStatus, error)
+	// NodeInfo returns information about the network node.
+	NodeInfo(ctx context.Context, opts NodeInfoOptions) (*NodeInfo, error)
+
+	// FindService searches for nodes that provide the given service.
+	FindService(ctx context.Context, opts FindServiceOptions) ([]*FindServiceResult, error)
+}
+
+type ConsensusService interface {
+	// ConsensusStatus returns the status of the consensus node.
+	ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*ConsensusStatus, error)
 }
 
 type NetworkService interface {

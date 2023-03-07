@@ -54,16 +54,10 @@ func (s *ProcessTransactionState) ProcessNetworkUpdate(cause [32]byte, account *
 	})
 }
 
-// ProcessNetworkUpdate queues a [internal.ForwardedMessage] for processing
-// after the current bundle.
-func (s *ProcessTransactionState) ProcessForwarded(msg messaging.Message) {
-	s.AdditionalMessages = append(s.AdditionalMessages, &internal.ForwardedMessage{Message: msg})
-}
-
 // ProcessTransaction queues a transaction for processing after the current
 // bundle.
 func (s *ProcessTransactionState) ProcessTransaction(txid *url.TxID) {
-	s.AdditionalMessages = append(s.AdditionalMessages, &internal.TransactionIsReady{
+	s.AdditionalMessages = append(s.AdditionalMessages, &internal.MessageIsReady{
 		TxID: txid,
 	})
 }

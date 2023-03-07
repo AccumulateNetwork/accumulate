@@ -41,12 +41,12 @@ type Partition struct {
 	blockIndex uint64
 	blockTime  time.Time
 
-	submitHook       SubmitHookFunc
-	routerSubmitHook RouterSubmitHookFunc
+	submitHook SubmitHookFunc
+	blockHook  BlockHookFunc
 }
 
 type SubmitHookFunc func([]messaging.Message) (drop, keepHook bool)
-type RouterSubmitHookFunc func([]messaging.Message) (_ []messaging.Message, keepHook bool)
+type BlockHookFunc func(execute.BlockParams, []messaging.Message) (_ []messaging.Message, keepHook bool)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -129,10 +129,10 @@ func (p *Partition) SetSubmitHook(fn SubmitHookFunc) {
 	p.submitHook = fn
 }
 
-func (p *Partition) SetRouterSubmitHook(fn RouterSubmitHookFunc) {
+func (p *Partition) SetBlockHook(fn BlockHookFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.routerSubmitHook = fn
+	p.blockHook = fn
 }
 
 func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
@@ -211,6 +211,50 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 	return results[0], nil
 }
 
+func (p *Partition) applyBlockHook(messages []messaging.Message) []messaging.Message {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.blockHook == nil {
+		return messages
+	}
+
+	messages, keep := p.blockHook(execute.BlockParams{
+		Context: context.Background(),
+		Index:   p.blockIndex,
+		Time:    p.blockTime,
+	}, messages)
+	if !keep {
+		p.blockHook = nil
+	}
+	return messages
+}
+
+func (p *Partition) loadBlockIndex() {
+	if p.blockIndex > 0 {
+		return
+	}
+
+	err := p.View(func(batch *database.Batch) error {
+		record := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger))
+		c, err := record.RootChain().Index().Get()
+		if err != nil {
+			return errors.FatalError.WithFormat("load root index chain: %w", err)
+		}
+		entry := new(protocol.IndexEntry)
+		err = c.EntryAs(c.Height()-1, entry)
+		if err != nil {
+			return errors.FatalError.WithFormat("load root index chain entry 0: %w", err)
+		}
+		p.blockIndex = entry.BlockIndex
+		p.blockTime = *entry.BlockTime
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (p *Partition) execute() error {
 	// TODO: Limit how many transactions are added to the block? Call recheck?
 	p.mu.Lock()
@@ -225,30 +269,12 @@ func (p *Partition) execute() error {
 	}
 
 	// Initialize block index
-	if p.blockIndex > 0 {
-		p.blockIndex++
-		p.blockTime = p.blockTime.Add(time.Second)
-	} else {
-		err := p.View(func(batch *database.Batch) error {
-			record := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger))
-			c, err := record.RootChain().Index().Get()
-			if err != nil {
-				return errors.FatalError.WithFormat("load root index chain: %w", err)
-			}
-			entry := new(protocol.IndexEntry)
-			err = c.EntryAs(c.Height()-1, entry)
-			if err != nil {
-				return errors.FatalError.WithFormat("load root index chain entry 0: %w", err)
-			}
-			p.blockIndex = entry.BlockIndex + 1
-			p.blockTime = entry.BlockTime.Add(time.Second)
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	}
+	p.loadBlockIndex()
+	p.blockIndex++
+	p.blockTime = p.blockTime.Add(time.Second)
 	p.logger.Debug("Stepping", "block", p.blockIndex)
+
+	messages = p.applyBlockHook(messages)
 
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)
@@ -270,17 +296,25 @@ func (p *Partition) execute() error {
 	var err error
 	results := make([][]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
-		results[i], err = node.deliverTx(blocks[i], messages)
+		// Copy the messages to avoid interference between nodes
+		m := make([]messaging.Message, len(messages))
+		for i, msg := range messages {
+			m[i] = messaging.CopyMessage(msg)
+		}
+
+		results[i], err = node.deliverTx(blocks[i], m)
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
 	}
 	for _, r := range results[1:] {
 		if len(r) != len(results[0]) {
+			p.logger.Error("Consensus failure", "step", "deliver", "expected", results[0], "actual", r)
 			return errors.FatalError.WithFormat("consensus failure: different number of results")
 		}
 		for i, st := range r {
 			if !results[0][i].Equal(st) {
+				p.logger.Error("Consensus failure", "step", "deliver", "id", st.TxID, "expected", results[0][i], "actual", st)
 				return errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
 			}
 		}
@@ -293,8 +327,8 @@ func (p *Partition) execute() error {
 		}
 	}
 	for _, msg := range messages {
-		if msg.Type() == messaging.MessageTypeUserTransaction ||
-			msg.Type() == messaging.MessageTypeUserSignature {
+		if msg.Type() == messaging.MessageTypeTransaction ||
+			msg.Type() == messaging.MessageTypeSignature {
 			continue
 		}
 		for {
@@ -375,12 +409,12 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 	sysTxnOrder := map[[32]byte]int{}
 	for i, msg := range messages {
 		switch msg := msg.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			if msg.Transaction.Body.Type().IsUser() {
 				userTxnOrder[msg.ID().Hash()] = i
 			}
 
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			if sig, ok := msg.Signature.(*protocol.PartitionSignature); ok {
 				sysTxnOrder[sig.TransactionHash] = int(sig.SequenceNumber)
 			}
@@ -396,9 +430,9 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 		}
 
 		switch a := a.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			// Sort user transactions first, then anchors, then synthetic
-			b := b.(*messaging.UserTransaction)
+			b := b.(*messaging.TransactionMessage)
 			if x := txnOrder(a) - txnOrder(b); x != 0 {
 				return x < 0
 			}
@@ -414,9 +448,9 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 			}
 			return a.ID().Compare(b.ID()) < 0
 
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			// Sort partition signatures first
-			b := b.(*messaging.UserSignature)
+			b := b.(*messaging.SignatureMessage)
 			c, d := a.Signature.Type() == protocol.SignatureTypePartition, b.Signature.Type() == protocol.SignatureTypePartition
 			switch {
 			case c && !d:
@@ -438,7 +472,7 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 // txnOrder returns an order parameter for the given user transaction. Sorting
 // with this will sort user transactions first, then anchors, then synthetic
 // transactions.
-func txnOrder(msg *messaging.UserTransaction) int {
+func txnOrder(msg *messaging.TransactionMessage) int {
 	switch {
 	case msg.Transaction.Body.Type().IsUser():
 		return 0

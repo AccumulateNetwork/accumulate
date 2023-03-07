@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -100,6 +101,35 @@ type ChainRecord struct {
 	extraData []byte
 }
 
+type ConsensusPeerInfo struct {
+	fieldsSet []bool
+	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	Host      string `json:"host,omitempty" form:"host" query:"host" validate:"required"`
+	Port      uint64 `json:"port,omitempty" form:"port" query:"port" validate:"required"`
+	extraData []byte
+}
+
+type ConsensusStatus struct {
+	fieldsSet        []bool
+	Ok               bool                   `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
+	LastBlock        *LastBlock             `json:"lastBlock,omitempty" form:"lastBlock" query:"lastBlock" validate:"required"`
+	Version          string                 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit           string                 `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
+	NodeKeyHash      [32]byte               `json:"nodeKeyHash,omitempty" form:"nodeKeyHash" query:"nodeKeyHash" validate:"required"`
+	ValidatorKeyHash [32]byte               `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
+	PartitionID      string                 `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
+	PartitionType    protocol.PartitionType `json:"partitionType,omitempty" form:"partitionType" query:"partitionType" validate:"required"`
+	Peers            []*ConsensusPeerInfo   `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
+	extraData        []byte
+}
+
+type ConsensusStatusOptions struct {
+	fieldsSet []bool
+	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	extraData []byte
+}
+
 type DataQuery struct {
 	fieldsSet []bool
 	Index     *uint64       `json:"index,omitempty" form:"index" query:"index"`
@@ -134,6 +164,19 @@ type ErrorEvent struct {
 
 type FaucetOptions struct {
 	fieldsSet []bool
+	extraData []byte
+}
+
+type FindServiceOptions struct {
+	fieldsSet []bool
+	Network   string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Service   *ServiceAddress `json:"service,omitempty" form:"service" query:"service" validate:"required"`
+	extraData []byte
+}
+
+type FindServiceResult struct {
+	fieldsSet []bool
+	PeerID    p2p.PeerID `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
 	extraData []byte
 }
 
@@ -212,7 +255,9 @@ type NetworkStatus struct {
 	Globals   *protocol.NetworkGlobals    `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
 	Network   *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Routing   *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
-	extraData []byte
+	// ExecutorVersion is the active executor version.
+	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
+	extraData       []byte
 }
 
 type NetworkStatusOptions struct {
@@ -221,32 +266,17 @@ type NetworkStatusOptions struct {
 	extraData []byte
 }
 
-type NodeStatus struct {
-	fieldsSet        []bool
-	Ok               bool                   `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
-	LastBlock        *LastBlock             `json:"lastBlock,omitempty" form:"lastBlock" query:"lastBlock" validate:"required"`
-	Version          string                 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
-	Commit           string                 `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
-	NodeKeyHash      [32]byte               `json:"nodeKeyHash,omitempty" form:"nodeKeyHash" query:"nodeKeyHash" validate:"required"`
-	ValidatorKeyHash [32]byte               `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
-	PartitionID      string                 `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
-	PartitionType    protocol.PartitionType `json:"partitionType,omitempty" form:"partitionType" query:"partitionType" validate:"required"`
-	Peers            []*PeerInfo            `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
-	extraData        []byte
-}
-
-type NodeStatusOptions struct {
+type NodeInfo struct {
 	fieldsSet []bool
-	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
-	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	PeerID    p2p.PeerID        `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
+	Network   string            `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Services  []*ServiceAddress `json:"services,omitempty" form:"services" query:"services" validate:"required"`
 	extraData []byte
 }
 
-type PeerInfo struct {
+type NodeInfoOptions struct {
 	fieldsSet []bool
-	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
-	Host      string `json:"host,omitempty" form:"host" query:"host" validate:"required"`
-	Port      uint64 `json:"port,omitempty" form:"port" query:"port" validate:"required"`
+	PeerID    p2p.PeerID `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
 	extraData []byte
 }
 
@@ -301,7 +331,7 @@ type RecordRange[T Record] struct {
 type ServiceAddress struct {
 	fieldsSet []bool
 	Type      ServiceType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Partition string      `json:"partition,omitempty" form:"partition" query:"partition"`
+	Argument  string      `json:"argument,omitempty" form:"argument" query:"argument"`
 	extraData []byte
 }
 
@@ -344,6 +374,7 @@ type SubscribeOptions struct {
 type TransactionRecord struct {
 	fieldsSet   []bool
 	TxID        *url.TxID                      `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Message     messaging.Message              `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Transaction *protocol.Transaction          `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Status      *protocol.TransactionStatus    `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
@@ -562,6 +593,54 @@ func (v *ChainRecord) Copy() *ChainRecord {
 
 func (v *ChainRecord) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ConsensusPeerInfo) Copy() *ConsensusPeerInfo {
+	u := new(ConsensusPeerInfo)
+
+	u.NodeID = v.NodeID
+	u.Host = v.Host
+	u.Port = v.Port
+
+	return u
+}
+
+func (v *ConsensusPeerInfo) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ConsensusStatus) Copy() *ConsensusStatus {
+	u := new(ConsensusStatus)
+
+	u.Ok = v.Ok
+	if v.LastBlock != nil {
+		u.LastBlock = (v.LastBlock).Copy()
+	}
+	u.Version = v.Version
+	u.Commit = v.Commit
+	u.NodeKeyHash = v.NodeKeyHash
+	u.ValidatorKeyHash = v.ValidatorKeyHash
+	u.PartitionID = v.PartitionID
+	u.PartitionType = v.PartitionType
+	u.Peers = make([]*ConsensusPeerInfo, len(v.Peers))
+	for i, v := range v.Peers {
+		if v != nil {
+			u.Peers[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *ConsensusStatus) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ConsensusStatusOptions) Copy() *ConsensusStatusOptions {
+	u := new(ConsensusStatusOptions)
+
+	u.NodeID = v.NodeID
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *ConsensusStatusOptions) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *DataQuery) Copy() *DataQuery {
 	u := new(DataQuery)
 
@@ -632,6 +711,31 @@ func (v *FaucetOptions) Copy() *FaucetOptions {
 }
 
 func (v *FaucetOptions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FindServiceOptions) Copy() *FindServiceOptions {
+	u := new(FindServiceOptions)
+
+	u.Network = v.Network
+	if v.Service != nil {
+		u.Service = (v.Service).Copy()
+	}
+
+	return u
+}
+
+func (v *FindServiceOptions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FindServiceResult) Copy() *FindServiceResult {
+	u := new(FindServiceResult)
+
+	if v.PeerID != "" {
+		u.PeerID = p2p.CopyPeerID(v.PeerID)
+	}
+
+	return u
+}
+
+func (v *FindServiceResult) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *GlobalsEvent) Copy() *GlobalsEvent {
 	u := new(GlobalsEvent)
@@ -771,6 +875,7 @@ func (v *NetworkStatus) Copy() *NetworkStatus {
 	if v.Routing != nil {
 		u.Routing = (v.Routing).Copy()
 	}
+	u.ExecutorVersion = v.ExecutorVersion
 
 	return u
 }
@@ -787,53 +892,36 @@ func (v *NetworkStatusOptions) Copy() *NetworkStatusOptions {
 
 func (v *NetworkStatusOptions) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *NodeStatus) Copy() *NodeStatus {
-	u := new(NodeStatus)
+func (v *NodeInfo) Copy() *NodeInfo {
+	u := new(NodeInfo)
 
-	u.Ok = v.Ok
-	if v.LastBlock != nil {
-		u.LastBlock = (v.LastBlock).Copy()
+	if v.PeerID != "" {
+		u.PeerID = p2p.CopyPeerID(v.PeerID)
 	}
-	u.Version = v.Version
-	u.Commit = v.Commit
-	u.NodeKeyHash = v.NodeKeyHash
-	u.ValidatorKeyHash = v.ValidatorKeyHash
-	u.PartitionID = v.PartitionID
-	u.PartitionType = v.PartitionType
-	u.Peers = make([]*PeerInfo, len(v.Peers))
-	for i, v := range v.Peers {
+	u.Network = v.Network
+	u.Services = make([]*ServiceAddress, len(v.Services))
+	for i, v := range v.Services {
 		if v != nil {
-			u.Peers[i] = (v).Copy()
+			u.Services[i] = (v).Copy()
 		}
 	}
 
 	return u
 }
 
-func (v *NodeStatus) CopyAsInterface() interface{} { return v.Copy() }
+func (v *NodeInfo) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *NodeStatusOptions) Copy() *NodeStatusOptions {
-	u := new(NodeStatusOptions)
+func (v *NodeInfoOptions) Copy() *NodeInfoOptions {
+	u := new(NodeInfoOptions)
 
-	u.NodeID = v.NodeID
-	u.Partition = v.Partition
-
-	return u
-}
-
-func (v *NodeStatusOptions) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *PeerInfo) Copy() *PeerInfo {
-	u := new(PeerInfo)
-
-	u.NodeID = v.NodeID
-	u.Host = v.Host
-	u.Port = v.Port
+	if v.PeerID != "" {
+		u.PeerID = p2p.CopyPeerID(v.PeerID)
+	}
 
 	return u
 }
 
-func (v *PeerInfo) CopyAsInterface() interface{} { return v.Copy() }
+func (v *NodeInfoOptions) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PendingQuery) Copy() *PendingQuery {
 	u := new(PendingQuery)
@@ -990,6 +1078,9 @@ func (v *TransactionRecord) Copy() *TransactionRecord {
 
 	if v.TxID != nil {
 		u.TxID = v.TxID
+	}
+	if v.Message != nil {
+		u.Message = messaging.CopyMessage(v.Message)
 	}
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
@@ -1261,6 +1352,73 @@ func (v *ChainRecord) Equal(u *ChainRecord) bool {
 	return true
 }
 
+func (v *ConsensusPeerInfo) Equal(u *ConsensusPeerInfo) bool {
+	if !(v.NodeID == u.NodeID) {
+		return false
+	}
+	if !(v.Host == u.Host) {
+		return false
+	}
+	if !(v.Port == u.Port) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ConsensusStatus) Equal(u *ConsensusStatus) bool {
+	if !(v.Ok == u.Ok) {
+		return false
+	}
+	switch {
+	case v.LastBlock == u.LastBlock:
+		// equal
+	case v.LastBlock == nil || u.LastBlock == nil:
+		return false
+	case !((v.LastBlock).Equal(u.LastBlock)):
+		return false
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Commit == u.Commit) {
+		return false
+	}
+	if !(v.NodeKeyHash == u.NodeKeyHash) {
+		return false
+	}
+	if !(v.ValidatorKeyHash == u.ValidatorKeyHash) {
+		return false
+	}
+	if !(v.PartitionID == u.PartitionID) {
+		return false
+	}
+	if !(v.PartitionType == u.PartitionType) {
+		return false
+	}
+	if len(v.Peers) != len(u.Peers) {
+		return false
+	}
+	for i := range v.Peers {
+		if !((v.Peers[i]).Equal(u.Peers[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *ConsensusStatusOptions) Equal(u *ConsensusStatusOptions) bool {
+	if !(v.NodeID == u.NodeID) {
+		return false
+	}
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
 func (v *DataQuery) Equal(u *DataQuery) bool {
 	switch {
 	case v.Index == u.Index:
@@ -1333,6 +1491,30 @@ func (v *ErrorEvent) Equal(u *ErrorEvent) bool {
 }
 
 func (v *FaucetOptions) Equal(u *FaucetOptions) bool {
+
+	return true
+}
+
+func (v *FindServiceOptions) Equal(u *FindServiceOptions) bool {
+	if !(v.Network == u.Network) {
+		return false
+	}
+	switch {
+	case v.Service == u.Service:
+		// equal
+	case v.Service == nil || u.Service == nil:
+		return false
+	case !((v.Service).Equal(u.Service)):
+		return false
+	}
+
+	return true
+}
+
+func (v *FindServiceResult) Equal(u *FindServiceResult) bool {
+	if !(p2p.EqualPeerID(v.PeerID, u.PeerID)) {
+		return false
+	}
 
 	return true
 }
@@ -1529,6 +1711,9 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 	case !((v.Routing).Equal(u.Routing)):
 		return false
 	}
+	if !(v.ExecutorVersion == u.ExecutorVersion) {
+		return false
+	}
 
 	return true
 }
@@ -1541,41 +1726,18 @@ func (v *NetworkStatusOptions) Equal(u *NetworkStatusOptions) bool {
 	return true
 }
 
-func (v *NodeStatus) Equal(u *NodeStatus) bool {
-	if !(v.Ok == u.Ok) {
+func (v *NodeInfo) Equal(u *NodeInfo) bool {
+	if !(p2p.EqualPeerID(v.PeerID, u.PeerID)) {
 		return false
 	}
-	switch {
-	case v.LastBlock == u.LastBlock:
-		// equal
-	case v.LastBlock == nil || u.LastBlock == nil:
-		return false
-	case !((v.LastBlock).Equal(u.LastBlock)):
+	if !(v.Network == u.Network) {
 		return false
 	}
-	if !(v.Version == u.Version) {
+	if len(v.Services) != len(u.Services) {
 		return false
 	}
-	if !(v.Commit == u.Commit) {
-		return false
-	}
-	if !(v.NodeKeyHash == u.NodeKeyHash) {
-		return false
-	}
-	if !(v.ValidatorKeyHash == u.ValidatorKeyHash) {
-		return false
-	}
-	if !(v.PartitionID == u.PartitionID) {
-		return false
-	}
-	if !(v.PartitionType == u.PartitionType) {
-		return false
-	}
-	if len(v.Peers) != len(u.Peers) {
-		return false
-	}
-	for i := range v.Peers {
-		if !((v.Peers[i]).Equal(u.Peers[i])) {
+	for i := range v.Services {
+		if !((v.Services[i]).Equal(u.Services[i])) {
 			return false
 		}
 	}
@@ -1583,25 +1745,8 @@ func (v *NodeStatus) Equal(u *NodeStatus) bool {
 	return true
 }
 
-func (v *NodeStatusOptions) Equal(u *NodeStatusOptions) bool {
-	if !(v.NodeID == u.NodeID) {
-		return false
-	}
-	if !(v.Partition == u.Partition) {
-		return false
-	}
-
-	return true
-}
-
-func (v *PeerInfo) Equal(u *PeerInfo) bool {
-	if !(v.NodeID == u.NodeID) {
-		return false
-	}
-	if !(v.Host == u.Host) {
-		return false
-	}
-	if !(v.Port == u.Port) {
+func (v *NodeInfoOptions) Equal(u *NodeInfoOptions) bool {
+	if !(p2p.EqualPeerID(v.PeerID, u.PeerID)) {
 		return false
 	}
 
@@ -1801,6 +1946,9 @@ func (v *TransactionRecord) Equal(u *TransactionRecord) bool {
 	case v.TxID == nil || u.TxID == nil:
 		return false
 	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	if !(messaging.EqualMessage(v.Message, u.Message)) {
 		return false
 	}
 	switch {
@@ -2379,6 +2527,224 @@ func (v *ChainRecord) IsValid() error {
 	}
 }
 
+var fieldNames_ConsensusPeerInfo = []string{
+	1: "NodeID",
+	2: "Host",
+	3: "Port",
+}
+
+func (v *ConsensusPeerInfo) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.NodeID) == 0) {
+		writer.WriteString(1, v.NodeID)
+	}
+	if !(len(v.Host) == 0) {
+		writer.WriteString(2, v.Host)
+	}
+	if !(v.Port == 0) {
+		writer.WriteUint(3, v.Port)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ConsensusPeerInfo)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ConsensusPeerInfo) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field NodeID is missing")
+	} else if len(v.NodeID) == 0 {
+		errs = append(errs, "field NodeID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Host is missing")
+	} else if len(v.Host) == 0 {
+		errs = append(errs, "field Host is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Port is missing")
+	} else if v.Port == 0 {
+		errs = append(errs, "field Port is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ConsensusStatus = []string{
+	1: "Ok",
+	2: "LastBlock",
+	3: "Version",
+	4: "Commit",
+	5: "NodeKeyHash",
+	6: "ValidatorKeyHash",
+	7: "PartitionID",
+	8: "PartitionType",
+	9: "Peers",
+}
+
+func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(!v.Ok) {
+		writer.WriteBool(1, v.Ok)
+	}
+	if !(v.LastBlock == nil) {
+		writer.WriteValue(2, v.LastBlock.MarshalBinary)
+	}
+	if !(len(v.Version) == 0) {
+		writer.WriteString(3, v.Version)
+	}
+	if !(len(v.Commit) == 0) {
+		writer.WriteString(4, v.Commit)
+	}
+	if !(v.NodeKeyHash == ([32]byte{})) {
+		writer.WriteHash(5, &v.NodeKeyHash)
+	}
+	if !(v.ValidatorKeyHash == ([32]byte{})) {
+		writer.WriteHash(6, &v.ValidatorKeyHash)
+	}
+	if !(len(v.PartitionID) == 0) {
+		writer.WriteString(7, v.PartitionID)
+	}
+	if !(v.PartitionType == 0) {
+		writer.WriteEnum(8, v.PartitionType)
+	}
+	if !(len(v.Peers) == 0) {
+		for _, v := range v.Peers {
+			writer.WriteValue(9, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ConsensusStatus)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ConsensusStatus) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Ok is missing")
+	} else if !v.Ok {
+		errs = append(errs, "field Ok is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field LastBlock is missing")
+	} else if v.LastBlock == nil {
+		errs = append(errs, "field LastBlock is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Version is missing")
+	} else if len(v.Version) == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Commit is missing")
+	} else if len(v.Commit) == 0 {
+		errs = append(errs, "field Commit is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field NodeKeyHash is missing")
+	} else if v.NodeKeyHash == ([32]byte{}) {
+		errs = append(errs, "field NodeKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field ValidatorKeyHash is missing")
+	} else if v.ValidatorKeyHash == ([32]byte{}) {
+		errs = append(errs, "field ValidatorKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field PartitionID is missing")
+	} else if len(v.PartitionID) == 0 {
+		errs = append(errs, "field PartitionID is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field PartitionType is missing")
+	} else if v.PartitionType == 0 {
+		errs = append(errs, "field PartitionType is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field Peers is missing")
+	} else if len(v.Peers) == 0 {
+		errs = append(errs, "field Peers is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ConsensusStatusOptions = []string{
+	1: "NodeID",
+	2: "Partition",
+}
+
+func (v *ConsensusStatusOptions) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.NodeID) == 0) {
+		writer.WriteString(1, v.NodeID)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ConsensusStatusOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ConsensusStatusOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field NodeID is missing")
+	} else if len(v.NodeID) == 0 {
+		errs = append(errs, "field NodeID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_DataQuery = []string{
 	1: "QueryType",
 	2: "Index",
@@ -2613,6 +2979,93 @@ func (v *FaucetOptions) MarshalBinary() ([]byte, error) {
 
 func (v *FaucetOptions) IsValid() error {
 	var errs []string
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FindServiceOptions = []string{
+	1: "Network",
+	2: "Service",
+}
+
+func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Network) == 0) {
+		writer.WriteString(1, v.Network)
+	}
+	if !(v.Service == nil) {
+		writer.WriteValue(2, v.Service.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_FindServiceOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FindServiceOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Network is missing")
+	} else if len(v.Network) == 0 {
+		errs = append(errs, "field Network is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Service is missing")
+	} else if v.Service == nil {
+		errs = append(errs, "field Service is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FindServiceResult = []string{
+	1: "PeerID",
+}
+
+func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.PeerID == ("")) {
+		writer.WriteValue(1, v.PeerID.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_FindServiceResult)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FindServiceResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field PeerID is missing")
+	} else if v.PeerID == ("") {
+		errs = append(errs, "field PeerID is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -3127,6 +3580,7 @@ var fieldNames_NetworkStatus = []string{
 	2: "Globals",
 	3: "Network",
 	4: "Routing",
+	5: "ExecutorVersion",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -3144,6 +3598,9 @@ func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Routing == nil) {
 		writer.WriteValue(4, v.Routing.MarshalBinary)
+	}
+	if !(v.ExecutorVersion == 0) {
+		writer.WriteEnum(5, v.ExecutorVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkStatus)
@@ -3227,53 +3684,29 @@ func (v *NetworkStatusOptions) IsValid() error {
 	}
 }
 
-var fieldNames_NodeStatus = []string{
-	1: "Ok",
-	2: "LastBlock",
-	3: "Version",
-	4: "Commit",
-	5: "NodeKeyHash",
-	6: "ValidatorKeyHash",
-	7: "PartitionID",
-	8: "PartitionType",
-	9: "Peers",
+var fieldNames_NodeInfo = []string{
+	1: "PeerID",
+	2: "Network",
+	3: "Services",
 }
 
-func (v *NodeStatus) MarshalBinary() ([]byte, error) {
+func (v *NodeInfo) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(!v.Ok) {
-		writer.WriteBool(1, v.Ok)
+	if !(v.PeerID == ("")) {
+		writer.WriteValue(1, v.PeerID.MarshalBinary)
 	}
-	if !(v.LastBlock == nil) {
-		writer.WriteValue(2, v.LastBlock.MarshalBinary)
+	if !(len(v.Network) == 0) {
+		writer.WriteString(2, v.Network)
 	}
-	if !(len(v.Version) == 0) {
-		writer.WriteString(3, v.Version)
-	}
-	if !(len(v.Commit) == 0) {
-		writer.WriteString(4, v.Commit)
-	}
-	if !(v.NodeKeyHash == ([32]byte{})) {
-		writer.WriteHash(5, &v.NodeKeyHash)
-	}
-	if !(v.ValidatorKeyHash == ([32]byte{})) {
-		writer.WriteHash(6, &v.ValidatorKeyHash)
-	}
-	if !(len(v.PartitionID) == 0) {
-		writer.WriteString(7, v.PartitionID)
-	}
-	if !(v.PartitionType == 0) {
-		writer.WriteEnum(8, v.PartitionType)
-	}
-	if !(len(v.Peers) == 0) {
-		for _, v := range v.Peers {
-			writer.WriteValue(9, v.MarshalBinary)
+	if !(len(v.Services) == 0) {
+		for _, v := range v.Services {
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 
-	_, _, err := writer.Reset(fieldNames_NodeStatus)
+	_, _, err := writer.Reset(fieldNames_NodeInfo)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -3281,53 +3714,23 @@ func (v *NodeStatus) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *NodeStatus) IsValid() error {
+func (v *NodeInfo) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Ok is missing")
-	} else if !v.Ok {
-		errs = append(errs, "field Ok is not set")
+		errs = append(errs, "field PeerID is missing")
+	} else if v.PeerID == ("") {
+		errs = append(errs, "field PeerID is not set")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field LastBlock is missing")
-	} else if v.LastBlock == nil {
-		errs = append(errs, "field LastBlock is not set")
+		errs = append(errs, "field Network is missing")
+	} else if len(v.Network) == 0 {
+		errs = append(errs, "field Network is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Version is missing")
-	} else if len(v.Version) == 0 {
-		errs = append(errs, "field Version is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Commit is missing")
-	} else if len(v.Commit) == 0 {
-		errs = append(errs, "field Commit is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field NodeKeyHash is missing")
-	} else if v.NodeKeyHash == ([32]byte{}) {
-		errs = append(errs, "field NodeKeyHash is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field ValidatorKeyHash is missing")
-	} else if v.ValidatorKeyHash == ([32]byte{}) {
-		errs = append(errs, "field ValidatorKeyHash is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field PartitionID is missing")
-	} else if len(v.PartitionID) == 0 {
-		errs = append(errs, "field PartitionID is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
-		errs = append(errs, "field PartitionType is missing")
-	} else if v.PartitionType == 0 {
-		errs = append(errs, "field PartitionType is not set")
-	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
-		errs = append(errs, "field Peers is missing")
-	} else if len(v.Peers) == 0 {
-		errs = append(errs, "field Peers is not set")
+		errs = append(errs, "field Services is missing")
+	} else if len(v.Services) == 0 {
+		errs = append(errs, "field Services is not set")
 	}
 
 	switch len(errs) {
@@ -3340,23 +3743,19 @@ func (v *NodeStatus) IsValid() error {
 	}
 }
 
-var fieldNames_NodeStatusOptions = []string{
-	1: "NodeID",
-	2: "Partition",
+var fieldNames_NodeInfoOptions = []string{
+	1: "PeerID",
 }
 
-func (v *NodeStatusOptions) MarshalBinary() ([]byte, error) {
+func (v *NodeInfoOptions) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.NodeID) == 0) {
-		writer.WriteString(1, v.NodeID)
-	}
-	if !(len(v.Partition) == 0) {
-		writer.WriteString(2, v.Partition)
+	if !(v.PeerID == ("")) {
+		writer.WriteValue(1, v.PeerID.MarshalBinary)
 	}
 
-	_, _, err := writer.Reset(fieldNames_NodeStatusOptions)
+	_, _, err := writer.Reset(fieldNames_NodeInfoOptions)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -3364,75 +3763,13 @@ func (v *NodeStatusOptions) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *NodeStatusOptions) IsValid() error {
+func (v *NodeInfoOptions) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field NodeID is missing")
-	} else if len(v.NodeID) == 0 {
-		errs = append(errs, "field NodeID is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Partition is missing")
-	} else if len(v.Partition) == 0 {
-		errs = append(errs, "field Partition is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_PeerInfo = []string{
-	1: "NodeID",
-	2: "Host",
-	3: "Port",
-}
-
-func (v *PeerInfo) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.NodeID) == 0) {
-		writer.WriteString(1, v.NodeID)
-	}
-	if !(len(v.Host) == 0) {
-		writer.WriteString(2, v.Host)
-	}
-	if !(v.Port == 0) {
-		writer.WriteUint(3, v.Port)
-	}
-
-	_, _, err := writer.Reset(fieldNames_PeerInfo)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *PeerInfo) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field NodeID is missing")
-	} else if len(v.NodeID) == 0 {
-		errs = append(errs, "field NodeID is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Host is missing")
-	} else if len(v.Host) == 0 {
-		errs = append(errs, "field Host is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Port is missing")
-	} else if v.Port == 0 {
-		errs = append(errs, "field Port is not set")
+		errs = append(errs, "field PeerID is missing")
+	} else if v.PeerID == ("") {
+		errs = append(errs, "field PeerID is not set")
 	}
 
 	switch len(errs) {
@@ -3751,7 +4088,7 @@ func (v *RecordRange[T]) IsValid() error {
 
 var fieldNames_ServiceAddress = []string{
 	1: "Type",
-	2: "Partition",
+	2: "Argument",
 }
 
 func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
@@ -3759,10 +4096,10 @@ func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Type == 0) {
-		writer.WriteEnum(1, v.Type)
+		writer.WriteUint(1, (uint64)(v.Type))
 	}
-	if !(len(v.Partition) == 0) {
-		writer.WriteString(2, v.Partition)
+	if !(len(v.Argument) == 0) {
+		writer.WriteString(2, v.Argument)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ServiceAddress)
@@ -4006,11 +4343,12 @@ func (v *SubscribeOptions) IsValid() error {
 var fieldNames_TransactionRecord = []string{
 	1: "RecordType",
 	2: "TxID",
-	3: "Transaction",
-	4: "Status",
-	5: "Produced",
-	6: "Signatures",
-	7: "Sequence",
+	3: "Message",
+	4: "Transaction",
+	5: "Status",
+	6: "Produced",
+	7: "Signatures",
+	8: "Sequence",
 }
 
 func (v *TransactionRecord) MarshalBinary() ([]byte, error) {
@@ -4021,20 +4359,23 @@ func (v *TransactionRecord) MarshalBinary() ([]byte, error) {
 	if !(v.TxID == nil) {
 		writer.WriteTxid(2, v.TxID)
 	}
+	if !(messaging.EqualMessage(v.Message, nil)) {
+		writer.WriteValue(3, v.Message.MarshalBinary)
+	}
 	if !(v.Transaction == nil) {
-		writer.WriteValue(3, v.Transaction.MarshalBinary)
+		writer.WriteValue(4, v.Transaction.MarshalBinary)
 	}
 	if !(v.Status == nil) {
-		writer.WriteValue(4, v.Status.MarshalBinary)
+		writer.WriteValue(5, v.Status.MarshalBinary)
 	}
 	if !(v.Produced == nil) {
-		writer.WriteValue(5, v.Produced.MarshalBinary)
+		writer.WriteValue(6, v.Produced.MarshalBinary)
 	}
 	if !(v.Signatures == nil) {
-		writer.WriteValue(6, v.Signatures.MarshalBinary)
+		writer.WriteValue(7, v.Signatures.MarshalBinary)
 	}
 	if !(v.Sequence == nil) {
-		writer.WriteValue(7, v.Sequence.MarshalBinary)
+		writer.WriteValue(8, v.Sequence.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionRecord)
@@ -4057,26 +4398,31 @@ func (v *TransactionRecord) IsValid() error {
 		errs = append(errs, "field TxID is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Message is missing")
+	} else if messaging.EqualMessage(v.Message, nil) {
+		errs = append(errs, "field Message is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Transaction is missing")
 	} else if v.Transaction == nil {
 		errs = append(errs, "field Transaction is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Status is missing")
 	} else if v.Status == nil {
 		errs = append(errs, "field Status is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Produced is missing")
 	} else if v.Produced == nil {
 		errs = append(errs, "field Produced is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Signatures is missing")
 	} else if v.Signatures == nil {
 		errs = append(errs, "field Signatures is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field Sequence is missing")
 	} else if v.Sequence == nil {
 		errs = append(errs, "field Sequence is not set")
@@ -4559,6 +4905,112 @@ func (v *ChainRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ConsensusPeerInfo) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ConsensusPeerInfo) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.NodeID = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Host = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Port = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ConsensusPeerInfo)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ConsensusStatus) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ConsensusStatus) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBool(1); ok {
+		v.Ok = x
+	}
+	if x := new(LastBlock); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.LastBlock = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadString(4); ok {
+		v.Commit = x
+	}
+	if x, ok := reader.ReadHash(5); ok {
+		v.NodeKeyHash = *x
+	}
+	if x, ok := reader.ReadHash(6); ok {
+		v.ValidatorKeyHash = *x
+	}
+	if x, ok := reader.ReadString(7); ok {
+		v.PartitionID = x
+	}
+	if x := new(protocol.PartitionType); reader.ReadEnum(8, x) {
+		v.PartitionType = *x
+	}
+	for {
+		if x := new(ConsensusPeerInfo); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
+			v.Peers = append(v.Peers, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ConsensusStatus)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ConsensusStatusOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ConsensusStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.NodeID = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ConsensusStatusOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *DataQuery) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -4748,6 +5200,59 @@ func (v *FaucetOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	seen, err := reader.Reset(fieldNames_FaucetOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *FindServiceOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FindServiceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Network = x
+	}
+	if x := new(ServiceAddress); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Service = x
+	}
+
+	seen, err := reader.Reset(fieldNames_FindServiceOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *FindServiceResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FindServiceResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	reader.ReadValue(1, func(r io.Reader) error {
+		x, err := p2p.UnmarshalPeerIDFrom(r)
+		if err == nil {
+			v.PeerID = x
+		}
+		return err
+	})
+
+	seen, err := reader.Reset(fieldNames_FindServiceResult)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -5099,6 +5604,9 @@ func (v *NetworkStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.RoutingTable); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Routing = x
 	}
+	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
+		v.ExecutorVersion = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_NetworkStatus)
 	if err != nil {
@@ -5135,46 +5643,32 @@ func (v *NetworkStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *NodeStatus) UnmarshalBinary(data []byte) error {
+func (v *NodeInfo) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *NodeStatus) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *NodeInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadBool(1); ok {
-		v.Ok = x
-	}
-	if x := new(LastBlock); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.LastBlock = x
-	}
-	if x, ok := reader.ReadString(3); ok {
-		v.Version = x
-	}
-	if x, ok := reader.ReadString(4); ok {
-		v.Commit = x
-	}
-	if x, ok := reader.ReadHash(5); ok {
-		v.NodeKeyHash = *x
-	}
-	if x, ok := reader.ReadHash(6); ok {
-		v.ValidatorKeyHash = *x
-	}
-	if x, ok := reader.ReadString(7); ok {
-		v.PartitionID = x
-	}
-	if x := new(protocol.PartitionType); reader.ReadEnum(8, x) {
-		v.PartitionType = *x
+	reader.ReadValue(1, func(r io.Reader) error {
+		x, err := p2p.UnmarshalPeerIDFrom(r)
+		if err == nil {
+			v.PeerID = x
+		}
+		return err
+	})
+	if x, ok := reader.ReadString(2); ok {
+		v.Network = x
 	}
 	for {
-		if x := new(PeerInfo); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
-			v.Peers = append(v.Peers, x)
+		if x := new(ServiceAddress); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+			v.Services = append(v.Services, x)
 		} else {
 			break
 		}
 	}
 
-	seen, err := reader.Reset(fieldNames_NodeStatus)
+	seen, err := reader.Reset(fieldNames_NodeInfo)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -5186,50 +5680,22 @@ func (v *NodeStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *NodeStatusOptions) UnmarshalBinary(data []byte) error {
+func (v *NodeInfoOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *NodeStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *NodeInfoOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
-		v.NodeID = x
-	}
-	if x, ok := reader.ReadString(2); ok {
-		v.Partition = x
-	}
+	reader.ReadValue(1, func(r io.Reader) error {
+		x, err := p2p.UnmarshalPeerIDFrom(r)
+		if err == nil {
+			v.PeerID = x
+		}
+		return err
+	})
 
-	seen, err := reader.Reset(fieldNames_NodeStatusOptions)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *PeerInfo) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *PeerInfo) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadString(1); ok {
-		v.NodeID = x
-	}
-	if x, ok := reader.ReadString(2); ok {
-		v.Host = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Port = x
-	}
-
-	seen, err := reader.Reset(fieldNames_PeerInfo)
+	seen, err := reader.Reset(fieldNames_NodeInfoOptions)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -5468,11 +5934,11 @@ func (v *ServiceAddress) UnmarshalBinary(data []byte) error {
 func (v *ServiceAddress) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(ServiceType); reader.ReadEnum(1, x) {
-		v.Type = *x
+	if x, ok := reader.ReadUint(1); ok {
+		v.Type = (ServiceType)(x)
 	}
 	if x, ok := reader.ReadString(2); ok {
-		v.Partition = x
+		v.Argument = x
 	}
 
 	seen, err := reader.Reset(fieldNames_ServiceAddress)
@@ -5645,19 +6111,26 @@ func (v *TransactionRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadTxid(2); ok {
 		v.TxID = x
 	}
-	if x := new(protocol.Transaction); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := messaging.UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Message = x
+		}
+		return err
+	})
+	if x := new(protocol.Transaction); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
-	if x := new(protocol.TransactionStatus); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+	if x := new(protocol.TransactionStatus); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.Status = x
 	}
-	if x := new(RecordRange[*TxIDRecord]); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+	if x := new(RecordRange[*TxIDRecord]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Produced = x
 	}
-	if x := new(RecordRange[*SignatureRecord]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+	if x := new(RecordRange[*SignatureRecord]); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
 		v.Signatures = x
 	}
-	if x := new(messaging.SequencedMessage); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+	if x := new(messaging.SequencedMessage); reader.ReadValue(8, x.UnmarshalBinaryFrom) {
 		v.Sequence = x
 	}
 
@@ -5962,6 +6435,48 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Ok               bool                                  `json:"ok,omitempty"`
+		LastBlock        *LastBlock                            `json:"lastBlock,omitempty"`
+		Version          string                                `json:"version,omitempty"`
+		Commit           string                                `json:"commit,omitempty"`
+		NodeKeyHash      string                                `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash string                                `json:"validatorKeyHash,omitempty"`
+		PartitionID      string                                `json:"partitionID,omitempty"`
+		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
+		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
+	}{}
+	if !(!v.Ok) {
+		u.Ok = v.Ok
+	}
+	if !(v.LastBlock == nil) {
+		u.LastBlock = v.LastBlock
+	}
+	if !(len(v.Version) == 0) {
+		u.Version = v.Version
+	}
+	if !(len(v.Commit) == 0) {
+		u.Commit = v.Commit
+	}
+	if !(v.NodeKeyHash == ([32]byte{})) {
+		u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
+	}
+	if !(v.ValidatorKeyHash == ([32]byte{})) {
+		u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+	}
+	if !(len(v.PartitionID) == 0) {
+		u.PartitionID = v.PartitionID
+	}
+	if !(v.PartitionType == 0) {
+		u.PartitionType = v.PartitionType
+	}
+	if !(len(v.Peers) == 0) {
+		u.Peers = v.Peers
+	}
+	return json.Marshal(&u)
+}
+
 func (v *DataQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType QueryType     `json:"queryType"`
@@ -6026,6 +6541,16 @@ func (v *ErrorEvent) MarshalJSON() ([]byte, error) {
 	u.EventType = v.EventType()
 	if !(v.Err == nil) {
 		u.Err = v.Err
+	}
+	return json.Marshal(&u)
+}
+
+func (v *FindServiceResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+	}{}
+	if !(v.PeerID == ("")) {
+		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -6164,44 +6689,30 @@ func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *NodeStatus) MarshalJSON() ([]byte, error) {
+func (v *NodeInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Ok               bool                         `json:"ok,omitempty"`
-		LastBlock        *LastBlock                   `json:"lastBlock,omitempty"`
-		Version          string                       `json:"version,omitempty"`
-		Commit           string                       `json:"commit,omitempty"`
-		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
-		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
-		PartitionID      string                       `json:"partitionID,omitempty"`
-		PartitionType    protocol.PartitionType       `json:"partitionType,omitempty"`
-		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
+		PeerID   *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Network  string                                  `json:"network,omitempty"`
+		Services encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
 	}{}
-	if !(!v.Ok) {
-		u.Ok = v.Ok
+	if !(v.PeerID == ("")) {
+		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	}
-	if !(v.LastBlock == nil) {
-		u.LastBlock = v.LastBlock
+	if !(len(v.Network) == 0) {
+		u.Network = v.Network
 	}
-	if !(len(v.Version) == 0) {
-		u.Version = v.Version
+	if !(len(v.Services) == 0) {
+		u.Services = v.Services
 	}
-	if !(len(v.Commit) == 0) {
-		u.Commit = v.Commit
-	}
-	if !(v.NodeKeyHash == ([32]byte{})) {
-		u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
-	}
-	if !(v.ValidatorKeyHash == ([32]byte{})) {
-		u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
-	}
-	if !(len(v.PartitionID) == 0) {
-		u.PartitionID = v.PartitionID
-	}
-	if !(v.PartitionType == 0) {
-		u.PartitionType = v.PartitionType
-	}
-	if !(len(v.Peers) == 0) {
-		u.Peers = v.Peers
+	return json.Marshal(&u)
+}
+
+func (v *NodeInfoOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+	}{}
+	if !(v.PeerID == ("")) {
+		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -6340,17 +6851,21 @@ func (v *SignatureRecord) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType  RecordType                     `json:"recordType"`
-		TxID        *url.TxID                      `json:"txID,omitempty"`
-		Transaction *protocol.Transaction          `json:"transaction,omitempty"`
-		Status      *protocol.TransactionStatus    `json:"status,omitempty"`
-		Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty"`
-		Signatures  *RecordRange[*SignatureRecord] `json:"signatures,omitempty"`
-		Sequence    *messaging.SequencedMessage    `json:"sequence,omitempty"`
+		RecordType  RecordType                                     `json:"recordType"`
+		TxID        *url.TxID                                      `json:"txID,omitempty"`
+		Message     *encoding.JsonUnmarshalWith[messaging.Message] `json:"message,omitempty"`
+		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
+		Status      *protocol.TransactionStatus                    `json:"status,omitempty"`
+		Produced    *RecordRange[*TxIDRecord]                      `json:"produced,omitempty"`
+		Signatures  *RecordRange[*SignatureRecord]                 `json:"signatures,omitempty"`
+		Sequence    *messaging.SequencedMessage                    `json:"sequence,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.TxID == nil) {
 		u.TxID = v.TxID
+	}
+	if !(messaging.EqualMessage(v.Message, nil)) {
+		u.Message = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Message, Func: messaging.UnmarshalMessageJSON}
 	}
 	if !(v.Transaction == nil) {
 		u.Transaction = v.Transaction
@@ -6632,6 +7147,50 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Ok               bool                                  `json:"ok,omitempty"`
+		LastBlock        *LastBlock                            `json:"lastBlock,omitempty"`
+		Version          string                                `json:"version,omitempty"`
+		Commit           string                                `json:"commit,omitempty"`
+		NodeKeyHash      string                                `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash string                                `json:"validatorKeyHash,omitempty"`
+		PartitionID      string                                `json:"partitionID,omitempty"`
+		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
+		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
+	}{}
+	u.Ok = v.Ok
+	u.LastBlock = v.LastBlock
+	u.Version = v.Version
+	u.Commit = v.Commit
+	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
+	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+	u.PartitionID = v.PartitionID
+	u.PartitionType = v.PartitionType
+	u.Peers = v.Peers
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Ok = u.Ok
+	v.LastBlock = u.LastBlock
+	v.Version = u.Version
+	v.Commit = u.Commit
+	if x, err := encoding.ChainFromJSON(u.NodeKeyHash); err != nil {
+		return fmt.Errorf("error decoding NodeKeyHash: %w", err)
+	} else {
+		v.NodeKeyHash = x
+	}
+	if x, err := encoding.ChainFromJSON(u.ValidatorKeyHash); err != nil {
+		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
+	} else {
+		v.ValidatorKeyHash = x
+	}
+	v.PartitionID = u.PartitionID
+	v.PartitionType = u.PartitionType
+	v.Peers = u.Peers
+	return nil
+}
+
 func (v *DataQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		QueryType QueryType     `json:"queryType"`
@@ -6724,6 +7283,21 @@ func (v *ErrorEvent) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), u.EventType)
 	}
 	v.Err = u.Err
+	return nil
+}
+
+func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+	}{}
+	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.PeerID != nil {
+		v.PeerID = u.PeerID.Value
+	}
+
 	return nil
 }
 
@@ -6892,47 +7466,39 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *NodeStatus) UnmarshalJSON(data []byte) error {
+func (v *NodeInfo) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Ok               bool                         `json:"ok,omitempty"`
-		LastBlock        *LastBlock                   `json:"lastBlock,omitempty"`
-		Version          string                       `json:"version,omitempty"`
-		Commit           string                       `json:"commit,omitempty"`
-		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
-		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
-		PartitionID      string                       `json:"partitionID,omitempty"`
-		PartitionType    protocol.PartitionType       `json:"partitionType,omitempty"`
-		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
+		PeerID   *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Network  string                                  `json:"network,omitempty"`
+		Services encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
 	}{}
-	u.Ok = v.Ok
-	u.LastBlock = v.LastBlock
-	u.Version = v.Version
-	u.Commit = v.Commit
-	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
-	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
-	u.PartitionID = v.PartitionID
-	u.PartitionType = v.PartitionType
-	u.Peers = v.Peers
+	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	u.Network = v.Network
+	u.Services = v.Services
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Ok = u.Ok
-	v.LastBlock = u.LastBlock
-	v.Version = u.Version
-	v.Commit = u.Commit
-	if x, err := encoding.ChainFromJSON(u.NodeKeyHash); err != nil {
-		return fmt.Errorf("error decoding NodeKeyHash: %w", err)
-	} else {
-		v.NodeKeyHash = x
+	if u.PeerID != nil {
+		v.PeerID = u.PeerID.Value
 	}
-	if x, err := encoding.ChainFromJSON(u.ValidatorKeyHash); err != nil {
-		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
-	} else {
-		v.ValidatorKeyHash = x
+
+	v.Network = u.Network
+	v.Services = u.Services
+	return nil
+}
+
+func (v *NodeInfoOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+	}{}
+	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
 	}
-	v.PartitionID = u.PartitionID
-	v.PartitionType = u.PartitionType
-	v.Peers = u.Peers
+	if u.PeerID != nil {
+		v.PeerID = u.PeerID.Value
+	}
+
 	return nil
 }
 
@@ -7063,9 +7629,11 @@ func (v *RecordRange[T]) UnmarshalJSON(data []byte) error {
 	if !(v.RecordType() == u.RecordType) {
 		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
 	}
-	v.Records = make([]T, len(u.Records.Value))
-	for i, x := range u.Records.Value {
-		v.Records[i] = x
+	if u.Records != nil {
+		v.Records = make([]T, len(u.Records.Value))
+		for i, x := range u.Records.Value {
+			v.Records[i] = x
+		}
 	}
 	v.Start = u.Start
 	v.Total = u.Total
@@ -7109,16 +7677,18 @@ func (v *SignatureRecord) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType  RecordType                     `json:"recordType"`
-		TxID        *url.TxID                      `json:"txID,omitempty"`
-		Transaction *protocol.Transaction          `json:"transaction,omitempty"`
-		Status      *protocol.TransactionStatus    `json:"status,omitempty"`
-		Produced    *RecordRange[*TxIDRecord]      `json:"produced,omitempty"`
-		Signatures  *RecordRange[*SignatureRecord] `json:"signatures,omitempty"`
-		Sequence    *messaging.SequencedMessage    `json:"sequence,omitempty"`
+		RecordType  RecordType                                     `json:"recordType"`
+		TxID        *url.TxID                                      `json:"txID,omitempty"`
+		Message     *encoding.JsonUnmarshalWith[messaging.Message] `json:"message,omitempty"`
+		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
+		Status      *protocol.TransactionStatus                    `json:"status,omitempty"`
+		Produced    *RecordRange[*TxIDRecord]                      `json:"produced,omitempty"`
+		Signatures  *RecordRange[*SignatureRecord]                 `json:"signatures,omitempty"`
+		Sequence    *messaging.SequencedMessage                    `json:"sequence,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.TxID = v.TxID
+	u.Message = &encoding.JsonUnmarshalWith[messaging.Message]{Value: v.Message, Func: messaging.UnmarshalMessageJSON}
 	u.Transaction = v.Transaction
 	u.Status = v.Status
 	u.Produced = v.Produced
@@ -7131,6 +7701,10 @@ func (v *TransactionRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
 	}
 	v.TxID = u.TxID
+	if u.Message != nil {
+		v.Message = u.Message.Value
+	}
+
 	v.Transaction = u.Transaction
 	v.Status = u.Status
 	v.Produced = u.Produced

@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -38,6 +39,26 @@ func NewFakeNode(t testing.TB, errorHandler func(err error)) *FakeNode {
 		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
+	)
+	if errorHandler == nil {
+		errorHandler = func(err error) {
+			t.Helper()
+
+			var err2 *errors.Error
+			if errors.As(err, &err2) && err2.Code == errors.Delivered {
+				return
+			}
+			assert.NoError(t, err)
+		}
+	}
+	return &FakeNode{H: sim, onErr: errorHandler}
+}
+
+func NewFakeNodeV1(t testing.TB, errorHandler func(err error)) *FakeNode {
+	sim := harness.NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1}),
 	)
 	if errorHandler == nil {
 		errorHandler = func(err error) {
@@ -203,7 +224,7 @@ func (n *FakeNode) Execute(inBlock func(func(*messaging.Envelope))) (sigHashes, 
 
 	var cond []harness.Condition
 	for _, delivery := range deliveries {
-		status := n.H.Submit(&messaging.Envelope{
+		status := n.H.SubmitTxn(&messaging.Envelope{
 			Transaction: []*protocol.Transaction{delivery.Transaction},
 			Signatures:  delivery.Signatures,
 		})
@@ -237,7 +258,7 @@ func (n *FakeNode) MustExecuteAndWait(inBlock func(func(*messaging.Envelope))) [
 
 func (n *FakeNode) conditionFor(txid *url.TxID) harness.Condition {
 	var produced []harness.Condition
-	return func(h *harness.Harness) bool {
+	return harness.True(func(h *harness.Harness) bool {
 		if produced == nil {
 			h.TB.Helper()
 			r, err := h.Query().QueryTransaction(context.Background(), txid, nil)
@@ -268,10 +289,10 @@ func (n *FakeNode) conditionFor(txid *url.TxID) harness.Condition {
 
 		// If all produced transactions are done, we're done
 		for _, produced := range produced {
-			if !produced(h) {
+			if !produced.Satisfied(h) {
 				return false
 			}
 		}
 		return true
-	}
+	})
 }

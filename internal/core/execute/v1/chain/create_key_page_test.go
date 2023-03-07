@@ -33,7 +33,7 @@ func TestCreateKeyPage_HashSize(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.Submit(
+	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -41,6 +41,5 @@ func TestCreateKeyPage_HashSize(t *testing.T) {
 			WithBody(&CreateKeyPage{Keys: []*KeySpecParams{{KeyHash: []byte{1}}}}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
-	require.NotZero(t, st.Code)
-	require.EqualError(t, st.Error, "public key hash length is invalid")
+	require.EqualError(t, st.AsError(), "public key hash length is invalid")
 }

@@ -135,6 +135,21 @@ type AuthorityEntry struct {
 	extraData []byte
 }
 
+// AuthoritySignature is a signature produced by an authority.
+type AuthoritySignature struct {
+	fieldsSet []bool
+	// Origin is the signer that produced this signature.
+	Origin *url.URL `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	// Authority is the authority that produced this signature.
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	// Vote is the authority's vote.
+	Vote VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	// TxID is the ID of the transaction this was produced for.
+	TxID      *url.TxID  `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Delegator []*url.URL `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
+	extraData []byte
+}
+
 type BTCLegacySignature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -181,6 +196,12 @@ type BlockValidatorAnchor struct {
 	PartitionAnchor
 	// AcmeBurnt is the amount of acme tokens burnt in the transaction.
 	AcmeBurnt big.Int `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	extraData []byte
+}
+
+type BurnCredits struct {
+	fieldsSet []bool
+	Amount    uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	extraData []byte
 }
 
@@ -602,12 +623,6 @@ type PartitionSyntheticLedger struct {
 	extraData []byte
 }
 
-// PlaceholderTransaction is a placeholder for some observable change in V2 logic.
-type PlaceholderTransaction struct {
-	fieldsSet []bool
-	extraData []byte
-}
-
 type RCD1Signature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -1004,6 +1019,8 @@ func (*AddKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTyp
 
 func (*AnchorLedger) Type() AccountType { return AccountTypeAnchorLedger }
 
+func (*AuthoritySignature) Type() SignatureType { return SignatureTypeAuthority }
+
 func (*BTCLegacySignature) Type() SignatureType { return SignatureTypeBTCLegacy }
 
 func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
@@ -1011,6 +1028,8 @@ func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
 func (*BlockLedger) Type() AccountType { return AccountTypeBlockLedger }
 
 func (*BlockValidatorAnchor) Type() TransactionType { return TransactionTypeBlockValidatorAnchor }
+
+func (*BurnCredits) Type() TransactionType { return TransactionTypeBurnCredits }
 
 func (*BurnTokens) Type() TransactionType { return TransactionTypeBurnTokens }
 
@@ -1069,8 +1088,6 @@ func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount
 func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
 
 func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
-
-func (*PlaceholderTransaction) Type() TransactionType { return TransactionTypePlaceholder }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
@@ -1333,6 +1350,31 @@ func (v *AuthorityEntry) Copy() *AuthorityEntry {
 
 func (v *AuthorityEntry) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *AuthoritySignature) Copy() *AuthoritySignature {
+	u := new(AuthoritySignature)
+
+	if v.Origin != nil {
+		u.Origin = v.Origin
+	}
+	if v.Authority != nil {
+		u.Authority = v.Authority
+	}
+	u.Vote = v.Vote
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+	u.Delegator = make([]*url.URL, len(v.Delegator))
+	for i, v := range v.Delegator {
+		if v != nil {
+			u.Delegator[i] = v
+		}
+	}
+
+	return u
+}
+
+func (v *AuthoritySignature) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *BTCLegacySignature) Copy() *BTCLegacySignature {
 	u := new(BTCLegacySignature)
 
@@ -1413,6 +1455,16 @@ func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 }
 
 func (v *BlockValidatorAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BurnCredits) Copy() *BurnCredits {
+	u := new(BurnCredits)
+
+	u.Amount = v.Amount
+
+	return u
+}
+
+func (v *BurnCredits) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BurnTokens) Copy() *BurnTokens {
 	u := new(BurnTokens)
@@ -2100,14 +2152,6 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 }
 
 func (v *PartitionSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *PlaceholderTransaction) Copy() *PlaceholderTransaction {
-	u := new(PlaceholderTransaction)
-
-	return u
-}
-
-func (v *PlaceholderTransaction) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RCD1Signature) Copy() *RCD1Signature {
 	u := new(RCD1Signature)
@@ -3025,6 +3069,46 @@ func (v *AuthorityEntry) Equal(u *AuthorityEntry) bool {
 	return true
 }
 
+func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
+	switch {
+	case v.Origin == u.Origin:
+		// equal
+	case v.Origin == nil || u.Origin == nil:
+		return false
+	case !((v.Origin).Equal(u.Origin)):
+		return false
+	}
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	if len(v.Delegator) != len(u.Delegator) {
+		return false
+	}
+	for i := range v.Delegator {
+		if !((v.Delegator[i]).Equal(u.Delegator[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *BTCLegacySignature) Equal(u *BTCLegacySignature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
@@ -3138,6 +3222,14 @@ func (v *BlockValidatorAnchor) Equal(u *BlockValidatorAnchor) bool {
 		return false
 	}
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BurnCredits) Equal(u *BurnCredits) bool {
+	if !(v.Amount == u.Amount) {
 		return false
 	}
 
@@ -4043,11 +4135,6 @@ func (v *PartitionSyntheticLedger) Equal(u *PartitionSyntheticLedger) bool {
 			return false
 		}
 	}
-
-	return true
-}
-
-func (v *PlaceholderTransaction) Equal(u *PlaceholderTransaction) bool {
 
 	return true
 }
@@ -5649,6 +5736,83 @@ func (v *AuthorityEntry) IsValid() error {
 	}
 }
 
+var fieldNames_AuthoritySignature = []string{
+	1: "Type",
+	2: "Origin",
+	3: "Authority",
+	4: "Vote",
+	5: "TxID",
+	6: "Delegator",
+}
+
+func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Origin == nil) {
+		writer.WriteUrl(2, v.Origin)
+	}
+	if !(v.Authority == nil) {
+		writer.WriteUrl(3, v.Authority)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(4, v.Vote)
+	}
+	if !(v.TxID == nil) {
+		writer.WriteTxid(5, v.TxID)
+	}
+	if !(len(v.Delegator) == 0) {
+		for _, v := range v.Delegator {
+			writer.WriteUrl(6, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_AuthoritySignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *AuthoritySignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Origin is missing")
+	} else if v.Origin == nil {
+		errs = append(errs, "field Origin is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Delegator is missing")
+	} else if len(v.Delegator) == 0 {
+		errs = append(errs, "field Delegator is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_BTCLegacySignature = []string{
 	1: "Type",
 	2: "PublicKey",
@@ -5978,6 +6142,50 @@ func (v *BlockValidatorAnchor) IsValid() error {
 		errs = append(errs, "field AcmeBurnt is missing")
 	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field AcmeBurnt is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BurnCredits = []string{
+	1: "Type",
+	2: "Amount",
+}
+
+func (v *BurnCredits) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Amount == 0) {
+		writer.WriteUint(2, v.Amount)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BurnCredits)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BurnCredits) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Amount is missing")
+	} else if v.Amount == 0 {
+		errs = append(errs, "field Amount is not set")
 	}
 
 	switch len(errs) {
@@ -8549,41 +8757,6 @@ func (v *PartitionSyntheticLedger) IsValid() error {
 		errs = append(errs, "field Pending is missing")
 	} else if len(v.Pending) == 0 {
 		errs = append(errs, "field Pending is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_PlaceholderTransaction = []string{
-	1: "Type",
-}
-
-func (v *PlaceholderTransaction) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-
-	_, _, err := writer.Reset(fieldNames_PlaceholderTransaction)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *PlaceholderTransaction) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Type is missing")
 	}
 
 	switch len(errs) {
@@ -11637,6 +11810,57 @@ func (v *AuthorityEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *AuthoritySignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AuthoritySignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Origin = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Authority = x
+	}
+	if x := new(VoteType); reader.ReadEnum(4, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadTxid(5); ok {
+		v.TxID = x
+	}
+	for {
+		if x, ok := reader.ReadUrl(6); ok {
+			v.Delegator = append(v.Delegator, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_AuthoritySignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BTCLegacySignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11845,6 +12069,41 @@ func (v *BlockValidatorAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) erro
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockValidatorAnchor)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BurnCredits) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BurnCredits) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BurnCredits) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.Amount = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BurnCredits)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -13507,38 +13766,6 @@ func (v *PartitionSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_PartitionSyntheticLedger)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *PlaceholderTransaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *PlaceholderTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-
-	return v.UnmarshalFieldsFrom(reader)
-}
-
-func (v *PlaceholderTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-
-	seen, err := reader.Reset(fieldNames_PlaceholderTransaction)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -15513,6 +15740,34 @@ func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      SignatureType               `json:"type"`
+		Origin    *url.URL                    `json:"origin,omitempty"`
+		Authority *url.URL                    `json:"authority,omitempty"`
+		Vote      VoteType                    `json:"vote,omitempty"`
+		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Origin == nil) {
+		u.Origin = v.Origin
+	}
+	if !(v.Authority == nil) {
+		u.Authority = v.Authority
+	}
+	if !(v.Vote == 0) {
+		u.Vote = v.Vote
+	}
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
+	}
+	if !(len(v.Delegator) == 0) {
+		u.Delegator = v.Delegator
+	}
+	return json.Marshal(&u)
+}
+
 func (v *BTCLegacySignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -15647,6 +15902,18 @@ func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
 	}
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *BurnCredits) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Amount uint64          `json:"amount,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Amount == 0) {
+		u.Amount = v.Amount
 	}
 	return json.Marshal(&u)
 }
@@ -16469,14 +16736,6 @@ func (v *PartitionSyntheticLedger) MarshalJSON() ([]byte, error) {
 	if !(len(v.Pending) == 0) {
 		u.Pending = v.Pending
 	}
-	return json.Marshal(&u)
-}
-
-func (v *PlaceholderTransaction) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type TransactionType `json:"type"`
-	}{}
-	u.Type = v.Type()
 	return json.Marshal(&u)
 }
 
@@ -17581,6 +17840,35 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      SignatureType               `json:"type"`
+		Origin    *url.URL                    `json:"origin,omitempty"`
+		Authority *url.URL                    `json:"authority,omitempty"`
+		Vote      VoteType                    `json:"vote,omitempty"`
+		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Origin = v.Origin
+	u.Authority = v.Authority
+	u.Vote = v.Vote
+	u.TxID = v.TxID
+	u.Delegator = v.Delegator
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Origin = u.Origin
+	v.Authority = u.Authority
+	v.Vote = u.Vote
+	v.TxID = u.TxID
+	v.Delegator = u.Delegator
+	return nil
+}
+
 func (v *BTCLegacySignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -17745,6 +18033,23 @@ func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 	} else {
 		v.AcmeBurnt = *x
 	}
+	return nil
+}
+
+func (v *BurnCredits) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Amount uint64          `json:"amount,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Amount = v.Amount
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Amount = u.Amount
 	return nil
 }
 
@@ -18786,20 +19091,6 @@ func (v *PartitionSyntheticLedger) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *PlaceholderTransaction) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type TransactionType `json:"type"`
-	}{}
-	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	return nil
-}
-
 func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -19052,9 +19343,11 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TransactionHash = x
 	}
-	v.Signatures = make([]Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	v.Authority = u.Authority
 	return nil
@@ -19119,9 +19412,11 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
-	v.Accounts = make([]Account, len(u.Accounts.Value))
-	for i, x := range u.Accounts.Value {
-		v.Accounts[i] = x
+	if u.Accounts != nil {
+		v.Accounts = make([]Account, len(u.Accounts.Value))
+		for i, x := range u.Accounts.Value {
+			v.Accounts[i] = x
+		}
 	}
 	return nil
 }
@@ -19560,9 +19855,11 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 
 	v.Received = u.Received
 	v.Initiator = u.Initiator
-	v.Signers = make([]Signer, len(u.Signers.Value))
-	for i, x := range u.Signers.Value {
-		v.Signers[i] = x
+	if u.Signers != nil {
+		v.Signers = make([]Signer, len(u.Signers.Value))
+		for i, x := range u.Signers.Value {
+			v.Signers[i] = x
+		}
 	}
 	v.SourceNetwork = u.SourceNetwork
 	v.DestinationNetwork = u.DestinationNetwork
@@ -19642,9 +19939,11 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Operations = make([]AccountAuthOperation, len(u.Operations.Value))
-	for i, x := range u.Operations.Value {
-		v.Operations[i] = x
+	if u.Operations != nil {
+		v.Operations = make([]AccountAuthOperation, len(u.Operations.Value))
+		for i, x := range u.Operations.Value {
+			v.Operations[i] = x
+		}
 	}
 	return nil
 }
@@ -19723,9 +20022,11 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Operation = make([]KeyPageOperation, len(u.Operation.Value))
-	for i, x := range u.Operation.Value {
-		v.Operation[i] = x
+	if u.Operation != nil {
+		v.Operation = make([]KeyPageOperation, len(u.Operation.Value))
+		for i, x := range u.Operation.Value {
+			v.Operation[i] = x
+		}
 	}
 	return nil
 }

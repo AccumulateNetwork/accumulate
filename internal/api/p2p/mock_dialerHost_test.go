@@ -24,22 +24,22 @@ func (_m *mockDialerHost) EXPECT() *mockDialerHost_Expecter {
 	return &mockDialerHost_Expecter{mock: &_m.Mock}
 }
 
-// getOwnService provides a mock function with given fields: sa
-func (_m *mockDialerHost) getOwnService(sa *api.ServiceAddress) (*service, bool) {
-	ret := _m.Called(sa)
+// getOwnService provides a mock function with given fields: network, sa
+func (_m *mockDialerHost) getOwnService(network string, sa *api.ServiceAddress) (*serviceHandler, bool) {
+	ret := _m.Called(network, sa)
 
-	var r0 *service
-	if rf, ok := ret.Get(0).(func(*api.ServiceAddress) *service); ok {
-		r0 = rf(sa)
+	var r0 *serviceHandler
+	if rf, ok := ret.Get(0).(func(string, *api.ServiceAddress) *serviceHandler); ok {
+		r0 = rf(network, sa)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*service)
+			r0 = ret.Get(0).(*serviceHandler)
 		}
 	}
 
 	var r1 bool
-	if rf, ok := ret.Get(1).(func(*api.ServiceAddress) bool); ok {
-		r1 = rf(sa)
+	if rf, ok := ret.Get(1).(func(string, *api.ServiceAddress) bool); ok {
+		r1 = rf(network, sa)
 	} else {
 		r1 = ret.Get(1).(bool)
 	}
@@ -53,19 +53,20 @@ type mockDialerHost_getOwnService_Call struct {
 }
 
 // getOwnService is a helper method to define mock.On call
+//   - network string
 //   - sa *api.ServiceAddress
-func (_e *mockDialerHost_Expecter) getOwnService(sa interface{}) *mockDialerHost_getOwnService_Call {
-	return &mockDialerHost_getOwnService_Call{Call: _e.mock.On("getOwnService", sa)}
+func (_e *mockDialerHost_Expecter) getOwnService(network interface{}, sa interface{}) *mockDialerHost_getOwnService_Call {
+	return &mockDialerHost_getOwnService_Call{Call: _e.mock.On("getOwnService", network, sa)}
 }
 
-func (_c *mockDialerHost_getOwnService_Call) Run(run func(sa *api.ServiceAddress)) *mockDialerHost_getOwnService_Call {
+func (_c *mockDialerHost_getOwnService_Call) Run(run func(network string, sa *api.ServiceAddress)) *mockDialerHost_getOwnService_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*api.ServiceAddress))
+		run(args[0].(string), args[1].(*api.ServiceAddress))
 	})
 	return _c
 }
 
-func (_c *mockDialerHost_getOwnService_Call) Return(_a0 *service, _a1 bool) *mockDialerHost_getOwnService_Call {
+func (_c *mockDialerHost_getOwnService_Call) Return(_a0 *serviceHandler, _a1 bool) *mockDialerHost_getOwnService_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }

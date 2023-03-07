@@ -46,11 +46,10 @@ func TestUpdateKey_Duplicate(t *testing.T) {
 		}).
 		Initiate(protocol.SignatureTypeED25519, otherKey).
 		Build()
-	st := sim.H.SubmitSuccessfully(env)
+	st := sim.H.SubmitTxnSuccessfully(env)
 	sim.H.StepUntil(
 		Txn(st.TxID).Fails())
 
 	st = sim.H.QueryTransaction(st.TxID, nil).Status
-	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "cannot have duplicate entries on key page")
+	require.EqualError(t, st.AsError(), "cannot have duplicate entries on key page")
 }

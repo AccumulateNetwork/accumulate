@@ -11,6 +11,8 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -18,6 +20,104 @@ type UpdateKey struct{}
 
 func (UpdateKey) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKey
+}
+
+func (UpdateKey) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
+	// Do not allow delegation
+	if md.Delegated {
+		return false, errors.Unauthorized.WithFormat("cannot %v with a delegated signature", transaction.Body.Type())
+	}
+
+	// Can't do much if we're not at the principal
+	if !transaction.Header.Principal.LocalTo(md.Location) {
+		return true, nil
+	}
+
+	// The principal is allowed to sign
+	if signer.GetUrl().Equal(transaction.Header.Principal) {
+		return false, nil
+	}
+
+	// Delegates are allowed to sign
+	var page *protocol.KeyPage
+	err = batch.Account(transaction.Header.Principal).Main().GetAs(&page)
+	if err != nil {
+		return false, err
+	}
+	_, _, ok := page.EntryByDelegate(signer.GetUrl())
+	if ok {
+		return false, nil
+	}
+
+	return false, errors.Unauthorized.WithFormat("%v is not authorized to sign %v for %v", signer.GetUrl(), transaction.Body.Type(), transaction.Header.Principal)
+}
+
+func (x UpdateKey) AuthorityIsSatisfied(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authority *url.URL) (satisfied, fallback bool, err error) {
+	book, _, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
+	if !ok {
+		return false, false, errors.BadRequest.With("principal is not a key page")
+	}
+
+	// If the authority is a delegate, fallback to the normal logic
+	if !authority.Equal(book) {
+		return false, true, nil
+	}
+
+	// Otherwise, the principal must submit at least one signature
+	_, ok = status.GetSigner(transaction.Header.Principal)
+	return ok, false, nil
+}
+
+func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	// Wait for the initiator
+	if status.Initiator == nil {
+		return false, false, nil
+	}
+
+	// Did the principal sign?
+	signer, ok := status.GetSigner(transaction.Header.Principal)
+	if ok {
+		if ok, err := x.didVote(batch, transaction, signer.GetAuthority()); err != nil {
+			return false, false, errors.UnknownError.Wrap(err)
+		} else if ok {
+			return true, false, nil
+		}
+	}
+
+	// Did a delegate sign?
+	var page *protocol.KeyPage
+	err = batch.Account(transaction.Header.Principal).Main().GetAs(&page)
+	if err != nil {
+		return false, false, err
+	}
+	for _, entry := range page.Keys {
+		if entry.Delegate == nil {
+			continue
+		}
+		if ok, err := x.didVote(batch, transaction, entry.Delegate); err != nil {
+			return false, false, errors.UnknownError.Wrap(err)
+		} else if ok {
+			return true, false, nil
+		}
+	}
+
+	return false, false, nil
+}
+
+func (UpdateKey) didVote(batch *database.Batch, transaction *protocol.Transaction, book *url.URL) (bool, error) {
+	// The book must vote
+	_, err := batch.Account(transaction.Header.Principal).
+		Transaction(transaction.ID().Hash()).
+		Vote(book).
+		Get()
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errors.NotFound):
+		return false, nil
+	default:
+		return false, errors.UnknownError.WithFormat("load vote: %w", err)
+	}
 }
 
 func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, *protocol.KeyPage, *protocol.KeyBook, error) {
@@ -70,47 +170,38 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 
 	// Do not update the key page version. Do not reset LastUsedOn.
 
-	// Find the first signature
-	txObj := st.batch.Transaction(tx.Transaction.GetHash())
-	status, err := txObj.GetStatus()
+	txn := st.batch.Transaction(st.txHash[:])
+	status, err := txn.Status().Get()
 	if err != nil {
-		return nil, fmt.Errorf("load transaction status: %w", err)
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
 
-	var initiator protocol.Signature
-	for _, signer := range status.Signers {
-		sigs, err := database.GetSignaturesForSigner(txObj, signer)
+	oldEntry := new(protocol.KeySpecParams)
+	i, _, ok := page.EntryByDelegate(status.Initiator)
+	switch {
+	case ok:
+		// Update entry for delegate
+		oldEntry.Delegate = page.Keys[i].Delegate
+
+	case status.Initiator.Equal(page.Url):
+		// Update entry by key hash
+		var msg messaging.MessageWithSignature
+		err = st.batch.Message(tx.Transaction.Header.Initiator).Main().GetAs(&msg)
 		if err != nil {
-			return nil, fmt.Errorf("load signatures for %v: %w", signer.GetUrl(), err)
+			return nil, errors.UnknownError.WithFormat("load initiator signature: %w", err)
 		}
 
-		for _, sig := range sigs {
-			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator) {
-				goto found_init
-			}
+		sig, ok := msg.GetSignature().(protocol.KeySignature)
+		if !ok {
+			return nil, errors.InternalError.WithFormat("invalid initiator: expected key signature, got %v", msg.GetSignature().Type())
 		}
-	}
-	return nil, errors.InternalError.WithFormat("unable to locate initiator signature")
+		oldEntry.KeyHash = sig.GetPublicKeyHash()
 
-found_init:
-	switch initiator := initiator.(type) {
-	case protocol.KeySignature:
-		err = updateKey(page, book,
-			&protocol.KeySpecParams{KeyHash: initiator.GetPublicKeyHash()},
-			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
-
-	case *protocol.DelegatedSignature:
-		err = updateKey(page, book,
-			&protocol.KeySpecParams{Delegate: initiator.GetSigner()},
-			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
-
-		if _, ok := initiator.Signature.(protocol.KeySignature); !ok {
-			return nil, fmt.Errorf("cannot UpdateKey with a multi-level delegated signature")
-		}
 	default:
-		return nil, errors.InternalError.WithFormat("%v does not support %v signatures", protocol.TransactionTypeUpdateKey, initiator.Type())
-
+		return nil, errors.InternalError.WithFormat("initiator %v is neither the principal nor a delegate", status.Initiator)
 	}
+
+	err = updateKey(page, book, oldEntry, &protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
 	if err != nil {
 		return nil, err
 	}

@@ -22,6 +22,10 @@ func init() {
 // for processing.
 type NetworkUpdate struct{}
 
+func (NetworkUpdate) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	return nil, errors.InternalError.With("invalid attempt to validate an internal message")
+}
+
 func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	msg, ok := ctx.message.(*internal.NetworkUpdate)
 	if !ok {
@@ -33,10 +37,6 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	txn.Header.Initiator = msg.Cause
 	txn.Body = msg.Body
 
-	// Mark the transaction as internal and queue it for processing
-	ctx.internal.Add(txn.ID().Hash())
-	ctx.transactionsToProcess.Add(txn.ID().Hash())
-
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
@@ -47,7 +47,7 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	}
 
 	// Store the transaction
-	err = batch.Message(txn.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: txn})
+	err = batch.Message(txn.ID().Hash()).Main().Put(&messaging.TransactionMessage{Transaction: txn})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
@@ -64,11 +64,16 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 		return nil, errors.UnknownError.WithFormat("store transaction status: %w", err)
 	}
 
+	// Execute the transaction
+	st, err := ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: txn})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	err = batch.Commit()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// The transaction has not been executed so don't add the status yet
-	return nil, nil
+	return st, nil
 }

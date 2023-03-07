@@ -19,7 +19,7 @@ Envelope:
       optional: true
       repeatable: true
 
-UserTransaction:
+TransactionMessage:
   union: { type: message }
   fields:
     - name: Transaction
@@ -27,11 +27,7 @@ UserTransaction:
       marshal-as: reference
       pointer: true
 
-# Currently UserSignature is used for *all* signatures, so it's really just a
-# Signature message. However in the future system signatures should move to or
-# be replaced by system messages, so we might eventually update UserSignature to
-# only support key signatures.
-UserSignature:
+SignatureMessage:
   union: { type: message }
   fields:
     - name: Signature
@@ -65,7 +61,6 @@ SequencedMessage:
 
 SyntheticMessage:
   # TODO Update to have multiple transactions with a list receipt
-  # TODO Move source, dest, sequence from txn header to here
   union: { type: message }
   fields:
     - name: Message
@@ -76,23 +71,44 @@ SyntheticMessage:
       marshal-as: reference
       pointer: true
 
-ValidatorSignature:
+BlockAnchor:
   union: { type: message }
   fields:
     - name: Signature
       type: protocol.KeySignature
       marshal-as: union
-    - name: Source
+    - name: Anchor
+      type: Message
+      marshal-as: union
+
+SignatureRequest:
+  union: { type: message }
+  fields:
+    - name: Authority
       type: url
       pointer: true
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: Cause
+      type: txid
+      pointer: true
 
-# AuthoritySignature:
-#   union: { type: message }
-#   fields:
-#     - name: Signature
-#       type: protocol.Signature
-#       marshal-as: union
-#     - name: Proof
-#       type: protocol.AnnotatedReceipt
-#       marshal-as: reference
-#       pointer: true
+CreditPayment:
+  union: { type: message }
+  fields:
+    - name: Paid
+      type: protocol.Fee
+      marshal-as: enum
+    - name: Payer
+      type: url
+      pointer: true
+    - name: Initiator
+      description: indicates whether the signature initiated the transaction
+      type: bool
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: Cause
+      type: txid
+      pointer: true

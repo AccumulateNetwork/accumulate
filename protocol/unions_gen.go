@@ -362,6 +362,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(AddCredits), nil
 	case TransactionTypeBlockValidatorAnchor:
 		return new(BlockValidatorAnchor), nil
+	case TransactionTypeBurnCredits:
+		return new(BurnCredits), nil
 	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
@@ -384,8 +386,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeLockAccount:
 		return new(LockAccount), nil
-	case TransactionTypePlaceholder:
-		return new(PlaceholderTransaction), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -450,6 +450,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 			return b == nil
 		}
 		b, ok := b.(*BlockValidatorAnchor)
+		return ok && a.Equal(b)
+	case *BurnCredits:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BurnCredits)
 		return ok && a.Equal(b)
 	case *BurnTokens:
 		if a == nil {
@@ -516,12 +522,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 			return b == nil
 		}
 		b, ok := b.(*LockAccount)
-		return ok && a.Equal(b)
-	case *PlaceholderTransaction:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PlaceholderTransaction)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		if a == nil {
@@ -629,6 +629,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 		return v.Copy()
 	case *BlockValidatorAnchor:
 		return v.Copy()
+	case *BurnCredits:
+		return v.Copy()
 	case *BurnTokens:
 		return v.Copy()
 	case *CreateDataAccount:
@@ -650,8 +652,6 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *IssueTokens:
 		return v.Copy()
 	case *LockAccount:
-		return v.Copy()
-	case *PlaceholderTransaction:
 		return v.Copy()
 	case *RemoteTransaction:
 		return v.Copy()
@@ -1000,6 +1000,8 @@ func UnmarshalKeyPageOperationJSON(data []byte) (KeyPageOperation, error) {
 // NewSignature creates a new Signature for the specified SignatureType.
 func NewSignature(typ SignatureType) (Signature, error) {
 	switch typ {
+	case SignatureTypeAuthority:
+		return new(AuthoritySignature), nil
 	case SignatureTypeBTCLegacy:
 		return new(BTCLegacySignature), nil
 	case SignatureTypeBTC:
@@ -1035,6 +1037,12 @@ func EqualSignature(a, b Signature) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *AuthoritySignature:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*AuthoritySignature)
+		return ok && a.Equal(b)
 	case *BTCLegacySignature:
 		if a == nil {
 			return b == nil
@@ -1115,6 +1123,8 @@ func EqualSignature(a, b Signature) bool {
 // CopySignature copies a Signature.
 func CopySignature(v Signature) Signature {
 	switch v := v.(type) {
+	case *AuthoritySignature:
+		return v.Copy()
 	case *BTCLegacySignature:
 		return v.Copy()
 	case *BTCSignature:

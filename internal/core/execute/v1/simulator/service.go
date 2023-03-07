@@ -29,12 +29,16 @@ type simService Simulator
 // Services returns the simulator's API v3 implementation.
 func (s *Simulator) Services() *simService { return (*simService)(s) }
 
+func (s *simService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return nil, errors.NotAllowed.With("not implemented")
+}
+
 // Private returns the service, because it implements [private.Sequencer]
 // directly.
 func (s *simService) Private() private.Sequencer { return s }
 
-// NodeStatus finds the specified node and returns its NodeStatus.
-func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
+// ConsensusStatus finds the specified node and returns its ConsensusStatus.
+func (s *simService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	if opts.NodeID == "" {
 		return nil, errors.BadRequest.WithFormat("node ID is missing")
 	}
@@ -48,7 +52,7 @@ func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions)
 			continue
 		}
 		if id.MatchesPrivateKey(sk) {
-			return n.service.NodeStatus(ctx, opts)
+			return n.service.ConsensusStatus(ctx, opts)
 		}
 	}
 	return nil, errors.NotFound.WithFormat("node %s not found", id)
@@ -138,14 +142,18 @@ func newExecService(x *ExecEntry, logger log.Logger) *partService {
 	return s
 }
 
+func (s *partService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return nil, errors.NotAllowed.With("not implemented")
+}
+
 // Private returns the service, because it implements [private.Sequencer]
 // directly.
 func (s *partService) Private() private.Sequencer { return s.private }
 
-// NodeStatus returns an incomplete node status. Some of the missing
+// ConsensusStatus returns an incomplete node status. Some of the missing
 // functionality can be implemented if there is need.
-func (s *partService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
-	return &api.NodeStatus{
+func (s *partService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return &api.ConsensusStatus{
 		Ok: true,
 		LastBlock: &api.LastBlock{
 			Height: int64(s.x.BlockIndex),

@@ -15,6 +15,7 @@ import (
 
 type ExecutorFor[T any, V interface{ Type() T }] interface {
 	Process(*database.Batch, V) (*protocol.TransactionStatus, error)
+	Validate(*database.Batch, V) (*protocol.TransactionStatus, error)
 }
 
 type MessageExecutor = ExecutorFor[messaging.MessageType, *MessageContext]
@@ -43,12 +44,3 @@ func registerSimpleExec[X ExecutorFor[T, V], T any, V interface{ Type() T }](lis
 		})
 	}
 }
-
-// SignatureContext is the context in which a message is executed.
-type SignatureContext struct {
-	*MessageContext
-	signature   protocol.Signature
-	transaction *protocol.Transaction
-}
-
-func (s *SignatureContext) Type() protocol.SignatureType { return s.signature.Type() }

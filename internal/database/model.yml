@@ -60,6 +60,51 @@
       pointer: true
       emptyIfMissing: true
 
+    - name: Transaction
+      type: entity
+      parameters:
+      - name: Hash
+        type: hash
+      attributes:
+      - name: Vote
+        description: records the hash of an authority's signature
+        type: state
+        dataType: hash
+        private: true
+        parameters:
+        - name: Authority
+          type: url
+          pointer: true
+      - name: Voters
+        description: lists authorities that have voted on this transaction
+        type: state
+        dataType: url
+        pointer: true
+        collection: set
+      - name: Signatures
+        type: entity
+        attributes:
+        - name: Active
+          description: records the active set of signatures
+          type: state
+          dataType: SignatureSetEntry
+          collection: set
+          pointer: true
+          private: true
+          comparator: compareSignatureSetEntries
+        - name: History
+          type: index
+          description: records the signature chain index of signatures for the transaction
+          dataType: uint
+          collection: set
+      - name: AnchorSignatures
+        description: records validators' anchor transaction signatures
+        type: state
+        dataType: protocol.KeySignature
+        union: true
+        collection: set
+        comparator: compareAnchorSignatures
+
     # Chains
     - name: MainChain
       type: other
@@ -161,6 +206,11 @@
     - name: Produced
       type: state
       dataType: txid
+      pointer: true
+      collection: set
+    - name: Signers
+      type: index
+      dataType: url
       pointer: true
       collection: set
 

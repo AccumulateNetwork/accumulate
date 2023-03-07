@@ -22,7 +22,7 @@ LastBlock:
     - name: DirectoryAnchorHeight
       type: uint
 
-PeerInfo:
+ConsensusPeerInfo:
   fields:
     - name: NodeID
       type: string
@@ -36,7 +36,7 @@ ServiceAddress:
   fields:
     - name: Type
       type: ServiceType
-      marshal-as: enum
-    - name: Partition
+      marshal-as-type: uint
+    - name: Argument
       type: string
       optional: true

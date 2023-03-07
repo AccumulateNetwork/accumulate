@@ -37,6 +37,7 @@ func TestVersionSwitch(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Version is unset
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
@@ -45,16 +46,15 @@ func TestVersionSwitch(t *testing.T) {
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
 
 	// Attempting to use V2 logic fails
-	st := sim.Submit(MustBuild(t,
-		build.Transaction().For(DnUrl()).
-			Body(&PlaceholderTransaction{}).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+	st := sim.SubmitTxn(MustBuild(t,
+		build.Transaction().For(alice).
+			BurnCredits(1).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
 
-	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "unsupported transaction type: placeholder")
+	require.EqualError(t, st.AsError(), "unsupported transaction type: burnCredits")
 
 	// Execute
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV1Halt).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
@@ -66,7 +66,7 @@ func TestVersionSwitch(t *testing.T) {
 	sim.StepN(10)
 
 	// Execute
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV2).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0))))
@@ -83,9 +83,9 @@ func TestVersionSwitch(t *testing.T) {
 	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
 
 	// Attempting to use V2 logic succeeds
-	st = sim.SubmitSuccessfully(MustBuild(t,
-		build.Transaction().For(alice).
-			Body(&PlaceholderTransaction{}).
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(alice, "book", "1").
+			BurnCredits(1).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
 
 	sim.StepUntil(

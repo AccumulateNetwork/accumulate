@@ -51,6 +51,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	txnX := []chain.TransactionExecutor{
 		// User transactions
 		chain.AddCredits{},
+		chain.BurnCredits{},
 		chain.BurnTokens{},
 		chain.CreateDataAccount{},
 		chain.CreateIdentity{},
@@ -75,14 +76,8 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.SyntheticDepositTokens{},
 		chain.SyntheticWriteData{},
 
-		// Forwarding
-		chain.SyntheticForwardTransaction{},
-
 		// Operator transactions
 		chain.ActivateProtocolVersion{},
-
-		// For testing
-		chain.Placeholder{},
 	}
 
 	switch opts.Describe.NetworkType {
@@ -100,9 +95,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	default:
 		return nil, errors.InternalError.WithFormat("invalid partition type %v", opts.Describe.NetworkType)
 	}
-
-	// This is a no-op in dev
-	txnX = addTestnetExecutors(txnX)
 
 	if opts.BackgroundTaskLauncher == nil {
 		opts.BackgroundTaskLauncher = func(f func()) { go f() }

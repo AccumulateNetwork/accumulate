@@ -197,6 +197,9 @@ const SignatureTypeDelegated SignatureType = 11
 // SignatureTypeInternal is used for internally produced transactions.
 const SignatureTypeInternal SignatureType = 12
 
+// SignatureTypeAuthority is a signature produced by an authority.
+const SignatureTypeAuthority SignatureType = 13
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48
 
@@ -257,14 +260,14 @@ const TransactionTypeUpdateKeyPage TransactionType = 15
 // TransactionTypeLockAccount sets a major block height that prevents tokens from being transferred out of a lite token account until that height has been reached.
 const TransactionTypeLockAccount TransactionType = 16
 
+// TransactionTypeBurnCredits burns credits from a key page or lite identity.
+const TransactionTypeBurnCredits TransactionType = 17
+
 // TransactionTypeUpdateAccountAuth updates authorization for an account.
 const TransactionTypeUpdateAccountAuth TransactionType = 21
 
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
-
-// TransactionTypePlaceholder is a placeholder for some observable change in V2 logic.
-const TransactionTypePlaceholder TransactionType = 46
 
 // TransactionTypeActivateProtocolVersion activates a new version of the protocol.
 const TransactionTypeActivateProtocolVersion TransactionType = 47
@@ -1041,7 +1044,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority:
 		*v = u
 		return true
 	default:
@@ -1078,6 +1081,8 @@ func (v SignatureType) String() string {
 		return "delegated"
 	case SignatureTypeInternal:
 		return "internal"
+	case SignatureTypeAuthority:
+		return "authority"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
 	}
@@ -1114,6 +1119,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeDelegated, true
 	case "internal":
 		return SignatureTypeInternal, true
+	case "authority":
+		return SignatureTypeAuthority, true
 	default:
 		return 0, false
 	}
@@ -1211,7 +1218,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypePlaceholder, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	default:
@@ -1256,12 +1263,12 @@ func (v TransactionType) String() string {
 		return "updateKeyPage"
 	case TransactionTypeLockAccount:
 		return "lockAccount"
+	case TransactionTypeBurnCredits:
+		return "burnCredits"
 	case TransactionTypeUpdateAccountAuth:
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
-	case TransactionTypePlaceholder:
-		return "placeholder"
 	case TransactionTypeActivateProtocolVersion:
 		return "activateProtocolVersion"
 	case TransactionTypeRemote:
@@ -1328,12 +1335,12 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateKeyPage, true
 	case "lockaccount":
 		return TransactionTypeLockAccount, true
+	case "burncredits":
+		return TransactionTypeBurnCredits, true
 	case "updateaccountauth":
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
 		return TransactionTypeUpdateKey, true
-	case "placeholder":
-		return TransactionTypePlaceholder, true
 	case "activateprotocolversion":
 		return TransactionTypeActivateProtocolVersion, true
 	case "remote":

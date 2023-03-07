@@ -22,6 +22,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/fatih/color"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
@@ -228,19 +229,34 @@ func (d *Daemon) Start() (err error) {
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
+	chGlobals := make(chan *core.GlobalValues, 1)
+	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
+		select {
+		case chGlobals <- e.New:
+		default:
+		}
+		return nil
+	})
+
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
 	dialer := &dialer{ready: make(chan struct{})}
-	client := &message.Client{Dialer: dialer, Router: routing.MessageRouter{Router: router}}
+	client := &message.Client{
+		Network: d.Config.Accumulate.Network.Id,
+		Dialer:  dialer,
+		Router:  routing.MessageRouter{Router: router},
+	}
 	execOpts := execute.Options{
-		Logger:        d.Logger,
-		Database:      d.db,
-		Key:           d.Key().Bytes(),
-		Describe:      d.Config.Accumulate.Describe,
-		Router:        router,
-		EventBus:      d.eventBus,
-		NewDispatcher: func() execute.Dispatcher { return newDispatcher(router, client.Dialer) },
-		Sequencer:     client.Private(),
-		Querier:       client,
+		Logger:    d.Logger,
+		Database:  d.db,
+		Key:       d.Key().Bytes(),
+		Describe:  d.Config.Accumulate.Describe,
+		Router:    router,
+		EventBus:  d.eventBus,
+		Sequencer: client.Private(),
+		Querier:   client,
+		NewDispatcher: func() execute.Dispatcher {
+			return newDispatcher(d.Config.Accumulate.Network.Id, router, dialer)
+		},
 	}
 
 	// On DNs initialize the major block scheduler
@@ -320,7 +336,11 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
 
-	nodeSvc := tm.NewNodeService(tm.NodeServiceParams{
+	// Wait for the executor to finish loading everything
+	globals := <-chGlobals
+
+	// Initialize all the services
+	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
 		Database:         d.db,
@@ -360,25 +380,37 @@ func (d *Daemon) Start() (err error) {
 		Partition: d.Config.Accumulate.PartitionId,
 		EventBus:  d.eventBus,
 	})
+	sequencerSvc := api.NewSequencer(api.SequencerParams{
+		Logger:       d.Logger.With("module", "acc-rpc"),
+		Database:     d.db,
+		EventBus:     d.eventBus,
+		Partition:    d.Config.Accumulate.PartitionId,
+		Globals:      globals,
+		ValidatorKey: d.Key().Bytes(),
+	})
 	messageHandler, err := message.NewHandler(
 		d.Logger.With("module", "acc-rpc"),
-		&message.NodeService{NodeService: nodeSvc},
+		&message.ConsensusService{ConsensusService: nodeSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
 		&message.NetworkService{NetworkService: netSvc},
 		&message.Querier{Querier: querySvc},
 		&message.Submitter{Submitter: submitSvc},
 		&message.Validator{Validator: validateSvc},
 		&message.EventService{EventService: eventSvc},
+		&message.Sequencer{Sequencer: sequencerSvc},
 	)
 	if err != nil {
 		return fmt.Errorf("initialize P2P handler: %w", err)
 	}
 
+	// Setup the p2p node
 	d.p2pnode, err = p2p.New(p2p.Options{
 		Logger:         d.Logger.With("module", "acc-rpc"),
+		Network:        d.Config.Accumulate.Network.Id,
 		Listen:         d.Config.Accumulate.P2P.Listen,
 		BootstrapPeers: app.Accumulate.P2P.BootstrapPeers,
 		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+		DiscoveryMode:  dht.ModeServer,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize P2P: %w", err)
@@ -391,11 +423,12 @@ func (d *Daemon) Start() (err error) {
 		submitSvc,
 		validateSvc,
 		eventSvc,
+		sequencerSvc,
 	}
 	for _, s := range services {
 		d.p2pnode.RegisterService(&v3.ServiceAddress{
-			Type:      s.Type(),
-			Partition: d.Config.Accumulate.PartitionId,
+			Type:     s.Type(),
+			Argument: d.Config.Accumulate.PartitionId,
 		}, messageHandler.Handle)
 	}
 

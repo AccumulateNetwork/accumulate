@@ -6,6 +6,8 @@ EntityRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -45,6 +47,8 @@ ChainRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -67,6 +71,8 @@ StateRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -90,6 +96,8 @@ StateRecord:
     - name: Collection
       type: CollectionType
       marshal-as: enum
+    - name: Comparator
+      type: string
 
 IndexRecord:
   non-binary: true
@@ -99,6 +107,8 @@ IndexRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -122,6 +132,8 @@ IndexRecord:
     - name: Collection
       type: CollectionType
       marshal-as: enum
+    - name: Comparator
+      type: string
 
 OtherRecord:
   non-binary: true
@@ -131,6 +143,8 @@ OtherRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private

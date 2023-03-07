@@ -9,21 +9,10 @@ package block
 import (
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
-
-type Block struct {
-	BlockMeta
-	State BlockState
-	Batch *database.Batch
-}
-
-// BlockMeta is metadata about a block.
-type BlockMeta = execute.BlockParams
 
 // BlockState tracks various metrics of a block of transactions as they are
 // executed.
@@ -50,6 +39,9 @@ type BlockAnchorState struct {
 type ProducedMessage struct {
 	// Producer is the ID of the producer.
 	Producer *url.TxID
+
+	// Destination is the account that the message should be routed to.
+	Destination *url.URL
 
 	// Message is the produced message.
 	Message messaging.Message

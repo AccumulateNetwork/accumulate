@@ -9,7 +9,6 @@ package p2p
 import (
 	"context"
 	"io"
-	"sort"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -31,22 +30,19 @@ var _ message.MultiDialer = (*dialer)(nil)
 // support testing with mocks.
 type dialerHost interface {
 	selfID() peer.ID
-	getOwnService(sa *api.ServiceAddress) (*service, bool)
+	getOwnService(network string, sa *api.ServiceAddress) (*serviceHandler, bool)
 	getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error)
 }
 
 // dialerPeers are the parts of [peerManager] required by [dialer]. dialerPeers
 // exists to support testing with mocks.
 type dialerPeers interface {
-	getPeer(id peer.ID) (*peerState, bool)
-	getPeers(service *api.ServiceAddress) []*peerState
-	adjustPriority(peer *peerState, delta int)
+	getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error)
 }
 
 // stream is a [message.Stream] with an associated [peerState].
 type stream struct {
-	message.Stream
-	peer *peerState
+	stream message.Stream
 }
 
 // Dialer returns a [message.MultiDialer] that knows how to dial any partition
@@ -64,55 +60,72 @@ func (n *Node) Dialer() message.MultiDialer {
 // find an appropriate peer that can service the address. If no peer can be
 // found, Dial will return [errors.NoPeer].
 func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	peer, sa, err := unpackAddress(addr)
+	net, peer, sa, err := unpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	if peer == "" {
-		return d.newPartitionStream(ctx, sa)
+		return d.newNetworkStream(ctx, sa, net)
 	}
 	return d.newPeerStream(ctx, sa, peer)
 }
 
 // unpackAddress unpacks a multiaddr into its components. The address must
-// include an /acc component and may include a /p2p component. unpackAddress
-// will return an error if the address includes any other components.
-func unpackAddress(addr multiaddr.Multiaddr) (peer.ID, *api.ServiceAddress, error) {
-	var saBytes, peerID []byte
+// include an /acc-svc component and may include a /p2p component or an /acc
+// component. unpackAddress will return an error if the address includes any
+// other components.
+func unpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *api.ServiceAddress, error) {
+	// Scan the address for /acc, /acc-svc, and /p2p components
+	var cNetwork, cService, cPeer *multiaddr.Component
 	var bad bool
 	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
 		switch c.Protocol().Code {
 		case api.P_ACC:
-			saBytes = c.RawValue()
+			cNetwork = &c
+		case api.P_ACC_SVC:
+			cService = &c
 		case multiaddr.P_P2P:
-			peerID = c.RawValue()
+			cPeer = &c
 		default:
 			bad = true
 		}
 		return true
 	})
 
-	if bad || saBytes == nil {
-		return "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
+	// The address must contain a /acc-svc component and must not contain any
+	// unexpected components
+	if bad || cService == nil {
+		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
+	// Parse the /acc-svc component
 	sa := new(api.ServiceAddress)
-	err := sa.UnmarshalBinary(saBytes)
+	err := sa.UnmarshalBinary(cService.RawValue())
 	if err != nil {
-		return "", nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
+		return "", "", nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
 	} else if sa.Type == api.ServiceTypeUnknown {
-		return "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
+		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
-	return peer.ID(peerID), sa, nil
+	var peerID peer.ID
+	if cPeer != nil {
+		peerID = peer.ID(cPeer.RawValue())
+	}
+
+	var net string
+	if cNetwork != nil {
+		net = string(cNetwork.RawValue())
+	}
+
+	return net, peerID, sa, nil
 }
 
 // BadDial notifies the dialer that a transport error was encountered while
 // processing the stream.
 func (d dialer) BadDial(ctx context.Context, _ multiaddr.Multiaddr, s message.Stream, err error) bool {
 	// TODO: Vary the priority hit depending on the type of error
-	d.peers.adjustPriority(s.(*stream).peer, -100)
+	// d.peers.adjustPriority(s.(*stream).peer, -100)
 
 	// TODO: Retry partition connections
 	return false
@@ -125,25 +138,26 @@ func (d dialer) BadDial(ctx context.Context, _ multiaddr.Multiaddr, s message.St
 // If the peer ID does not match a peer known by the node, or if the node does
 // not have an address for the given peer, newPeerStream will fail.
 func (d dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer peer.ID) (message.Stream, error) {
+	// If the peer ID is our ID
 	if d.host.selfID() == peer {
-		s, ok := d.host.getOwnService(sa)
+		// Check if we have the service
+		s, ok := d.host.getOwnService("", sa)
 		if !ok {
 			return nil, errors.NotFound // TODO return protocol not supported
 		}
 
+		// Create a pipe and handle it
 		p, q := message.DuplexPipe(ctx)
 		go s.handler(p)
 		return q, nil
 	}
 
-	// Retrieve the peer state
-	state, ok := d.peers.getPeer(peer)
-	if !ok {
-		return nil, errors.BadRequest.WithFormat("unknown peer %v", peer)
-	}
-
 	// Open a new stream
-	s, err := d.host.getPeerService(ctx, peer, sa)
+	return openStreamFor(ctx, d.host, peer, sa)
+}
+
+func openStreamFor(ctx context.Context, host dialerHost, peer peer.ID, sa *api.ServiceAddress) (message.Stream, error) {
+	s, err := host.getPeerService(ctx, peer, sa)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -152,59 +166,54 @@ func (d dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer 
 	go func() { <-ctx.Done(); _ = s.Close() }()
 
 	ps := new(stream)
-	ps.peer = state
-	ps.Stream = message.NewStream(s)
+	ps.stream = message.NewStream(s)
 	return ps, nil
 }
 
-// newPartitionStream opens a stream to the highest priority peer that
+// newNetworkStream opens a stream to the highest priority peer that
 // participates in the given partition. If the current node participates in the
-// partition, newPartitionStream returns a pipe and spawns a goroutine to handle
+// partition, newNetworkStream returns a pipe and spawns a goroutine to handle
 // it as if it were an incoming stream.
 //
 // If the node is aware of multiple peers that participate in the partition, it
 // will try them in order of decreasing priority. If a peer is successfully
 // dialed, its priority is decremented by one so that subsequent dials are
 // routed to a different peer.
-func (d dialer) newPartitionStream(ctx context.Context, sa *api.ServiceAddress) (message.Stream, error) {
+func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, net string) (message.Stream, error) {
+	callCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Check if we participate in this partition
-	s, ok := d.host.getOwnService(sa)
+	service, ok := d.host.getOwnService(net, sa)
 	if ok {
 		p, q := message.DuplexPipe(ctx)
-		go s.handler(p)
+		go service.handler(p)
 		return q, nil
 	}
 
-	// Sort peers by priority
-	peers := d.peers.getPeers(sa)
-	sort.Slice(peers, func(i, j int) bool { return peers[i].priority > peers[j].priority })
+	// Construct an address for the service
+	addr, err := sa.MultiaddrFor(net)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Query the DHT for peers that provide the service
+	peers, err := d.peers.getPeers(callCtx, addr, 10)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	// Try each peer in descending priority
-	for _, p := range peers {
+	for p := range peers {
 		// Open a stream
-		s, err := d.host.getPeerService(ctx, p.info.ID, sa)
+		s, err := openStreamFor(ctx, d.host, p.ID, sa)
 		switch {
 		case err == nil:
-			// Decrement the priority so we round-robin between peers
-			d.peers.adjustPriority(p, -1)
-
-			// Close the stream once the context is done
-			go func() { <-ctx.Done(); _ = s.Close() }()
-
-			ps := new(stream)
-			ps.peer = p
-			ps.Stream = message.NewStream(s)
-			return ps, nil
+			return s, nil
 
 		case errors.Is(err, network.ErrNoConn),
 			errors.Is(err, network.ErrNoRemoteAddrs):
-			// Can't connect to this peer, decrement the priority and try again.
-			// If we were to remove the peer instead, we could have a situation
-			// where a network issues lead to us removing all peers. Since that
-			// situation is not easily recovered from without restarting the
-			// node, we instead decrement the priority by a large number. That
-			// way the peer will be avoided unless all other peers have failed.
-			d.peers.adjustPriority(p, -100)
+			// Can't connect to this peer, try again
 			continue
 
 		default:
@@ -222,20 +231,56 @@ func (n *Node) SelfDialer() message.Dialer { return (*selfDialer)(n) }
 
 // Dial returns a stream for the current node.
 func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	peer, sa, err := unpackAddress(addr)
+	// Parse the address
+	_, peer, sa, err := unpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	if peer != "" && peer != d.host.ID() {
-		return nil, errors.NotFound.With("dialed self but asked for a different peer")
+		s, err := openStreamFor(ctx, (*Node)(d), peer, sa)
+		return s, errors.UnknownError.Wrap(err)
 	}
 
-	s, ok := (*Node)(d).getOwnService(sa)
+	// Check if we provide the service
+	s, ok := (*Node)(d).getOwnService("", sa)
 	if !ok {
 		return nil, errors.NotFound // TODO return protocol not supported
 	}
 
+	// Create a pipe and handle it
 	p, q := message.DuplexPipe(ctx)
 	go s.handler(p)
 	return q, nil
+}
+
+func (s *stream) Read() (message.Message, error) {
+	// Convert ErrReset and Canceled into EOF
+	m, err := s.stream.Read()
+	switch {
+	case err == nil:
+		return m, nil
+	case isEOF(err):
+		return nil, io.EOF
+	default:
+		return nil, err
+	}
+}
+
+func (s *stream) Write(msg message.Message) error {
+	// Convert ErrReset and Canceled into EOF
+	err := s.stream.Write(msg)
+	switch {
+	case err == nil:
+		return nil
+	case isEOF(err):
+		return io.EOF
+	default:
+		return err
+	}
+}
+
+func isEOF(err error) bool {
+	return errors.Is(err, io.EOF) ||
+		errors.Is(err, network.ErrReset) ||
+		errors.Is(err, context.Canceled)
 }

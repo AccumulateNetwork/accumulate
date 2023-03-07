@@ -52,6 +52,8 @@
         "-b=2",
         "-v=2",
         "-f=0",
+        "--globals={\"executorVersion\": \"v2\"}",
+        "--faucet-seed=ci",
       ]
     },
     {
@@ -66,6 +68,7 @@
         "devnet",
         "-w=${workspaceFolder}/.nodes",
         "--truncate",
+        "--faucet-seed=ci",
       ]
     },
     {
@@ -83,6 +86,7 @@
         "${workspaceFolder}/.nodes",
         "--truncate",
         "--debug",
+        "--faucet-seed=ci",
       ]
     },
     {
@@ -354,6 +358,19 @@
       ]
     },
     {
+      "name": "Debug sequence",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "sequence",
+        "mainnet",
+      ]
+    },
+    {
       "name": "Lint",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
@@ -390,14 +407,29 @@
       "port": 2345,
       "host": "127.0.0.1",
       "substitutePath": [
+        // // Full paths (GitLab Docker build)
+        // {
+        //   "to": "/go/",
+        //   "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
+        // },
+        // {
+        //   "to": "/root/",
+        //   "from": "${workspaceFolder}",
+        // },
+
+        // Trimmed paths
         {
-          "to": "/go/",
-          "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
+          "to": "gitlab.com/accumulatenetwork/accumulate/",
+          "from": "${workspaceFolder}/",
         },
         {
-          "to": "/root/",
-          "from": "${workspaceFolder}",
+          "to": "github.com/AccumulateNetwork/",
+          "from": "${env:HOME}/go/pkg/mod/github.com/!accumulate!network/", // <-- MODIFY THIS if you're not using the default GOPATH
         },
+        // {
+        //   "to": "",
+        //   "from": "${env:HOME}/go/pkg/mod/", // <-- MODIFY THIS if you're not using the default GOPATH
+        // },
       ],
     },
     {

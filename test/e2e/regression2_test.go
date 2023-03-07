@@ -46,7 +46,7 @@ func TestBadOperatorPageUpdate(t *testing.T) {
 	before := GetAccount[*KeyPage](t, sim.Database(Directory), DnUrl().JoinPath(Operators, "1"))
 
 	// Execute
-	st := sim.BuildAndSubmitSuccessfully(
+	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(DnUrl(), Operators, "1").
 			UpdateKeyPage().Add().Entry().Hash([32]byte{1}).FinishEntry().FinishOperation().
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
@@ -77,7 +77,7 @@ func TestBadOracleUpdate(t *testing.T) {
 	require.NoError(t, v.UnmarshalBinary(before.Entry.GetData()[0]))
 
 	// Execute
-	st := sim.BuildAndSubmitSuccessfully(
+	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(DnUrl(), Oracle).
 			WriteData([]byte("foo")).ToState().
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
@@ -121,7 +121,7 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	// Execute
-	st := sim.BuildAndSubmitSuccessfully(
+	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "tokens").
 			SendTokens(123, 0).To(bob, "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
@@ -214,8 +214,7 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 	// Submit the transaction directly to the wrong BVN
 	st, err := sim.SubmitTo(badBvn, deliveries)
 	require.NoError(t, err)
-	require.NotNil(t, st[0].Error)
-	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvn, goodBvn), st[0].Error.Message)
+	require.EqualError(t, st[1].AsError(), fmt.Sprintf("signature submitted to %s instead of %s", badBvn, goodBvn))
 }
 
 func TestAnchoring(t *testing.T) {
@@ -239,7 +238,7 @@ func TestAnchoring(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
 
 	// Execute 1
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("foo")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -247,7 +246,7 @@ func TestAnchoring(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
 
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("bar")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -256,7 +255,7 @@ func TestAnchoring(t *testing.T) {
 		Txn(st.TxID).Succeeds())
 
 	// Execute 2
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("baz")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -264,7 +263,7 @@ func TestAnchoring(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
 
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("bat")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -305,7 +304,7 @@ func TestSignatureChainAnchoring(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
 	// Execute
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice).
 			CreateDataAccount(alice, "foo").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
@@ -340,7 +339,7 @@ func TestSignatureChainAnchoring(t *testing.T) {
 	})
 
 	// Activate the new behavior
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV1SignatureAnchoring).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
@@ -352,7 +351,7 @@ func TestSignatureChainAnchoring(t *testing.T) {
 	sim.StepN(10)
 
 	// Execute
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice).
 			CreateDataAccount(alice, "bar").
 			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey)))
@@ -401,10 +400,10 @@ func TestUpdateKeyWithDelegate(t *testing.T) {
 
 	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(p *KeyPage) { p.Keys = nil; p.AddKeySpec(&KeySpec{Delegate: alice.JoinPath("book")}) })
 
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(bob, "book", "1").
 			UpdateKey(aliceKey, SignatureTypeED25519).
-			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey).Delegator(bob, "book", "1")))
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -466,7 +465,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 
 	outOfOrder := func(sim *Sim, delivery *messaging.Envelope) *TransactionStatus {
 		// Sign and submit the transaction with bob
-		st := sim.SubmitSuccessfully(MustBuild(t,
+		st := sim.SubmitTxnSuccessfully(MustBuild(t,
 			build.SignatureForTransaction(delivery.Transaction[0]).
 				Url(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey)))
 
@@ -474,27 +473,27 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 			Txn(st.TxID).Received())
 
 		// Submit alice's signature
-		sim.SubmitSuccessfully(delivery)
+		sim.SubmitTxnSuccessfully(delivery)
 
 		return st
 	}
 
 	extraSig := func(sim *Sim, delivery *messaging.Envelope) *TransactionStatus {
 		// Submit alice's signature
-		st := sim.SubmitSuccessfully(delivery)
+		st := sim.SubmitTxnSuccessfully(delivery)
 
 		sim.StepUntil(
 			Txn(st.TxID).Received())
 
 		// Submit with alice's other key
-		sim.SubmitSuccessfully(MustBuild(t,
+		sim.SubmitTxnSuccessfully(MustBuild(t,
 			build.SignatureForTransaction(delivery.Transaction[0]).
 				Url(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey2).Delegator(bob, "book", "1")))
 
 		sim.StepN(50)
 
 		// Sign and submit the transaction with bob
-		sim.SubmitSuccessfully(MustBuild(t,
+		sim.SubmitTxnSuccessfully(MustBuild(t,
 			build.SignatureForTransaction(delivery.Transaction[0]).
 				Url(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey)))
 
@@ -505,7 +504,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		var sigId *url.TxID
 		sim.SetSubmitHook("BVN1", func(messages []messaging.Message) (dropTx bool, keepHook bool) {
 			for _, msg := range messages {
-				msg, ok := msg.(*messaging.UserTransaction)
+				msg, ok := msg.(*messaging.TransactionMessage)
 				if !ok {
 					continue
 				}
@@ -605,7 +604,7 @@ func TestSignerOverwritten(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: alice.JoinPath("book")}}}})
 
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(bob, "tokens").
 			SendTokens(1, 0).To("foo").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
@@ -653,7 +652,46 @@ func TestMissingPrincipal(t *testing.T) {
 		Initiate(txn)
 	require.NoError(t, err)
 
-	st := sim.Submit(&messaging.Envelope{Transaction: []*Transaction{txn}, Signatures: []Signature{sig}})
-	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "missing principal")
+	st := sim.SubmitTxn(&messaging.Envelope{Transaction: []*Transaction{txn}, Signatures: []Signature{sig}})
+	require.EqualError(t, st.AsError(), "missing principal")
+}
+
+// TestOldExec runs a basic simulator test with the V1 executor to ensure that
+// everything is copacetic. This was motivated by a change to
+// [messaging.Envelope.Normalize] that caused problems.
+func TestOldExec(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+
+	// Execute
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			SendTokens(123, 0).To(bob, "tokens").
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	// Verify
+	account := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
+	require.Equal(t, 123, int(account.Balance.Int64()))
 }
