@@ -289,6 +289,12 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 	// Request additional signatures
 	x.sendSignatureRequests(batch, ctx2)
 
+	// Send the credit payment
+	err = x.sendCreditPayment(batch, ctx2)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	// Verify the signer's authority is satisfied
 	authority := ctx.getAuthority()
 	ok, err := ctx.authorityIsSatisfied(batch, authority)
@@ -301,12 +307,6 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 
 	// Send the authority signature
 	x.sendAuthoritySignature(batch, ctx2)
-
-	// Send the credit payment
-	err = x.sendCreditPayment(batch, ctx2)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
 
 	err = clearActiveSignatures(batch, ctx)
 	if err != nil {
@@ -422,14 +422,13 @@ func (UserSignature) sendAuthoritySignature(batch *database.Batch, ctx *userSigC
 // sendCreditPayment sends the principal a notice that the signer paid and (if
 // the signature is the initiator) the transaction was initiated.
 func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContext) error {
-	hash, err := batch.
-		Account(ctx.getSigner()).
-		Transaction(ctx.transaction.ID().Hash()).
-		Signatures().
-		Initiator().
-		Get()
-	if err != nil && !errors.Is(err, errors.NotFound) {
-		return errors.UnknownError.WithFormat("load initiator hash: %w", err)
+	didInit := protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil)
+
+	// Don't send a payment if we didn't pay anything. Since we don't (yet)
+	// support anyone besides the initiator paying, this means only the
+	// initiator should send a payment.
+	if !didInit {
+		return nil
 	}
 
 	ctx.didProduce(
@@ -439,7 +438,7 @@ func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContex
 			Payer:     ctx.getSigner(),
 			TxID:      ctx.transaction.ID(),
 			Cause:     ctx.message.ID(),
-			Initiator: hash != [32]byte{},
+			Initiator: didInit,
 		},
 	)
 	return nil
