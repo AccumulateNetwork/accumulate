@@ -184,7 +184,9 @@ func (b *multiBlockState) Commit() error {
 		return err
 	}
 
-	// Change the active executor implementation at the end of the block
+	// Change the active executor implementation at the end of the block. This
+	// must be done after commit; otherwise changes made in this block will not
+	// be visible to the new executor.
 	err = b.multi.updateActive()
 	return errors.UnknownError.Wrap(err)
 }
