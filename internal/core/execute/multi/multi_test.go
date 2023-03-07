@@ -47,11 +47,11 @@ func TestVersionSwitch(t *testing.T) {
 
 	// Attempting to use V2 logic fails
 	st := sim.SubmitTxn(MustBuild(t,
-		build.Transaction().For(DnUrl()).
-			Body(&PlaceholderTransaction{}).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+		build.Transaction().For(alice).
+			BurnCredits(1).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
 
-	require.EqualError(t, st.AsError(), "unsupported transaction type: placeholder")
+	require.EqualError(t, st.AsError(), "unsupported transaction type: burnCredits")
 
 	// Execute
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
@@ -84,8 +84,8 @@ func TestVersionSwitch(t *testing.T) {
 
 	// Attempting to use V2 logic succeeds
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
-		build.Transaction().For(alice).
-			Body(&PlaceholderTransaction{}).
+		build.Transaction().For(alice, "book", "1").
+			BurnCredits(1).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
