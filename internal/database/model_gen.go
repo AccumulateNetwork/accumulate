@@ -625,8 +625,9 @@ type AccountTransaction struct {
 	label  string
 	parent *Account
 
-	vote   map[accountTransactionVoteKey]record.Value[[32]byte]
-	voters record.Set[*url.URL]
+	vote             map[accountTransactionVoteKey]record.Value[[32]byte]
+	voters           record.Set[*url.URL]
+	anchorSignatures record.Set[protocol.KeySignature]
 }
 
 type accountTransactionVoteKey struct {
@@ -649,6 +650,12 @@ func (c *AccountTransaction) Voters() record.Set[*url.URL] {
 	})
 }
 
+func (c *AccountTransaction) AnchorSignatures() record.Set[protocol.KeySignature] {
+	return getOrCreateField(&c.anchorSignatures, func() record.Set[protocol.KeySignature] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("AnchorSignatures"), c.label+" "+"anchor signatures", record.Union(protocol.UnmarshalKeySignature), compareAnchorSignatures)
+	})
+}
+
 func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 0 {
 		return nil, nil, errors.InternalError.With("bad key for transaction")
@@ -667,6 +674,8 @@ func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key,
 		return v, key[2:], nil
 	case "Voters":
 		return c.Voters(), key[1:], nil
+	case "AnchorSignatures":
+		return c.AnchorSignatures(), key[1:], nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for transaction")
 	}
@@ -685,6 +694,9 @@ func (c *AccountTransaction) IsDirty() bool {
 	if fieldIsDirty(c.voters) {
 		return true
 	}
+	if fieldIsDirty(c.anchorSignatures) {
+		return true
+	}
 
 	return false
 }
@@ -699,6 +711,7 @@ func (c *AccountTransaction) Commit() error {
 		commitField(&err, v)
 	}
 	commitField(&err, c.voters)
+	commitField(&err, c.anchorSignatures)
 
 	return err
 }
