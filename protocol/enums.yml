@@ -188,7 +188,10 @@ TransactionType:
     description: sets a major block height that prevents tokens from being transferred out of a lite token account until that height has been reached
   BurnCredits:
     value: 0x11
-    description: burns credits from a key page or lite identity
+    description: burns credits from a credit account
+  TransferCredits:
+    value: 0x12
+    description: transfers credits between credit accounts within the same domain
   UpdateAccountAuth:
     value: 0x15
     description: updates authorization for an account
