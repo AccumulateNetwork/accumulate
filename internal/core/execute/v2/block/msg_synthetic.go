@@ -97,61 +97,26 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	return syn, nil
 }
 
-func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	// If the message has already been processed, return its recorded status
-	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	if status.Delivered() {
-		return status, nil
+func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
+	batch = batch.Begin(true)
+	defer func() { commitOrDiscard(batch, &err) }()
+
+	// Check if the message has already been processed
+	status, err := ctx.checkStatus(batch)
+	if err != nil || status.Delivered() {
+		return status, err
 	}
 
 	// Add a transaction state to ensure the block gets recorded
 	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
-
-	batch = batch.Begin(true)
-	defer batch.Discard()
-
-	// Process the message
-	status = new(protocol.TransactionStatus)
-	status.Received = ctx.Block.Index
-	status.TxID = ctx.message.ID()
 
 	syn, err := x.check(batch, ctx)
 	if err == nil {
 		_, err = ctx.callMessageExecutor(batch, syn.Message)
 	}
 
-	// Update the status
-	switch {
-	case err == nil:
-		status.Code = errors.Delivered
-
-	case errors.Code(err).IsClientError():
-		status.Set(err)
-
-	default:
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Record the synthetic message and it's cause/produced relation
-	err = batch.Message(syn.Hash()).Main().Put(syn)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message: %w", err)
-	}
-
-	err = batch.Message(syn.Hash()).Produced().Add(syn.Message.ID())
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message produced: %w", err)
-	}
-
-	err = batch.Message(syn.Message.Hash()).Cause().Add(syn.ID())
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message cause: %w", err)
-	}
-
-	err = batch.Commit()
+	// Record the message and its status
+	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
