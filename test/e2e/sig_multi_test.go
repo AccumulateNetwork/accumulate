@@ -41,18 +41,18 @@ func TestSimpleMultisig(t *testing.T) {
 	})
 
 	// Initiate
-	st := sim.BuildAndSubmitTxnSuccessfully(
+	st := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(alice).
 			CreateTokenAccount(alice, "tokens").ForToken(ACME).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
 	// Wait until the principal lists the transaction as pending
 	sim.StepUntil(True(func(h *Harness) bool {
-		r, err := h.Query().QueryPendingIds(context.Background(), st.TxID.Account(), nil)
+		r, err := h.Query().QueryPendingIds(context.Background(), st[0].TxID.Account(), nil)
 		switch {
 		case err == nil:
 			for _, r := range r.Records {
-				if r.Value.Hash() == st.TxID.Hash() {
+				if r.Value.Hash() == st[0].TxID.Hash() {
 					return true
 				}
 			}
@@ -63,10 +63,11 @@ func TestSimpleMultisig(t *testing.T) {
 	}))
 
 	// Sign again
-	st = sim.BuildAndSubmitTxnSuccessfully(
-		build.SignatureForTxID(st.TxID).Load(sim.Query()).
+	st = sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTxID(st[0].TxID).Load(sim.Query()).
 			Url(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
 
 	sim.StepUntil(
-		Txn(st.TxID).Succeeds())
+		Txn(st[0].TxID).Succeeds(),
+		Sig(st[1].TxID).Completes())
 }

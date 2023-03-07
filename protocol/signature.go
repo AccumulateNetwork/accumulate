@@ -1046,7 +1046,7 @@ func UnmarshalKeySignatureFrom(rd io.Reader) (KeySignature, error) {
  */
 
 func (s *AuthoritySignature) GetVote() VoteType            { return s.Vote }
-func (s *AuthoritySignature) GetSigner() *url.URL          { return s.Signer }
+func (s *AuthoritySignature) GetSigner() *url.URL          { return s.RoutingLocation() }
 func (s *AuthoritySignature) GetTransactionHash() [32]byte { return s.TxID.Hash() }
 func (s *AuthoritySignature) Hash() []byte                 { return signatureHash(s) }
 func (s *AuthoritySignature) Metadata() Signature          { return s }

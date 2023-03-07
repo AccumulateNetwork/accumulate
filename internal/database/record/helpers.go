@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -28,6 +28,7 @@ func copyRef[T interface{ Copy() T }](v T) T { return v.Copy() } //nolint
 func CompareHash(u, v [32]byte) int  { return bytes.Compare(u[:], v[:]) }
 func CompareTxid(u, v *url.TxID) int { return u.Compare(v) }
 func CompareUrl(u, v *url.URL) int   { return u.Compare(v) }
+func CompareUint(u, v uint64) int    { return int(u) - int(v) }
 
 func ParseString(s string) (string, error) { return s, nil }
 

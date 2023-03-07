@@ -290,7 +290,8 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 	x.sendSignatureRequests(batch, ctx2)
 
 	// Verify the signer's authority is satisfied
-	ok, err := ctx.authorityIsSatisfied(batch, ctx.getAuthority())
+	authority := ctx.getAuthority()
+	ok, err := ctx.authorityIsSatisfied(batch, authority)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -303,6 +304,11 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 
 	// Send the credit payment
 	err = x.sendCreditPayment(batch, ctx2)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	err = clearActiveSignatures(batch, ctx)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -340,20 +346,29 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load chain: %w", err)
 	}
-	err = chain.AddEntry(ctx.signature.Hash(), true)
+	chainIndex := chain.Height()
+	err = chain.AddEntry(ctx.signature.Hash(), false)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store chain: %w", err)
 	}
 
-	// Add the signature to the transaction's signature set
-	sigSet, err := batch.Transaction(ctx.transaction.GetHash()).SignaturesForSigner(ctx.signer)
+	// Add the signature to the signature set
+	err = addSignature(batch, ctx.SignatureContext, ctx.signer, &database.SignatureSetEntry{
+		KeyIndex:   uint64(ctx.keyIndex),
+		ChainIndex: uint64(chainIndex),
+		Version:    ctx.keySig.GetSignerVersion(),
+		Hash:       ctx.message.Hash(),
+	})
 	if err != nil {
-		return errors.UnknownError.WithFormat("load signatures: %w", err)
+		return errors.UnknownError.Wrap(err)
 	}
 
-	_, err = sigSet.Add(uint64(ctx.keyIndex), ctx.signature)
-	if err != nil {
-		return errors.UnknownError.WithFormat("store signature: %w", err)
+	// Store the initiator against its metadata hash (for UpdateKey)
+	if protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
+		err = batch.Message(ctx.transaction.Header.Initiator).Main().Put(ctx.message)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store initiator message: %w", err)
+		}
 	}
 
 	return nil
@@ -387,7 +402,7 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 // sendAuthoritySignature sends the authority signature for the signer.
 func (UserSignature) sendAuthoritySignature(batch *database.Batch, ctx *userSigContext) {
 	auth := &protocol.AuthoritySignature{
-		Signer:    ctx.getSigner(),
+		Origin:    ctx.getSigner(),
 		Authority: ctx.getAuthority(),
 		Vote:      protocol.VoteTypeAccept,
 		TxID:      ctx.transaction.ID(),
@@ -407,12 +422,14 @@ func (UserSignature) sendAuthoritySignature(batch *database.Batch, ctx *userSigC
 // sendCreditPayment sends the principal a notice that the signer paid and (if
 // the signature is the initiator) the transaction was initiated.
 func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContext) error {
-	didInit, err := ctx.didInitiate(batch)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if !didInit {
-		return nil
+	hash, err := batch.
+		Account(ctx.getSigner()).
+		Transaction(ctx.transaction.ID().Hash()).
+		Signatures().
+		Initiator().
+		Get()
+	if err != nil && !errors.Is(err, errors.NotFound) {
+		return errors.UnknownError.WithFormat("load initiator hash: %w", err)
 	}
 
 	ctx.didProduce(
@@ -422,7 +439,7 @@ func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContex
 			Payer:     ctx.getSigner(),
 			TxID:      ctx.transaction.ID(),
 			Cause:     ctx.message.ID(),
-			Initiator: didInit,
+			Initiator: hash != [32]byte{},
 		},
 	)
 	return nil
