@@ -54,12 +54,15 @@ func (c txnCond) Refund() msgCond {
 // sigCond provides methods to define conditions on a signature.
 type sigCond struct{ msgCond }
 
-func (c sigCond) Completes() Condition {
+// SingleCompletes waits for the signature, credit payment, signature requests,
+// and authority signatures to complete. SingleCompletes is inappropriate for
+// signatures from multi-sig signers.
+func (c sigCond) SingleCompletes() Condition {
 	conditions := []Condition{
 		c.Succeeds(),
 		c.CreditPayment().Succeeds(),
-		// c.SignatureRequest().make("succeeds", deliveredThen(producedRecursive(succeeds))),
-		c.AuthoritySignature().make("succeeds", deliveredThen(producedRecursive(succeeds))),
+		c.SignatureRequest().Completes(),
+		c.AuthoritySignature().Completes(),
 	}
 	return c.make("completes", func(h *Harness, _ *condition, _ *msgResult) bool {
 		ok := true
@@ -154,30 +157,36 @@ func (c msgCond) Capture(ptr **protocol.TransactionStatus) msgCond {
 	return c
 }
 
-// Received waits until the transaction has been received.
+// Received waits until the messages has been received.
 func (c msgCond) Received() Condition { return c.make("is received", received) }
 
-// IsDelivered waits until the transaction has been delivered (executed, whether
+// IsDelivered waits until the messages has been delivered (executed, whether
 // success or failure).
 func (c msgCond) IsDelivered() Condition { return c.make("is delivered", isDelivered) }
 
-// IsPending waits until the transaction is pending (received but not executed).
-// IsPending will fail if the transaction has been recorded with any status
-// other than pending.
+// IsPending waits until the messages is pending (received but not executed).
+// IsPending will fail if the messages has been recorded with any status other
+// than pending.
 func (c msgCond) IsPending() Condition { return c.make("is pending", isPending) }
 
-// Succeeds waits until the transaction has been delivered and succeeds if the
-// transaction succeeded (and fails otherwise).
+// Succeeds waits until the messages has been delivered and succeeds if the
+// messages succeeded (and fails otherwise).
 func (c msgCond) Succeeds() Condition { return c.make("succeeds", deliveredThen(succeeds)) }
 
-// Fails waits until the transaction has been delivered and succeeds if the
-// transaction failed (and fails otherwise).
+// Fails waits until the messages has been delivered and succeeds if the
+// messages failed (and fails otherwise).
 func (c msgCond) Fails() Condition { return c.make("fails", deliveredThen(fails)) }
 
-// Fails waits until the transaction has been delivered and succeeds if the
-// transaction failed with the given code (and fails otherwise).
+// Fails waits until the messages has been delivered and succeeds if the
+// messages failed with the given code (and fails otherwise).
 func (c msgCond) FailsWithCode(code errors.Status) Condition {
 	return c.make("fails", failsWithCode(code))
+}
+
+// Completes waits until the messages has been delivered, verifies the
+// messages succeeded, and recursively waits on any produced messages.
+func (c msgCond) Completes() Condition {
+	return c.make("completes", deliveredThen(producedRecursive(succeeds)))
 }
 
 type msgResult struct {
