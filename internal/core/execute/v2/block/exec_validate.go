@@ -18,7 +18,7 @@ import (
 
 // Validate converts the message to a delivery and validates it. Validate
 // returns an error if the message is not a [message.LegacyMessage].
-func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (x *Executor) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
 	// Make sure every transaction is signed
 	err := checkForUnsignedTransactions(messages)
 	if err != nil {
@@ -27,8 +27,8 @@ func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Messag
 
 	// Set up the bundle
 	d := new(bundle)
-	d.BlockV2 = new(BlockV2)
-	d.BlockV2.Executor = (*Executor)(x)
+	d.Block = new(Block)
+	d.Block.Executor = x
 	d.messages = messages
 	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
