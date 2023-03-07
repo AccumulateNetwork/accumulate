@@ -336,6 +336,37 @@ func (b BurnCreditsBuilder) SignWith(signer any, path ...string) SignatureBuilde
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
+type TransferCreditsBuilder struct {
+	t      TransactionBuilder
+	amount uint64
+	body   protocol.TransferCredits
+}
+
+func (b TransactionBuilder) TransferCredits(amount any) TransferCreditsBuilder {
+	return TransferCreditsBuilder{t: b}.And(amount)
+}
+
+func (b TransferCreditsBuilder) To(recipient any, path ...string) TransferCreditsBuilder {
+	b.body.To = append(b.body.To, &protocol.CreditRecipient{
+		Url:    b.t.parseUrl(recipient, path...),
+		Amount: b.amount,
+	})
+	return b
+}
+
+func (b TransferCreditsBuilder) And(amount any) TransferCreditsBuilder {
+	b.amount = b.t.parseAmount(amount, protocol.CreditPrecisionPower).Uint64()
+	return b
+}
+
+func (b TransferCreditsBuilder) Done() (*protocol.Transaction, error) {
+	return b.t.Body(&b.body).Done()
+}
+
+func (b TransferCreditsBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.t.Body(&b.body).SignWith(signer, path...)
+}
+
 type BurnTokensBuilder struct {
 	t    TransactionBuilder
 	body protocol.BurnTokens
