@@ -270,32 +270,19 @@ func (UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) er
 }
 
 // Process processes a signature.
-func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
-	status := new(protocol.TransactionStatus)
-	status.TxID = ctx.message.ID()
-	status.Received = ctx.Block.Index
-
+func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ *protocol.TransactionStatus, err error) {
 	batch = batch.Begin(true)
-	defer batch.Discard()
-
-	// Make sure the block is recorded
-	ctx.Block.State.MergeSignature(&ProcessSignatureState{})
+	defer func() { commitOrDiscard(batch, &err) }()
 
 	// Process the signature
 	ctx2 := &userSigContext{SignatureContext: ctx}
-	err := x.check(batch, ctx2)
-	if err == nil {
-		err = x.process(batch, ctx2)
+	err = x.check(batch, ctx2)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	switch {
-	case err == nil:
-		status.Code = errors.Delivered
 
-	case errors.Code(err).IsClientError():
-		status.Set(err)
-		return status, nil
-
-	default:
+	err = x.process(batch, ctx2)
+	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
@@ -308,8 +295,7 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (*p
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	if !ok {
-		err = batch.Commit()
-		return status, errors.UnknownError.Wrap(err)
+		return nil, nil
 	}
 
 	// Send the authority signature
@@ -321,8 +307,7 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (*p
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	err = batch.Commit()
-	return status, errors.UnknownError.Wrap(err)
+	return nil, nil
 }
 
 // process processes the signature.
