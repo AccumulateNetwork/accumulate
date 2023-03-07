@@ -84,10 +84,6 @@
       - name: Signatures
         type: entity
         attributes:
-        - name: Initiator
-          description: records the hash of the initiator signature
-          type: state
-          dataType: hash
         - name: Active
           description: records the active set of signatures
           type: state
