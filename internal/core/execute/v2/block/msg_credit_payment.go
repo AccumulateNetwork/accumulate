@@ -58,71 +58,35 @@ func (CreditPayment) check(batch *database.Batch, ctx *MessageContext) (*messagi
 	return pay, txn, nil
 }
 
-func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	// If the message has already been processed, return its recorded status
-	status, err := batch.Transaction2(ctx.message.Hash()).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	if status.Delivered() {
-		return status, nil
+func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
+	batch = batch.Begin(true)
+	defer func() { commitOrDiscard(batch, &err) }()
+
+	// Check if the message has already been processed
+	status, err := ctx.checkStatus(batch)
+	if err != nil || status.Delivered() {
+		return status, err
 	}
 
 	// Add a transaction state to ensure the block gets recorded
 	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
 
-	batch = batch.Begin(true)
-	defer batch.Discard()
-
-	// Process the message
-	status = new(protocol.TransactionStatus)
-	status.Received = ctx.Block.Index
-	status.TxID = ctx.message.ID()
-
+	// Process the message and the transaction
 	pay, txn, err := x.check(batch, ctx)
 	if err == nil {
 		err = x.record(batch, ctx, pay)
 	}
+	if err == nil {
+		_, err = ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: txn})
+	}
 
-	// Update the status
-	switch {
-	case err == nil:
-		status.Code = errors.Delivered
-
-	case errors.Code(err).IsClientError():
-		status.Set(err)
-
-	default:
+	// Record the message and its status
+	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
+	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Record the message
-	err = batch.Message(pay.Hash()).Main().Put(pay)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store message: %w", err)
-	}
-
-	err = batch.Message(pay.Hash()).Cause().Add(pay.TxID)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("add cause: %w", err)
-	}
-
-	// Record the status
-	err = batch.Transaction2(pay.Hash()).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store status: %w", err)
-	}
-
-	// The transaction may be ready so process it
-	if !status.Failed() {
-		_, err = ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: txn})
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
-	err = batch.Commit()
-	return status, errors.UnknownError.Wrap(err)
+	return status, nil
 }
 
 func (CreditPayment) record(batch *database.Batch, ctx *MessageContext, pay *messaging.CreditPayment) error {
