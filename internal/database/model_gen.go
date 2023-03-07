@@ -627,6 +627,7 @@ type AccountTransaction struct {
 
 	vote             map[accountTransactionVoteKey]record.Value[[32]byte]
 	voters           record.Set[*url.URL]
+	signatures       *AccountTransactionSignatures
 	anchorSignatures record.Set[protocol.KeySignature]
 }
 
@@ -647,6 +648,18 @@ func (c *AccountTransaction) getVote(authority *url.URL) record.Value[[32]byte] 
 func (c *AccountTransaction) Voters() record.Set[*url.URL] {
 	return getOrCreateField(&c.voters, func() record.Set[*url.URL] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Voters"), c.label+" "+"voters", record.Wrapped(record.UrlWrapper), record.CompareUrl)
+	})
+}
+
+func (c *AccountTransaction) Signatures() *AccountTransactionSignatures {
+	return getOrCreateField(&c.signatures, func() *AccountTransactionSignatures {
+		v := new(AccountTransactionSignatures)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = c.key.Append("Signatures")
+		v.parent = c
+		v.label = c.label + " " + "signatures"
+		return v
 	})
 }
 
@@ -674,6 +687,8 @@ func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key,
 		return v, key[2:], nil
 	case "Voters":
 		return c.Voters(), key[1:], nil
+	case "Signatures":
+		return c.Signatures(), key[1:], nil
 	case "AnchorSignatures":
 		return c.AnchorSignatures(), key[1:], nil
 	default:
@@ -694,6 +709,9 @@ func (c *AccountTransaction) IsDirty() bool {
 	if fieldIsDirty(c.voters) {
 		return true
 	}
+	if fieldIsDirty(c.signatures) {
+		return true
+	}
 	if fieldIsDirty(c.anchorSignatures) {
 		return true
 	}
@@ -711,7 +729,86 @@ func (c *AccountTransaction) Commit() error {
 		commitField(&err, v)
 	}
 	commitField(&err, c.voters)
+	commitField(&err, c.signatures)
 	commitField(&err, c.anchorSignatures)
+
+	return err
+}
+
+type AccountTransactionSignatures struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    record.Key
+	label  string
+	parent *AccountTransaction
+
+	initiator record.Value[[32]byte]
+	active    record.Set[*SignatureSetEntry]
+	history   record.Set[uint64]
+}
+
+func (c *AccountTransactionSignatures) Initiator() record.Value[[32]byte] {
+	return getOrCreateField(&c.initiator, func() record.Value[[32]byte] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Initiator"), c.label+" "+"initiator", false, record.Wrapped(record.HashWrapper))
+	})
+}
+
+func (c *AccountTransactionSignatures) getActive() record.Set[*SignatureSetEntry] {
+	return getOrCreateField(&c.active, func() record.Set[*SignatureSetEntry] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Active"), c.label+" "+"active", record.Struct[SignatureSetEntry](), compareSignatureSetEntries)
+	})
+}
+
+func (c *AccountTransactionSignatures) History() record.Set[uint64] {
+	return getOrCreateField(&c.history, func() record.Set[uint64] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("History"), c.label+" "+"history", record.Wrapped(record.UintWrapper), record.CompareUint)
+	})
+}
+
+func (c *AccountTransactionSignatures) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.InternalError.With("bad key for signatures")
+	}
+
+	switch key[0] {
+	case "Initiator":
+		return c.Initiator(), key[1:], nil
+	case "Active":
+		return c.getActive(), key[1:], nil
+	case "History":
+		return c.History(), key[1:], nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for signatures")
+	}
+}
+
+func (c *AccountTransactionSignatures) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.initiator) {
+		return true
+	}
+	if fieldIsDirty(c.active) {
+		return true
+	}
+	if fieldIsDirty(c.history) {
+		return true
+	}
+
+	return false
+}
+
+func (c *AccountTransactionSignatures) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.initiator)
+	commitField(&err, c.active)
+	commitField(&err, c.history)
 
 	return err
 }
@@ -889,6 +986,7 @@ type Message struct {
 	main     record.Value[messaging.Message]
 	cause    record.Set[*url.TxID]
 	produced record.Set[*url.TxID]
+	signers  record.Set[*url.URL]
 }
 
 func (c *Message) getMain() record.Value[messaging.Message] {
@@ -909,6 +1007,12 @@ func (c *Message) Produced() record.Set[*url.TxID] {
 	})
 }
 
+func (c *Message) Signers() record.Set[*url.URL] {
+	return getOrCreateField(&c.signers, func() record.Set[*url.URL] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Signers"), c.label+" "+"signers", record.Wrapped(record.UrlWrapper), record.CompareUrl)
+	})
+}
+
 func (c *Message) Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 0 {
 		return nil, nil, errors.InternalError.With("bad key for message")
@@ -921,6 +1025,8 @@ func (c *Message) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return c.Cause(), key[1:], nil
 	case "Produced":
 		return c.Produced(), key[1:], nil
+	case "Signers":
+		return c.Signers(), key[1:], nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for message")
 	}
@@ -940,6 +1046,9 @@ func (c *Message) IsDirty() bool {
 	if fieldIsDirty(c.produced) {
 		return true
 	}
+	if fieldIsDirty(c.signers) {
+		return true
+	}
 
 	return false
 }
@@ -953,6 +1062,7 @@ func (c *Message) Commit() error {
 	commitField(&err, c.main)
 	commitField(&err, c.cause)
 	commitField(&err, c.produced)
+	commitField(&err, c.signers)
 
 	return err
 }
