@@ -156,9 +156,6 @@ func (b *Batch) Commit() error {
 // Discard discards pending writes. Attempting to use the Batch after calling
 // Discard will result in a panic.
 func (b *Batch) Discard() {
-	if !b.done && b.writable {
-		b.logger.Debug("Discarding a writable batch")
-	}
 	b.done = true
 	b.kvstore.Discard()
 }
