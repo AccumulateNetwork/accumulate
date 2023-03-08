@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -49,7 +50,7 @@ func TestUpdateAccountAuth_Duplicate(t *testing.T) {
 func TestUpdateAccountAuth_Page(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 1)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1})
 
 	alice := protocol.AccountUrl("alice")
 	bob := protocol.AccountUrl("bob")

@@ -1214,7 +1214,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	check := newDefaultCheckError(t, true)
 
-	n := simulator.NewFakeNode(t, check.ErrorHandler())
+	n := simulator.NewFakeNodeV1(t, check.ErrorHandler())
 
 	fooKey, liteKey := generateKey(), generateKey()
 	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()

@@ -17,25 +17,38 @@ func (TransferCredits) Type() protocol.TransactionType {
 	return protocol.TransactionTypeTransferCredits
 }
 
-func (TransferCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (TransferCredits{}).Validate(st, tx)
+func (x TransferCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (TransferCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (TransferCredits) check(st *StateManager, tx *Delivery) (*protocol.TransferCredits, error) {
 	body, ok := tx.Transaction.Body.(*protocol.TransferCredits)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid payload: want %v, got %v", protocol.TransactionTypeTransferCredits, tx.Transaction.Body.Type())
 	}
 
-	var total uint64
 	for _, to := range body.To {
 		if to.Amount == 0 {
 			return nil, errors.BadRequest.WithFormat("transfer amount must be non-zero")
 		}
-		total += to.Amount
 		if !to.Url.LocalTo(st.OriginUrl) {
 			return nil, errors.BadRequest.WithFormat("cannot transfer credits outside of %v", st.OriginUrl.RootIdentity())
 		}
+	}
+
+	return body, nil
+}
+
+func (x TransferCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	var total uint64
+	for _, to := range body.To {
+		total += to.Amount
 	}
 
 	// Ensure the principal is a credit account

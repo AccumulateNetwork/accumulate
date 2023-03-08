@@ -40,11 +40,12 @@ func (CreateDataAccount) TransactionIsReady(delegate AuthDelegate, batch *databa
 	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction)
 }
 
-func (CreateDataAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (CreateDataAccount{}).Validate(st, tx)
+func (x CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (CreateDataAccount) check(st *StateManager, tx *Delivery) (*protocol.CreateDataAccount, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateDataAccount)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateDataAccount), tx.Transaction.Body)
@@ -60,7 +61,21 @@ func (CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
-	err := checkCreateAdiAccount(st, body.Url)
+	err := originIsParent(tx, body.Url)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return body, nil
+}
+
+func (x CreateDataAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = checkCreateAdiAccount(st, body.Url)
 	if err != nil {
 		return nil, err
 	}
