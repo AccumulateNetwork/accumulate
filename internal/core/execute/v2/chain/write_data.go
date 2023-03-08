@@ -91,11 +91,12 @@ func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, trans
 	return len(votes) > 0, false, nil
 }
 
-func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (WriteData{}).Validate(st, tx)
+func (x WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (WriteData) check(st *StateManager, tx *Delivery) (*protocol.WriteData, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteData)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
@@ -113,10 +114,34 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 	}
 
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
+	isLite := err == nil
 	if err == nil {
 		if body.WriteToState {
 			return nil, errors.BadRequest.WithFormat("cannot write data to the state of a lite data account")
 		}
+		return body, nil
+	}
+
+	if body.WriteToState {
+		if isLite {
+			return nil, errors.BadRequest.WithFormat("cannot write data to the state of a lite data account")
+		}
+		if body.Scratch {
+			return nil, errors.BadRequest.WithFormat("writing scratch data to the account state is not permitted")
+		}
+	}
+
+	return body, nil
+}
+
+func (x WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
+	if err == nil {
 		return executeWriteLiteDataAccount(st, body.Entry)
 	}
 
@@ -135,10 +160,6 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	}
 
 	if writeToState {
-		if scratch {
-			return nil, errors.BadRequest.WithFormat("writing scratch data to the account state is not permitted")
-		}
-
 		account.Entry = entry
 		err := st.Update(account)
 		if err != nil {

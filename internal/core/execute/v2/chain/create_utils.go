@@ -12,15 +12,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+func originIsParent(txn *Delivery, account *url.URL) error {
+	// The origin must be the parent
+	if !account.Identity().Equal(txn.Transaction.Header.Principal) {
+		return errors.BadRequest.WithFormat("invalid principal: cannot create %v as a child of %v", account, txn.Transaction.Header.Principal)
+	}
+	return nil
+}
+
 func checkCreateAdiAccount(st *StateManager, account *url.URL) error {
 	// ADI accounts can only be created within an ADI
 	if _, ok := st.Origin.(*protocol.ADI); !ok {
 		return errors.BadRequest.WithFormat("invalid principal: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.Type())
-	}
-
-	// The origin must be the parent
-	if !account.Identity().Equal(st.OriginUrl) {
-		return errors.BadRequest.WithFormat("invalid principal: cannot create %v as a child of %v", account, st.OriginUrl)
 	}
 
 	dir, err := st.batch.Account(account.Identity()).Directory().Get()

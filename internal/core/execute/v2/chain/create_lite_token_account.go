@@ -22,20 +22,32 @@ func (CreateLiteTokenAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateLiteTokenAccount
 }
 
-func (CreateLiteTokenAccount) validate(transaction *protocol.Transaction) (*url.URL, error) {
+func (x CreateLiteTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(tx.Transaction)
+	return nil, err
+}
+
+func (CreateLiteTokenAccount) check(transaction *protocol.Transaction) (*url.URL, error) {
 	_, ok := transaction.Body.(*protocol.CreateLiteTokenAccount)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateLiteTokenAccount), transaction.Body)
 	}
+
 	key, tok, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
 	if key == nil {
 		return nil, errors.BadRequest.WithFormat("invalid lite token account URL: %v", transaction.Header.Principal)
 	}
+
+	// Only ACME for now
+	if !protocol.AcmeUrl().Equal(tok) {
+		return nil, errors.BadRequest.WithFormat("creating non-ACME lite token accounts is not supported")
+	}
+
 	return tok, nil
 }
 
 func (CreateLiteTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
-	_, err = CreateLiteTokenAccount{}.validate(transaction)
+	_, err = CreateLiteTokenAccount{}.check(transaction)
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
 	}
@@ -45,7 +57,7 @@ func (CreateLiteTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *d
 }
 
 func (CreateLiteTokenAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
-	_, err = CreateLiteTokenAccount{}.validate(transaction)
+	_, err = CreateLiteTokenAccount{}.check(transaction)
 	if err != nil {
 		return false, false, errors.UnknownError.Wrap(err)
 	}
@@ -60,18 +72,9 @@ func (CreateLiteTokenAccount) AllowMissingPrincipal(transaction *protocol.Transa
 }
 
 func (CreateLiteTokenAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return CreateLiteTokenAccount{}.Validate(st, tx)
-}
-
-func (CreateLiteTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	tok, err := CreateLiteTokenAccount{}.validate(tx.Transaction)
+	tok, err := CreateLiteTokenAccount{}.check(tx.Transaction)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Only ACME for now
-	if !protocol.AcmeUrl().Equal(tok) {
-		return nil, errors.BadRequest.WithFormat("creating non-ACME lite token accounts is not supported")
 	}
 
 	// Will fail if the account already exists. DO NOT set any other properties

@@ -61,11 +61,12 @@ func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) b
 	return transaction.Header.Principal.IsRootIdentity()
 }
 
-func (CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (CreateIdentity{}).Validate(st, tx)
+func (x CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (CreateIdentity) check(st *StateManager, tx *Delivery) (*protocol.CreateIdentity, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
@@ -81,6 +82,44 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		}
 	}
 
+	if !body.Url.IsRootIdentity() {
+		err := originIsParent(tx, body.Url)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	if body.KeyBookUrl == nil && len(body.Authorities) == 0 && body.Url.IsRootIdentity() {
+		return nil, errors.BadRequest.WithFormat("a root identity cannot be created with an empty authority set")
+	}
+
+	// Create a new key book
+	if body.KeyBookUrl != nil {
+		// Verify the user provided a first key
+		if len(body.KeyHash) == 0 {
+			return nil, errors.BadRequest.WithFormat("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
+		}
+
+		// Verify the URL is ok
+		err := validateKeyBookUrl(body.KeyBookUrl, body.Url)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(body.KeyHash) != 32 {
+			return nil, errors.BadRequest.WithFormat("invalid Key Hash: length must be equal to 32 bytes")
+		}
+	}
+
+	return body, nil
+}
+
+func (x CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
 	// TODO Require the principal to be the ADI when creating a root identity?
 	if !body.Url.IsRootIdentity() {
 		err := checkCreateAdiAccount(st, body.Url)
@@ -89,11 +128,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		}
 	}
 
-	if body.KeyBookUrl == nil && len(body.Authorities) == 0 && body.Url.IsRootIdentity() {
-		return nil, errors.BadRequest.WithFormat("a root identity cannot be created with an empty authority set")
-	}
-
-	err := protocol.IsValidAdiUrl(body.Url, false)
+	err = protocol.IsValidAdiUrl(body.Url, false)
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("invalid URL: %v", err)
 	}
@@ -104,17 +139,6 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 
 	// Create a new key book
 	if body.KeyBookUrl != nil {
-		// Verify the user provided a first key
-		if len(body.KeyHash) == 0 {
-			return nil, errors.BadRequest.WithFormat("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
-		}
-
-		// Verify the URL is ok
-		err = validateKeyBookUrl(body.KeyBookUrl, body.Url)
-		if err != nil {
-			return nil, err
-		}
-
 		// Add it to the authority set
 		identity.AddAuthority(body.KeyBookUrl)
 
@@ -124,9 +148,6 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		book.PageCount = 1
 		book.AddAuthority(body.KeyBookUrl)
 		accounts = append(accounts, book)
-		if len(body.KeyHash) != 32 {
-			return nil, errors.BadRequest.WithFormat("invalid Key Hash: length must be equal to 32 bytes")
-		}
 
 		// Create the page
 		page := new(protocol.KeyPage)

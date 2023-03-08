@@ -38,11 +38,12 @@ func (CreateToken) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
 }
 
-func (CreateToken) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (CreateToken{}).Validate(st, tx)
+func (x CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (CreateToken) check(st *StateManager, tx *Delivery) (*protocol.CreateToken, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateToken)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), tx.Transaction.Body)
@@ -58,9 +59,9 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		}
 	}
 
-	err := checkCreateAdiAccount(st, body.Url)
+	err := originIsParent(tx, body.Url)
 	if err != nil {
-		return nil, err
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	if body.Precision > 18 {
@@ -69,6 +70,20 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 
 	if body.SupplyLimit != nil && body.SupplyLimit.Sign() < 0 {
 		return nil, fmt.Errorf("supply limit can't be a negative value")
+	}
+
+	return body, nil
+}
+
+func (x CreateToken) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = checkCreateAdiAccount(st, body.Url)
+	if err != nil {
+		return nil, err
 	}
 
 	token := new(protocol.TokenIssuer)
