@@ -32,18 +32,10 @@ func (BurnCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 			protocol.FormatAmount(uint64(protocol.MinimumCreditPurchase), protocol.CreditPrecisionPower))
 	}
 
-	// Ensure the principal is a signer
-	var account protocol.AccountWithCredits
-	switch a := st.Origin.(type) {
-	case protocol.AccountWithCredits:
-		account = a
-	case *protocol.LiteTokenAccount:
-		err := st.batch.Account(st.OriginUrl.RootIdentity()).Main().GetAs(&account)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load lite identity: %w", err)
-		}
-	default:
-		return nil, errors.BadRequest.WithFormat("invalid principal: want a signer, got %v", st.Origin.Type())
+	// Ensure the principal is a credit account
+	account, err := loadCreditAccount(st.batch, st.OriginUrl, "invalid principal")
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	if !account.DebitCredits(body.Amount) {
@@ -52,7 +44,7 @@ func (BurnCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 			protocol.FormatAmount(body.Amount, protocol.CreditPrecisionPower))
 	}
 
-	err := st.Update(account)
+	err = st.Update(account)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store account: %w", err)
 	}
