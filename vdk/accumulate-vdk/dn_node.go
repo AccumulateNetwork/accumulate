@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"path"
 	"strings"
 
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
@@ -21,7 +22,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func InitializeDNFollower(seedNodeUrl string) error {
+func StartDN(workDir string) {
+
+}
+
+func InitializeDNFollower(workDir string, seedNodeUrl string) error {
 	basePort, config, genDoc, err := initFollowerNodeFromSeedNodeUrl(seedNodeUrl)
 	if err != nil {
 		return fmt.Errorf("failed to configure node from seed proxy, %v", err)
@@ -34,8 +39,11 @@ func InitializeDNFollower(seedNodeUrl string) error {
 	config.Instrumentation.Prometheus = true
 	config.LogLevel = "info"
 
+	if config.Accumulate.Describe.NetworkType != protocol.PartitionTypeDirectory {
+		return fmt.Errorf("expecting directory node partition")
+	}
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
-	config.SetRoot(netDir)
+	config.SetRoot(path.Join(workDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		AdvertizeAddress: listenUrl.Hostname(),
 		ListenAddress:    listenUrl.Hostname(),
