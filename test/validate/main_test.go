@@ -273,6 +273,14 @@ func (s *ValidationTestSuite) TestMain() {
 
 	s.NotZero(QueryAccountAs[*LiteIdentity](s.Harness, liteId).CreditBalance)
 
+	s.TB.Log("Burn credits")
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(liteId).
+			BurnCredits(1).
+			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
 	s.TB.Log("Create an ADI")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
