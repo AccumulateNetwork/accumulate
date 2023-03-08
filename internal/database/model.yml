@@ -201,12 +201,12 @@
       union: true
       private: true
     - name: Cause
-      type: state
+      type: index
       dataType: txid
       pointer: true
       collection: set
     - name: Produced
-      type: state
+      type: index
       dataType: txid
       pointer: true
       collection: set
