@@ -37,6 +37,16 @@ SignatureSetEntry:
       description: is the hash of the signature
       type: hash
 
+VoteEntry:
+  fields:
+    - name: Authority
+      description: is the URL of the authority
+      type: url
+      pointer: true
+    - name: Hash
+      description: is the hash of the signature
+      type: hash
+
 SigOrTxn:
   fields:
     - name: Transaction

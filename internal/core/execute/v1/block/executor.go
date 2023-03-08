@@ -219,9 +219,6 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	delivery := new(chain.Delivery)
 	delivery.Transaction = txn
 
-	st := chain.NewStateManager(&m.Describe, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
-	defer st.Discard()
-
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
 		Initiator: txn.Header.Principal,
 	})

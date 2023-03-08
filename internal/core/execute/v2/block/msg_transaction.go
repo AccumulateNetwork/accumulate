@@ -320,9 +320,10 @@ func (TransactionMessage) getSequence(ctx *MessageContext) (*messaging.Sequenced
 	return seq, nil
 }
 
-func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
+func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *TransactionContext) (_ *protocol.TransactionStatus, err error) {
 	batch = batch.Begin(true)
 	defer batch.Discard()
+	defer func() { commitOrDiscard(batch, &err) }()
 
 	// Record when the transaction is received
 	status, err := batch.Transaction(ctx.transaction.GetHash()).Status().Get()
@@ -358,11 +359,6 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 	status, state, err := ctx.Executor.ProcessTransaction(batch, delivery)
 	if err != nil {
 		return nil, err
-	}
-
-	err = batch.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("commit batch: %w", err)
 	}
 
 	kv := []interface{}{
@@ -415,12 +411,17 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		}
 	}
 
-	// Clear the payments
-	if status.Delivered() {
-		err = batch.Account(delivery.Transaction.Header.Principal).
-			Transaction(delivery.Transaction.ID().Hash()).
-			Payments().
-			Put(nil)
+	// Clear votes and payments
+	if status.Delivered() && ctx.transaction.Body.Type().IsUser() {
+		txn := batch.Account(delivery.Transaction.Header.Principal).
+			Transaction(delivery.Transaction.ID().Hash())
+
+		err = txn.Payments().Put(nil)
+		if err != nil {
+			return nil, err
+		}
+
+		err = txn.Votes().Put(nil)
 		if err != nil {
 			return nil, err
 		}
