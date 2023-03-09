@@ -8,8 +8,8 @@ The diagrams below omit validation checks and assume the signature is valid.
 @startuml
 :Valid user signature;
 
-if (can pay txn fee?) then (no)
-  if (can pay sig fee?) then
+if (can pay fee?) then (no)
+  if (has credits?) then
     :Debit sig fee;
   else (no)
   endif
