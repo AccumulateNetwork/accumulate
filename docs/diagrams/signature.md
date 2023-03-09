@@ -17,7 +17,7 @@ if (can pay fee?) then (no)
 
 else (yes)
   fork
-    if (paid) then
+    if (initiator?) then
       :Debit txn fee;
       :Send credit payment;
     else (no)
