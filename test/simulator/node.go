@@ -167,6 +167,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 func (n *Node) Begin(writable bool) *database.Batch         { return n.database.Begin(writable) }
 func (n *Node) Update(fn func(*database.Batch) error) error { return n.database.Update(fn) }
 func (n *Node) View(fn func(*database.Batch) error) error   { return n.database.View(fn) }
+func (n *Node) SetObserver(observer database.Observer)      { n.database.SetObserver(observer) }
 
 func (n *Node) willChangeGlobals(e events.WillChangeGlobals) error {
 	n.globals.Store(e.New)

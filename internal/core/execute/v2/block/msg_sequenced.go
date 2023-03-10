@@ -9,7 +9,7 @@ package block
 import (
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
