@@ -32,6 +32,7 @@ type Batch struct {
 	id          string
 	nextChildId int64
 	parent      *Batch
+	observer    Observer
 	kvstore     storage.KeyValueTxn
 	bptEntries  map[storage.Key][32]byte
 
