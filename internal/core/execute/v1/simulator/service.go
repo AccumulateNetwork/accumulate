@@ -170,10 +170,10 @@ func (s *partService) ConsensusStatus(ctx context.Context, opts api.ConsensusSta
 // NetworkStatus returns the active globals.
 func (s *partService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return &api.NetworkStatus{
-		Oracle:  s.x.Executor.ActiveGlobals_TESTONLY().Oracle,
-		Network: s.x.Executor.ActiveGlobals_TESTONLY().Network,
-		Globals: s.x.Executor.ActiveGlobals_TESTONLY().Globals,
-		Routing: s.x.Executor.ActiveGlobals_TESTONLY().Routing,
+		Oracle:  s.x.Executor.ActiveGlobals().Oracle,
+		Network: s.x.Executor.ActiveGlobals().Network,
+		Globals: s.x.Executor.ActiveGlobals().Globals,
+		Routing: s.x.Executor.ActiveGlobals().Routing,
 	}, nil
 }
 
