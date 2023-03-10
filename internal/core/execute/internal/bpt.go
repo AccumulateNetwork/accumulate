@@ -128,8 +128,8 @@ func (a *observedAccount) hashPendingV2(err *error, hasher *hash.Hasher, txid *u
 	}
 
 	// Authority votes
-	for _, authority := range loadState(err, true, txn.Voters().Get) {
-		hashState(err, hasher, false, txn.Vote(authority).Get)
+	for _, entry := range loadState(err, true, txn.Votes().Get) {
+		hashValue(err, hasher, entry)
 	}
 
 	// Active signatures

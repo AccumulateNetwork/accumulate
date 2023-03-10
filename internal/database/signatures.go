@@ -16,6 +16,10 @@ func compareSignatureSetEntries(a, b *SignatureSetEntry) int {
 	return int(a.KeyIndex) - int(b.KeyIndex)
 }
 
+func compareVoteEntries(a, b *VoteEntry) int {
+	return a.Authority.Compare(b.Authority)
+}
+
 func (c *AccountTransactionSignatures) Active() record.Set[*SignatureSetEntry] {
 	return &accountTransactionSignaturesActive{c.getActive(), c}
 }
