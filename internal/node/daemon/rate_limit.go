@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,12 +11,12 @@ import (
 	"sync"
 )
 
-type rateLimitedListener struct {
+type RateLimitedListener struct {
 	net.Listener
 	Pool chan struct{}
 }
 
-func (l *rateLimitedListener) Accept() (net.Conn, error) {
+func (l *RateLimitedListener) Accept() (net.Conn, error) {
 	<-l.Pool
 
 	conn, err := l.Listener.Accept()
