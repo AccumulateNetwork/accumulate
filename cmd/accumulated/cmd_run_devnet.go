@@ -32,7 +32,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -282,7 +281,7 @@ func startDevnetFaucet(peers []multiaddr.Multiaddr, logger log.Logger, done *syn
 	// Register it
 	handler, err := message.NewHandler(logger, message.Faucet{Faucet: faucetSvc})
 	check(err)
-	if !node.RegisterService(&api.ServiceAddress{Type: faucetSvc.Type()}, handler.Handle) {
+	if !node.RegisterService(faucetSvc.Type().AddressForUrl(protocol.AcmeUrl()), handler.Handle) {
 		fatalf("failed to register faucet service")
 	}
 
