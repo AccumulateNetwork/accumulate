@@ -182,7 +182,7 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 		var err error
 		results[i], err = node.checkTx(messages, types.CheckTxType_New)
 		if err != nil {
-			return nil, errors.FatalError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
