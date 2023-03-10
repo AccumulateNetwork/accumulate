@@ -2,8 +2,6 @@
 
 The diagrams below omit validation checks and assume the signature is valid.
 
-⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹
-
 ### Execute user signature
 
 ```plantuml
@@ -58,7 +56,7 @@ endif
 @enduml
 ```
 
-#### ¹Signature validity
+#### ¹ Signature validity
 
 A user signature is valid if and only if:
 
@@ -82,7 +80,7 @@ A user signature is valid if and only if:
   used on field. The timestamp does not have any specific meaning.
 - Its signer has a non-zero credit balance.
 
-#### ²Fees
+#### ² Fees
 
 - The penalty fee for a signer that cannot pay for its signature is the smallest
   possible fee, 0.01 credits.
@@ -91,7 +89,7 @@ A user signature is valid if and only if:
 - The initiator of a transaction must pay the transaction fee. See the
   transaction fee schedule for details.
 
-#### ³Credit payment
+#### ³ Credit payment
 
 When a signature contributes credits towards paying the transaction fee, the
 signer informs the principal of the payment via a credit payment message. When a
@@ -105,7 +103,7 @@ transaction fee and no other signature may contribute to paying the fee. When
 this signature is processed, the signer informs the principal via a credit
 payment message that the transaction has been initiated and paid for.
 
-#### ⁴Signature request
+#### ⁴ Signature request
 
 When a signature initiates a transaction, the signer sends a signature request
 to the principal. Upon receipt of this message the principal marks the
@@ -114,7 +112,7 @@ initiator signature also sends a signature request to any additional authorities
 required by the transaction. Thus all (direct) authorities that must sign the
 transaction are notified of its existence.
 
-#### ⁵Signer versioning and the active signature set
+#### ⁵ Signer versioning and the active signature set
 
 Each signer of a transaction maintains a set of signatures that are active for
 that transaction. When a signature is received, if the active signature set is
