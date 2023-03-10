@@ -28,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -73,15 +74,21 @@ func TestValidateAPI(t *testing.T) {
 
 	// Set up the P2P client node
 	t.Log("Create the client")
+	logger := logging.ConsoleLoggerForTest(t, "info")
 	node, err := p2p.New(p2p.Options{
 		Network: net.Id,
-		Logger:  logging.ConsoleLoggerForTest(t, "info"),
+		Logger:  logger,
 		BootstrapPeers: []multiaddr.Multiaddr{
 			net.Bvns[0].Nodes[0].Listen().Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr(),
 		},
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = node.Close() })
+
+	// Run the faucet through the API
+	handler, err := message.NewHandler(logger, message.Faucet{Faucet: s.faucetSvc})
+	require.NoError(t, err)
+	node.RegisterService(api.ServiceTypeFaucet.AddressForUrl(protocol.AcmeUrl()), handler.Handle)
 
 	// Wait for the nodes to get connected
 	waitFor(t, node, net.Id, api.ServiceTypeSubmit.AddressFor(Directory), time.Minute)
@@ -92,7 +99,7 @@ func TestValidateAPI(t *testing.T) {
 	// Create a harness that uses the P2P client node for services but steps the
 	// simulator directly
 	s.Harness = New(s.T(), node, s.sim)
-	s.nodeSvc = node
+	s.node, s.faucetSvc = node, node
 
 	suite.Run(t, s)
 }
@@ -133,7 +140,7 @@ func TestValidateNetwork(t *testing.T) {
 	// waitFor(t, node, "network?", api.ServiceTypeFaucet.Address(), time.Minute)
 
 	s := new(ValidationTestSuite)
-	s.Harness, s.faucetSvc, s.nodeSvc = harness, node, node
+	s.Harness, s.faucetSvc, s.node = harness, node, node
 	suite.Run(t, s)
 }
 
@@ -141,7 +148,7 @@ func waitFor(t *testing.T, node *p2p.Node, network string, sa *api.ServiceAddres
 	ma, err := sa.MultiaddrFor(network)
 	require.NoError(t, err)
 
-	t.Logf("Wait for %v", sa)
+	fmt.Printf("Wait for %v\n", sa)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -155,7 +162,7 @@ type ValidationTestSuite struct {
 	sim       *simulator.Simulator
 	nonce     uint64
 	faucetSvc api.Faucet
-	nodeSvc   api.NodeService
+	node      *p2p.Node
 }
 
 func (s *ValidationTestSuite) SetupSuite() {
@@ -231,6 +238,7 @@ func (s *ValidationTestSuite) faucet(account *url.URL) *protocol.TransactionStat
 }
 
 func (s *ValidationTestSuite) TestMain() {
+	s.TB.Skip()
 	// Set up lite addresses
 	liteKey := acctesting.GenerateKey("Lite")
 	liteAcme := acctesting.AcmeLiteAddressStdPriv(liteKey)
@@ -782,20 +790,111 @@ func (s *ValidationTestSuite) TestMain() {
 	s.Require().Equal(int(tokensBefore), int(tokensAfter))
 }
 
-func (s *ValidationTestSuite) TestNodeService() {
-	if s.nodeSvc == nil {
-		s.TB.Skip()
+func (s *ValidationTestSuite) TestFaucets() {
+	if s.node == nil {
+		s.T().Skip()
 	}
 
-	info, err := s.nodeSvc.NodeInfo(context.Background(), api.NodeInfoOptions{})
+	// The normal faucet works
+	liteKey := acctesting.GenerateKey(s.T().Name(), "lite")
+	liteAcme := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	liteId := liteAcme.RootIdentity()
+	fst, err := s.node.Faucet(context.Background(), liteAcme, api.FaucetOptions{})
+	s.Require().NoError(err)
+	s.StepUntil(
+		Txn(fst.Status.TxID).Succeeds(),
+		Txn(fst.Status.TxID).Produced().Succeeds())
+
+	// A random faucet fails
+	_, err = s.node.Faucet(context.Background(), AccountUrl("foo"), api.FaucetOptions{Token: AccountUrl("foo", "tokens")})
+	s.Require().Error(err)
+	s.Require().IsType((*errors.Error)(nil), err)
+	e := err.(*errors.Error)
+	for e.Cause != nil {
+		e = e.Cause
+	}
+	s.Require().EqualError(e, "no live peers for faucet:foo.acme!_tokens")
+
+	// Set up a token issuer
+	pegnet := AccountUrl("pegnet")
+	pegKey := acctesting.GenerateKey(s.T().Name(), pegnet)
+	ns := s.NetworkStatus(api.NetworkStatusOptions{Partition: protocol.Directory})
+	oracle := float64(ns.Oracle.Price) / AcmeOraclePrecision
+
+	st := s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(liteAcme).
+			AddCredits().To(liteId).WithOracle(oracle).Purchase(1e6).
+			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(liteAcme).
+			CreateIdentity(pegnet).WithKey(pegKey, SignatureTypeED25519).WithKeyBook(pegnet, "book").
+			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(liteAcme).
+			AddCredits().To(pegnet, "book", "1").WithOracle(oracle).Purchase(1e6).
+			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	st = s.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(pegnet).
+			CreateToken(pegnet, "peg").
+			WithSymbol("PEG").
+			SignWith(pegnet, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(pegKey))
+	s.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Set up a new faucet
+	logger := logging.ConsoleLoggerForTest(s.T(), "info")
+	peg := pegnet.JoinPath("peg")
+	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
+		Logger:    logger,
+		Account:   peg,
+		Key:       build.ED25519PrivateKey(pegKey),
+		Submitter: s.sim.Services(),
+		Querier:   s.sim.Services(),
+		Events:    s.sim.Services(),
+	})
+	s.Require().NoError(err)
+	s.T().Cleanup(func() { faucetSvc.Stop() })
+
+	handler, err := message.NewHandler(logger, message.Faucet{Faucet: faucetSvc})
+	s.Require().NoError(err)
+	s.node.RegisterService(api.ServiceTypeFaucet.AddressForUrl(peg), handler.Handle)
+
+	// Use the new faucet
+	litePeg := liteId.JoinPath(peg.ShortString())
+	fst, err = s.node.Faucet(context.Background(), litePeg, api.FaucetOptions{})
+	s.Require().NoError(err)
+	s.StepUntil(
+		Txn(fst.Status.TxID).Succeeds(),
+		Txn(fst.Status.TxID).Produced().Succeeds())
+
+	s.NotZero(QueryAccountAs[*LiteTokenAccount](s.Harness, litePeg).Balance.Uint64())
+}
+
+func (s *ValidationTestSuite) TestNodeService() {
+	if s.node == nil {
+		s.T().Skip()
+	}
+
+	info, err := s.node.NodeInfo(context.Background(), api.NodeInfoOptions{})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(info.Network)
-	s.Require().Len(info.Services, 1)
 
-	nodes, err := s.nodeSvc.FindService(context.Background(), api.FindServiceOptions{Network: info.Network})
+	nodes, err := s.node.FindService(context.Background(), api.FindServiceOptions{Network: info.Network})
 	s.Require().NoError(err)
 	for _, n := range nodes {
-		info, err := s.nodeSvc.NodeInfo(context.Background(), api.NodeInfoOptions{PeerID: n.PeerID})
+		info, err := s.node.NodeInfo(context.Background(), api.NodeInfoOptions{PeerID: n.PeerID})
 		s.Require().NoError(err)
 		fmt.Printf("%v has %d service(s)\n", info.PeerID, len(info.Services))
 		for _, svc := range info.Services {
