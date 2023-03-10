@@ -22,7 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// Faucet implements [api.Faucet] for ACME.
+// Faucet implements [api.Faucet].
 //
 // Faucet aggregates faucet transactions and sends them once per block to ensure
 // the correct ordering of signatures. Otherwise, the transactions could be
@@ -31,8 +31,11 @@ import (
 // current batch, which is submitted to the network after receiving a block
 // event.
 type Faucet struct {
-	logger  logging.OptionalLogger
-	account *url.URL
+	logger    logging.OptionalLogger
+	account   *url.URL
+	precision uint64
+	amount    uint64
+	issue     bool
 
 	signingKey      build.Signer
 	signerUrl       *url.URL
@@ -54,6 +57,7 @@ type FaucetParams struct {
 	Submitter api.Submitter
 	Querier   api.Querier
 	Events    api.EventService
+	Amount    uint64
 }
 
 var _ api.Faucet = (*Faucet)(nil)
@@ -71,6 +75,33 @@ func NewFaucet(ctx context.Context, params FaucetParams) (*Faucet, error) {
 	f.mu = new(sync.Mutex)
 	f.trigger = make(chan struct{})
 
+	if params.Amount == 0 {
+		f.amount = 10
+	} else {
+		f.amount = params.Amount
+	}
+
+	// Load the token type
+	q := api.Querier2{Querier: params.Querier}
+	r, err := q.QueryAccount(ctx, f.account, nil)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load account %v: %w", f.account, err)
+	}
+	switch account := r.Account.(type) {
+	case *protocol.TokenIssuer:
+		f.precision = account.Precision
+		f.issue = true
+	case protocol.AccountWithTokens:
+		var issuer *protocol.TokenIssuer
+		_, err = q.QueryAccountAs(ctx, account.GetTokenUrl(), nil, &issuer)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load issuer %v: %w", account.GetTokenUrl(), err)
+		}
+		f.precision = issuer.Precision
+	default:
+		return nil, errors.UnknownError.WithFormat("cannot send tokens from %v (%v)", f.account, account.Type())
+	}
+
 	// Get the key hash
 	pkh, ok := params.Key.Address().GetPublicKeyHash()
 	if !ok {
@@ -78,7 +109,6 @@ func NewFaucet(ctx context.Context, params FaucetParams) (*Faucet, error) {
 	}
 
 	// Find the signer
-	q := api.Querier2{Querier: params.Querier}
 	results, err := q.SearchForPublicKeyHash(f.context, params.Account, &api.PublicKeyHashSearchQuery{PublicKeyHash: pkh})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("find %x in %v: %w", pkh[:4], params.Account, err)
@@ -172,11 +202,19 @@ func (f *Faucet) Stop() { f.cancel() }
 func (f *Faucet) faucet(account *url.URL) (*url.TxID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	env, err := build.Transaction().
-		For(f.account).
-		SendTokens(10, protocol.AcmePrecisionPower).
-		To(account).
-		SignWith(f.signerUrl).
+
+	b := build.Transaction().For(f.account)
+	if f.issue {
+		b = b.IssueTokens(f.amount, f.precision).
+			To(account).
+			FinishTransaction()
+	} else {
+		b = b.SendTokens(f.amount, f.precision).
+			To(account).
+			FinishTransaction()
+	}
+
+	env, err := b.SignWith(f.signerUrl).
 		Signer(f.signingKey).
 		Version(f.signerVersion).
 		Timestamp(f.signerTimestamp).

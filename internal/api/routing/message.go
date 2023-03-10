@@ -56,7 +56,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		// Route to the requested partition
 		if msg.Partition == "" {
-			return nil, errors.BadRequest.WithFormat("partition is missing")
+			return nil, errors.BadRequest.With("partition is missing")
 		}
 		service.Argument = msg.Partition
 
@@ -66,10 +66,10 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		// Route to the requested node and partition
 		if msg.NodeID == "" {
-			return nil, errors.BadRequest.WithFormat("node ID is missing")
+			return nil, errors.BadRequest.With("node ID is missing")
 		}
 		if msg.Partition == "" {
-			return nil, errors.BadRequest.WithFormat("partition is missing")
+			return nil, errors.BadRequest.With("partition is missing")
 		}
 
 		// Return /p2p/{id}/acc/{service}:{partition}
@@ -86,7 +86,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		// Route to the requested partition
 		if msg.Partition == "" {
-			return nil, errors.BadRequest.WithFormat("partition is missing")
+			return nil, errors.BadRequest.With("partition is missing")
 		}
 		service.Argument = msg.Partition
 
@@ -95,7 +95,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		// Route based on the scope
 		if msg.Scope == nil {
-			return nil, errors.BadRequest.WithFormat("scope is missing")
+			return nil, errors.BadRequest.With("scope is missing")
 		}
 		service.Argument, err = r.Router.RouteAccount(msg.Scope)
 
@@ -104,7 +104,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		// Route the envelope
 		if msg.Envelope == nil {
-			return nil, errors.BadRequest.WithFormat("envelope is missing")
+			return nil, errors.BadRequest.With("envelope is missing")
 		}
 		service.Argument, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
 
@@ -113,7 +113,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		// Route the envelope
 		if msg.Envelope == nil {
-			return nil, errors.BadRequest.WithFormat("envelope is missing")
+			return nil, errors.BadRequest.With("envelope is missing")
 		}
 		service.Argument, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
 
@@ -122,7 +122,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		// Route to the requested partition
 		if msg.Partition == "" && msg.Account == nil {
-			return nil, errors.BadRequest.WithFormat("partition or account is required")
+			return nil, errors.BadRequest.With("partition or account is required")
 		}
 		if msg.Partition != "" {
 			service.Argument = msg.Partition
@@ -131,7 +131,21 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		}
 
 	case *message.FaucetRequest:
-		service.Type = api.ServiceTypeFaucet
+		if msg.Account == nil {
+			return nil, errors.BadRequest.With("account is missing")
+		}
+
+		token := msg.Token
+		if token == nil {
+			_, t, _ := protocol.ParseLiteTokenAddress(msg.Account)
+			if t != nil {
+				token = t
+			} else {
+				return nil, errors.BadRequest.WithFormat("%v is not a lite token address and the request does not specify a token type", t)
+			}
+		}
+
+		service = api.ServiceTypeFaucet.AddressForUrl(token)
 
 	case *message.PrivateSequenceRequest:
 		service.Type = private.ServiceTypeSequencer

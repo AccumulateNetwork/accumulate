@@ -2951,10 +2951,15 @@ func (v *FaucetRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    Type     `json:"type"`
 		Account *url.URL `json:"account,omitempty"`
+		Token   *url.URL `json:"token,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Account == nil) {
 		u.Account = v.Account
+	}
+	if !(v.FaucetOptions.Token == nil) {
+
+		u.Token = v.FaucetOptions.Token
 	}
 	return json.Marshal(&u)
 }
@@ -3336,9 +3341,11 @@ func (v *FaucetRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type    Type     `json:"type"`
 		Account *url.URL `json:"account,omitempty"`
+		Token   *url.URL `json:"token,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Account = v.Account
+	u.Token = v.FaucetOptions.Token
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3346,6 +3353,7 @@ func (v *FaucetRequest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Account = u.Account
+	v.FaucetOptions.Token = u.Token
 	return nil
 }
 
