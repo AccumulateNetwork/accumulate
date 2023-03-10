@@ -55,8 +55,9 @@ func NewSequencer(params SequencerParams) *Sequencer {
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.valKey = params.ValidatorKey
 	s.globals.Store(params.Globals)
-	events.SubscribeAsync(params.EventBus, func(e events.WillChangeGlobals) {
-		s.globals.Store(e.New)
+	events.SubscribeSync(params.EventBus, func(e events.WillChangeGlobals) error {
+		s.globals.Store(e.New.Copy())
+		return nil
 	})
 	return s
 }
