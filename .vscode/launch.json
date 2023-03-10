@@ -133,6 +133,21 @@
       ]
     },
 
+    // Services
+    {
+      "name": "API (testnet)",
+      "presentation": { "group": "30-Services" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated-http",
+      "args": [
+        "TestNet",
+        "--peer=/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
+        // "--peer=/dns/bvn0-seed.testnet.accumulatenetwork.io/tcp/16593/p2p/12D3KooWKuua795EgHLgNZ8Z9sHc1R9Mdfk82WiBb9YV4VTqYXRs",
+      ]
+    },
+
     // Validate
     {
       "name": "Validate: Playbooks (sim v1)",
