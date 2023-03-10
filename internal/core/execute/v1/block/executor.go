@@ -194,7 +194,7 @@ func (m *Executor) StoreBlockTimers(ds *logging.DataSet) {
 	m.BlockTimers.Store(ds)
 }
 
-func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
+func (m *Executor) ActiveGlobals() *core.GlobalValues {
 	return &m.globals.Active
 }
 
