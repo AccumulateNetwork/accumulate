@@ -100,7 +100,7 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		}
 	}
 
-	st := chain.NewStateManager(&ctx.Executor.Describe, &ctx.Executor.globals.Active, batch.Begin(false), principal, txn.Transaction, ctx.Executor.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(&ctx.Executor.Describe, &ctx.Executor.globals.Active, ctx.Executor, batch.Begin(false), principal, txn.Transaction, ctx.Executor.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 	st.Pretend = true
 
@@ -397,6 +397,32 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 			fn("Additional transaction succeeded", kv...)
 		} else {
 			fn("Transaction succeeded", kv...)
+		}
+	}
+
+	// Calculate refunds
+	var swos []protocol.SynthTxnWithOrigin
+	for _, newTxn := range state.ProducedTxns {
+		if swo, ok := newTxn.Body.(protocol.SynthTxnWithOrigin); ok {
+			swos = append(swos, swo)
+		}
+	}
+
+	if len(swos) > 0 {
+		err = ctx.Executor.setSyntheticOrigin(batch, ctx.transaction, swos)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// Clear the payments
+	if status.Delivered() {
+		err = batch.Account(delivery.Transaction.Header.Principal).
+			Transaction(delivery.Transaction.ID().Hash()).
+			Payments().
+			Put(nil)
+		if err != nil {
+			return nil, err
 		}
 	}
 

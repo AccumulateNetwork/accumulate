@@ -626,6 +626,7 @@ type AccountTransaction struct {
 	label  string
 	parent *Account
 
+	payments         record.Set[[32]byte]
 	vote             map[accountTransactionVoteKey]record.Value[[32]byte]
 	voters           record.Set[*url.URL]
 	signatures       *AccountTransactionSignatures
@@ -638,6 +639,12 @@ type accountTransactionVoteKey struct {
 
 func keyForAccountTransactionVote(authority *url.URL) accountTransactionVoteKey {
 	return accountTransactionVoteKey{record.MapKeyUrl(authority)}
+}
+
+func (c *AccountTransaction) Payments() record.Set[[32]byte] {
+	return getOrCreateField(&c.payments, func() record.Set[[32]byte] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Payments"), c.label+" "+"payments", record.Wrapped(record.HashWrapper), record.CompareHash)
+	})
 }
 
 func (c *AccountTransaction) getVote(authority *url.URL) record.Value[[32]byte] {
@@ -676,6 +683,8 @@ func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key,
 	}
 
 	switch key[0] {
+	case "Payments":
+		return c.Payments(), key[1:], nil
 	case "Vote":
 		if len(key) < 2 {
 			return nil, nil, errors.InternalError.With("bad key for transaction")
@@ -702,6 +711,9 @@ func (c *AccountTransaction) IsDirty() bool {
 		return false
 	}
 
+	if fieldIsDirty(c.payments) {
+		return true
+	}
 	for _, v := range c.vote {
 		if v.IsDirty() {
 			return true
@@ -726,6 +738,7 @@ func (c *AccountTransaction) Commit() error {
 	}
 
 	var err error
+	commitField(&err, c.payments)
 	for _, v := range c.vote {
 		commitField(&err, v)
 	}
