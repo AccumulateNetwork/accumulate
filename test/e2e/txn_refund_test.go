@@ -21,6 +21,37 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
+func TestRefund(t *testing.T) {
+	key := acctesting.GenerateKey("lite")
+	liteAcme := acctesting.AcmeLiteAddressStdPriv(key)
+	liteId := liteAcme.RootIdentity()
+	alice := AccountUrl("alice")
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	// Setup accounts
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, key[32:])
+	MakeLiteTokenAccount(t, sim.DatabaseFor(liteId), key[32:], AcmeUrl())
+	CreditCredits(t, sim.DatabaseFor(liteId), liteId, 1e9)
+
+	creditsBefore := QueryAccountAs[*LiteIdentity](&sim.Harness, liteId).CreditBalance
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(liteAcme).
+			CreateIdentity(alice).WithKey(key, SignatureTypeED25519).WithKeyBook(alice, "book").
+			SignWith(liteId).Version(1).Timestamp(1).PrivateKey(key))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Fails(),
+		Txn(st.TxID).Refund().Succeeds())
+	creditsAfter := QueryAccountAs[*LiteIdentity](&sim.Harness, liteId).CreditBalance
+	require.Equal(t, 100, int(creditsBefore-creditsAfter))
+}
+
 func TestRefundCycle(t *testing.T) {
 	var timestamp uint64
 
