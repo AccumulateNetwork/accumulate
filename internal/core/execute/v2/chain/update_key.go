@@ -112,8 +112,7 @@ func (UpdateKey) didVote(batch *database.Batch, transaction *protocol.Transactio
 	// The book must vote
 	_, err := batch.Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
-		Vote(book).
-		Get()
+		Votes().Find(&database.VoteEntry{Authority: book})
 	switch {
 	case err == nil:
 		return true, nil
