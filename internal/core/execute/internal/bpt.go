@@ -122,6 +122,11 @@ func (a *observedAccount) hashPendingV2(err *error, hasher *hash.Hasher, txid *u
 		hasher.AddHash((*[32]byte)(sig.Hash()))
 	}
 
+	// Credit payments
+	for _, hash := range loadState(err, true, txn.Payments().Get) {
+		hasher.AddHash2(hash)
+	}
+
 	// Authority votes
 	for _, authority := range loadState(err, true, txn.Voters().Get) {
 		hashState(err, hasher, false, txn.Vote(authority).Get)
