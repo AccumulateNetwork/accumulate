@@ -274,7 +274,7 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 
 		// DN -> BVN
 		for _, bvn := range x.Describe.Network.GetBvnNames() {
-			err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, bvn)
+			err = x.sendBlockAnchor(block, anchor, sequenceNumber, bvn)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
 			}
@@ -283,14 +283,14 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 		// DN -> self
 		anchor = anchor.Copy() // Make a copy so we don't modify the anchors sent to the BVNs
 		anchor.MakeMajorBlock = 0
-		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
+		err = x.sendBlockAnchor(block, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
 			return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
 		}
 
 	case protocol.PartitionTypeBlockValidator:
 		// BVN -> DN
-		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
+		err = x.sendBlockAnchor(block, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
 			return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
 		}
@@ -490,7 +490,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 	return nil
 }
 
-func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
+func (x *Executor) sendBlockAnchor(block *Block, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	// Only send anchors from a validator
 	if !x.isValidator {
 		return nil
@@ -501,7 +501,7 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	// will still be running v1
 	destPartUrl := protocol.PartitionUrl(destPart)
 	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && didUpdateToV2(anchor) && !strings.EqualFold(destPart, protocol.Directory) {
-		env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
+		env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, block.Batch, anchor, sequenceNumber, destPartUrl)
 		if err != nil {
 			return errors.InternalError.Wrap(err)
 		}
@@ -514,6 +514,13 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = destPartUrl.JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
+
+	x.logger.Info("Sending an anchor", "module", "anchoring",
+		"block", block.Index,
+		"destination", txn.Header.Principal,
+		"source-block", anchor.GetPartitionAnchor().MinorBlockIndex,
+		"root", logging.AsHex(anchor.GetPartitionAnchor().RootChainAnchor).Slice(0, 4),
+		"bpt", logging.AsHex(anchor.GetPartitionAnchor().StateTreeAnchor).Slice(0, 4))
 
 	seq := &messaging.SequencedMessage{
 		Message:     &messaging.TransactionMessage{Transaction: txn},
