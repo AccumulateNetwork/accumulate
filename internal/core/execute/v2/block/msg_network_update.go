@@ -52,16 +52,27 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
 
-	// Store the transaction status
-	signer := ctx.Executor.globals.Active.AsSigner(ctx.Executor.Describe.PartitionId)
-	status := new(protocol.TransactionStatus)
-	status.TxID = txn.ID()
-	status.Initiator = signer.GetUrl()
-	status.AddSigner(signer)
-
-	err = batch.Transaction(txn.GetHash()).Status().Put(status)
+	// Store a fake payment
+	pay := new(messaging.CreditPayment)
+	pay.Payer = protocol.DnUrl().JoinPath(protocol.Network)
+	pay.Cause = pay.Payer.WithTxID(msg.Cause)
+	pay.Initiator = true
+	pay.TxID = txn.ID()
+	err = batch.Message(pay.Hash()).Main().Put(pay)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store transaction status: %w", err)
+		return nil, errors.UnknownError.WithFormat("store payment: %w", err)
+	}
+	err = batch.Message(pay.Hash()).Cause().Add(pay.Cause)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store payment cause: %w", err)
+	}
+
+	err = batch.Account(msg.Account).
+		Transaction(txn.ID().Hash()).
+		Payments().
+		Add(pay.Hash())
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store payment hash: %w", err)
 	}
 
 	// Execute the transaction

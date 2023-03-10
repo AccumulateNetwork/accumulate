@@ -25,44 +25,6 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, produced []*ProducedM
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	// Collect transactions and refundable synthetic transactions
-	txns := map[[32]byte]*protocol.Transaction{}
-	swos := map[[32]byte][]protocol.SynthTxnWithOrigin{}
-	for _, p := range produced {
-		from, err := batch.Message(p.Producer.Hash()).Main().Get()
-		if err != nil {
-			return errors.InternalError.WithFormat("load message: %w", err)
-		}
-		fromTxn, ok := from.(messaging.MessageWithTransaction)
-		if !ok {
-			continue
-		}
-
-		sub, ok := p.Message.(messaging.MessageWithTransaction)
-		if !ok {
-			continue
-		}
-
-		swo, ok := sub.GetTransaction().Body.(protocol.SynthTxnWithOrigin)
-		if !ok {
-			continue
-		}
-
-		swo.SetCause(fromTxn.ID().Hash(), fromTxn.ID().Account())
-
-		h := p.Producer.Hash()
-		txns[h] = fromTxn.GetTransaction()
-		swos[h] = append(swos[h], swo)
-	}
-
-	// Calculate refund amounts
-	for hash, from := range txns {
-		err := x.setSyntheticOrigin(batch, from, swos[hash])
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-
 	// Shouldn't this be recorded somewhere?
 	state := new(chain.ChainUpdates)
 
@@ -99,19 +61,31 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, produced []*ProducedM
 // transaction, spreading the potential refund across all produced synthetic
 // transactions.
 func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []protocol.SynthTxnWithOrigin) error {
+	for _, swo := range produced {
+		swo.SetCause(from.ID().Hash(), from.ID().Account())
+	}
+
+	if !from.Body.Type().IsUser() {
+		return nil
+	}
+
 	// Set the refund amount for each output
 	refund, err := x.globals.Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(produced))
 	if err != nil {
 		return errors.InternalError.WithFormat("compute refund: %w", err)
 	}
 
-	status, err := batch.Transaction(from.GetHash()).GetStatus()
+	isInit, initiator, err := x.TransactionIsInitiated(batch, from)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load status: %w", err)
+		return errors.UnknownError.Wrap(err)
+	}
+	if !isInit {
+		return errors.InternalError.WithFormat("producer is not initiated")
 	}
 
 	for _, swo := range produced {
-		swo.SetRefund(status.Initiator, refund)
+		swo.SetCause(from.ID().Hash(), from.ID().Account())
+		swo.SetRefund(initiator.Payer, refund)
 	}
 	return nil
 }

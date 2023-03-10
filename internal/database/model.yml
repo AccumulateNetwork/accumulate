@@ -68,6 +68,11 @@
       - name: Hash
         type: hash
       attributes:
+      - name: Payments
+        description: records the hashes of credit payment messages
+        type: state
+        dataType: hash
+        collection: set
       - name: Vote
         description: records the hash of an authority's signature
         type: state

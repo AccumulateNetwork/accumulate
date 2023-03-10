@@ -403,14 +403,6 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Store the initiator against its metadata hash (for UpdateKey)
-	if protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
-		err = batch.Message(ctx.transaction.Header.Initiator).Main().Put(ctx.message)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store initiator message: %w", err)
-		}
-	}
-
 	return nil
 }
 
