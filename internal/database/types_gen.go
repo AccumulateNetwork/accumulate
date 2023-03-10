@@ -84,6 +84,15 @@ type TransactionChainEntry struct {
 	extraData   []byte
 }
 
+type VoteEntry struct {
+	fieldsSet []bool
+	// Authority is the URL of the authority.
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	// Hash is the hash of the signature.
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
 type sigSetData struct {
 	fieldsSet []bool
 	Version   uint64        `json:"version,omitempty" form:"version" query:"version" validate:"required"`
@@ -188,6 +197,19 @@ func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
 }
 
 func (v *TransactionChainEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *VoteEntry) Copy() *VoteEntry {
+	u := new(VoteEntry)
+
+	if v.Authority != nil {
+		u.Authority = v.Authority
+	}
+	u.Hash = v.Hash
+
+	return u
+}
+
+func (v *VoteEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *sigSetData) Copy() *sigSetData {
 	u := new(sigSetData)
@@ -338,6 +360,22 @@ func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
 		return false
 	}
 	if !(v.AnchorIndex == u.AnchorIndex) {
+		return false
+	}
+
+	return true
+}
+
+func (v *VoteEntry) Equal(u *VoteEntry) bool {
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+	if !(v.Hash == u.Hash) {
 		return false
 	}
 
@@ -732,6 +770,54 @@ func (v *TransactionChainEntry) IsValid() error {
 	}
 }
 
+var fieldNames_VoteEntry = []string{
+	1: "Authority",
+	2: "Hash",
+}
+
+func (v *VoteEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Authority == nil) {
+		writer.WriteUrl(1, v.Authority)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(2, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_VoteEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *VoteEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_sigSetData = []string{
 	1: "Version",
 	2: "Entries",
@@ -976,6 +1062,32 @@ func (v *TransactionChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *VoteEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *VoteEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Authority = x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_VoteEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *sigSetData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1102,6 +1214,20 @@ func (v *SignatureSetEntry) MarshalJSON() ([]byte, error) {
 	u.KeyIndex = v.KeyIndex
 	if !(v.Version == 0) {
 		u.Version = v.Version
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(v.Hash)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *VoteEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Authority *url.URL `json:"authority,omitempty"`
+		Hash      string   `json:"hash,omitempty"`
+	}{}
+	if !(v.Authority == nil) {
+		u.Authority = v.Authority
 	}
 	if !(v.Hash == ([32]byte{})) {
 		u.Hash = encoding.ChainToJSON(v.Hash)
@@ -1245,6 +1371,25 @@ func (v *SignatureSetEntry) UnmarshalJSON(data []byte) error {
 	v.ChainIndex = u.ChainIndex
 	v.KeyIndex = u.KeyIndex
 	v.Version = u.Version
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	return nil
+}
+
+func (v *VoteEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Authority *url.URL `json:"authority,omitempty"`
+		Hash      string   `json:"hash,omitempty"`
+	}{}
+	u.Authority = v.Authority
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Authority = u.Authority
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {

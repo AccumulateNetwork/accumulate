@@ -189,7 +189,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	// If every authority is disabled, at least one signature is required
 	voters, err := batch.Account(delivery.Transaction.Header.Principal).
 		Transaction(delivery.Transaction.ID().Hash()).
-		Voters().Get()
+		Votes().Get()
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load voters: %w", err)
 	}
@@ -201,8 +201,7 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	_, err := batch.
 		Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
-		Vote(authUrl).
-		Get()
+		Votes().Find(&database.VoteEntry{Authority: authUrl})
 	switch {
 	case err == nil:
 		return true, nil
