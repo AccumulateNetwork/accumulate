@@ -12,6 +12,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -212,7 +213,8 @@ func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, ne
 			return s, nil
 
 		case errors.Is(err, network.ErrNoConn),
-			errors.Is(err, network.ErrNoRemoteAddrs):
+			errors.Is(err, network.ErrNoRemoteAddrs),
+			errors.As(err, new(*swarm.DialError)):
 			// Can't connect to this peer, try again
 			continue
 

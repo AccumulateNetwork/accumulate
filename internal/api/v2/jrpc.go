@@ -140,9 +140,11 @@ func (m *JrpcMethods) Describe(ctx context.Context, _ json.RawMessage) interface
 	}
 
 	res := new(DescriptionResponse)
-	res.PartitionId = m.Options.Describe.PartitionId
-	res.NetworkType = m.Options.Describe.NetworkType
-	res.Network = m.Options.Describe.Network
+	if m.Options.Describe != nil {
+		res.PartitionId = m.Options.Describe.PartitionId
+		res.NetworkType = m.Options.Describe.NetworkType
+		res.Network = m.Options.Describe.Network
+	}
 	res.Values.Globals = net.Globals
 	res.Values.Network = net.Network
 	res.Values.Oracle = net.Oracle
