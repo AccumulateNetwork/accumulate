@@ -54,7 +54,7 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("synthetic", "debug").
 	// SetModule("anchoring", "info").
 	// SetModule("block", "debug").
-	// SetModule("storage", "debug").
+	SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
 	// SetModule("fake-tendermint", "info").

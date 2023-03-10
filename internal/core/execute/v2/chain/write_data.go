@@ -81,14 +81,14 @@ func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, trans
 	}
 
 	// Writing to a lite data account only requires one signature
-	voters, err := batch.Account(transaction.Header.Principal).
+	votes, err := batch.Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
-		Voters().
+		Votes().
 		Get()
 	if err != nil {
 		return false, false, errors.UnknownError.WithFormat("load voters: %w", err)
 	}
-	return len(voters) > 0, false, nil
+	return len(votes) > 0, false, nil
 }
 
 func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
