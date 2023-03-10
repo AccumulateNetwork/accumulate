@@ -627,18 +627,9 @@ type AccountTransaction struct {
 	parent *Account
 
 	payments         record.Set[[32]byte]
-	vote             map[accountTransactionVoteKey]record.Value[[32]byte]
-	voters           record.Set[*url.URL]
+	votes            record.Set[*VoteEntry]
 	signatures       *AccountTransactionSignatures
 	anchorSignatures record.Set[protocol.KeySignature]
-}
-
-type accountTransactionVoteKey struct {
-	Authority [32]byte
-}
-
-func keyForAccountTransactionVote(authority *url.URL) accountTransactionVoteKey {
-	return accountTransactionVoteKey{record.MapKeyUrl(authority)}
 }
 
 func (c *AccountTransaction) Payments() record.Set[[32]byte] {
@@ -647,15 +638,9 @@ func (c *AccountTransaction) Payments() record.Set[[32]byte] {
 	})
 }
 
-func (c *AccountTransaction) getVote(authority *url.URL) record.Value[[32]byte] {
-	return getOrCreateMap(&c.vote, keyForAccountTransactionVote(authority), func() record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Vote", authority), c.label+" "+"vote"+" "+authority.RawString(), false, record.Wrapped(record.HashWrapper))
-	})
-}
-
-func (c *AccountTransaction) Voters() record.Set[*url.URL] {
-	return getOrCreateField(&c.voters, func() record.Set[*url.URL] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Voters"), c.label+" "+"voters", record.Wrapped(record.UrlWrapper), record.CompareUrl)
+func (c *AccountTransaction) Votes() record.Set[*VoteEntry] {
+	return getOrCreateField(&c.votes, func() record.Set[*VoteEntry] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Votes"), c.label+" "+"votes", record.Struct[VoteEntry](), compareVoteEntries)
 	})
 }
 
@@ -685,18 +670,8 @@ func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key,
 	switch key[0] {
 	case "Payments":
 		return c.Payments(), key[1:], nil
-	case "Vote":
-		if len(key) < 2 {
-			return nil, nil, errors.InternalError.With("bad key for transaction")
-		}
-		authority, okAuthority := key[1].(*url.URL)
-		if !okAuthority {
-			return nil, nil, errors.InternalError.With("bad key for transaction")
-		}
-		v := c.getVote(authority)
-		return v, key[2:], nil
-	case "Voters":
-		return c.Voters(), key[1:], nil
+	case "Votes":
+		return c.Votes(), key[1:], nil
 	case "Signatures":
 		return c.Signatures(), key[1:], nil
 	case "AnchorSignatures":
@@ -714,12 +689,7 @@ func (c *AccountTransaction) IsDirty() bool {
 	if fieldIsDirty(c.payments) {
 		return true
 	}
-	for _, v := range c.vote {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	if fieldIsDirty(c.voters) {
+	if fieldIsDirty(c.votes) {
 		return true
 	}
 	if fieldIsDirty(c.signatures) {
@@ -739,10 +709,7 @@ func (c *AccountTransaction) Commit() error {
 
 	var err error
 	commitField(&err, c.payments)
-	for _, v := range c.vote {
-		commitField(&err, v)
-	}
-	commitField(&err, c.voters)
+	commitField(&err, c.votes)
 	commitField(&err, c.signatures)
 	commitField(&err, c.anchorSignatures)
 

@@ -8,9 +8,12 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -69,4 +72,75 @@ func TestSimpleMultisig(t *testing.T) {
 
 	sim.StepUntil(
 		Txn(st[0].TxID).Succeeds())
+}
+
+func TestMultiAuthority(t *testing.T) {
+	// Tests AC-3069
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e12)
+
+	// Initiate
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice).
+			CreateTokenAccount(alice, "tokens").ForToken(ACME).WithAuthority(bob, "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	// Wait until the principal lists the transaction as pending
+	sim.StepUntil(True(func(h *Harness) bool {
+		r, err := h.Query().QueryPendingIds(context.Background(), st[0].TxID.Account(), nil)
+		switch {
+		case err == nil:
+			for _, r := range r.Records {
+				if r.Value.Hash() == st[0].TxID.Hash() {
+					return true
+				}
+			}
+		case !errors.Is(err, errors.NotFound):
+			require.NoError(h.TB, err)
+		}
+		return false
+	}))
+
+	// Verify that payments and votes are recorded
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		pay, err := batch.Account(alice).Transaction(st[0].TxID.Hash()).Payments().Get()
+		require.NoError(t, err)
+		require.NotEmpty(t, pay)
+		fmt.Println(pay)
+		votes, err := batch.Account(alice).Transaction(st[0].TxID.Hash()).Votes().Get()
+		require.NoError(t, err)
+		require.NotEmpty(t, votes)
+	})
+
+	// Sign with the other authority
+	st = sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTxID(st[0].TxID).Load(sim.Query()).
+			Url(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
+
+	sim.StepUntil(
+		Txn(st[0].TxID).Succeeds())
+
+	// Verify that payments and votes are wiped
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		pay, err := batch.Account(alice).Transaction(st[0].TxID.Hash()).Payments().Get()
+		require.NoError(t, err)
+		assert.Empty(t, pay)
+		votes, err := batch.Account(alice).Transaction(st[0].TxID.Hash()).Votes().Get()
+		require.NoError(t, err)
+		assert.Empty(t, votes)
+	})
 }
