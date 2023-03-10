@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -26,6 +26,32 @@ var FirstPossibleBptKey = [32]byte{
 	255, 255, 255, 255, 255, 255, 255, 255,
 	255, 255, 255, 255, 255, 255, 255, 255,
 	255, 255, 255, 255, 255, 255, 255, 255,
+}
+
+func (b *BPT) ForEach(fn func(key storage.Key, hash [32]byte) error) error {
+	if b.Manager == nil { //                                Snapshot cannot be taken if we have no db
+		return fmt.Errorf("no manager found for BPT") //    return error
+	}
+
+	place := FirstPossibleBptKey
+	NodeCnt := uint64(0) //                                 Recalculate number of nodes
+	for {                //
+		bptVals, next := b.GetRange(place, int(window)) //  Read a thousand values from the BPT
+		NodeCnt += uint64(len(bptVals))
+		if len(bptVals) == 0 { //                           If there are none left, we break out
+			break
+		}
+		place = next //                                     We will get the next 1000 after the last 1000
+
+		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
+			err := fn(v.Key, v.Hash) //                     Get that next value
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // SaveSnapshot
