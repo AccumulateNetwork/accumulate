@@ -19,14 +19,11 @@ import (
 	"sync"
 
 	"github.com/fatih/color"
-	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	tmconfig "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/log"
-	tmp2p "github.com/tendermint/tendermint/p2p"
+	ip2p "gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -99,7 +96,6 @@ func runDevNet(*cobra.Command, []string) {
 
 	logWriter := newLogWriter(nil)
 
-	var peers []multiaddr.Multiaddr
 	var daemons []*accumulated.Daemon
 	started := new(sync.WaitGroup)
 	for _, node := range nodes {
@@ -119,18 +115,6 @@ func runDevNet(*cobra.Command, []string) {
 			},
 		)
 		check(err)
-
-		if peers == nil {
-			nk, err := tmp2p.LoadNodeKey(dnn.Config.NodeKeyFile())
-			check(err)
-			sk, err := crypto.UnmarshalEd25519PrivateKey(nk.PrivKey.Bytes())
-			check(err)
-			id, err := peer.IDFromPrivateKey(sk)
-			check(err)
-			c, err := multiaddr.NewComponent("p2p", id.String())
-			check(err)
-			peers = append(peers, dnn.Config.Accumulate.P2P.Listen[0].Encapsulate(c))
-		}
 
 		bvnn, err := accumulated.Load(
 			filepath.Join(flagMain.WorkDir, name, "bvnn"),
@@ -165,7 +149,7 @@ func runDevNet(*cobra.Command, []string) {
 		check(err)
 		logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
 		check(err)
-		startDevnetFaucet(daemons[0].Config.Accumulate.Network.Id, peers, logger, done, stop)
+		startDevnetFaucet(daemons, logger, done, stop)
 	}
 
 	color.HiBlack("----- Started -----")
@@ -254,7 +238,7 @@ func getNodeDirs(dir string) []int {
 	return nodes
 }
 
-func startDevnetFaucet(network string, peers []multiaddr.Multiaddr, logger log.Logger, done *sync.WaitGroup, stop chan struct{}) {
+func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *sync.WaitGroup, stop chan struct{}) {
 	var seed storage.Key
 	for _, s := range strings.Split(flagRunDevnet.FaucetSeed, " ") {
 		seed = seed.Append(s)
@@ -264,12 +248,20 @@ func startDevnetFaucet(network string, peers []multiaddr.Multiaddr, logger log.L
 	check(err)
 
 	// Create the faucet node
-	node, err := p2p.New(p2p.Options{
-		Network:        network,
-		Key:            sk,
-		Logger:         logger,
-		BootstrapPeers: peers,
-	})
+	opts := p2p.Options{
+		Network: daemons[0].Config.Accumulate.Network.Id,
+		Key:     sk,
+		Logger:  logger,
+	}
+	inode, err := ip2p.New(opts)
+	check(err)
+
+	// Directly connect to all the validator nodes
+	for _, d := range daemons {
+		check(inode.ConnectDirectly(d.P2P_TESTONLY()))
+	}
+
+	node, err := p2p.NewWith(inode, opts)
 	check(err)
 
 	// Create the faucet service
