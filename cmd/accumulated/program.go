@@ -124,14 +124,6 @@ func startDual(primary, secondary *accumulated.Daemon) error {
 		_ = primary.Stop()
 		return errors.UnknownError.WithFormat("start secondary: %w", err)
 	}
-
-	err = primary.ConnectDirectly(secondary)
-	if err != nil {
-		_ = primary.Stop()
-		_ = secondary.Stop()
-		return errors.UnknownError.Wrap(err)
-	}
-
 	return nil
 }
 
