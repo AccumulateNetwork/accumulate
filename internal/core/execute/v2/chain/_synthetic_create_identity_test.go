@@ -19,7 +19,7 @@ import (
 func init() { acctesting.EnableDebugFeatures() }
 
 func TestSyntheticCreateIdentity_MultiSlash(t *testing.T) {
-	db := database.OpenInMemory(nil)
+	db := database.OpenInMemory(acctesting.NullObserver{}, nil)
 
 	fooKey := generateKey()
 	batch := db.Begin(true)
@@ -54,7 +54,7 @@ func TestSyntheticCreateIdentity_MultiSlash(t *testing.T) {
 }
 
 func TestSyntheticCreateIdentity_MultiSlash_SubADI(t *testing.T) {
-	db := database.OpenInMemory(nil)
+	db := database.OpenInMemory(acctesting.NullObserver{}, nil)
 
 	fooKey := generateKey()
 	batch := db.Begin(true)

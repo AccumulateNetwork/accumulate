@@ -29,10 +29,19 @@ type Updater interface {
 type Beginner interface {
 	Updater
 	Begin(bool) *Batch
+	SetObserver(Observer)
 }
 
 var _ Beginner = (*Database)(nil)
 var _ Beginner = (*Batch)(nil)
+
+// SetObserver sets the database observer.
+func (b *Batch) SetObserver(observer Observer) {
+	if observer == nil {
+		observer = unsetObserver{}
+	}
+	b.observer = observer
+}
 
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
@@ -40,6 +49,7 @@ func (d *Database) Begin(writable bool) *Batch {
 
 	b := new(Batch)
 	b.id = fmt.Sprint(id)
+	b.observer = d.observer
 	b.writable = writable
 	b.logger.L = d.logger
 	b.kvstore = d.store.Begin(writable)
@@ -57,6 +67,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 
 	c := new(Batch)
 	c.id = fmt.Sprintf("%s.%d", b.id, b.nextChildId)
+	c.observer = b.observer
 	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
@@ -219,6 +230,11 @@ func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 
 	err = v.LoadValue(value, true)
 	return errors.UnknownError.Wrap(err)
+}
+
+func zero[T any]() T {
+	var z T
+	return z
 }
 
 // resolveValue resolves the value for the given key.

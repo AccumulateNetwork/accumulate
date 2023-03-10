@@ -19,6 +19,7 @@ import (
 func TestCreateAccountWithinNonAdi(t *testing.T) {
 	// Setup
 	db := database.OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
 	alice := protocol.AccountUrl("alice")
 	aliceTokens := alice.JoinPath("tokens")
 	badAccount := aliceTokens.JoinPath("account")
@@ -60,6 +61,7 @@ func TestCreateAccountWithinNonAdi(t *testing.T) {
 func TestCreateAccountWithinOtherAdi(t *testing.T) {
 	// Setup
 	db := database.OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
 	alice := protocol.AccountUrl("alice")
 	bob := protocol.AccountUrl("bob")
 	badAccount := bob.JoinPath("account")
