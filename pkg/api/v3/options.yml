@@ -78,6 +78,10 @@ ValidateOptions:
 
 FaucetOptions:
   fields:
+    - name: Token
+      type: url
+      pointer: true
+      optional: true
 
 SubscribeOptions:
   fields:
