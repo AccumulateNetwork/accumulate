@@ -83,7 +83,8 @@ func (m *Machine[T]) UnmarshalFrom(rd io.Reader, v T) error {
 func (m *Machine[T]) ToJSON(w *bytes.Buffer, v T) error {
 	w.WriteRune('{')
 	w2 := new(bytes.Buffer)
-	for i, f := range m.Fields {
+	var comma bool
+	for _, f := range m.Fields {
 		err := f.ToJSON(w2, v)
 		if err != nil {
 			return err
@@ -91,11 +92,12 @@ func (m *Machine[T]) ToJSON(w *bytes.Buffer, v T) error {
 		if w2.Len() == 0 {
 			continue
 		}
-		if i > 0 {
+		if comma {
 			w.WriteRune(',')
 		}
 		_, _ = w2.WriteTo(w)
 		w2.Reset()
+		comma = true
 	}
 	w.WriteRune('}')
 	return nil

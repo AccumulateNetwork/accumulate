@@ -164,6 +164,7 @@ type ErrorEvent struct {
 
 type FaucetOptions struct {
 	fieldsSet []bool
+	Token     *url.URL `json:"token,omitempty" form:"token" query:"token"`
 	extraData []byte
 }
 
@@ -706,6 +707,10 @@ func (v *ErrorEvent) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *FaucetOptions) Copy() *FaucetOptions {
 	u := new(FaucetOptions)
+
+	if v.Token != nil {
+		u.Token = v.Token
+	}
 
 	return u
 }
@@ -1491,6 +1496,14 @@ func (v *ErrorEvent) Equal(u *ErrorEvent) bool {
 }
 
 func (v *FaucetOptions) Equal(u *FaucetOptions) bool {
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
+		return false
+	}
 
 	return true
 }
@@ -2963,11 +2976,17 @@ func (v *ErrorEvent) IsValid() error {
 	}
 }
 
-var fieldNames_FaucetOptions = []string{}
+var fieldNames_FaucetOptions = []string{
+	1: "Token",
+}
 
 func (v *FaucetOptions) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
+
+	if !(v.Token == nil) {
+		writer.WriteUrl(1, v.Token)
+	}
 
 	_, _, err := writer.Reset(fieldNames_FaucetOptions)
 	if err != nil {
@@ -5198,6 +5217,10 @@ func (v *FaucetOptions) UnmarshalBinary(data []byte) error {
 
 func (v *FaucetOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Token = x
+	}
 
 	seen, err := reader.Reset(fieldNames_FaucetOptions)
 	if err != nil {
