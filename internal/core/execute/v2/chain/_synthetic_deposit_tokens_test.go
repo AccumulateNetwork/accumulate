@@ -27,7 +27,7 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	// _, _, gtx, err := acctesting.BuildTestSynthDepositGenTx()
 	// require.NoError(t, err)
 
-	db := database.OpenInMemory(nil)
+	db := database.OpenInMemory(acctesting.NullObserver{}, nil)
 
 	batch := db.Begin(true)
 	defer batch.Discard()

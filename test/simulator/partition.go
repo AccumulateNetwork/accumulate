@@ -123,6 +123,12 @@ func (p *Partition) Begin(writable bool) *database.Batch {
 	return p.nodes[0].Begin(true)
 }
 
+func (p *Partition) SetObserver(observer database.Observer) {
+	for _, n := range p.nodes {
+		n.SetObserver(observer)
+	}
+}
+
 func (p *Partition) SetSubmitHook(fn SubmitHookFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
