@@ -172,7 +172,10 @@ func (n *Node) Addrs() []multiaddr.Multiaddr {
 func (n *Node) ConnectDirectly(m *Node) error {
 	// TODO Keep the [Node] around so we can create direct connections that
 	// avoid the TCP/IP overhead
-	return nil
+	return n.host.Connect(context.Background(), peer.AddrInfo{
+		ID:    m.ID(),
+		Addrs: m.Addrs(),
+	})
 }
 
 // Close shuts down the host and topics.
