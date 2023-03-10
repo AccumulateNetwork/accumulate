@@ -13,6 +13,7 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // N_ACC is the multicodec name for the acc protocol.
@@ -36,6 +37,36 @@ func (s ServiceType) Address() *ServiceAddress {
 // argument.
 func (s ServiceType) AddressFor(arg string) *ServiceAddress {
 	return &ServiceAddress{Type: s, Argument: arg}
+}
+
+// AddressFor constructs a ServiceAddress for the service type and given URL
+// argument. The URL is encoded to avoid looking like a path.
+//
+// The URL encoding leaves (latin) alphanumerics, dash, underscore, and dot
+// untouched. Slashes are encoded as '!_' and all other characters are encoded
+// as hex and prefixed with '!'.
+func (s ServiceType) AddressForUrl(u *url.URL) *ServiceAddress {
+	arg := new(strings.Builder)
+	for _, r := range u.ShortString() {
+		switch {
+		case '0' <= r && r <= '9',
+			'a' <= r && r <= 'z',
+			'A' <= r && r <= 'Z':
+			arg.WriteRune(r)
+			continue
+		}
+		switch r {
+		case '/':
+			arg.WriteString("!_")
+			continue
+		case '-', '_', '.':
+			arg.WriteRune(r)
+			continue
+		}
+		arg.WriteRune('!')
+		arg.WriteString(strconv.FormatUint(uint64(r), 16))
+	}
+	return s.AddressFor(arg.String())
 }
 
 // ParseServiceAddress parses a string as a [ServiceAddress]. See

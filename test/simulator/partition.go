@@ -123,6 +123,12 @@ func (p *Partition) Begin(writable bool) *database.Batch {
 	return p.nodes[0].Begin(true)
 }
 
+func (p *Partition) SetObserver(observer database.Observer) {
+	for _, n := range p.nodes {
+		n.SetObserver(observer)
+	}
+}
+
 func (p *Partition) SetSubmitHook(fn SubmitHookFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -182,7 +188,7 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 		var err error
 		results[i], err = node.checkTx(messages, types.CheckTxType_New)
 		if err != nil {
-			return nil, errors.FatalError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
