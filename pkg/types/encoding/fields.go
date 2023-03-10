@@ -140,6 +140,7 @@ func (f SliceField[V, U, A]) ToJSON(w *bytes.Buffer, v V) error {
 	g, u := f.val(), f(v)
 	w.WriteRune('[')
 	w2 := new(bytes.Buffer)
+	var comma bool
 	for i := range *u {
 		err := g.ToJSON(w2, SliceIndex[U]{*u, i})
 		if err != nil {
@@ -148,11 +149,12 @@ func (f SliceField[V, U, A]) ToJSON(w *bytes.Buffer, v V) error {
 		if w2.Len() == 0 {
 			continue
 		}
-		if i > 0 {
+		if comma {
 			w.WriteRune(',')
 		}
 		_, _ = w2.WriteTo(w)
 		w2.Reset()
+		comma = true
 	}
 	w.WriteRune(']')
 	return nil
