@@ -311,6 +311,7 @@ type errDb struct{ err error }
 func (e errDb) View(func(*database.Batch) error) error   { return e.err }
 func (e errDb) Update(func(*database.Batch) error) error { return e.err }
 func (e errDb) Begin(bool) *database.Batch               { panic(e.err) }
+func (e errDb) SetObserver(observer database.Observer)   { panic(e.err) }
 
 func (s *Simulator) Database(partition string) database.Beginner {
 	p, ok := s.partitions[partition]

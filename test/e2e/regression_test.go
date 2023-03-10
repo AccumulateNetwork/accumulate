@@ -523,11 +523,15 @@ func TestPendingTransactionForMissingAccount(t *testing.T) {
 		})
 		require.NoError(t, err)
 	})
+	b := buf.Bytes()
 
 	// Restore the snapshot
+	hashes := acctesting.VisitorObserver{}
+	require.NoError(t, snapshot.Visit(ioutil2.NewBuffer(b), hashes))
 	db2 := database.OpenInMemory(nil)
+	db2.SetObserver(hashes)
 	helpers.Update(t, db2, func(batch *database.Batch) {
-		require.NoError(t, snapshot.Restore(batch, buf, nil))
+		require.NoError(t, snapshot.Restore(batch, ioutil2.NewBuffer(b), nil))
 	})
 }
 
