@@ -146,6 +146,9 @@ func (m *MessageContext) queueAdditional(msg messaging.Message) {
 
 // didProduce queues a produced synthetic message for dispatch.
 func (m *MessageContext) didProduce(dest *url.URL, msg messaging.Message) {
+	if dest == nil {
+		panic("nil destination for produced message")
+	}
 	m.produced = append(m.produced, &ProducedMessage{
 		Producer:    m.message.ID(),
 		Destination: dest,
@@ -312,4 +315,26 @@ func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *p
 	}
 
 	return nil
+}
+
+func (x *Executor) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
+	payments, err := batch.Account(transaction.Header.Principal).
+		Transaction(transaction.ID().Hash()).
+		Payments().
+		Get()
+	if err != nil {
+		return false, nil, errors.UnknownError.WithFormat("load payments: %w", err)
+	}
+
+	for _, hash := range payments {
+		var msg *messaging.CreditPayment
+		err = batch.Message(hash).Main().GetAs(&msg)
+		if err != nil {
+			return false, nil, errors.UnknownError.WithFormat("load payment: %w", err)
+		}
+		if msg.Initiator {
+			return true, msg, nil
+		}
+	}
+	return false, nil, nil
 }
