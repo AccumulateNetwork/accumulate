@@ -44,7 +44,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 		b.Run(name, func(b *testing.B) {
 			logger := logging.NewTestLogger(b, "plain", "disabled", false)
 			store := tc.NewStorage(logger)
-			db := database.New(store, logger)
+			db := database.New(store, acctesting.NullObserver{}, logger)
 
 			network := config.Network{
 				Type:             config.BlockValidator,
