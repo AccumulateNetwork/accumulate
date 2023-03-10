@@ -19,16 +19,18 @@ import (
 type StateManager struct {
 	stateCache
 
-	Origin    protocol.Account
-	OriginUrl *url.URL
+	AuthDelegate AuthDelegate
+	Origin       protocol.Account
+	OriginUrl    *url.URL
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(net *config.Describe, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(net *config.Describe, globals *core.GlobalValues, authDelegate AuthDelegate, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
+	m.AuthDelegate = authDelegate
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
 	m.stateCache = *newStateCache(net, globals, transaction.Body.Type(), txid, batch)
