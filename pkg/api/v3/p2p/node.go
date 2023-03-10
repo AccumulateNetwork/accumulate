@@ -46,6 +46,10 @@ func New(opts Options) (*Node, error) {
 		return nil, errors.UnknownError.WithFormat("initialize node: %w", err)
 	}
 
+	return NewWith(node, opts)
+}
+
+func NewWith(node *p2p.Node, opts Options) (*Node, error) {
 	// Wait for the directory service
 	dnAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(opts.Network)
 	if err != nil {
