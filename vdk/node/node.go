@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"path"
 	"strings"
@@ -20,13 +21,33 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/vdk/logger"
 )
 
-func StartDN(workDir string) {
+// CreateNode specify working directory of configuration, a log writer callback,
+// and nodeIndex (usually zero unless running a devnet with more than one node on the same BVN)
+func NewNode(workDir string, logWriter logger.LogWriter, nodeIndex int) (*accumulated.Daemon, error) {
+	node, err := accumulated.Load(workDir, func(c *config.Config) (io.Writer, error) {
+		la := func(w io.Writer, format string, color bool) io.Writer {
+			config := logger.NodeWriterConfig{
+				Format:          logger.NodeLogFormat(format),
+				PartitionName:   c.Accumulate.PartitionId,
+				NodeIndex:       nodeIndex,
+				NodeName:        "node",
+				NodeNamePadding: 0,
+				Colorize:        color}
+			return logger.NewNodeWriter(w, config)
+		}
+		return logWriter(c.LogFormat, la)
+	})
 
+	if err != nil {
+		return nil, err //err
+	}
+	return node, nil
 }
 
-func InitializeDNFollower(workDir string, seedNodeUrl string) error {
+func InitializeFollowerFromSeed(workDir string, expectedPartitionType protocol.PartitionType, seedNodeUrl string) error {
 	basePort, config, genDoc, err := initFollowerNodeFromSeedNodeUrl(seedNodeUrl)
 	if err != nil {
 		return fmt.Errorf("failed to configure node from seed proxy, %v", err)
@@ -39,7 +60,7 @@ func InitializeDNFollower(workDir string, seedNodeUrl string) error {
 	config.Instrumentation.Prometheus = true
 	config.LogLevel = "info"
 
-	if config.Accumulate.Describe.NetworkType != protocol.PartitionTypeDirectory {
+	if config.Accumulate.Describe.NetworkType != expectedPartitionType {
 		return fmt.Errorf("expecting directory node partition")
 	}
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
