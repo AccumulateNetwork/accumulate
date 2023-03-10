@@ -94,11 +94,15 @@ func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext
 
 // processDirect processes a direct authority's signature.
 func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureContext, sig *protocol.AuthoritySignature) error {
-	// Check for a previous vote
 	hash := ctx.signature.Hash()
+	entry := new(database.VoteEntry)
+	entry.Authority = sig.Authority
+	entry.Hash = *(*[32]byte)(hash)
+
+	// Check for a previous vote
 	principal := batch.Account(sig.TxID.Account())
-	vote := principal.Transaction(sig.TxID.Hash()).Vote(sig.Authority)
-	_, err := vote.Get()
+	vote := principal.Transaction(sig.TxID.Hash()).Votes()
+	_, err := vote.Find(entry)
 	switch {
 	case err == nil:
 		return errors.Conflict.WithFormat("%v has already voted on %v", sig.Authority, sig.TxID)
@@ -119,7 +123,7 @@ func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureC
 	}
 
 	// Record the vote
-	err = vote.Put(*(*[32]byte)(hash))
+	err = vote.Add(entry)
 	if err != nil {
 		return errors.UnknownError.With("store vote: %w", err)
 	}
