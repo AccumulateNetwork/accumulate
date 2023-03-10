@@ -44,6 +44,19 @@ func (b *Batch) VisitAccounts(visit func(*Account) error) error {
 	return nil
 }
 
+func (b *Batch) ForEachAccount(fn func(account *Account) error) error {
+	bpt := pmt.NewBPTManager(b.kvstore)
+	return bpt.Bpt.ForEach(func(key storage.Key, hash [32]byte) error {
+		// Create an Account object
+		u, err := b.getAccountUrl(record.Key{key})
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		return fn(b.Account(u))
+	})
+}
+
 func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte, error)) error {
 	bpt := pmt.NewBPTManager(b.kvstore)
 	err := bpt.Bpt.SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
