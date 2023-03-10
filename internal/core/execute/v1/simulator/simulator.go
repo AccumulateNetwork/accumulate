@@ -627,6 +627,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 func (x *ExecEntry) Begin(writable bool) *database.Batch         { return x.Database.Begin(writable) }
 func (x *ExecEntry) Update(fn func(*database.Batch) error) error { return x.Database.Update(fn) }
 func (x *ExecEntry) View(fn func(*database.Batch) error) error   { return x.Database.View(fn) }
+func (x *ExecEntry) SetObserver(observer database.Observer)      { x.Database.SetObserver(observer) }
 
 // Submit adds the envelopes to the next block's queue.
 //

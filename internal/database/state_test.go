@@ -60,8 +60,14 @@ func TestState(t *testing.T) {
 	_, err = f.Seek(0, io.SeekStart)
 	require.NoError(t, err)
 
+	hashes := acctesting.VisitorObserver{}
+	require.NoError(t, snapshot.Visit(f, hashes))
+	_, err = f.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
 	// Load the file into a new database
 	db := database.OpenInMemory(nil)
+	db.SetObserver(hashes)
 	require.NoError(t, db.Update(func(b *database.Batch) error {
 		return snapshot.FullRestore(b, f, nil, &bvn.Executor.Describe)
 	}))
@@ -79,6 +85,7 @@ func TestState(t *testing.T) {
 func TestVersion(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
 	db := database.OpenInMemory(logger)
+	db.SetObserver(acctesting.NullObserver{})
 
 	foo := protocol.AccountUrl("foo")
 	get := func(batch *database.Batch) (a *protocol.UnknownSigner) {
