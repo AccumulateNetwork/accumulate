@@ -553,25 +553,46 @@ func (s *Querier) queryMinorBlock(ctx context.Context, batch *database.Batch, mi
 		return nil, errors.UnknownError.WithFormat("load block ledger: %w", err)
 	}
 
+	allEntries, err := normalizeBlockEntries(batch, ledger)
+	if err != nil {
+		return nil, errors.InternalError.Wrap(err)
+	}
+
+	// Convert entries into records
 	r := new(api.MinorBlockRecord)
 	r.Index = ledger.Index
 	r.Time = &ledger.Time
+	r.Source = s.partition.URL
 	r.Entries = new(api.RecordRange[*api.ChainEntryRecord[api.Record]])
-	r.Entries.Total = uint64(len(ledger.Entries))
+	r.Entries.Total = uint64(len(allEntries))
 
+	var didAnchor *protocol.BlockEntry
 	allocRange(r.Entries, entryRange, zeroBased)
 	for i := range r.Entries.Records {
-		e := ledger.Entries[r.Entries.Start+uint64(i)]
+		e := allEntries[r.Entries.Start+uint64(i)]
+		if s.partition.AnchorPool().Equal(e.Account) && e.Chain == "main" {
+			didAnchor = e
+		}
+
 		r.Entries.Records[i], err = loadBlockEntry(batch, e)
 		if err == nil {
 			continue
 		}
 
-		var e2 *errors.Error
-		if !errors.As(err, &e2) || e2.Code.IsServerError() {
+		if errors.Code(err).IsServerError() {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
+
+	if didAnchor == nil || !s.partition.Equal(protocol.DnUrl()) {
+		return r, nil
+	}
+
+	r.Anchored, err = s.loadAnchoredBlocks(ctx, batch, didAnchor.Index)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	return r, nil
 }
 
@@ -724,7 +745,7 @@ func (s *Querier) queryMinorBlockRange2(ctx context.Context, batch *database.Bat
 			continue
 		}
 
-		if errors.Is(err, errors.NotFound) {
+		if errors.Code(err) == errors.NotFound {
 			if !omitEmpty {
 				blocks[i] = &api.MinorBlockRecord{Index: blockIndex}
 				i++
