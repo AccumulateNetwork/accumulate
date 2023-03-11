@@ -119,11 +119,14 @@ const ExecutorVersionV1 ExecutorVersion = 1
 // ExecutorVersionV1SignatureAnchoring introduces anchoring of signature chains into the root chain.
 const ExecutorVersionV1SignatureAnchoring ExecutorVersion = 2
 
+// ExecutorVersionV1ActivationFix fixes a problem that prevented v1-signatureAnchoring from being activated correctly.
+const ExecutorVersionV1ActivationFix ExecutorVersion = 3
+
 // ExecutorVersionV1Halt halts transaction processing in preparation for v2.
-const ExecutorVersionV1Halt ExecutorVersion = 3
+const ExecutorVersionV1Halt ExecutorVersion = 4
 
 // ExecutorVersionV2 is the second version of the execute system.
-const ExecutorVersionV2 ExecutorVersion = 4
+const ExecutorVersionV2 ExecutorVersion = 5
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -773,7 +776,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1Halt, ExecutorVersionV2:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1ActivationFix, ExecutorVersionV1Halt, ExecutorVersionV2:
 		*v = u
 		return true
 	default:
@@ -788,6 +791,8 @@ func (v ExecutorVersion) String() string {
 		return "v1"
 	case ExecutorVersionV1SignatureAnchoring:
 		return "v1-signatureAnchoring"
+	case ExecutorVersionV1ActivationFix:
+		return "v1-activationFix"
 	case ExecutorVersionV1Halt:
 		return "v1-halt"
 	case ExecutorVersionV2:
@@ -806,6 +811,10 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV1SignatureAnchoring, true
 	case "v1-signatureanchoring":
 		return ExecutorVersionV1SignatureAnchoring, true
+	case "v1activationfix":
+		return ExecutorVersionV1ActivationFix, true
+	case "v1-activationfix":
+		return ExecutorVersionV1ActivationFix, true
 	case "v1halt":
 		return ExecutorVersionV1Halt, true
 	case "v1-halt":
