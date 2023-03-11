@@ -7,6 +7,10 @@
 - For certain types, zero-valued fields will be omitted from JSON output instead of being returned as null or zero.
   - `sendTokens.hash`, `signature.transactionHash`, `tokenIssuer.issued`, `dataAccount.entry`
 
+## 1.0.3
+
+- Allow the latest protocol version to be reactivated (#3228, !754)
+
 ## 1.0.2
 
 - Implement versioning of the core executor code (#3152, !684)

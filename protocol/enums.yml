@@ -6,14 +6,17 @@ ExecutorVersion:
     value: 2
     label: v1-signatureAnchoring
     description: introduces anchoring of signature chains into the root chain
-  V1Halt:
+  V1ActivationFix:
     value: 3
+    label: v1-activationFix
+    description: fixes a problem that prevented v1-signatureAnchoring from being activated correctly
+  V1Halt:
+    value: 4
     label: v1-halt
     description: halts transaction processing in preparation for v2
   V2:
-    value: 4
+    value: 5
     description: is the second version of the execute system
-
 PartitionType:
   Directory:
     value: 1
