@@ -75,7 +75,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 		return err
 	}
 
-	ns, err := m.NetV3.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
+	ns, err := m.Network.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -88,7 +88,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 		return m.execute(ctx, txrq, body)
 	}
 
-	sub, err := m.NetV3.Faucet(ctx, req.Url, api.FaucetOptions{})
+	sub, err := m.Options.Faucet.Faucet(ctx, req.Url, api.FaucetOptions{})
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -195,7 +195,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		return err
 	}
 
-	return m.submit(m.NetV3, ctx, env, req.CheckOnly)
+	return m.submit(m.Submitter, m.Validator, ctx, env, req.CheckOnly)
 }
 
 func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage) interface{} {
@@ -205,7 +205,7 @@ func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage)
 		return validatorError(err)
 	}
 
-	return m.submit(m.NetV3, ctx, req.Envelope, req.CheckOnly)
+	return m.submit(m.Submitter, m.Validator, ctx, req.Envelope, req.CheckOnly)
 }
 
 func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) interface{} {
@@ -215,10 +215,10 @@ func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) 
 		return validatorError(err)
 	}
 
-	return m.submit(m.LocalV3, ctx, req.Envelope, req.CheckOnly)
+	return m.submit(m.LocalV3, m.LocalV3, ctx, req.Envelope, req.CheckOnly)
 }
 
-func (m *JrpcMethods) submit(v3 V3, ctx context.Context, env *messaging.Envelope, checkOnly bool) interface{} {
+func (m *JrpcMethods) submit(sub api.Submitter, val api.Validator, ctx context.Context, env *messaging.Envelope, checkOnly bool) interface{} {
 	// Marshal the envelope
 	txData, err := env.MarshalBinary()
 	if err != nil {
@@ -229,9 +229,9 @@ func (m *JrpcMethods) submit(v3 V3, ctx context.Context, env *messaging.Envelope
 	var resp []*api.Submission
 	var yes, no = true, false
 	if checkOnly {
-		resp, err = v3.Validate(ctx, env, api.ValidateOptions{Full: &no})
+		resp, err = val.Validate(ctx, env, api.ValidateOptions{Full: &no})
 	} else {
-		resp, err = v3.Submit(ctx, env, api.SubmitOptions{Verify: &no, Wait: &yes})
+		resp, err = sub.Submit(ctx, env, api.SubmitOptions{Verify: &no, Wait: &yes})
 	}
 	if err != nil {
 		return accumulateError(err)
