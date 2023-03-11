@@ -374,6 +374,15 @@ func TestSignatureChainAnchoring(t *testing.T) {
 		_, _, _, err = indexing.ReceiptForChainIndex(config.NetworkUrl{URL: PartitionUrl("BVN0")}, batch, batch.Account(alicePage).SignatureChain(), 0)
 		require.NoError(t, err)
 	})
+
+	// Verify that the latest version can be re-activated
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV1SignatureAnchoring).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
 }
 
 func TestUpdateKeyWithDelegate(t *testing.T) {
