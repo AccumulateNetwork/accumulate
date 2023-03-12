@@ -30,7 +30,7 @@ import (
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
-	if event.Major == 0 {
+	if event.Major == 0 || !d.Config.Accumulate.Snapshots.Enable {
 		return nil
 	}
 
