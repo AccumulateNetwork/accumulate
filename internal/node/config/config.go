@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -140,6 +140,7 @@ func Default(netName string, net NetworkType, _ NodeType, partitionId string) *C
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
+	c.Accumulate.Snapshots.Enable = true
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
 	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
@@ -147,7 +148,6 @@ func Default(netName string, net NetworkType, _ NodeType, partitionId string) *C
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	c.Accumulate.BatchReplayLimit = 500
-	// c.Accumulate.Snapshots.Frequency = 2
 	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
@@ -174,6 +174,9 @@ type Accumulate struct {
 }
 
 type Snapshots struct {
+	// Enable enables snapshots
+	Enable bool `toml:"enable" mapstructure:"enable"`
+
 	// Directory is the directory to store snapshots in
 	Directory string `toml:"directory" mapstructure:"directory"`
 
