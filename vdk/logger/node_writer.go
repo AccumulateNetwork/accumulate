@@ -2,9 +2,10 @@ package logger
 
 import (
 	"fmt"
-	"github.com/fatih/color"
 	"io"
 	"strings"
+
+	"github.com/fatih/color"
 )
 
 type NodeLogFormat string

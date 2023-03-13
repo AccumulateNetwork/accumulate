@@ -1,14 +1,15 @@
 package logger
 
 import (
-	"github.com/kardianos/service"
-	"github.com/rs/zerolog"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/vdk/utils"
 	"io"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/kardianos/service"
+	"github.com/rs/zerolog"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/vdk/utils"
 )
 
 type LogWriterConfig struct {
