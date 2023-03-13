@@ -8,7 +8,6 @@ package api
 
 import (
 	"context"
-	"strings"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -236,27 +235,20 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	return r, nil
 }
 
-func (s *Querier) queryMessage(ctx context.Context, batch *database.Batch, txid *url.TxID) (api.Record, error) {
-	return loadTransactionOrSignature(batch, txid)
+func (s *Querier) queryMessage(ctx context.Context, batch *database.Batch, txid *url.TxID) (*api.MessageRecord[messaging.Message], error) {
+	return loadMessage(batch, txid)
 }
 
-func (s *Querier) queryTransaction(ctx context.Context, batch *database.Batch, txid *url.TxID) (*api.TransactionRecord, error) {
-	var msg messaging.MessageWithTransaction
-	err := batch.Message(txid.Hash()).Main().GetAs(&msg)
+func (s *Querier) queryTransaction(ctx context.Context, batch *database.Batch, txid *url.TxID) (*api.MessageRecord[*messaging.TransactionMessage], error) {
+	r, err := s.queryMessage(ctx, batch, txid)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load state: %w", err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	return loadTransaction(batch, msg.GetTransaction())
-}
-
-func (s *Querier) querySignature(ctx context.Context, batch *database.Batch, msgid *url.TxID) (*api.SignatureRecord, error) {
-	var msg messaging.MessageWithSignature
-	err := batch.Message(msgid.Hash()).Main().GetAs(&msg)
+	r2, err := api.MessageRecordAs[*messaging.TransactionMessage](r)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load state: %w", err)
+		return nil, errors.UnknownError.WithFormat("%v is not a transaction: %w", txid, err)
 	}
-
-	return loadSignature(batch, msg.GetSignature(), msg.GetTxID())
+	return r2, nil
 }
 
 func (s *Querier) queryAccountChains(ctx context.Context, record *database.Account) (*api.RecordRange[*api.ChainRecord], error) {
@@ -362,17 +354,10 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 			}
 
 		case merkle.ChainTypeTransaction:
-			var typ string
 			var err error
-			if strings.EqualFold(r.Name, "signature") {
-				typ = "signature"
-				r.Value, err = s.querySignature(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
-			} else {
-				typ = "transaction"
-				r.Value, err = s.queryTransaction(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
-			}
+			r.Value, err = s.queryMessage(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
 			if err != nil {
-				return nil, errors.UnknownError.WithFormat("load %s: %w", typ, err)
+				return nil, errors.UnknownError.Wrap(err)
 			}
 		}
 	}
@@ -409,7 +394,7 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	return r, nil
 }
 
-func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
 	entryHash, err := record.Entry(index)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get entry hash: %w", err)
@@ -418,7 +403,7 @@ func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Bat
 	return s.queryDataEntry(ctx, batch, record, index, entryHash, expand)
 }
 
-func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
 	count, err := record.Count()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get count: %w", err)
@@ -429,18 +414,18 @@ func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch,
 	return s.queryDataEntryByIndex(ctx, batch, record, count-1, true)
 }
 
-func (s *Querier) queryDataEntryByHash(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntryByHash(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
 	// TODO: Find a way to get the index without scanning the entire set
 	return s.queryDataEntry(ctx, batch, record, 0, entryHash, expand)
 }
 
-func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
+func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
 	txnHash, err := record.Transaction(entryHash)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get transaction hash: %w", err)
 	}
 
-	r := new(api.ChainEntryRecord[*api.TransactionRecord])
+	r := new(api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]])
 	r.Name = "data"
 	r.Type = protocol.ChainTypeTransaction
 	r.Index = index
@@ -479,13 +464,13 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 	return r, nil
 }
 
-func (s *Querier) queryDataEntryRange(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, opts *api.RangeOptions) (*api.RecordRange[*api.ChainEntryRecord[*api.TransactionRecord]], error) {
+func (s *Querier) queryDataEntryRange(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, opts *api.RangeOptions) (*api.RecordRange[*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]], error) {
 	total, err := record.Count()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get count: %w", err)
 	}
 
-	r := new(api.RecordRange[*api.ChainEntryRecord[*api.TransactionRecord]])
+	r := new(api.RecordRange[*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]])
 	r.Total = total
 	allocRange(r, opts, zeroBased)
 

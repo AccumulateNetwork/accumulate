@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -6,20 +6,10 @@
 
 package api
 
-import "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-
-func RangeAs[U, V Record](r *RecordRange[V]) ([]U, error) {
-	s := make([]U, len(r.Records))
-	for i, v := range r.Records {
-		u, ok := any(v).(U)
-		if !ok {
-			var z U
-			return nil, errors.Conflict.WithFormat("want %T, got %T", z, v)
-		}
-		s[i] = u
-	}
-	return s, nil
-}
+import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+)
 
 func MapRange[U, V Record](r *RecordRange[V], fn func(V) (U, error)) (*RecordRange[U], error) {
 	s := new(RecordRange[U])
@@ -39,6 +29,8 @@ func MapRange[U, V Record](r *RecordRange[V], fn func(V) (U, error)) (*RecordRan
 // MakeRange creates a record range with at most max elements of v (unless max
 // is zero), transformed by fn. MakeRange only returns an error if fn returns an
 // error.
+//
+// MakeRange will not return an error as long as fn does not.
 func MakeRange[V any, U Record](values []V, start, count uint64, fn func(V) (U, error)) (*RecordRange[U], error) {
 	r := new(RecordRange[U])
 	r.Start = start
@@ -64,21 +56,15 @@ func MakeRange[V any, U Record](values []V, start, count uint64, fn func(V) (U, 
 	return r, nil
 }
 
-func ChainEntryAs[U, V Record](r *ChainEntryRecord[V]) (*ChainEntryRecord[U], error) {
-	var zv V
-	var zu U
-	s := new(ChainEntryRecord[U])
-	if u, ok := any(r.Value).(U); ok {
-		s.Value = u
-	} else if !EqualRecord(r.Value, zv) {
-		return nil, errors.Conflict.WithFormat("want %T, got %T", zu, r.Value)
+func ChainEntryRecordAsMessage[T messaging.Message](r *ChainEntryRecord[Record]) (*ChainEntryRecord[*MessageRecord[T]], error) {
+	m, err := ChainEntryRecordAs[*MessageRecord[messaging.Message]](r)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
-
-	s.Account = r.Account
-	s.Name = r.Name
-	s.Type = r.Type
-	s.Index = r.Index
-	s.Entry = r.Entry
-	s.Receipt = r.Receipt
-	return s, nil
+	r.Value, err = MessageRecordAs[T](m.Value)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	r2, err := ChainEntryRecordAs[*MessageRecord[T]](r)
+	return r2, errors.UnknownError.Wrap(err)
 }

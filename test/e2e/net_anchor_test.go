@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -83,7 +84,7 @@ func TestAnchorThreshold(t *testing.T) {
 	// Re-submit the first signature and verify it is still pending
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepN(50)
-	require.True(t, sim.QueryTransaction(txid, nil).Status.Pending())
+	require.True(t, sim.QueryTransaction(txid, nil).Status == errors.Pending)
 
 	// Submit a second signature and verify it is delivered
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[1]}})

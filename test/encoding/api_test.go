@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -88,6 +89,16 @@ func TestAPIv2Consistency(t *testing.T) {
 					return int(v.(map[string]any)["blockIndex"].(float64)) - 29
 				})
 				major["minorBlocks"] = minor[:i]
+
+			case "query":
+				if !strings.Contains(c.Request["url"].(string), "/anchors#anchor/") {
+					break
+				}
+
+				// Don't complain if the new implementation adds info
+				delete(res["data"].(map[string]any), "state")
+				delete(res, "mainChain")
+				delete(res, "merkleState")
 			}
 
 			// Don't complain if the new implementation adds info
@@ -138,6 +149,11 @@ func jsonDeleteEmpty(v any) bool {
 		for _, k := range empty {
 			delete(v, k)
 		}
+
+		// This is a hack but I don't care about compatibility of this specific
+		// field
+		delete(v, "gotDirectoryReceipt")
+
 		return len(v) == 0
 	}
 

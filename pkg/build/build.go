@@ -50,7 +50,7 @@ func (b SignatureBuilder) Load(q api.Querier) SignatureBuilder {
 		b.errs = append(b.errs, err)
 		return b
 	}
-	b.transaction = r.Transaction
+	b.transaction = r.Message.Transaction
 	return b
 }
 
