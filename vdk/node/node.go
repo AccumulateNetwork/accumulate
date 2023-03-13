@@ -239,15 +239,15 @@ func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error
 	if tmClient == nil {
 		return nil, fmt.Errorf("no healthy tendermint peers, cannot fetch genesis document")
 	}
-	fmt.Printf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", server)
+	log.Printf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", server)
 
 	buf := new(bytes.Buffer)
 	var total int
 	for i := uint(0); ; i++ {
 		if total == 0 {
-			fmt.Printf("Get genesis chunk %d/? from %s\n", i+1, server)
+			log.Printf("Get genesis chunk %d/? from %s\n", i+1, server)
 		} else {
-			fmt.Printf("Get genesis chunk %d/%d from %s\n", i+1, total, server)
+			log.Printf("Get genesis chunk %d/%d from %s\n", i+1, total, server)
 		}
 		rgen, err := tmClient.GenesisChunked(context.Background(), i)
 		if err != nil {
@@ -275,7 +275,7 @@ func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error
 func versionCheck(version *api.VersionResponse, peer string) error {
 	switch {
 	case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
-		fmt.Printf("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.\n", peer)
+		log.Printf("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.\n", peer)
 
 	case accumulate.Commit != version.Commit:
 		return fmt.Errorf("wrong version: network is %s, we are %s", formatVersion(version.Version, version.VersionIsKnown), formatVersion(accumulate.Version, accumulate.IsVersionKnown()))
