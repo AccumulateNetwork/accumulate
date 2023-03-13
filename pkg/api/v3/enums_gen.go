@@ -68,11 +68,11 @@ const RecordTypeChainEntry RecordType = 3
 // RecordTypeKey .
 const RecordTypeKey RecordType = 4
 
-// RecordTypeTransaction .
-const RecordTypeTransaction RecordType = 16
+// RecordTypeMessage .
+const RecordTypeMessage RecordType = 16
 
-// RecordTypeSignature .
-const RecordTypeSignature RecordType = 17
+// RecordTypeSignatureSet .
+const RecordTypeSignatureSet RecordType = 17
 
 // RecordTypeMinorBlock .
 const RecordTypeMinorBlock RecordType = 32
@@ -289,7 +289,7 @@ func (v RecordType) GetEnumValue() uint64 { return uint64(v) }
 func (v *RecordType) SetEnumValue(id uint64) bool {
 	u := RecordType(id)
 	switch u {
-	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeTransaction, RecordTypeSignature, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry:
+	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry:
 		*v = u
 		return true
 	default:
@@ -308,10 +308,10 @@ func (v RecordType) String() string {
 		return "chainEntry"
 	case RecordTypeKey:
 		return "key"
-	case RecordTypeTransaction:
-		return "transaction"
-	case RecordTypeSignature:
-		return "signature"
+	case RecordTypeMessage:
+		return "message"
+	case RecordTypeSignatureSet:
+		return "signatureSet"
 	case RecordTypeMinorBlock:
 		return "minorBlock"
 	case RecordTypeMajorBlock:
@@ -340,10 +340,10 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeChainEntry, true
 	case "key":
 		return RecordTypeKey, true
-	case "transaction":
-		return RecordTypeTransaction, true
-	case "signature":
-		return RecordTypeSignature, true
+	case "message":
+		return RecordTypeMessage, true
+	case "signatureset":
+		return RecordTypeSignatureSet, true
 	case "minorblock":
 		return RecordTypeMinorBlock, true
 	case "majorblock":

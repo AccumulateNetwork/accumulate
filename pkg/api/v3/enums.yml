@@ -65,9 +65,9 @@ RecordType:
   Key:
     value: 0x04
 
-  Transaction:
+  Message:
     value: 0x10
-  Signature:
+  SignatureSet:
     value: 0x11
 
   MinorBlock:

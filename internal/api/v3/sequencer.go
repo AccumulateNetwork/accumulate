@@ -64,7 +64,7 @@ func NewSequencer(params SequencerParams) *Sequencer {
 
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
-func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	if !s.partition.URL.ParentOf(src) {
 		return nil, errors.BadRequest.WithFormat("requested source is %s but this partition is %s", src.RootIdentity(), s.partitionID)
 	}
@@ -77,7 +77,7 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64)
 	// Starting a batch would not be safe if the ABCI were updated to commit in
 	// the middle of a block
 
-	var r *api.TransactionRecord
+	var r *api.MessageRecord[messaging.Message]
 	var err error
 	switch {
 	case s.partition.Synthetic().Equal(src):
@@ -96,7 +96,7 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64)
 	return nil, errors.BadRequest.WithFormat("invalid source: %s", src)
 }
 
-func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	chain, err := batch.Account(s.partition.AnchorPool()).AnchorSequenceChain().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load anchor sequence chain: %w", err)
@@ -117,7 +117,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	txn.Body = msg.GetTransaction().Body
 
 	var signatures []protocol.Signature
-	r := new(api.TransactionRecord)
+	r := new(api.MessageRecord[messaging.Message])
 	if globals.ExecutorVersion.V2() {
 		r.Sequence = new(messaging.SequencedMessage)
 		r.Sequence.Message = &messaging.TransactionMessage{Transaction: txn}
@@ -157,23 +157,25 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	}
 	signatures = append(signatures, keySig)
 
-	r.Transaction = txn
-	r.TxID = txn.ID()
-	r.Signatures = new(api.RecordRange[*api.SignatureRecord])
-	r.Signatures.Total = 1
-	r.Signatures.Records = []*api.SignatureRecord{
-		{Signature: &protocol.SignatureSet{
-			Vote:            protocol.VoteTypeAccept,
-			Signer:          signer.Url,
-			Authority:       signer.Url,
-			TransactionHash: txn.ID().Hash(),
-			Signatures:      signatures,
-		}, TxID: txn.ID(), Signer: signer},
+	sigSet := new(api.RecordRange[*api.MessageRecord[messaging.Message]])
+	sigSet.Total = uint64(len(signatures))
+	sigSet.Records = make([]*api.MessageRecord[messaging.Message], len(signatures))
+	for i, sig := range signatures {
+		sigSet.Records[i] = &api.MessageRecord[messaging.Message]{
+			ID:      signer.Url.WithTxID(*(*[32]byte)(sig.Hash())),
+			Message: &messaging.SignatureMessage{Signature: sig},
+		}
 	}
+
+	r.ID = txn.ID()
+	r.Message = &messaging.TransactionMessage{Transaction: txn}
+	r.Signatures = new(api.RecordRange[*api.SignatureSetRecord])
+	r.Signatures.Total = 1
+	r.Signatures.Records = []*api.SignatureSetRecord{{Signatures: sigSet}}
 	return r, nil
 }
 
-func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	// Load the appropriate sequence chain
 	partition, ok := protocol.ParsePartitionUrl(dst)
 	if !ok {
@@ -202,8 +204,13 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", entry.Source, err)
 	}
 
-	r := new(api.TransactionRecord)
-	r.Signatures = new(api.RecordRange[*api.SignatureRecord])
+	r := new(api.MessageRecord[messaging.Message])
+	r.Signatures = new(api.RecordRange[*api.SignatureSetRecord])
+
+	status, err := batch.Transaction(hash).Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
 
 	// Load the transaction
 	if globals.ExecutorVersion.V2() {
@@ -217,24 +224,22 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		h := seq.Message.Hash()
 		hash = h[:]
 
-		if txn, ok := seq.Message.(messaging.MessageWithTransaction); ok {
-			r.Transaction = txn.GetTransaction()
-		}
-
 	} else {
 		var msg messaging.MessageWithTransaction
 		err = batch.Message2(hash).Main().GetAs(&msg)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
-		r.Transaction = msg.GetTransaction()
 		hash = msg.GetTransaction().GetHash()
+		r.Sequence = new(messaging.SequencedMessage)
+		r.Sequence.Message = msg
+		r.Sequence.Source = status.SourceNetwork
+		r.Sequence.Destination = status.DestinationNetwork
+		r.Sequence.Number = status.SequenceNumber
+		r.SyntheticReceipt = status.Proof
 	}
 
-	status, err := batch.Transaction(hash).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
+	r.ID = r.Message.ID()
 
 	if globals.ExecutorVersion.V2() {
 		// Get the synthetic main chain receipt
@@ -295,23 +300,24 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		}
 		signatures = append(signatures, keySig)
 
-		r.Signatures.Total = 1
-		r.Signatures.Records = []*api.SignatureRecord{
-			{Signature: &protocol.SignatureSet{
-				Vote:            protocol.VoteTypeAccept,
-				Signer:          signer.Url,
-				Authority:       signer.Url,
-				TransactionHash: r.Transaction.ID().Hash(),
-				Signatures:      signatures,
-			}, TxID: r.Transaction.ID(), Signer: signer},
+		sigSet := new(api.RecordRange[*api.MessageRecord[messaging.Message]])
+		sigSet.Total = uint64(len(signatures))
+		sigSet.Records = make([]*api.MessageRecord[messaging.Message], len(signatures))
+		for i, sig := range signatures {
+			sigSet.Records[i] = &api.MessageRecord[messaging.Message]{
+				ID:      signer.Url.WithTxID(*(*[32]byte)(sig.Hash())),
+				Message: &messaging.SignatureMessage{Signature: sig},
+			}
 		}
-		r.TxID = r.Transaction.ID()
-	} else {
 
-		r.TxID = r.Message.ID()
+		r.Signatures.Total = 1
+		r.Signatures.Records = []*api.SignatureSetRecord{{Signatures: sigSet}}
 	}
 
-	r.Status = status
+	r.Status = status.Code
+	r.Error = status.Error
+	r.Result = status.Result
+	r.Received = status.Received
 	return r, nil
 }
 

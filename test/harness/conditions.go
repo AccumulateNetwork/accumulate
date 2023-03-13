@@ -250,32 +250,35 @@ func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
 		panic("not reached")
 	}
 
-	// Convert the result
-	var res msgResult
-	var produced []*api.TxIDRecord
-	switch qr := qr.(type) {
-	case *api.SignatureRecord:
-		res.Status, produced = qr.Status, qr.Produced.Records
-		res.Message = &messaging.SignatureMessage{Signature: qr.Signature}
-		res.Type = qr.Signature.Type().String() + " signature"
-	case *api.TransactionRecord:
-		res.Status, produced = qr.Status, qr.Produced.Records
-		if qr.Message != nil {
-			res.Message = qr.Message
-			res.Type = qr.Message.Type().String()
-		} else {
-			res.Message = &messaging.TransactionMessage{Transaction: qr.Transaction}
-			res.Type = qr.Transaction.Body.Type().String() + " transaction"
-		}
-	default:
+	msg, ok := qr.(*api.MessageRecord[messaging.Message])
+	if !ok {
 		h.TB.Fatalf("Unsupported record type %v", qr.RecordType())
 		panic("not reached")
 	}
 
-	res.Status.TxID = id
-	res.Produced = make([]*url.TxID, len(produced))
-	for i, v := range produced {
-		res.Produced[i] = v.Value
+	// Convert the result
+	var res msgResult
+	res.Status = &protocol.TransactionStatus{
+		TxID:     id,
+		Code:     msg.Status,
+		Error:    msg.Error,
+		Result:   msg.Result,
+		Received: msg.Received,
+	}
+	if msg.Produced != nil {
+		for _, v := range msg.Produced.Records {
+			res.Produced = append(res.Produced, v.Value)
+		}
+	}
+	res.Message = msg.Message
+
+	switch msg := msg.Message.(type) {
+	case *messaging.SignatureMessage:
+		res.Type = msg.Signature.Type().String() + " signature"
+	case *messaging.TransactionMessage:
+		res.Type = msg.Transaction.Body.Type().String() + " transaction"
+	default:
+		res.Type = msg.Type().String()
 	}
 
 	return &res, true

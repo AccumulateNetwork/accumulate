@@ -133,8 +133,8 @@ func TestRefundFailedUserTransaction_Local(t *testing.T) {
 	produced := sim.QueryTransaction(st.TxID, nil).Produced.Records
 	require.Len(t, produced, 1, "Expected a single transaction to be produced")
 	refund := sim.QueryTransaction(produced[0].Value, nil)
-	require.IsType(t, (*SyntheticDepositCredits)(nil), refund.Transaction.Body)
-	require.Equal(t, alice.JoinPath("book", "1").ShortString(), refund.Transaction.Header.Principal.ShortString())
+	require.IsType(t, (*SyntheticDepositCredits)(nil), refund.Message.Transaction.Body)
+	require.Equal(t, alice.JoinPath("book", "1").ShortString(), refund.Message.Transaction.Header.Principal.ShortString())
 }
 
 func TestRefundFailedUserTransaction_Remote(t *testing.T) {
@@ -173,6 +173,6 @@ func TestRefundFailedUserTransaction_Remote(t *testing.T) {
 	produced := sim.QueryTransaction(st.TxID, nil).Produced.Records
 	require.Len(t, produced, 1, "Expected a single transaction to be produced")
 	refund := sim.QueryTransaction(produced[0].Value, nil)
-	require.IsType(t, (*SyntheticDepositCredits)(nil), refund.Transaction.Body)
-	require.Equal(t, alice.JoinPath("book", "1").ShortString(), refund.Transaction.Header.Principal.ShortString())
+	require.IsType(t, (*SyntheticDepositCredits)(nil), refund.Message.Transaction.Body)
+	require.Equal(t, alice.JoinPath("book", "1").ShortString(), refund.Message.Transaction.Header.Principal.ShortString())
 }

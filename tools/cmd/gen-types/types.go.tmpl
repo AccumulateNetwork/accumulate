@@ -82,6 +82,40 @@ func (v *{{.FullName true false}}) Copy() *{{.FullName true false}} {
 }
 
 func (v *{{.FullName true false}}) CopyAsInterface() interface{} { return v.Copy() }
+
+{{if .Params}}
+func {{.Name}}As[{{range .Params}}{{.Name}}2 {{.Type}},{{end}} {{range .Params}}{{.Name}}1 {{.Type}},{{end}}](v *{{.Name}}[{{range .Params}}{{.Name}}1,{{end}}]) (*{{.Name}}[{{range .Params}}{{.Name}}2,{{end}}], error) {
+	{{- range .Fields}}
+	{{-   if .TypeParam}}
+	{{-     if .Repeatable}}
+	v{{.Name}} := make([]{{.TypeParam.Name}}2, len(v.{{.Name}}))
+	for i, v := range v.{{.Name}} {
+		if u, ok := any(v).({{.TypeParam.Name}}2); ok {
+			v{{.Name}}[i] = u
+		} else {
+			var z {{.TypeParam.Name}}2
+			return nil, errors2.Conflict.WithFormat("want %T, got %T", z, v)
+		}
+	}
+	{{      else}}
+	v{{.Name}}, ok := any(v.{{.Name}}).({{.TypeParam.Name}}2)
+	if !ok {
+		var z {{.TypeParam.Name}}2
+		return nil, errors2.Conflict.WithFormat("want %T, got %T", z, v.{{.Name}})
+	}
+	{{      end}}
+	{{-   end}}
+	{{- end}}
+
+	u := new({{.Name}}[{{range .Params}}{{.Name}}2,{{end}}])
+	{{- range .Fields}}
+	{{-   if and .IsMarshalled (not .Virtual)}}
+	u.{{.Name}} = v{{if not .TypeParam}}.{{end}}{{.Name}}
+	{{-   end}}
+	{{- end}}
+	return u, nil
+}
+{{end}}
 {{end}}{{end}}
 
 {{range .Types}}{{if and .IsComparable (not .CustomEqual)}}
