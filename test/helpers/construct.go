@@ -176,6 +176,11 @@ func MakeIdentity(t testing.TB, db database.Updater, u *url.URL, pubKeys ...[]by
 	MakeAccount(t, db, identity, book, page)
 }
 
+func MakeIdentityWithCredits(t testing.TB, db database.Updater, u *url.URL, pubKeys ...[]byte) {
+	MakeIdentity(t, db, u, pubKeys...)
+	CreditCredits(t, db, u.JoinPath("book", "1"), 1e9)
+}
+
 func MakeKeyBook(t testing.TB, db database.Updater, u *url.URL, pubKeys ...[]byte) {
 	t.Helper()
 	book, page := newBook(u, pubKeys...)
