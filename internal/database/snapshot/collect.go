@@ -240,6 +240,10 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opt
 			}
 			return errors.UnknownError.WithFormat("collect signature %x: %w", h[:4], err)
 		}
+		if sig == nil {
+			w.Logger.Info("Skipping signature chain message that is not a signature", "hash", logging.AsHex(h).Slice(0, 4))
+			continue
+		}
 
 		if opts.VisitSignature != nil {
 			err = opts.VisitSignature(sig)

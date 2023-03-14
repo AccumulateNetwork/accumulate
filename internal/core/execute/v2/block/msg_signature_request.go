@@ -117,6 +117,13 @@ func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *
 		return errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
 
+	// Add the message to the signature chain
+	h := ctx.message.Hash()
+	err = batch.Account(req.Authority).SignatureChain().Inner().AddHash(h[:], false)
+	if err != nil {
+		return errors.UnknownError.WithFormat("add to signature chain: %w", err)
+	}
+
 	// If the 'authority' is the principal, send a signature request to each authority
 	if !req.Authority.Equal(req.TxID.Account()) {
 		return nil
