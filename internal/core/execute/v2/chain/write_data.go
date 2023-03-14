@@ -69,7 +69,7 @@ func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, trans
 
 // TransactionIsReady returns true if the transaction is writing to a lite data
 // account.
-func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, false, errors.UnknownError.Wrap(err)
