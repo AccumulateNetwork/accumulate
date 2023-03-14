@@ -275,7 +275,7 @@ query:
 	}
 }
 
-func queryTx(v3 V3, ctx context.Context, txid *url.TxID, includeReceipt, ignorePending, resolveSignature bool) (*TransactionQueryResponse, error) {
+func queryTx(v3 api.Querier, ctx context.Context, txid *url.TxID, includeReceipt, ignorePending, resolveSignature bool) (*TransactionQueryResponse, error) {
 	r, err := v3.Query(ctx, txid.AsUrl(), &api.DefaultQuery{IncludeReceipt: includeReceipt})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -312,7 +312,7 @@ func (m *JrpcMethods) QueryDirectory(ctx context.Context, params json.RawMessage
 		return err
 	}
 
-	r, err := recordIs[*api.RecordRange[api.Record]](m.NetV3.Query(ctx, req.Url, &api.DirectoryQuery{
+	r, err := recordIs[*api.RecordRange[api.Record]](m.Querier.Query(ctx, req.Url, &api.DirectoryQuery{
 		Range: rangeOptsV3(&req.QueryPagination, &req.QueryOptions),
 	}))
 	if err != nil {
@@ -456,7 +456,7 @@ func signatureV3(r *api.SignatureRecord) (*TransactionQueryResponse, error) {
 	return res, nil
 }
 
-func txnAndReceiptV3(v3 V3, ctx context.Context, r *api.TransactionRecord) (*TransactionQueryResponse, error) {
+func txnAndReceiptV3(v3 api.Querier, ctx context.Context, r *api.TransactionRecord) (*TransactionQueryResponse, error) {
 	res, err := transactionV3(r)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -480,7 +480,7 @@ func txnAndReceiptV3(v3 V3, ctx context.Context, r *api.TransactionRecord) (*Tra
 	return res, nil
 }
 
-func sigAndReceiptV3(v3 V3, ctx context.Context, r *api.SignatureRecord) (*TransactionQueryResponse, error) {
+func sigAndReceiptV3(v3 api.Querier, ctx context.Context, r *api.SignatureRecord) (*TransactionQueryResponse, error) {
 	res, err := signatureV3(r)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -525,7 +525,7 @@ func chainTxnV3(r *api.ChainEntryRecord[*api.TransactionRecord]) (*TransactionQu
 	return res, nil
 }
 
-func txnOrSigV3(v3 V3, ctx context.Context, r *api.ChainEntryRecord[api.Record], prove bool) (*TransactionQueryResponse, error) {
+func txnOrSigV3(v3 api.Querier, ctx context.Context, r *api.ChainEntryRecord[api.Record], prove bool) (*TransactionQueryResponse, error) {
 	var res *TransactionQueryResponse
 	var err error
 	switch r := r.Value.(type) {
@@ -552,11 +552,11 @@ func (m *JrpcMethods) QueryKeyPageIndex(ctx context.Context, params json.RawMess
 		return err
 	}
 
-	r, err := rangeOf[*api.KeyRecord](m.NetV3.Query(ctx, req.Url, &api.PublicKeyHashSearchQuery{
+	r, err := rangeOf[*api.KeyRecord](m.Querier.Query(ctx, req.Url, &api.PublicKeyHashSearchQuery{
 		PublicKeyHash: req.Key,
 	}))
 	if err == nil && len(r.Records) == 0 {
-		r, err = rangeOf[*api.KeyRecord](m.NetV3.Query(ctx, req.Url, &api.PublicKeySearchQuery{
+		r, err = rangeOf[*api.KeyRecord](m.Querier.Query(ctx, req.Url, &api.PublicKeySearchQuery{
 			PublicKey: req.Key,
 			Type:      protocol.SignatureTypeED25519,
 		}))
@@ -588,7 +588,7 @@ func (m *JrpcMethods) QueryData(ctx context.Context, params json.RawMessage) any
 	}
 
 	// List chains
-	r1, err := rangeOf[*api.ChainRecord](m.NetV3.Query(ctx, req.Url, &api.ChainQuery{}))
+	r1, err := rangeOf[*api.ChainRecord](m.Querier.Query(ctx, req.Url, &api.ChainQuery{}))
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -599,7 +599,7 @@ func (m *JrpcMethods) QueryData(ctx context.Context, params json.RawMessage) any
 	}
 
 	// Get the data entries
-	r2, err := chainEntryOf[*api.TransactionRecord](m.NetV3.Query(ctx, req.Url, q))
+	r2, err := chainEntryOf[*api.TransactionRecord](m.Querier.Query(ctx, req.Url, q))
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -618,7 +618,7 @@ func (m *JrpcMethods) QueryDataSet(ctx context.Context, params json.RawMessage) 
 		return err
 	}
 
-	r, err := chainRangeOf[*api.TransactionRecord](m.NetV3.Query(ctx, req.Url, &api.DataQuery{Range: rangeOptsV3(&req.QueryPagination, &req.QueryOptions)}))
+	r, err := chainRangeOf[*api.TransactionRecord](m.Querier.Query(ctx, req.Url, &api.DataQuery{Range: rangeOptsV3(&req.QueryPagination, &req.QueryOptions)}))
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -650,7 +650,7 @@ func (m *JrpcMethods) QueryTxHistory(ctx context.Context, params json.RawMessage
 		q.Name = "main"
 	}
 
-	r, err := chainRangeOf[*api.TransactionRecord](m.NetV3.Query(ctx, req.Url, q))
+	r, err := chainRangeOf[*api.TransactionRecord](m.Querier.Query(ctx, req.Url, q))
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -714,20 +714,20 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			return accumulateError(fmt.Errorf("invalid txid %q: not 32 bytes", qv.Get("txid")))
 		}
 
-		return jrpcFormatResponse(queryTx(m.NetV3, ctx, req.Url.WithTxID(*(*[32]byte)(txid)), req.Prove, false, true))
+		return jrpcFormatResponse(queryTx(m.Querier, ctx, req.Url.WithTxID(*(*[32]byte)(txid)), req.Prove, false, true))
 
 	case req.Url.Fragment == "":
 		txid, err := req.Url.AsTxID()
 		if err == nil {
-			return jrpcFormatResponse(queryTx(m.NetV3, ctx, txid, req.Prove, false, false))
+			return jrpcFormatResponse(queryTx(m.Querier, ctx, txid, req.Prove, false, false))
 		}
 
-		acct, err := recordIs[*api.AccountRecord](m.NetV3.Query(ctx, req.Url, &api.DefaultQuery{IncludeReceipt: req.Prove}))
+		acct, err := recordIs[*api.AccountRecord](m.Querier.Query(ctx, req.Url, &api.DefaultQuery{IncludeReceipt: req.Prove}))
 		if err != nil {
 			return accumulateError(err)
 		}
 
-		chains, err := rangeOf[*api.ChainRecord](m.NetV3.Query(ctx, req.Url, new(api.ChainQuery)))
+		chains, err := rangeOf[*api.ChainRecord](m.Querier.Query(ctx, req.Url, new(api.ChainQuery)))
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -749,7 +749,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			return accumulateError(fmt.Errorf("invalid entry: %q is not a hash", fragment[1]))
 		}
 
-		r, err := chainRangeOf[api.Record](m.NetV3.Query(ctx, req.Url, &api.AnchorSearchQuery{Anchor: entryHash, IncludeReceipt: true}))
+		r, err := chainRangeOf[api.Record](m.Querier.Query(ctx, req.Url, &api.AnchorSearchQuery{Anchor: entryHash, IncludeReceipt: true}))
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -796,7 +796,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 	case "pending":
 		switch len(fragment) {
 		case 1:
-			r, err := rangeOf[*api.TxIDRecord](m.NetV3.Query(ctx, req.Url, &api.PendingQuery{Range: &api.RangeOptions{Count: uint64p(100)}}))
+			r, err := rangeOf[*api.TxIDRecord](m.Querier.Query(ctx, req.Url, &api.PendingQuery{Range: &api.RangeOptions{Count: uint64p(100)}}))
 			if err != nil {
 				return accumulateError(err)
 			}
@@ -835,7 +835,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 		}
 
 		if q.Range == nil {
-			r, err := chainEntryOf[*api.TransactionRecord](m.NetV3.Query(ctx, req.Url, q))
+			r, err := chainEntryOf[*api.TransactionRecord](m.Querier.Query(ctx, req.Url, q))
 			if err != nil {
 				return accumulateError(err)
 			}
@@ -846,7 +846,7 @@ func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
 			return res
 		}
 
-		r, err := chainRangeOf[*api.TransactionRecord](m.NetV3.Query(ctx, req.Url, q))
+		r, err := chainRangeOf[*api.TransactionRecord](m.Querier.Query(ctx, req.Url, q))
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -876,7 +876,7 @@ chain_query:
 		q.Range.Expand = &chainTx
 	}
 
-	r, err := m.NetV3.Query(ctx, req.Url, q)
+	r, err := m.Querier.Query(ctx, req.Url, q)
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -889,7 +889,7 @@ chain_query:
 		if !chainTx {
 			return chainEntryV3(cr)
 		}
-		res, err := txnOrSigV3(m.NetV3, ctx, cr, req.Prove)
+		res, err := txnOrSigV3(m.Querier, ctx, cr, req.Prove)
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -914,7 +914,7 @@ chain_query:
 	if chainTx {
 		resp.Type = "txHistory"
 		for _, cr := range rs {
-			txres, err := txnOrSigV3(m.NetV3, ctx, cr, req.Prove)
+			txres, err := txnOrSigV3(m.Querier, ctx, cr, req.Prove)
 			if err != nil {
 				return accumulateError(err)
 			}
@@ -959,7 +959,7 @@ func (m *JrpcMethods) QueryMinorBlocks(ctx context.Context, params json.RawMessa
 	if req.BlockFilterMode == BlockFilterModeExcludeEmpty {
 		q.OmitEmpty = true
 	}
-	r, err := rangeOf[*api.MinorBlockRecord](m.NetV3.Query(ctx, req.Url, q))
+	r, err := rangeOf[*api.MinorBlockRecord](m.Querier.Query(ctx, req.Url, q))
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -1055,7 +1055,7 @@ func (m *JrpcMethods) QueryMajorBlocks(ctx context.Context, params json.RawMessa
 
 	q := new(api.BlockQuery)
 	q.MajorRange = &api.RangeOptions{Start: req.Start, Count: &req.Count}
-	r, err := rangeOf[*api.MajorBlockRecord](m.NetV3.Query(ctx, req.Url, q))
+	r, err := rangeOf[*api.MajorBlockRecord](m.Querier.Query(ctx, req.Url, q))
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -1075,7 +1075,7 @@ func (m *JrpcMethods) QueryMajorBlocks(ctx context.Context, params json.RawMessa
 		q.OmitEmpty = true
 		q.Major = &major.Index
 		q.MinorRange = &api.RangeOptions{Count: uint64p(100)}
-		r, err := recordIs[*api.MajorBlockRecord](m.NetV3.Query(ctx, req.Url, q))
+		r, err := recordIs[*api.MajorBlockRecord](m.Querier.Query(ctx, req.Url, q))
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -1105,7 +1105,7 @@ func (m *JrpcMethods) QuerySynth(ctx context.Context, params json.RawMessage) in
 		src = req.Source.JoinPath(protocol.Synthetic)
 	}
 
-	r, err := recordIs[*api.TransactionRecord](m.NetV3.Private().Sequence(ctx, src, req.Destination, req.SequenceNumber))
+	r, err := recordIs[*api.TransactionRecord](m.Sequencer.Sequence(ctx, src, req.Destination, req.SequenceNumber))
 	if err != nil {
 		return accumulateError(err)
 	}

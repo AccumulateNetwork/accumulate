@@ -618,7 +618,12 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		Logger:        logger,
 		TxMaxWaitTime: time.Hour,
 		LocalV3:       x.service,
-		NetV3:         sim.Services(),
+		Querier:       sim.Services(),
+		Submitter:     sim.Services(),
+		Network:       sim.Services(),
+		Faucet:        sim.Services(),
+		Validator:     sim.Services(),
+		Sequencer:     sim.Services(),
 	})
 	require.NoError(sim, err)
 	x.API = acctesting.DirectJrpcClient(jrpc)
