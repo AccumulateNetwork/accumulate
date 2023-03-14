@@ -77,6 +77,14 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *MessageContext, msg *me
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Add the signature to the signature chain
+	err = batch.Account(txn.Header.Principal).
+		Transaction(txn.ID().Hash()).
+		RecordHistory(ctx.message)
+	if err != nil {
+		return errors.UnknownError.WithFormat("record history: %w", err)
+	}
+
 	ready, err := x.txnIsReady(batch, ctx, txn, seq)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
