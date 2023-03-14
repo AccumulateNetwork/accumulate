@@ -332,7 +332,7 @@ func (s *QuerierTestSuite) TestSearchForPublicKeyHash() {
 }
 
 func (s *QuerierTestSuite) TestSearchForTransactionHash() {
-	r, err := s.QuerierFor(s.faucet).SearchForTransactionHash(context.Background(), s.faucet, &api.MessageHashSearchQuery{Hash: s.createAlice.TxID.Hash()})
+	r, err := s.QuerierFor(s.faucet).SearchForMessage(context.Background(), s.createAlice.TxID.Hash())
 	s.Require().NoError(err)
 	s.Require().Len(r.Records, 1)
 }

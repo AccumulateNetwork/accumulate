@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Querier2 struct {
@@ -173,8 +174,8 @@ func (q Querier2) SearchForDelegate(ctx context.Context, scope *url.URL, search 
 	return rangeOf[*KeyRecord](doQuery(q, ctx, scope, search))
 }
 
-func (q Querier2) SearchForTransactionHash(ctx context.Context, scope *url.URL, search *MessageHashSearchQuery) (*RecordRange[*TxIDRecord], error) {
-	return rangeOf[*TxIDRecord](doQuery(q, ctx, scope, search))
+func (q Querier2) SearchForMessage(ctx context.Context, hash [32]byte) (*RecordRange[*TxIDRecord], error) {
+	return rangeOf[*TxIDRecord](doQuery(q, ctx, protocol.UnknownUrl(), &MessageHashSearchQuery{Hash: hash}))
 }
 
 type queryPtr[T any] interface {
