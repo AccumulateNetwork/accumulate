@@ -31,13 +31,13 @@ func (CreateDataAccount) SignerIsAuthorized(delegate AuthDelegate, batch *databa
 	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
-func (CreateDataAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (CreateDataAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateDataAccount)
 	if !ok {
 		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateDataAccount), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction)
 }
 
 func (CreateDataAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {

@@ -44,7 +44,7 @@ func (CreateLiteTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *d
 	return false, nil
 }
 
-func (CreateLiteTokenAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (CreateLiteTokenAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	_, err = CreateLiteTokenAccount{}.validate(transaction)
 	if err != nil {
 		return false, false, errors.UnknownError.Wrap(err)

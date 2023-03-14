@@ -55,7 +55,7 @@ func (UpdateKey) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch
 	return false, errors.Unauthorized.WithFormat("%v is not authorized to sign %v for %v", signer.GetUrl(), transaction.Body.Type(), transaction.Header.Principal)
 }
 
-func (x UpdateKey) AuthorityIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authority *url.URL) (satisfied, fallback bool, err error) {
+func (x UpdateKey) AuthorityIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, authority *url.URL) (satisfied, fallback bool, err error) {
 	// If the authority is a delegate, fallback to the normal logic
 	if !authority.ParentOf(transaction.Header.Principal) {
 		return false, true, nil
@@ -73,7 +73,7 @@ func (x UpdateKey) AuthorityIsReady(delegate AuthDelegate, batch *database.Batch
 	}
 }
 
-func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	// Wait for the initiator
 	isInit, pay, err := delegate.TransactionIsInitiated(batch, transaction)
 	if err != nil {
@@ -85,7 +85,7 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 
 	// Did the principal sign?
 	if pay.Payer.Equal(transaction.Header.Principal) {
-		if ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, transaction.Header.Principal.Identity()); err != nil {
+		if ok, err := delegate.AuthorityIsSatisfied(batch, transaction, transaction.Header.Principal.Identity()); err != nil {
 			return false, false, errors.UnknownError.Wrap(err)
 		} else if ok {
 			return true, false, nil
@@ -102,7 +102,7 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 		if entry.Delegate == nil {
 			continue
 		}
-		if ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, entry.Delegate); err != nil {
+		if ok, err := delegate.AuthorityIsSatisfied(batch, transaction, entry.Delegate); err != nil {
 			return false, false, errors.UnknownError.Wrap(err)
 		} else if ok {
 			return true, false, nil
