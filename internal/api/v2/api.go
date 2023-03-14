@@ -37,8 +37,14 @@ type V3 interface {
 }
 
 type Options struct {
-	Logger         log.Logger
-	Describe       *config.Describe
-	TxMaxWaitTime  time.Duration
-	NetV3, LocalV3 V3
+	Logger        log.Logger
+	Describe      *config.Describe
+	TxMaxWaitTime time.Duration
+	LocalV3       V3
+	Querier       api.Querier
+	Submitter     api.Submitter
+	Network       api.NetworkService
+	Faucet        api.Faucet
+	Validator     api.Validator
+	Sequencer     private.Sequencer
 }

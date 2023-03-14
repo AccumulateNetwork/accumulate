@@ -73,7 +73,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		jsonrpc.ConsensusService{ConsensusService: selfClient},
 		jsonrpc.NetworkService{NetworkService: client},
 		jsonrpc.MetricsService{MetricsService: client},
-		jsonrpc.Querier{Querier: client},
+		jsonrpc.Querier{Querier: &api.Collator{Querier: client, Network: client}},
 		jsonrpc.Submitter{Submitter: client},
 		jsonrpc.Validator{Validator: client},
 		jsonrpc.Faucet{Faucet: client},
@@ -89,7 +89,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		message.ConsensusService{ConsensusService: selfClient},
 		message.NetworkService{NetworkService: client},
 		message.MetricsService{MetricsService: client},
-		message.Querier{Querier: client},
+		message.Querier{Querier: &api.Collator{Querier: client, Network: client}},
 		message.Submitter{Submitter: client},
 		message.Validator{Validator: client},
 		message.Faucet{Faucet: client},
@@ -104,7 +104,12 @@ func NewHandler(opts Options) (*Handler, error) {
 		Describe:      opts.Network,
 		TxMaxWaitTime: opts.MaxWait,
 		LocalV3:       selfClient,
-		NetV3:         client,
+		Querier:       &api.Collator{Querier: client, Network: client},
+		Submitter:     client,
+		Network:       client,
+		Faucet:        client,
+		Validator:     client,
+		Sequencer:     client.Private(),
 	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize API v2: %v", err)
