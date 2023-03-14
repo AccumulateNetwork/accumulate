@@ -246,7 +246,9 @@ type MinorBlockRecord struct {
 	fieldsSet []bool
 	Index     uint64                                  `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	Time      *time.Time                              `json:"time,omitempty" form:"time" query:"time" validate:"required"`
+	Source    *url.URL                                `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	Entries   *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	Anchored  *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty" form:"anchored" query:"anchored" validate:"required"`
 	extraData []byte
 }
 
@@ -856,8 +858,14 @@ func (v *MinorBlockRecord) Copy() *MinorBlockRecord {
 		u.Time = new(time.Time)
 		*u.Time = *v.Time
 	}
+	if v.Source != nil {
+		u.Source = v.Source
+	}
 	if v.Entries != nil {
 		u.Entries = (v.Entries).Copy()
+	}
+	if v.Anchored != nil {
+		u.Anchored = (v.Anchored).Copy()
 	}
 
 	return u
@@ -1680,11 +1688,27 @@ func (v *MinorBlockRecord) Equal(u *MinorBlockRecord) bool {
 		return false
 	}
 	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	switch {
 	case v.Entries == u.Entries:
 		// equal
 	case v.Entries == nil || u.Entries == nil:
 		return false
 	case !((v.Entries).Equal(u.Entries)):
+		return false
+	}
+	switch {
+	case v.Anchored == u.Anchored:
+		// equal
+	case v.Anchored == nil || u.Anchored == nil:
+		return false
+	case !((v.Anchored).Equal(u.Anchored)):
 		return false
 	}
 
@@ -3536,7 +3560,9 @@ var fieldNames_MinorBlockRecord = []string{
 	1: "RecordType",
 	2: "Index",
 	3: "Time",
-	4: "Entries",
+	4: "Source",
+	5: "Entries",
+	6: "Anchored",
 }
 
 func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
@@ -3550,8 +3576,14 @@ func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
 	if !(v.Time == nil) {
 		writer.WriteTime(3, *v.Time)
 	}
+	if !(v.Source == nil) {
+		writer.WriteUrl(4, v.Source)
+	}
 	if !(v.Entries == nil) {
-		writer.WriteValue(4, v.Entries.MarshalBinary)
+		writer.WriteValue(5, v.Entries.MarshalBinary)
+	}
+	if !(v.Anchored == nil) {
+		writer.WriteValue(6, v.Anchored.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_MinorBlockRecord)
@@ -3579,9 +3611,19 @@ func (v *MinorBlockRecord) IsValid() error {
 		errs = append(errs, "field Time is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == nil {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Entries is missing")
 	} else if v.Entries == nil {
 		errs = append(errs, "field Entries is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Anchored is missing")
+	} else if v.Anchored == nil {
+		errs = append(errs, "field Anchored is not set")
 	}
 
 	switch len(errs) {
@@ -5592,8 +5634,14 @@ func (v *MinorBlockRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadTime(3); ok {
 		v.Time = &x
 	}
-	if x := new(RecordRange[*ChainEntryRecord[Record]]); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Source = x
+	}
+	if x := new(RecordRange[*ChainEntryRecord[Record]]); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.Entries = x
+	}
+	if x := new(RecordRange[*MinorBlockRecord]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+		v.Anchored = x
 	}
 
 	seen, err := reader.Reset(fieldNames_MinorBlockRecord)
@@ -6697,7 +6745,9 @@ func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 		RecordType RecordType                              `json:"recordType"`
 		Index      uint64                                  `json:"index,omitempty"`
 		Time       *time.Time                              `json:"time,omitempty"`
+		Source     *url.URL                                `json:"source,omitempty"`
 		Entries    *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
+		Anchored   *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.Index == 0) {
@@ -6706,8 +6756,14 @@ func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	if !(v.Time == nil) {
 		u.Time = v.Time
 	}
+	if !(v.Source == nil) {
+		u.Source = v.Source
+	}
 	if !(v.Entries == nil) {
 		u.Entries = v.Entries
+	}
+	if !(v.Anchored == nil) {
+		u.Anchored = v.Anchored
 	}
 	return json.Marshal(&u)
 }
@@ -7471,12 +7527,16 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 		RecordType RecordType                              `json:"recordType"`
 		Index      uint64                                  `json:"index,omitempty"`
 		Time       *time.Time                              `json:"time,omitempty"`
+		Source     *url.URL                                `json:"source,omitempty"`
 		Entries    *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
+		Anchored   *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Index = v.Index
 	u.Time = v.Time
+	u.Source = v.Source
 	u.Entries = v.Entries
+	u.Anchored = v.Anchored
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -7485,7 +7545,9 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	}
 	v.Index = u.Index
 	v.Time = u.Time
+	v.Source = u.Source
 	v.Entries = u.Entries
+	v.Anchored = u.Anchored
 	return nil
 }
 
