@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
@@ -22,7 +22,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 		m.methods = make(jsonrpc2.MethodMap, {{len .Methods}})
 	}
 	{{range .Methods}}
-	m.methods["{{.RPC}}"] = m.{{.Name}}{{end}}
+	m.methods["{{.RPC}}"] = jrpcBatchQuery(m.{{.Name}}){{end}}
 
 	return m.methods
 }
@@ -45,6 +45,14 @@ func (m *JrpcMethods) parse(params json.RawMessage, target interface{}, validate
 	}
 
 	return nil
+}
+
+func jrpcBatchQuery(m jsonrpc2.MethodFunc) jsonrpc2.MethodFunc {
+	return func(ctx context.Context, params json.RawMessage) interface{} {
+		ctx, cancel, _ := api.ContextWithBatchData(ctx)
+		defer cancel()
+		return m(ctx, params)
+	}
 }
 
 func jrpcFormatResponse(res interface{}, err error) interface{} {

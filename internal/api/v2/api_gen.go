@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -21,41 +22,41 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 		m.methods = make(jsonrpc2.MethodMap, 35)
 	}
 
-	m.methods["describe"] = m.Describe
-	m.methods["execute"] = m.Execute
-	m.methods["add-credits"] = m.ExecuteAddCredits
-	m.methods["burn-tokens"] = m.ExecuteBurnTokens
-	m.methods["create-adi"] = m.ExecuteCreateAdi
-	m.methods["create-data-account"] = m.ExecuteCreateDataAccount
-	m.methods["create-identity"] = m.ExecuteCreateIdentity
-	m.methods["create-key-book"] = m.ExecuteCreateKeyBook
-	m.methods["create-key-page"] = m.ExecuteCreateKeyPage
-	m.methods["create-token"] = m.ExecuteCreateToken
-	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
-	m.methods["execute-direct"] = m.ExecuteDirect
-	m.methods["issue-tokens"] = m.ExecuteIssueTokens
-	m.methods["execute-local"] = m.ExecuteLocal
-	m.methods["send-tokens"] = m.ExecuteSendTokens
-	m.methods["update-account-auth"] = m.ExecuteUpdateAccountAuth
-	m.methods["update-key"] = m.ExecuteUpdateKey
-	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
-	m.methods["write-data"] = m.ExecuteWriteData
-	m.methods["write-data-to"] = m.ExecuteWriteDataTo
-	m.methods["faucet"] = m.Faucet
-	m.methods["metrics"] = m.Metrics
-	m.methods["query"] = m.Query
-	m.methods["query-data"] = m.QueryData
-	m.methods["query-data-set"] = m.QueryDataSet
-	m.methods["query-directory"] = m.QueryDirectory
-	m.methods["query-key-index"] = m.QueryKeyPageIndex
-	m.methods["query-major-blocks"] = m.QueryMajorBlocks
-	m.methods["query-minor-blocks"] = m.QueryMinorBlocks
-	m.methods["query-synth"] = m.QuerySynth
-	m.methods["query-tx"] = m.QueryTx
-	m.methods["query-tx-history"] = m.QueryTxHistory
-	m.methods["query-tx-local"] = m.QueryTxLocal
-	m.methods["status"] = m.Status
-	m.methods["version"] = m.Version
+	m.methods["describe"] = jrpcBatchQuery(m.Describe)
+	m.methods["execute"] = jrpcBatchQuery(m.Execute)
+	m.methods["add-credits"] = jrpcBatchQuery(m.ExecuteAddCredits)
+	m.methods["burn-tokens"] = jrpcBatchQuery(m.ExecuteBurnTokens)
+	m.methods["create-adi"] = jrpcBatchQuery(m.ExecuteCreateAdi)
+	m.methods["create-data-account"] = jrpcBatchQuery(m.ExecuteCreateDataAccount)
+	m.methods["create-identity"] = jrpcBatchQuery(m.ExecuteCreateIdentity)
+	m.methods["create-key-book"] = jrpcBatchQuery(m.ExecuteCreateKeyBook)
+	m.methods["create-key-page"] = jrpcBatchQuery(m.ExecuteCreateKeyPage)
+	m.methods["create-token"] = jrpcBatchQuery(m.ExecuteCreateToken)
+	m.methods["create-token-account"] = jrpcBatchQuery(m.ExecuteCreateTokenAccount)
+	m.methods["execute-direct"] = jrpcBatchQuery(m.ExecuteDirect)
+	m.methods["issue-tokens"] = jrpcBatchQuery(m.ExecuteIssueTokens)
+	m.methods["execute-local"] = jrpcBatchQuery(m.ExecuteLocal)
+	m.methods["send-tokens"] = jrpcBatchQuery(m.ExecuteSendTokens)
+	m.methods["update-account-auth"] = jrpcBatchQuery(m.ExecuteUpdateAccountAuth)
+	m.methods["update-key"] = jrpcBatchQuery(m.ExecuteUpdateKey)
+	m.methods["update-key-page"] = jrpcBatchQuery(m.ExecuteUpdateKeyPage)
+	m.methods["write-data"] = jrpcBatchQuery(m.ExecuteWriteData)
+	m.methods["write-data-to"] = jrpcBatchQuery(m.ExecuteWriteDataTo)
+	m.methods["faucet"] = jrpcBatchQuery(m.Faucet)
+	m.methods["metrics"] = jrpcBatchQuery(m.Metrics)
+	m.methods["query"] = jrpcBatchQuery(m.Query)
+	m.methods["query-data"] = jrpcBatchQuery(m.QueryData)
+	m.methods["query-data-set"] = jrpcBatchQuery(m.QueryDataSet)
+	m.methods["query-directory"] = jrpcBatchQuery(m.QueryDirectory)
+	m.methods["query-key-index"] = jrpcBatchQuery(m.QueryKeyPageIndex)
+	m.methods["query-major-blocks"] = jrpcBatchQuery(m.QueryMajorBlocks)
+	m.methods["query-minor-blocks"] = jrpcBatchQuery(m.QueryMinorBlocks)
+	m.methods["query-synth"] = jrpcBatchQuery(m.QuerySynth)
+	m.methods["query-tx"] = jrpcBatchQuery(m.QueryTx)
+	m.methods["query-tx-history"] = jrpcBatchQuery(m.QueryTxHistory)
+	m.methods["query-tx-local"] = jrpcBatchQuery(m.QueryTxLocal)
+	m.methods["status"] = jrpcBatchQuery(m.Status)
+	m.methods["version"] = jrpcBatchQuery(m.Version)
 
 	return m.methods
 }
@@ -78,6 +79,14 @@ func (m *JrpcMethods) parse(params json.RawMessage, target interface{}, validate
 	}
 
 	return nil
+}
+
+func jrpcBatchQuery(m jsonrpc2.MethodFunc) jsonrpc2.MethodFunc {
+	return func(ctx context.Context, params json.RawMessage) interface{} {
+		ctx, cancel, _ := api.ContextWithBatchData(ctx)
+		defer cancel()
+		return m(ctx, params)
+	}
 }
 
 func jrpcFormatResponse(res interface{}, err error) interface{} {
