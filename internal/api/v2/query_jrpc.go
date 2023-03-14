@@ -27,7 +27,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 	// Query directly
 	if req.TxIdUrl != nil {
 		return jrpcFormatResponse(waitFor(func() (*TransactionQueryResponse, error) {
-			return queryTx(m.NetV3, ctx, req.TxIdUrl, req.Prove, req.IgnorePending, true)
+			return queryTx(m.Querier, ctx, req.TxIdUrl, req.Prove, req.IgnorePending, true)
 		}, req.Wait, m.TxMaxWaitTime))
 	}
 
@@ -43,7 +43,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 
 	q := &api.MessageHashSearchQuery{Hash: hash}
 	return jrpcFormatResponse(waitFor(func() (*TransactionQueryResponse, error) {
-		r, err := rangeOf[*api.TxIDRecord](m.NetV3.Query(ctx, protocol.UnknownUrl(), q))
+		r, err := rangeOf[*api.TxIDRecord](m.Querier.Query(ctx, protocol.UnknownUrl(), q))
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +67,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				r, err := queryTx(m.NetV3, ctx, txid, req.Prove, req.IgnorePending, true)
+				r, err := queryTx(m.Querier, ctx, txid, req.Prove, req.IgnorePending, true)
 				switch {
 				case err == nil:
 					if req.IncludeRemote || !r.Status.Remote() {
