@@ -241,7 +241,7 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 	}
 
 	// Load the active signature set
-	sigs, err := batch.
+	entries, err := batch.
 		Account(signerUrl).
 		Transaction(transaction.ID().Hash()).
 		Signatures().
@@ -250,9 +250,14 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 		return false, errors.UnknownError.WithFormat("load %v signatures: %w", signerUrl, err)
 	}
 
-	// Check if the threshold has been reached
-	if uint64(len(sigs)) >= signer.GetSignatureThreshold() {
-		return true, nil
+	// Check if the threshold has been reached for any delegation path
+	paths := map[[32]byte]uint64{}
+	for _, entry := range entries {
+		h := entry.PathHash()
+		paths[h]++
+		if paths[h] >= signer.GetSignatureThreshold() {
+			return true, nil
+		}
 	}
 
 	return false, nil

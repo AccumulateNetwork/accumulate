@@ -65,6 +65,8 @@ type SignatureSetEntry struct {
 	KeyIndex uint64 `json:"keyIndex" form:"keyIndex" query:"keyIndex" validate:"required"`
 	// Version is the signer version.
 	Version uint64 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	// Path is the authority/delegation path.
+	Path []*url.URL `json:"path,omitempty" form:"path" query:"path" validate:"required"`
 	// Hash is the hash of the signature.
 	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
 	extraData []byte
@@ -173,6 +175,12 @@ func (v *SignatureSetEntry) Copy() *SignatureSetEntry {
 
 	u.KeyIndex = v.KeyIndex
 	u.Version = v.Version
+	u.Path = make([]*url.URL, len(v.Path))
+	for i, v := range v.Path {
+		if v != nil {
+			u.Path[i] = v
+		}
+	}
 	u.Hash = v.Hash
 
 	return u
@@ -330,6 +338,14 @@ func (v *SignatureSetEntry) Equal(u *SignatureSetEntry) bool {
 	}
 	if !(v.Version == u.Version) {
 		return false
+	}
+	if len(v.Path) != len(u.Path) {
+		return false
+	}
+	for i := range v.Path {
+		if !((v.Path[i]).Equal(u.Path[i])) {
+			return false
+		}
 	}
 	if !(v.Hash == u.Hash) {
 		return false
@@ -643,7 +659,8 @@ func (v *SigSetEntry) IsValid() error {
 var fieldNames_SignatureSetEntry = []string{
 	1: "KeyIndex",
 	2: "Version",
-	3: "Hash",
+	3: "Path",
+	4: "Hash",
 }
 
 func (v *SignatureSetEntry) MarshalBinary() ([]byte, error) {
@@ -654,8 +671,13 @@ func (v *SignatureSetEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Version == 0) {
 		writer.WriteUint(2, v.Version)
 	}
+	if !(len(v.Path) == 0) {
+		for _, v := range v.Path {
+			writer.WriteUrl(3, v)
+		}
+	}
 	if !(v.Hash == ([32]byte{})) {
-		writer.WriteHash(3, &v.Hash)
+		writer.WriteHash(4, &v.Hash)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SignatureSetEntry)
@@ -678,6 +700,11 @@ func (v *SignatureSetEntry) IsValid() error {
 		errs = append(errs, "field Version is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Path is missing")
+	} else if len(v.Path) == 0 {
+		errs = append(errs, "field Path is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Hash is missing")
 	} else if v.Hash == ([32]byte{}) {
 		errs = append(errs, "field Hash is not set")
@@ -1000,7 +1027,14 @@ func (v *SignatureSetEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.Version = x
 	}
-	if x, ok := reader.ReadHash(3); ok {
+	for {
+		if x, ok := reader.ReadUrl(3); ok {
+			v.Path = append(v.Path, x)
+		} else {
+			break
+		}
+	}
+	if x, ok := reader.ReadHash(4); ok {
 		v.Hash = *x
 	}
 
@@ -1191,13 +1225,17 @@ func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 
 func (v *SignatureSetEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		KeyIndex uint64 `json:"keyIndex"`
-		Version  uint64 `json:"version,omitempty"`
-		Hash     string `json:"hash,omitempty"`
+		KeyIndex uint64                      `json:"keyIndex"`
+		Version  uint64                      `json:"version,omitempty"`
+		Path     encoding.JsonList[*url.URL] `json:"path,omitempty"`
+		Hash     string                      `json:"hash,omitempty"`
 	}{}
 	u.KeyIndex = v.KeyIndex
 	if !(v.Version == 0) {
 		u.Version = v.Version
+	}
+	if !(len(v.Path) == 0) {
+		u.Path = v.Path
 	}
 	if !(v.Hash == ([32]byte{})) {
 		u.Hash = encoding.ChainToJSON(v.Hash)
@@ -1340,18 +1378,21 @@ func (v *SigSetEntry) UnmarshalJSON(data []byte) error {
 
 func (v *SignatureSetEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		KeyIndex uint64 `json:"keyIndex"`
-		Version  uint64 `json:"version,omitempty"`
-		Hash     string `json:"hash,omitempty"`
+		KeyIndex uint64                      `json:"keyIndex"`
+		Version  uint64                      `json:"version,omitempty"`
+		Path     encoding.JsonList[*url.URL] `json:"path,omitempty"`
+		Hash     string                      `json:"hash,omitempty"`
 	}{}
 	u.KeyIndex = v.KeyIndex
 	u.Version = v.Version
+	u.Path = v.Path
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.KeyIndex = u.KeyIndex
 	v.Version = u.Version
+	v.Path = u.Path
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
