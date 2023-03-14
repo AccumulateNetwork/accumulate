@@ -149,7 +149,12 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		TxMaxWaitTime: time.Hour,
 		Describe:      &network,
 		LocalV3:       (*nodeService)(n),
-		NetV3:         (*simService)(s),
+		Querier:       (*simService)(s),
+		Submitter:     (*simService)(s),
+		Network:       (*simService)(s),
+		Faucet:        (*simService)(s),
+		Validator:     (*simService)(s),
+		Sequencer:     (*simService)(s),
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
