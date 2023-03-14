@@ -274,11 +274,36 @@ func (s *ValidationTestSuite) TestMain() {
 	s.NotZero(QueryAccountAs[*LiteTokenAccount](s.Harness, liteAcme).Balance)
 
 	s.TB.Log("Test collator")
-	c := &api.Collator{Querier: s.Query().Querier, Network: s.Network()}
-	r, err := api.Querier2{Querier: c}.SearchForMessage(context.Background(), st1.TxID.Hash())
-	_ = s.NoError(err) &&
-		s.NotNil(r) &&
-		s.NotEmpty(r.Records)
+	c := api.Querier2{Querier: &api.Collator{Querier: s.Query().Querier, Network: s.Network()}}
+	{
+		r, err := c.SearchForMessage(context.Background(), st1.TxID.Hash())
+		_ = s.NoError(err) &&
+			s.NotNil(r) &&
+			s.NotEmpty(r.Records)
+	}
+	{
+		// TODO Make this smarter than hard coding a height
+		var block uint64 = 4
+		r, err := c.QueryMinorBlock(context.Background(), DnUrl(), &api.BlockQuery{Minor: &block})
+		_ = s.NoError(err) &&
+			s.NotNil(r) &&
+			s.NotNil(r.Anchored) &&
+			s.NotEmpty(r.Anchored.Records) &&
+			s.NotNil(r.Anchored.Records[0].Time) &&
+			s.NotNil(r.Anchored.Records[0].Entries) &&
+			s.NotEmpty(r.Anchored.Records[0].Entries.Records)
+	}
+
+	s.TB.Log("Test API batch")
+	func() {
+		// Test batch (manually verify the same connection is used)
+		ctx, cancel, _ := api.ContextWithBatchData(context.Background())
+		defer cancel()
+		_, err := s.Harness.Query().QueryAccount(ctx, liteAcme, nil)
+		s.Require().NoError(err)
+		_, err = s.Harness.Query().QueryAccount(ctx, liteAcme, nil)
+		s.Require().NoError(err)
+	}()
 
 	s.TB.Log("Add credits to lite account")
 	st := s.BuildAndSubmitTxnSuccessfully(
