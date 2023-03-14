@@ -314,6 +314,8 @@ func (s *Querier) loadAnchoredBlocks(ctx context.Context, batch *database.Batch,
 		return nil, nil //nolint // Bad, but ignore
 	}
 
+	// If this is the first time the anchor chain has been anchored, start is 0.
+	// Otherwise, find the previous index entry and start at its position +1.
 	var start uint64
 	end := anchorIndex
 	if i > 0 {
@@ -324,7 +326,10 @@ func (s *Querier) loadAnchoredBlocks(ctx context.Context, batch *database.Batch,
 		}
 		start = entry.Source + 1
 	}
-	count := end - start
+
+	// Start and end are inclusive. Start 0 and end 3 means get four entries
+	// starting at 0.
+	count := end - start + 1
 
 	expand := true
 	anchors, err := s.queryChainEntryRange(ctx, batch, batch.Account(s.partition.AnchorPool()).MainChain(), &api.RangeOptions{Start: start, Count: &count, Expand: &expand})
