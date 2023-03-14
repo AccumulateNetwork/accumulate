@@ -61,7 +61,7 @@ type SignerValidator interface {
 }
 
 type AuthorityValidator interface {
-	AuthorityIsSatisfied(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authority *url.URL) (satisfied, fallback bool, err error)
+	AuthorityIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authority *url.URL) (satisfied, fallback bool, err error)
 }
 
 // PrincipalValidator validates the principal for a specific type of transaction.
@@ -78,9 +78,27 @@ type TransactionExecutorCleanup interface {
 }
 
 type AuthDelegate interface {
-	TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error)
 	GetAccountAuthoritySet(*database.Batch, protocol.Account) (*protocol.AccountAuth, error)
+
+	// TransactionIsInitiated verifies the transaction has been paid for and the
+	// initiator signature has been processed.
+	TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error)
+
+	// SignerIsAuthorized verifies the signer is authorized to sign a given
+	// transaction.
 	SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) error
+
+	// AuthorityIsSatisfied verifies the authority is ready to send an authority
+	// signature. For most transactions, this succeeds if at least one of the
+	// authority's signers is satisfied.
 	AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error)
+
+	// SignerIsSatisfied verifies the signer is satisfied. For most
+	// transactions, this succeeds if the signer's conditions (thresholds) have
+	// been met.
 	SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error)
+
+	// AuthorityIsReady verifies that an authority signature (aka vote)
+	// approving the transaction has been received from the authority.
+	AuthorityIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error)
 }

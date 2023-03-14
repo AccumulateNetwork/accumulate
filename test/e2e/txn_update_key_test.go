@@ -122,3 +122,47 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 			Build())
 	require.EqualError(t, st[1].AsError(), "cannot updateKey with a delegated signature")
 }
+
+func TestUpdateKey_TwoDelegates(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	charlie := url.MustParse("charlie")
+	david := url.MustParse("david")
+	aliceKey := acctesting.GenerateKey(alice)
+	charlieKey := acctesting.GenerateKey(charlie)
+
+	// Initialize
+	var timestamp uint64
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	MakeIdentity(t, sim.DatabaseFor(charlie), charlie, charlieKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) {
+		page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book")})
+		page.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book")})
+		page.AddKeySpec(&KeySpec{Delegate: david.JoinPath("book")})
+
+		// Make sure charlie is in the middle
+		require.True(t, page.Keys[0].Delegate.Equal(bob.JoinPath("book")))
+		require.True(t, page.Keys[1].Delegate.Equal(charlie.JoinPath("book")))
+		require.True(t, page.Keys[2].Delegate.Equal(david.JoinPath("book")))
+	})
+	CreditCredits(t, sim.DatabaseFor(charlie), charlie.JoinPath("book", "1"), 1e9)
+
+	// Update the key
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice, "book", "1").
+			UpdateKey(charlieKey, SignatureTypeED25519).
+			SignWith(charlie, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(charlieKey))
+	sim.StepUntil(
+		Txn(st[0].TxID).Succeeds())
+
+	// Verify the key changed
+	page := GetAccount[*KeyPage](t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"))
+	_, _, ok := page.EntryByKey(charlieKey[32:])
+	require.True(t, ok)
+}

@@ -18,6 +18,9 @@ import (
 
 type UpdateKey struct{}
 
+var _ SignerValidator = UpdateKey{}
+var _ AuthorityValidator = UpdateKey{}
+
 func (UpdateKey) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKey
 }
@@ -52,25 +55,27 @@ func (UpdateKey) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch
 	return false, errors.Unauthorized.WithFormat("%v is not authorized to sign %v for %v", signer.GetUrl(), transaction.Body.Type(), transaction.Header.Principal)
 }
 
-func (x UpdateKey) AuthorityIsSatisfied(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authority *url.URL) (satisfied, fallback bool, err error) {
-	book, _, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
-	if !ok {
-		return false, false, errors.BadRequest.With("principal is not a key page")
-	}
-
+func (x UpdateKey) AuthorityIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authority *url.URL) (satisfied, fallback bool, err error) {
 	// If the authority is a delegate, fallback to the normal logic
-	if !authority.Equal(book) {
+	if !authority.ParentOf(transaction.Header.Principal) {
 		return false, true, nil
 	}
 
 	// Otherwise, the principal must submit at least one signature
-	_, ok = status.GetSigner(transaction.Header.Principal)
-	return ok, false, nil
+	_, err = batch.Message(transaction.ID().Hash()).Signers().Index(transaction.Header.Principal)
+	switch {
+	case err == nil:
+		return true, false, nil
+	case errors.Is(err, errors.NotFound):
+		return false, false, nil
+	default:
+		return false, false, errors.UnknownError.WithFormat("load %v signers: %w", transaction.ID(), err)
+	}
 }
 
 func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	// Wait for the initiator
-	isInit, _, err := delegate.TransactionIsInitiated(batch, transaction)
+	isInit, pay, err := delegate.TransactionIsInitiated(batch, transaction)
 	if err != nil {
 		return false, false, errors.UnknownError.Wrap(err)
 	}
@@ -78,49 +83,28 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 		return false, false, nil
 	}
 
-	// Did the principal sign?
-	signer, ok := status.GetSigner(transaction.Header.Principal)
-	if ok {
-		if ok, err := x.didVote(batch, transaction, signer.GetAuthority()); err != nil {
-			return false, false, errors.UnknownError.Wrap(err)
-		} else if ok {
-			return true, false, nil
-		}
+	// If the initiator is the principal, the transaction is ready once the
+	// book's authority signature is received
+	if pay.Payer.Equal(transaction.Header.Principal) {
+		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, transaction.Header.Principal.Identity())
+		return ok, false, err
 	}
 
-	// Did a delegate sign?
+	// If the initiator is a delegate, the transaction is ready once the
+	// delegate's authority signature is received
 	var page *protocol.KeyPage
 	err = batch.Account(transaction.Header.Principal).Main().GetAs(&page)
 	if err != nil {
 		return false, false, err
 	}
-	for _, entry := range page.Keys {
-		if entry.Delegate == nil {
-			continue
-		}
-		if ok, err := x.didVote(batch, transaction, entry.Delegate); err != nil {
-			return false, false, errors.UnknownError.Wrap(err)
-		} else if ok {
-			return true, false, nil
-		}
+	_, entry, ok := page.EntryByDelegate(pay.Payer)
+	if !ok {
+		// If the initiator is neither the principal nor a delegate, it is not
+		// authorized
+		return false, false, errors.Unauthorized.WithFormat("initiator %v is not authorized to sign %v for %v", pay.Payer, transaction.Body.Type(), transaction.Header.Principal)
 	}
-
-	return false, false, nil
-}
-
-func (UpdateKey) didVote(batch *database.Batch, transaction *protocol.Transaction, book *url.URL) (bool, error) {
-	// The book must vote
-	_, err := batch.Account(transaction.Header.Principal).
-		Transaction(transaction.ID().Hash()).
-		Votes().Find(&database.VoteEntry{Authority: book})
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, errors.NotFound):
-		return false, nil
-	default:
-		return false, errors.UnknownError.WithFormat("load vote: %w", err)
-	}
+	ok, err = delegate.AuthorityIsSatisfied(batch, transaction, status, entry.(*protocol.KeySpec).Delegate)
+	return ok, false, errors.UnknownError.Wrap(err)
 }
 
 func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, *protocol.KeyPage, *protocol.KeyBook, error) {
