@@ -32,7 +32,7 @@ import (
 
 // CreateNode specify working directory of configuration, a log writer callback,
 // and nodeIndex (usually zero unless running a devnet with more than one node on the same BVN)
-func NewNode(workDir string, logWriter logger.LogWriter, nodeIndex int) (*accumulated.Daemon, error) {
+func NewNode(workDir string, logWriter logger.LogWriter, nodeIndex int) (*Daemon, error) {
 	node, err := accumulated.Load(workDir, func(c *config.Config) (io.Writer, error) {
 		la := func(w io.Writer, format string, color bool) io.Writer {
 			config := logger.NodeWriterConfig{
@@ -50,7 +50,7 @@ func NewNode(workDir string, logWriter logger.LogWriter, nodeIndex int) (*accumu
 	if err != nil {
 		return nil, err //err
 	}
-	return node, nil
+	return &Daemon{*node}, nil
 }
 
 func InitializeFollowerFromSeed(workDir string, expectedPartitionType protocol.PartitionType, seedNodeUrl string) error {
