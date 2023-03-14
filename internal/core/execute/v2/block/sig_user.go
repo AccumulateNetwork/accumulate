@@ -381,7 +381,7 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 		return errors.UnknownError.WithFormat("store signer: %w", err)
 	}
 
-	// Add the signature to the signature set
+	// Add the signature to the signature set and chain
 	err = addSignature(batch, ctx.SignatureContext, ctx.signer, &database.SignatureSetEntry{
 		KeyIndex: uint64(ctx.keyIndex),
 		Version:  ctx.keySig.GetSignerVersion(),
