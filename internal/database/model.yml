@@ -81,21 +81,12 @@
         pointer: true
         comparator: compareVoteEntries
       - name: Signatures
-        type: entity
-        attributes:
-        - name: Active
-          description: records the active set of signatures
-          type: state
-          dataType: SignatureSetEntry
-          collection: set
-          pointer: true
-          private: true
-          comparator: compareSignatureSetEntries
-        - name: History
-          type: index
-          description: records the signature chain index of signatures for the transaction
-          dataType: uint
-          collection: set
+        description: records the active set of signatures
+        type: state
+        dataType: SignatureSetEntry
+        collection: set
+        pointer: true
+        comparator: compareSignatureSetEntries
       - name: AnchorSignatures
         description: records validators' anchor transaction signatures
         type: state
@@ -103,6 +94,11 @@
         union: true
         collection: set
         comparator: compareAnchorSignatures
+      - name: History
+        type: index
+        description: records the signature chain index of entries for the transaction
+        dataType: uint
+        collection: set
 
     # Chains
     - name: MainChain

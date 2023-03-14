@@ -42,7 +42,6 @@ func newSigSet(txn *Transaction, signer protocol.Signer2, writable bool) (*Signa
 		Account(signer.GetUrl()).
 		Transaction(txn.hash32()).
 		Signatures().
-		Active().
 		Get()
 	if err != nil {
 		return nil, err
