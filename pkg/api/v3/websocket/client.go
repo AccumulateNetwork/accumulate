@@ -78,7 +78,6 @@ func newClient(network string, s message.StreamOf[*Message], logger log.Logger) 
 	c.inner.Network = network
 	c.inner.Dialer = (*clientDialer)(c)
 	c.inner.Router = clientRouter{}
-	c.inner.DisableFanout = true
 	c.conn = s
 	c.context, c.cancel = context.WithCancel(context.Background())
 	c.outgoing = make(chan *Message)
