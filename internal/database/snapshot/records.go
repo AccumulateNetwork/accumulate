@@ -15,15 +15,19 @@ import (
 // TODO: Check for existing records when restoring?
 
 func CollectSignature(batch *database.Batch, hash [32]byte) (*Signature, error) {
-	var msg messaging.MessageWithSignature
-	err := batch.Message(hash).Main().GetAs(&msg)
+	msg, err := batch.Message(hash).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	smsg, ok := msg.(*messaging.SignatureMessage)
+	if !ok {
+		return nil, nil
+	}
+
 	sig := new(Signature)
-	sig.Signature = msg.GetSignature()
-	sig.Txid = msg.GetTxID()
+	sig.Signature = smsg.GetSignature()
+	sig.Txid = smsg.GetTxID()
 	return sig, nil
 }
 
