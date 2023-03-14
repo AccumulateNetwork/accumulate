@@ -116,15 +116,22 @@ outer:
 		return
 	}
 
-	// List all the unsatisfied conditions
+	h.Verify(conditions...)
+}
+
+func (h *Harness) Verify(conditions ...Condition) {
+	h.TB.Helper()
+	ok := true
 	s := "Condition(s) not satisfied after 50 blocks:"
 	for _, c := range conditions {
 		if !c.Satisfied(h) {
+			ok = false
 			s += "\n  " + c.String()
 		}
 	}
-
-	h.TB.Fatal(color.RedString(s))
+	if !ok {
+		h.TB.Fatal(color.RedString(s))
+	}
 }
 
 // Submit submits the envelope.
