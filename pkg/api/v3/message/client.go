@@ -183,8 +183,7 @@ func (r *PrivateSequenceResponse) rval() *api.TransactionRecord { return r.Value
 // subsequent requests to that address will reuse the existing stream.
 func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
 	// Setup the context and stream dictionary
-	streams := map[string]Stream{}
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel, streams := getBatchData(ctx)
 	defer cancel()
 
 	// Process each request
@@ -218,6 +217,18 @@ func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback fun
 		}
 	}
 	return nil
+}
+
+type batchDataStreamsKey struct{}
+
+func getBatchData(ctx context.Context) (context.Context, context.CancelFunc, map[string]Stream) {
+	ctx, cancel, bd := api.ContextWithBatchData(ctx)
+	streams, _ := bd.Get(batchDataStreamsKey{}).(map[string]Stream)
+	if streams == nil {
+		streams = map[string]Stream{}
+		bd.Put(batchDataStreamsKey{}, streams)
+	}
+	return ctx, cancel, streams
 }
 
 func (c *Client) routeRequest(req Message) (multiaddr.Multiaddr, error) {
