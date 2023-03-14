@@ -242,7 +242,6 @@ func (s *ValidationTestSuite) faucet(account *url.URL) *protocol.TransactionStat
 }
 
 func (s *ValidationTestSuite) TestMain() {
-	s.TB.Skip()
 	// Set up lite addresses
 	liteKey := acctesting.GenerateKey("Lite")
 	liteAcme := acctesting.AcmeLiteAddressStdPriv(liteKey)
@@ -273,6 +272,13 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st2.TxID).Produced().Succeeds())
 
 	s.NotZero(QueryAccountAs[*LiteTokenAccount](s.Harness, liteAcme).Balance)
+
+	s.TB.Log("Test collator")
+	c := &api.Collator{Querier: s.Query().Querier, Network: s.Network()}
+	r, err := api.Querier2{Querier: c}.SearchForMessage(context.Background(), st1.TxID.Hash())
+	_ = s.NoError(err) &&
+		s.NotNil(r) &&
+		s.NotEmpty(r.Records)
 
 	s.TB.Log("Add credits to lite account")
 	st := s.BuildAndSubmitTxnSuccessfully(
