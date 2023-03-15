@@ -29,8 +29,8 @@ type Machine[T any] struct {
 
 // WriteTo writes the value's fields to the writer.
 func (m *Machine[T]) WriteTo(w *Writer, v T) {
-	for i, f := range m.Fields {
-		f.WriteTo(w, uint(i+1), v)
+	for _, f := range m.Fields {
+		f.WriteTo(w, v)
 	}
 }
 
@@ -51,8 +51,8 @@ func (m *Machine[T]) MarshalBinary(v T) ([]byte, error) {
 
 // ReadFrom reads the value's fields from binary.
 func (m *Machine[T]) ReadFrom(r *Reader, v T) {
-	for i, f := range m.Fields {
-		f.ReadFrom(r, uint(i+1), v)
+	for _, f := range m.Fields {
+		f.ReadFrom(r, v)
 	}
 }
 

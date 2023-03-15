@@ -64,14 +64,23 @@ var machine_{{.Name}} = &encoding.Machine[*{{.Name}}]{
 	Fields: []*encoding.Field[*{{.Name}}]{
 		{{- $typ := .}}
 		{{- range .Fields}}
-		{{-   if not .Virtual}}
-		{Name: "{{.Name}}", OmitEmpty: {{.OmitEmpty}}, Required: {{not .IsOptional}}, Accessor:
-		{{-     if .Repeatable -}}
-		encoding.SliceField[*{{$typ.FullName true false}}, *{{resolveElemType . true}}, {{accessor .}}]
+		{{-   if .IsMarshalled}}
+		{Name: "{{.Name}}",
+		{{-     if .Number}}Number: {{.Number}}, {{end}}
+		{{-     if .IsBinary}}Binary: {{.IsBinary}}, {{end}}
+		{{-     if .OmitEmpty}}OmitEmpty: {{.OmitEmpty}}, {{end}}
+		{{-     if not (or .IsOptional .Virtual)}}Required: {{not .IsOptional}}, {{end -}}
+		Accessor:
+		{{-     if .Virtual -}}
+		encoding.ReadOnlyAccessor[*{{$typ.FullName true false}}, {{resolveElemType . false}}, {{accessor .}}]((*{{$typ.FullName true false}}).{{.Name}}) },
 		{{-     else -}}
+		{{-       if .Repeatable -}}
+		encoding.SliceField[*{{$typ.FullName true false}}, *{{resolveElemType . true}}, {{accessor .}}]
+		{{-       else -}}
 		{{accessor .}}
-		{{-     end -}}
+		{{-       end -}}
 		(func(v *{{$typ.FullName true false}}) {{if and .Pointer (not .Repeatable)}}*{{end}}*{{resolveType . (not .Repeatable)}} { return &v.{{.Name}} }) },
+		{{-     end}}
 		{{-   end}}
 		{{- end}}
 	},
