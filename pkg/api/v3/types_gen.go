@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"time"
 
@@ -566,9 +567,9 @@ func (v *ChainEntryRecord[T]) CopyAsInterface() interface{} { return v.Copy() }
 
 func ChainEntryRecordAs[T2 Record, T1 Record](v *ChainEntryRecord[T1]) (*ChainEntryRecord[T2], error) {
 	vValue, ok := any(v.Value).(T2)
-	if !ok {
-		var z T2
-		return nil, errors2.Conflict.WithFormat("want %T, got %T", z, v.Value)
+	if !ok && any(v.Value) != nil {
+		z := reflect.TypeOf(new(T2)).Elem()
+		return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v.Value)
 	}
 
 	u := new(ChainEntryRecord[T2])
@@ -892,9 +893,9 @@ func (v *MessageRecord[T]) CopyAsInterface() interface{} { return v.Copy() }
 
 func MessageRecordAs[T2 messaging.Message, T1 messaging.Message](v *MessageRecord[T1]) (*MessageRecord[T2], error) {
 	vMessage, ok := any(v.Message).(T2)
-	if !ok {
-		var z T2
-		return nil, errors2.Conflict.WithFormat("want %T, got %T", z, v.Message)
+	if !ok && any(v.Message) != nil {
+		z := reflect.TypeOf(new(T2)).Elem()
+		return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v.Message)
 	}
 
 	u := new(MessageRecord[T2])
@@ -1105,11 +1106,11 @@ func (v *RecordRange[T]) CopyAsInterface() interface{} { return v.Copy() }
 func RecordRangeAs[T2 Record, T1 Record](v *RecordRange[T1]) (*RecordRange[T2], error) {
 	vRecords := make([]T2, len(v.Records))
 	for i, v := range v.Records {
-		if u, ok := any(v).(T2); ok {
+		if u, ok := any(v).(T2); ok || any(u) == nil {
 			vRecords[i] = u
 		} else {
-			var z T2
-			return nil, errors2.Conflict.WithFormat("want %T, got %T", z, v)
+			z := reflect.TypeOf(new(T2)).Elem()
+			return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v)
 		}
 	}
 

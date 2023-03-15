@@ -102,7 +102,7 @@ func (s Skip) WithFormat(format string, args ...interface{}) *Error {
 
 	e := convert(err)
 	e.Code = s.status
-	e.recordCallSite(2)
+	e.recordCallSite(2 + s.n)
 	return e
 }
 

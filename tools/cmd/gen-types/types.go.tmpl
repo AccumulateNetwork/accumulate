@@ -90,18 +90,18 @@ func {{.Name}}As[{{range .Params}}{{.Name}}2 {{.Type}},{{end}} {{range .Params}}
 	{{-     if .Repeatable}}
 	v{{.Name}} := make([]{{.TypeParam.Name}}2, len(v.{{.Name}}))
 	for i, v := range v.{{.Name}} {
-		if u, ok := any(v).({{.TypeParam.Name}}2); ok {
+		if u, ok := any(v).({{.TypeParam.Name}}2); ok || any(u) == nil {
 			v{{.Name}}[i] = u
 		} else {
-			var z {{.TypeParam.Name}}2
-			return nil, errors2.Conflict.WithFormat("want %T, got %T", z, v)
+			z := reflect.TypeOf(new({{.TypeParam.Name}}2)).Elem()
+			return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v)
 		}
 	}
 	{{      else}}
 	v{{.Name}}, ok := any(v.{{.Name}}).({{.TypeParam.Name}}2)
-	if !ok {
-		var z {{.TypeParam.Name}}2
-		return nil, errors2.Conflict.WithFormat("want %T, got %T", z, v.{{.Name}})
+	if !ok && any(v.{{.Name}}) != nil {
+		z := reflect.TypeOf(new({{.TypeParam.Name}}2)).Elem()
+		return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v.{{.Name}})
 	}
 	{{      end}}
 	{{-   end}}

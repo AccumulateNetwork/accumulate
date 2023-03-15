@@ -43,11 +43,15 @@ func loadMessage(batch *database.Batch, txid *url.TxID) (*api.MessageRecord[mess
 	r.Received = status.Received
 
 	// Load produced and cause
-	produced, err := batch.Message(txid.Hash()).Produced().Get()
+	p1, err := batch.Transaction2(txid.Hash()).Produced().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load produced: %w", err)
 	}
-	r.Produced, _ = api.MakeRange(produced, 0, 0, func(v *url.TxID) (*api.TxIDRecord, error) {
+	p2, err := batch.Message(txid.Hash()).Produced().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load produced: %w", err)
+	}
+	r.Produced, _ = api.MakeRange(append(p1, p2...), 0, 0, func(v *url.TxID) (*api.TxIDRecord, error) {
 		return &api.TxIDRecord{Value: v}, nil
 	})
 
@@ -78,13 +82,61 @@ func loadMessage(batch *database.Batch, txid *url.TxID) (*api.MessageRecord[mess
 	}
 
 	// Load the transaction-specific fields
-	err = loadTransactionSignatures(batch, r)
-	return r, errors.UnknownError.Wrap(err)
-}
-
-func loadTransactionSignatures(batch *database.Batch, r *api.MessageRecord[messaging.Message]) error {
 	r.Signatures = new(api.RecordRange[*api.SignatureSetRecord])
 
+	err = loadTransactionSignaturesV1(batch, r)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	err = loadTransactionSignaturesV2(batch, r)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	r.Signatures.Total = uint64(len(r.Signatures.Records))
+
+	return r, nil
+}
+
+func loadTransactionSignaturesV1(batch *database.Batch, r *api.MessageRecord[messaging.Message]) error {
+	txn := batch.Transaction2(r.ID.Hash())
+	status, err := txn.Status().Get()
+	if err != nil && !errors.Code(err).IsClientError() {
+		return errors.UnknownError.WithFormat("load status: %w", err)
+	}
+
+	for _, signer := range status.Signers {
+		entries, err := txn.ReadSignaturesForSigner(signer)
+		if err != nil && !errors.Code(err).IsClientError() {
+			return errors.UnknownError.WithFormat("load %v signatures: %w", signer.GetUrl(), err)
+		}
+
+		messages, err := api.MakeRange(entries.Entries(), 0, 0, func(e database.SigSetEntry) (*api.MessageRecord[messaging.Message], error) {
+			msg, err := batch.Message2(e.SignatureHash[:]).Main().Get()
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load signature %x: %w", e.SignatureHash[:], err)
+			}
+
+			r := new(api.MessageRecord[messaging.Message])
+			r.ID = msg.ID()
+			r.Message = msg
+			return r, nil
+		})
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		set := new(api.SignatureSetRecord)
+		set.Account = signer
+		set.Signatures = messages
+		r.Signatures.Records = append(r.Signatures.Records, set)
+	}
+
+	return nil
+}
+
+func loadTransactionSignaturesV2(batch *database.Batch, r *api.MessageRecord[messaging.Message]) error {
 	signers, err := batch.Message(r.ID.Hash()).Signers().Get()
 	if err != nil && !errors.Code(err).IsClientError() {
 		return errors.UnknownError.WithFormat("load signers: %w", err)
@@ -113,8 +165,13 @@ func loadTransactionSignatures(batch *database.Batch, r *api.MessageRecord[messa
 			active[s.Hash] = true
 		}
 
+		history := tryLoad(&err, txn.History().Get, "%s history", s)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
 		// Load messages
-		messages, err := api.MakeRange(tryLoad(&err, txn.History().Get, "%s history", s), 0, 0, func(i uint64) (*api.MessageRecord[messaging.Message], error) {
+		messages, err := api.MakeRange(history, 0, 0, func(i uint64) (*api.MessageRecord[messaging.Message], error) {
 			hash, err := batch.Account(s).SignatureChain().Entry(int64(i))
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("load %v signature chain entry %d: %w", s, i, err)

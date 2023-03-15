@@ -231,6 +231,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
 		hash = msg.GetTransaction().GetHash()
+		r.Message = msg
 		r.Sequence = new(messaging.SequencedMessage)
 		r.Sequence.Message = msg
 		r.Sequence.Source = status.SourceNetwork
@@ -265,7 +266,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 			return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
 		}
 
-		status.Proof = receipt
+		r.SyntheticReceipt = receipt
 	}
 
 	if !globals.ExecutorVersion.V2() {
