@@ -49,20 +49,28 @@ func NewHandler(opts Options) (*Handler, error) {
 	h.logger.Set(opts.Logger)
 
 	// Message clients
-	selfClient := &message.Client{
-		Router: unrouter(opts.Network.PartitionId),
-		Dialer: opts.Node.SelfDialer(),
+	client := &message.Client{
+		Network: opts.Network.Network.Id,
+		Router:  routing.MessageRouter{Router: opts.Router},
+		Dialer:  opts.Node.Dialer(),
 	}
 
-	client := &message.Client{
-		Router: routing.MessageRouter{Router: opts.Router},
-		Dialer: opts.Node.Dialer(),
+	var selfClient *message.Client
+	if opts.Network == nil {
+		selfClient = client
+	} else {
+		selfClient = &message.Client{
+			Network: opts.Network.Network.Id,
+			Router:  unrouter(opts.Network.PartitionId),
+			Dialer:  opts.Node.SelfDialer(),
+		}
 	}
 
 	// JSON-RPC API v3
 	v3, err := jsonrpc.NewHandler(
 		opts.Logger,
 		jsonrpc.NodeService{NodeService: selfClient},
+		jsonrpc.ConsensusService{ConsensusService: selfClient},
 		jsonrpc.NetworkService{NetworkService: client},
 		jsonrpc.MetricsService{MetricsService: client},
 		jsonrpc.Querier{Querier: client},
@@ -78,6 +86,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	ws, err := websocket.NewHandler(
 		opts.Logger,
 		message.NodeService{NodeService: selfClient},
+		message.ConsensusService{ConsensusService: selfClient},
 		message.NetworkService{NetworkService: client},
 		message.MetricsService{MetricsService: client},
 		message.Querier{Querier: client},
@@ -125,17 +134,56 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mux.ServeHTTP(w, r)
 }
 
+// unrouter routes everything to the same partition
 type unrouter string
 
 func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	service := new(api.ServiceAddress)
-	service.Partition = string(r)
+	service.Argument = string(r)
 	var err error
 	switch msg := msg.(type) {
+	case *message.NodeInfoRequest:
+		// If no peer is specified, don't attach anything else to the address so
+		// it's sent to us
+		if msg.PeerID == "" {
+			return api.ServiceTypeNode.Address().Multiaddr(), nil
+		}
+
+		// Send the request to /p2p/{id}/node
+		c1, err := multiaddr.NewComponent("p2p", msg.PeerID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := api.ServiceTypeNode.Address().Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
+	case *message.FindServiceRequest:
+		return api.ServiceTypeNode.Address().Multiaddr(), nil
+
+	case *message.ConsensusStatusRequest:
+		// If no node ID is specified, route normally
+		if msg.NodeID == "" {
+			service.Type = api.ServiceTypeConsensus
+			break
+		}
+
+		// If a node ID is specified, a partition ID must also be specified
+		if msg.Partition == "" {
+			return nil, errors.BadRequest.WithFormat("missing partition")
+		}
+
+		// Send the request to /p2p/{id}/acc-svc/consensus:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID)
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := api.ServiceTypeConsensus.AddressFor(msg.Partition).Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
 	case *message.NetworkStatusRequest:
 		service.Type = api.ServiceTypeNetwork
-	case *message.NodeStatusRequest:
-		service.Type = api.ServiceTypeNode
 	case *message.MetricsRequest:
 		service.Type = api.ServiceTypeMetrics
 	case *message.QueryRequest:
@@ -155,10 +203,6 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		return nil, errors.BadRequest.WithFormat("cannot route request: %w", err)
 	}
 
-	// Return /acc/{service}:{partition}
-	ma, err := multiaddr.NewComponent(api.N_ACC, service.String())
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
-	}
-	return ma, nil
+	// Send the request to /acc-svc/{service}:{partition}
+	return service.Multiaddr(), nil
 }

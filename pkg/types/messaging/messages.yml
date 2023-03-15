@@ -19,7 +19,7 @@ Envelope:
       optional: true
       repeatable: true
 
-UserTransaction:
+TransactionMessage:
   union: { type: message }
   fields:
     - name: Transaction
@@ -27,7 +27,7 @@ UserTransaction:
       marshal-as: reference
       pointer: true
 
-UserSignature:
+SignatureMessage:
   union: { type: message }
   fields:
     - name: Signature

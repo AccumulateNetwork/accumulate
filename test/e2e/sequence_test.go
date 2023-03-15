@@ -312,9 +312,9 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	// Resubmit the original, valid signature
 	var messages []messaging.Message
 	for _, delivery := range original {
-		messages = append(messages, &messaging.UserTransaction{Transaction: delivery.Transaction})
+		messages = append(messages, &messaging.TransactionMessage{Transaction: delivery.Transaction})
 		for _, sig := range delivery.Signatures {
-			messages = append(messages, &messaging.UserSignature{Signature: sig, TxID: delivery.Transaction.ID()})
+			messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: delivery.Transaction.ID()})
 		}
 	}
 	batch := x.Database.Begin(false)

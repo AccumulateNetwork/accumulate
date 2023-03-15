@@ -83,7 +83,7 @@ func TestFee(t *testing.T) {
 				switch i {
 				case TransactionTypeActivateProtocolVersion,
 					TransactionTypeAcmeFaucet,
-					TransactionTypePlaceholder,
+					TransactionTypeBurnCredits,
 					TransactionTypeAddCredits:
 					// A few transactions are free
 					require.Zero(t, fee)

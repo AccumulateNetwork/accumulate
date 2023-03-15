@@ -10,9 +10,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -23,30 +26,30 @@ func TestUpdateKey(t *testing.T) {
 
 	// Initialize
 	var timestamp uint64
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
 
-	sim.CreateIdentity(alice, aliceKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
 		page.AddKeySpec(&KeySpec{Delegate: AccountUrl("foo")})
 		page.AcceptThreshold = 2
 	})
 
 	// Update the key
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("book", "1")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			UseSimpleHash(). // Test AC-2953
-			WithBody(&UpdateKey{NewKeyHash: hash(otherKey[32:])}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
-	)...)
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().
+			For(alice, "book", "1").
+			UpdateKey(otherKey, SignatureTypeED25519).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	sim.StepUntil(
+		Txn(st[0].TxID).Succeeds())
 
 	// Verify the key changed
-	page := simulator.GetAccount[*KeyPage](sim, alice.JoinPath("book", "1"))
+	page := GetAccount[*KeyPage](t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"))
 	_, _, ok := page.EntryByKey(otherKey[32:])
 	require.True(t, ok)
 }
@@ -58,28 +61,29 @@ func TestUpdateKey_HasDelegate(t *testing.T) {
 
 	// Initialize
 	var timestamp uint64
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
 
-	sim.CreateIdentity(alice, aliceKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
 		page.Keys[0].Delegate = AccountUrl("foo")
 	})
 
 	// Update the key
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("book", "1")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&UpdateKey{NewKeyHash: hash(otherKey[32:])}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
-	)...)
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().
+			For(alice, "book", "1").
+			UpdateKey(otherKey[32:], SignatureTypeED25519).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	sim.StepUntil(
+		Txn(st[0].TxID).Succeeds())
 
 	// Verify the delegate is unchanged
-	page := simulator.GetAccount[*KeyPage](sim, alice.JoinPath("book", "1"))
+	page := GetAccount[*KeyPage](t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"))
 	require.Len(t, page.Keys, 1)
 	require.NotNil(t, page.Keys[0].Delegate)
 	require.Equal(t, "foo.acme", page.Keys[0].Delegate.ShortString())
@@ -93,18 +97,21 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 
 	// Initialize
 	var timestamp uint64
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
 
-	sim.CreateIdentity(alice, aliceKey[32:])
-	sim.CreateKeyBook(alice.JoinPath("book2"), make([]byte, 32))
-	sim.CreateKeyBook(alice.JoinPath("book3"), otherKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.Keys[0].Delegate = alice.JoinPath("book2") })
-	updateAccount(sim, alice.JoinPath("book2", "1"), func(page *KeyPage) { page.Keys[0].Delegate = alice.JoinPath("book3") })
-	updateAccount(sim, alice.JoinPath("book3", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	MakeKeyBook(t, sim.DatabaseFor(alice), alice.JoinPath("book2"), make([]byte, 32))
+	MakeKeyBook(t, sim.DatabaseFor(alice), alice.JoinPath("book3"), otherKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) { page.Keys[0].Delegate = alice.JoinPath("book2") })
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book2", "1"), func(page *KeyPage) { page.Keys[0].Delegate = alice.JoinPath("book3") })
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book3", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 
 	// Update the key
-	st := sim.H.SubmitTxn(
+	st := sim.Submit(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("book", "1")).
 			WithSigner(alice.JoinPath("book3", "1"), 1).
@@ -113,10 +120,5 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 			WithBody(&UpdateKey{NewKeyHash: hash(newKey[32:])}).
 			Initiate(SignatureTypeED25519, otherKey).
 			Build())
-	require.NotNil(t, st.Error)
-	err := st.Error
-	for err.Cause != nil {
-		err = err.Cause
-	}
-	require.EqualError(t, err, "cannot updateKey with a delegated signature")
+	require.EqualError(t, st[1].AsError(), "cannot updateKey with a delegated signature")
 }

@@ -26,12 +26,13 @@ type TxFetchMode uint64
 type BlockFilterMode uint64
 
 type V3 interface {
-	api.NodeService
+	api.ConsensusService
 	api.NetworkService
 	api.MetricsService
 	api.Querier
 	api.Submitter
 	api.Validator
+	api.Faucet
 	Private() private.Sequencer
 }
 

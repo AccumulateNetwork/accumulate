@@ -341,12 +341,16 @@ func (b *bootstrap) maybeCreateAcme() {
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
+	if !protocol.IsTestNet {
+		return
+	}
+
 	// Always do this so the DN has the proper issued amount
 	amount := new(big.Int)
 	amount.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 	b.acmeIssued.Add(b.acmeIssued, amount)
 
-	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
+	if !b.shouldCreate(protocol.FaucetUrl) {
 		return
 	}
 

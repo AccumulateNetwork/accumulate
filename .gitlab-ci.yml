@@ -3,7 +3,4 @@ include:
 - local: /.gitlab/all.gitlab-ci.yml
 - local: /.gitlab/merge-request.gitlab-ci.yml
 - local: /.gitlab/release.gitlab-ci.yml
-- template: Jobs/License-Scanning.gitlab-ci.yml
-- template: Security/Dependency-Scanning.gitlab-ci.yml
-- template: Jobs/Secret-Detection.gitlab-ci.yml
-- template: Security/SAST.gitlab-ci.yml
+- local: /.gitlab/scan.gitlab-ci.yml

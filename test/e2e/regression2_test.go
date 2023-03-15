@@ -214,8 +214,7 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 	// Submit the transaction directly to the wrong BVN
 	st, err := sim.SubmitTo(badBvn, deliveries)
 	require.NoError(t, err)
-	require.NotNil(t, st[0].Error)
-	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvn, goodBvn), st[0].Error.Message)
+	require.EqualError(t, st[1].AsError(), fmt.Sprintf("signature submitted to %s instead of %s", badBvn, goodBvn))
 }
 
 func TestAnchoring(t *testing.T) {
@@ -505,7 +504,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		var sigId *url.TxID
 		sim.SetSubmitHook("BVN1", func(messages []messaging.Message) (dropTx bool, keepHook bool) {
 			for _, msg := range messages {
-				msg, ok := msg.(*messaging.UserTransaction)
+				msg, ok := msg.(*messaging.TransactionMessage)
 				if !ok {
 					continue
 				}
@@ -654,8 +653,7 @@ func TestMissingPrincipal(t *testing.T) {
 	require.NoError(t, err)
 
 	st := sim.SubmitTxn(&messaging.Envelope{Transaction: []*Transaction{txn}, Signatures: []Signature{sig}})
-	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "missing principal")
+	require.EqualError(t, st.AsError(), "missing principal")
 }
 
 // TestOldExec runs a basic simulator test with the V1 executor to ensure that

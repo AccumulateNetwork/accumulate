@@ -229,13 +229,6 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 	}
 
-	// Check if the signature set includes a completed set
-	for _, e := range signatures.Entries() {
-		if e.Type == protocol.SignatureTypeSet {
-			return true, nil
-		}
-	}
-
 	// Check if the threshold has been reached
 	if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
 		return true, nil
@@ -303,7 +296,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	// Store the transaction state (without signatures)
 	//
 	// TODO This should not always be a UserTransaction
-	err := batch.Message(delivery.Transaction.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: delivery.Transaction})
+	err := batch.Message(delivery.Transaction.ID().Hash()).Main().Put(&messaging.TransactionMessage{Transaction: delivery.Transaction})
 	if err != nil {
 		return nil, fmt.Errorf("store transaction: %w", err)
 	}
@@ -391,10 +384,13 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 }
 
 func selectTargetChain(account *database.Account, body protocol.TransactionBody) *database.Chain2 {
-	if writeData, ok := body.(*protocol.WriteData); ok {
-		if writeData.Scratch {
+	switch body := body.(type) {
+	case *protocol.WriteData:
+		if body.Scratch {
 			return account.ScratchChain()
 		}
+	case *protocol.TransferCredits:
+		return account.ScratchChain()
 	}
 	return account.MainChain()
 }

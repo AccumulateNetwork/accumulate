@@ -627,6 +627,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 func (x *ExecEntry) Begin(writable bool) *database.Batch         { return x.Database.Begin(writable) }
 func (x *ExecEntry) Update(fn func(*database.Batch) error) error { return x.Database.Update(fn) }
 func (x *ExecEntry) View(fn func(*database.Batch) error) error   { return x.Database.View(fn) }
+func (x *ExecEntry) SetObserver(observer database.Observer)      { x.Database.SetObserver(observer) }
 
 // Submit adds the envelopes to the next block's queue.
 //
@@ -713,9 +714,9 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
-				messages = append(messages, &messaging.UserTransaction{Transaction: deliveries[i].Transaction})
+				messages = append(messages, &messaging.TransactionMessage{Transaction: deliveries[i].Transaction})
 				for _, sig := range deliveries[i].Signatures {
-					messages = append(messages, &messaging.UserSignature{Signature: sig, TxID: deliveries[i].Transaction.ID()})
+					messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: deliveries[i].Transaction.ID()})
 				}
 				continue
 			}

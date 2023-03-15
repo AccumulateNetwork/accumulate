@@ -22,8 +22,10 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/fatih/color"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
+	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	service2 "github.com/tendermint/tendermint/libs/service"
@@ -74,6 +76,7 @@ type Daemon struct {
 	api               *nodeapi.Handler
 	nodeKey           *tmp2p.NodeKey
 	connectionManager connections.ConnectionInitializer
+	router            routing.Router
 	eventBus          *events.Bus
 	localTm           tmclient.Client
 	snapshotSchedule  cron.Schedule
@@ -88,7 +91,7 @@ type Daemon struct {
 func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
 	cfg, err := config.Load(dir)
 	if err != nil {
-		return nil, fmt.Errorf("reading config file: %v", err)
+		return nil, errors.UnknownError.WithFormat("reading config file: %v", err)
 	}
 
 	return New(cfg, newWriter)
@@ -107,17 +110,17 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 
 	logWriter, err := newWriter(daemon.Config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize log writer: %v", err)
+		return nil, errors.UnknownError.WithFormat("initialize log writer: %v", err)
 	}
 
 	logLevel, logWriter, err := logging.ParseLogLevel(daemon.Config.LogLevel, logWriter)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse log level: %v", err)
+		return nil, errors.BadRequest.WithFormat("invalid parse log level: %v", err)
 	}
 
 	daemon.Logger, err = logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize logger: %v", err)
+		return nil, errors.UnknownError.WithFormat("initialize logger: %v", err)
 	}
 
 	return &daemon, nil
@@ -132,124 +135,191 @@ func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
 func (d *Daemon) P2P_TESTONLY() *p2p.Node         { return d.p2pnode }
 func (d *Daemon) API() *nodeapi.Handler           { return d.api }
 
+// StartSecondary starts this daemon as a secondary process of the given daemon
+// (which must already be running).
+func (d *Daemon) StartSecondary(e *Daemon) error {
+	if e.done == nil {
+		return errors.BadRequest.WithFormat("not started")
+	}
+
+	// Reuse the P2P node. Otherwise, start everything normally.
+	d.p2pnode = e.p2pnode
+	return d.Start()
+}
+
 func (d *Daemon) Start() (err error) {
+	if d.Config.Accumulate.API.DebugJSONRPC {
+		jsonrpc2.DebugMethodFunc = true
+	}
+
+	// Set up analysis
+	if d.Config.Accumulate.AnalysisLog.Enabled {
+		err = d.startAnalysis()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// Set up shutdown notification
 	if d.done != nil {
-		return fmt.Errorf("already started")
+		return errors.BadRequest.With("already started")
 	}
 	d.done = make(chan struct{})
-
 	defer func() {
 		if err != nil {
 			close(d.done)
 		}
 	}()
 
-	if d.Config.Accumulate.AnalysisLog.Enabled {
-		dir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.AnalysisLog.Directory)
-		err = os.MkdirAll(dir, 0700)
-		if err != nil {
-			return err
-		}
-
-		ymd, hm := logging.GetCurrentDateTime()
-		f, err := os.Create(filepath.Join(dir, fmt.Sprintf("trace_%v_%v.json", ymd, hm)))
-		if err != nil {
-			return err
-		}
-
-		exp, err := stdouttrace.New(stdouttrace.WithWriter(f))
-		if err != nil {
-			f.Close()
-			return err
-		}
-
-		r, err := resource.Merge(
-			resource.Default(),
-			resource.NewWithAttributes(
-				semconv.SchemaURL,
-				semconv.ServiceNameKey.String("accumulate"),
-				semconv.ServiceVersionKey.String(accumulate.Version),
-			),
-		)
-		if err != nil {
-			f.Close()
-			return err
-		}
-
-		tp := sdktrace.NewTracerProvider(
-			sdktrace.WithBatcher(exp),
-			sdktrace.WithResource(r),
-		)
-		go func() {
-			<-d.done
-			_ = tp.Shutdown(context.Background())
-			f.Close()
-		}()
-		// otel.SetTracerProvider(tp)
-		d.tracer = tp.Tracer("Accumulate")
-	}
-
+	// Parse the snapshot schedule
 	if s, err := core.Cron.Parse(d.Config.Accumulate.Snapshots.Schedule); err != nil {
 		d.Logger.Error("Ignoring invalid snapshot schedule", "error", err, "value", d.Config.Accumulate.Snapshots.Schedule)
 	} else {
 		d.snapshotSchedule = s
 	}
 
+	// Start the database
 	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
-		return fmt.Errorf("failed to open database: %v", err)
+		return errors.UnknownError.WithFormat("open database: %v", err)
 	}
-
-	// Close the database if start fails (mostly for tests)
 	defer func() {
 		if err != nil {
 			_ = d.db.Close()
 		}
 	}()
 
-	// read private validator
-	d.privVal, err = config.LoadFilePV(
-		d.Config.PrivValidatorKeyFile(),
-		d.Config.PrivValidatorStateFile(),
-	)
+	// Load keys
+	err = d.loadKeys()
 	if err != nil {
-		return fmt.Errorf("failed to load private validator: %v", err)
+		return errors.UnknownError.Wrap(err)
 	}
 
-	d.nodeKey, err = tmp2p.LoadNodeKey(d.Config.NodeKeyFile())
-	if err != nil {
-		return fmt.Errorf("failed to load node key: %v", err)
-	}
-
-	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
-		return client.New(server)
-	})
-
+	// Setup the event buss
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
-	chGlobals := make(chan *core.GlobalValues, 1)
+	globals := make(chan *core.GlobalValues, 1)
 	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
 		select {
-		case chGlobals <- e.New:
+		case globals <- e.New:
 		default:
 		}
 		return nil
 	})
 
-	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
-	dialer := &dialer{ready: make(chan struct{})}
-	client := &message.Client{Dialer: dialer, Router: routing.MessageRouter{Router: router}}
+	// Start the API
+	err = d.startAPI()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Start the executor and ABCI
+	app, err := d.startApp()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Start Tendermint
+	err = d.startConsensus(app)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Start services
+	err = d.startServices(globals)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	d.startMonitoringAndCleanup()
+	return nil
+}
+
+func (d *Daemon) startAnalysis() error {
+	// Create the directory
+	dir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.AnalysisLog.Directory)
+	err := os.MkdirAll(dir, 0700)
+	if err != nil {
+		return errors.UnknownError.WithFormat("create analysis log directory: %w", err)
+	}
+
+	// Open the log file (tagged with date and time)
+	ymd, hm := logging.GetCurrentDateTime()
+	f, err := os.Create(filepath.Join(dir, fmt.Sprintf("trace_%v_%v.json", ymd, hm)))
+	if err != nil {
+		return errors.UnknownError.WithFormat("open analysis log file: %w", err)
+	}
+	go func() { <-d.done; _ = f.Close() }()
+
+	// Define the service
+	r, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("accumulate"),
+			semconv.ServiceVersionKey.String(accumulate.Version),
+		),
+	)
+	if err != nil {
+		return err
+	}
+
+	// Initialize the exporter
+	exp, err := stdouttrace.New(stdouttrace.WithWriter(f))
+	if err != nil {
+		return err
+	}
+
+	// Initialize the tracer provider
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithResource(r),
+	)
+	go func() { <-d.done; _ = tp.Shutdown(context.Background()) }()
+
+	// otel.SetTracerProvider(tp)
+	d.tracer = tp.Tracer("Accumulate")
+	return nil
+}
+
+func (d *Daemon) loadKeys() error {
+	var err error
+	d.privVal, err = config.LoadFilePV(
+		d.Config.PrivValidatorKeyFile(),
+		d.Config.PrivValidatorStateFile(),
+	)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load private validator key: %v", err)
+	}
+
+	d.nodeKey, err = tmp2p.LoadNodeKey(d.Config.NodeKeyFile())
+	if err != nil {
+		return errors.UnknownError.WithFormat("load node key: %v", err)
+	}
+
+	return nil
+}
+
+func (d *Daemon) startApp() (types.Application, error) {
+	dialer := d.p2pnode.Dialer()
+	client := &message.Client{
+		Network: d.Config.Accumulate.Network.Id,
+		Dialer:  dialer,
+		Router:  routing.MessageRouter{Router: d.router},
+	}
 	execOpts := execute.Options{
-		Logger:        d.Logger,
-		Database:      d.db,
-		Key:           d.Key().Bytes(),
-		Describe:      d.Config.Accumulate.Describe,
-		Router:        router,
-		EventBus:      d.eventBus,
-		NewDispatcher: func() execute.Dispatcher { return newDispatcher(router, client.Dialer) },
-		Sequencer:     client.Private(),
-		Querier:       client,
+		Logger:    d.Logger,
+		Database:  d.db,
+		Key:       d.Key().Bytes(),
+		Describe:  d.Config.Accumulate.Describe,
+		Router:    d.router,
+		EventBus:  d.eventBus,
+		Sequencer: client.Private(),
+		Querier:   client,
+		NewDispatcher: func() execute.Dispatcher {
+			return newDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
+		},
 	}
 
 	// On DNs initialize the major block scheduler
@@ -259,7 +329,7 @@ func (d *Daemon) Start() (err error) {
 
 	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
-		return fmt.Errorf("failed to initialize chain executor: %v", err)
+		return nil, errors.UnknownError.WithFormat("initialize chain executor: %v", err)
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
@@ -271,7 +341,10 @@ func (d *Daemon) Start() (err error) {
 		Config:   d.Config,
 		Tracer:   d.tracer,
 	})
+	return app, nil
+}
 
+func (d *Daemon) startConsensus(app types.Application) error {
 	// Create node
 	tmn, err := tmnode.NewNode(
 		&d.Config.Config,
@@ -284,7 +357,7 @@ func (d *Daemon) Start() (err error) {
 		d.Logger,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to initialize node: %v", err)
+		return errors.UnknownError.WithFormat("initialize consensus: %v", err)
 	}
 	d.node = &node.Node{Node: tmn, Config: d.Config, ABCI: app}
 
@@ -292,7 +365,7 @@ func (d *Daemon) Start() (err error) {
 	// TODO Feed Tendermint logger to service logger
 	err = d.node.Start()
 	if err != nil {
-		return fmt.Errorf("failed to start node: %v", err)
+		return errors.UnknownError.WithFormat("start consensus: %v", err)
 	}
 
 	// Stop the node if start fails (mostly for tests)
@@ -317,23 +390,23 @@ func (d *Daemon) Start() (err error) {
 	// Create a local client
 	d.localTm = local.New(d.node.Node)
 
-	if d.Config.Accumulate.API.DebugJSONRPC {
-		jsonrpc2.DebugMethodFunc = true
-	}
+	return nil
+}
 
+func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
-	err = d.connectionManager.InitClients(d.localTm, statusChecker)
+	err := d.connectionManager.InitClients(d.localTm, statusChecker)
 
 	if err != nil {
-		return fmt.Errorf("failed to initialize the connection manager: %v", err)
+		return errors.UnknownError.WithFormat("initialize the connection manager: %v", err)
 	}
 
 	// Wait for the executor to finish loading everything
 	globals := <-chGlobals
 
 	// Initialize all the services
-	nodeSvc := tm.NewNodeService(tm.NodeServiceParams{
+	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
 		Database:         d.db,
@@ -383,7 +456,7 @@ func (d *Daemon) Start() (err error) {
 	})
 	messageHandler, err := message.NewHandler(
 		d.Logger.With("module", "acc-rpc"),
-		&message.NodeService{NodeService: nodeSvc},
+		&message.ConsensusService{ConsensusService: nodeSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
 		&message.NetworkService{NetworkService: netSvc},
 		&message.Querier{Querier: querySvc},
@@ -393,19 +466,9 @@ func (d *Daemon) Start() (err error) {
 		&message.Sequencer{Sequencer: sequencerSvc},
 	)
 	if err != nil {
-		return fmt.Errorf("initialize P2P handler: %w", err)
+		return errors.UnknownError.WithFormat("initialize P2P handler: %w", err)
 	}
 
-	// Setup the p2p node
-	d.p2pnode, err = p2p.New(p2p.Options{
-		Logger:         d.Logger.With("module", "acc-rpc"),
-		Listen:         d.Config.Accumulate.P2P.Listen,
-		BootstrapPeers: app.Accumulate.P2P.BootstrapPeers,
-		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
-	})
-	if err != nil {
-		return fmt.Errorf("initialize P2P: %w", err)
-	}
 	services := []interface{ Type() v3.ServiceType }{
 		nodeSvc,
 		metricsSvc,
@@ -418,33 +481,54 @@ func (d *Daemon) Start() (err error) {
 	}
 	for _, s := range services {
 		d.p2pnode.RegisterService(&v3.ServiceAddress{
-			Type:      s.Type(),
-			Partition: d.Config.Accumulate.PartitionId,
+			Type:     s.Type(),
+			Argument: d.Config.Accumulate.PartitionId,
 		}, messageHandler.Handle)
 	}
 
-	// Unblock the dialer
-	dialer.dialer = d.p2pnode.Dialer()
-	close(dialer.ready)
+	return nil
+}
+
+func (d *Daemon) startAPI() error {
+	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
+		return client.New(server)
+	})
+	d.router = routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
+
+	// Setup the p2p node
+	var err error
+	if d.p2pnode == nil {
+		d.p2pnode, err = p2p.New(p2p.Options{
+			Logger:         d.Logger.With("module", "acc-rpc"),
+			Network:        d.Config.Accumulate.Network.Id,
+			Listen:         d.Config.Accumulate.P2P.Listen,
+			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
+			Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+			DiscoveryMode:  dht.ModeServer,
+		})
+		if err != nil {
+			return errors.UnknownError.WithFormat("initialize P2P: %w", err)
+		}
+	}
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
 		Logger:  d.Logger.With("module", "acc-rpc"),
 		Node:    d.p2pnode,
-		Router:  router,
+		Router:  d.router,
 		Network: &d.Config.Accumulate.Describe,
 		MaxWait: d.Config.Accumulate.API.TxMaxWaitTime,
 	})
 	if err != nil {
-		return fmt.Errorf("initialize API: %w", err)
+		return errors.UnknownError.WithFormat("initialize API: %w", err)
 	}
 
 	d.apiServer = &http.Server{Handler: d.api, ReadHeaderTimeout: d.Config.Accumulate.API.ReadHeaderTimeout}
 	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
-		return fmt.Errorf("failed to start JSON-RPC: %v", err)
+		return errors.UnknownError.WithFormat("start JSON-RPC: %v", err)
 	}
 	if secure {
-		return fmt.Errorf("failed to start JSON-RPC: HTTPS is not supported")
+		return errors.BadRequest.WithFormat("cannot start JSON-RPC: HTTPS is not supported")
 	}
 
 	if d.Config.Accumulate.API.ConnectionLimit > 0 {
@@ -452,7 +536,7 @@ func (d *Daemon) Start() (err error) {
 		for i := 0; i < d.Config.Accumulate.API.ConnectionLimit; i++ {
 			pool <- struct{}{}
 		}
-		l = &rateLimitedListener{Listener: l, Pool: pool}
+		l = &RateLimitedListener{Listener: l, Pool: pool}
 	}
 
 	go func() {
@@ -462,6 +546,10 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
+	return nil
+}
+
+func (d *Daemon) startMonitoringAndCleanup() {
 	// Shut down the node if the disk space gets too low
 	go d.ensureSufficientDiskSpace(d.Config.RootDir)
 	for !d.node.IsRunning() {
@@ -493,8 +581,6 @@ func (d *Daemon) Start() (err error) {
 			d.Logger.Error("Error closing database", "module", module, "error", err)
 		}
 	}()
-
-	return nil
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
@@ -557,11 +643,11 @@ func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {
 func listenHttpUrl(s string) (net.Listener, bool, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return nil, false, fmt.Errorf("invalid address: %v", err)
+		return nil, false, errors.BadRequest.WithFormat("invalid address: %v", err)
 	}
 
 	if u.Path != "" && u.Path != "/" {
-		return nil, false, fmt.Errorf("invalid address: path is not empty")
+		return nil, false, errors.BadRequest.WithFormat("invalid address: path is not empty")
 	}
 
 	var secure bool
@@ -571,7 +657,7 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 	case "https":
 		secure = true
 	default:
-		return nil, false, fmt.Errorf("invalid address: unsupported scheme %q", u.Scheme)
+		return nil, false, errors.BadRequest.WithFormat("invalid address: unsupported scheme %q", u.Scheme)
 	}
 
 	l, err := net.Listen("tcp", u.Host)

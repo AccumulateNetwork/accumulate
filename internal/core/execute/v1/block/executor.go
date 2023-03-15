@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -135,8 +136,12 @@ func newExecutor(opts ExecutorOptions, isGenesis bool, executors ...chain.Transa
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
 	m.db = opts.Database
-	m.mainDispatcher = opts.NewDispatcher()
+	if opts.NewDispatcher != nil {
+		m.mainDispatcher = opts.NewDispatcher()
+	}
 	m.isGenesis = isGenesis
+
+	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -192,7 +197,7 @@ func (m *Executor) StoreBlockTimers(ds *logging.DataSet) {
 	m.BlockTimers.Store(ds)
 }
 
-func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
+func (m *Executor) ActiveGlobals() *core.GlobalValues {
 	return &m.globals.Active
 }
 

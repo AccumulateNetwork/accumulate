@@ -54,10 +54,31 @@ func (c txnCond) Refund() msgCond {
 // sigCond provides methods to define conditions on a signature.
 type sigCond struct{ msgCond }
 
+// SingleCompletes waits for the signature, credit payment, signature requests,
+// and authority signatures to complete. SingleCompletes is inappropriate for
+// signatures from multi-sig signers.
+func (c sigCond) SingleCompletes() Condition {
+	conditions := []Condition{
+		c.Succeeds(),
+		c.CreditPayment().Succeeds(),
+		c.SignatureRequest().Completes(),
+		c.AuthoritySignature().Completes(),
+	}
+	return c.make("completes", func(h *Harness, _ *condition, _ *msgResult) bool {
+		ok := true
+		for _, c := range conditions {
+			if !c.Satisfied(h) {
+				ok = false
+			}
+		}
+		return ok
+	})
+}
+
 // CreditPayment defines a condition on the credit payment produced by a
 // signature.
 func (c sigCond) CreditPayment() msgCond {
-	return c.with("credit payment", deliveredThen, produced2(func(r *msgResult) bool {
+	return c.with("credit payment", deliveredThen, producedFiltered(func(r *msgResult) bool {
 		_, ok := messaging.UnwrapAs[*messaging.CreditPayment](r.Message)
 		return ok
 	}))
@@ -66,7 +87,7 @@ func (c sigCond) CreditPayment() msgCond {
 // SignatureRequest defines a condition on signature requests produced by a
 // signature.
 func (c sigCond) SignatureRequest() sigCond2 {
-	return sigCond2{c.with("signature request", deliveredThen, produced2(func(r *msgResult) bool {
+	return sigCond2{c.with("signature request", deliveredThen, producedFiltered(func(r *msgResult) bool {
 		_, ok := messaging.UnwrapAs[*messaging.SignatureRequest](r.Message)
 		return ok
 	}))}
@@ -75,8 +96,8 @@ func (c sigCond) SignatureRequest() sigCond2 {
 // AuthoritySignature defines a condition on the authority signature produced by
 // a signature.
 func (c sigCond) AuthoritySignature() sigCond2 {
-	return sigCond2{c.with("authority signature", deliveredThen, produced2(func(r *msgResult) bool {
-		msg, ok := messaging.UnwrapAs[*messaging.UserSignature](r.Message)
+	return sigCond2{c.with("authority signature", deliveredThen, producedFiltered(func(r *msgResult) bool {
+		msg, ok := messaging.UnwrapAs[*messaging.SignatureMessage](r.Message)
 		return ok && msg.Signature.Type() == protocol.SignatureTypeAuthority
 	}))}
 }
@@ -94,6 +115,7 @@ type msgCond struct {
 	id        *url.TxID
 	modifiers []predicateModifier
 	message   []string
+	capture   **protocol.TransactionStatus
 }
 
 func (c msgCond) with(message string, mod ...predicateModifier) msgCond {
@@ -120,36 +142,55 @@ func (c msgCond) make(message string, predicate statusPredicate) Condition {
 	for _, mod := range c.modifiers {
 		predicate = mod(predicate)
 	}
-	return newMessageCond(c.id, predicate, parts)
+	return &condition{
+		predicate: waitFor(c.id)(predicate),
+		message:   parts,
+		capture:   c.capture,
+	}
 }
 
-// Received waits until the transaction has been received.
+// Capture captures the status of the message in the given pointer. If the
+// condition involves multiple messages, the captured status will be the status
+// of the last message.
+func (c msgCond) Capture(ptr **protocol.TransactionStatus) msgCond {
+	c.capture = ptr
+	return c
+}
+
+// Received waits until the messages has been received.
 func (c msgCond) Received() Condition { return c.make("is received", received) }
 
-// IsDelivered waits until the transaction has been delivered (executed, whether
+// IsDelivered waits until the messages has been delivered (executed, whether
 // success or failure).
 func (c msgCond) IsDelivered() Condition { return c.make("is delivered", isDelivered) }
 
-// IsPending waits until the transaction is pending (received but not executed).
-// IsPending will fail if the transaction has been recorded with any status
-// other than pending.
+// IsPending waits until the messages is pending (received but not executed).
+// IsPending will fail if the messages has been recorded with any status other
+// than pending.
 func (c msgCond) IsPending() Condition { return c.make("is pending", isPending) }
 
-// Succeeds waits until the transaction has been delivered and succeeds if the
-// transaction succeeded (and fails otherwise).
+// Succeeds waits until the messages has been delivered and succeeds if the
+// messages succeeded (and fails otherwise).
 func (c msgCond) Succeeds() Condition { return c.make("succeeds", deliveredThen(succeeds)) }
 
-// Fails waits until the transaction has been delivered and succeeds if the
-// transaction failed (and fails otherwise).
+// Fails waits until the messages has been delivered and succeeds if the
+// messages failed (and fails otherwise).
 func (c msgCond) Fails() Condition { return c.make("fails", deliveredThen(fails)) }
 
-// Fails waits until the transaction has been delivered and succeeds if the
-// transaction failed with the given code (and fails otherwise).
+// Fails waits until the messages has been delivered and succeeds if the
+// messages failed with the given code (and fails otherwise).
 func (c msgCond) FailsWithCode(code errors.Status) Condition {
 	return c.make("fails", failsWithCode(code))
 }
 
+// Completes waits until the messages has been delivered, verifies the
+// messages succeeded, and recursively waits on any produced messages.
+func (c msgCond) Completes() Condition {
+	return c.make("completes", deliveredThen(producedRecursive(succeeds)))
+}
+
 type msgResult struct {
+	Type     string
 	Message  messaging.Message
 	Status   *protocol.TransactionStatus
 	Produced []*url.TxID
@@ -162,20 +203,35 @@ type predicateModifier func(statusPredicate) statusPredicate
 type condition struct {
 	predicate  statusPredicate
 	lastResult *msgResult
+	capture    **protocol.TransactionStatus
 	message    []string
+	prodMsg    *string
 }
 
 func (c *condition) String() string {
 	return strings.Join(c.message, " ")
 }
 
+func (c *condition) messageReplaceEnd(s string) string {
+	t := strings.Join(c.message[:len(c.message)-1], " ")
+	return t + " " + s
+}
+
 func (c *condition) Satisfied(h *Harness) bool {
+	h.TB.Helper()
 	return c.predicate(h, c, c.lastResult)
 }
 
 func (c *condition) replace(h *Harness, new statusPredicate) bool {
+	h.TB.Helper()
 	c.predicate = new
 	return c.Satisfied(h)
+}
+
+func (c *condition) replaceWith(h *Harness, d *condition) bool {
+	c.message = d.message
+	c.prodMsg = d.prodMsg
+	return c.replace(h, d.predicate)
 }
 
 func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
@@ -200,13 +256,16 @@ func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
 	switch qr := qr.(type) {
 	case *api.SignatureRecord:
 		res.Status, produced = qr.Status, qr.Produced.Records
-		res.Message = &messaging.UserSignature{Signature: qr.Signature}
+		res.Message = &messaging.SignatureMessage{Signature: qr.Signature}
+		res.Type = qr.Signature.Type().String() + " signature"
 	case *api.TransactionRecord:
 		res.Status, produced = qr.Status, qr.Produced.Records
 		if qr.Message != nil {
 			res.Message = qr.Message
+			res.Type = qr.Message.Type().String()
 		} else {
-			res.Message = &messaging.UserTransaction{Transaction: qr.Transaction}
+			res.Message = &messaging.TransactionMessage{Transaction: qr.Transaction}
+			res.Type = qr.Transaction.Body.Type().String() + " transaction"
 		}
 	default:
 		h.TB.Fatalf("Unsupported record type %v", qr.RecordType())
@@ -222,15 +281,6 @@ func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
 	return &res, true
 }
 
-func newMessageCond(id *url.TxID, predicate statusPredicate, message []string) *condition {
-	// parts := make([]string, len(message)+1)
-	// n := copy(parts, message)
-	// h := id.Hash()
-	// parts[n] = fmt.Sprintf("(%x@%s)", h[:4], id.Account())
-
-	return &condition{predicate: waitFor(id)(predicate), message: message}
-}
-
 func waitFor(id *url.TxID) predicateModifier {
 	return func(predicate statusPredicate) statusPredicate {
 		return func(h *Harness, c *condition, _ *msgResult) bool {
@@ -242,6 +292,14 @@ func waitFor(id *url.TxID) predicateModifier {
 			}
 
 			c.lastResult = r
+			if c.capture != nil {
+				*c.capture = r.Status
+			}
+
+			if c.prodMsg != nil {
+				*c.prodMsg = "produced " + r.Type
+				c.prodMsg = nil
+			}
 
 			// Evaluate the predicate (only replace if the status is final)
 			if r.Status.Delivered() {
@@ -274,13 +332,31 @@ func produced(predicate statusPredicate) statusPredicate {
 			h.TB.Fatalf("%v did not produce transactions", r.Status.TxID)
 		}
 
+		nProd := len(c.message) - 2
+		if nProd < 0 || c.message[nProd] != "produced" {
+			nProd = -1
+		}
+
 		conditions := make([]*condition, len(r.Produced))
 		for i, id := range r.Produced {
-			conditions[i] = newMessageCond(id, predicate, c.message)
+			c := &condition{
+				predicate: waitFor(id)(predicate),
+				message:   c.message,
+				capture:   c.capture,
+			}
+			conditions[i] = c
+			if nProd < 0 {
+				continue
+			}
+
+			m := make([]string, len(c.message))
+			copy(m, c.message)
+			c.message = m
+			c.prodMsg = &m[nProd]
 		}
 
 		if len(conditions) == 1 {
-			return c.replace(h, conditions[0].predicate)
+			return c.replaceWith(h, conditions[0])
 		}
 
 		return c.replace(h, func(h *Harness, _ *condition, _ *msgResult) bool {
@@ -295,7 +371,50 @@ func produced(predicate statusPredicate) statusPredicate {
 	}
 }
 
-func produced2(filter func(*msgResult) bool) predicateModifier {
+func producedRecursive(predicate statusPredicate) statusPredicate {
+	var recursive statusPredicate
+	recursive = func(h *Harness, c *condition, r *msgResult) bool {
+		h.TB.Helper()
+
+		conditions := make([]*condition, len(r.Produced)+1)
+		conditions[0] = &condition{
+			predicate:  predicate,
+			message:    c.message,
+			capture:    c.capture,
+			lastResult: r,
+		}
+
+		for i, id := range r.Produced {
+			m := make([]string, len(c.message)+1)
+			n := copy(m, c.message[:len(c.message)-1])
+			m[n] = "produced"
+			m[n+1] = c.message[n]
+			conditions[i+1] = &condition{
+				predicate: waitFor(id)(deliveredThen(recursive)),
+				message:   m,
+				capture:   c.capture,
+				prodMsg:   &m[n],
+			}
+		}
+
+		if len(conditions) == 1 {
+			return c.replaceWith(h, conditions[0])
+		}
+
+		return c.replace(h, func(h *Harness, _ *condition, _ *msgResult) bool {
+			ok := true
+			for _, c := range conditions {
+				if !c.Satisfied(h) {
+					ok = false
+				}
+			}
+			return ok
+		})
+	}
+	return recursive
+}
+
+func producedFiltered(filter func(*msgResult) bool) predicateModifier {
 	return func(predicate statusPredicate) statusPredicate {
 		return func(h *Harness, c *condition, r *msgResult) bool {
 			h.TB.Helper()
@@ -316,6 +435,10 @@ func produced2(filter func(*msgResult) bool) predicateModifier {
 				// Is it the one we want?
 				if !filter(r) {
 					continue
+				}
+
+				if n := len(c.message) - 2; n >= 0 && c.message[n] == "produced" {
+					c.prodMsg = &c.message[n]
 				}
 
 				// Found it, delegate to the predicate
@@ -351,7 +474,7 @@ func isPending(h *Harness, c *condition, r *msgResult) bool {
 		if r.Status.Code == errors.Pending {
 			return true
 		}
-		h.TB.Fatal("Expected transaction to be pending")
+		h.TB.Fatal(c.messageReplaceEnd("is not pending"), "🗴")
 	}
 
 	// Check if the account lists the transaction as pending
@@ -378,7 +501,8 @@ func succeeds(h *Harness, c *condition, r *msgResult) bool {
 
 	// Must be success
 	if r.Status.Failed() {
-		h.TB.Fatal("Expected transaction to succeed")
+		h.TB.Logf("%v\n", r.Status.AsError())
+		h.TB.Fatal(c.messageReplaceEnd("did not succeed"), "🗴")
 	}
 	if h.VerboseConditions {
 		fmt.Println(c, "✔")
@@ -391,7 +515,7 @@ func fails(h *Harness, c *condition, r *msgResult) bool {
 
 	// Must be failure
 	if !r.Status.Failed() {
-		h.TB.Fatal("Expected transaction to fail")
+		h.TB.Fatal(c.messageReplaceEnd("did not fail"), "🗴")
 	}
 	return true
 }
@@ -402,11 +526,12 @@ func failsWithCode(code errors.Status) statusPredicate {
 
 		// Must be failure
 		if !r.Status.Failed() {
-			h.TB.Fatal("Expected transaction to fail")
+			h.TB.Fatal(c.messageReplaceEnd("did not fail"), "🗴")
 		}
 
 		if r.Status.Code != code {
-			h.TB.Fatalf("Expected code %v, got %v", code, r.Status.Code)
+			m := fmt.Sprintf("failed with %v, not %v", r.Status.Code, code)
+			h.TB.Fatal(c.messageReplaceEnd(m), "🗴")
 		}
 		return true
 	}

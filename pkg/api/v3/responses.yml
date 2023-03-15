@@ -1,4 +1,25 @@
-NodeStatus:
+NodeInfo:
+  fields:
+    - name: PeerID
+      type: p2p.PeerID
+      marshal-as: union
+      zero-value: '""'
+    - name: Network
+      type: string
+    - name: Services
+      type: ServiceAddress
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+FindServiceResult:
+  fields:
+    - name: PeerID
+      type: p2p.PeerID
+      marshal-as: union
+      zero-value: '""'
+
+ConsensusStatus:
   fields:
     - name: Ok
       type: bool
@@ -20,7 +41,7 @@ NodeStatus:
       type: protocol.PartitionType
       marshal-as: enum
     - name: Peers
-      type: PeerInfo
+      type: ConsensusPeerInfo
       marshal-as: reference
       pointer: true
       repeatable: true
@@ -43,6 +64,11 @@ NetworkStatus:
       type: protocol.RoutingTable
       marshal-as: reference
       pointer: true
+    - name: ExecutorVersion
+      description: is the active executor version
+      type: protocol.ExecutorVersion
+      marshal-as: enum
+      optional: true
 
 Metrics:
   fields:

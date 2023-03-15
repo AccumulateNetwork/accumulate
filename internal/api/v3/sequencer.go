@@ -55,8 +55,9 @@ func NewSequencer(params SequencerParams) *Sequencer {
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.valKey = params.ValidatorKey
 	s.globals.Store(params.Globals)
-	events.SubscribeAsync(params.EventBus, func(e events.WillChangeGlobals) {
-		s.globals.Store(e.New)
+	events.SubscribeSync(params.EventBus, func(e events.WillChangeGlobals) error {
+		s.globals.Store(e.New.Copy())
+		return nil
 	})
 	return s
 }
@@ -119,11 +120,11 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	r := new(api.TransactionRecord)
 	if globals.ExecutorVersion.V2() {
 		r.Sequence = new(messaging.SequencedMessage)
-		r.Sequence.Message = &messaging.UserTransaction{Transaction: txn}
+		r.Sequence.Message = &messaging.TransactionMessage{Transaction: txn}
 		r.Sequence.Source = s.partition.URL
 		r.Sequence.Destination = dst
 		r.Sequence.Number = num
-		r.Message = &messaging.UserTransaction{Transaction: txn}
+		r.Message = &messaging.TransactionMessage{Transaction: txn}
 
 		h := r.Sequence.Hash()
 		hash = h[:]

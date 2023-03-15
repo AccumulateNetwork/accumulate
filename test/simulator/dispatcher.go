@@ -28,6 +28,10 @@ var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // Submit routes the envelope and adds it to the queue for a partition.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
+	if d.sim.DropDispatchedMessages {
+		return nil
+	}
+
 	partition, err := d.sim.router.RouteAccount(u)
 	if err != nil {
 		return err

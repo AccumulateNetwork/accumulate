@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -51,6 +52,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	txnX := []chain.TransactionExecutor{
 		// User transactions
 		chain.AddCredits{},
+		chain.BurnCredits{},
 		chain.BurnTokens{},
 		chain.CreateDataAccount{},
 		chain.CreateIdentity{},
@@ -62,6 +64,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.IssueTokens{},
 		chain.LockAccount{},
 		chain.SendTokens{},
+		chain.TransferCredits{},
 		chain.UpdateAccountAuth{},
 		chain.UpdateKey{},
 		chain.UpdateKeyPage{},
@@ -77,9 +80,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 
 		// Operator transactions
 		chain.ActivateProtocolVersion{},
-
-		// For testing
-		chain.Placeholder{},
 	}
 
 	switch opts.Describe.NetworkType {
@@ -98,9 +98,6 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		return nil, errors.InternalError.WithFormat("invalid partition type %v", opts.Describe.NetworkType)
 	}
 
-	// This is a no-op in dev
-	txnX = addTestnetExecutors(txnX)
-
 	if opts.BackgroundTaskLauncher == nil {
 		opts.BackgroundTaskLauncher = func(f func()) { go f() }
 	}
@@ -113,6 +110,8 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.db = opts.Database
 	m.mainDispatcher = opts.NewDispatcher()
 	m.isGenesis = false
+
+	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")

@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -184,28 +185,17 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 
 	case status.Initiator.Equal(page.Url):
 		// Update entry by key hash
-		sigs, err := database.GetSignaturesForSigner(txn, page)
+		var msg messaging.MessageWithSignature
+		err = st.batch.Message(tx.Transaction.Header.Initiator).Main().GetAs(&msg)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load signatures: %w", err)
+			return nil, errors.UnknownError.WithFormat("load initiator signature: %w", err)
 		}
 
-		var theSig protocol.KeySignature
-		for _, sig := range sigs {
-			var initiator protocol.Signature
-			var ok bool
-			if !protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator) {
-				continue
-			}
-			theSig, ok = initiator.(protocol.KeySignature)
-			if !ok {
-				return nil, errors.InternalError.WithFormat("invalid initiator: expected key signature, got %v", initiator.Type())
-			}
-			break
+		sig, ok := msg.GetSignature().(protocol.KeySignature)
+		if !ok {
+			return nil, errors.InternalError.WithFormat("invalid initiator: expected key signature, got %v", msg.GetSignature().Type())
 		}
-		if theSig == nil {
-			return nil, errors.InternalError.WithFormat("unable to locate initiator signature")
-		}
-		oldEntry.KeyHash = theSig.GetPublicKeyHash()
+		oldEntry.KeyHash = sig.GetPublicKeyHash()
 
 	default:
 		return nil, errors.InternalError.WithFormat("initiator %v is neither the principal nor a delegate", status.Initiator)

@@ -186,15 +186,18 @@ TransactionType:
   LockAccount:
     value: 0x10
     description: sets a major block height that prevents tokens from being transferred out of a lite token account until that height has been reached
+  BurnCredits:
+    value: 0x11
+    description: burns credits from a credit account
+  TransferCredits:
+    value: 0x12
+    description: transfers credits between credit accounts within the same domain
   UpdateAccountAuth:
     value: 0x15
     description: updates authorization for an account
   UpdateKey:
     value: 0x16
     description: update key for existing keys
-  Placeholder:
-    value: 0x2E
-    description: is a placeholder for some observable change in V2 logic
   ActivateProtocolVersion:
     value: 0x2F
     description: activates a new version of the protocol

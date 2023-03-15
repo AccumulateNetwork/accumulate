@@ -37,16 +37,30 @@ type Options = p2p.Options
 // network to be available and queries it to determine the routing table. Thus
 // New must not be used by the core nodes themselves.
 func New(opts Options) (*Node, error) {
+	if opts.Network == "" {
+		return nil, errors.BadRequest.With("missing network")
+	}
+
 	node, err := p2p.New(opts)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize node: %w", err)
 	}
 
 	// Wait for the directory service
-	node.WaitForService(&api.ServiceAddress{Type: api.ServiceTypeNetwork, Partition: protocol.Directory})
+	dnAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(opts.Network)
+	if err != nil {
+		return nil, err
+	}
+	err = node.WaitForService(context.Background(), dnAddr)
+	if err != nil {
+		return nil, err
+	}
 
 	// Query the network status
-	client := &message.Client{Dialer: node.Dialer()}
+	client := &message.Client{
+		Network: opts.Network,
+		Dialer:  node.Dialer(),
+	}
 	ns, err := client.GetNetInfo(context.Background())
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("query network status: %w", err)
@@ -72,8 +86,8 @@ func (n *Node) Addresses() []multiaddr.Multiaddr { return n.node.Addrs() }
 // will return once the service is registered on the current node or until the
 // node is informed of a peer with the given service. WaitForService will return
 // immediately if the service is already registered or known.
-func (n *Node) WaitForService(sa *api.ServiceAddress) {
-	n.node.WaitForService(sa)
+func (n *Node) WaitForService(ctx context.Context, addr multiaddr.Multiaddr) error {
+	return n.node.WaitForService(ctx, addr)
 }
 
 // RegisterService registers a service handler and registers the service with
@@ -83,6 +97,7 @@ func (n *Node) RegisterService(sa *api.ServiceAddress, handler func(message.Stre
 }
 
 var _ api.NodeService = (*Node)(nil)
+var _ api.ConsensusService = (*Node)(nil)
 var _ api.NetworkService = (*Node)(nil)
 var _ api.MetricsService = (*Node)(nil)
 var _ api.Querier = (*Node)(nil)
@@ -90,9 +105,19 @@ var _ api.Submitter = (*Node)(nil)
 var _ api.Validator = (*Node)(nil)
 var _ api.Faucet = (*Node)(nil)
 
-// NodeStatus implements [api.NodeService.NodeStatus].
-func (n *Node) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
-	return n.client.NodeStatus(ctx, opts)
+// NodeInfo implements [api.NodeService.NodeInfo].
+func (n *Node) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
+	return n.client.NodeInfo(ctx, opts)
+}
+
+// FindService implements [api.NodeService.FindService].
+func (n *Node) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
+	return n.client.FindService(ctx, opts)
+}
+
+// ConsensusStatus implements [api.ConsensusService.ConsensusStatus].
+func (n *Node) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return n.client.ConsensusStatus(ctx, opts)
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].

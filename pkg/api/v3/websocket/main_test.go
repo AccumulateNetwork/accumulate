@@ -23,11 +23,11 @@ import (
 )
 
 func TestNodeService(t *testing.T) {
-	expect := &api.NodeStatus{Ok: true, Version: "asdf", ValidatorKeyHash: [32]byte{1, 2, 3}}
-	s := mocks.NewNodeService(t)
-	s.EXPECT().NodeStatus(mock.Anything, mock.Anything).Return(expect, nil)
-	c := setupTest(t, message.NodeService{NodeService: s})
-	actual, err := c.NodeStatus(context.Background(), api.NodeStatusOptions{NodeID: "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN", Partition: "foo"})
+	expect := &api.ConsensusStatus{Ok: true, Version: "asdf", ValidatorKeyHash: [32]byte{1, 2, 3}}
+	s := mocks.NewConsensusService(t)
+	s.EXPECT().ConsensusStatus(mock.Anything, mock.Anything).Return(expect, nil)
+	c := setupTest(t, message.ConsensusService{ConsensusService: s})
+	actual, err := c.ConsensusStatus(context.Background(), api.ConsensusStatusOptions{NodeID: "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN", Partition: "foo"})
 	require.NoError(t, err)
 	require.True(t, expect.Equal(actual))
 }
@@ -124,7 +124,7 @@ func setupTest(t testing.TB, services ...message.Service) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	p, q := message.DuplexPipeOf[Message](ctx)
 	go handler.handle(p, ctx, cancel)
-	c := newClient(q, logger)
+	c := newClient("foo", q, logger)
 	go func() { <-c.Done(); cancel() }()
 	return c
 }

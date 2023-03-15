@@ -7,8 +7,8 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -22,122 +22,74 @@ func init() {
 // AuthoritySignature processes delegated signatures.
 type AuthoritySignature struct{}
 
-func (AuthoritySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
-	panic("not implemented")
+func (x AuthoritySignature) Validate(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+	// An authority signature must be synthetic, so only do enough validation to
+	// make sure its valid. Properly produced synthetic messages should _always_
+	// be recorded, even if the accounts involved don't exist or are invalid.
+	_, err := x.check(batch, ctx)
+	return nil, errors.UnknownError.Wrap(err)
 }
 
-func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+func (AuthoritySignature) check(batch *database.Batch, ctx *SignatureContext) (*protocol.AuthoritySignature, error) {
 	sig, ok := ctx.signature.(*protocol.AuthoritySignature)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid signature type: expected %v, got %v", protocol.SignatureTypeAuthority, ctx.signature.Type())
 	}
 
+	if sig.Origin == nil {
+		return nil, errors.BadRequest.With("missing origin")
+	}
+	if sig.TxID == nil {
+		return nil, errors.BadRequest.With("missing transaction ID")
+	}
+
+	if !ctx.transaction.Body.Type().IsUser() {
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with an authority signature", ctx.transaction.Body.Type())
+	}
+
 	// An authority signature MUST NOT be submitted directly
 	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
-		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("a non-synthetic message cannot carry an %v signature", ctx.signature.Type())), nil
+		return nil, errors.BadRequest.WithFormat("a non-synthetic message cannot carry an %v signature", ctx.signature.Type())
 	}
 
-	// Make sure the block gets recorded
-	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
+	return sig, nil
+}
 
+func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext) (_ *protocol.TransactionStatus, err error) {
 	batch = batch.Begin(true)
-	defer batch.Discard()
-
-	// If the signature has already been processed, return the stored status
-	hash := sig.Hash()
-	status, err := batch.Transaction(hash).Status().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-
-	if status.Code != 0 {
-		return status, nil //nolint:nilerr // False positive
-	}
-
-	// Initialize the status
-	status.TxID = ctx.message.ID()
-	status.Received = ctx.Block.Index
+	defer func() { commitOrDiscard(batch, &err) }()
 
 	// Check the message for basic validity
-	err = x.check(batch, ctx, sig)
-	var err2 *errors.Error
-	switch {
-	case err == nil:
-		// Process the signature (update the transaction status)
-		if len(sig.Delegator) > 0 {
-			err = x.processDelegated(batch, ctx, sig)
-		} else {
-			err = x.processDirect(batch, ctx, sig)
-		}
-		switch {
-		case err == nil:
-			// Ok
-			status.Code = errors.Delivered
+	sig, err := x.check(batch, ctx)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
-		case errors.As(err, &err2) && err2.Code.IsClientError():
-			// Record the error
-			status.Set(err)
-
-		default:
-			// A system error occurred
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-	case errors.As(err, &err2) && err2.Code.IsClientError():
-		// Record the error
-		status.Set(err)
-
-	default:
-		// A system error occurred
+	// Process the signature (update the transaction status)
+	if len(sig.Delegator) > 0 {
+		err = x.processDelegated(batch, ctx, sig)
+	} else {
+		err = x.processDirect(batch, ctx, sig)
+	}
+	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Once a signature has been included in the block, record the signature and
 	// its status not matter what, unless there is a system error
-	err = batch.Message2(hash).Main().Put(ctx.message)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store signature: %w", err)
-	}
-
-	err = batch.Transaction(hash).Status().Put(status)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store status: %w", err)
-	}
-
-	if status.Failed() || len(sig.Delegator) > 0 {
-		err = batch.Commit()
-		return status, errors.UnknownError.Wrap(err)
+	if len(sig.Delegator) > 0 {
+		return nil, nil
 	}
 
 	// TODO Don't do this unless all authorities are satisfied
 
 	// Process the transaction
-	_, err = ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: ctx.transaction})
+	_, err = ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: ctx.transaction})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	err = batch.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	return status, nil
-}
-
-func (AuthoritySignature) check(batch *database.Batch, ctx *SignatureContext, sig *protocol.AuthoritySignature) error {
-	if sig.Signer == nil {
-		return errors.BadRequest.With("missing signer")
-	}
-	if sig.TxID == nil {
-		return errors.BadRequest.With("missing transaction ID")
-	}
-
-	if !ctx.transaction.Body.Type().IsUser() {
-		return errors.BadRequest.WithFormat("cannot sign a %v transaction with an authority signature", ctx.transaction.Body.Type())
-	}
-
-	return nil
+	return nil, nil
 }
 
 // processDirect processes a direct authority's signature.
@@ -184,9 +136,9 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 	}
 
 	// Verify that the authority is a delegate
-	index, _, ok := signer.EntryByDelegate(sig.Signer)
+	keyIndex, _, ok := signer.EntryByDelegate(sig.Authority)
 	if !ok {
-		return errors.BadRequest.WithFormat("%v is not a delegate of %v", sig.Signer, sig.Delegator[0])
+		return errors.BadRequest.WithFormat("%v is not a delegate of %v", sig.Authority, sig.Delegator[0])
 	}
 
 	// Verify that the delegator can sign this transaction
@@ -197,23 +149,30 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 
 	// Add the signature to the signer's chain
 	hash := ctx.signature.Hash()
-	err = batch.Account(signer.GetUrl()).SignatureChain().Inner().AddHash(hash, false)
+	chain := batch.Account(signer.GetUrl()).SignatureChain().Inner()
+	head, err := chain.Head().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load signature chain head: %w", err)
+	}
+	chainIndex := head.Count
+
+	err = chain.AddHash(hash, false)
 	if err != nil {
 		return errors.UnknownError.WithFormat("add to signature chain: %w", err)
 	}
 
 	// Add the signature to the transaction's signature set
-	set, err := batch.Transaction(ctx.transaction.GetHash()).SignaturesForSigner(signer)
+	err = addSignature(batch, ctx, signer, &database.SignatureSetEntry{
+		KeyIndex:   uint64(keyIndex),
+		ChainIndex: uint64(chainIndex),
+		Version:    signer.GetVersion(),
+		Hash:       ctx.message.Hash(),
+	})
 	if err != nil {
-		return errors.UnknownError.WithFormat("load signatures: %w", err)
+		return errors.UnknownError.Wrap(err)
 	}
 
-	_, err = set.Add(uint64(index), ctx.signature)
-	if err != nil {
-		return errors.UnknownError.WithFormat("add signature: %w", err)
-	}
-
-	// If the signer's authority is satisfied, send the next authority signature
+	// If the signer's authority is satisfied
 	signerAuth := signer.GetAuthority()
 	ok, err = ctx.authorityIsSatisfied(batch, signerAuth)
 	if err != nil {
@@ -223,8 +182,14 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		return nil
 	}
 
+	err = clearActiveSignatures(batch, ctx)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Send the next authority signature
 	auth := &protocol.AuthoritySignature{
-		Signer:    signer.GetUrl(),
+		Origin:    signer.GetUrl(),
 		Authority: signerAuth,
 		Vote:      protocol.VoteTypeAccept,
 		TxID:      ctx.transaction.ID(),
@@ -234,7 +199,7 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 	// TODO Deduplicate
 	ctx.didProduce(
 		auth.RoutingLocation(),
-		&messaging.UserSignature{
+		&messaging.SignatureMessage{
 			Signature: auth,
 			TxID:      ctx.transaction.ID(),
 		},
@@ -293,7 +258,7 @@ func (AuthoritySignature) signerIsAuthorized(batch *database.Batch, ctx *Signatu
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](ctx.Executor, ctx.transaction.Body.Type())
 	if ok {
-		fallback, err := val.SignerIsAuthorized(ctx.Executor, batch, ctx.transaction, &protocol.UnknownSigner{Url: sig.Signer}, md)
+		fallback, err := val.SignerIsAuthorized(ctx.Executor, batch, ctx.transaction, &protocol.UnknownSigner{Url: sig.Origin}, md)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -327,5 +292,5 @@ func (AuthoritySignature) signerIsAuthorized(batch *database.Batch, ctx *Signatu
 
 	// Authorization is enabled => unauthorized
 	// Transaction type forces authorization => unauthorized
-	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", sig.Signer, principal.GetUrl())
+	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", sig.Origin, principal.GetUrl())
 }

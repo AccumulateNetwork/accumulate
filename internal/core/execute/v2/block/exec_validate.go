@@ -18,7 +18,7 @@ import (
 
 // Validate converts the message to a delivery and validates it. Validate
 // returns an error if the message is not a [message.LegacyMessage].
-func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (x *Executor) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
 	// Make sure every transaction is signed
 	err := checkForUnsignedTransactions(messages)
 	if err != nil {
@@ -27,8 +27,8 @@ func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Messag
 
 	// Set up the bundle
 	d := new(bundle)
-	d.BlockV2 = new(BlockV2)
-	d.BlockV2.Executor = (*Executor)(x)
+	d.Block = new(Block)
+	d.Block.Executor = x
 	d.messages = messages
 	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
@@ -48,7 +48,9 @@ func (x *ExecutorV2) Validate(batch *database.Batch, messages []messaging.Messag
 		errCode := errors.Code(err)
 		switch {
 		case err == nil:
-			s.Code = errors.OK
+			if s.Code == 0 {
+				s.Code = errors.OK
+			}
 		case errCode.Success():
 			s.Code = errCode
 		case errCode.IsClientError():
@@ -71,4 +73,18 @@ func (b *bundle) callMessageValidator(batch *database.Batch, ctx *MessageContext
 
 	// Validate the message
 	return x.Validate(batch, ctx)
+}
+
+// callSignatureValidator finds the executor for the signature and calls it.
+func (b *bundle) callSignatureValidator(batch *database.Batch, ctx *SignatureContext) (*protocol.TransactionStatus, error) {
+	// Find the appropriate executor
+	x, ok := b.Executor.signatureExecutors[ctx.Type()]
+	if !ok {
+		return protocol.NewErrorStatus(ctx.message.ID(), errors.BadRequest.WithFormat("unsupported signature type %v", ctx.Type())), nil
+	}
+
+	// Validate the message
+	st, err := x.Validate(batch, ctx)
+	err = errors.UnknownError.Wrap(err)
+	return st, err
 }

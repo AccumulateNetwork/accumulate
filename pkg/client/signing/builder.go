@@ -308,7 +308,7 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 	if s.InitMode == InitWithSimpleHash {
 		txn.Header.Initiator = *(*[32]byte)(sig.Metadata().Hash())
 	} else {
-		init, err := sig.(protocol.InitiatorSignature).Initiator()
+		init, err := sig.(protocol.UserSignature).Initiator()
 		if err != nil {
 			return nil, err
 		}

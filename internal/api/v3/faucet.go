@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -21,7 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// Faucet implements [api.Faucet] for ACME.
+// Faucet implements [api.Faucet].
 //
 // Faucet aggregates faucet transactions and sends them once per block to ensure
 // the correct ordering of signatures. Otherwise, the transactions could be
@@ -30,8 +31,11 @@ import (
 // current batch, which is submitted to the network after receiving a block
 // event.
 type Faucet struct {
-	logger  logging.OptionalLogger
-	account *url.URL
+	logger    logging.OptionalLogger
+	account   *url.URL
+	precision uint64
+	amount    uint64
+	issue     bool
 
 	signingKey      build.Signer
 	signerUrl       *url.URL
@@ -41,6 +45,7 @@ type Faucet struct {
 	context  context.Context
 	cancel   context.CancelFunc
 	mu       *sync.Mutex
+	trigger  chan struct{}
 	envelope *messaging.Envelope
 }
 
@@ -52,6 +57,7 @@ type FaucetParams struct {
 	Submitter api.Submitter
 	Querier   api.Querier
 	Events    api.EventService
+	Amount    uint64
 }
 
 var _ api.Faucet = (*Faucet)(nil)
@@ -67,6 +73,34 @@ func NewFaucet(ctx context.Context, params FaucetParams) (*Faucet, error) {
 	f.signingKey = params.Key
 	f.context, f.cancel = context.WithCancel(ctx)
 	f.mu = new(sync.Mutex)
+	f.trigger = make(chan struct{})
+
+	if params.Amount == 0 {
+		f.amount = 10
+	} else {
+		f.amount = params.Amount
+	}
+
+	// Load the token type
+	q := api.Querier2{Querier: params.Querier}
+	r, err := q.QueryAccount(ctx, f.account, nil)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load account %v: %w", f.account, err)
+	}
+	switch account := r.Account.(type) {
+	case *protocol.TokenIssuer:
+		f.precision = account.Precision
+		f.issue = true
+	case protocol.AccountWithTokens:
+		var issuer *protocol.TokenIssuer
+		_, err = q.QueryAccountAs(ctx, account.GetTokenUrl(), nil, &issuer)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load issuer %v: %w", account.GetTokenUrl(), err)
+		}
+		f.precision = issuer.Precision
+	default:
+		return nil, errors.UnknownError.WithFormat("cannot send tokens from %v (%v)", f.account, account.Type())
+	}
 
 	// Get the key hash
 	pkh, ok := params.Key.Address().GetPublicKeyHash()
@@ -75,7 +109,6 @@ func NewFaucet(ctx context.Context, params FaucetParams) (*Faucet, error) {
 	}
 
 	// Find the signer
-	q := api.Querier2{Querier: params.Querier}
 	results, err := q.SearchForPublicKeyHash(f.context, params.Account, &api.PublicKeyHashSearchQuery{PublicKeyHash: pkh})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("find %x in %v: %w", pkh[:4], params.Account, err)
@@ -96,34 +129,61 @@ func NewFaucet(ctx context.Context, params FaucetParams) (*Faucet, error) {
 		return nil, errors.UnknownError.WithFormat("subscribe: %w", err)
 	}
 
-	// Process events and submit envelopes
+	// Process events
 	go func() {
-		for e := range events {
+		for {
+			var e api.Event
+			select {
+			case <-f.context.Done():
+				return
+
+			case e = <-events:
+			}
+
 			switch e := e.(type) {
 			case *api.ErrorEvent:
 				f.logger.Error("Received an error event", "err", e.Err)
+				continue
 
 			case *api.BlockEvent:
-				// Capture and reset the envelope
-				f.mu.Lock()
-				env := f.envelope
-				f.envelope = nil
-				f.mu.Unlock()
-				if env == nil {
-					continue
-				}
+			}
 
-				// Submit the envelope
-				subs, err := params.Submitter.Submit(f.context, env, api.SubmitOptions{})
-				if err != nil {
-					f.logger.Error("Failed to submit", "err", err)
-				}
-				for _, sub := range subs {
-					if sub.Status.Error == nil {
-						f.logger.Info("Submitted", "submission", sub)
-					} else {
-						f.logger.Error("Submission failed", "err", sub.Status.Error, "submission", sub)
-					}
+			select {
+			case <-f.context.Done():
+				return
+			case f.trigger <- struct{}{}:
+			}
+		}
+	}()
+
+	// Submit envelopes
+	go func() {
+		for {
+			select {
+			case <-f.context.Done():
+				return
+			case <-f.trigger:
+			}
+
+			// Capture and reset the envelope
+			f.mu.Lock()
+			env := f.envelope
+			f.envelope = nil
+			f.mu.Unlock()
+			if env == nil {
+				continue
+			}
+
+			// Submit the envelope
+			subs, err := params.Submitter.Submit(f.context, env, api.SubmitOptions{})
+			if err != nil {
+				f.logger.Error("Failed to submit", "err", err)
+			}
+			for _, sub := range subs {
+				if sub.Status.Error == nil {
+					f.logger.Info("Submitted", "submission", sub)
+				} else {
+					f.logger.Error("Submission failed", "err", sub.Status.Error, "submission", sub)
 				}
 			}
 		}
@@ -142,11 +202,19 @@ func (f *Faucet) Stop() { f.cancel() }
 func (f *Faucet) faucet(account *url.URL) (*url.TxID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	env, err := build.Transaction().
-		For(f.account).
-		SendTokens(10, protocol.AcmePrecisionPower).
-		To(account).
-		SignWith(f.signerUrl).
+
+	b := build.Transaction().For(f.account)
+	if f.issue {
+		b = b.IssueTokens(f.amount, f.precision).
+			To(account).
+			FinishTransaction()
+	} else {
+		b = b.SendTokens(f.amount, f.precision).
+			To(account).
+			FinishTransaction()
+	}
+
+	env, err := b.SignWith(f.signerUrl).
 		Signer(f.signingKey).
 		Version(f.signerVersion).
 		Timestamp(f.signerTimestamp).
@@ -154,6 +222,15 @@ func (f *Faucet) faucet(account *url.URL) (*url.TxID, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Don't wait for more than 2 seconds
+	go func() {
+		time.Sleep(2 * time.Second)
+		select {
+		case f.trigger <- struct{}{}:
+		default:
+		}
+	}()
 
 	// Add the new transaction and signature to the envelope (do not submit)
 	if f.envelope == nil {

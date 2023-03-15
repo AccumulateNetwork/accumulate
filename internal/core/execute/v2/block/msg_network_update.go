@@ -7,7 +7,7 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -47,7 +47,7 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	}
 
 	// Store the transaction
-	err = batch.Message(txn.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: txn})
+	err = batch.Message(txn.ID().Hash()).Main().Put(&messaging.TransactionMessage{Transaction: txn})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
@@ -65,7 +65,7 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	}
 
 	// Execute the transaction
-	st, err := ctx.callMessageExecutor(batch, &messaging.UserTransaction{Transaction: txn})
+	st, err := ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: txn})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

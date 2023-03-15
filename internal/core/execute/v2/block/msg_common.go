@@ -88,7 +88,7 @@ func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 		// without the transaction executor complaining about a user transaction
 		// within a synthetic context.
 		switch m.message.Type() {
-		case messaging.MessageTypeUserSignature,
+		case messaging.MessageTypeSignature,
 			messaging.MessageTypeCreditPayment:
 			return false
 		}
@@ -110,7 +110,7 @@ func getMessageContextAncestor[T any](m *MessageContext) (T, bool) {
 
 		// For the same reasons as MessageContext.isWithin
 		switch m.message.Type() {
-		case messaging.MessageTypeUserSignature,
+		case messaging.MessageTypeSignature,
 			messaging.MessageTypeCreditPayment:
 			var z T
 			return z, false
@@ -229,4 +229,87 @@ func (b *bundle) recordPending(batch *database.Batch, ctx *MessageContext, msg m
 	}
 
 	return status, nil
+}
+
+func commitOrDiscard(batch *database.Batch, err *error) {
+	if *err != nil {
+		batch.Discard()
+		return
+	}
+
+	e := batch.Commit()
+	*err = errors.UnknownError.Skip(1).Wrap(e)
+}
+
+func (m *MessageContext) checkStatus(batch *database.Batch) (*protocol.TransactionStatus, error) {
+	// If the message has already been processed, return its recorded status
+	status, err := batch.Transaction2(m.message.Hash()).Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
+	if status.Delivered() {
+		return status, nil
+	}
+
+	if status.TxID == nil {
+		status.TxID = m.message.ID()
+	}
+
+	if status.Received == 0 {
+		status.Received = m.Block.Index
+	}
+
+	return status, nil
+}
+
+func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *protocol.TransactionStatus, okStatus errors.Status, err error) error {
+	switch {
+	case err == nil:
+		status.Code = okStatus
+
+	case errors.Code(err).IsClientError():
+		status.Set(err)
+
+	default:
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Record the message
+	err = batch.Message(m.message.Hash()).Main().Put(m.message)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store message: %w", err)
+	}
+
+	// If this message was caused by another message, record that
+	if msg, ok := m.message.(messaging.MessageWithCauses); ok {
+		for _, cause := range msg.GetCauses() {
+			err = batch.Message(msg.Hash()).Cause().Add(cause)
+			if err != nil {
+				return errors.UnknownError.WithFormat("add cause: %w", err)
+			}
+		}
+	}
+
+	// If this message produced other messages, record that
+	if msg, ok := m.message.(messaging.MessageWithProduced); ok {
+		for _, produced := range msg.GetProduced() {
+			err = batch.Message(msg.Hash()).Produced().Add(produced)
+			if err != nil {
+				return errors.UnknownError.WithFormat("add produced: %w", err)
+			}
+
+			err = batch.Message(produced.Hash()).Cause().Add(msg.ID())
+			if err != nil {
+				return errors.UnknownError.WithFormat("add cause: %w", err)
+			}
+		}
+	}
+
+	// Record the status
+	err = batch.Transaction2(m.message.Hash()).Status().Put(status)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store status: %w", err)
+	}
+
+	return nil
 }

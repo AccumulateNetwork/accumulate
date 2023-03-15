@@ -96,7 +96,7 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
-	ns, err := m.LocalV3.NodeStatus(ctx, api.NodeStatusOptions{})
+	ns, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -119,7 +119,7 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 }
 
 func (m *JrpcMethods) Version(ctx context.Context, _ json.RawMessage) interface{} {
-	node, err := m.LocalV3.NodeStatus(ctx, api.NodeStatusOptions{})
+	node, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -140,9 +140,11 @@ func (m *JrpcMethods) Describe(ctx context.Context, _ json.RawMessage) interface
 	}
 
 	res := new(DescriptionResponse)
-	res.PartitionId = m.Options.Describe.PartitionId
-	res.NetworkType = m.Options.Describe.NetworkType
-	res.Network = m.Options.Describe.Network
+	if m.Options.Describe != nil {
+		res.PartitionId = m.Options.Describe.PartitionId
+		res.NetworkType = m.Options.Describe.NetworkType
+		res.Network = m.Options.Describe.Network
+	}
 	res.Values.Globals = net.Globals
 	res.Values.Network = net.Network
 	res.Values.Oracle = net.Oracle

@@ -362,6 +362,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(AddCredits), nil
 	case TransactionTypeBlockValidatorAnchor:
 		return new(BlockValidatorAnchor), nil
+	case TransactionTypeBurnCredits:
+		return new(BurnCredits), nil
 	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
@@ -384,8 +386,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeLockAccount:
 		return new(LockAccount), nil
-	case TransactionTypePlaceholder:
-		return new(PlaceholderTransaction), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -406,6 +406,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SystemGenesis), nil
 	case TransactionTypeSystemWriteData:
 		return new(SystemWriteData), nil
+	case TransactionTypeTransferCredits:
+		return new(TransferCredits), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
@@ -450,6 +452,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 			return b == nil
 		}
 		b, ok := b.(*BlockValidatorAnchor)
+		return ok && a.Equal(b)
+	case *BurnCredits:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BurnCredits)
 		return ok && a.Equal(b)
 	case *BurnTokens:
 		if a == nil {
@@ -517,12 +525,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*LockAccount)
 		return ok && a.Equal(b)
-	case *PlaceholderTransaction:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PlaceholderTransaction)
-		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		if a == nil {
 			return b == nil
@@ -583,6 +585,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*SystemWriteData)
 		return ok && a.Equal(b)
+	case *TransferCredits:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*TransferCredits)
+		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
 		if a == nil {
 			return b == nil
@@ -629,6 +637,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 		return v.Copy()
 	case *BlockValidatorAnchor:
 		return v.Copy()
+	case *BurnCredits:
+		return v.Copy()
 	case *BurnTokens:
 		return v.Copy()
 	case *CreateDataAccount:
@@ -651,8 +661,6 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 		return v.Copy()
 	case *LockAccount:
 		return v.Copy()
-	case *PlaceholderTransaction:
-		return v.Copy()
 	case *RemoteTransaction:
 		return v.Copy()
 	case *SendTokens:
@@ -672,6 +680,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *SystemGenesis:
 		return v.Copy()
 	case *SystemWriteData:
+		return v.Copy()
+	case *TransferCredits:
 		return v.Copy()
 	case *UpdateAccountAuth:
 		return v.Copy()

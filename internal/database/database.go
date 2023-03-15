@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,11 +10,13 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/etcd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -26,12 +28,14 @@ type Database struct {
 	store       storage.KeyValueStore
 	logger      log.Logger
 	nextBatchId int64
+	observer    Observer
 }
 
 // New creates a new database using the given key-value store.
 func New(store storage.KeyValueStore, logger log.Logger) *Database {
 	d := new(Database)
 	d.store = store
+	d.observer = unsetObserver{}
 
 	if logger != nil {
 		d.logger = logger.With("module", "database")
@@ -93,6 +97,14 @@ func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 	}
 }
 
+// SetObserver sets the database observer.
+func (d *Database) SetObserver(observer Observer) {
+	if observer == nil {
+		observer = unsetObserver{}
+	}
+	d.observer = observer
+}
+
 // Close closes the database and the key-value store.
 func (d *Database) Close() error {
 	return d.store.Close()
@@ -110,4 +122,14 @@ func (b *Batch) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, erro
 		return nil, err
 	}
 	return chain.Anchor(), nil
+}
+
+type Observer interface {
+	DidChangeAccount(batch *Batch, account *Account) (hash.Hasher, error)
+}
+
+type unsetObserver struct{}
+
+func (unsetObserver) DidChangeAccount(batch *Batch, account *Account) (hash.Hasher, error) {
+	return nil, errors.NotReady.WithFormat("cannot modify account - observer is not set")
 }

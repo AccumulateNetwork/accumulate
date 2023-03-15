@@ -146,6 +146,11 @@ func (app *Accumulator) recover(code *uint32) {
 // willChangeGlobals populates the validator update list, which is passed to
 // Tendermint to update the validator set.
 func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
+	// Don't do anything when the globals are first loaded
+	if e.Old == nil {
+		return nil
+	}
+
 	// Compare the old and new partition definitions
 	updates, err := e.Old.DiffValidators(e.New, app.Accumulate.PartitionId)
 	if err != nil {
@@ -421,9 +426,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	seq := map[[32]byte]uint64{}
 	for _, msg := range messages {
 		switch msg := msg.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			txns[*(*[32]byte)(msg.Transaction.GetHash())] = msg.Transaction.Body.Type()
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			sig, ok := msg.Signature.(*protocol.PartitionSignature)
 			if !ok {
 				continue

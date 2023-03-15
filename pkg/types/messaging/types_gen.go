@@ -62,6 +62,13 @@ type SequencedMessage struct {
 	extraData []byte
 }
 
+type SignatureMessage struct {
+	fieldsSet []bool
+	Signature protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	TxID      *url.TxID          `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	extraData []byte
+}
+
 type SignatureRequest struct {
 	fieldsSet []bool
 	Authority *url.URL  `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
@@ -77,14 +84,7 @@ type SyntheticMessage struct {
 	extraData []byte
 }
 
-type UserSignature struct {
-	fieldsSet []bool
-	Signature protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	TxID      *url.TxID          `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
-	extraData []byte
-}
-
-type UserTransaction struct {
+type TransactionMessage struct {
 	fieldsSet   []bool
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	extraData   []byte
@@ -96,13 +96,13 @@ func (*CreditPayment) Type() MessageType { return MessageTypeCreditPayment }
 
 func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
 
+func (*SignatureMessage) Type() MessageType { return MessageTypeSignature }
+
 func (*SignatureRequest) Type() MessageType { return MessageTypeSignatureRequest }
 
 func (*SyntheticMessage) Type() MessageType { return MessageTypeSynthetic }
 
-func (*UserSignature) Type() MessageType { return MessageTypeUserSignature }
-
-func (*UserTransaction) Type() MessageType { return MessageTypeUserTransaction }
+func (*TransactionMessage) Type() MessageType { return MessageTypeTransaction }
 
 func (v *BlockAnchor) Copy() *BlockAnchor {
 	u := new(BlockAnchor)
@@ -186,6 +186,21 @@ func (v *SequencedMessage) Copy() *SequencedMessage {
 
 func (v *SequencedMessage) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SignatureMessage) Copy() *SignatureMessage {
+	u := new(SignatureMessage)
+
+	if v.Signature != nil {
+		u.Signature = protocol.CopySignature(v.Signature)
+	}
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+
+	return u
+}
+
+func (v *SignatureMessage) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SignatureRequest) Copy() *SignatureRequest {
 	u := new(SignatureRequest)
 
@@ -219,23 +234,8 @@ func (v *SyntheticMessage) Copy() *SyntheticMessage {
 
 func (v *SyntheticMessage) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *UserSignature) Copy() *UserSignature {
-	u := new(UserSignature)
-
-	if v.Signature != nil {
-		u.Signature = protocol.CopySignature(v.Signature)
-	}
-	if v.TxID != nil {
-		u.TxID = v.TxID
-	}
-
-	return u
-}
-
-func (v *UserSignature) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *UserTransaction) Copy() *UserTransaction {
-	u := new(UserTransaction)
+func (v *TransactionMessage) Copy() *TransactionMessage {
+	u := new(TransactionMessage)
 
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
@@ -244,7 +244,7 @@ func (v *UserTransaction) Copy() *UserTransaction {
 	return u
 }
 
-func (v *UserTransaction) CopyAsInterface() interface{} { return v.Copy() }
+func (v *TransactionMessage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockAnchor) Equal(u *BlockAnchor) bool {
 	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
@@ -351,6 +351,22 @@ func (v *SequencedMessage) Equal(u *SequencedMessage) bool {
 	return true
 }
 
+func (v *SignatureMessage) Equal(u *SignatureMessage) bool {
+	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+
+	return true
+}
+
 func (v *SignatureRequest) Equal(u *SignatureRequest) bool {
 	switch {
 	case v.Authority == u.Authority:
@@ -396,23 +412,7 @@ func (v *SyntheticMessage) Equal(u *SyntheticMessage) bool {
 	return true
 }
 
-func (v *UserSignature) Equal(u *UserSignature) bool {
-	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
-		return false
-	}
-	switch {
-	case v.TxID == u.TxID:
-		// equal
-	case v.TxID == nil || u.TxID == nil:
-		return false
-	case !((v.TxID).Equal(u.TxID)):
-		return false
-	}
-
-	return true
-}
-
-func (v *UserTransaction) Equal(u *UserTransaction) bool {
+func (v *TransactionMessage) Equal(u *TransactionMessage) bool {
 	switch {
 	case v.Transaction == u.Transaction:
 		// equal
@@ -671,6 +671,59 @@ func (v *SequencedMessage) IsValid() error {
 	}
 }
 
+var fieldNames_SignatureMessage = []string{
+	1: "Type",
+	2: "Signature",
+	3: "TxID",
+}
+
+func (v *SignatureMessage) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(protocol.EqualSignature(v.Signature, nil)) {
+		writer.WriteValue(2, v.Signature.MarshalBinary)
+	}
+	if !(v.TxID == nil) {
+		writer.WriteTxid(3, v.TxID)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SignatureMessage)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SignatureMessage) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Signature is missing")
+	} else if protocol.EqualSignature(v.Signature, nil) {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SignatureRequest = []string{
 	1: "Type",
 	2: "Authority",
@@ -786,65 +839,12 @@ func (v *SyntheticMessage) IsValid() error {
 	}
 }
 
-var fieldNames_UserSignature = []string{
-	1: "Type",
-	2: "Signature",
-	3: "TxID",
-}
-
-func (v *UserSignature) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(protocol.EqualSignature(v.Signature, nil)) {
-		writer.WriteValue(2, v.Signature.MarshalBinary)
-	}
-	if !(v.TxID == nil) {
-		writer.WriteTxid(3, v.TxID)
-	}
-
-	_, _, err := writer.Reset(fieldNames_UserSignature)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *UserSignature) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Signature is missing")
-	} else if protocol.EqualSignature(v.Signature, nil) {
-		errs = append(errs, "field Signature is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field TxID is missing")
-	} else if v.TxID == nil {
-		errs = append(errs, "field TxID is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_UserTransaction = []string{
+var fieldNames_TransactionMessage = []string{
 	1: "Type",
 	2: "Transaction",
 }
 
-func (v *UserTransaction) MarshalBinary() ([]byte, error) {
+func (v *TransactionMessage) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -853,7 +853,7 @@ func (v *UserTransaction) MarshalBinary() ([]byte, error) {
 		writer.WriteValue(2, v.Transaction.MarshalBinary)
 	}
 
-	_, _, err := writer.Reset(fieldNames_UserTransaction)
+	_, _, err := writer.Reset(fieldNames_TransactionMessage)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -861,7 +861,7 @@ func (v *UserTransaction) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *UserTransaction) IsValid() error {
+func (v *TransactionMessage) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -1078,6 +1078,48 @@ func (v *SequencedMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *SignatureMessage) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SignatureMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SignatureMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := protocol.UnmarshalSignatureFrom(r)
+		if err == nil {
+			v.Signature = x
+		}
+		return err
+	})
+	if x, ok := reader.ReadTxid(3); ok {
+		v.TxID = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SignatureMessage)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SignatureRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1161,11 +1203,11 @@ func (v *SyntheticMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func (v *UserSignature) UnmarshalBinary(data []byte) error {
+func (v *TransactionMessage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *UserSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *TransactionMessage) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	var vType MessageType
@@ -1179,54 +1221,12 @@ func (v *UserSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	return v.UnmarshalFieldsFrom(reader)
 }
 
-func (v *UserSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	reader.ReadValue(2, func(r io.Reader) error {
-		x, err := protocol.UnmarshalSignatureFrom(r)
-		if err == nil {
-			v.Signature = x
-		}
-		return err
-	})
-	if x, ok := reader.ReadTxid(3); ok {
-		v.TxID = x
-	}
-
-	seen, err := reader.Reset(fieldNames_UserSignature)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *UserTransaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *UserTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType MessageType
-	if x := new(MessageType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-
-	return v.UnmarshalFieldsFrom(reader)
-}
-
-func (v *UserTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+func (v *TransactionMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
 
-	seen, err := reader.Reset(fieldNames_UserTransaction)
+	seen, err := reader.Reset(fieldNames_TransactionMessage)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1328,6 +1328,22 @@ func (v *SequencedMessage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SignatureMessage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType                                     `json:"type"`
+		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		TxID      *url.TxID                                       `json:"txID,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(protocol.EqualSignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	}
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
+	}
+	return json.Marshal(&u)
+}
+
 func (v *SignatureRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      MessageType `json:"type"`
@@ -1364,23 +1380,7 @@ func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *UserSignature) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type      MessageType                                     `json:"type"`
-		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		TxID      *url.TxID                                       `json:"txID,omitempty"`
-	}{}
-	u.Type = v.Type()
-	if !(protocol.EqualSignature(v.Signature, nil)) {
-		u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	}
-	if !(v.TxID == nil) {
-		u.TxID = v.TxID
-	}
-	return json.Marshal(&u)
-}
-
-func (v *UserTransaction) MarshalJSON() ([]byte, error) {
+func (v *TransactionMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type        MessageType           `json:"type"`
 		Transaction *protocol.Transaction `json:"transaction,omitempty"`
@@ -1461,9 +1461,11 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	if x, err := encoding.BytesFromJSON(u.TxHash); err != nil {
 		return fmt.Errorf("error decoding TxHash: %w", err)
@@ -1471,9 +1473,11 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 		v.TxHash = x
 	}
 	v.Transaction = u.Transaction
-	v.Messages = make([]Message, len(u.Messages.Value))
-	for i, x := range u.Messages.Value {
-		v.Messages[i] = x
+	if u.Messages != nil {
+		v.Messages = make([]Message, len(u.Messages.Value))
+		for i, x := range u.Messages.Value {
+			v.Messages[i] = x
+		}
 	}
 	return nil
 }
@@ -1504,6 +1508,29 @@ func (v *SequencedMessage) UnmarshalJSON(data []byte) error {
 	v.Source = u.Source
 	v.Destination = u.Destination
 	v.Number = u.Number
+	return nil
+}
+
+func (v *SignatureMessage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType                                     `json:"type"`
+		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		TxID      *url.TxID                                       `json:"txID,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	u.TxID = v.TxID
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
+
+	v.TxID = u.TxID
 	return nil
 }
 
@@ -1553,30 +1580,7 @@ func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *UserSignature) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type      MessageType                                     `json:"type"`
-		Signature *encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		TxID      *url.TxID                                       `json:"txID,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Signature = &encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.TxID = v.TxID
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	if u.Signature != nil {
-		v.Signature = u.Signature.Value
-	}
-
-	v.TxID = u.TxID
-	return nil
-}
-
-func (v *UserTransaction) UnmarshalJSON(data []byte) error {
+func (v *TransactionMessage) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type        MessageType           `json:"type"`
 		Transaction *protocol.Transaction `json:"transaction,omitempty"`

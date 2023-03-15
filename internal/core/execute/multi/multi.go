@@ -53,7 +53,7 @@ func NewExecutor(opts Options) (Executor, error) {
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("create v2 executor: %w", err)
 		}
-		return (*v2.ExecutorV2)(exec), nil
+		return exec, nil
 	}
 
 	exec, err := v1.NewNodeExecutor(opts)
@@ -110,7 +110,7 @@ func (m *Multi) updateActive() error {
 		return errors.UnknownError.WithFormat("create v2 executor: %w", err)
 	}
 
-	m.setActive((*v2.ExecutorV2)(exec))
+	m.setActive(exec)
 	return nil
 }
 
@@ -168,10 +168,25 @@ type multiBlock struct {
 func (b *multiBlock) Close() (BlockState, error) {
 	s, err := b.Block.Close()
 	if err != nil {
-		return s, err
+		return nil, err
+	}
+	return &multiBlockState{multi: b.multi, BlockState: s}, nil
+}
+
+type multiBlockState struct {
+	multi *Multi
+	BlockState
+}
+
+func (b *multiBlockState) Commit() error {
+	err := b.BlockState.Commit()
+	if err != nil {
+		return err
 	}
 
-	// Change the active executor implementation at the end of the block
+	// Change the active executor implementation at the end of the block. This
+	// must be done after commit; otherwise changes made in this block will not
+	// be visible to the new executor.
 	err = b.multi.updateActive()
-	return s, errors.UnknownError.Wrap(err)
+	return errors.UnknownError.Wrap(err)
 }

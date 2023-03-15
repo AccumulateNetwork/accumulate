@@ -232,7 +232,7 @@ AuthoritySignature:
   union: { type: signature }
   description: is a signature produced by an authority
   fields:
-    - name: Signer
+    - name: Origin
       description: is the signer that produced this signature
       type: url
       pointer: true

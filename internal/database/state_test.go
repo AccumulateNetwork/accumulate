@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -27,7 +28,7 @@ var delivered = (*protocol.TransactionStatus).Delivered
 func TestState(t *testing.T) {
 	// Create some state
 	sim := simulator.New(t, 1)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1})
 	alice := acctesting.GenerateTmKey(t.Name(), "Alice")
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 	faucet := protocol.Faucet.Signer()
@@ -59,8 +60,14 @@ func TestState(t *testing.T) {
 	_, err = f.Seek(0, io.SeekStart)
 	require.NoError(t, err)
 
+	hashes := acctesting.VisitorObserver{}
+	require.NoError(t, snapshot.Visit(f, hashes))
+	_, err = f.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
 	// Load the file into a new database
 	db := database.OpenInMemory(nil)
+	db.SetObserver(hashes)
 	require.NoError(t, db.Update(func(b *database.Batch) error {
 		return snapshot.FullRestore(b, f, nil, &bvn.Executor.Describe)
 	}))
@@ -78,6 +85,7 @@ func TestState(t *testing.T) {
 func TestVersion(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
 	db := database.OpenInMemory(logger)
+	db.SetObserver(acctesting.NullObserver{})
 
 	foo := protocol.AccountUrl("foo")
 	get := func(batch *database.Batch) (a *protocol.UnknownSigner) {

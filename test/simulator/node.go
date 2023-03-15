@@ -8,8 +8,6 @@ package simulator
 
 import (
 	"bytes"
-	"context"
-	"crypto/sha256"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -18,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -32,7 +29,6 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -40,6 +36,7 @@ import (
 type Node struct {
 	id         int
 	init       *accumulated.NodeInit
+	simulator  *Simulator
 	partition  *Partition
 	logger     logging.OptionalLogger
 	eventBus   *events.Bus
@@ -62,6 +59,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n := new(Node)
 	n.id = node
 	n.init = init
+	n.simulator = s
 	n.partition = p
 	n.logger.Set(p.logger, "node", node)
 	n.eventBus = events.NewBus(n.logger)
@@ -169,6 +167,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 func (n *Node) Begin(writable bool) *database.Batch         { return n.database.Begin(writable) }
 func (n *Node) Update(fn func(*database.Batch) error) error { return n.database.Update(fn) }
 func (n *Node) View(fn func(*database.Batch) error) error   { return n.database.View(fn) }
+func (n *Node) SetObserver(observer database.Observer)      { n.database.SetObserver(observer) }
 
 func (n *Node) willChangeGlobals(e events.WillChangeGlobals) error {
 	n.globals.Store(e.New)
@@ -301,108 +300,4 @@ func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 	batch := n.database.Begin(false)
 	defer batch.Discard()
 	return batch.BptRoot(), nil
-}
-
-// nodeService implements API v3.
-type nodeService Node
-
-// Private returns the private sequencer service.
-func (s *nodeService) Private() private.Sequencer { return s.seqSvc }
-
-// NodeStatus implements [api.NodeService].
-func (s *nodeService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
-	return &api.NodeStatus{
-		Ok: true,
-		LastBlock: &api.LastBlock{
-			Height: int64(s.partition.blockIndex),
-			Time:   s.partition.blockTime,
-			// TODO: chain root, state root
-		},
-		NodeKeyHash:      sha256.Sum256(s.nodeKey[32:]),
-		ValidatorKeyHash: sha256.Sum256(s.privValKey[32:]),
-		PartitionID:      s.partition.ID,
-		PartitionType:    s.partition.Type,
-	}, nil
-}
-
-// NetworkStatus implements [api.NetworkService].
-func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
-	v, ok := s.globals.Load().(*core.GlobalValues)
-	if !ok {
-		return nil, errors.NotReady
-	}
-	return &api.NetworkStatus{
-		Oracle:  v.Oracle,
-		Network: v.Network,
-		Globals: v.Globals,
-		Routing: v.Routing,
-	}, nil
-}
-
-// Metrics implements [api.MetricsService].
-func (s *nodeService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
-	return nil, errors.NotAllowed
-}
-
-// Query implements [api.Querier].
-func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
-	// Copy to avoid changing the caller's values
-	query = api.CopyQuery(query)
-
-	r, err := s.querySvc.Query(ctx, scope, query)
-	if err != nil {
-		return nil, err
-	}
-
-	// Force despecialization of generic types
-	b, err := r.MarshalBinary()
-	if err != nil {
-		return nil, errors.InternalError.Wrap(err)
-	}
-	r, err = api.UnmarshalRecord(b)
-	if err != nil {
-		return nil, errors.InternalError.Wrap(err)
-	}
-	return r, nil
-}
-
-// Submit implements [api.Submitter].
-func (s *nodeService) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
-	return s.submit(envelope, false)
-}
-
-// Validate implements [api.Validator].
-func (s *nodeService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
-	return s.submit(envelope, true)
-}
-
-// Subscribe implements [api.EventService].
-func (s *nodeService) Subscribe(ctx context.Context, opts api.SubscribeOptions) (<-chan api.Event, error) {
-	return s.eventSvc.Subscribe(ctx, opts)
-}
-
-func (s *nodeService) submit(envelope *messaging.Envelope, pretend bool) ([]*api.Submission, error) {
-	// Convert the envelope to deliveries
-	deliveries, err := envelope.Normalize()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	st, err := s.partition.Submit(deliveries, pretend)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	subs := make([]*api.Submission, len(st))
-	for i, st := range st {
-		// Create an api.Submission
-		subs[i] = new(api.Submission)
-		subs[i].Status = st
-		subs[i].Success = st.Code.Success()
-		if st.Error != nil {
-			subs[i].Message = st.Error.Message
-		}
-	}
-
-	return subs, nil
 }

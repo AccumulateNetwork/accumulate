@@ -49,8 +49,9 @@ func TestExecuteCheckOnly(t *testing.T) {
 		j, err := NewJrpc(Options{NetV3: v3, LocalV3: v3})
 		require.NoError(t, err)
 
+		txid := protocol.AccountUrl("foo").WithTxID([32]byte{1})
 		v3.EXPECT().Validate(mock.Anything, mock.Anything, mock.Anything).Return([]*api.Submission{{
-			Status:  new(protocol.TransactionStatus),
+			Status:  &protocol.TransactionStatus{TxID: txid},
 			Success: true,
 		}}, nil)
 
@@ -69,8 +70,9 @@ func TestExecuteCheckOnly(t *testing.T) {
 		j, err := NewJrpc(Options{NetV3: v3, LocalV3: v3})
 		require.NoError(t, err)
 
+		txid := protocol.AccountUrl("foo").WithTxID([32]byte{1})
 		v3.EXPECT().Submit(mock.Anything, mock.Anything, mock.Anything).Return([]*api.Submission{{
-			Status:  new(protocol.TransactionStatus),
+			Status:  &protocol.TransactionStatus{TxID: txid},
 			Success: true,
 		}}, nil)
 
