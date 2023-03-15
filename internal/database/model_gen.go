@@ -216,6 +216,27 @@ func (c *Batch) dirtyChains() []*MerkleManager {
 	return chains
 }
 
+func (c *Batch) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	for _, v := range c.account {
+		walkChanges(&err, v, fn)
+	}
+	for _, v := range c.message {
+		walkChanges(&err, v, fn)
+	}
+	for _, v := range c.transaction {
+		walkChanges(&err, v, fn)
+	}
+	for _, v := range c.systemData {
+		walkChanges(&err, v, fn)
+	}
+	return err
+}
+
 func (c *Batch) baseCommit() error {
 	if c == nil {
 		return nil
@@ -584,6 +605,38 @@ func (c *Account) dirtyChains() []*MerkleManager {
 	return chains
 }
 
+func (c *Account) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	walkChanges(&err, c.url, fn)
+	walkChanges(&err, c.main, fn)
+	walkChanges(&err, c.pending, fn)
+	for _, v := range c.syntheticForAnchor {
+		walkChanges(&err, v, fn)
+	}
+	walkChanges(&err, c.directory, fn)
+	for _, v := range c.transaction {
+		walkChanges(&err, v, fn)
+	}
+	walkChanges(&err, c.mainChain, fn)
+	walkChanges(&err, c.scratchChain, fn)
+	walkChanges(&err, c.signatureChain, fn)
+	walkChanges(&err, c.rootChain, fn)
+	walkChanges(&err, c.anchorSequenceChain, fn)
+	walkChanges(&err, c.majorBlockChain, fn)
+	for _, v := range c.syntheticSequenceChain {
+		walkChanges(&err, v, fn)
+	}
+	for _, v := range c.anchorChain {
+		walkChanges(&err, v, fn)
+	}
+	walkChanges(&err, c.data, fn)
+	return err
+}
+
 func (c *Account) baseCommit() error {
 	if c == nil {
 		return nil
@@ -708,6 +761,19 @@ func (c *AccountTransaction) IsDirty() bool {
 	return false
 }
 
+func (c *AccountTransaction) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	walkChanges(&err, c.payments, fn)
+	walkChanges(&err, c.votes, fn)
+	walkChanges(&err, c.signatures, fn)
+	walkChanges(&err, c.anchorSignatures, fn)
+	return err
+}
+
 func (c *AccountTransaction) Commit() error {
 	if c == nil {
 		return nil
@@ -787,6 +853,17 @@ func (c *AccountAnchorChain) dirtyChains() []*MerkleManager {
 	chains = append(chains, c.bpt.dirtyChains()...)
 
 	return chains
+}
+
+func (c *AccountAnchorChain) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	walkChanges(&err, c.root, fn)
+	walkChanges(&err, c.bpt, fn)
+	return err
 }
 
 func (c *AccountAnchorChain) Commit() error {
@@ -870,6 +947,15 @@ func (c *AccountData) IsDirty() bool {
 	}
 
 	return false
+}
+
+func (c *AccountData) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	return err
 }
 
 func (c *AccountData) Commit() error {
@@ -961,6 +1047,16 @@ func (c *Message) IsDirty() bool {
 	}
 
 	return false
+}
+
+func (c *Message) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	walkChanges(&err, c.main, fn)
+	return err
 }
 
 func (c *Message) Commit() error {
@@ -1084,6 +1180,21 @@ func (c *Transaction) IsDirty() bool {
 	return false
 }
 
+func (c *Transaction) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	walkChanges(&err, c.main, fn)
+	walkChanges(&err, c.status, fn)
+	walkChanges(&err, c.produced, fn)
+	for _, v := range c.signatures {
+		walkChanges(&err, v, fn)
+	}
+	return err
+}
+
 func (c *Transaction) Commit() error {
 	if c == nil {
 		return nil
@@ -1158,6 +1269,15 @@ func (c *SystemData) IsDirty() bool {
 	}
 
 	return false
+}
+
+func (c *SystemData) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	return err
 }
 
 func (c *SystemData) Commit() error {
@@ -1308,6 +1428,19 @@ func (c *MerkleManager) IsDirty() bool {
 	return false
 }
 
+func (c *MerkleManager) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	walkChanges(&err, c.head, fn)
+	for _, v := range c.states {
+		walkChanges(&err, v, fn)
+	}
+	return err
+}
+
 func (c *MerkleManager) Commit() error {
 	if c == nil {
 		return nil
@@ -1364,4 +1497,13 @@ func commitField[T record.Record](lastErr *error, field T) {
 func fieldIsDirty[T record.Record](field T) bool {
 	var z T
 	return any(field) != any(z) && field.IsDirty()
+}
+
+func walkChanges[T record.Record](lastErr *error, field T, fn record.WalkFunc) {
+	var z T
+	if *lastErr != nil || any(field) == any(z) {
+		return
+	}
+
+	*lastErr = field.WalkChanges(fn)
 }
