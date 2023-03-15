@@ -76,6 +76,18 @@ func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.
 	signerUrl := ctx.getSigner()
 	set := batch.Account(signerUrl).Transaction(ctx.transaction.ID().Hash()).Signatures()
 
+	// Add the signature to the signer's chain
+	chain := batch.Account(signer.GetUrl()).SignatureChain()
+	head, err := chain.Head().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load chain: %w", err)
+	}
+	entry.ChainIndex = uint64(head.Count)
+	err = chain.Inner().AddHash(ctx.signature.Hash(), false)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store chain: %w", err)
+	}
+
 	// Grab the version from an entry
 	all, err := set.Active().Get()
 	if err != nil {

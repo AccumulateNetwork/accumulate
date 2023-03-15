@@ -76,43 +76,30 @@ func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (_ *p
 	if err == nil {
 		err = x.record(batch, ctx, pay)
 	}
-	if err == nil {
-		_, err = ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: txn})
-	}
 
 	// Record the message and its status
 	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	if !status.Code.Success() {
+		return status, nil
+	}
 
-	return status, nil
+	_, err = ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: txn})
+	return status, errors.UnknownError.Wrap(err)
 }
 
 func (CreditPayment) record(batch *database.Batch, ctx *MessageContext, pay *messaging.CreditPayment) error {
-	// TODO Record payment
-
-	// Record the initiator on the transaction status
-	if !pay.Initiator {
-		return nil
-	}
-
-	status, err := batch.Transaction2(pay.TxID.Hash()).Status().Get()
+	// Add the message to the signature chain
+	h := ctx.message.Hash()
+	err := batch.Account(pay.TxID.Account()).SignatureChain().Inner().AddHash(h[:], false)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load status: %w", err)
-	}
-	if err != nil {
-		return errors.UnknownError.WithFormat("load transaction status: %w", err)
-	}
-	if status.Initiator == nil {
-		status.Initiator = pay.Payer
-		err = batch.Transaction2(pay.TxID.Hash()).Status().Put(status)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store transaction status: %w", err)
-		}
-	} else if !status.Initiator.Equal(pay.Payer) {
-		return errors.Conflict.WithFormat("conflicting initiator for %v", pay.TxID)
+		return errors.UnknownError.WithFormat("add to signature chain: %w", err)
 	}
 
-	return nil
+	return batch.Account(pay.TxID.Account()).
+		Transaction(pay.TxID.Hash()).
+		Payments().
+		Add(pay.Hash())
 }

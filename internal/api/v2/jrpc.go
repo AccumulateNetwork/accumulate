@@ -40,7 +40,13 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 		m.logger = opts.Logger.With("module", "jrpc")
 	}
 
-	if opts.LocalV3 == nil || opts.NetV3 == nil {
+	if opts.LocalV3 == nil ||
+		opts.Querier == nil ||
+		opts.Submitter == nil ||
+		opts.Network == nil ||
+		opts.Faucet == nil ||
+		opts.Validator == nil ||
+		opts.Sequencer == nil {
 		return nil, errors.BadRequest.With("missing P2P clients")
 	}
 

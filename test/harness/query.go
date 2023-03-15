@@ -37,6 +37,11 @@ func (h *Harness) Query() api.Querier2 {
 	return api.Querier2{Querier: h.services}
 }
 
+// Network returns the Harness's service as an api.NetworkService.
+func (h *Harness) Network() api.NetworkService {
+	return h.services
+}
+
 // QueryAccount queries the Harness's service, passing the given arguments.
 // QueryAccount fails if Query returns an error. See api.Querier2.QueryAccount.
 func (h *Harness) QueryAccount(scope *url.URL, query *api.DefaultQuery) *api.AccountRecord {
@@ -327,9 +332,9 @@ func (h *Harness) SearchForDelegate(scope *url.URL, search *api.DelegateSearchQu
 // SearchForTransactionHash queries the Harness's service, passing the given
 // arguments. SearchForTransactionHash fails if Query returns an error. See
 // api.Querier2.SearchForTransactionHash.
-func (h *Harness) SearchForTransactionHash(scope *url.URL, search *api.MessageHashSearchQuery) *api.RecordRange[*api.TxIDRecord] {
+func (h *Harness) SearchForMessage(ctx context.Context, hash [32]byte) *api.RecordRange[*api.TxIDRecord] {
 	h.TB.Helper()
-	r, err := h.Query().SearchForTransactionHash(context.Background(), scope, search)
+	r, err := h.Query().SearchForMessage(context.Background(), hash)
 	require.NoError(h.TB, err)
 	return r
 }

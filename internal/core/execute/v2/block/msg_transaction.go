@@ -100,7 +100,7 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		}
 	}
 
-	st := chain.NewStateManager(&ctx.Executor.Describe, &ctx.Executor.globals.Active, batch.Begin(false), principal, txn.Transaction, ctx.Executor.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(&ctx.Executor.Describe, &ctx.Executor.globals.Active, ctx.Executor, batch.Begin(false), principal, txn.Transaction, ctx.Executor.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 	st.Pretend = true
 
@@ -320,9 +320,9 @@ func (TransactionMessage) getSequence(ctx *MessageContext) (*messaging.Sequenced
 	return seq, nil
 }
 
-func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *TransactionContext) (*protocol.TransactionStatus, error) {
+func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *TransactionContext) (_ *protocol.TransactionStatus, err error) {
 	batch = batch.Begin(true)
-	defer batch.Discard()
+	defer func() { commitOrDiscard(batch, &err) }()
 
 	// Record when the transaction is received
 	status, err := batch.Transaction(ctx.transaction.GetHash()).Status().Get()
@@ -360,11 +360,6 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		return nil, err
 	}
 
-	err = batch.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("commit batch: %w", err)
-	}
-
 	kv := []interface{}{
 		"block", ctx.Block.Index,
 		"type", ctx.transaction.Body.Type(),
@@ -397,6 +392,37 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 			fn("Additional transaction succeeded", kv...)
 		} else {
 			fn("Transaction succeeded", kv...)
+		}
+	}
+
+	// Calculate refunds
+	var swos []protocol.SynthTxnWithOrigin
+	for _, newTxn := range state.ProducedTxns {
+		if swo, ok := newTxn.Body.(protocol.SynthTxnWithOrigin); ok {
+			swos = append(swos, swo)
+		}
+	}
+
+	if len(swos) > 0 {
+		err = ctx.Executor.setSyntheticOrigin(batch, ctx.transaction, swos)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// Clear votes and payments
+	if status.Delivered() {
+		txn := batch.Account(delivery.Transaction.Header.Principal).
+			Transaction(delivery.Transaction.ID().Hash())
+
+		err = txn.Payments().Put(nil)
+		if err != nil {
+			return nil, err
+		}
+
+		err = txn.Votes().Put(nil)
+		if err != nil {
+			return nil, err
 		}
 	}
 

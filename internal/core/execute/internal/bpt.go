@@ -7,12 +7,13 @@
 package internal
 
 import (
-	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type databaseObserver struct{}
@@ -42,12 +43,23 @@ func (a *observedAccount) hashState() (hash.Hasher, error) {
 	hashState(&err, &hasher, true, a.Main().Get)          // Add a simple hash of the main state
 	hashState(&err, &hasher, false, a.hashSecondaryState) // Add a merkle hash of the Secondary State which is a list of accounts contained by the adi
 	hashState(&err, &hasher, false, a.hashChains)         // Add a merkle hash of chains
-	hashState(&err, &hasher, false, a.hashTransactions)   // Add a merkle hash of transactions
+	hashState(&err, &hasher, false, a.hashPending)        // Add a merkle hash of transactions
 	return hasher, err
 }
 
-// hashChains returns a merkle hash of the DAG root of every chain in alphabetic
-// order.
+func (a *observedAccount) hashSecondaryState() (hash.Hasher, error) {
+	var err error
+	var hasher hash.Hasher
+	for _, u := range loadState(&err, false, a.Directory().Get) {
+		hasher.AddUrl(u)
+	}
+	// Hash the hash to allow for future expansion
+	dirHash := hasher.MerkleHash()
+	return hash.Hasher{dirHash}, err
+}
+
+// hashChains returns a merkle hash of the DAG root of every chain in
+// alphabetical order.
 func (a *observedAccount) hashChains() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
@@ -66,40 +78,64 @@ func (a *observedAccount) hashChains() (hash.Hasher, error) {
 	return hasher, err
 }
 
-// hashTransactions returns a merkle hash of the transaction hash and status of
+// hashPending returns a merkle hash of the transaction hash and status of
 // every pending transaction and every synthetic transaction waiting for an
 // anchor.
-func (a *observedAccount) hashTransactions() (hash.Hasher, error) {
+func (a *observedAccount) hashPending() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
+
 	for _, txid := range loadState(&err, false, a.Pending().Get) {
-		h := txid.Hash()
-		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetState)
-		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetStatus)
+		// V1 BPT logic for pending transactions
+		v1 := a.batch.Transaction2(txid.Hash())
+		isV1 := loadState(&err, true, v1.Main().Get) != nil
+		if isV1 {
+			hashState(&err, &hasher, false, v1.GetState)
+			hashState(&err, &hasher, false, v1.GetStatus)
+		}
+
+		// V2 BPT logic for pending transactions
+		if !isV1 {
+			// If the transaction is not a V1 transaction, add its hash directly
+			hasher.AddTxID(txid)
+		}
+		a.hashPendingV2(&err, &hasher, txid)
 	}
 
-	// // TODO Include this
-	// for _, anchor := range loadState(&err, false, a.SyntheticAnchors().Get) {
-	// 	hasher.AddHash(&anchor) //nolint:rangevarref
-	// 	for _, txid := range loadState(&err, false, a.SyntheticForAnchor(anchor).Get) {
-	// 		h := txid.Hash()
-	// 		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetState)
-	// 		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetStatus)
-	// 	}
-	// }
+	// If the account is a page, look on the book for pending transactions
+	page, ok := loadState(&err, true, a.Main().Get).(*protocol.KeyPage)
+	if !ok {
+		return hasher, err
+	}
+	for _, txid := range loadState(&err, false, a.batch.Account(page.GetAuthority()).Pending().Get) {
+		a.hashPendingV2(&err, &hasher, txid)
+	}
 
 	return hasher, err
 }
 
-func (a *observedAccount) hashSecondaryState() (hash.Hasher, error) {
-	var err error
-	var hasher hash.Hasher
-	for _, u := range loadState(&err, false, a.Directory().Get) {
-		hasher.AddUrl(u)
+func (a *observedAccount) hashPendingV2(err *error, hasher *hash.Hasher, txid *url.TxID) {
+	txn := a.Transaction(txid.Hash())
+
+	// Anchor signatures
+	for _, sig := range loadState(err, true, txn.AnchorSignatures().Get) {
+		hasher.AddHash((*[32]byte)(sig.Hash()))
 	}
-	// Hash the hash to allow for future expansion
-	dirHash := hasher.MerkleHash()
-	return hash.Hasher{dirHash}, err
+
+	// Credit payments
+	for _, hash := range loadState(err, true, txn.Payments().Get) {
+		hasher.AddHash2(hash)
+	}
+
+	// Authority votes
+	for _, entry := range loadState(err, true, txn.Votes().Get) {
+		hashValue(err, hasher, entry)
+	}
+
+	// Active signatures
+	for _, entry := range loadState(err, true, txn.Signatures().Active().Get) {
+		hashValue(err, hasher, entry)
+	}
 }
 
 func hashState[T any](lastErr *error, hasher *hash.Hasher, allowMissing bool, get func() (T, error)) {
@@ -110,16 +146,20 @@ func hashState[T any](lastErr *error, hasher *hash.Hasher, allowMissing bool, ge
 	v, err := get()
 	switch {
 	case err == nil:
-		// Ok
+		hashValue(lastErr, hasher, v)
 	case allowMissing && errors.Is(err, errors.NotFound):
 		hasher.AddHash(new([32]byte))
-		return
 	default:
 		*lastErr = err
+	}
+}
+
+func hashValue(lastErr *error, hasher *hash.Hasher, v any) {
+	if *lastErr != nil {
 		return
 	}
 
-	switch v := interface{}(v).(type) {
+	switch v := v.(type) {
 	case interface{ MerkleHash() []byte }:
 		hasher.AddValue(v)
 	case interface{ GetHash() []byte }:
@@ -132,7 +172,8 @@ func hashState[T any](lastErr *error, hasher *hash.Hasher, allowMissing bool, ge
 		}
 		hasher.AddBytes(data)
 	default:
-		panic(fmt.Errorf("unhashable type %T", v))
+		h := storage.MakeKey(v)
+		hasher.AddHash2(h)
 	}
 }
 

@@ -68,21 +68,18 @@
       - name: Hash
         type: hash
       attributes:
-      - name: Vote
-        description: records the hash of an authority's signature
+      - name: Payments
+        description: records the hashes of credit payment messages
         type: state
         dataType: hash
-        private: true
-        parameters:
-        - name: Authority
-          type: url
-          pointer: true
-      - name: Voters
+        collection: set
+      - name: Votes
         description: lists authorities that have voted on this transaction
         type: state
-        dataType: url
-        pointer: true
+        dataType: VoteEntry
         collection: set
+        pointer: true
+        comparator: compareVoteEntries
       - name: Signatures
         type: entity
         attributes:
@@ -201,12 +198,12 @@
       union: true
       private: true
     - name: Cause
-      type: state
+      type: index
       dataType: txid
       pointer: true
       collection: set
     - name: Produced
-      type: state
+      type: index
       dataType: txid
       pointer: true
       collection: set
@@ -225,7 +222,7 @@
     attributes:
     - name: Main
       type: state
-      dataType: SigOrTxn # TODO split apart
+      dataType: SigOrTxn
       pointer: true
     - name: Status
       type: state

@@ -381,34 +381,14 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 		return errors.UnknownError.WithFormat("store signer: %w", err)
 	}
 
-	// Add the signature to the signer's chain
-	chain, err := batch.Account(ctx.signer.GetUrl()).SignatureChain().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load chain: %w", err)
-	}
-	chainIndex := chain.Height()
-	err = chain.AddEntry(ctx.signature.Hash(), false)
-	if err != nil {
-		return errors.UnknownError.WithFormat("store chain: %w", err)
-	}
-
 	// Add the signature to the signature set
 	err = addSignature(batch, ctx.SignatureContext, ctx.signer, &database.SignatureSetEntry{
-		KeyIndex:   uint64(ctx.keyIndex),
-		ChainIndex: uint64(chainIndex),
-		Version:    ctx.keySig.GetSignerVersion(),
-		Hash:       ctx.message.Hash(),
+		KeyIndex: uint64(ctx.keyIndex),
+		Version:  ctx.keySig.GetSignerVersion(),
+		Hash:     ctx.message.Hash(),
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
-	}
-
-	// Store the initiator against its metadata hash (for UpdateKey)
-	if protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil) {
-		err = batch.Message(ctx.transaction.Header.Initiator).Main().Put(ctx.message)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store initiator message: %w", err)
-		}
 	}
 
 	return nil
