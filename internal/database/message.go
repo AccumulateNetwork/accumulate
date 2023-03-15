@@ -31,7 +31,6 @@ type messageMain Message
 
 func (m *messageMain) IsDirty() bool                 { return (*Message)(m).getMain().IsDirty() }
 func (m *messageMain) Commit() error                 { return (*Message)(m).getMain().Commit() }
-func (m *messageMain) Key(n int) any                 { return (*Message)(m).getMain().Key(n) }
 func (m *messageMain) Put(v messaging.Message) error { return (*Message)(m).getMain().Put(v) }
 
 func (m *messageMain) Get() (messaging.Message, error) {
@@ -89,4 +88,10 @@ func (m *messageMain) Resolve(key record.Key) (record.Record, record.Key, error)
 		return m, nil, nil
 	}
 	return nil, nil, errors.InternalError.With("bad key for value")
+}
+
+func (m *messageMain) WalkChanges(fn record.WalkFunc) error {
+	var err error
+	walkChanges(&err, m.main, fn)
+	return err
 }

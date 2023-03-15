@@ -44,7 +44,7 @@ func (b *Batch) VisitAccounts(visit func(*Account) error) error {
 	return nil
 }
 
-func (b *Batch) ForEachAccount(fn func(account *Account) error) error {
+func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
 	bpt := pmt.NewBPTManager(b.kvstore)
 	return bpt.Bpt.ForEach(func(key storage.Key, hash [32]byte) error {
 		// Create an Account object
@@ -53,7 +53,7 @@ func (b *Batch) ForEachAccount(fn func(account *Account) error) error {
 			return errors.UnknownError.Wrap(err)
 		}
 
-		return fn(b.Account(u))
+		return fn(b.Account(u), hash)
 	})
 }
 
