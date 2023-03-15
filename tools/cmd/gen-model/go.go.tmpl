@@ -285,6 +285,26 @@ func (c *{{fullName .}}) dirtyChains() []*MerkleManager {
 }
 {{end}}
 
+func (c *{{fullName .}}) WalkChanges(fn func(record.Key, record.Record) error) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	{{- range .Attributes}}
+	{{- if not .Type.IsIndex}}
+	{{- if parameterized .}}
+	for _, v := range c.{{lower .Name}} {
+		walkChanges(&err, v, fn)
+	}
+	{{- else}}
+	walkChanges(&err, c.{{lower .Name}}, fn)
+	{{- end}}
+	{{- end}}
+	{{- end}}
+	return err
+}
+
 func (c *{{fullName .}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	if c == nil {
 		return nil
@@ -351,4 +371,13 @@ func commitField[T record.Record](lastErr *error, field T) {
 func fieldIsDirty[T record.Record](field T) bool {
 	var z T
 	return any(field) != any(z) && field.IsDirty()
+}
+
+func walkChanges[T record.Record](lastErr *error, field T, fn func(record.Key, record.Record) error) {
+	var z T
+	if *lastErr != nil || any(field) == any(z) {
+		return
+	}
+
+	*lastErr = field.WalkChanges(fn)
 }

@@ -213,6 +213,13 @@ func (v *value[T]) Resolve(key Key) (Record, Key, error) {
 	return nil, nil, errors.InternalError.With("bad key for value")
 }
 
+func (v *value[T]) WalkChanges(fn func(Key, Record) error) error {
+	if v.IsDirty() {
+		return fn(v.key, v)
+	}
+	return nil
+}
+
 // GetValue loads the value.
 func (v *value[T]) GetValue() (encoding.BinaryValue, int, error) {
 	_, err := v.Get()

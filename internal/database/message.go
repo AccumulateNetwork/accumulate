@@ -90,3 +90,9 @@ func (m *messageMain) Resolve(key record.Key) (record.Record, record.Key, error)
 	}
 	return nil, nil, errors.InternalError.With("bad key for value")
 }
+
+func (m *messageMain) WalkChanges(fn func(record.Key, record.Record) error) error {
+	var err error
+	walkChanges(&err, m.main, fn)
+	return err
+}

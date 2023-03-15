@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -164,4 +165,8 @@ func (s *BlockStateV1) Commit() error {
 
 func (s *BlockStateV1) Discard() {
 	s.Batch.Discard()
+}
+
+func (s *BlockStateV1) WalkChanges(fn func(record.Key, record.Record) error) error {
+	return s.Batch.WalkChanges(fn)
 }

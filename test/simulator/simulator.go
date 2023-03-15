@@ -280,6 +280,18 @@ func (s *Simulator) SetBlockHook(partition string, fn BlockHookFunc) {
 	s.partitions[partition].SetBlockHook(fn)
 }
 
+func (s *Simulator) SetCommitHookFor(account *url.URL, fn CommitHookFunc) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	s.partitions[partition].SetCommitHook(fn)
+}
+
+func (s *Simulator) SetCommitHook(partition string, fn CommitHookFunc) {
+	s.partitions[partition].SetCommitHook(fn)
+}
+
 func (s *Simulator) Submit(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
 	partition, err := routing.RouteMessages(s.router, messages)
 	if err != nil {

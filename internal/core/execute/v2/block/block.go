@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 )
 
 // Block implements [execute.Block].
@@ -50,4 +51,8 @@ func (s *closedBlock) Commit() error {
 
 func (s *closedBlock) Discard() {
 	s.Batch.Discard()
+}
+
+func (s *closedBlock) WalkChanges(fn func(record.Key, record.Record) error) error {
+	return s.Batch.WalkChanges(fn)
 }

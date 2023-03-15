@@ -19,6 +19,9 @@ type Record interface {
 	IsDirty() bool
 	// Commit writes any modifications to the store.
 	Commit() error
+	// WalkChanges walks the record and calls the function for any changed
+	// values.
+	WalkChanges(fn func(Key, Record) error) error
 }
 
 // Value records a value.
