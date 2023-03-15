@@ -103,6 +103,10 @@ var fieldNames_GlobalValues = []string{
 }
 
 func (v *GlobalValues) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

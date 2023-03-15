@@ -1455,6 +1455,10 @@ var fieldNames_ChainState = []string{
 }
 
 func (v *ChainState) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1521,6 +1525,10 @@ var fieldNames_DataEntryQuery = []string{
 }
 
 func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1566,6 +1574,10 @@ var fieldNames_DataEntryQueryResponse = []string{
 }
 
 func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1634,6 +1646,10 @@ var fieldNames_GeneralReceipt = []string{
 }
 
 func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1716,6 +1732,10 @@ var fieldNames_ResponseDataEntry = []string{
 }
 
 func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1780,6 +1800,10 @@ var fieldNames_ResponseDataEntrySet = []string{
 }
 
 func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1831,6 +1855,10 @@ var fieldNames_ResponseKeyPageIndex = []string{
 }
 
 func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1884,6 +1912,10 @@ var fieldNames_TxReceipt = []string{
 }
 
 func (v *TxReceipt) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

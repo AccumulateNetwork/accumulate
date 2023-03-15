@@ -230,6 +230,11 @@ type Field struct {
 	IsEmbedded bool
 }
 
+func (f *Field) TypeParam() *typegen.TypeParam {
+	p, _ := f.ParentType.ResolveTypeParam(&f.Field)
+	return p
+}
+
 func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }
 func (t *Type) IsBinary() bool     { return !t.NonBinary }
 func (t *Type) IsComparable() bool { return !t.Incomparable }
