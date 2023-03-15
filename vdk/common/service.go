@@ -12,6 +12,7 @@ import (
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/config"
+	"gitlab.com/accumulatenetwork/accumulate/vdk/utils"
 	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/logging"
 )
 
@@ -33,7 +34,7 @@ func NewLogWriter(s service.Service, logFilename, jsonLogFilename string) func(s
 	}
 
 	// Rotate logs on SIGHUP
-	onHUP(func() {
+	utils.OnHUP(func() {
 		if logFile != nil {
 			logFile.Rotate()
 		}
@@ -94,7 +95,7 @@ func NewLogWriter(s service.Service, logFilename, jsonLogFilename string) func(s
 }
 
 func Interrupt(pid int) {
-	interrupt(pid)
+	utils.Interrupt(pid)
 }
 
 type multiWriter []io.Writer

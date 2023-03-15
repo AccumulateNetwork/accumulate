@@ -1,4 +1,4 @@
-package vdk
+package utils
 
 import (
 	"encoding/binary"

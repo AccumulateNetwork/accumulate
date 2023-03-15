@@ -1,4 +1,4 @@
-package vdk
+package node
 
 import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"

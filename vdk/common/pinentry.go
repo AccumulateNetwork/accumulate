@@ -3,7 +3,6 @@ package vdk
 import (
 	"errors"
 	"fmt"
-	"github.com/twpayne/go-pinentry"
 	"io"
 	"os"
 	"runtime/debug"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/howeyc/gopass"
+	"github.com/twpayne/go-pinentry"
 )
 
 var PinEntryMode string
