@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -193,6 +193,9 @@ func (r *Reader) readField(field uint) bool {
 	if r.err != nil {
 		return false
 	}
+	if field == 0 {
+		return r.current == 0 && r.last == 0
+	}
 
 	if field < 1 || field > 32 {
 		r.err = ErrInvalidFieldNumber
@@ -229,6 +232,14 @@ func (r *Reader) ReadHash(n uint) (*[32]byte, bool) {
 		return nil, false
 	}
 	return (*[32]byte)(v), true
+}
+
+func (r *Reader) ReadHash2(n uint) ([32]byte, bool) {
+	v, ok := r.ReadHash(n)
+	if !ok {
+		return [32]byte{}, false
+	}
+	return *v, true
 }
 
 // ReadInt reads the value as a varint-encoded signed integer.

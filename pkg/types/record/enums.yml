@@ -1,0 +1,32 @@
+# Copied from tools/internal/typegen
+typeCode:
+  Unknown:
+    value: 0
+  Int:
+    value: 1
+  Uint:
+    value: 2
+  Bool:
+    value: 3
+  String:
+    value: 4
+  Hash:
+    value: 5
+  Bytes:
+    value: 6
+  Url:
+    value: 7
+  Time:
+    value: 8
+  Duration:
+    value: 9
+  BigInt:
+    value: 10
+  Any:
+    value: 11
+  RawJson:
+    value: 12
+  Float:
+    value: 13
+  Txid:
+    value: 14

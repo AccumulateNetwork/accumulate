@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -45,6 +45,21 @@ func UnmarshalInt(b []byte) (int64, error) {
 	return v, nil
 }
 
+func MarshalBool(v bool) []byte {
+	if v {
+		return MarshalUint(1)
+	}
+	return MarshalUint(0)
+}
+
+func UnmarshalBool(b []byte) (bool, error) {
+	v, err := UnmarshalUint(b)
+	if err != nil {
+		return false, err
+	}
+	return v == 1, nil
+}
+
 func MarshalBytes(v []byte) []byte {
 	b := MarshalUint(uint64(len(v)))
 	return append(b, v...)
@@ -89,6 +104,10 @@ func UnmarshalString(b []byte) (string, error) {
 
 func MarshalHash(v *[32]byte) []byte {
 	return (*v)[:]
+}
+
+func MarshalHash2(v [32]byte) []byte {
+	return v[:]
 }
 
 func UnmarshalHash(b []byte) ([32]byte, error) {
