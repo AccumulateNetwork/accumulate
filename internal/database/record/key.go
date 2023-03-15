@@ -4,30 +4,67 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package bsn
+package record
 
 import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
+	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-type RecordKey record.Key
+// A Key is the key for a record.
+type Key []interface{}
 
-func (k RecordKey) Copy() RecordKey {
-	l := make(RecordKey, len(k))
+// Append creates a child key of this key.
+func (k Key) Append(v ...interface{}) Key {
+	l := make(Key, len(k)+len(v))
+	n := copy(l, k)
+	copy(l[n:], v)
+	return l
+}
+
+// Hash converts the record key to a storage key.
+func (k Key) Hash() storage.Key {
+	return storage.MakeKey(k...)
+}
+
+// String returns a human-readable string for the key.
+func (k Key) String() string {
+	s := make([]string, len(k))
+	for i, v := range k {
+		switch v := v.(type) {
+		case []byte:
+			s[i] = hex.EncodeToString(v)
+		case [32]byte:
+			s[i] = hex.EncodeToString(v[:])
+		default:
+			s[i] = fmt.Sprint(v)
+		}
+	}
+	return strings.Join(s, ".")
+}
+
+// // MarshalJSON is implemented so keys are formatted nicely by zerolog.
+// func (k Key) MarshalJSON() ([]byte, error) {
+// 	return json.Marshal(k.String())
+// }
+
+func (k Key) Copy() Key {
+	l := make(Key, len(k))
 	copy(l, k)
 	return l
 }
 
-func (k RecordKey) Equal(l RecordKey) bool {
+func (k Key) Equal(l Key) bool {
 	if len(k) != len(l) {
 		return false
 	}
@@ -39,46 +76,7 @@ func (k RecordKey) Equal(l RecordKey) bool {
 	return true
 }
 
-func keyPartsEqual(v, u any) bool {
-	switch v := v.(type) {
-	case int64:
-		_, ok := u.(int64)
-		if !ok {
-			return false
-		}
-	case uint64:
-		_, ok := u.(uint64)
-		if !ok {
-			return false
-		}
-	case string:
-		_, ok := u.(string)
-		if !ok {
-			return false
-		}
-	case [32]byte:
-		_, ok := u.([32]byte)
-		if !ok {
-			return false
-		}
-	case *url.URL:
-		u, ok := u.(*url.URL)
-		if !ok {
-			return false
-		}
-		return v.Equal(u)
-	case *url.TxID:
-		u, ok := u.(*url.TxID)
-		if !ok {
-			return false
-		}
-		return v.Equal(u)
-	}
-
-	return v == u
-}
-
-func (k *RecordKey) MarshalBinary() ([]byte, error) {
+func (k *Key) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	_, _ = buf.Write(encoding.MarshalUint(uint64(len(*k))))
 	w := encoding.NewWriter(buf)
@@ -99,11 +97,11 @@ func (k *RecordKey) MarshalBinary() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (k *RecordKey) UnmarshalBinary(b []byte) error {
+func (k *Key) UnmarshalBinary(b []byte) error {
 	return k.UnmarshalBinaryFrom(bytes.NewBuffer(b))
 }
 
-func (k *RecordKey) UnmarshalBinaryFrom(rd io.Reader) error {
+func (k *Key) UnmarshalBinaryFrom(rd io.Reader) error {
 	br, ok := rd.(encoding.BytesReader)
 	if !ok {
 		br = bufio.NewReader(rd)
@@ -111,18 +109,18 @@ func (k *RecordKey) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	n, err := binary.ReadUvarint(br)
 	if err != nil {
-		return errors.UnknownError.WithFormat("decode RecordKey: %w", err)
+		return errors.UnknownError.WithFormat("decode Key: %w", err)
 	}
-	*k = make(RecordKey, n)
+	*k = make(Key, n)
 
 	// This is an abuse but 🤷 it works
 	r := encoding.NewReader(br)
 	for i := uint64(0); i < n; i++ {
 		v, err := binary.ReadUvarint(br)
 		if err != nil {
-			return errors.UnknownError.WithFormat("decode RecordKey: %w", err)
+			return errors.UnknownError.WithFormat("decode Key: %w", err)
 		}
-		p, err := newKeyPart(TypeCode(v))
+		p, err := newKeyPart(typeCode(v))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -132,12 +130,12 @@ func (k *RecordKey) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	_, err = r.Reset(nil)
 	if err != nil {
-		return errors.UnknownError.WithFormat("decode RecordKey: %w", err)
+		return errors.UnknownError.WithFormat("decode Key: %w", err)
 	}
 	return nil
 }
 
-func (k RecordKey) MarshalJSON() ([]byte, error) {
+func (k Key) MarshalJSON() ([]byte, error) {
 	parts := make([]map[string]any, len(k))
 	for i, v := range k {
 		p, err := asKeyPart(v)
@@ -149,14 +147,14 @@ func (k RecordKey) MarshalJSON() ([]byte, error) {
 	return json.Marshal(parts)
 }
 
-func (k *RecordKey) UnmarshalJSON(b []byte) error {
+func (k *Key) UnmarshalJSON(b []byte) error {
 	var parts []map[string]json.RawMessage
 	err := json.Unmarshal(b, &parts)
 	if err != nil {
 		return err
 	}
 
-	*k = make(RecordKey, len(parts))
+	*k = make(Key, len(parts))
 	for i, p := range parts {
 		if len(p) != 1 {
 			return errors.EncodingError.WithFormat("invalid key part: expected { typ: val }, got %v", parts)
@@ -167,7 +165,7 @@ func (k *RecordKey) UnmarshalJSON(b []byte) error {
 		for s, b = range p {
 		}
 
-		typ, ok := TypeCodeByName(s)
+		typ, ok := typeCodeByName(s)
 		if !ok {
 			return errors.EncodingError.WithFormat("%q is not a valid type code", s)
 		}
@@ -179,7 +177,7 @@ func (k *RecordKey) UnmarshalJSON(b []byte) error {
 
 		err = json.Unmarshal(b, &kp)
 		if err != nil {
-			return errors.UnknownError.WithFormat("decode RecordKey: %w", err)
+			return errors.UnknownError.WithFormat("decode Key: %w", err)
 		}
 
 		(*k)[i] = kp.Value()
