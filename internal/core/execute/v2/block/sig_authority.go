@@ -94,11 +94,15 @@ func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext
 
 // processDirect processes a direct authority's signature.
 func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureContext, sig *protocol.AuthoritySignature) error {
-	// Check for a previous vote
 	hash := ctx.signature.Hash()
+	entry := new(database.VoteEntry)
+	entry.Authority = sig.Authority
+	entry.Hash = *(*[32]byte)(hash)
+
+	// Check for a previous vote
 	principal := batch.Account(sig.TxID.Account())
-	vote := principal.Transaction(sig.TxID.Hash()).Vote(sig.Authority)
-	_, err := vote.Get()
+	vote := principal.Transaction(sig.TxID.Hash()).Votes()
+	_, err := vote.Find(entry)
 	switch {
 	case err == nil:
 		return errors.Conflict.WithFormat("%v has already voted on %v", sig.Authority, sig.TxID)
@@ -119,7 +123,7 @@ func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureC
 	}
 
 	// Record the vote
-	err = vote.Put(*(*[32]byte)(hash))
+	err = vote.Add(entry)
 	if err != nil {
 		return errors.UnknownError.With("store vote: %w", err)
 	}
@@ -147,26 +151,11 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Add the signature to the signer's chain
-	hash := ctx.signature.Hash()
-	chain := batch.Account(signer.GetUrl()).SignatureChain().Inner()
-	head, err := chain.Head().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load signature chain head: %w", err)
-	}
-	chainIndex := head.Count
-
-	err = chain.AddHash(hash, false)
-	if err != nil {
-		return errors.UnknownError.WithFormat("add to signature chain: %w", err)
-	}
-
 	// Add the signature to the transaction's signature set
 	err = addSignature(batch, ctx, signer, &database.SignatureSetEntry{
-		KeyIndex:   uint64(keyIndex),
-		ChainIndex: uint64(chainIndex),
-		Version:    signer.GetVersion(),
-		Hash:       ctx.message.Hash(),
+		KeyIndex: uint64(keyIndex),
+		Version:  signer.GetVersion(),
+		Hash:     ctx.message.Hash(),
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)

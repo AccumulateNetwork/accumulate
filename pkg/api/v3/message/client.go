@@ -29,10 +29,6 @@ type Client struct {
 
 	// Router determines the address a message should be routed to.
 	Router Router
-
-	// DisableFanout disables request fanout and response aggregation for
-	// requests such as transaction hash searches.
-	DisableFanout bool
 }
 
 // A Router determines the address a message should be routed to.
@@ -174,84 +170,7 @@ func (r *PrivateSequenceResponse) rval() *api.TransactionRecord { return r.Value
 // and aggregates the responses into a single response.
 //
 // RoundTrip is a low-level interface not intended for general use.
-func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
-	if c.DisableFanout {
-		return c.roundTrip(ctx, requests, callback)
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// TODO Move the aggregation logic into a separate module
-
-	// Collect aggregate requests
-	var parts []multiaddr.Multiaddr
-	aggregate := map[Message]aggregator{}
-	for i, n := 0, len(requests); i < n; i++ {
-		// If the request is a transaction hash search query request, fan it out
-		req, ok := requests[i].(*QueryRequest)
-		if !ok {
-			continue
-		}
-		if req.Scope == nil || !protocol.IsUnknown(req.Scope) {
-			continue
-		}
-		if _, ok := req.Query.(*api.MessageHashSearchQuery); !ok {
-			continue
-		}
-
-		// Query the network for a list of partitions
-		if parts == nil {
-			var err error
-			parts, err = c.getParts(ctx, api.ServiceTypeQuery)
-			if err != nil {
-				return errors.UnknownError.Wrap(err)
-			}
-		}
-
-		// Overwrite the existing entry in requests with an Addressed message
-		// for the first partition
-		agg := new(recordRangeAggregator)
-		ar := &Addressed{Message: req, Address: parts[0]}
-		aggregate[ar] = agg
-		requests[i] = ar
-
-		// Create a new Addressed message for every other partition
-		for _, part := range parts[1:] {
-			ar := &Addressed{Message: req, Address: part}
-			aggregate[ar] = agg
-			requests = append(requests, ar)
-		}
-	}
-
-	// If there are no requests to fanout, just call roundTrip
-	if len(aggregate) == 0 {
-		return c.roundTrip(ctx, requests, callback)
-	}
-
-	// Send the requests
-	err := c.roundTrip(ctx, requests, func(res, req Message) error {
-		// If the request was a fanout request, aggregate the response
-		agg, ok := aggregate[req]
-		if !ok {
-			return callback(res, req)
-		}
-		return agg.Add(res)
-	})
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Finalize aggregates and pass them to the callback
-	for req, agg := range aggregate {
-		err := callback(agg.Done(), req)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-	return nil
-}
-
+//
 // roundTrip routes each request, dials a stream, and executes a round-trip
 // call, sending the request and waiting for the response. roundTrip calls the
 // callback for each request-response pair. The callback may be called more than
@@ -262,14 +181,13 @@ func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback fun
 // errors, roundTrip will only dial each address once. If multiple requests
 // route to the same address, the first request will dial a stream and
 // subsequent requests to that address will reuse the existing stream.
-func (c *Client) roundTrip(ctx context.Context, req []Message, callback func(res, req Message) error) error {
+func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
 	// Setup the context and stream dictionary
-	streams := map[string]Stream{}
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel, streams := getBatchData(ctx)
 	defer cancel()
 
 	// Process each request
-	for _, req := range req {
+	for _, req := range requests {
 		// Route it
 		addr, err := c.routeRequest(req)
 		if err != nil {
@@ -299,6 +217,18 @@ func (c *Client) roundTrip(ctx context.Context, req []Message, callback func(res
 		}
 	}
 	return nil
+}
+
+type batchDataStreamsKey struct{}
+
+func getBatchData(ctx context.Context) (context.Context, context.CancelFunc, map[string]Stream) {
+	ctx, cancel, bd := api.ContextWithBatchData(ctx)
+	streams, _ := bd.Get(batchDataStreamsKey{}).(map[string]Stream)
+	if streams == nil {
+		streams = map[string]Stream{}
+		bd.Put(batchDataStreamsKey{}, streams)
+	}
+	return ctx, cancel, streams
 }
 
 func (c *Client) routeRequest(req Message) (multiaddr.Multiaddr, error) {
@@ -436,7 +366,7 @@ func (c *Client) GetNetInfo(ctx context.Context) (*api.NetworkStatus, error) {
 
 	// Send it and wait for a NetworkStatusResponse
 	var res *NetworkStatusResponse
-	err = c.roundTrip(ctx, []Message{areq}, func(r, _ Message) error {
+	err = c.RoundTrip(ctx, []Message{areq}, func(r, _ Message) error {
 		var ok bool
 		res, ok = r.(*NetworkStatusResponse)
 		if !ok {
@@ -449,66 +379,4 @@ func (c *Client) GetNetInfo(ctx context.Context) (*api.NetworkStatus, error) {
 	}
 
 	return res.Value, nil
-}
-
-// getParts queries the network for the list of partitions.
-func (c *Client) getParts(ctx context.Context, service api.ServiceType) ([]multiaddr.Multiaddr, error) {
-	ns, err := c.GetNetInfo(ctx)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Pre-calculate a list of multiaddresses for each partition of the form
-	// /acc/{partition}
-	ma := make([]multiaddr.Multiaddr, len(ns.Network.Partitions))
-	for i, part := range ns.Network.Partitions {
-		ma[i], err = service.AddressFor(part.ID).MultiaddrFor(c.Network)
-		if err != nil {
-			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
-		}
-	}
-
-	return ma, nil
-}
-
-// An aggregator aggregates responses.
-type aggregator interface {
-	// Add adds a response.
-	Add(Message) error
-
-	// Done returns the aggregated response.
-	Done() Message
-}
-
-// A recordRangeRecord aggregates RecordResponses. Start is not preserved.
-type recordRangeAggregator struct {
-	value []api.Record
-	total uint64
-}
-
-// Add checks if the message is a RecordResponse containing a RecordRange and
-// adds its records to the aggregator.
-func (agg *recordRangeAggregator) Add(m Message) error {
-	res, ok := m.(*RecordResponse)
-	if !ok {
-		return errors.Conflict.WithFormat("invalid response type %T", res)
-	}
-
-	v, ok := res.Value.(*api.RecordRange[api.Record])
-	if !ok {
-		return errors.Conflict.WithFormat("invalid response value type %T", res.Value)
-	}
-
-	agg.value = append(agg.value, v.Records...)
-	agg.total += v.Total
-	return nil
-}
-
-// Done constructs a new RecordResponse containing a RecordRange containing all
-// of the records.
-func (agg *recordRangeAggregator) Done() Message {
-	rr := new(api.RecordRange[api.Record])
-	rr.Records = agg.value
-	rr.Total = agg.total
-	return &RecordResponse{Value: rr}
 }

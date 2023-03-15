@@ -26,6 +26,8 @@ func init() {
 }
 
 func TestVersionSwitch(t *testing.T) {
+	var timestamp uint64
+
 	// Initialize
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
@@ -52,15 +54,24 @@ func TestVersionSwitch(t *testing.T) {
 	st := sim.SubmitTxn(MustBuild(t,
 		build.Transaction().For(alice).
 			BurnCredits(1).
-			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
 	require.EqualError(t, st.AsError(), "unsupported transaction type: burnCredits")
+
+	// Create a pending transaction
+	p := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice).
+			CreateDataAccount(alice, "data").WithAuthority("bob.acme", "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(p.TxID).IsPending())
 
 	// Update to v1-halt
 	sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV1Halt).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
 	sim.StepN(2)
 
@@ -75,7 +86,7 @@ func TestVersionSwitch(t *testing.T) {
 	st = sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "tokens").
 			AddCredits().WithOracle(InitialAcmeOracle).Spend(10).To(alice, "book", "1").
-			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey))
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
 
 	// Wait until all partitions are updated
 	sim.StepUntil(True(func(h *Harness) bool {
@@ -102,7 +113,7 @@ func TestVersionSwitch(t *testing.T) {
 	st = sim.SubmitTxn(MustBuild(t,
 		build.Transaction().For(alice).
 			AddCredits().WithOracle(InitialAcmeOracle).Spend(10).To(alice, "book", "1").
-			SignWith(alice, "book", "1").Version(1).Timestamp(3).PrivateKey(aliceKey)))
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
 	require.EqualError(t, st.AsError(), "user messages are not being accepted: an upgrade is in progress")
 
@@ -110,7 +121,7 @@ func TestVersionSwitch(t *testing.T) {
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV2).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -127,8 +138,16 @@ func TestVersionSwitch(t *testing.T) {
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "book", "1").
 			BurnCredits(1).
-			SignWith(alice, "book", "1").Version(1).Timestamp(4).PrivateKey(aliceKey)))
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
+
+	// Sign the pending transaction again
+	p = sim.BuildAndSubmitTxnSuccessfully(
+		build.SignatureForTxID(p.TxID).Load(sim.Query()).
+			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(p.TxID).IsPending())
 }

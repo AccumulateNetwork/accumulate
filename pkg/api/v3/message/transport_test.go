@@ -49,7 +49,7 @@ func TestTransport(t *testing.T) {
 	require.NoError(t, err)
 
 	c := &Client{Network: "foo", Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
-	err = c.roundTrip(context.Background(), []Message{
+	err = c.RoundTrip(context.Background(), []Message{
 		&Addressed{Address: addr},
 		&Addressed{Address: addr},
 	}, func(res, req Message) error { return nil })

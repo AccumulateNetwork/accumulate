@@ -59,6 +59,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.MajorBlockSchedule = "* * * * *"
+	g.ExecutorVersion = ExecutorVersionV2
 
 	var err error
 	s.sim, err = simulator.New(
@@ -134,6 +135,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 }
 
 func uintp(v uint64) *uint64 { return &v }
+func boolp(v bool) *bool     { return &v }
 
 func (s *QuerierTestSuite) TestQueryTransaction() {
 	r, err := s.QuerierFor(s.faucet).QueryTransaction(context.Background(), s.createAlice.TxID, nil)
@@ -161,7 +163,7 @@ func (s *QuerierTestSuite) TestQueryAccount() {
 func (s *QuerierTestSuite) TestQueryAccountChains() {
 	r, err := s.QuerierFor(s.alice).QueryAccountChains(context.Background(), s.alice, nil)
 	s.Require().NoError(err)
-	_ = s.Len(r.Records, 3) &&
+	_ = s.Len(r.Records, 4) &&
 		s.Equal("main", r.Records[0].Name) &&
 		s.Equal(merkle.ChainTypeTransaction, r.Records[0].Type) &&
 		s.Equal(2, int(r.Records[0].Count))
@@ -271,7 +273,13 @@ func (s *QuerierTestSuite) TestQueryPending() {
 func (s *QuerierTestSuite) TestQueryMinorBlock() {
 	r, err := s.QuerierFor(s.alice).QueryMinorBlock(context.Background(), s.alice, &api.BlockQuery{Minor: uintp(2)})
 	s.Require().NoError(err)
-	s.Require().Len(r.Entries.Records, 1)
+	s.Require().NotEmpty(r.Entries.Records)
+}
+
+func (s *QuerierTestSuite) TestQueryDirectoryMinorBlock() {
+	r, err := s.QuerierFor(DnUrl()).QueryMinorBlock(context.Background(), DnUrl(), &api.BlockQuery{Minor: uintp(4)})
+	s.Require().NoError(err)
+	s.Require().NotEmpty(r.Anchored.Records)
 }
 
 func (s *QuerierTestSuite) TestQueryMinorBlocks() {
@@ -296,27 +304,16 @@ func (s *QuerierTestSuite) TestQueryMajorBlock() {
 func (s *QuerierTestSuite) TestQueryMajorBlocks() {
 	r, err := s.QuerierFor(s.alice).QueryMajorBlocks(context.Background(), s.alice, &api.BlockQuery{MajorRange: &api.RangeOptions{}})
 	s.Require().NoError(err)
-	s.Require().Len(r.Records, 1)
+	s.Require().NotEmpty(r.Records)
 }
 
 func (s *QuerierTestSuite) TestSearchForAnchor() {
-	txr, err := s.QuerierFor(s.faucet).QueryTransaction(context.Background(), s.createAlice.TxID, nil)
+	u := PartitionUrl("BVN1").JoinPath(AnchorPool)
+	chr, err := s.QuerierFor(u).QueryChainEntries(context.Background(), u, &api.ChainQuery{Name: "anchor-sequence", Range: &api.RangeOptions{FromEnd: true, Count: uintp(1), Start: 0, Expand: boolp(true)}})
 	s.Require().NoError(err)
-	txr, err = s.QuerierFor(s.alice).QueryTransaction(context.Background(), txr.Produced.Records[0].Value, nil)
-	s.Require().NoError(err)
+	anchor := chr.Records[0].Value.(*api.TransactionRecord).Transaction.Body.(*BlockValidatorAnchor).RootChainAnchor
 
-	var anchor []byte
-	for _, r := range txr.Signatures.Records {
-		for _, sig := range r.Signature.(*SignatureSet).Signatures {
-			sig, ok := sig.(*ReceiptSignature)
-			if ok {
-				anchor = sig.Proof.Anchor
-			}
-		}
-	}
-	s.Require().NotNil(anchor)
-
-	r, err := s.QuerierFor(DnUrl()).SearchForAnchor(context.Background(), DnUrl().JoinPath(AnchorPool), &api.AnchorSearchQuery{Anchor: anchor})
+	r, err := s.QuerierFor(DnUrl()).SearchForAnchor(context.Background(), DnUrl().JoinPath(AnchorPool), &api.AnchorSearchQuery{Anchor: anchor[:]})
 	s.Require().NoError(err)
 	s.NotEmpty(r.Records)
 }
@@ -335,7 +332,7 @@ func (s *QuerierTestSuite) TestSearchForPublicKeyHash() {
 }
 
 func (s *QuerierTestSuite) TestSearchForTransactionHash() {
-	r, err := s.QuerierFor(s.faucet).SearchForTransactionHash(context.Background(), s.faucet, &api.MessageHashSearchQuery{Hash: s.createAlice.TxID.Hash()})
+	r, err := s.QuerierFor(s.faucet).SearchForMessage(context.Background(), s.createAlice.TxID.Hash())
 	s.Require().NoError(err)
 	s.Require().Len(r.Records, 1)
 }

@@ -66,7 +66,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+	st := chain.NewStateManager(&x.Describe, &x.globals.Active, x, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	defer st.Discard()
 
 	// Execute the transaction
@@ -119,7 +119,11 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Del
 }
 
 func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
-	if status.Initiator == nil {
+	isInit, _, err := x.TransactionIsInitiated(batch, delivery.Transaction)
+	if err != nil {
+		return false, errors.UnknownError.Wrap(err)
+	}
+	if !isInit {
 		return false, nil
 	}
 
@@ -185,7 +189,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	// If every authority is disabled, at least one signature is required
 	voters, err := batch.Account(delivery.Transaction.Header.Principal).
 		Transaction(delivery.Transaction.ID().Hash()).
-		Voters().Get()
+		Votes().Get()
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load voters: %w", err)
 	}
@@ -197,8 +201,7 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	_, err := batch.
 		Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
-		Vote(authUrl).
-		Get()
+		Votes().Find(&database.VoteEntry{Authority: authUrl})
 	switch {
 	case err == nil:
 		return true, nil
@@ -430,7 +433,11 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Issue a refund to the initial signer
-	if status.Initiator == nil || !delivery.Transaction.Body.Type().IsUser() {
+	isInit, initiator, err := x.TransactionIsInitiated(batch, delivery.Transaction)
+	if err != nil {
+		return nil, nil, errors.UnknownError.Wrap(err)
+	}
+	if !isInit || !delivery.Transaction.Body.Type().IsUser() {
 		return status, state, nil
 	}
 
@@ -445,6 +452,6 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 
 	refund := new(protocol.SyntheticDepositCredits)
 	refund.Amount = (paid - protocol.FeeFailedMaximum).AsUInt64()
-	state.DidProduceTxn(status.Initiator, refund)
+	state.DidProduceTxn(initiator.Payer, refund)
 	return status, state, nil
 }

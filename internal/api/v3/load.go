@@ -7,8 +7,11 @@
 package api
 
 import (
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -225,4 +228,135 @@ func getAccountAuthoritySet(batch *database.Batch, account *url.URL) (*protocol.
 	}
 
 	return getAccountAuthoritySet(batch, url)
+}
+
+func normalizeBlockEntries(batch *database.Batch, ledger *protocol.BlockLedger) ([]*protocol.BlockEntry, error) {
+	// For each account+chain, find the entry with the largest index. This is
+	// necessary because some protocol versions add every chain entry to the
+	// ledger and others only add the last.
+	type AccountAndChain struct {
+		Account [32]byte
+		Chain   string
+	}
+	end := map[AccountAndChain]*protocol.BlockEntry{}
+	for _, e := range ledger.Entries {
+		k := AccountAndChain{e.Account.AccountID32(), e.Chain}
+		if d := end[k]; d == nil || d.Index < e.Index {
+			end[k] = e
+		}
+	}
+
+	// For each account+chain, find the previously anchored chain height and
+	// construct a BlockEntry for every new chain entry
+	//
+	// TODO This really needs to be indexed
+	var entries []*protocol.BlockEntry
+	for _, e := range end {
+		chain, err := batch.Account(e.Account).ChainByName(e.Chain)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load %v %s chain: %w", e.Account, e.Chain, err)
+		}
+		indexChain, err := chain.Index().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load %v %s index chain: %w", e.Account, e.Chain, err)
+		}
+
+		var start uint64
+		i, _, err := indexing.SearchIndexChain(indexChain, 0, indexing.MatchExact, indexing.SearchIndexChainBySource(e.Index))
+		switch {
+		case err == nil:
+			if i == 0 {
+				break
+			}
+
+			entry := new(protocol.IndexEntry)
+			err = indexChain.EntryAs(int64(i)-1, entry)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load %v %s index chain entry %d: %w", e.Account, e.Chain, i-1, err)
+			}
+
+			start = entry.Source + 1
+
+		case errors.Is(err, errors.NotFound):
+			start = e.Index
+
+		default:
+			return nil, errors.UnknownError.WithFormat("find %v %s index chain entry for block %d: %w", e.Account, e.Chain, ledger.Index, err)
+		}
+
+		for j := start; j <= e.Index; j++ {
+			entries = append(entries, &protocol.BlockEntry{
+				Account: e.Account,
+				Chain:   e.Chain,
+				Index:   j,
+			})
+		}
+	}
+
+	return entries, nil
+}
+
+func (s *Querier) loadAnchoredBlocks(ctx context.Context, batch *database.Batch, anchorIndex uint64) (*api.RecordRange[*api.MinorBlockRecord], error) {
+	// From this point on we're making a best effort to return a list of
+	// anchored blocks. However if something fails, we're going to ignore it and
+	// return what we have regardless.
+
+	indexChain, err := batch.Account(s.partition.AnchorPool()).MainChain().Index().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor ledger index chain: %w", err)
+	}
+	if indexChain.Height() == 0 {
+		return nil, nil // Bad, but ignore
+	}
+
+	i, _, err := indexing.SearchIndexChain(indexChain, uint64(indexChain.Height()-1), indexing.MatchExact, indexing.SearchIndexChainBySource(anchorIndex))
+	if err != nil {
+		return nil, nil //nolint // Bad, but ignore
+	}
+
+	// If this is the first time the anchor chain has been anchored, start is 0.
+	// Otherwise, find the previous index entry and start at its position +1.
+	var start uint64
+	end := anchorIndex
+	if i > 0 {
+		entry := new(protocol.IndexEntry)
+		err := indexChain.EntryAs(int64(i-1), entry)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor ledger index chain entry %d: %w", i-1, err)
+		}
+		start = entry.Source + 1
+	}
+
+	// Start and end are inclusive. Start 0 and end 3 means get four entries
+	// starting at 0.
+	count := end - start + 1
+
+	expand := true
+	anchors, err := s.queryChainEntryRange(ctx, batch, batch.Account(s.partition.AnchorPool()).MainChain(), &api.RangeOptions{Start: start, Count: &count, Expand: &expand})
+	if err != nil {
+		return nil, nil //nolint // Bad, but ignore
+	}
+
+	blocks := new(api.RecordRange[*api.MinorBlockRecord])
+	blocks.Total = count
+	blocks.Records = make([]*api.MinorBlockRecord, 0, len(anchors.Records))
+	for _, rec := range anchors.Records {
+		txn, ok := rec.Value.(*api.TransactionRecord)
+		if !ok {
+			continue // Bad, but ignore
+		}
+
+		anchorBody, ok := txn.Transaction.Body.(protocol.AnchorBody)
+		if !ok {
+			continue // Bad, but ignore
+		}
+
+		anchor := anchorBody.GetPartitionAnchor()
+		b := new(api.MinorBlockRecord)
+		b.Index = anchor.MinorBlockIndex
+		b.Source = anchor.Source
+		blocks.Records = append(blocks.Records, b)
+	}
+
+	return blocks, nil
 }

@@ -70,7 +70,11 @@ func (x UpdateKey) AuthorityIsSatisfied(delegate AuthDelegate, batch *database.B
 
 func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	// Wait for the initiator
-	if status.Initiator == nil {
+	isInit, _, err := delegate.TransactionIsInitiated(batch, transaction)
+	if err != nil {
+		return false, false, errors.UnknownError.Wrap(err)
+	}
+	if !isInit {
 		return false, false, nil
 	}
 
@@ -108,8 +112,7 @@ func (UpdateKey) didVote(batch *database.Batch, transaction *protocol.Transactio
 	// The book must vote
 	_, err := batch.Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
-		Vote(book).
-		Get()
+		Votes().Find(&database.VoteEntry{Authority: book})
 	switch {
 	case err == nil:
 		return true, nil
@@ -168,25 +171,27 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, err
 	}
 
-	// Do not update the key page version. Do not reset LastUsedOn.
+	// Do not update the key page version, do not reset LastUsedOn
 
-	txn := st.batch.Transaction(st.txHash[:])
-	status, err := txn.Status().Get()
+	isInit, initiator, err := st.AuthDelegate.TransactionIsInitiated(st.batch, tx.Transaction)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if !isInit {
+		return nil, errors.InternalError.With("transaction has not been initiated")
 	}
 
 	oldEntry := new(protocol.KeySpecParams)
-	i, _, ok := page.EntryByDelegate(status.Initiator)
+	i, _, ok := page.EntryByDelegate(initiator.Payer)
 	switch {
 	case ok:
 		// Update entry for delegate
 		oldEntry.Delegate = page.Keys[i].Delegate
 
-	case status.Initiator.Equal(page.Url):
+	case initiator.Payer.Equal(page.Url):
 		// Update entry by key hash
 		var msg messaging.MessageWithSignature
-		err = st.batch.Message(tx.Transaction.Header.Initiator).Main().GetAs(&msg)
+		err = st.batch.Message(initiator.Cause.Hash()).Main().GetAs(&msg)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load initiator signature: %w", err)
 		}
@@ -198,7 +203,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		oldEntry.KeyHash = sig.GetPublicKeyHash()
 
 	default:
-		return nil, errors.InternalError.WithFormat("initiator %v is neither the principal nor a delegate", status.Initiator)
+		return nil, errors.InternalError.WithFormat("initiator %v is neither the principal nor a delegate", initiator)
 	}
 
 	err = updateKey(page, book, oldEntry, &protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)

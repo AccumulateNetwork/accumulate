@@ -151,8 +151,15 @@ MinorBlockRecord:
     - name: Time
       type: time
       pointer: true
+    - name: Source
+      type: url
+      pointer: true
     - name: Entries
       type: RecordRange[*ChainEntryRecord[Record]]
+      marshal-as: reference
+      pointer: true
+    - name: Anchored
+      type: RecordRange[*MinorBlockRecord]
       marshal-as: reference
       pointer: true
 
