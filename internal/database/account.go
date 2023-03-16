@@ -19,6 +19,13 @@ func (b *Batch) Account(u *url.URL) *Account {
 	return b.getAccount(u.StripExtras())
 }
 
+// Hash retrieves or calculates the state hash of the account.
+func (a *Account) Hash() ([32]byte, error) {
+	// TODO Retrieve from the BPT
+	h, err := a.parent.observer.DidChangeAccount(a.parent, a)
+	return *(*[32]byte)(h.MerkleHash()), err
+}
+
 func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) error) (T, error) {
 	record := batch.Account(url).Main()
 

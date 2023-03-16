@@ -58,18 +58,23 @@ func (k Key) String() string {
 // 	return json.Marshal(k.String())
 // }
 
-func (k Key) Copy() Key {
+func (k Key) Copy() *Key {
 	l := make(Key, len(k))
 	copy(l, k)
-	return l
+	return &l
 }
 
-func (k Key) Equal(l Key) bool {
-	if len(k) != len(l) {
+func (k Key) CopyAsInterface() any {
+	return k.Copy()
+}
+
+func (k Key) Equal(l *Key) bool {
+	// Must have a pointer receiver to work well with marshalling
+	if len(k) != len(*l) {
 		return false
 	}
 	for i := range k {
-		if !keyPartsEqual(k[i], l[i]) {
+		if !keyPartsEqual(k[i], (*l)[i]) {
 			return false
 		}
 	}

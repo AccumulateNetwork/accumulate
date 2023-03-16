@@ -9,7 +9,10 @@ package record
 import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
+
+type Key = record.Key
 
 // A Record is a component of a data model.
 type Record interface {

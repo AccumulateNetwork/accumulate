@@ -20,7 +20,7 @@ func TestKeyBinary(t *testing.T) {
 
 	var l Key
 	require.NoError(t, l.UnmarshalBinary(b))
-	require.True(t, k.Equal(l))
+	require.True(t, k.Equal(&l))
 }
 
 func TestKeyJSON(t *testing.T) {
@@ -30,5 +30,5 @@ func TestKeyJSON(t *testing.T) {
 
 	var l Key
 	require.NoError(t, l.UnmarshalJSON(b))
-	require.True(t, k.Equal(l))
+	require.True(t, k.Equal(&l))
 }

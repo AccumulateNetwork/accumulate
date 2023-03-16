@@ -4,6 +4,10 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package record
+package execute
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-model --package record_test --out model_gen_test.go model_test.yml
+func (WillCommitBlock) IsEvent() {}
+
+type WillCommitBlock struct {
+	Block BlockState
+}

@@ -6,4 +6,6 @@
 
 package record
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-model --package record_test --out model_gen_test.go model_test.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package record enums.yml
+
+type typeCode uint64

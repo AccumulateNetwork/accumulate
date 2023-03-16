@@ -35,6 +35,9 @@ const MessageTypeSignatureRequest MessageType = 6
 // MessageTypeCreditPayment is a payment of credits towards a transaction's fee.
 const MessageTypeCreditPayment MessageType = 7
 
+// MessageTypeBlockSummary is a summary of a block.
+const MessageTypeBlockSummary MessageType = 8
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -42,7 +45,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeTransaction, MessageTypeSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary:
 		*v = u
 		return true
 	default:
@@ -67,6 +70,8 @@ func (v MessageType) String() string {
 		return "signatureRequest"
 	case MessageTypeCreditPayment:
 		return "creditPayment"
+	case MessageTypeBlockSummary:
+		return "blockSummary"
 	default:
 		return fmt.Sprintf("MessageType:%d", v)
 	}
@@ -89,6 +94,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeSignatureRequest, true
 	case "creditpayment":
 		return MessageTypeCreditPayment, true
+	case "blocksummary":
+		return MessageTypeBlockSummary, true
 	default:
 		return 0, false
 	}

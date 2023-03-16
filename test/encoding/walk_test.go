@@ -34,7 +34,7 @@ func TestWalkAndReplay(t *testing.T) {
 	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
 
 	// Use the simulator to create genesis documents
-	net := simulator.SimpleNetwork("Gold/1.0.0", 3, 1)
+	net := simulator.SimpleNetwork(t.Name(), 3, 1)
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		net,

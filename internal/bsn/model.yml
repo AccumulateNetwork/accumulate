@@ -1,0 +1,31 @@
+- name: ChangeSet
+  type: entity
+  root: true
+  customCommit: true
+  fields:
+  # - name: kvstore
+  #   type: storage.KeyValueTxn
+  # - name: bptEntries
+  #   type: map[storage.Key][32]byte
+
+  attributes:
+  - name: Summary
+    type: entity
+    parameters:
+    - name: Hash
+      type: hash
+    attributes:
+    - name: Main
+      type: state
+      dataType: messaging.BlockSummary
+      pointer: true
+    - name: Anchor
+      type: state
+      dataType: messaging.Message
+      union: true
+    - name: Signatures
+      type: state
+      dataType: protocol.KeySignature
+      union: true
+      collection: set
+      comparator: compareSignatures
