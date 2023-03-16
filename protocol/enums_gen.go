@@ -161,6 +161,9 @@ const PartitionTypeDirectory PartitionType = 1
 // PartitionTypeBlockValidator .
 const PartitionTypeBlockValidator PartitionType = 2
 
+// PartitionTypeBlockSummary .
+const PartitionTypeBlockSummary PartitionType = 3
+
 // SignatureTypeUnknown is used when the signature type is not known.
 const SignatureTypeUnknown SignatureType = 0
 
@@ -994,7 +997,7 @@ func (v PartitionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *PartitionType) SetEnumValue(id uint64) bool {
 	u := PartitionType(id)
 	switch u {
-	case PartitionTypeDirectory, PartitionTypeBlockValidator:
+	case PartitionTypeDirectory, PartitionTypeBlockValidator, PartitionTypeBlockSummary:
 		*v = u
 		return true
 	default:
@@ -1009,6 +1012,8 @@ func (v PartitionType) String() string {
 		return "directory"
 	case PartitionTypeBlockValidator:
 		return "blockValidator"
+	case PartitionTypeBlockSummary:
+		return "blockSummary"
 	default:
 		return fmt.Sprintf("PartitionType:%d", v)
 	}
@@ -1023,6 +1028,10 @@ func PartitionTypeByName(name string) (PartitionType, bool) {
 		return PartitionTypeBlockValidator, true
 	case "block-validator":
 		return PartitionTypeBlockValidator, true
+	case "blocksummary":
+		return PartitionTypeBlockSummary, true
+	case "block-summary":
+		return PartitionTypeBlockSummary, true
 	default:
 		return 0, false
 	}

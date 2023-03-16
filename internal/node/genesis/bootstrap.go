@@ -37,7 +37,7 @@ import (
 
 type InitOpts struct {
 	PartitionId     string
-	NetworkType     config.NetworkType
+	NetworkType     protocol.PartitionType
 	GenesisTime     time.Time
 	Logger          log.Logger
 	FactomAddresses func() (io.Reader, error)
@@ -289,7 +289,7 @@ func (b *bootstrap) createAnchorPool() {
 	anchorLedger := new(protocol.AnchorLedger)
 	anchorLedger.Url = b.partition.AnchorPool()
 
-	if b.NetworkType == config.Directory {
+	if b.NetworkType == protocol.PartitionTypeDirectory {
 		// Initialize the last major block time to prevent a major block from
 		// being created immediately once the network boots
 		anchorLedger.MajorBlockTime = b.GenesisTime

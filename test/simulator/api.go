@@ -16,7 +16,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
@@ -188,12 +187,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	}
 
 	// Determine the listening address
-	var addr string
-	if n.partition.Type == config.Directory {
-		addr = n.init.Listen().Directory().AccumulateAPI().String()
-	} else {
-		addr = n.init.Listen().BlockValidator().AccumulateAPI().String()
-	}
+	addr := n.init.Listen().PartitionType(n.partition.Type).AccumulateAPI().String()
 
 	// Start the listener
 	ln, err := net.Listen("tcp", addr)
@@ -225,14 +219,8 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 		return nil
 	}
 
-	var addr1, addr2 multiaddr.Multiaddr
-	if n.partition.Type == config.Directory {
-		addr1 = n.init.Listen().Scheme("tcp").Directory().AccumulateP2P().Multiaddr()
-		addr2 = n.init.Listen().Scheme("udp").Directory().AccumulateP2P().Multiaddr()
-	} else {
-		addr1 = n.init.Listen().Scheme("tcp").BlockValidator().AccumulateP2P().Multiaddr()
-		addr2 = n.init.Listen().Scheme("udp").BlockValidator().AccumulateP2P().Multiaddr()
-	}
+	addr1 := n.init.Listen().Scheme("tcp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
+	addr2 := n.init.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
 
 	h, err := message.NewHandler(
 		n.logger.With("module", "acc"),
