@@ -82,12 +82,12 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	PartitionId   string             `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
-	NetworkType   config.NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
-	Network       config.Network     `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	NetworkAnchor [32]byte           `json:"networkAnchor,omitempty" form:"networkAnchor" query:"networkAnchor" validate:"required"`
-	Values        core.GlobalValues  `json:"values,omitempty" form:"values" query:"values" validate:"required"`
-	Error         *errors2.Error     `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	PartitionId   string                 `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
+	NetworkType   protocol.PartitionType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
+	Network       config.Network         `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	NetworkAnchor [32]byte               `json:"networkAnchor,omitempty" form:"networkAnchor" query:"networkAnchor" validate:"required"`
+	Values        core.GlobalValues      `json:"values,omitempty" form:"values" query:"values" validate:"required"`
+	Error         *errors2.Error         `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
 type DirectoryQuery struct {
@@ -2398,12 +2398,12 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PartitionId   string             `json:"partitionId,omitempty"`
-		NetworkType   config.NetworkType `json:"networkType,omitempty"`
-		Network       config.Network     `json:"network,omitempty"`
-		NetworkAnchor string             `json:"networkAnchor,omitempty"`
-		Values        core.GlobalValues  `json:"values,omitempty"`
-		Error         *errors2.Error     `json:"error,omitempty"`
+		PartitionId   string                 `json:"partitionId,omitempty"`
+		NetworkType   protocol.PartitionType `json:"networkType,omitempty"`
+		Network       config.Network         `json:"network,omitempty"`
+		NetworkAnchor string                 `json:"networkAnchor,omitempty"`
+		Values        core.GlobalValues      `json:"values,omitempty"`
+		Error         *errors2.Error         `json:"error,omitempty"`
 	}{}
 	if !(len(v.PartitionId) == 0) {
 		u.PartitionId = v.PartitionId
@@ -3457,12 +3457,12 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PartitionId   string             `json:"partitionId,omitempty"`
-		NetworkType   config.NetworkType `json:"networkType,omitempty"`
-		Network       config.Network     `json:"network,omitempty"`
-		NetworkAnchor string             `json:"networkAnchor,omitempty"`
-		Values        core.GlobalValues  `json:"values,omitempty"`
-		Error         *errors2.Error     `json:"error,omitempty"`
+		PartitionId   string                 `json:"partitionId,omitempty"`
+		NetworkType   protocol.PartitionType `json:"networkType,omitempty"`
+		Network       config.Network         `json:"network,omitempty"`
+		NetworkAnchor string                 `json:"networkAnchor,omitempty"`
+		Values        core.GlobalValues      `json:"values,omitempty"`
+		Error         *errors2.Error         `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
 	u.NetworkType = v.NetworkType
