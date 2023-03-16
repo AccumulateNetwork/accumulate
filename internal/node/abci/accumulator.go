@@ -26,7 +26,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -375,24 +374,6 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			Code: uint32(protocol.ErrorCodeUnknownError),
 			Log:  "Node is not ready",
 		}
-	}
-
-	// Only use the shared batch when the check type is CheckTxType_New,
-	//   we want to avoid changes to variables version increments to and stick and therefore be done multiple times
-	var batch *database.Batch
-	switch req.Type {
-	case abci.CheckTxType_New:
-		// TODO I don't think we need a mutex because I think Tendermint
-		// guarantees that ABCI calls are non-concurrent
-		app.checkTxMutex.Lock()
-		defer app.checkTxMutex.Unlock()
-		if app.checkTxBatch == nil { // For cases where we haven't started/ended a block yet
-			app.checkTxBatch = app.DB.Begin(false)
-		}
-		batch = app.checkTxBatch
-	case abci.CheckTxType_Recheck:
-		batch = app.DB.Begin(false)
-		defer batch.Discard()
 	}
 
 	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {

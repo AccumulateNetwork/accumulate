@@ -334,7 +334,6 @@ func (d *Daemon) startApp() (types.Application, error) {
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		DB:       d.db,
 		Address:  d.Key().PubKey().Address(),
 		Executor: exec,
 		Logger:   d.Logger,

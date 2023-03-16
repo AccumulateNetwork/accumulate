@@ -9,7 +9,6 @@ package execute
 import (
 	"time"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
@@ -33,21 +32,52 @@ func (x *ExecutorV1) StoreBlockTimers(ds *logging.DataSet) {
 	(*block.Executor)(x).StoreBlockTimers(ds)
 }
 
-func (x *ExecutorV1) LoadStateRoot(batch *database.Batch) ([]byte, error) {
-	return (*block.Executor)(x).LoadStateRoot(batch)
+func (x *ExecutorV1) LastBlock() (uint64, [32]byte, error) {
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+
+	var ledger *protocol.SystemLedger
+	err := batch.Account(x.Describe.Ledger()).Main().GetAs(&ledger)
+	if err != nil {
+		return 0, [32]byte{}, errors.UnknownError.Wrap(err)
+	}
+
+	return ledger.Index, *(*[32]byte)(batch.BptRoot()), nil
 }
 
-func (x *ExecutorV1) RestoreSnapshot(batch database.Beginner, snapshot ioutil2.SectionReader) error {
-	return (*block.Executor)(x).RestoreSnapshot(batch, snapshot)
-}
+func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
+	batch := x.Database.Begin(true)
+	defer batch.Discard()
+	err = (*block.Executor)(x).RestoreSnapshot(batch, snapshot)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
-func (x *ExecutorV1) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
-	return (*block.Executor)(x).InitChainValidators(initVal)
+	err = batch.Commit()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return (*block.Executor)(x).InitChainValidators(validators)
 }
 
 // Validate converts the message to a delivery and validates it. Validate
 // returns an error if the message is not a [message.LegacyMessage].
-func (x *ExecutorV1) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (x *ExecutorV1) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
+	// Only use the shared batch when the check type is CheckTxType_New,
+	//   we want to avoid changes to variables version increments to and stick and therefore be done multiple times
+	var batch *database.Batch
+	if recheck {
+		batch = x.Database.Begin(false)
+		defer batch.Discard()
+	} else {
+		// For cases where we haven't started/ended a block yet
+		if x.CheckTxBatch == nil {
+			x.CheckTxBatch = x.Database.Begin(false)
+		}
+		batch = x.CheckTxBatch
+	}
+
 	deliveries, err := chain.DeliveriesFromMessages(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -141,36 +171,46 @@ func (b *BlockV1) Process(messages []messaging.Message) ([]*protocol.Transaction
 // Close ends the block and returns the block state.
 func (b *BlockV1) Close() (execute.BlockState, error) {
 	err := b.Executor.EndBlock(b.Block)
-	return (*BlockStateV1)(b.Block), err
+	return (*BlockStateV1)(b), err
 }
 
 // BlockStateV1 translates [execute.BlockState] calls for a v1 executor block.
-type BlockStateV1 block.Block
+type BlockStateV1 BlockV1
 
-func (b *BlockStateV1) Params() execute.BlockParams { return b.BlockMeta }
+func (b *BlockStateV1) Params() execute.BlockParams { return b.Block.BlockMeta }
 
 func (s *BlockStateV1) IsEmpty() bool {
-	return s.State.Empty()
+	return s.Block.State.Empty()
 }
 
 func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {
-	return s.State.MakeMajorBlock,
-		s.State.MakeMajorBlockTime,
-		s.State.MakeMajorBlock > 0
+	return s.Block.State.MakeMajorBlock,
+		s.Block.State.MakeMajorBlockTime,
+		s.Block.State.MakeMajorBlock > 0
 }
 
 func (s *BlockStateV1) Commit() error {
-	return s.Batch.Commit()
+	err := s.Block.Batch.Commit()
+	if err != nil {
+		return err
+	}
+
+	// Start a new checkTx batch
+	if s.Executor.CheckTxBatch != nil {
+		s.Executor.CheckTxBatch.Discard()
+	}
+	s.Executor.CheckTxBatch = s.Executor.Database.Begin(false)
+	return nil
 }
 
 func (s *BlockStateV1) Discard() {
-	s.Batch.Discard()
+	s.Block.Batch.Discard()
 }
 
 func (s *BlockStateV1) Hash() []byte {
-	return s.Batch.BptRoot()
+	return s.Block.Batch.BptRoot()
 }
 
 func (s *BlockStateV1) WalkChanges(fn record.WalkFunc) error {
-	return s.Batch.WalkChanges(fn)
+	return s.Block.Batch.WalkChanges(fn)
 }

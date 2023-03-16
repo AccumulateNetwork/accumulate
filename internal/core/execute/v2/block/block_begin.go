@@ -221,16 +221,11 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 		return errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
 
-	stateRoot, err := x.LoadStateRoot(block.Batch)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load state hash: %w", err)
-	}
-
 	anchor := ledger.Anchor.CopyAsInterface().(protocol.AnchorBody)
 	partAnchor := anchor.GetPartitionAnchor()
 	partAnchor.RootChainIndex = uint64(rootChain.Height()) - 1
 	partAnchor.RootChainAnchor = *(*[32]byte)(rootChain.Anchor())
-	partAnchor.StateTreeAnchor = *(*[32]byte)(stateRoot)
+	partAnchor.StateTreeAnchor = *(*[32]byte)(block.Batch.BptRoot())
 	anchorTxn := new(protocol.Transaction)
 	anchorTxn.Body = anchor
 

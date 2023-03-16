@@ -33,21 +33,24 @@ type Executor interface {
 	EnableTimers()
 	StoreBlockTimers(ds *logging.DataSet)
 
-	// LoadStateRoot returns the BPT root hash.
-	LoadStateRoot(*database.Batch) ([]byte, error)
+	// LastBlock returns the height and hash of the last block.
+	LastBlock() (uint64, [32]byte, error)
 
-	// RestoreSnapshot restores the database from a snapshot.
-	RestoreSnapshot(database.Beginner, ioutil2.SectionReader) error
-
-	// InitChainValidators validates the given initial validators and returns
-	// any additional validators.
-	InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error)
+	// Restore restores the database from a snapshot, validates the initial
+	// validators, and returns any additional validators.
+	Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error)
 
 	// Validate validates a set of messages.
-	Validate(*database.Batch, []messaging.Message) ([]*protocol.TransactionStatus, error)
+	Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error)
 
 	// Begin begins a Tendermint block.
 	Begin(BlockParams) (Block, error)
+}
+
+type ValidatorUpdate struct {
+	Type      protocol.SignatureType
+	PublicKey []byte
+	Power     int64
 }
 
 // Options are the options for constructing an [Executor]

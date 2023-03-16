@@ -398,9 +398,7 @@ func (s *Simulator) SubmitTo(partition string, envelope *messaging.Envelope) err
 	}
 
 	// Check
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(batch, deliveries)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(deliveries, false)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

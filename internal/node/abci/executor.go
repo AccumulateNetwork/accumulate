@@ -25,8 +25,4 @@ type Executor interface {
 	Begin(execute.BlockParams) (execute.Block, error)
 }
 
-type ValidatorUpdate struct {
-	Type      protocol.SignatureType
-	PublicKey []byte
-	Power     int64
-}
+type ValidatorUpdate = execute.ValidatorUpdate
