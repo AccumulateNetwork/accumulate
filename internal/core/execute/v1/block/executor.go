@@ -9,7 +9,6 @@ package block
 import (
 	"crypto/ed25519"
 
-	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -38,6 +37,8 @@ type Executor struct {
 	isValidator    bool
 	isGenesis      bool
 	mainDispatcher Dispatcher
+
+	CheckTxBatch *database.Batch
 }
 
 type ExecutorOptions = execute.Options
@@ -268,18 +269,17 @@ func (m *Executor) RestoreSnapshot(db database.Beginner, file ioutil2.SectionRea
 	return nil
 }
 
-func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (additional [][]byte, err error) {
+func (x *Executor) InitChainValidators(initVal []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
 	// Verify the initial keys are ED25519 and build a map
 	initValMap := map[[32]byte]bool{}
 	for _, val := range initVal {
-		key := val.PubKey.GetEd25519()
-		if key == nil {
-			return nil, errors.BadRequest.WithFormat("validator key type %T is not supported", val.PubKey.Sum)
+		if val.Type != protocol.SignatureTypeED25519 {
+			return nil, errors.BadRequest.WithFormat("validator key type %T is not supported", val.Type)
 		}
-		if len(key) != ed25519.PublicKeySize {
-			return nil, errors.BadRequest.WithFormat("invalid ED25519 key: want length %d, got %d", ed25519.PublicKeySize, len(key))
+		if len(val.PublicKey) != ed25519.PublicKeySize {
+			return nil, errors.BadRequest.WithFormat("invalid ED25519 key: want length %d, got %d", ed25519.PublicKeySize, len(val.PublicKey))
 		}
-		initValMap[*(*[32]byte)(key)] = true
+		initValMap[*(*[32]byte)(val.PublicKey)] = true
 	}
 
 	// Capture any validators missing from the initial set
@@ -291,7 +291,11 @@ func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (addition
 		if initValMap[*(*[32]byte)(val.PublicKey)] {
 			delete(initValMap, *(*[32]byte)(val.PublicKey))
 		} else {
-			additional = append(additional, val.PublicKey)
+			additional = append(additional, &execute.ValidatorUpdate{
+				Type:      protocol.SignatureTypeED25519,
+				PublicKey: val.PublicKey,
+				Power:     1,
+			})
 		}
 	}
 
