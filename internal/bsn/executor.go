@@ -7,9 +7,8 @@
 package bsn
 
 import (
-	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -38,14 +37,19 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	return x, nil
 }
 
-func (*Executor) EnableTimers()                                                  {}
-func (*Executor) StoreBlockTimers(ds *logging.DataSet)                           {}
-func (*Executor) LoadStateRoot(*database.Batch) ([]byte, error)                  { return nil, nil }
-func (*Executor) RestoreSnapshot(database.Beginner, ioutil2.SectionReader) error { return nil }
-func (*Executor) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
+var _ execute.Executor = (*Executor)(nil)
+
+func (*Executor) EnableTimers()                        {}
+func (*Executor) StoreBlockTimers(ds *logging.DataSet) {}
+
+func (*Executor) LastBlock() (uint64, [32]byte, error) {
+	return 1, [32]byte{}, nil
+}
+
+func (*Executor) Restore(snapshot ioutil2.SectionReader, validators []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
 	return nil, nil
 }
 
-func (*Executor) Validate(*database.Batch, []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (*Executor) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
 	return nil, nil
 }
