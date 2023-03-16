@@ -216,7 +216,7 @@ func (c *Batch) dirtyChains() []*MerkleManager {
 	return chains
 }
 
-func (c *Batch) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *Batch) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -605,7 +605,7 @@ func (c *Account) dirtyChains() []*MerkleManager {
 	return chains
 }
 
-func (c *Account) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *Account) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -755,7 +755,7 @@ func (c *AccountTransaction) IsDirty() bool {
 	return false
 }
 
-func (c *AccountTransaction) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *AccountTransaction) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -835,7 +835,7 @@ func (c *AccountTransactionSignatures) IsDirty() bool {
 	return false
 }
 
-func (c *AccountTransactionSignatures) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *AccountTransactionSignatures) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -923,7 +923,7 @@ func (c *AccountAnchorChain) dirtyChains() []*MerkleManager {
 	return chains
 }
 
-func (c *AccountAnchorChain) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *AccountAnchorChain) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -1017,7 +1017,7 @@ func (c *AccountData) IsDirty() bool {
 	return false
 }
 
-func (c *AccountData) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *AccountData) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -1117,7 +1117,7 @@ func (c *Message) IsDirty() bool {
 	return false
 }
 
-func (c *Message) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *Message) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -1248,7 +1248,7 @@ func (c *Transaction) IsDirty() bool {
 	return false
 }
 
-func (c *Transaction) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *Transaction) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -1339,7 +1339,7 @@ func (c *SystemData) IsDirty() bool {
 	return false
 }
 
-func (c *SystemData) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *SystemData) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -1496,7 +1496,7 @@ func (c *MerkleManager) IsDirty() bool {
 	return false
 }
 
-func (c *MerkleManager) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *MerkleManager) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -1567,7 +1567,7 @@ func fieldIsDirty[T record.Record](field T) bool {
 	return any(field) != any(z) && field.IsDirty()
 }
 
-func walkChanges[T record.Record](lastErr *error, field T, fn func(record.Key, record.Record) error) {
+func walkChanges[T record.Record](lastErr *error, field T, fn record.WalkFunc) {
 	var z T
 	if *lastErr != nil || any(field) == any(z) {
 		return

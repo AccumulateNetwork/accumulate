@@ -403,8 +403,10 @@ func (p *Partition) execute() error {
 		}
 	}
 
-	if hook := p.getCommitHook(); hook != nil {
-		hook(&p.PartitionInfo, blockState[0])
+	if !blockState[0].IsEmpty() {
+		if hook := p.getCommitHook(); hook != nil {
+			hook(&p.PartitionInfo, blockState[0])
+		}
 	}
 
 	// Commit

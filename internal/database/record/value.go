@@ -82,11 +82,6 @@ func newValue[T any](logger log.Logger, store Store, key Key, name string, allow
 	return v
 }
 
-// Key returns the I'th component of the value's key.
-func (v *value[T]) Key(i int) interface{} {
-	return v.key[i]
-}
-
 // Get loads the value, unmarshalling it if necessary. If IsDirty returns true,
 // Get is guaranteed to succeed.
 func (v *value[T]) Get() (u T, err error) {
@@ -213,9 +208,15 @@ func (v *value[T]) Resolve(key Key) (Record, Key, error) {
 	return nil, nil, errors.InternalError.With("bad key for value")
 }
 
-func (v *value[T]) WalkChanges(fn func(Key, Record) error) error {
+type walkValue[T any] struct{ *value[T] }
+
+func (v walkValue[T]) Key() Key {
+	return v.key
+}
+
+func (v *value[T]) WalkChanges(fn WalkFunc) error {
 	if v.IsDirty() {
-		return fn(v.key, v)
+		return fn(walkValue[T]{v})
 	}
 	return nil
 }
@@ -260,13 +261,17 @@ func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 }
 
 // LoadBytes unmarshals the value from bytes.
-func (v *value[T]) LoadBytes(data []byte) error {
+func (v *value[T]) LoadBytes(data []byte, put bool) error {
 	err := v.value.UnmarshalBinary(data)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	v.status = valueClean
+	if put {
+		v.status = valueDirty
+	} else {
+		v.status = valueClean
+	}
 	return nil
 }
 

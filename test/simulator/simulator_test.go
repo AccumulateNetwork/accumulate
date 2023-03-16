@@ -7,13 +7,10 @@
 package simulator_test
 
 import (
-	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -39,15 +36,6 @@ func TestSimulator(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
-
-	for _, p := range sim.Partitions() {
-		sim.S.SetCommitHook(p.ID, func(p *PartitionInfo, state execute.BlockState) {
-			_ = state.WalkChanges(func(key record.Key, _ record.Record) error {
-				fmt.Printf("%s block %d changed %v\n", p.ID, state.Params().Index, key)
-				return nil
-			})
-		})
-	}
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)

@@ -226,7 +226,10 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 }
 
 func (s *Simulator) Router() routing.Router { return s.router }
-func (s *Simulator) EventBus() *events.Bus  { return s.partitions[protocol.Directory].nodes[0].eventBus }
+
+func (s *Simulator) EventBus(partition string) *events.Bus {
+	return s.partitions[partition].nodes[0].eventBus
+}
 
 func (s *Simulator) BlockIndex(partition string) uint64 {
 	p := s.partitions[partition]

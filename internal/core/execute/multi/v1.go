@@ -167,6 +167,10 @@ func (s *BlockStateV1) Discard() {
 	s.Batch.Discard()
 }
 
-func (s *BlockStateV1) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (s *BlockStateV1) Hash() []byte {
+	return s.Batch.BptRoot()
+}
+
+func (s *BlockStateV1) WalkChanges(fn record.WalkFunc) error {
 	return s.Batch.WalkChanges(fn)
 }

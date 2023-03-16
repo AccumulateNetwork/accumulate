@@ -201,7 +201,7 @@ func (c *counted[T]) Resolve(key Key) (Record, Key, error) {
 	return c.value(i), nil, nil
 }
 
-func (c *counted[T]) WalkChanges(fn func(Key, Record) error) error {
+func (c *counted[T]) WalkChanges(fn WalkFunc) error {
 	err := c.count.WalkChanges(fn)
 	if err != nil {
 		return err

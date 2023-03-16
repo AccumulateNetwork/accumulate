@@ -98,7 +98,7 @@ func (c *changeSet) IsDirty() bool {
 	return false
 }
 
-func (c *changeSet) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *changeSet) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -210,7 +210,7 @@ func (c *entity) IsDirty() bool {
 	return false
 }
 
-func (c *entity) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *entity) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -373,7 +373,7 @@ func (c *TemplateTest) IsDirty() bool {
 	return false
 }
 
-func (c *TemplateTest) WalkChanges(fn func(record.Key, record.Record) error) error {
+func (c *TemplateTest) WalkChanges(fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -448,9 +448,9 @@ func fieldIsDirty[T record.Record](field T) bool {
 	return any(field) != any(z) && field.IsDirty()
 }
 
-func walkChanges[T record.Record](lastErr *error, field T, fn func(record.Key, record.Record) error) {
+func walkChanges[T record.Record](lastErr *error, field T, fn record.WalkFunc) {
 	var z T
-	if *lastErr != nil || any(field) == any(z) || !field.IsDirty() {
+	if *lastErr != nil || any(field) == any(z) {
 		return
 	}
 
