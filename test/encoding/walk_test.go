@@ -7,10 +7,11 @@
 package encoding
 
 import (
+	"bytes"
+	"fmt"
 	"math/big"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -136,6 +137,9 @@ func TestWalkAndReplay(t *testing.T) {
 		simulator.SnapshotMap(genesis),
 	)
 
+	fmt.Println()
+	fmt.Println()
+
 	for id, blocks := range blocks {
 		db := sim.Database(id)
 		for _, block := range blocks {
@@ -148,26 +152,34 @@ func TestWalkAndReplay(t *testing.T) {
 			})
 
 			View(t, db, func(batch *database.Batch) {
-				if assert.Equal(t, block.Hash, batch.BptRoot()) {
+				if bytes.Equal(block.Hash, batch.BptRoot()) {
 					return
 				}
+				t.Errorf("Root hash does not match for %s block %d", id, block.Index)
+
 				require.NoError(t, batch.ForEachAccount(func(account *database.Account, hash [32]byte) error {
 					u := account.Url()
 					a, ok := block.Accounts[u.AccountID32()]
 					if !ok {
 						t.Errorf("Extra account %v", u)
-					} else {
-						assert.Equal(t, a.Hash, hash, "Mismatch for %v", u)
-						delete(block.Accounts, u.AccountID32())
+						return nil
+					}
+
+					delete(block.Accounts, u.AccountID32())
+
+					if hash != a.Hash {
+						t.Errorf("%v hash does not match", u)
 					}
 					return nil
 				}))
+
+				for _, a := range block.Accounts {
+					t.Errorf("Missing account %v", a.Url)
+				}
+
 				t.FailNow()
 			})
 
-			for _, a := range block.Accounts {
-				t.Errorf("Missing account %v", a.Url)
-			}
 		}
 	}
 
