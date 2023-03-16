@@ -9,12 +9,11 @@ package bsn
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type ExecutorFor[T any, V interface{ Type() T }] interface {
-	Process(*Block, V) (*protocol.TransactionStatus, error)
-	Validate(*Block, V) (*protocol.TransactionStatus, error)
+	Process(*ChangeSet, V) error
+	Validate(*ChangeSet, V) error
 }
 
 type MessageExecutor = ExecutorFor[messaging.MessageType, *MessageContext]
@@ -42,9 +41,3 @@ func registerSimpleExec[X ExecutorFor[T, V], T any, V interface{ Type() T }](lis
 		})
 	}
 }
-
-type MessageContext struct {
-	message messaging.Message
-}
-
-func (m *MessageContext) Type() messaging.MessageType { return m.message.Type() }

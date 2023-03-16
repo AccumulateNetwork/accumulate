@@ -7,8 +7,8 @@
 package bsn
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
@@ -17,10 +17,31 @@ func init() {
 
 type BlockSummary struct{}
 
-func (x BlockSummary) Validate(batch *Block, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	return nil, nil
+func (x BlockSummary) Validate(batch *ChangeSet, ctx *MessageContext) error {
+	_, err := x.check(batch, ctx)
+	return err
 }
 
-func (x BlockSummary) Process(batch *Block, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
-	return nil, nil
+func (BlockSummary) check(batch *ChangeSet, ctx *MessageContext) (*messaging.BlockSummary, error) {
+	msg, ok := ctx.message.(*messaging.BlockSummary)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBlockAnchor, ctx.message.Type())
+	}
+
+	if msg.Partition == "" {
+		return nil, errors.BadRequest.With("missing partition")
+	}
+	if msg.Index == 0 {
+		return nil, errors.BadRequest.With("missing index")
+	}
+
+	return msg, nil
+}
+
+func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error) {
+	batch = batch.Begin()
+	defer func() { commitOrDiscard(batch, &err) }()
+
+	_, err = x.check(batch, ctx)
+	return err
 }

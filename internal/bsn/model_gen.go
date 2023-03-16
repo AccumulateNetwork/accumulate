@@ -12,6 +12,7 @@ package bsn
 
 import (
 	"encoding/hex"
+	"strconv"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -25,6 +26,7 @@ type ChangeSet struct {
 	store  record.Store
 
 	summary map[summaryKey]*Summary
+	pending map[pendingKey]record.Value[[32]byte]
 }
 
 type summaryKey struct {
@@ -33,6 +35,14 @@ type summaryKey struct {
 
 func keyForSummary(hash [32]byte) summaryKey {
 	return summaryKey{hash}
+}
+
+type pendingKey struct {
+	PreviousBlock uint64
+}
+
+func keyForPending(previousBlock uint64) pendingKey {
+	return pendingKey{previousBlock}
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
@@ -44,6 +54,12 @@ func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 		v.parent = c
 		v.label = "summary" + " " + hex.EncodeToString(hash[:])
 		return v
+	})
+}
+
+func (c *ChangeSet) Pending(previousBlock uint64) record.Value[[32]byte] {
+	return getOrCreateMap(&c.pending, keyForPending(previousBlock), func() record.Value[[32]byte] {
+		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("Pending", previousBlock), "pending"+" "+strconv.FormatUint(previousBlock, 10), false, record.Wrapped(record.HashWrapper))
 	})
 }
 
@@ -63,6 +79,16 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 		}
 		v := c.Summary(hash)
 		return v, key[2:], nil
+	case "Pending":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for change set")
+		}
+		previousBlock, okPreviousBlock := key[1].(uint64)
+		if !okPreviousBlock {
+			return nil, nil, errors.InternalError.With("bad key for change set")
+		}
+		v := c.Pending(previousBlock)
+		return v, key[2:], nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
@@ -74,6 +100,11 @@ func (c *ChangeSet) IsDirty() bool {
 	}
 
 	for _, v := range c.summary {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.pending {
 		if v.IsDirty() {
 			return true
 		}
@@ -91,6 +122,9 @@ func (c *ChangeSet) WalkChanges(fn record.WalkFunc) error {
 	for _, v := range c.summary {
 		walkChanges(&err, v, fn)
 	}
+	for _, v := range c.pending {
+		walkChanges(&err, v, fn)
+	}
 	return err
 }
 
@@ -101,6 +135,9 @@ func (c *ChangeSet) baseCommit() error {
 
 	var err error
 	for _, v := range c.summary {
+		commitField(&err, v)
+	}
+	for _, v := range c.pending {
 		commitField(&err, v)
 	}
 
@@ -115,19 +152,12 @@ type Summary struct {
 	parent *ChangeSet
 
 	main       record.Value[*messaging.BlockSummary]
-	anchor     record.Value[messaging.Message]
 	signatures record.Set[protocol.KeySignature]
 }
 
 func (c *Summary) Main() record.Value[*messaging.BlockSummary] {
 	return getOrCreateField(&c.main, func() record.Value[*messaging.BlockSummary] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Struct[messaging.BlockSummary]())
-	})
-}
-
-func (c *Summary) Anchor() record.Value[messaging.Message] {
-	return getOrCreateField(&c.anchor, func() record.Value[messaging.Message] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Anchor"), c.label+" "+"anchor", false, record.Union(messaging.UnmarshalMessage))
 	})
 }
 
@@ -145,8 +175,6 @@ func (c *Summary) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Main":
 		return c.Main(), key[1:], nil
-	case "Anchor":
-		return c.Anchor(), key[1:], nil
 	case "Signatures":
 		return c.Signatures(), key[1:], nil
 	default:
@@ -160,9 +188,6 @@ func (c *Summary) IsDirty() bool {
 	}
 
 	if fieldIsDirty(c.main) {
-		return true
-	}
-	if fieldIsDirty(c.anchor) {
 		return true
 	}
 	if fieldIsDirty(c.signatures) {
@@ -179,7 +204,6 @@ func (c *Summary) WalkChanges(fn record.WalkFunc) error {
 
 	var err error
 	walkChanges(&err, c.main, fn)
-	walkChanges(&err, c.anchor, fn)
 	walkChanges(&err, c.signatures, fn)
 	return err
 }
@@ -191,7 +215,6 @@ func (c *Summary) Commit() error {
 
 	var err error
 	commitField(&err, c.main)
-	commitField(&err, c.anchor)
 	commitField(&err, c.signatures)
 
 	return err

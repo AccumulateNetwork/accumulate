@@ -2,12 +2,6 @@
   type: entity
   root: true
   customCommit: true
-  fields:
-  # - name: kvstore
-  #   type: storage.KeyValueTxn
-  # - name: bptEntries
-  #   type: map[storage.Key][32]byte
-
   attributes:
   - name: Summary
     type: entity
@@ -19,13 +13,16 @@
       type: state
       dataType: messaging.BlockSummary
       pointer: true
-    - name: Anchor
-      type: state
-      dataType: messaging.Message
-      union: true
     - name: Signatures
       type: state
       dataType: protocol.KeySignature
       union: true
       collection: set
       comparator: compareSignatures
+  - name: Pending
+    description: lists pending summaries keyed by previous block
+    parameters:
+    - name: PreviousBlock
+      type: uint
+    type: state
+    dataType: hash

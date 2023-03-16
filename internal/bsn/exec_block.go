@@ -14,13 +14,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+type blockStats struct {
+	Processed int
+}
+
+func (s *blockStats) IsEmpty() bool {
+	return s.Processed == 0
+}
+
 type Block struct {
-	params *execute.BlockParams
-	batch  *ChangeSet
+	executor *Executor
+	params   *execute.BlockParams
+	batch    *ChangeSet
+	stats    blockStats
 }
 
 func (x *Executor) Begin(params execute.BlockParams) (execute.Block, error) {
 	b := new(Block)
+	b.executor = x
 	b.params = &params
 	b.batch = NewChangeSet(x.store, x.logger)
 	return b, nil
@@ -46,11 +57,11 @@ func (b *Block) Close() (execute.BlockState, error) {
 type BlockState struct {
 	params execute.BlockParams
 	batch  *ChangeSet
-	empty  bool
+	stats  blockStats
 }
 
 func (b *BlockState) Params() execute.BlockParams       { return b.params }
-func (b *BlockState) IsEmpty() bool                     { return b.empty }
+func (b *BlockState) IsEmpty() bool                     { return b.stats.IsEmpty() }
 func (b *BlockState) Discard()                          { b.batch.Discard() }
 func (b *BlockState) Hash() []byte                      { return nil }
 func (b *BlockState) WalkChanges(record.WalkFunc) error { return nil }
@@ -60,7 +71,7 @@ func (b *BlockState) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 }
 
 func (b *BlockState) Commit() error {
-	if b.empty {
+	if b.IsEmpty() {
 		b.Discard()
 		return nil
 	}

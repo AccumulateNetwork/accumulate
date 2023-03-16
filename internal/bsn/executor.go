@@ -13,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var executors []func(ExecutorOptions) (messaging.MessageType, MessageExecutor)
@@ -47,9 +46,5 @@ func (*Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 }
 
 func (*Executor) Restore(snapshot ioutil2.SectionReader, validators []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
-	return nil, nil
-}
-
-func (*Executor) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
 	return nil, nil
 }
