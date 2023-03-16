@@ -42,8 +42,8 @@ var _ execute.Executor = (*Executor)(nil)
 func (*Executor) EnableTimers()                        {}
 func (*Executor) StoreBlockTimers(ds *logging.DataSet) {}
 
-func (*Executor) LastBlock() (uint64, [32]byte, error) {
-	return 1, [32]byte{}, nil
+func (*Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
+	return new(execute.BlockParams), [32]byte{}, nil
 }
 
 func (*Executor) Restore(snapshot ioutil2.SectionReader, validators []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {

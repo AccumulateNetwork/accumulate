@@ -122,7 +122,7 @@ func (m *Multi) StoreBlockTimers(ds *logging.DataSet) {
 	(*m.active.Load()).StoreBlockTimers(ds)
 }
 
-func (m *Multi) LastBlock() (uint64, [32]byte, error) {
+func (m *Multi) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	return (*m.active.Load()).LastBlock()
 }
 

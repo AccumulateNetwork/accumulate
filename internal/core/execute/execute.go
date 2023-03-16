@@ -34,7 +34,7 @@ type Executor interface {
 	StoreBlockTimers(ds *logging.DataSet)
 
 	// LastBlock returns the height and hash of the last block.
-	LastBlock() (uint64, [32]byte, error)
+	LastBlock() (*BlockParams, [32]byte, error)
 
 	// Restore restores the database from a snapshot, validates the initial
 	// validators, and returns any additional validators.

@@ -32,17 +32,29 @@ func (x *ExecutorV1) StoreBlockTimers(ds *logging.DataSet) {
 	(*block.Executor)(x).StoreBlockTimers(ds)
 }
 
-func (x *ExecutorV1) LastBlock() (uint64, [32]byte, error) {
+func (x *ExecutorV1) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 
-	var ledger *protocol.SystemLedger
-	err := batch.Account(x.Describe.Ledger()).Main().GetAs(&ledger)
+	c, err := batch.Account(x.Describe.Ledger()).RootChain().Index().Get()
 	if err != nil {
-		return 0, [32]byte{}, errors.UnknownError.Wrap(err)
+		return nil, [32]byte{}, errors.FatalError.WithFormat("load root index chain: %w", err)
+	}
+	if c.Height() == 0 {
+		return nil, [32]byte{}, errors.NotFound
 	}
 
-	return ledger.Index, *(*[32]byte)(batch.BptRoot()), nil
+	entry := new(protocol.IndexEntry)
+	err = c.EntryAs(c.Height()-1, entry)
+	if err != nil {
+		return nil, [32]byte{}, errors.FatalError.WithFormat("load root index chain entry 0: %w", err)
+	}
+
+	b := new(BlockParams)
+	b.Index = entry.BlockIndex
+	b.Time = *entry.BlockTime
+
+	return b, *(*[32]byte)(batch.BptRoot()), nil
 }
 
 func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {

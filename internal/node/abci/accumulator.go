@@ -62,7 +62,7 @@ type Accumulator struct {
 type AccumulatorOptions struct {
 	*config.Config
 	Tracer   trace.Tracer
-	Executor Executor
+	Executor execute.Executor
 	EventBus *events.Bus
 	Logger   log.Logger
 	Address  crypto.Address // This is the address of this node, and is used to determine if the node is the leader
@@ -216,11 +216,11 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 		AppVersion: Version,
 	}
 
-	height, hash, err := app.Executor.LastBlock()
+	block, hash, err := app.Executor.LastBlock()
 	switch {
 	case err == nil:
 		app.ready = true
-		res.LastBlockHeight = int64(height)
+		res.LastBlockHeight = int64(block.Index)
 		res.LastBlockAppHash = hash[:]
 
 	case errors.Is(err, errors.NotFound):
@@ -262,12 +262,12 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 	app.logger.Info("Initializing")
 
-	var initVal []*ValidatorUpdate
+	var initVal []*execute.ValidatorUpdate
 	for _, v := range req.Validators {
 		if v.PubKey.GetEd25519() == nil {
 			panic("unsupported validator key type")
 		}
-		initVal = append(initVal, &ValidatorUpdate{
+		initVal = append(initVal, &execute.ValidatorUpdate{
 			Type:      protocol.SignatureTypeED25519,
 			PublicKey: v.PubKey.GetEd25519(),
 			Power:     v.Power,
