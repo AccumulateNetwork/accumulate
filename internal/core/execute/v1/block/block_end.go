@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -256,7 +255,7 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	if len(block.State.ProducedTxns) > 0 {
 		// Build synthetic receipts on Directory nodes
-		if m.Describe.NetworkType == config.Directory {
+		if m.Describe.NetworkType == protocol.PartitionTypeDirectory {
 			err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
@@ -370,7 +369,7 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 
 	// See if we can get the anchors we need for pending synthetic transactions.
 	// https://accumulate.atlassian.net/browse/AC-1860
-	if x.Describe.NetworkType != config.Directory && len(pending) > 0 {
+	if x.Describe.NetworkType == protocol.PartitionTypeBlockValidator && len(pending) > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -598,7 +597,7 @@ func (x *Executor) shouldPrepareAnchor(block *Block) {
 
 func (x *Executor) shouldOpenMajorBlock(batch *database.Batch, blockTime time.Time) (bool, time.Time) {
 	// Only the directory network can open a major block
-	if x.Describe.NetworkType != config.Directory {
+	if x.Describe.NetworkType != protocol.PartitionTypeDirectory {
 		return false, time.Time{}
 	}
 
@@ -698,9 +697,10 @@ func (x *Executor) prepareAnchor(block *Block) error {
 
 	// Update the system ledger
 	_, err = database.UpdateAccount(block.Batch, x.Describe.Ledger(), func(ledger *protocol.SystemLedger) error {
-		if x.Describe.NetworkType == config.Directory {
+		switch x.Describe.NetworkType {
+		case protocol.PartitionTypeDirectory:
 			ledger.Anchor, err = x.buildDirectoryAnchor(block, ledger, anchorLedger)
-		} else {
+		case protocol.PartitionTypeBlockValidator:
 			ledger.Anchor, err = x.buildPartitionAnchor(block, ledger)
 		}
 		return errors.UnknownError.Wrap(err)

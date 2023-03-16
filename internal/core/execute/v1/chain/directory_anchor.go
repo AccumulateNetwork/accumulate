@@ -13,7 +13,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -52,7 +51,7 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	}
 
 	// Trigger a major block?
-	if st.NetworkType != config.Directory {
+	if st.NetworkType != protocol.PartitionTypeDirectory {
 		st.State.MakeMajorBlock = body.MakeMajorBlock
 		st.State.MakeMajorBlockTime = body.MakeMajorBlockTime
 	}
@@ -72,14 +71,14 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	}
 
 	// Process updates when present
-	if len(body.Updates) > 0 && st.NetworkType != config.Directory {
+	if len(body.Updates) > 0 && st.NetworkType != protocol.PartitionTypeDirectory {
 		err := processNetworkAccountUpdates(st, tx, body.Updates)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if st.NetworkType != config.Directory {
+	if st.NetworkType != protocol.PartitionTypeDirectory {
 		err = processReceiptsFromDirectory(st, tx, body)
 		if err != nil {
 			return nil, err

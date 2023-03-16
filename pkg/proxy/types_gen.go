@@ -77,9 +77,9 @@ type SeedCountResponse struct {
 
 type SeedList struct {
 	fieldsSet []bool
-	BasePort  uint64             `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required"`
-	Type      config.NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Addresses []string           `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
+	BasePort  uint64                 `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required"`
+	Type      protocol.PartitionType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Addresses []string               `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
 	extraData []byte
 }
 
@@ -712,7 +712,7 @@ func (v *SeedList) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(1); ok {
 		v.BasePort = x
 	}
-	if x := new(config.NetworkType); reader.ReadEnum(2, x) {
+	if x := new(protocol.PartitionType); reader.ReadEnum(2, x) {
 		v.Type = *x
 	}
 	for {
@@ -792,7 +792,7 @@ func (v *SeedCountResponse) MarshalJSON() ([]byte, error) {
 func (v *SeedList) MarshalJSON() ([]byte, error) {
 	u := struct {
 		BasePort  uint64                    `json:"basePort,omitempty"`
-		Type      config.NetworkType        `json:"type,omitempty"`
+		Type      protocol.PartitionType    `json:"type,omitempty"`
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
 	}{}
 	if !(v.BasePort == 0) {
@@ -810,7 +810,7 @@ func (v *SeedList) MarshalJSON() ([]byte, error) {
 func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		BasePort  uint64                                             `json:"basePort,omitempty"`
-		Type      config.NetworkType                                 `json:"type,omitempty"`
+		Type      protocol.PartitionType                             `json:"type,omitempty"`
 		Addresses encoding.JsonList[string]                          `json:"addresses,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
@@ -901,7 +901,7 @@ func (v *SeedCountResponse) UnmarshalJSON(data []byte) error {
 func (v *SeedList) UnmarshalJSON(data []byte) error {
 	u := struct {
 		BasePort  uint64                    `json:"basePort,omitempty"`
-		Type      config.NetworkType        `json:"type,omitempty"`
+		Type      protocol.PartitionType    `json:"type,omitempty"`
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
 	}{}
 	u.BasePort = v.BasePort
@@ -919,7 +919,7 @@ func (v *SeedList) UnmarshalJSON(data []byte) error {
 func (v *SeedListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		BasePort  uint64                                             `json:"basePort,omitempty"`
-		Type      config.NetworkType                                 `json:"type,omitempty"`
+		Type      protocol.PartitionType                             `json:"type,omitempty"`
 		Addresses encoding.JsonList[string]                          `json:"addresses,omitempty"`
 		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}

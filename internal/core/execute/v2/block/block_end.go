@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -467,7 +466,7 @@ func (x *Executor) shouldPrepareAnchor(block *Block) {
 
 func (x *Executor) shouldOpenMajorBlock(batch *database.Batch, blockTime time.Time) (bool, time.Time) {
 	// Only the directory network can open a major block
-	if x.Describe.NetworkType != config.Directory {
+	if x.Describe.NetworkType != protocol.PartitionTypeDirectory {
 		return false, time.Time{}
 	}
 
@@ -567,9 +566,10 @@ func (x *Executor) prepareAnchor(block *Block) error {
 
 	// Update the system ledger
 	_, err = database.UpdateAccount(block.Batch, x.Describe.Ledger(), func(ledger *protocol.SystemLedger) error {
-		if x.Describe.NetworkType == config.Directory {
+		switch x.Describe.NetworkType {
+		case protocol.PartitionTypeDirectory:
 			ledger.Anchor, err = x.buildDirectoryAnchor(block, ledger, anchorLedger)
-		} else {
+		case protocol.PartitionTypeBlockValidator:
 			ledger.Anchor, err = x.buildPartitionAnchor(block, ledger)
 		}
 		return errors.UnknownError.Wrap(err)
