@@ -32,10 +32,15 @@ type BlockAnchor struct {
 }
 
 type BlockSummary struct {
-	fieldsSet        []bool
-	Partition        string             `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-	Index            uint64             `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	StateTreeHash    [32]byte           `json:"stateTreeHash,omitempty" form:"stateTreeHash" query:"stateTreeHash" validate:"required"`
+	fieldsSet []bool
+	// Partition is the ID of the partition of the block.
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	// Index is the index of the block.
+	Index uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	// StateTreeHash is the state tree hash after the block.
+	StateTreeHash [32]byte `json:"stateTreeHash,omitempty" form:"stateTreeHash" query:"stateTreeHash" validate:"required"`
+	// PreviousBlock is the index of the previous block (excludes any empty blocks).
+	PreviousBlock    uint64             `json:"previousBlock,omitempty" form:"previousBlock" query:"previousBlock" validate:"required"`
 	RecordUpdates    []*RecordUpdate    `json:"recordUpdates,omitempty" form:"recordUpdates" query:"recordUpdates" validate:"required"`
 	StateTreeUpdates []*StateTreeUpdate `json:"stateTreeUpdates,omitempty" form:"stateTreeUpdates" query:"stateTreeUpdates" validate:"required"`
 	extraData        []byte
@@ -152,6 +157,7 @@ func (v *BlockSummary) Copy() *BlockSummary {
 	u.Partition = v.Partition
 	u.Index = v.Index
 	u.StateTreeHash = v.StateTreeHash
+	u.PreviousBlock = v.PreviousBlock
 	u.RecordUpdates = make([]*RecordUpdate, len(v.RecordUpdates))
 	for i, v := range v.RecordUpdates {
 		if v != nil {
@@ -338,6 +344,9 @@ func (v *BlockSummary) Equal(u *BlockSummary) bool {
 		return false
 	}
 	if !(v.StateTreeHash == u.StateTreeHash) {
+		return false
+	}
+	if !(v.PreviousBlock == u.PreviousBlock) {
 		return false
 	}
 	if len(v.RecordUpdates) != len(u.RecordUpdates) {
@@ -608,8 +617,9 @@ var fieldNames_BlockSummary = []string{
 	2: "Partition",
 	3: "Index",
 	4: "StateTreeHash",
-	5: "RecordUpdates",
-	6: "StateTreeUpdates",
+	5: "PreviousBlock",
+	6: "RecordUpdates",
+	7: "StateTreeUpdates",
 }
 
 func (v *BlockSummary) MarshalBinary() ([]byte, error) {
@@ -626,14 +636,17 @@ func (v *BlockSummary) MarshalBinary() ([]byte, error) {
 	if !(v.StateTreeHash == ([32]byte{})) {
 		writer.WriteHash(4, &v.StateTreeHash)
 	}
+	if !(v.PreviousBlock == 0) {
+		writer.WriteUint(5, v.PreviousBlock)
+	}
 	if !(len(v.RecordUpdates) == 0) {
 		for _, v := range v.RecordUpdates {
-			writer.WriteValue(5, v.MarshalBinary)
+			writer.WriteValue(6, v.MarshalBinary)
 		}
 	}
 	if !(len(v.StateTreeUpdates) == 0) {
 		for _, v := range v.StateTreeUpdates {
-			writer.WriteValue(6, v.MarshalBinary)
+			writer.WriteValue(7, v.MarshalBinary)
 		}
 	}
 
@@ -667,11 +680,16 @@ func (v *BlockSummary) IsValid() error {
 		errs = append(errs, "field StateTreeHash is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field PreviousBlock is missing")
+	} else if v.PreviousBlock == 0 {
+		errs = append(errs, "field PreviousBlock is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field RecordUpdates is missing")
 	} else if len(v.RecordUpdates) == 0 {
 		errs = append(errs, "field RecordUpdates is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field StateTreeUpdates is missing")
 	} else if len(v.StateTreeUpdates) == 0 {
 		errs = append(errs, "field StateTreeUpdates is not set")
@@ -1262,15 +1280,18 @@ func (v *BlockSummary) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadHash(4); ok {
 		v.StateTreeHash = *x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.PreviousBlock = x
+	}
 	for {
-		if x := new(RecordUpdate); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+		if x := new(RecordUpdate); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 			v.RecordUpdates = append(v.RecordUpdates, x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x := new(StateTreeUpdate); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+		if x := new(StateTreeUpdate); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
 			v.StateTreeUpdates = append(v.StateTreeUpdates, x)
 		} else {
 			break
@@ -1672,6 +1693,7 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 		Partition        string                              `json:"partition,omitempty"`
 		Index            uint64                              `json:"index,omitempty"`
 		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
 		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
 		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
 	}{}
@@ -1684,6 +1706,9 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.StateTreeHash == ([32]byte{})) {
 		u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+	}
+	if !(v.PreviousBlock == 0) {
+		u.PreviousBlock = v.PreviousBlock
 	}
 	if !(len(v.RecordUpdates) == 0) {
 		u.RecordUpdates = v.RecordUpdates
@@ -1892,6 +1917,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 		Partition        string                              `json:"partition,omitempty"`
 		Index            uint64                              `json:"index,omitempty"`
 		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
 		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
 		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
 	}{}
@@ -1899,6 +1925,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 	u.Partition = v.Partition
 	u.Index = v.Index
 	u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+	u.PreviousBlock = v.PreviousBlock
 	u.RecordUpdates = v.RecordUpdates
 	u.StateTreeUpdates = v.StateTreeUpdates
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -1914,6 +1941,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 	} else {
 		v.StateTreeHash = x
 	}
+	v.PreviousBlock = u.PreviousBlock
 	v.RecordUpdates = u.RecordUpdates
 	v.StateTreeUpdates = u.StateTreeUpdates
 	return nil

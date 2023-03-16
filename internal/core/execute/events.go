@@ -6,7 +6,12 @@
 
 package execute
 
+func (WillBeginBlock) IsEvent()  {}
 func (WillCommitBlock) IsEvent() {}
+
+type WillBeginBlock struct {
+	BlockParams
+}
 
 type WillCommitBlock struct {
 	Block BlockState

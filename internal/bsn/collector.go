@@ -14,12 +14,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Collector struct {
 	partition string
 	db        database.Beginner
 	events    *events.Bus
+	previous  chan uint64
 	latest    chan *messaging.BlockSummary
 }
 
@@ -38,13 +40,54 @@ func StartCollector(opts CollectorOptions) (*Collector, error) {
 	c.partition = opts.Partition
 	c.db = opts.Database
 	c.events = opts.Events
+	c.previous = make(chan uint64, 1)
 	c.latest = make(chan *messaging.BlockSummary, 1)
+	events.SubscribeSync(opts.Events, c.willBeginBlock)
 	events.SubscribeSync(opts.Events, c.willCommitBlock)
 	events.SubscribeSync(opts.Events, c.didCommitBlock)
+
+	// Load the index of the last block
+	batch := c.db.Begin(false)
+	defer batch.Discard()
+	var ledger *protocol.SystemLedger
+	err := batch.Account(protocol.PartitionUrl(c.partition).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	switch {
+	case err == nil:
+		c.previous <- ledger.Index
+	case errors.Is(err, errors.NotFound):
+		c.previous <- 0
+	default:
+		return nil, errors.UnknownError.WithFormat("load system ledger: %w", err)
+	}
+
 	return c, nil
 }
 
 func (DidCollectBlock) IsEvent() {}
+
+func (c *Collector) willBeginBlock(e execute.WillBeginBlock) error {
+	batch := c.db.Begin(false)
+	defer batch.Discard()
+	var ledger *protocol.SystemLedger
+	err := batch.Account(protocol.PartitionUrl(c.partition).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load system ledger: %w", err)
+	}
+
+	// Drain the channel
+	select {
+	case <-c.previous:
+	default:
+	}
+
+	// Send the index of the previous block
+	select {
+	case c.previous <- ledger.Index:
+		return nil
+	default:
+		return errors.InternalError.With("channel is full")
+	}
+}
 
 func (c *Collector) willCommitBlock(e execute.WillCommitBlock) error {
 	s := new(messaging.BlockSummary)
@@ -56,6 +99,13 @@ func (c *Collector) willCommitBlock(e execute.WillCommitBlock) error {
 		// Ok
 	default:
 		return errors.InternalError.With("already processing another block")
+	}
+
+	// Get the index of the previous block
+	select {
+	case s.PreviousBlock = <-c.previous:
+	default:
+		return errors.InternalError.With("no previous block")
 	}
 
 	err := e.Block.WalkChanges(func(r record.TerminalRecord) error {

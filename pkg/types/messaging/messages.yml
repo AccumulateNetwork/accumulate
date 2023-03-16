@@ -117,11 +117,17 @@ BlockSummary:
   union: { type: message }
   fields:
     - name: Partition
+      description: is the ID of the partition of the block
       type: string
     - name: Index
+      description: is the index of the block
       type: uint
     - name: StateTreeHash
+      description: is the state tree hash after the block
       type: hash
+    - name: PreviousBlock
+      description: is the index of the previous block (excludes any empty blocks)
+      type: uint
     - name: RecordUpdates
       type: RecordUpdate
       marshal-as: reference
