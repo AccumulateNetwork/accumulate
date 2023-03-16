@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -26,6 +27,7 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -114,6 +116,48 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Network:      *s.netcfg,
 	}
 
+	// Collect and submit block summaries
+	if s.init.Bsn != nil {
+		// Collect block summaries
+		_, err := bsn.StartCollector(bsn.CollectorOptions{
+			Partition: p.ID,
+			Database:  n,
+			Events:    n.eventBus,
+		})
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("start collector: %w", err)
+		}
+
+		signer := nodeSigner{n}
+		events.SubscribeAsync(n.eventBus, func(e bsn.DidCollectBlock) {
+			env, err := build.SignatureForMessage(e.Summary).
+				Url(network.NodeUrl()).
+				Signer(signer).
+				Done()
+			if err != nil {
+				n.logger.Error("Failed to sign block summary", "error", err)
+				return
+			}
+
+			messages, err := env.Normalize()
+			if err != nil {
+				n.logger.Error("Failed to normalize block summary envelope", "error", err)
+				return
+			}
+
+			st, err := s.SubmitTo("BSN", messages)
+			if err != nil {
+				n.logger.Error("Failed to submit block summary envelope", "error", err)
+				return
+			}
+			for _, st := range st {
+				if st.Error != nil {
+					n.logger.Error("Block summary envelope failed", "error", st.AsError())
+				}
+			}
+		})
+	}
+
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
 		Logger:        n.logger,
@@ -122,7 +166,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Describe:      network,
 		Router:        s.router,
 		EventBus:      n.eventBus,
-		NewDispatcher: func() execute.Dispatcher { return &dispatcher{sim: s, envelopes: map[string][][]messaging.Message{}} },
+		NewDispatcher: s.newDispatcher,
 		Sequencer:     s.Services(),
 		Querier:       s.Services(),
 	}

@@ -24,6 +24,10 @@ type dispatcher struct {
 	envelopes map[string][][]messaging.Message
 }
 
+func (s *Simulator) newDispatcher() execute.Dispatcher {
+	return &dispatcher{sim: s, envelopes: map[string][][]messaging.Message{}}
+}
+
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // Submit routes the envelope and adds it to the queue for a partition.
