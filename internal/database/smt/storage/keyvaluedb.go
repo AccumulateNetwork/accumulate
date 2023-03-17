@@ -42,6 +42,8 @@ type KeyValueStore interface {
 
 	// Close closes the store.
 	Close() error
+
+	WithPrefix(string) Beginner
 }
 
 // Logger defines a generic logging interface compatible with Tendermint (stolen from Tendermint).

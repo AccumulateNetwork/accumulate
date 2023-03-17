@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -32,6 +32,7 @@ type DB struct {
 	readyMu  *sync.RWMutex
 	badgerDB *badger.DB
 	logger   storage.Logger
+	prefix   string
 }
 
 var _ storage.KeyValueStore = (*DB)(nil)
@@ -70,6 +71,13 @@ func New(filepath string, logger storage.Logger) (*DB, error) {
 	go d.gc()
 
 	return d, nil
+}
+
+func (m *DB) WithPrefix(prefix string) storage.Beginner {
+	n := new(DB)
+	*n = *m
+	n.prefix = prefix
+	return n
 }
 
 // Close

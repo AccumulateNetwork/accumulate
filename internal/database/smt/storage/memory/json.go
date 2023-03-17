@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,8 +15,8 @@ import (
 )
 
 func (m *DB) MarshalJSON() ([]byte, error) {
-	vv := make(map[string]string, len(m.entries))
-	for k, v := range m.entries {
+	vv := make(map[string]string, len(m.entries.values))
+	for k, v := range m.entries.values {
 		vv[hex.EncodeToString(k[:])] = hex.EncodeToString(v) //nolint:rangevarref
 	}
 	return json.Marshal(vv)
@@ -40,7 +40,7 @@ func (m *DB) UnmarshalJSON(b []byte) error {
 		if err != nil {
 			return err
 		}
-		m.entries[storage.Key(*(*[32]byte)(kk))] = vv
+		m.entries.values[storage.Key(*(*[32]byte)(kk))] = vv
 	}
 	return nil
 }
