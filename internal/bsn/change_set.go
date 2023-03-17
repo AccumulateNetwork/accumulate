@@ -45,6 +45,9 @@ func (c *ChangeSet) Commit() error {
 }
 
 func (c *ChangeSet) Discard() {
+	for _, b := range c.partition {
+		b.Discard()
+	}
 	if kvs, ok := c.store.(record.KvStore); ok {
 		kvs.Store.Discard()
 	}
