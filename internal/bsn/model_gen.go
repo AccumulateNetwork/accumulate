@@ -14,7 +14,9 @@ import (
 	"encoding/hex"
 	"strconv"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -22,11 +24,16 @@ import (
 )
 
 type ChangeSet struct {
-	logger logging.OptionalLogger
-	store  record.Store
+	logger  logging.OptionalLogger
+	store   record.Store
+	key     record.Key
+	kvstore storage.KeyValueTxn
+	parent  *ChangeSet
 
-	summary map[summaryKey]*Summary
-	pending map[pendingKey]record.Value[[32]byte]
+	lastBlock record.Value[*LastBlock]
+	summary   map[summaryKey]*Summary
+	pending   map[pendingKey]record.Value[[32]byte]
+	partition map[partitionKey]*database.Batch
 }
 
 type summaryKey struct {
@@ -45,12 +52,26 @@ func keyForPending(previousBlock uint64) pendingKey {
 	return pendingKey{previousBlock}
 }
 
+type partitionKey struct {
+	ID string
+}
+
+func keyForPartition(id string) partitionKey {
+	return partitionKey{id}
+}
+
+func (c *ChangeSet) LastBlock() record.Value[*LastBlock] {
+	return getOrCreateField(&c.lastBlock, func() record.Value[*LastBlock] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
+	})
+}
+
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 	return getOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
 		v := new(Summary)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Summary", hash)
+		v.key = c.key.Append("Summary", hash)
 		v.parent = c
 		v.label = "summary" + " " + hex.EncodeToString(hash[:])
 		return v
@@ -59,7 +80,7 @@ func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 
 func (c *ChangeSet) Pending(previousBlock uint64) record.Value[[32]byte] {
 	return getOrCreateMap(&c.pending, keyForPending(previousBlock), func() record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("Pending", previousBlock), "pending"+" "+strconv.FormatUint(previousBlock, 10), false, record.Wrapped(record.HashWrapper))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Pending", previousBlock), "pending"+" "+strconv.FormatUint(previousBlock, 10), false, record.Wrapped(record.HashWrapper))
 	})
 }
 
@@ -69,6 +90,8 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 	}
 
 	switch key[0] {
+	case "LastBlock":
+		return c.LastBlock(), key[1:], nil
 	case "Summary":
 		if len(key) < 2 {
 			return nil, nil, errors.InternalError.With("bad key for change set")
@@ -89,6 +112,16 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 		}
 		v := c.Pending(previousBlock)
 		return v, key[2:], nil
+	case "Partition":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for change set")
+		}
+		id, okID := key[1].(string)
+		if !okID {
+			return nil, nil, errors.InternalError.With("bad key for change set")
+		}
+		v := c.Partition(id)
+		return v, key[2:], nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
@@ -99,12 +132,20 @@ func (c *ChangeSet) IsDirty() bool {
 		return false
 	}
 
+	if fieldIsDirty(c.lastBlock) {
+		return true
+	}
 	for _, v := range c.summary {
 		if v.IsDirty() {
 			return true
 		}
 	}
 	for _, v := range c.pending {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.partition {
 		if v.IsDirty() {
 			return true
 		}
@@ -119,10 +160,14 @@ func (c *ChangeSet) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
+	walkChanges(&err, c.lastBlock, fn)
 	for _, v := range c.summary {
 		walkChanges(&err, v, fn)
 	}
 	for _, v := range c.pending {
+		walkChanges(&err, v, fn)
+	}
+	for _, v := range c.partition {
 		walkChanges(&err, v, fn)
 	}
 	return err
@@ -134,10 +179,14 @@ func (c *ChangeSet) baseCommit() error {
 	}
 
 	var err error
+	commitField(&err, c.lastBlock)
 	for _, v := range c.summary {
 		commitField(&err, v)
 	}
 	for _, v := range c.pending {
+		commitField(&err, v)
+	}
+	for _, v := range c.partition {
 		commitField(&err, v)
 	}
 

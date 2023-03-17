@@ -13,9 +13,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+// New
 func NewChangeSet(store storage.Beginner, logger log.Logger) *ChangeSet {
 	c := new(ChangeSet)
-	c.store = record.KvStore{Store: store.Begin(true)}
+	c.kvstore = store.Begin(true)
+	c.store = record.KvStore{Store: c.kvstore}
 	c.logger.Set(logger, "module", "database")
 	return c
 }
@@ -24,6 +26,8 @@ func (c *ChangeSet) Begin() *ChangeSet {
 	d := new(ChangeSet)
 	d.logger = c.logger
 	d.store = c
+	d.parent = c
+	d.kvstore = c.kvstore.Begin(true)
 	return d
 }
 
@@ -33,16 +37,14 @@ func (c *ChangeSet) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	kvs, ok := c.store.(record.KvStore)
-	if !ok {
-		return nil
-	}
-
-	err = kvs.Store.Commit()
+	err = c.kvstore.Commit()
 	return errors.UnknownError.Wrap(err)
 }
 
 func (c *ChangeSet) Discard() {
+	for _, b := range c.partition {
+		b.Discard()
+	}
 	if kvs, ok := c.store.(record.KvStore); ok {
 		kvs.Store.Discard()
 	}

@@ -2,7 +2,17 @@
   type: entity
   root: true
   customCommit: true
+  fields:
+  - name: kvstore
+    type: storage.KeyValueTxn
+  - name: parent
+    type: ChangeSet
+    pointer: true
   attributes:
+  - name: LastBlock
+    type: state
+    dataType: LastBlock
+    pointer: true
   - name: Summary
     type: entity
     parameters:
@@ -26,3 +36,12 @@
       type: uint
     type: state
     dataType: hash
+  - name: Partition
+    description: is the database for a partition
+    parameters:
+    - name: ID
+      type: string
+    type: other
+    dataType: database.Batch
+    pointer: true
+    omitAccessor: true
