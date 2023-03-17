@@ -10,7 +10,6 @@ import (
 	"bytes"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -154,42 +153,8 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 	part = batch.Partition(msg.Partition)
 
 	// Verify the root hash is the same
-	if bytes.Equal(msg.StateTreeHash[:], part.BptRoot()) {
-		return nil
+	if !bytes.Equal(msg.StateTreeHash[:], part.BptRoot()) {
+		return errors.BadRequest.With("state hash does not match")
 	}
-
-	hashes := map[[32]byte][32]byte{}
-	for _, v := range msg.StateTreeUpdates {
-		if v.Key[1].(*url.URL).ShortString() == "dn.acme/anchors" {
-			print("")
-		}
-		r, _, err := part.Resolve(v.Key)
-		if err != nil {
-			return errors.UnknownError.WithFormat("resolve %v: %w", r, err)
-		}
-		account, ok := r.(*database.Account)
-		if !ok {
-			continue
-		}
-		hashes[account.Url().AccountID32()] = v.Hash
-		hash, err := account.Hash()
-		if err != nil {
-			return errors.UnknownError.WithFormat("hash %v: %w", account.Url(), err)
-		}
-		if hash != v.Hash {
-			ctx.batch.logger.Error("Account hash mismatch", "account", account.Url())
-		}
-	}
-
-	part.ForEachAccount(func(account *database.Account, hash [32]byte) error {
-		id := account.Url().AccountID32()
-		h2, ok := hashes[id]
-		if ok && hash != h2 {
-			ctx.batch.logger.Error("Account hash mismatch in bpt", "account", account.Url())
-		}
-		delete(hashes, id)
-		return nil
-	})
-
-	return errors.BadRequest.With("state hash does not match")
+	return nil
 }

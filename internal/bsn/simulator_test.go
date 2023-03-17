@@ -7,20 +7,19 @@
 package bsn_test
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
-	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -36,30 +35,7 @@ func TestSimulator(t *testing.T) {
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	g.ExecutorVersion = ExecutorVersionLatest
 
-	// Use the simulator to create genesis documents
 	net := simulator.SimpleNetwork(t.Name(), 1, 1)
-	sim := NewSim(t,
-		simulator.MemoryDatabase,
-		net,
-		simulator.GenesisWith(GenesisTime, g),
-	)
-
-	sim.StepN(100)
-
-	// Capture the snapshot now as the genesis snapshot
-	genesis := map[string][]byte{}
-	for _, part := range sim.Partitions() {
-		helpers.View(t, sim.Database(part.ID), func(batch *database.Batch) {
-			buf := new(ioutil2.Buffer)
-			_, err := snapshot.Collect(batch, new(snapshot.Header), buf, snapshot.CollectOptions{
-				PreserveAccountHistory: func(*database.Account) (bool, error) { return true, nil },
-			})
-			require.NoError(t, err)
-			genesis[part.ID] = buf.Bytes()
-		})
-	}
-
-	// Add the BSN
 	net.Bsn = &accumulated.BvnInit{
 		Id: "BSN",
 		Nodes: []*accumulated.NodeInit{{
@@ -69,35 +45,19 @@ func TestSimulator(t *testing.T) {
 		}},
 	}
 
-	// Build the BSN's snapshot
-	header := new(snapshot.Header)
-	header.Height = 1
-	header.Timestamp = GenesisTime
-	header.PartitionSnapshotIDs = []string{Directory}
-	for _, b := range net.Bvns {
-		header.PartitionSnapshotIDs = append(header.PartitionSnapshotIDs, b.Id)
-	}
-	{
-		buf := new(ioutil2.Buffer)
-		snap, err := snapshot.Create(buf, header)
-		require.NoError(t, err)
-
-		for _, id := range header.PartitionSnapshotIDs {
-			w, err := snap.Open(snapshot.SectionTypeSnapshot)
-			require.NoError(t, err)
-			_, err = bytes.NewBuffer(genesis[id]).WriteTo(w)
-			require.NoError(t, err)
-			err = w.Close()
-			require.NoError(t, err)
+	var bsnStore *memory.DB
+	openDb := func(partition string, node int, logger log.Logger) storage.KeyValueStore {
+		if partition == net.Bsn.Id && node == 0 {
+			bsnStore = memory.New(logger)
+			return bsnStore
 		}
-		genesis[net.Bsn.Id] = buf.Bytes()
+		return memory.New(logger)
 	}
 
 	// Initialize
-	sim = NewSim(t,
-		simulator.MemoryDatabase,
+	sim := NewSim(t,
+		openDb,
 		net,
-		// simulator.SnapshotMap(genesis),
 		simulator.GenesisWith(GenesisTime, g),
 	)
 
@@ -118,4 +78,9 @@ func TestSimulator(t *testing.T) {
 	// Verify
 	account := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(lite), lite)
 	require.Equal(t, 123, int(account.Balance.Int64()))
+
+	batch := bsn.NewChangeSet(bsnStore, nil)
+	defer batch.Discard()
+	account2 := GetAccount[*LiteTokenAccount](t, batch.Partition("BVN0"), lite)
+	require.True(t, account.Equal(account2))
 }
