@@ -21,6 +21,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -28,6 +29,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -202,13 +204,32 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 
 	globals.Network = netinfo
 
-	for id := range docs {
+	ids := []string{protocol.Directory}
+	for _, bvn := range network.Bvns {
+		ids = append(ids, bvn.Id)
+	}
+
+	bsnSnapBuf := new(ioutil2.Buffer)
+	var bsnSnap *snapshot.Writer
+	var err error
+	if network.Bsn != nil {
+		header := new(snapshot.Header)
+		header.Height = 1
+		header.Timestamp = time
+		header.PartitionSnapshotIDs = ids
+		bsnSnap, err = snapshot.Create(bsnSnapBuf, header)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, id := range ids {
 		netType := protocol.PartitionTypeBlockValidator
 		if strings.EqualFold(id, protocol.Directory) {
 			netType = protocol.PartitionTypeDirectory
 		}
-		snapshot := new(ioutil2.Buffer)
-		root, err := genesis.Init(snapshot, genesis.InitOpts{
+		snapBuf := new(ioutil2.Buffer)
+		root, err := genesis.Init(snapBuf, genesis.InitOpts{
 			PartitionId:     id,
 			NetworkType:     netType,
 			GenesisTime:     time,
@@ -222,10 +243,42 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			return nil, err
 		}
 
+		// Write the snapshot to the BSN snapshot
+		if network.Bsn != nil {
+			w, err := bsnSnap.Open(snapshot.SectionTypeSnapshot)
+			if err != nil {
+				return nil, err
+			}
+			_, err = bytes.NewBuffer(snapBuf.Bytes()).WriteTo(w)
+			if err != nil {
+				return nil, err
+			}
+			err = w.Close()
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		docs[id].AppHash = root
-		docs[id].AppState, err = json.Marshal(snapshot.Bytes())
+		docs[id].AppState, err = json.Marshal(snapBuf.Bytes())
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	if network.Bsn != nil {
+		b, err := json.Marshal(bsnSnapBuf.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		docs[network.Bsn.Id] = &tmtypes.GenesisDoc{
+			ChainID:       network.Bsn.Id,
+			GenesisTime:   time,
+			InitialHeight: 1,
+			// TODO Validators
+			ConsensusParams: tmtypes.DefaultConsensusParams(),
+			AppHash:         make(tmbytes.HexBytes, 32),
+			AppState:        b,
 		}
 	}
 

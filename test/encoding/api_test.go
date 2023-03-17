@@ -52,7 +52,7 @@ func TestAPIv2Consistency(t *testing.T) {
 	// Start the simulator
 	sim, err := simulator.New(
 		acctesting.NewTestLogger(t),
-		func(partition string, node int, logger log.Logger) storage.Beginner {
+		func(partition string, node int, logger log.Logger) storage.KeyValueStore {
 			mem := memory.New(logger)
 			require.NoError(t, json.Unmarshal(testData.State[partition], mem))
 			return mem

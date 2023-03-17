@@ -48,7 +48,7 @@ func TestGenerateDbTestdata(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		func(partition string, _ int, logger log.Logger) storage.Beginner {
+		func(partition string, _ int, logger log.Logger) storage.KeyValueStore {
 			if strings.EqualFold(partition, protocol.Directory) {
 				return memory.New(logger)
 			}

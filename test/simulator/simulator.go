@@ -12,7 +12,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -54,7 +53,7 @@ type Simulator struct {
 	DropDispatchedMessages bool
 }
 
-type OpenDatabaseFunc func(partition string, node int, logger log.Logger) storage.Beginner
+type OpenDatabaseFunc func(partition string, node int, logger log.Logger) storage.KeyValueStore
 type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
 
 func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
@@ -108,21 +107,30 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 		}
 	}
 
-	for _, p := range s.partitions {
-		snapshot, err := snapshot(p.ID, s.init, s.logger)
+	ids := []string{protocol.Directory}
+	for _, b := range network.Bvns {
+		ids = append(ids, b.Id)
+	}
+	if network.Bsn != nil {
+		ids = append(ids, network.Bsn.Id)
+	}
+
+	for _, id := range ids {
+		snapshot, err := snapshot(id, s.init, s.logger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 		}
-		err = p.initChain(snapshot)
+		// fmt.Println("Init", id)
+		err = s.partitions[id].initChain(snapshot)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("init %s: %w", p.ID, err)
+			return nil, errors.UnknownError.WithFormat("init %s: %w", id, err)
 		}
 	}
 
 	return s, nil
 }
 
-func MemoryDatabase(_ string, _ int, logger log.Logger) storage.Beginner {
+func MemoryDatabase(_ string, _ int, logger log.Logger) storage.KeyValueStore {
 	if logger != nil {
 		logger = logger.With("module", "storage")
 	}
@@ -130,7 +138,7 @@ func MemoryDatabase(_ string, _ int, logger log.Logger) storage.Beginner {
 }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc {
-	return func(partition string, node int, logger log.Logger) storage.Beginner {
+	return func(partition string, node int, logger log.Logger) storage.KeyValueStore {
 		if logger != nil {
 			logger = logger.With("module", "storage")
 		}
@@ -225,11 +233,6 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 
 	var genDocs map[string]*tmtypes.GenesisDoc
 	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
-		if network.Bsn != nil && strings.EqualFold(partition, network.Bsn.Id) {
-			// TODO Fix
-			return new(ioutil2.Buffer), nil
-		}
-
 		var err error
 		if genDocs == nil {
 			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil, nil)
