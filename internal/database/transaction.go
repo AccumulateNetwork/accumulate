@@ -18,12 +18,12 @@ import (
 )
 
 func (r *Transaction) hash32() [32]byte {
-	h := r.key[1].([32]byte)
+	h := r.key[1+len(r.parent.key)].([32]byte)
 	return h
 }
 
 func (r *Transaction) hash() []byte {
-	h := r.key[1].([32]byte)
+	h := r.key[1+len(r.parent.key)].([32]byte)
 	return h[:]
 }
 

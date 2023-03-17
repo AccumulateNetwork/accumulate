@@ -49,7 +49,7 @@ func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) er
 }
 
 func (r *Account) Url() *url.URL {
-	return r.key[1].(*url.URL)
+	return r.key[1+len(r.parent.key)].(*url.URL)
 }
 
 func (a *Account) Commit() error {

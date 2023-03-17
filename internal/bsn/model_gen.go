@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"strconv"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -25,13 +26,14 @@ import (
 type ChangeSet struct {
 	logger  logging.OptionalLogger
 	store   record.Store
+	key     record.Key
 	kvstore storage.KeyValueStore
 	parent  *ChangeSet
 
 	lastBlock record.Value[*LastBlock]
 	summary   map[summaryKey]*Summary
 	pending   map[pendingKey]record.Value[[32]byte]
-	partition map[partitionKey]*PartitionBatch
+	partition map[partitionKey]*database.Batch
 }
 
 type summaryKey struct {
@@ -60,7 +62,7 @@ func keyForPartition(id string) partitionKey {
 
 func (c *ChangeSet) LastBlock() record.Value[*LastBlock] {
 	return getOrCreateField(&c.lastBlock, func() record.Value[*LastBlock] {
-		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
 	})
 }
 
@@ -69,7 +71,7 @@ func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 		v := new(Summary)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Summary", hash)
+		v.key = c.key.Append("Summary", hash)
 		v.parent = c
 		v.label = "summary" + " " + hex.EncodeToString(hash[:])
 		return v
@@ -78,7 +80,7 @@ func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 
 func (c *ChangeSet) Pending(previousBlock uint64) record.Value[[32]byte] {
 	return getOrCreateMap(&c.pending, keyForPending(previousBlock), func() record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("Pending", previousBlock), "pending"+" "+strconv.FormatUint(previousBlock, 10), false, record.Wrapped(record.HashWrapper))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Pending", previousBlock), "pending"+" "+strconv.FormatUint(previousBlock, 10), false, record.Wrapped(record.HashWrapper))
 	})
 }
 

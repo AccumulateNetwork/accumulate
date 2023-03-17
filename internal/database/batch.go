@@ -48,14 +48,15 @@ func (b *Batch) SetObserver(observer Observer) {
 func (d *Database) Begin(writable bool) *Batch {
 	id := atomic.AddInt64(&d.nextBatchId, 1)
 
-	b := NewBatch(fmt.Sprint(id), d.store.Begin(writable), writable, d.logger)
+	b := NewBatch(fmt.Sprint(id), nil, d.store.Begin(writable), writable, d.logger)
 	b.observer = d.observer
 	return b
 }
 
-func NewBatch(id string, store storage.KeyValueTxn, writable bool, logger log.Logger) *Batch {
+func NewBatch(id string, key record.Key, store storage.KeyValueTxn, writable bool, logger log.Logger) *Batch {
 	b := new(Batch)
 	b.id = id
+	b.key = key
 	b.writable = writable
 	b.logger.Set(logger)
 	b.kvstore = store

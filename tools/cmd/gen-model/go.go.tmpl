@@ -38,13 +38,8 @@ c.label + " " +
 {{- end}}
 {{- end}}
 
-{{  define "key"}}
-{{- if .GetParent.Root -}}
-record.Key{}
-{{- else -}}
-c.key
-{{- end -}}
-.Append({{template "keyArgs" .}})
+{{  define "key" -}}
+c.key.Append({{template "keyArgs" .}})
 {{- end}}
 
 {{  define "keyArgs"}}
@@ -108,8 +103,8 @@ type {{.FullName}} interface {
 type {{fullName .}} struct {
 	logger logging.OptionalLogger
 	store record.Store
-	{{- if not .Root}}
 	key record.Key
+	{{- if not .Root}}
 	label string
 	{{- if .GetParent}}
 	parent *{{fullName .GetParent}}

@@ -24,6 +24,10 @@ func (c *AccountTransactionSignatures) Active() record.Set[*SignatureSetEntry] {
 	return &accountTransactionSignaturesActive{c.getActive(), c}
 }
 
+func (a *AccountTransaction) hash() [32]byte {
+	return a.key[1+len(a.parent.key)].([32]byte)
+}
+
 // accountTransactionSignaturesActive is a wrapper for the active signature [record.Set] that records
 // the signer in Message(hash).Signers.
 type accountTransactionSignaturesActive struct {
@@ -48,7 +52,7 @@ func (a *accountTransactionSignaturesActive) updateIndices(v []*SignatureSetEntr
 
 	// Record the signerUrl URL in the message's signerUrl list
 	signerUrl := a.parent.parent.parent.Url()
-	hash := a.parent.key[3].([32]byte)
+	hash := a.parent.parent.hash()
 	err = a.parent.parent.parent.parent.Message(hash).Signers().Add(signerUrl)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)

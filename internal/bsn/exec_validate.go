@@ -18,11 +18,14 @@ func (x *Executor) Validate(messages []messaging.Message, recheck bool) ([]*prot
 	b.batch = NewChangeSet(x.store, x.logger)
 	defer b.batch.Discard()
 
+	d := new(bundle)
+	d.Block = b
+
 	// Validate each message
 	var statuses []*protocol.TransactionStatus
 	for _, msg := range messages {
-		ctx := &MessageContext{message: msg}
-		err := b.callMessageValidator(b.batch, ctx)
+		ctx := &MessageContext{bundle: d, message: msg}
+		err := d.callMessageValidator(b.batch, ctx)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -33,7 +36,7 @@ func (x *Executor) Validate(messages []messaging.Message, recheck bool) ([]*prot
 }
 
 // callMessageValidator finds the validator for the message and calls it.
-func (b *Block) callMessageValidator(batch *ChangeSet, ctx *MessageContext) error {
+func (b *bundle) callMessageValidator(batch *ChangeSet, ctx *MessageContext) error {
 	// Find the appropriate Validator
 	x, ok := b.executor.executors[ctx.Type()]
 	if !ok {

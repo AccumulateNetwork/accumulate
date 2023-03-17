@@ -18,7 +18,7 @@ func (b *Batch) Message2(hash []byte) *Message {
 }
 
 func (m *Message) hash() [32]byte {
-	return m.key[1].([32]byte)
+	return m.key[1+len(m.parent.key)].([32]byte)
 }
 
 func (m *Message) Main() record.Value[messaging.Message] {

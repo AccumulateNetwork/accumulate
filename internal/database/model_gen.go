@@ -27,6 +27,7 @@ import (
 type Batch struct {
 	logger      logging.OptionalLogger
 	store       record.Store
+	key         record.Key
 	done        bool
 	writable    bool
 	id          string
@@ -79,7 +80,7 @@ func (c *Batch) getAccount(url *url.URL) *Account {
 		v := new(Account)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Account", url)
+		v.key = c.key.Append("Account", url)
 		v.parent = c
 		v.label = "account" + " " + url.RawString()
 		return v
@@ -91,7 +92,7 @@ func (c *Batch) Message(hash [32]byte) *Message {
 		v := new(Message)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Message", hash)
+		v.key = c.key.Append("Message", hash)
 		v.parent = c
 		v.label = "message" + " " + hex.EncodeToString(hash[:])
 		return v
@@ -103,7 +104,7 @@ func (c *Batch) getTransaction(hash [32]byte) *Transaction {
 		v := new(Transaction)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Transaction", hash)
+		v.key = c.key.Append("Transaction", hash)
 		v.parent = c
 		v.label = "transaction" + " " + hex.EncodeToString(hash[:])
 		return v
@@ -115,7 +116,7 @@ func (c *Batch) SystemData(partition string) *SystemData {
 		v := new(SystemData)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("SystemData", partition)
+		v.key = c.key.Append("SystemData", partition)
 		v.parent = c
 		v.label = "system data" + " " + partition
 		return v

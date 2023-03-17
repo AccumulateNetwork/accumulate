@@ -38,7 +38,7 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Ke
 	}
 
 	var typ merkle.ChainType
-	switch key[2].(string) {
+	switch key[len(account.key)].(string) {
 	case "MainChain",
 		"SignatureChain",
 		"ScratchChain",

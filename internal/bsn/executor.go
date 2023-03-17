@@ -8,6 +8,7 @@ package bsn
 
 import (
 	"io"
+	"strings"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -18,6 +19,7 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 var executors []func(ExecutorOptions) (messaging.MessageType, MessageExecutor)
@@ -103,7 +105,7 @@ func (x *Executor) Restore(file ioutil2.SectionReader, validators []*execute.Val
 			return nil, errors.BadRequest.With("invalid snapshot: number of sub-snapshots does not match the header")
 		}
 
-		id := header.PartitionSnapshotIDs[i]
+		id := strings.ToLower(header.PartitionSnapshotIDs[i])
 		pb := &partitionBeginner{x.logger, x.store, id}
 		i++
 
@@ -128,8 +130,8 @@ type partitionBeginner struct {
 func (p *partitionBeginner) SetObserver(observer database.Observer) {}
 
 func (p *partitionBeginner) Begin(writable bool) *database.Batch {
-	s := p.store.WithPrefix(p.partition).Begin(writable)
-	b := database.NewBatch(p.partition, s, writable, p.logger)
+	s := p.store.Begin(writable)
+	b := database.NewBatch(p.partition, record.Key{"Partition", p.partition}, s, writable, p.logger)
 	b.SetObserver(execute.NewDatabaseObserver())
 	return b
 }

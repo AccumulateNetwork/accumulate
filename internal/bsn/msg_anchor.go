@@ -66,7 +66,7 @@ func (x BlockAnchor) check(batch *ChangeSet, ctx *MessageContext) (*messaging.Bl
 	g := new(core.GlobalValues)
 	u := config.NetworkUrl{URL: protocol.PartitionUrl(summary.Partition)}
 	err := g.Load(u, func(accountUrl *url.URL, target interface{}) error {
-		return batch.Partition(summary.Partition).Account(accountUrl).Main().GetAs(&target)
+		return batch.Partition(summary.Partition).Account(accountUrl).Main().GetAs(target)
 	})
 	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("load %s globals: %w", summary.Partition, err)

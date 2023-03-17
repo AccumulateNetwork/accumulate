@@ -71,7 +71,7 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 	g := new(core.GlobalValues)
 	u := config.NetworkUrl{URL: protocol.PartitionUrl(msg.Partition)}
 	err = g.Load(u, func(accountUrl *url.URL, target interface{}) error {
-		return partdb.Account(accountUrl).Main().GetAs(&target)
+		return partdb.Account(accountUrl).Main().GetAs(target)
 	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("load %s globals: %w", msg.Partition, err)

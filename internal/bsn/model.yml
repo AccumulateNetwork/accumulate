@@ -42,6 +42,6 @@
     - name: ID
       type: string
     type: other
-    dataType: PartitionBatch
+    dataType: database.Batch
     pointer: true
     omitAccessor: true
