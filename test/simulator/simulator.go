@@ -12,7 +12,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -225,11 +224,6 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 
 	var genDocs map[string]*tmtypes.GenesisDoc
 	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
-		if network.Bsn != nil && strings.EqualFold(partition, network.Bsn.Id) {
-			// TODO Fix
-			return new(ioutil2.Buffer), nil
-		}
-
 		var err error
 		if genDocs == nil {
 			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil, nil)

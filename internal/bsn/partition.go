@@ -26,10 +26,15 @@ func (c *ChangeSet) Partition(id string) *PartitionBatch {
 		return b
 	}
 
+	if c.partition == nil {
+		c.partition = map[partitionKey]*PartitionBatch{}
+	}
+
 	var b *database.Batch
 	if c.parent == nil {
 		// TODO It would be better to do c.store.(record.KvStore).WithPrefix(id)
-		b = database.NewBatch(id, c.kvstore.WithPrefix(id).Begin(true), true, c.logger)
+		s := c.kvstore.WithPrefix(id).Begin(true)
+		b = database.NewBatch(id, s, true, c.logger)
 		b.SetObserver(execute.NewDatabaseObserver())
 	} else {
 		b = c.parent.Partition(id).Begin(true)

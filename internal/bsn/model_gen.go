@@ -28,6 +28,7 @@ type ChangeSet struct {
 	kvstore storage.KeyValueStore
 	parent  *ChangeSet
 
+	lastBlock record.Value[*LastBlock]
 	summary   map[summaryKey]*Summary
 	pending   map[pendingKey]record.Value[[32]byte]
 	partition map[partitionKey]*PartitionBatch
@@ -57,6 +58,12 @@ func keyForPartition(id string) partitionKey {
 	return partitionKey{id}
 }
 
+func (c *ChangeSet) LastBlock() record.Value[*LastBlock] {
+	return getOrCreateField(&c.lastBlock, func() record.Value[*LastBlock] {
+		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
+	})
+}
+
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 	return getOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
 		v := new(Summary)
@@ -81,6 +88,8 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 	}
 
 	switch key[0] {
+	case "LastBlock":
+		return c.LastBlock(), key[1:], nil
 	case "Summary":
 		if len(key) < 2 {
 			return nil, nil, errors.InternalError.With("bad key for change set")
@@ -121,6 +130,9 @@ func (c *ChangeSet) IsDirty() bool {
 		return false
 	}
 
+	if fieldIsDirty(c.lastBlock) {
+		return true
+	}
 	for _, v := range c.summary {
 		if v.IsDirty() {
 			return true
@@ -146,6 +158,7 @@ func (c *ChangeSet) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
+	walkChanges(&err, c.lastBlock, fn)
 	for _, v := range c.summary {
 		walkChanges(&err, v, fn)
 	}
@@ -164,6 +177,7 @@ func (c *ChangeSet) baseCommit() error {
 	}
 
 	var err error
+	commitField(&err, c.lastBlock)
 	for _, v := range c.summary {
 		commitField(&err, v)
 	}

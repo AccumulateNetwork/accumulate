@@ -12,18 +12,20 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 )
 
+type storeKey struct {
+	prefix string
+	key    storage.Key
+}
+
 type store struct {
 	mu     sync.RWMutex
-	values map[storage.Key][]byte
+	values map[storeKey][]byte
 }
 
 func (s *store) get(p string, k storage.Key) ([]byte, bool) {
-	if p != "" {
-		k = k.Append(p)
-	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	v, ok := s.values[k]
+	v, ok := s.values[storeKey{p, k}]
 	return v, ok
 }
 
@@ -43,18 +45,15 @@ func (s *store) putAll(p string, v map[storage.Key][]byte) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.values == nil {
-		s.values = make(map[storage.Key][]byte, len(v))
+		s.values = make(map[storeKey][]byte, len(v))
 	}
 	for k, v := range v {
-		if p != "" {
-			k = k.Append(p)
-		}
-		s.values[k] = v
+		s.values[storeKey{p, k}] = v
 	}
 }
 
 func (s *store) copy() *store {
-	values := make(map[storage.Key][]byte, len(s.values))
+	values := make(map[storeKey][]byte, len(s.values))
 	for k, v := range s.values {
 		values[k] = v
 	}

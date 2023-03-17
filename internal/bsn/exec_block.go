@@ -48,6 +48,15 @@ func (b *Block) Close() (execute.BlockState, error) {
 	if b.params == nil {
 		return nil, errors.NotAllowed.With("not a block")
 	}
+
+	err := b.batch.LastBlock().Put(&LastBlock{
+		Index: b.params.Index,
+		Time:  b.params.Time,
+	})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store last block info: %w", err)
+	}
+
 	s := new(BlockState)
 	s.params = *b.params
 	s.batch = b.batch

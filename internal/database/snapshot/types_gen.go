@@ -66,7 +66,9 @@ type Header struct {
 	Timestamp time.Time `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	// ExecutorVersion is the snapshot's executor version.
 	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion" validate:"required"`
-	extraData       []byte
+	// PartitionSnapshotIDs is the ID of the parttions of sub-snapshots.
+	PartitionSnapshotIDs []string `json:"partitionSnapshotIDs,omitempty" form:"partitionSnapshotIDs" query:"partitionSnapshotIDs" validate:"required"`
+	extraData            []byte
 }
 
 type OldChain struct {
@@ -182,6 +184,10 @@ func (v *Header) Copy() *Header {
 	u.RootHash = v.RootHash
 	u.Timestamp = v.Timestamp
 	u.ExecutorVersion = v.ExecutorVersion
+	u.PartitionSnapshotIDs = make([]string, len(v.PartitionSnapshotIDs))
+	for i, v := range v.PartitionSnapshotIDs {
+		u.PartitionSnapshotIDs[i] = v
+	}
 
 	return u
 }
@@ -384,6 +390,14 @@ func (v *Header) Equal(u *Header) bool {
 	}
 	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
+	}
+	if len(v.PartitionSnapshotIDs) != len(u.PartitionSnapshotIDs) {
+		return false
+	}
+	for i := range v.PartitionSnapshotIDs {
+		if !(v.PartitionSnapshotIDs[i] == u.PartitionSnapshotIDs[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -689,6 +703,7 @@ var fieldNames_Header = []string{
 	3: "RootHash",
 	4: "Timestamp",
 	5: "ExecutorVersion",
+	6: "PartitionSnapshotIDs",
 }
 
 func (v *Header) MarshalBinary() ([]byte, error) {
@@ -709,6 +724,11 @@ func (v *Header) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.ExecutorVersion == 0) {
 		writer.WriteEnum(5, v.ExecutorVersion)
+	}
+	if !(len(v.PartitionSnapshotIDs) == 0) {
+		for _, v := range v.PartitionSnapshotIDs {
+			writer.WriteString(6, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_Header)
@@ -746,6 +766,11 @@ func (v *Header) IsValid() error {
 		errs = append(errs, "field ExecutorVersion is missing")
 	} else if v.ExecutorVersion == 0 {
 		errs = append(errs, "field ExecutorVersion is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field PartitionSnapshotIDs is missing")
+	} else if len(v.PartitionSnapshotIDs) == 0 {
+		errs = append(errs, "field PartitionSnapshotIDs is not set")
 	}
 
 	switch len(errs) {
@@ -1204,6 +1229,13 @@ func (v *Header) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
 		v.ExecutorVersion = *x
 	}
+	for {
+		if x, ok := reader.ReadString(6); ok {
+			v.PartitionSnapshotIDs = append(v.PartitionSnapshotIDs, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_Header)
 	if err != nil {
@@ -1470,11 +1502,12 @@ func (v *Chain) MarshalJSON() ([]byte, error) {
 
 func (v *Header) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Version         uint64                   `json:"version,omitempty"`
-		Height          uint64                   `json:"height,omitempty"`
-		RootHash        string                   `json:"rootHash,omitempty"`
-		Timestamp       time.Time                `json:"timestamp,omitempty"`
-		ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty"`
+		Version              uint64                    `json:"version,omitempty"`
+		Height               uint64                    `json:"height,omitempty"`
+		RootHash             string                    `json:"rootHash,omitempty"`
+		Timestamp            time.Time                 `json:"timestamp,omitempty"`
+		ExecutorVersion      protocol.ExecutorVersion  `json:"executorVersion,omitempty"`
+		PartitionSnapshotIDs encoding.JsonList[string] `json:"partitionSnapshotIDs,omitempty"`
 	}{}
 	if !(v.Version == 0) {
 		u.Version = v.Version
@@ -1490,6 +1523,9 @@ func (v *Header) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.ExecutorVersion == 0) {
 		u.ExecutorVersion = v.ExecutorVersion
+	}
+	if !(len(v.PartitionSnapshotIDs) == 0) {
+		u.PartitionSnapshotIDs = v.PartitionSnapshotIDs
 	}
 	return json.Marshal(&u)
 }
@@ -1652,17 +1688,19 @@ func (v *Chain) UnmarshalJSON(data []byte) error {
 
 func (v *Header) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Version         uint64                   `json:"version,omitempty"`
-		Height          uint64                   `json:"height,omitempty"`
-		RootHash        string                   `json:"rootHash,omitempty"`
-		Timestamp       time.Time                `json:"timestamp,omitempty"`
-		ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty"`
+		Version              uint64                    `json:"version,omitempty"`
+		Height               uint64                    `json:"height,omitempty"`
+		RootHash             string                    `json:"rootHash,omitempty"`
+		Timestamp            time.Time                 `json:"timestamp,omitempty"`
+		ExecutorVersion      protocol.ExecutorVersion  `json:"executorVersion,omitempty"`
+		PartitionSnapshotIDs encoding.JsonList[string] `json:"partitionSnapshotIDs,omitempty"`
 	}{}
 	u.Version = v.Version
 	u.Height = v.Height
 	u.RootHash = encoding.ChainToJSON(v.RootHash)
 	u.Timestamp = v.Timestamp
 	u.ExecutorVersion = v.ExecutorVersion
+	u.PartitionSnapshotIDs = v.PartitionSnapshotIDs
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1675,6 +1713,7 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 	}
 	v.Timestamp = u.Timestamp
 	v.ExecutorVersion = u.ExecutorVersion
+	v.PartitionSnapshotIDs = u.PartitionSnapshotIDs
 	return nil
 }
 

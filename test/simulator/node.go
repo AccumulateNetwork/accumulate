@@ -83,14 +83,6 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		events.SubscribeSync(n.eventBus, s.router.willChangeGlobals)
 	}
 
-	// Collect and submit block summaries
-	if s.init.Bsn != nil && n.partition.Type != protocol.PartitionTypeBlockSummary {
-		err := n.initCollector()
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
 	var err error
 	switch n.partition.Type {
 	case protocol.PartitionTypeDirectory,
@@ -103,6 +95,14 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	}
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Collect and submit block summaries
+	if s.init.Bsn != nil && n.partition.Type != protocol.PartitionTypeBlockSummary {
+		err := n.initCollector()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 	}
 
 	return n, nil
@@ -354,9 +354,8 @@ func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 		state.Discard()
 
 		// Get the old root
-		batch := n.database.Begin(false)
-		defer batch.Discard()
-		return batch.BptRoot(), nil
+		_, root, err := n.executor.LastBlock()
+		return root[:], errors.UnknownError.Wrap(err)
 	}
 
 	// Commit

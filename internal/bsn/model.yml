@@ -9,6 +9,10 @@
     type: ChangeSet
     pointer: true
   attributes:
+  - name: LastBlock
+    type: state
+    dataType: LastBlock
+    pointer: true
   - name: Summary
     type: entity
     parameters:

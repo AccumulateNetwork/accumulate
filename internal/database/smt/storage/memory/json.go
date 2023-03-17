@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 )
@@ -17,7 +18,11 @@ import (
 func (m *DB) MarshalJSON() ([]byte, error) {
 	vv := make(map[string]string, len(m.entries.values))
 	for k, v := range m.entries.values {
-		vv[hex.EncodeToString(k[:])] = hex.EncodeToString(v) //nolint:rangevarref
+		s := hex.EncodeToString(k.key[:])
+		if k.prefix != "" {
+			s = k.prefix + "." + s
+		}
+		vv[s] = hex.EncodeToString(v) //nolint:rangevarref
 	}
 	return json.Marshal(vv)
 }
@@ -28,19 +33,25 @@ func (m *DB) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	for k, v := range vv {
-		kk, err := hex.DecodeString(k)
+	for s, v := range vv {
+		var k storeKey
+		i := strings.IndexByte(s, '.')
+		if i >= 0 {
+			k.prefix, s = s[:i], s[i+1:]
+		}
+		kk, err := hex.DecodeString(s)
 		if err != nil {
 			return err
 		}
 		if len(kk) != 32 {
 			return fmt.Errorf("invalid key length: want 32, got %d", len(kk))
 		}
+		k.key = *(*storage.Key)(kk)
 		vv, err := hex.DecodeString(v)
 		if err != nil {
 			return err
 		}
-		m.entries.values[storage.Key(*(*[32]byte)(kk))] = vv
+		m.entries.values[k] = vv
 	}
 	return nil
 }

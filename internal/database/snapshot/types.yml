@@ -16,6 +16,10 @@ Header:
     description: is the snapshot's executor version
     type: protocol.ExecutorVersion
     marshal-as: enum
+  - name: PartitionSnapshotIDs
+    description: is the ID of the parttions of sub-snapshots
+    type: string
+    repeatable: true
 
 Account:
   fields:
