@@ -107,14 +107,23 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 		}
 	}
 
-	for _, p := range s.partitions {
-		snapshot, err := snapshot(p.ID, s.init, s.logger)
+	ids := []string{protocol.Directory}
+	for _, b := range network.Bvns {
+		ids = append(ids, b.Id)
+	}
+	if network.Bsn != nil {
+		ids = append(ids, network.Bsn.Id)
+	}
+
+	for _, id := range ids {
+		snapshot, err := snapshot(id, s.init, s.logger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 		}
-		err = p.initChain(snapshot)
+		// fmt.Println("Init", id)
+		err = s.partitions[id].initChain(snapshot)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("init %s: %w", p.ID, err)
+			return nil, errors.UnknownError.WithFormat("init %s: %w", id, err)
 		}
 	}
 

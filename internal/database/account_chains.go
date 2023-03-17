@@ -7,6 +7,7 @@
 package database
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -52,6 +53,11 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Ke
 		typ = merkle.ChainTypeIndex
 	default:
 		panic("unknown chain key") // Will be removed once chains are completely integrated into the model
+	}
+
+	if len(account.parent.key) > 0 && strings.ContainsRune(namefmt, '%') {
+		nameKey := key[len(account.parent.key):]
+		namefmt = fmt.Sprintf(namefmt, nameKey...)
 	}
 
 	c := NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt, labelfmt)
