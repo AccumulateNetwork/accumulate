@@ -20,6 +20,8 @@ var ErrNotOpen = errors.InternalError.With("not open")
 type Beginner interface {
 	// Begin begins a transaction or sub-transaction.
 	Begin(writable bool) KeyValueTxn
+
+	BeginWithPrefix(writable bool, prefix string) KeyValueTxn
 }
 
 type KeyValueTxn interface {

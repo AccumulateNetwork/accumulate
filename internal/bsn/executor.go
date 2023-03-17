@@ -129,7 +129,7 @@ type partitionBeginner struct {
 func (p *partitionBeginner) SetObserver(observer database.Observer) {}
 
 func (p *partitionBeginner) Begin(writable bool) *database.Batch {
-	s := p.store.Begin(writable)
+	s := p.store.BeginWithPrefix(true, p.partition+"·")
 	b := database.NewBatch(p.partition, s, writable, p.logger)
 	b.SetObserver(execute.NewDatabaseObserver())
 	return b

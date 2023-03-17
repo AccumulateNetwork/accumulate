@@ -25,7 +25,7 @@ func (c *ChangeSet) Partition(id string) *database.Batch {
 
 	var b *database.Batch
 	if c.parent == nil {
-		s := c.kvstore.Begin(true)
+		s := c.kvstore.BeginWithPrefix(true, id+"·")
 		b = database.NewBatch(id, s, true, c.logger)
 		b.SetObserver(execute.NewDatabaseObserver())
 	} else {

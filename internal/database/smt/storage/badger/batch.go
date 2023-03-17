@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package badger
 
 import (
+	"bytes"
 	"sync"
 
 	"github.com/dgraph-io/badger"
@@ -19,15 +20,21 @@ type Batch struct {
 	db       *DB
 	txn      *badger.Txn
 	writable bool
+	prefix   string
 }
 
 var _ storage.KeyValueTxn = (*Batch)(nil)
 
 func (db *DB) Begin(writable bool) storage.KeyValueTxn {
+	return db.BeginWithPrefix(writable, "")
+}
+
+func (db *DB) BeginWithPrefix(writable bool, prefix string) storage.KeyValueTxn {
 	b := new(Batch)
 	b.db = db
 	b.txn = db.badgerDB.NewTransaction(writable)
 	b.writable = writable
+	b.prefix = prefix
 	if db.logger == nil {
 		return b
 	}
@@ -35,10 +42,14 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 }
 
 func (b *Batch) Begin(writable bool) storage.KeyValueTxn {
+	return b.BeginWithPrefix(writable, "")
+}
+
+func (b *Batch) BeginWithPrefix(writable bool, prefix string) storage.KeyValueTxn {
 	if !b.writable || !writable {
-		return memory.NewBatch(b.Get, nil)
+		return memory.NewBatch(prefix, b.get, nil)
 	}
-	return memory.NewBatch(b.Get, b.PutAll)
+	return memory.NewBatch(prefix, b.get, b.commit)
 }
 
 func (b *Batch) lock() (sync.Locker, error) {
@@ -69,7 +80,7 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 	}
 
 	for k, v := range values {
-		k := k // See docs/developer/rangevarref.md
+		k := b.makeKey("", k)
 		err := b.txn.Set(k[:], v)
 		if err != nil {
 			return err
@@ -79,14 +90,45 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 	return nil
 }
 
+func (b *Batch) commit(values map[memory.PrefixedKey][]byte) error {
+	if l, err := b.lock(); err != nil {
+		return err
+	} else {
+		defer l.Unlock()
+	}
+
+	for k, v := range values {
+		k := b.makeKey(k.Prefix, k.Key)
+		err := b.txn.Set(k[:], v)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (b *Batch) makeKey(prefix string, key storage.Key) []byte {
+	k := new(bytes.Buffer)
+	k.Grow(len(b.prefix) + len(prefix) + 32)
+	k.WriteString(b.prefix)
+	k.WriteString(prefix)
+	k.Write(key[:])
+	return k.Bytes()
+}
+
 func (b *Batch) Get(key storage.Key) (v []byte, err error) {
+	return b.get("", key)
+}
+
+func (b *Batch) get(prefix string, key storage.Key) (v []byte, err error) {
 	if l, err := b.db.lock(false); err != nil {
 		return nil, err
 	} else {
 		defer l.Unlock()
 	}
 
-	item, err := b.txn.Get(key[:])
+	item, err := b.txn.Get(b.makeKey(prefix, key))
 	switch {
 	case err == nil:
 		// Ok
