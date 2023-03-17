@@ -193,7 +193,7 @@ func createFaucet(seedStrs []string) []byte {
 	store := memory.New(nil)
 	batch := store.Begin(true)
 	defer batch.Discard()
-	bpt := pmt.NewBPTManager(batch)
+	bpt := pmt.NewBPTManager(batch, storage.MakeKey("BPT"))
 
 	var err error
 	lta := new(protocol.LiteTokenAccount)

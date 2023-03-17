@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -46,7 +46,7 @@ func chk(t *testing.T, entry Entry) bool {
 func TestBPT_receipt(t *testing.T) {
 	numberEntries := 50000 //               A pretty reasonable sized BPT
 
-	bpt := NewBPTManager(nil).Bpt        //     Build a BPT
+	bpt := NewBPTManager(nil, kBpt).Bpt  //     Build a BPT
 	var keys, values common.RandHash     //     use the default sequence for keys
 	values.SetSeed([]byte{1, 2, 3})      //     use a different sequence for values
 	for i := 0; i < numberEntries; i++ { // For the number of Entries specified for the BPT

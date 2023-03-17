@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -34,12 +34,12 @@ func TestSaveState(t *testing.T) {
 	require.Nil(t, err, "failed to create db")
 	defer BDB.Close()
 
-	storeTx := BDB.Begin(true)           // and begin its use.
-	bptManager := NewBPTManager(storeTx) // Create a BptManager.  We will create a new one each cycle.
-	bpt := bptManager.Bpt                //     Build a BPT
-	var keys, values common.RandHash     //     use the default sequence for keys
-	values.SetSeed([]byte{1, 2, 3})      //     use a different sequence for values
-	for i := 0; i < numberEntries; i++ { // For the number of Entries specified for the BPT
+	storeTx := BDB.Begin(true)                 // and begin its use.
+	bptManager := NewBPTManager(storeTx, kBpt) // Create a BptManager.  We will create a new one each cycle.
+	bpt := bptManager.Bpt                      //     Build a BPT
+	var keys, values common.RandHash           //     use the default sequence for keys
+	values.SetSeed([]byte{1, 2, 3})            //     use a different sequence for values
+	for i := 0; i < numberEntries; i++ {       // For the number of Entries specified for the BPT
 		chainID := keys.NextAList() //      Get a key, keep a list
 		value := values.GetRandBuff(int(values.GetRandInt64() % 100))
 		hash := sha256.Sum256(value)
@@ -66,7 +66,7 @@ func TestSaveState(t *testing.T) {
 	_, err = f.Seek(0, io.SeekStart)
 	require.NoError(t, err)
 
-	bptMan := NewBPTManager(nil)
+	bptMan := NewBPTManager(nil, kBpt)
 	err = bptMan.Bpt.LoadSnapshot(f, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 		value, err := io.ReadAll(reader)
 		if err != nil {

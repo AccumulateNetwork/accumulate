@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -45,7 +45,7 @@ func X(_ *cobra.Command, args []string) {
 	store := memory.New(logger.With("module", "storage"))
 	batch := store.Begin(true)
 	defer batch.Discard()
-	bpt := pmt.NewBPTManager(batch)
+	bpt := pmt.NewBPTManager(batch, storage.MakeKey("BPT"))
 
 	hasher := make(hash.Hasher, 4)
 	lookup := map[[32]byte]*snapshot.Account{}

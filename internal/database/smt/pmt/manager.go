@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,29 +11,28 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 )
 
-var kBpt = storage.MakeKey("BPT")
-var kBptRoot = kBpt.Append("Root")
-
 type Manager struct {
 	DBManager storage.KeyValueTxn
 	Dirty     []*BptNode
 	Bpt       *BPT
+	Key       storage.Key
 }
 
 // NewBPTManager
 // Get a new BPTManager which keeps the BPT on disk.  If the BPT is on
 // disk, then it can be reloaded as needed.
-func NewBPTManager(dbManager storage.KeyValueTxn) *Manager { // Return a new BPTManager
+func NewBPTManager(dbManager storage.KeyValueTxn, key storage.Key) *Manager { // Return a new BPTManager
 	if dbManager == nil { //                       If no dbManager is provided,
 		store := new(memory.DB)       //           Create a memory one
 		dbManager = store.Begin(true) //
 	}
-	manager := new(Manager)            //          Allocate the struct
-	manager.DBManager = dbManager      //          populate with pointer to the database manager
-	manager.Bpt = NewBPT(manager)      //          Allocate a new BPT
-	manager.Bpt.Manager = manager      //          Allow the Bpt to call back to the manager for db access
-	data, e := dbManager.Get(kBptRoot) //          Get the BPT settings from disk
-	if e == nil {                      //          If nothing is found, well this is a fresh instance
+	manager := new(Manager)                      //               Allocate the struct
+	manager.Key = key                            //
+	manager.DBManager = dbManager                //               populate with pointer to the database manager
+	manager.Bpt = NewBPT(manager)                //               Allocate a new BPT
+	manager.Bpt.Manager = manager                //               Allow the Bpt to call back to the manager for db access
+	data, e := dbManager.Get(key.Append("Root")) //               Get the BPT settings from disk
+	if e == nil {                                //               If nothing is found, well this is a fresh instance
 		manager.Bpt.UnMarshal(data)             // But if data is found, then unmarshal
 		manager.LoadNode(manager.Bpt.GetRoot()) // and load up the root data for the BPT
 	} //
@@ -56,7 +55,7 @@ func (m *Manager) LoadNode(node *BptNode) {
 		panic("load should not be called on a node that is not a border node") // panic -- should not occur
 	}
 
-	data, e := m.DBManager.Get(kBpt.Append(node.NodeKey[:])) //                      Get the Byte Block
+	data, e := m.DBManager.Get(m.Key.Append(node.NodeKey[:])) //                      Get the Byte Block
 	if e != nil {
 		panic("Should have a Byte Block for any persisted BPT")
 	}
@@ -68,14 +67,14 @@ func (m *Manager) LoadNode(node *BptNode) {
 // Flushes the Byte Block to disk
 func (m *Manager) FlushNode(node *BptNode) error { //   Flush a Byte Block
 	if node.Height&7 == 0 {
-		data := m.Bpt.MarshalByteBlock(node)                       //
-		err := m.DBManager.Put(kBpt.Append(node.NodeKey[:]), data) //
+		data := m.Bpt.MarshalByteBlock(node)                        //
+		err := m.DBManager.Put(m.Key.Append(node.NodeKey[:]), data) //
 		if err != nil {
 			return err
 		}
 		if node.Height == 0 {
 			data = m.Bpt.Marshal()
-			err = m.DBManager.Put(kBptRoot, data)
+			err = m.DBManager.Put(m.Key.Append("Root"), data)
 			if err != nil {
 				return err
 			}

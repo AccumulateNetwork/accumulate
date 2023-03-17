@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -27,7 +27,7 @@ func TestSanity(t *testing.T) {
 	store := memory.NewDB()              // Create a database
 	batch := store.Begin(true)           // Start a batch
 	defer batch.Discard()                //
-	bpt := NewBPTManager(batch)          // Create a BPT manager
+	bpt := NewBPTManager(batch, kBpt)    // Create a BPT manager
 	bpt.InsertKV(fakeKey, fakeValue)     // Insert a key, value pair
 	require.NoError(t, bpt.Bpt.Update()) // Push the update
 	require.NoError(t, batch.Commit())   // Commit the batch
@@ -36,7 +36,7 @@ func TestSanity(t *testing.T) {
 
 	batch = store.Begin(false)            // Start a batch
 	defer batch.Discard()                 //
-	bpt = NewBPTManager(batch)            // Create a BPT manager
+	bpt = NewBPTManager(batch, kBpt)      // Create a BPT manager
 	bpt.Bpt.GetRoot()                     // Get the root node
 	rootHash2 := bpt.Bpt.RootHash         // Load the root hash
 	nodeHash2 := bpt.Bpt.Root.Hash        //
@@ -138,9 +138,9 @@ func TestManager(t *testing.T) {
 
 	var keys, values common.RandHash // hash sequences
 
-	store := memory.NewDB()              // use a memory database
-	storeTx := store.Begin(true)         // and begin its use.
-	bptManager := NewBPTManager(storeTx) // Create a BptManager.  We will create a new one each cycle.
+	store := memory.NewDB()                    // use a memory database
+	storeTx := store.Begin(true)               // and begin its use.
+	bptManager := NewBPTManager(storeTx, kBpt) // Create a BptManager.  We will create a new one each cycle.
 
 	for i := 0; i < c; i++ { //             For each cycle
 
@@ -151,7 +151,7 @@ func TestManager(t *testing.T) {
 		}
 		require.NoError(t, bptManager.Bpt.Update())
 		Check(t, bptManager.Bpt, bptManager.Bpt.GetRoot())
-		bptManager = NewBPTManager(storeTx)
+		bptManager = NewBPTManager(storeTx, kBpt)
 	}
 	var first, place, last [32]byte
 	copy(first[:], []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
@@ -173,7 +173,7 @@ func TestManager(t *testing.T) {
 		require.Truef(t, found, "Must find every key put into the BPT. Failed at %d", i)
 	}
 
-	bptManager = NewBPTManager(storeTx)
+	bptManager = NewBPTManager(storeTx, kBpt)
 	var sb, eb bool
 	for i := 0; !sb || !eb; i++ {
 		key := keys.NextA()
@@ -203,8 +203,8 @@ func TestManagerSeries(t *testing.T) {
 	var previous [32]byte    // Previous final root
 	for h := 0; h < 3; h++ { // Run our test 3 times, each time killing one manager, building another which must
 		{ //                     get its state from "disk"
-			bptManager := NewBPTManager(storeTx) // Get manager from disk.  First time empty, and more elements each pass
-			current := bptManager.GetRootHash()  // Check that previous == current, on every pass
+			bptManager := NewBPTManager(storeTx, kBpt) // Get manager from disk.  First time empty, and more elements each pass
+			current := bptManager.GetRootHash()        // Check that previous == current, on every pass
 			if !bytes.Equal(previous[:], current[:]) {
 				t.Errorf("previous %x should be the same as current %x", previous, current)
 			}
@@ -232,8 +232,8 @@ func TestManagerSeries(t *testing.T) {
 				require.NoError(t, bptManager.Bpt.Update())
 			}
 		}
-		bptManager := NewBPTManager(storeTx)    //  One more check that previous is the same as current when
-		currentRoot := bptManager.GetRootHash() //  we build a new BPTManager from the database
+		bptManager := NewBPTManager(storeTx, kBpt) //  One more check that previous is the same as current when
+		currentRoot := bptManager.GetRootHash()    //  we build a new BPTManager from the database
 		//fmt.Printf("=> %x %x\n", previous, currentRoot)
 		if !bytes.Equal(previous[:], currentRoot[:]) { //
 			t.Error("loading the BPT should have the same root as previous root") //
@@ -251,9 +251,9 @@ func TestManagerPersist(t *testing.T) {
 		keys.SetSeed([]byte{1, 2, 3, 4})   // Seed keys differently than values, so they have
 		values.SetSeed([]byte{5, 6, 7, 8}) // a different set of hashes
 
-		store := memory.NewDB()              // Set up a memory DB
-		storeTx := store.Begin(true)         //
-		bptManager := NewBPTManager(storeTx) //
+		store := memory.NewDB()                    // Set up a memory DB
+		storeTx := store.Begin(true)               //
+		bptManager := NewBPTManager(storeTx, kBpt) //
 
 		for j := 0; j < i; j++ {
 			k, v := keys.NextAList(), values.NextA()
@@ -264,7 +264,7 @@ func TestManagerPersist(t *testing.T) {
 		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
 
 		storeTx = store.Begin(true)
-		bptManager = NewBPTManager(storeTx)
+		bptManager = NewBPTManager(storeTx, kBpt)
 		for i, v := range keys.List {
 			k := keys.GetAElement(i)
 			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.GetRoot(), k)
@@ -283,7 +283,7 @@ func TestManagerPersist(t *testing.T) {
 		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
 
 		storeTx = store.Begin(true)
-		bptManager = NewBPTManager(storeTx)
+		bptManager = NewBPTManager(storeTx, kBpt)
 		for i, v := range keys.List {
 			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.GetRoot(), keys.GetAElement(i))
 			value, ok := (*entry).(*Value)
@@ -298,7 +298,7 @@ func TestBptGet(t *testing.T) {
 	numberTests := 50000
 	var keys, values common.RandHash
 	values.SetSeed([]byte{1, 3, 4}) // Let keys default the seed, make values different
-	bpt := NewBPTManager(nil).Bpt
+	bpt := NewBPTManager(nil, kBpt).Bpt
 	for i := 0; i < numberTests; i++ {
 		k := keys.NextAList()
 		v := values.NextA()

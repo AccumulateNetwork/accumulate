@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -39,7 +39,7 @@ func (b *BPT) GetRoot() (root *BptNode) {
 		rootNodeKey, _ := GetNodeKey(0, [32]byte{}) // Get the root Node Key
 		b.Root = new(BptNode)                       // Allocate a Root Node
 		if b.Manager != nil {                       // If we have a manager, pull from the DB
-			if data, err := b.Manager.DBManager.Get(kBpt.Append(rootNodeKey)); err == nil {
+			if data, err := b.Manager.DBManager.Get(b.Manager.Key.Append(rootNodeKey)); err == nil {
 				b.Root.UnMarshal(data) //              Unmarshal what we get from the DB
 			}
 		}

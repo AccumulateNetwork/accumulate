@@ -45,7 +45,7 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 	txnHashes := new(snapshot.HashSet)
 	sigHashes := new(snapshot.HashSet)
 
-	bpt := pmt.NewBPTManager(stx)
+	bpt := pmt.NewBPTManager(stx, storage.MakeKey("BPT"))
 	place := pmt.FirstPossibleBptKey
 	const window = 1000 //                                       Process this many BPT entries at a time
 	var count int       //                                       Recalculate number of nodes

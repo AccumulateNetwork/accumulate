@@ -18,7 +18,7 @@ import (
 )
 
 func (b *Batch) VisitAccounts(visit func(*Account) error) error {
-	bpt := pmt.NewBPTManager(b.kvstore)
+	bpt := b.getBpt()
 
 	place := pmt.FirstPossibleBptKey
 	const window = 1000 //                                       Process this many BPT entries at a time
@@ -45,8 +45,7 @@ func (b *Batch) VisitAccounts(visit func(*Account) error) error {
 }
 
 func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
-	bpt := pmt.NewBPTManager(b.kvstore)
-	return bpt.Bpt.ForEach(func(key storage.Key, hash [32]byte) error {
+	return b.getBpt().Bpt.ForEach(func(key storage.Key, hash [32]byte) error {
 		// Create an Account object
 		u, err := b.getAccountUrl(record.Key{key})
 		if err != nil {
@@ -58,8 +57,7 @@ func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) e
 }
 
 func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte, error)) error {
-	bpt := pmt.NewBPTManager(b.kvstore)
-	err := bpt.Bpt.SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
+	err := b.getBpt().Bpt.SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
 		u, err := b.getAccountUrl(record.Key{key})
 		if err != nil {
@@ -106,7 +104,7 @@ func (b *Batch) commitBpt() error {
 		return nil
 	}
 
-	bpt := pmt.NewBPTManager(b.kvstore)
+	bpt := b.getBpt()
 
 	for k, v := range b.bptEntries {
 		bpt.InsertKV(k, v)
@@ -121,14 +119,17 @@ func (b *Batch) commitBpt() error {
 	return nil
 }
 
+func (b *Batch) getBpt() *pmt.Manager {
+	return pmt.NewBPTManager(b.kvstore, b.key.Append("BPT").Hash())
+}
+
 // BptRoot returns the root of the BPT. BptRoot panics if there are any
 // uncommitted BPT changes.
 func (b *Batch) BptRoot() []byte {
 	if len(b.bptEntries) > 0 {
 		panic("attempted to get BPT root with uncommitted changes")
 	}
-	bpt := pmt.NewBPTManager(b.kvstore)
-	return bpt.Bpt.RootHash[:]
+	return b.getBpt().Bpt.RootHash[:]
 }
 
 // BptReceipt builds a BPT receipt for the given key.
@@ -137,8 +138,7 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*merkle.Receipt, er
 		return nil, errors.InternalError.With("cannot generate a BPT receipt when there are uncommitted BPT entries")
 	}
 
-	bpt := pmt.NewBPTManager(b.kvstore)
-	receipt := bpt.Bpt.GetReceipt(key)
+	receipt := b.getBpt().Bpt.GetReceipt(key)
 	if receipt == nil {
 		return nil, errors.NotFound.WithFormat("BPT key %v not found", key)
 	}
