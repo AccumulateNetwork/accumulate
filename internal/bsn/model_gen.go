@@ -26,7 +26,6 @@ import (
 type ChangeSet struct {
 	logger  logging.OptionalLogger
 	store   record.Store
-	key     record.Key
 	kvstore storage.KeyValueTxn
 	parent  *ChangeSet
 
@@ -45,11 +44,12 @@ func keyForSummary(hash [32]byte) summaryKey {
 }
 
 type pendingKey struct {
+	Partition     string
 	PreviousBlock uint64
 }
 
-func keyForPending(previousBlock uint64) pendingKey {
-	return pendingKey{previousBlock}
+func keyForPending(partition string, previousBlock uint64) pendingKey {
+	return pendingKey{partition, previousBlock}
 }
 
 type partitionKey struct {
@@ -62,7 +62,7 @@ func keyForPartition(id string) partitionKey {
 
 func (c *ChangeSet) LastBlock() record.Value[*LastBlock] {
 	return getOrCreateField(&c.lastBlock, func() record.Value[*LastBlock] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
+		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
 	})
 }
 
@@ -71,16 +71,16 @@ func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 		v := new(Summary)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = c.key.Append("Summary", hash)
+		v.key = record.Key{}.Append("Summary", hash)
 		v.parent = c
 		v.label = "summary" + " " + hex.EncodeToString(hash[:])
 		return v
 	})
 }
 
-func (c *ChangeSet) Pending(previousBlock uint64) record.Value[[32]byte] {
-	return getOrCreateMap(&c.pending, keyForPending(previousBlock), func() record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Pending", previousBlock), "pending"+" "+strconv.FormatUint(previousBlock, 10), false, record.Wrapped(record.HashWrapper))
+func (c *ChangeSet) Pending(partition string, previousBlock uint64) record.Value[[32]byte] {
+	return getOrCreateMap(&c.pending, keyForPending(partition, previousBlock), func() record.Value[[32]byte] {
+		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("Pending", partition, previousBlock), "pending"+" "+partition+" "+strconv.FormatUint(previousBlock, 10), false, record.Wrapped(record.HashWrapper))
 	})
 }
 
@@ -103,15 +103,16 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 		v := c.Summary(hash)
 		return v, key[2:], nil
 	case "Pending":
-		if len(key) < 2 {
+		if len(key) < 3 {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
-		previousBlock, okPreviousBlock := key[1].(uint64)
-		if !okPreviousBlock {
+		partition, okPartition := key[1].(string)
+		previousBlock, okPreviousBlock := key[2].(uint64)
+		if !okPartition || !okPreviousBlock {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
-		v := c.Pending(previousBlock)
-		return v, key[2:], nil
+		v := c.Pending(partition, previousBlock)
+		return v, key[3:], nil
 	case "Partition":
 		if len(key) < 2 {
 			return nil, nil, errors.InternalError.With("bad key for change set")

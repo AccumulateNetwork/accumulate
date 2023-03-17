@@ -96,7 +96,7 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 	switch {
 	case msg.PreviousBlock > ledger.Index:
 		// Record as pending
-		err = batch.Pending(msg.PreviousBlock).Put(msg.Hash())
+		err = batch.Pending(msg.Partition, msg.PreviousBlock).Put(msg.Hash())
 		return errors.UnknownError.Wrap(err)
 
 	case msg.PreviousBlock < ledger.Index:
@@ -109,13 +109,30 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 	err = x.process(batch, ctx, msg)
 	switch {
 	case err == nil:
-		return nil
+		// Ok
 	case errors.Code(err).IsClientError():
 		ctx.recordErrorStatus(err)
 		return nil
 	default:
 		return errors.UnknownError.Wrap(err)
 	}
+
+	hash, err := batch.Pending(msg.Partition, msg.Index).Get()
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		return nil
+	default:
+		return errors.UnknownError.WithFormat("load pending hash: %w", err)
+	}
+
+	pending, err := batch.Summary(hash).Main().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load %s block %d pending summary: %w", msg.Partition, msg.Index, err)
+	}
+	ctx.additional = append(ctx.additional, pending)
+	return nil
 }
 
 func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messaging.BlockSummary) (err error) {
@@ -156,5 +173,16 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 	if !bytes.Equal(msg.StateTreeHash[:], part.BptRoot()) {
 		return errors.BadRequest.With("state hash does not match")
 	}
+
+	// Load the ledger
+	var ledger *protocol.SystemLedger
+	err = part.Account(protocol.PartitionUrl(msg.Partition).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load %s system ledger: %w", msg.Partition, err)
+	}
+	if ledger.Index != msg.Index {
+		return errors.UnknownError.WithFormat("invalid summary: index does not match: summary says %d but ledger says %d", msg.Index, ledger.Index)
+	}
+
 	return nil
 }

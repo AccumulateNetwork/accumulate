@@ -32,6 +32,8 @@
   - name: Pending
     description: lists pending summaries keyed by previous block
     parameters:
+    - name: Partition
+      type: string
     - name: PreviousBlock
       type: uint
     type: state
