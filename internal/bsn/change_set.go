@@ -13,8 +13,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-func NewChangeSet(store storage.Beginner, logger log.Logger) *ChangeSet {
+func NewChangeSet(store storage.KeyValueStore, logger log.Logger) *ChangeSet {
 	c := new(ChangeSet)
+	c.kvstore = store
 	c.store = record.KvStore{Store: store.Begin(true)}
 	c.logger.Set(logger, "module", "database")
 	return c
@@ -24,6 +25,7 @@ func (c *ChangeSet) Begin() *ChangeSet {
 	d := new(ChangeSet)
 	d.logger = c.logger
 	d.store = c
+	d.parent = c
 	return d
 }
 

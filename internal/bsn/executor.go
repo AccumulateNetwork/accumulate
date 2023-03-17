@@ -20,12 +20,12 @@ var executors []func(ExecutorOptions) (messaging.MessageType, MessageExecutor)
 type Executor struct {
 	executors map[messaging.MessageType]MessageExecutor
 	logger    logging.OptionalLogger
-	store     storage.Beginner
+	store     storage.KeyValueStore
 }
 
 type ExecutorOptions struct {
 	Logger log.Logger
-	Store  storage.Beginner
+	Store  storage.KeyValueStore
 }
 
 func NewExecutor(opts ExecutorOptions) (*Executor, error) {

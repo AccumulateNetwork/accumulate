@@ -7,8 +7,12 @@
 package bsn
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
@@ -58,21 +62,22 @@ func (x BlockAnchor) check(batch *ChangeSet, ctx *MessageContext) (*messaging.Bl
 		return nil, nil, errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
-	// // Verify the signer is a validator of this partition
-	// partition, ok := protocol.ParsePartitionUrl(seq.Source)
-	// if !ok {
-	// 	return nil, errors.BadRequest.WithFormat("signature source is not a partition")
-	// }
+	// Load the partition's globals
+	g := new(core.GlobalValues)
+	u := config.NetworkUrl{URL: protocol.PartitionUrl(summary.Partition)}
+	err := g.Load(u, func(accountUrl *url.URL, target interface{}) error {
+		return batch.Partition(summary.Partition).Account(accountUrl).Main().GetAs(&target)
+	})
+	if err != nil {
+		return nil, nil, errors.UnknownError.WithFormat("load %s globals: %w", summary.Partition, err)
+	}
 
-	// // TODO: Consider checking the version. However this can get messy because
-	// // it takes some time for changes to propagate, so we'd need an activation
-	// // height or something.
-
-	// signer := ctx.Executor.globals.Active.AsSigner(partition)
-	// _, _, ok = signer.EntryByKeyHash(msg.Signature.GetPublicKeyHash())
-	// if !ok {
-	// 	return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
-	// }
+	// Verify the signer is a validator of this partition
+	signer := g.AsSigner(summary.Partition)
+	_, _, ok = signer.EntryByKeyHash(msg.Signature.GetPublicKeyHash())
+	if !ok {
+		return nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", summary.Partition)
+	}
 
 	return msg, summary, nil
 }

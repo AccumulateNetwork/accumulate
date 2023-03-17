@@ -15,7 +15,7 @@ import (
 func (x *Executor) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
 	b := new(Block)
 	b.executor = x
-	b.batch = NewChangeSet(x.store.Begin(false), x.logger)
+	b.batch = NewChangeSet(x.store, x.logger)
 	defer b.batch.Discard()
 
 	// Validate each message

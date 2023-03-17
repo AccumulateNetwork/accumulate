@@ -54,7 +54,7 @@ type Simulator struct {
 	DropDispatchedMessages bool
 }
 
-type OpenDatabaseFunc func(partition string, node int, logger log.Logger) storage.Beginner
+type OpenDatabaseFunc func(partition string, node int, logger log.Logger) storage.KeyValueStore
 type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
 
 func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
@@ -122,7 +122,7 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 	return s, nil
 }
 
-func MemoryDatabase(_ string, _ int, logger log.Logger) storage.Beginner {
+func MemoryDatabase(_ string, _ int, logger log.Logger) storage.KeyValueStore {
 	if logger != nil {
 		logger = logger.With("module", "storage")
 	}
@@ -130,7 +130,7 @@ func MemoryDatabase(_ string, _ int, logger log.Logger) storage.Beginner {
 }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc {
-	return func(partition string, node int, logger log.Logger) storage.Beginner {
+	return func(partition string, node int, logger log.Logger) storage.KeyValueStore {
 		if logger != nil {
 			logger = logger.With("module", "storage")
 		}

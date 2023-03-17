@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -22,11 +23,14 @@ import (
 )
 
 type ChangeSet struct {
-	logger logging.OptionalLogger
-	store  record.Store
+	logger  logging.OptionalLogger
+	store   record.Store
+	kvstore storage.KeyValueStore
+	parent  *ChangeSet
 
-	summary map[summaryKey]*Summary
-	pending map[pendingKey]record.Value[[32]byte]
+	summary   map[summaryKey]*Summary
+	pending   map[pendingKey]record.Value[[32]byte]
+	partition map[partitionKey]*PartitionBatch
 }
 
 type summaryKey struct {
@@ -43,6 +47,14 @@ type pendingKey struct {
 
 func keyForPending(previousBlock uint64) pendingKey {
 	return pendingKey{previousBlock}
+}
+
+type partitionKey struct {
+	ID string
+}
+
+func keyForPartition(id string) partitionKey {
+	return partitionKey{id}
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
@@ -89,6 +101,16 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 		}
 		v := c.Pending(previousBlock)
 		return v, key[2:], nil
+	case "Partition":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for change set")
+		}
+		id, okID := key[1].(string)
+		if !okID {
+			return nil, nil, errors.InternalError.With("bad key for change set")
+		}
+		v := c.Partition(id)
+		return v, key[2:], nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
@@ -109,6 +131,11 @@ func (c *ChangeSet) IsDirty() bool {
 			return true
 		}
 	}
+	for _, v := range c.partition {
+		if v.IsDirty() {
+			return true
+		}
+	}
 
 	return false
 }
@@ -125,6 +152,9 @@ func (c *ChangeSet) WalkChanges(fn record.WalkFunc) error {
 	for _, v := range c.pending {
 		walkChanges(&err, v, fn)
 	}
+	for _, v := range c.partition {
+		walkChanges(&err, v, fn)
+	}
 	return err
 }
 
@@ -138,6 +168,9 @@ func (c *ChangeSet) baseCommit() error {
 		commitField(&err, v)
 	}
 	for _, v := range c.pending {
+		commitField(&err, v)
+	}
+	for _, v := range c.partition {
 		commitField(&err, v)
 	}
 
