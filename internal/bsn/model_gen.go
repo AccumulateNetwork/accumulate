@@ -27,7 +27,7 @@ type ChangeSet struct {
 	logger  logging.OptionalLogger
 	store   record.Store
 	key     record.Key
-	kvstore storage.KeyValueStore
+	kvstore storage.KeyValueTxn
 	parent  *ChangeSet
 
 	lastBlock record.Value[*LastBlock]

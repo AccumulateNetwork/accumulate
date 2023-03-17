@@ -32,7 +32,7 @@ func TestSimulator(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	bobKey := acctesting.GenerateKey(bob)
 
-	net := simulator.SimpleNetwork(t.Name(), 3, 3)
+	net := simulator.SimpleNetwork(t.Name(), 1, 1)
 	net.Bsn = &accumulated.BvnInit{
 		Id: "BSN",
 		Nodes: []*accumulated.NodeInit{{

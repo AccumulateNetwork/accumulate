@@ -119,30 +119,43 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 }
 
 func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messaging.BlockSummary) (err error) {
-	batch = batch.Begin()
-	partdb := batch.Partition(msg.Partition)
-	defer func() { commitOrDiscard(batch, &err) }()
+	// This is hacky because the main database's BPT support fits badly into the
+	// data model. The data model collects pending BPT updates in a map; when a
+	// sub-batch is committed, it's BPT updates are pushed to its parent. Only
+	// the root batch actually updates the BPT, and that is done directly
+	// through the key-value store. Thus we have to create a root batch and
+	// commit it, but without actually changing the database.
+
+	storeTxn := batch.kvstore.Begin(true)
+	defer func() { commitOrDiscard(storeTxn, &err) }()
+
+	batch = NewChangeSet(storeTxn, ctx.executor.logger)
+	defer batch.Discard()
+	part := batch.Partition(msg.Partition)
 
 	// Execute all the record updates
 	for _, v := range msg.RecordUpdates {
-		err := partdb.PutRawValue(v.Key, v.Value)
+		err = part.PutRawValue(v.Key, v.Value)
 		if err != nil {
 			return errors.UnknownError.WithFormat("store record update: %w", err)
 		}
 	}
 
-	// Ensure every account is committed
-	for _, account := range partdb.UpdatedAccounts() {
-		err := account.Commit()
-		if err != nil {
-			return errors.UnknownError.WithFormat("commit account %v: %w", account.Url(), err)
-		}
+	// Commit the batch
+	err = batch.Commit()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
+
+	// Create a new batch
+	batch = NewChangeSet(storeTxn, ctx.executor.logger)
+	defer batch.Discard()
+	part = batch.Partition(msg.Partition)
 
 	// Verify the root hash is the same
-	if !bytes.Equal(msg.StateTreeHash[:], partdb.BptRoot()) {
-		return errors.BadRequest.With("state hash does not match")
+	if bytes.Equal(msg.StateTreeHash[:], part.BptRoot()) {
+		return nil
 	}
 
-	return nil
+	return errors.BadRequest.With("state hash does not match")
 }

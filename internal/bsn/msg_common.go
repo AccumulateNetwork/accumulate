@@ -12,7 +12,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func commitOrDiscard(batch *ChangeSet, err *error) {
+type committer interface {
+	Commit() error
+	Discard()
+}
+
+func commitOrDiscard(batch committer, err *error) {
 	if *err != nil {
 		batch.Discard()
 		return
