@@ -29,13 +29,13 @@ func (CreateToken) SignerIsAuthorized(delegate AuthDelegate, batch *database.Bat
 	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
-func (CreateToken) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (CreateToken) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateToken)
 	if !ok {
 		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction)
 }
 
 func (CreateToken) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
