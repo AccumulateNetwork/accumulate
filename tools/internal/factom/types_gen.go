@@ -74,6 +74,10 @@ var fieldNames_EntryMetadata = []string{
 }
 
 func (v *EntryMetadata) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

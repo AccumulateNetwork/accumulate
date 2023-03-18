@@ -412,6 +412,10 @@ var fieldNames_NetworkState = []string{
 }
 
 func (v *NetworkState) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -483,6 +487,10 @@ var fieldNames_PartitionList = []string{
 }
 
 func (v *PartitionList) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -524,6 +532,10 @@ var fieldNames_SeedCount = []string{
 }
 
 func (v *SeedCount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -565,6 +577,10 @@ var fieldNames_SeedList = []string{
 }
 
 func (v *SeedList) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
