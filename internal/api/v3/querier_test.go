@@ -147,7 +147,7 @@ func (s *QuerierTestSuite) TestQueryTransaction() {
 	_ = s.NotNil(r.Produced) &&
 		s.Len(r.Produced.Records, 1)
 	_ = s.NotNil(r.Signatures) &&
-		s.Len(r.Signatures.Records, 1)
+		s.Len(r.Signatures.Records, 2)
 }
 
 func (s *QuerierTestSuite) TestQueryAccount() {
