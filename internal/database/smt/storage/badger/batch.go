@@ -69,7 +69,8 @@ func (b *Batch) Put(key storage.Key, value []byte) error {
 		defer l.Unlock()
 	}
 
-	return b.txn.Set(key[:], value)
+	k := b.makeKey("", key)
+	return b.txn.Set(k, value)
 }
 
 func (b *Batch) PutAll(values map[storage.Key][]byte) error {
@@ -80,8 +81,7 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 	}
 
 	for k, v := range values {
-		k := b.makeKey("", k)
-		err := b.txn.Set(k[:], v)
+		err := b.txn.Set(b.makeKey("", k), v)
 		if err != nil {
 			return err
 		}
@@ -98,8 +98,7 @@ func (b *Batch) commit(values map[memory.PrefixedKey][]byte) error {
 	}
 
 	for k, v := range values {
-		k := b.makeKey(k.Prefix, k.Key)
-		err := b.txn.Set(k[:], v)
+		err := b.txn.Set(b.makeKey(k.Prefix, k.Key), v)
 		if err != nil {
 			return err
 		}
