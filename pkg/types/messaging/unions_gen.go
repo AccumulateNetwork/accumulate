@@ -126,6 +126,9 @@ func UnmarshalMessageFrom(rd io.Reader) (Message, error) {
 	// Read the type code
 	var typ MessageType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
