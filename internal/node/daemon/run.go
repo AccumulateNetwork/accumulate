@@ -124,6 +124,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 		return nil, errors.UnknownError.WithFormat("initialize logger: %v", err)
 	}
 
+	daemon.eventBus = events.NewBus(daemon.Logger.With("module", "events"))
 	return &daemon, nil
 }
 
@@ -179,10 +180,34 @@ func (d *Daemon) Start() (err error) {
 		d.snapshotSchedule = s
 	}
 
+	// Load keys
+	err = d.loadKeys()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	switch d.Config.Accumulate.NetworkType {
+	case protocol.PartitionTypeDirectory,
+		protocol.PartitionTypeBlockValidator:
+		err = d.startValidator()
+	case protocol.PartitionTypeBlockSummary:
+		err = d.startSummary()
+	default:
+		return errors.InternalError.WithFormat("unknown partition type %v", d.Config.Accumulate.NetworkType)
+	}
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	d.startMonitoringAndCleanup()
+	return nil
+}
+
+func (d *Daemon) startValidator() (err error) {
 	// Start the database
 	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
-		return errors.UnknownError.WithFormat("open database: %v", err)
+		return errors.UnknownError.WithFormat("open database: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -190,14 +215,7 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
-	// Load keys
-	err = d.loadKeys()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Setup the event buss
-	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
+	// Setup the event bus
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	globals := make(chan *core.GlobalValues, 1)
@@ -215,6 +233,14 @@ func (d *Daemon) Start() (err error) {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Start the block summary collector
+	if d.Config.Accumulate.SummaryNetwork != "" {
+		err = d.startCollector()
+		if err != nil {
+			return errors.UnknownError.WithFormat("start collector: %w", err)
+		}
+	}
+
 	// Start the executor and ABCI
 	app, err := d.startApp()
 	if err != nil {
@@ -229,12 +255,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Start services
 	err = d.startServices(globals)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	d.startMonitoringAndCleanup()
-	return nil
+	return errors.UnknownError.Wrap(err)
 }
 
 func (d *Daemon) startAnalysis() error {
@@ -397,7 +418,6 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
 	err := d.connectionManager.InitClients(d.localTm, statusChecker)
-
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize the connection manager: %v", err)
 	}
@@ -567,18 +587,22 @@ func (d *Daemon) startMonitoringAndCleanup() {
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 		defer cancel()
 
-		err := d.apiServer.Shutdown(ctx)
-		if err != nil {
-			d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
+		if d.apiServer != nil {
+			err := d.apiServer.Shutdown(ctx)
+			if err != nil {
+				d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
+			}
 		}
 
-		err = d.db.Close()
-		if err != nil {
-			module := "badger"
-			if d.UseMemDB {
-				module = "memdb"
+		if d.db != nil {
+			err := d.db.Close()
+			if err != nil {
+				module := "badger"
+				if d.UseMemDB {
+					module = "memdb"
+				}
+				d.Logger.Error("Error closing database", "module", module, "error", err)
 			}
-			d.Logger.Error("Error closing database", "module", module, "error", err)
 		}
 	}()
 }

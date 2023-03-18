@@ -238,6 +238,25 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 	}
 
+	var bsnTmValidators []tmtypes.GenesisValidator
+	if network.Bsn != nil {
+		for j, node := range network.Bsn.Nodes {
+			key := tmed25519.PrivKey(node.PrivValKey)
+			operators = append(operators, key.PubKey().Bytes())
+
+			netinfo.AddValidator(key.PubKey().Bytes(), network.Bsn.Id, node.BsnnType == config.Validator)
+
+			if node.BsnnType == config.Validator {
+				bsnTmValidators = append(bsnTmValidators, tmtypes.GenesisValidator{
+					Name:    fmt.Sprintf("%s.%d", network.Bsn.Id, j+1),
+					Address: key.PubKey().Address(),
+					PubKey:  key.PubKey(),
+					Power:   1,
+				})
+			}
+		}
+	}
+
 	docs[protocol.Directory] = &tmtypes.GenesisDoc{
 		ChainID:         protocol.Directory,
 		GenesisTime:     time,
@@ -316,10 +335,10 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			return nil, err
 		}
 		docs[network.Bsn.Id] = &tmtypes.GenesisDoc{
-			ChainID:       network.Bsn.Id,
-			GenesisTime:   time,
-			InitialHeight: 1,
-			// TODO Validators
+			ChainID:         network.Bsn.Id,
+			GenesisTime:     time,
+			InitialHeight:   1,
+			Validators:      bsnTmValidators,
 			ConsensusParams: tmtypes.DefaultConsensusParams(),
 			AppHash:         make(tmbytes.HexBytes, 32),
 			AppState:        b,
