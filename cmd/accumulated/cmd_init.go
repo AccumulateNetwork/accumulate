@@ -96,6 +96,7 @@ var flagInitDevnet struct {
 	NumBvns       int
 	NumValidators int
 	NumFollowers  int
+	NumBsnNodes   int
 	BasePort      int
 	IPs           []string
 	Docker        bool
@@ -154,6 +155,7 @@ func initInitFlags() {
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per partition to configure")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per partition to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBsnNodes, "bsn", "s", 0, "Number of block summary network nodes")
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringSliceVar(&flagInitDevnet.IPs, "ip", []string{"127.0.1.1"}, "IP addresses to use or base IP - must not end with .0")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
@@ -191,7 +193,7 @@ func networkReset() {
 			os.RemoveAll(filepath.Join(flagMain.WorkDir, ent.Name()))
 			continue
 		}
-		if !strings.HasPrefix(ent.Name(), "node-") {
+		if !strings.HasPrefix(ent.Name(), "node-") && !strings.HasPrefix(ent.Name(), "bsn-") {
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
 			continue
 		}
@@ -225,7 +227,7 @@ func nodeReset(dir string) bool {
 		}
 
 		switch strings.ToLower(ent.Name()) {
-		case "dnn", "bvnn":
+		case "dnn", "bvnn", "bsnn":
 			dir := path.Join(dir, ent.Name())
 			fmt.Fprintf(os.Stderr, "Deleting %s\n", dir)
 			err = os.RemoveAll(dir)

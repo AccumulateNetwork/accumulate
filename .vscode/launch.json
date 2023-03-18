@@ -52,6 +52,7 @@
         "-b=2",
         "-v=2",
         "-f=0",
+        "-s=2",
         "--globals={\"executorVersion\": \"v2\"}",
         "--faucet-seed=ci",
       ]

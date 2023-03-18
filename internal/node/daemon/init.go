@@ -40,8 +40,8 @@ const nodeDirPerm = 0755
 
 type MakeConfigFunc func(networkName string, net protocol.PartitionType, node config.NodeType, netId string) *config.Config
 
-func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config.Config {
-	var allConfigs [][][2]*config.Config
+func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.Config {
+	var allConfigs [][][]*config.Config
 
 	if mkcfg == nil {
 		mkcfg = config.Default
@@ -53,6 +53,13 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 		Type:     protocol.PartitionTypeDirectory,
 		BasePort: int64(network.Bvns[0].Nodes[0].BasePort), // TODO This is not great
 	}
+	bsnConfig := config.Partition{
+		Type:     protocol.PartitionTypeBlockSummary,
+		BasePort: int64(network.Bvns[0].Nodes[0].BasePort) + int64(config.PortOffsetBlockSummary), // TODO This is not great
+	}
+	if network.Bsn != nil {
+		bsnConfig.Id = network.Bsn.Id
+	}
 
 	// If the node addresses are loopback or private IPs, disable strict address book
 	ip := net.ParseIP(network.Bvns[0].Nodes[0].Peer().String())
@@ -60,7 +67,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 
 	var i int
 	for _, bvn := range network.Bvns {
-		var bvnConfigs [][2]*config.Config
+		var bvnConfigs [][]*config.Config
 		bvnConfig := config.Partition{
 			Id:       bvn.Id,
 			Type:     protocol.PartitionTypeBlockValidator,
@@ -111,12 +118,49 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			dnn.Accumulate.P2P.BootstrapPeers = p2pPeers
 			bvnn.Accumulate.P2P.BootstrapPeers = p2pPeers
 
-			bvnConfigs = append(bvnConfigs, [2]*config.Config{dnn, bvnn})
+			bvnConfigs = append(bvnConfigs, []*config.Config{dnn, bvnn})
 		}
 		allConfigs = append(allConfigs, bvnConfigs)
 		netConfig.Partitions = append(netConfig.Partitions, bvnConfig)
 	}
 	netConfig.Partitions[0] = dnConfig
+
+	if network.Bsn != nil {
+		var bsnConfigs [][]*config.Config
+		for i, node := range network.Bsn.Nodes {
+			bsnn := mkcfg(network.Id, protocol.PartitionTypeBlockSummary, node.BsnnType, network.Bsn.Id)
+			bsnn.Moniker = fmt.Sprintf("%s.%d", network.Bsn.Id, i+1)
+			ConfigureNodePorts(node, bsnn, protocol.PartitionTypeBlockSummary)
+			bsnConfig.Nodes = append(bsnConfig.Nodes, config.Node{
+				Address: node.Advertize().Scheme("http").TendermintP2P().BlockSummary().String(),
+				Type:    node.BsnnType,
+			})
+
+			if bsnn.P2P.ExternalAddress == "" {
+				bsnn.P2P.ExternalAddress = node.Peer().TendermintP2P().BlockSummary().String()
+			}
+
+			// No duplicate IPs
+			bsnn.P2P.AllowDuplicateIP = false
+
+			// Initial peers (should be bootstrap peers but that setting isn't
+			// present in 0.37)
+			bsnn.P2P.PersistentPeers = strings.Join(network.Bsn.Peers(node).BlockSummary().TendermintP2P().WithKey().String(), ",")
+
+			// Set whether unroutable addresses are allowed
+			bsnn.P2P.AddrBookStrict = strict
+
+			p2pPeers := network.Peers(node).AccumulateP2P().WithKey().
+				Do(AddressBuilder.Directory, AddressBuilder.BlockValidator).
+				Do(func(b AddressBuilder) AddressBuilder { return b.Scheme("tcp") }, func(b AddressBuilder) AddressBuilder { return b.Scheme("udp") }).
+				Multiaddr()
+			bsnn.Accumulate.P2P.BootstrapPeers = p2pPeers
+
+			bsnConfigs = append(bsnConfigs, []*config.Config{bsnn})
+		}
+		allConfigs = append(allConfigs, bsnConfigs)
+		netConfig.Partitions = append(netConfig.Partitions, bsnConfig)
+	}
 
 	for _, configs := range allConfigs {
 		for _, configs := range configs {
