@@ -386,6 +386,7 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 		KeyIndex: uint64(ctx.keyIndex),
 		Version:  ctx.keySig.GetSignerVersion(),
 		Hash:     ctx.message.Hash(),
+		Path:     ctx.delegators,
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
