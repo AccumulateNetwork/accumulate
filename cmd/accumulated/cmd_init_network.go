@@ -147,16 +147,9 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 	checkf(err, "build genesis documents")
 
 	configs := accumulated.BuildNodesConfig(netInit, nil)
-	var count int
-	dnGenDoc := genDocs[protocol.Directory]
-	for i, bvn := range netInit.Bvns {
-		bvnGenDoc := genDocs[bvn.Id]
-		for j, node := range bvn.Nodes {
-			count++
-			configs[i][j][0].SetRoot(filepath.Join(flagMain.WorkDir, fmt.Sprintf("node-%d", count), "dnn"))
-			configs[i][j][1].SetRoot(filepath.Join(flagMain.WorkDir, fmt.Sprintf("node-%d", count), "bvnn"))
-
-			for _, config := range configs[i][j] {
+	for _, configs := range configs {
+		for _, configs := range configs {
+			for _, config := range configs {
 				if flagInit.LogLevels != "" {
 					config.LogLevel = flagInit.LogLevels
 				}
@@ -172,13 +165,36 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 					config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 				}
 			}
+		}
+	}
+
+	var count int
+	dnGenDoc := genDocs[protocol.Directory]
+	for i, bvn := range netInit.Bvns {
+		bvnGenDoc := genDocs[bvn.Id]
+		for j, node := range bvn.Nodes {
+			count++
+			configs[i][j][0].SetRoot(filepath.Join(flagMain.WorkDir, fmt.Sprintf("node-%d", count), "dnn"))
+			configs[i][j][1].SetRoot(filepath.Join(flagMain.WorkDir, fmt.Sprintf("node-%d", count), "bvnn"))
+
 			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.DnNodeKey, dnGenDoc)
 			checkf(err, "write DNN files")
 			configs[i][j][1].Config.PrivValidatorKey = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.BvnNodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
+		}
+	}
 
+	if netInit.Bsn != nil {
+		bsnGenDoc := genDocs[netInit.Bsn.Id]
+		i := len(netInit.Bvns)
+		for j, node := range netInit.Bsn.Nodes {
+			configs[i][j][0].SetRoot(filepath.Join(flagMain.WorkDir, fmt.Sprintf("bsn-%d", j+1), "bsnn"))
+
+			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
+			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.BsnNodeKey, bsnGenDoc)
+			checkf(err, "write BSNN files")
 		}
 	}
 }

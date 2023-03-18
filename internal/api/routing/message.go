@@ -106,7 +106,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		if msg.Envelope == nil {
 			return nil, errors.BadRequest.With("envelope is missing")
 		}
-		service.Argument, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
+		service.Argument, err = r.Router.Route(msg.Envelope)
 
 	case *message.ValidateRequest:
 		service.Type = api.ServiceTypeValidate
@@ -115,7 +115,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		if msg.Envelope == nil {
 			return nil, errors.BadRequest.With("envelope is missing")
 		}
-		service.Argument, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
+		service.Argument, err = r.Router.Route(msg.Envelope)
 
 	case *message.SubscribeRequest:
 		service.Type = api.ServiceTypeEvent

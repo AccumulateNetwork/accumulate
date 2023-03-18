@@ -18,6 +18,7 @@ import (
 type SignatureBuilder struct {
 	parser
 	transaction *protocol.Transaction
+	message     messaging.Message
 	signatures  []protocol.Signature
 	signer      signing.Builder
 }
@@ -72,7 +73,12 @@ func (b SignatureBuilder) Done() (*messaging.Envelope, error) {
 	}
 
 	env := new(messaging.Envelope)
-	env.Transaction = []*protocol.Transaction{b.transaction}
+	if b.transaction != nil {
+		env.Transaction = []*protocol.Transaction{b.transaction}
+	}
+	if b.message != nil {
+		env.Messages = []messaging.Message{b.message}
+	}
 	env.Signatures = b.signatures
 	return env, nil
 }
@@ -82,7 +88,7 @@ func (b SignatureBuilder) SignWith(signer any, path ...string) SignatureBuilder 
 }
 
 func (b SignatureBuilder) sign() SignatureBuilder {
-	if b.transaction == nil {
+	if b.transaction == nil && b.message == nil {
 		panic("transaction is missing")
 	}
 
@@ -98,10 +104,15 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 
 	var signature protocol.Signature
 	var err error
-	if b.transaction.Body.Type() != protocol.TransactionTypeRemote && b.transaction.Header.Initiator == ([32]byte{}) {
-		signature, err = b.signer.Initiate(b.transaction)
-	} else {
+	switch {
+	case b.message != nil:
+		h := b.message.Hash()
+		signature, err = b.signer.Sign(h[:])
+	case b.transaction.Body.Type() == protocol.TransactionTypeRemote,
+		b.transaction.Header.Initiator != [32]byte{}:
 		signature, err = b.signer.Sign(b.transaction.GetHash())
+	default:
+		signature, err = b.signer.Initiate(b.transaction)
 	}
 	if err != nil {
 		b.errorf(errors.UnknownError, "sign: %w", err)

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,8 +16,9 @@ type DevnetOptions struct {
 	BvnCount       int
 	ValidatorCount int
 	FollowerCount  int
+	BsnCount       int
 	BasePort       int
-	GenerateKeys   func() (privVal, dnn, bvnn []byte)
+	GenerateKeys   func() (privVal, dnn, bvnn, bsnn []byte)
 	HostName       func(bvnNum, nodeNum int) (host, listen string)
 }
 
@@ -42,7 +43,7 @@ func NewDevnet(opts DevnetOptions) *NetworkInit {
 			bvnInit.Nodes = append(bvnInit.Nodes, nodeInit)
 
 			if opts.GenerateKeys != nil {
-				privVal, dnn, bvnn := opts.GenerateKeys()
+				privVal, dnn, bvnn, _ := opts.GenerateKeys()
 				nodeInit.PrivValKey = privVal
 				nodeInit.DnNodeKey = dnn
 				nodeInit.BvnNodeKey = bvnn
@@ -53,6 +54,31 @@ func NewDevnet(opts DevnetOptions) *NetworkInit {
 				nodeInit.AdvertizeAddress = host
 				nodeInit.ListenAddress = listen
 			}
+		}
+	}
+
+	if opts.BsnCount == 0 {
+		return netInit
+	}
+
+	netInit.Bsn = new(BvnInit)
+	netInit.Bsn.Id = "BSN"
+	for i := 0; i < opts.BsnCount; i++ {
+		nodeInit := new(NodeInit)
+		nodeInit.BsnnType = config.Validator
+		nodeInit.BasePort = uint64(opts.BasePort)
+		netInit.Bsn.Nodes = append(netInit.Bsn.Nodes, nodeInit)
+
+		if opts.GenerateKeys != nil {
+			privVal, _, _, bsnn := opts.GenerateKeys()
+			nodeInit.PrivValKey = privVal
+			nodeInit.BsnNodeKey = bsnn
+		}
+
+		if opts.HostName != nil {
+			host, listen := opts.HostName(-1, i)
+			nodeInit.AdvertizeAddress = host
+			nodeInit.ListenAddress = listen
 		}
 	}
 

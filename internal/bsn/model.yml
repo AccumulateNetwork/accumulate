@@ -1,0 +1,49 @@
+- name: ChangeSet
+  type: entity
+  root: true
+  customCommit: true
+  fields:
+  - name: kvstore
+    type: storage.KeyValueTxn
+  - name: parent
+    type: ChangeSet
+    pointer: true
+  attributes:
+  - name: LastBlock
+    type: state
+    dataType: LastBlock
+    pointer: true
+  - name: Summary
+    type: entity
+    parameters:
+    - name: Hash
+      type: hash
+    attributes:
+    - name: Main
+      type: state
+      dataType: messaging.BlockSummary
+      pointer: true
+    - name: Signatures
+      type: state
+      dataType: protocol.KeySignature
+      union: true
+      collection: set
+      comparator: compareSignatures
+  - name: Pending
+    description: lists pending summaries keyed by previous block
+    parameters:
+    - name: Partition
+      type: string
+    - name: PreviousBlock
+      type: uint
+    type: state
+    dataType: hash
+  - name: Partition
+    description: is the database for a partition
+    parameters:
+    - name: ID
+      type: string
+    type: other
+    dataType: database.Batch
+    pointer: true
+    omitAccessor: true

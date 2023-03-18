@@ -22,7 +22,7 @@ import (
 
 var ErrFieldsOutOfOrder = errors.New("fields are out of order")
 
-const MaxValueSize = 1 << 15
+const MaxValueSize = 1 << 24
 
 type BytesReader interface {
 	io.Reader

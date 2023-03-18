@@ -8,6 +8,7 @@ package database
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
@@ -23,14 +24,14 @@ const markPower = 8
 
 // Database is an Accumulate database.
 type Database struct {
-	store       storage.KeyValueStore
+	store       storage.Beginner
 	logger      log.Logger
 	nextBatchId int64
 	observer    Observer
 }
 
 // New creates a new database using the given key-value store.
-func New(store storage.KeyValueStore, logger log.Logger) *Database {
+func New(store storage.Beginner, logger log.Logger) *Database {
 	d := new(Database)
 	d.store = store
 	d.observer = unsetObserver{}
@@ -105,7 +106,10 @@ func (d *Database) SetObserver(observer Observer) {
 
 // Close closes the database and the key-value store.
 func (d *Database) Close() error {
-	return d.store.Close()
+	if c, ok := d.store.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 // Import imports values from another database.

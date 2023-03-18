@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -47,11 +48,11 @@ func TestGenerateDbTestdata(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		func(partition string, _ int, logger log.Logger) database.Beginner {
+		func(partition string, _ int, logger log.Logger) storage.KeyValueStore {
 			if strings.EqualFold(partition, protocol.Directory) {
-				return database.OpenInMemory(logger)
+				return memory.New(logger)
 			}
-			return db
+			return store
 		},
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
