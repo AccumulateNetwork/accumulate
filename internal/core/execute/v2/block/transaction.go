@@ -206,12 +206,13 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	case err == nil:
 		return true, nil
 	case errors.Is(err, errors.NotFound):
-		// return false, nil
+		return false, nil
 	default:
 		return false, errors.UnknownError.With("load vote: %w", err)
 	}
+}
 
-	// Check if any signer has reached its threshold (TODO Remove)
+func (x *Executor) AuthorityIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error) {
 	for _, signer := range status.FindSigners(authUrl) {
 		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer)
 		if err != nil {
