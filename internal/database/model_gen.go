@@ -628,8 +628,9 @@ type AccountTransaction struct {
 
 	payments         record.Set[[32]byte]
 	votes            record.Set[*VoteEntry]
-	signatures       *AccountTransactionSignatures
+	signatures       record.Set[*SignatureSetEntry]
 	anchorSignatures record.Set[protocol.KeySignature]
+	history          record.Set[uint64]
 }
 
 func (c *AccountTransaction) Payments() record.Set[[32]byte] {
@@ -644,21 +645,21 @@ func (c *AccountTransaction) Votes() record.Set[*VoteEntry] {
 	})
 }
 
-func (c *AccountTransaction) Signatures() *AccountTransactionSignatures {
-	return getOrCreateField(&c.signatures, func() *AccountTransactionSignatures {
-		v := new(AccountTransactionSignatures)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Signatures")
-		v.parent = c
-		v.label = c.label + " " + "signatures"
-		return v
+func (c *AccountTransaction) Signatures() record.Set[*SignatureSetEntry] {
+	return getOrCreateField(&c.signatures, func() record.Set[*SignatureSetEntry] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", record.Struct[SignatureSetEntry](), compareSignatureSetEntries)
 	})
 }
 
 func (c *AccountTransaction) AnchorSignatures() record.Set[protocol.KeySignature] {
 	return getOrCreateField(&c.anchorSignatures, func() record.Set[protocol.KeySignature] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("AnchorSignatures"), c.label+" "+"anchor signatures", record.Union(protocol.UnmarshalKeySignature), compareAnchorSignatures)
+	})
+}
+
+func (c *AccountTransaction) History() record.Set[uint64] {
+	return getOrCreateField(&c.history, func() record.Set[uint64] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("History"), c.label+" "+"history", record.Wrapped(record.UintWrapper), record.CompareUint)
 	})
 }
 
@@ -676,6 +677,8 @@ func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key,
 		return c.Signatures(), key[1:], nil
 	case "AnchorSignatures":
 		return c.AnchorSignatures(), key[1:], nil
+	case "History":
+		return c.History(), key[1:], nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for transaction")
 	}
@@ -698,6 +701,9 @@ func (c *AccountTransaction) IsDirty() bool {
 	if fieldIsDirty(c.anchorSignatures) {
 		return true
 	}
+	if fieldIsDirty(c.history) {
+		return true
+	}
 
 	return false
 }
@@ -712,70 +718,6 @@ func (c *AccountTransaction) Commit() error {
 	commitField(&err, c.votes)
 	commitField(&err, c.signatures)
 	commitField(&err, c.anchorSignatures)
-
-	return err
-}
-
-type AccountTransactionSignatures struct {
-	logger logging.OptionalLogger
-	store  record.Store
-	key    record.Key
-	label  string
-	parent *AccountTransaction
-
-	active  record.Set[*SignatureSetEntry]
-	history record.Set[uint64]
-}
-
-func (c *AccountTransactionSignatures) getActive() record.Set[*SignatureSetEntry] {
-	return getOrCreateField(&c.active, func() record.Set[*SignatureSetEntry] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Active"), c.label+" "+"active", record.Struct[SignatureSetEntry](), compareSignatureSetEntries)
-	})
-}
-
-func (c *AccountTransactionSignatures) History() record.Set[uint64] {
-	return getOrCreateField(&c.history, func() record.Set[uint64] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("History"), c.label+" "+"history", record.Wrapped(record.UintWrapper), record.CompareUint)
-	})
-}
-
-func (c *AccountTransactionSignatures) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
-		return nil, nil, errors.InternalError.With("bad key for signatures")
-	}
-
-	switch key[0] {
-	case "Active":
-		return c.getActive(), key[1:], nil
-	case "History":
-		return c.History(), key[1:], nil
-	default:
-		return nil, nil, errors.InternalError.With("bad key for signatures")
-	}
-}
-
-func (c *AccountTransactionSignatures) IsDirty() bool {
-	if c == nil {
-		return false
-	}
-
-	if fieldIsDirty(c.active) {
-		return true
-	}
-	if fieldIsDirty(c.history) {
-		return true
-	}
-
-	return false
-}
-
-func (c *AccountTransactionSignatures) Commit() error {
-	if c == nil {
-		return nil
-	}
-
-	var err error
-	commitField(&err, c.active)
 	commitField(&err, c.history)
 
 	return err
