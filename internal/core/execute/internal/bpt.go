@@ -133,7 +133,7 @@ func (a *observedAccount) hashPendingV2(err *error, hasher *hash.Hasher, txid *u
 	}
 
 	// Active signatures
-	for _, entry := range loadState(err, true, txn.Signatures().Active().Get) {
+	for _, entry := range loadState(err, true, txn.Signatures().Get) {
 		hashValue(err, hasher, entry)
 	}
 }

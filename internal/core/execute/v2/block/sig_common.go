@@ -69,22 +69,16 @@ func (s *SignatureContext) authorityIsReady(batch *database.Batch, authority *ur
 
 func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.Signer, entry *database.SignatureSetEntry) error {
 	signerUrl := ctx.getSigner()
-	set := batch.Account(signerUrl).Transaction(ctx.transaction.ID().Hash()).Signatures()
+	txn := batch.Account(signerUrl).Transaction(ctx.transaction.ID().Hash())
 
-	// Add the signature to the signer's chain
-	chain := batch.Account(signer.GetUrl()).SignatureChain()
-	head, err := chain.Head().Get()
+	// Add the signature chain
+	err := txn.RecordHistory(ctx.message)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load chain: %w", err)
-	}
-	entry.ChainIndex = uint64(head.Count)
-	err = chain.Inner().AddHash(ctx.signature.Hash(), false)
-	if err != nil {
-		return errors.UnknownError.WithFormat("store chain: %w", err)
+		return errors.UnknownError.WithFormat("record history: %w", err)
 	}
 
 	// Grab the version from an entry
-	all, err := set.Active().Get()
+	all, err := txn.Signatures().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load signature set version: %w", err)
 	}
@@ -102,11 +96,11 @@ func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.
 		}
 
 		// Add to the active set if the signature's signer version is the same
-		err = set.Active().Add(entry)
+		err = txn.Signatures().Add(entry)
 
 	case version < entry.Version:
 		// Replace the active set if the signature's signer version is more recent
-		err = set.Active().Put([]*database.SignatureSetEntry{entry})
+		err = txn.Signatures().Put([]*database.SignatureSetEntry{entry})
 
 	default: // version > entry.Version
 		// This should be caught elsewhere
@@ -118,7 +112,7 @@ func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.
 
 	// Add the transaction to the authority's pending list if the signer is not
 	// yet satisfied
-	all, err = set.Active().Get()
+	all, err = txn.Signatures().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load signature set version: %w", err)
 	}
@@ -153,7 +147,6 @@ func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext) error {
 			Account(signer).
 			Transaction(ctx.transaction.ID().Hash()).
 			Signatures().
-			Active().
 			Put(nil)
 		if err != nil {
 			return errors.UnknownError.WithFormat("clear active signature set: %w", err)
