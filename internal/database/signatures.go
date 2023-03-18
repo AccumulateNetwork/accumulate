@@ -9,7 +9,6 @@ package database
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func compareSignatureSetEntries(a, b *SignatureSetEntry) int {
@@ -50,19 +49,6 @@ func (a *accountTransactionSignaturesActive) updateIndices(v []*SignatureSetEntr
 	signerUrl := a.parent.parent.parent.Url()
 	hash := a.parent.key[3].([32]byte)
 	err = a.parent.parent.parent.parent.Message(hash).Signers().Add(signerUrl)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	var signer protocol.Signer
-	err = a.parent.parent.parent.Main().GetAs(&signer)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Record the signer URL in the transaction status for backwards
-	// compatibility; TODO remove
-	err = a.parent.parent.parent.parent.Transaction2(hash).ensureSigner(signer)
 	return errors.UnknownError.Wrap(err)
 }
 
