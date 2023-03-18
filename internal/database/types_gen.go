@@ -415,6 +415,10 @@ var fieldNames_BlockStateSynthTxnEntry = []string{
 }
 
 func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -473,6 +477,10 @@ var fieldNames_ReceiptList = []string{
 }
 
 func (v *ReceiptList) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -540,6 +548,10 @@ var fieldNames_SigOrTxn = []string{
 }
 
 func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -598,6 +610,10 @@ var fieldNames_SigSetEntry = []string{
 }
 
 func (v *SigSetEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -664,6 +680,10 @@ var fieldNames_SignatureSetEntry = []string{
 }
 
 func (v *SignatureSetEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -728,6 +748,10 @@ var fieldNames_TransactionChainEntry = []string{
 }
 
 func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -792,6 +816,10 @@ var fieldNames_VoteEntry = []string{
 }
 
 func (v *VoteEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -840,6 +868,10 @@ var fieldNames_sigSetData = []string{
 }
 
 func (v *sigSetData) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
