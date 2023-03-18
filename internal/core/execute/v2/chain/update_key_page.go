@@ -76,7 +76,7 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	return true, nil
 }
 
-func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	// All new delegates must sign the transaction
 	newOwners, err := getNewOwners(batch, transaction)
 	if err != nil {
@@ -84,7 +84,7 @@ func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.B
 	}
 
 	for _, owner := range newOwners {
-		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, owner)
+		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, owner)
 		if !ok || err != nil {
 			return false, false, err
 		}
