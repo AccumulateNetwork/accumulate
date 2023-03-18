@@ -264,6 +264,10 @@ var fieldNames_FakeAccount = []string{
 }
 
 func (v *FakeAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -304,6 +308,10 @@ var fieldNames_FakeAuthority = []string{
 }
 
 func (v *FakeAuthority) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -348,6 +356,10 @@ var fieldNames_FakeLiteAccount = []string{
 }
 
 func (v *FakeLiteAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -400,6 +412,10 @@ var fieldNames_FakeSignature = []string{
 }
 
 func (v *FakeSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -478,6 +494,10 @@ var fieldNames_FakeSigner = []string{
 }
 
 func (v *FakeSigner) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -547,6 +567,10 @@ var fieldNames_FakeTransactionBody = []string{
 }
 
 func (v *FakeTransactionBody) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

@@ -76,6 +76,10 @@ var fieldNames_ServiceRegisteredEvent = []string{
 }
 
 func (v *ServiceRegisteredEvent) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
