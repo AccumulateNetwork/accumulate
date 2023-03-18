@@ -156,6 +156,7 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		KeyIndex: uint64(keyIndex),
 		Version:  signer.GetVersion(),
 		Hash:     ctx.message.Hash(),
+		Path:     sig.Delegator,
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
