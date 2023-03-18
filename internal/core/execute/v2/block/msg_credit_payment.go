@@ -91,15 +91,11 @@ func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (_ *p
 }
 
 func (CreditPayment) record(batch *database.Batch, ctx *MessageContext, pay *messaging.CreditPayment) error {
-	// Add the message to the signature chain
-	h := ctx.message.Hash()
-	err := batch.Account(pay.TxID.Account()).SignatureChain().Inner().AddHash(h[:], false)
+	txn := batch.Account(pay.TxID.Account()).Transaction(pay.TxID.Hash())
+	err := txn.RecordHistory(ctx.message)
 	if err != nil {
-		return errors.UnknownError.WithFormat("add to signature chain: %w", err)
+		return errors.UnknownError.WithFormat("record history: %w", err)
 	}
 
-	return batch.Account(pay.TxID.Account()).
-		Transaction(pay.TxID.Hash()).
-		Payments().
-		Add(pay.Hash())
+	return txn.Payments().Add(pay.Hash())
 }
