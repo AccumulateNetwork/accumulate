@@ -7,6 +7,7 @@
 package database
 
 import (
+	"crypto/sha256"
 	"sort"
 
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -16,11 +17,41 @@ import (
 )
 
 func compareSignatureSetEntries(a, b *SignatureSetEntry) int {
-	return int(a.KeyIndex) - int(b.KeyIndex)
+	// Compare key indices
+	c := int(a.KeyIndex) - int(b.KeyIndex)
+	if c != 0 {
+		return c
+	}
+
+	// Compare delegation path lengths
+	c = len(a.Path) - len(b.Path)
+	if c != 0 {
+		return c
+	}
+
+	// Compare delegation paths
+	for i := range a.Path {
+		c = a.Path[i].Compare(b.Path[i])
+		if c != 0 {
+			return c
+		}
+	}
+
+	return 0
 }
 
 func compareVoteEntries(a, b *VoteEntry) int {
 	return a.Authority.Compare(b.Authority)
+}
+
+// PathHash returns a hash derived from the delegation path.
+func (a *SignatureSetEntry) PathHash() [32]byte {
+	sha := sha256.New()
+	for _, p := range a.Path {
+		hash := p.Hash()
+		_, _ = sha.Write(hash)
+	}
+	return *(*[32]byte)(sha.Sum(nil))
 }
 
 // RecordHistory adds the message to the signature chain and history.
