@@ -19,6 +19,10 @@ func (b *Batch) Account(u *url.URL) *Account {
 	return b.getAccount(u.StripExtras())
 }
 
+func (b *Batch) AccountTransaction(id *url.TxID) *AccountTransaction {
+	return b.Account(id.Account()).Transaction(id.Hash())
+}
+
 func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) error) (T, error) {
 	record := batch.Account(url).Main()
 
