@@ -82,23 +82,50 @@ func runDevNet(*cobra.Command, []string) {
 		skip[id] = true
 	}
 
-	nodes := getNodeDirs(flagMain.WorkDir)
-	for _, node := range nodes {
-		id := fmt.Sprint(node)
-		if len(id) > nodeIdLen {
-			nodeIdLen = len(id)
+	vals, bsns := getNodeDirs(flagMain.WorkDir)
+	for _, nodes := range [][]int{vals, bsns} {
+		for _, node := range nodes {
+			id := fmt.Sprint(node)
+			if len(id) > nodeIdLen {
+				nodeIdLen = len(id)
+			}
 		}
 	}
 
 	stop := make(chan struct{})
-	didStop := make(chan struct{}, len(nodes)*2)
+	didStop := make(chan struct{}, len(vals)*2+len(bsns))
 	done := new(sync.WaitGroup)
 
 	logWriter := newLogWriter(nil)
 
 	var daemons []*accumulated.Daemon
 	started := new(sync.WaitGroup)
-	for _, node := range nodes {
+
+	for _, num := range bsns {
+		if skip[-num] {
+			continue
+		}
+
+		name := fmt.Sprintf("bsn-%d", num)
+		daemon, err := accumulated.Load(
+			filepath.Join(flagMain.WorkDir, name, "bsnn"),
+			func(c *config.Config) (io.Writer, error) {
+				return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
+					return newNodeWriter(w, format, "bsn", num, color)
+				})
+			},
+		)
+		check(err)
+
+		startDevNetNode(daemon, nil, started, done, stop, didStop)
+
+		daemons = append(daemons, daemon)
+	}
+
+	// Wait for the BSN to start since the validators will send messages to it
+	started.Wait()
+
+	for _, node := range vals {
 		if skip[node] {
 			continue
 		}
@@ -179,7 +206,9 @@ func runDevNet(*cobra.Command, []string) {
 func startDevNetNode(primary, secondary *accumulated.Daemon, started, done *sync.WaitGroup, stop, didStop chan struct{}) {
 	// Disable features not compatible with multi-node, single-process
 	primary.Config.Instrumentation.Prometheus = false
-	secondary.Config.Instrumentation.Prometheus = false
+	if secondary != nil {
+		secondary.Config.Instrumentation.Prometheus = false
+	}
 
 	started.Add(1)
 	go func() {
@@ -187,55 +216,71 @@ func startDevNetNode(primary, secondary *accumulated.Daemon, started, done *sync
 
 		// Start it
 		check(primary.Start())
-		check(secondary.StartSecondary(primary))
+		if secondary != nil {
+			check(secondary.StartSecondary(primary))
+		}
 
 		// On stop, send the signal
 		go func() {
 			<-primary.Done()
 			didStop <- struct{}{}
 		}()
-		go func() {
-			<-secondary.Done()
-			didStop <- struct{}{}
-		}()
+		if secondary != nil {
+			go func() {
+				<-secondary.Done()
+				didStop <- struct{}{}
+			}()
+		}
 
 		// On signal, stop the node
-		done.Add(2)
+		done.Add(1)
+		if secondary != nil {
+			done.Add(1)
+		}
 		go func() {
 			defer done.Done()
 			<-stop
 			check(primary.Stop())
 		}()
-		go func() {
-			defer done.Done()
-			<-stop
-			check(secondary.Stop())
-		}()
+		if secondary != nil {
+			go func() {
+				defer done.Done()
+				<-stop
+				check(secondary.Stop())
+			}()
+		}
 	}()
 }
 
-func getNodeDirs(dir string) []int {
-	var nodes []int
-
+func getNodeDirs(dir string) (vals, bsns []int) {
 	ent, err := os.ReadDir(dir)
 	checkf(err, "failed to read %q", dir)
 
 	for _, ent := range ent {
-		// We only want directories starting with node-
-		if !ent.IsDir() || !strings.HasPrefix(ent.Name(), "node-") {
+		// We only want directories starting with node- or bsn-
+		var nodes *[]int
+		var num string
+		switch {
+		case !ent.IsDir():
+			continue
+		case strings.HasPrefix(ent.Name(), "node-"):
+			nodes, num = &vals, ent.Name()[5:]
+		case strings.HasPrefix(ent.Name(), "bsn-"):
+			nodes, num = &bsns, ent.Name()[4:]
+		default:
 			continue
 		}
 
 		// We only want directories named node-#, e.g. node-1
-		node, err := strconv.ParseInt(ent.Name()[5:], 10, 16)
+		node, err := strconv.ParseInt(num, 10, 16)
 		if err != nil {
 			continue
 		}
 
-		nodes = append(nodes, int(node))
+		*nodes = append(*nodes, int(node))
 	}
 
-	return nodes
+	return
 }
 
 func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *sync.WaitGroup, stop chan struct{}) {

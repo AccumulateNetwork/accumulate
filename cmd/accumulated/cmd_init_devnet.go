@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -45,17 +45,21 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 		BvnCount:       flagInitDevnet.NumBvns,
 		ValidatorCount: flagInitDevnet.NumValidators,
 		FollowerCount:  flagInitDevnet.NumFollowers,
+		BsnCount:       flagInitDevnet.NumBsnNodes,
 		BasePort:       flagInitDevnet.BasePort,
 	}
 
 	if !flagInitDevnet.Compose {
-		initOpts.GenerateKeys = func() (privVal, dnn, bvnn []byte) {
-			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
+		initOpts.GenerateKeys = func() (privVal, dnn, bvnn, bsnn []byte) {
+			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
 		}
 	}
 
 	if flagInitDevnet.Docker {
 		initOpts.HostName = func(bvnNum, nodeNum int) (host string, listen string) {
+			if bvnNum < 0 {
+				return fmt.Sprintf("bsn-%d%s", nodeNum+1, flagInitDevnet.DnsSuffix), "0.0.0.0"
+			}
 			return fmt.Sprintf("node-%d%s", bvnNum*count+nodeNum+1, flagInitDevnet.DnsSuffix), "0.0.0.0"
 		}
 	} else {
