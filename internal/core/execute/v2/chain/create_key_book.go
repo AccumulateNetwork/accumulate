@@ -29,13 +29,13 @@ func (CreateKeyBook) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
-func (CreateKeyBook) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (CreateKeyBook) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateKeyBook)
 	if !ok {
 		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction)
 }
 
 func (CreateKeyBook) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
