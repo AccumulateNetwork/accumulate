@@ -337,7 +337,7 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 
 	// Verify the signer's authority is satisfied
 	authority := ctx.getAuthority()
-	ok, err := ctx.authorityIsSatisfied(batch, authority)
+	ok, err := ctx.authorityIsReady(batch, authority)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

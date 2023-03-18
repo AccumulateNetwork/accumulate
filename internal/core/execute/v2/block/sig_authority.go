@@ -163,7 +163,7 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 
 	// If the signer's authority is satisfied
 	signerAuth := signer.GetAuthority()
-	ok, err = ctx.authorityIsSatisfied(batch, signerAuth)
+	ok, err = ctx.authorityIsReady(batch, signerAuth)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
