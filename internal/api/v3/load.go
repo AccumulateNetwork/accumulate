@@ -71,6 +71,21 @@ func loadTransaction(batch *database.Batch, txn *protocol.Transaction) (*api.Tra
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
 
+	// Append v1 signers (from Transaction(id).Status) and v2 signers (from
+	// Message(id).Signers)
+	s2, err := batch.Message2(txn.GetHash()).Signers().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load signers: %w", err)
+	}
+
+	// Copy instead of appending to avoid the possibility of modifying the
+	// transaction status's slice
+	signers := make([]protocol.Signer, len(status.Signers)+len(s2))
+	n := copy(signers, status.Signers)
+	for i, u := range s2 {
+		signers[n+i] = &protocol.UnknownSigner{Url: u}
+	}
+
 	produced, err := record.Produced().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load produced: %w", err)
@@ -83,7 +98,7 @@ func loadTransaction(batch *database.Batch, txn *protocol.Transaction) (*api.Tra
 	r.Produced, _ = api.MakeRange(produced, 0, 0, func(x *url.TxID) (*api.TxIDRecord, error) {
 		return &api.TxIDRecord{Value: x}, nil
 	})
-	r.Signatures, err = api.MakeRange(status.Signers, 0, 0, func(s protocol.Signer) (*api.SignatureRecord, error) {
+	r.Signatures, err = api.MakeRange(signers, 0, 0, func(s protocol.Signer) (*api.SignatureRecord, error) {
 		// If something can't be loaded (not found), ignore the error since what
 		// the user is asking for is the transaction, not the signature(s)
 
