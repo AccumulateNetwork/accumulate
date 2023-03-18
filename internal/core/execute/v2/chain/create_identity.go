@@ -35,14 +35,14 @@ func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.
 	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
-func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return false, false, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
 	}
 
 	// Check additional authorities
-	ready, fallback, err = additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+	ready, fallback, err = additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction)
 	if !fallback || err != nil {
 		return ready, fallback, err
 	}

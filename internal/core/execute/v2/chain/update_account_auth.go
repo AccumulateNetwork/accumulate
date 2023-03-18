@@ -58,7 +58,7 @@ func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *databa
 	return true, nil
 }
 
-func (UpdateAccountAuth) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (UpdateAccountAuth) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.UpdateAccountAuth)
 	if !ok {
 		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateAccountAuth), transaction.Body)
@@ -74,7 +74,7 @@ func (UpdateAccountAuth) TransactionIsReady(delegate AuthDelegate, batch *databa
 			return false, false, fmt.Errorf("invalid payload: authority is nil")
 		}
 
-		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, op.Authority)
+		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, op.Authority)
 		if !ok || err != nil {
 			return false, false, err
 		}
