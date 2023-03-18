@@ -100,6 +100,10 @@ var fieldNames_Signature = []string{
 }
 
 func (v *Signature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -147,6 +151,10 @@ var fieldNames_sigSection = []string{
 }
 
 func (v *sigSection) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

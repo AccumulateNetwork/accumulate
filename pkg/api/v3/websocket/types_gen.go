@@ -64,6 +64,10 @@ var fieldNames_Message = []string{
 }
 
 func (v *Message) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

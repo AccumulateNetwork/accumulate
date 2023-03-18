@@ -80,6 +80,9 @@ func Unmarshal{{elideInterface .}}From(rd io.Reader) ({{.Interface}}, error) {
 	// Read the type code
 	var typ {{.Enumeration}}
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
