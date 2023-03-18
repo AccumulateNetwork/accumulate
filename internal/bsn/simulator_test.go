@@ -75,6 +75,8 @@ func TestSimulator(t *testing.T) {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
+	sim.StepN(10)
+
 	// Verify
 	account := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(lite), lite)
 	require.Equal(t, 123, int(account.Balance.Int64()))

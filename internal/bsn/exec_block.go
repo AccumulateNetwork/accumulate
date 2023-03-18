@@ -60,6 +60,7 @@ func (b *Block) Close() (execute.BlockState, error) {
 	s := new(BlockState)
 	s.params = *b.params
 	s.batch = b.batch
+	s.stats = b.stats
 	return s, nil
 }
 
