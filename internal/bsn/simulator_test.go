@@ -75,12 +75,14 @@ func TestSimulator(t *testing.T) {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
-	sim.StepN(10)
-
-	// Verify
+	// Verify the transaction
 	account := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(lite), lite)
 	require.Equal(t, 123, int(account.Balance.Int64()))
 
+	// Wait for the BSN to sync
+	sim.StepN(10)
+
+	// Verify the BSN's version is the same
 	batch := bsn.NewChangeSet(bsnStore, nil)
 	defer batch.Discard()
 	account2 := GetAccount[*LiteTokenAccount](t, batch.Partition("BVN0"), lite)
