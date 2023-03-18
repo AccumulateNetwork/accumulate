@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"time"
 
@@ -561,6 +562,28 @@ func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 
 func (v *ChainEntryRecord[T]) CopyAsInterface() interface{} { return v.Copy() }
 
+func ChainEntryRecordAs[T2 Record, T1 Record](v *ChainEntryRecord[T1]) (*ChainEntryRecord[T2], error) {
+	if v == nil {
+		return nil, nil
+	}
+	vValue, ok := any(v.Value).(T2)
+	if !ok && any(v.Value) != nil {
+		z := reflect.TypeOf(new(T2)).Elem()
+		return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v.Value)
+	}
+
+	u := new(ChainEntryRecord[T2])
+	u.Account = v.Account
+	u.Name = v.Name
+	u.Type = v.Type
+	u.Index = v.Index
+	u.Entry = v.Entry
+	u.Value = vValue
+	u.Receipt = v.Receipt
+	u.State = v.State
+	return u, nil
+}
+
 func (v *ChainQuery) Copy() *ChainQuery {
 	u := new(ChainQuery)
 
@@ -1017,6 +1040,27 @@ func (v *RecordRange[T]) Copy() *RecordRange[T] {
 }
 
 func (v *RecordRange[T]) CopyAsInterface() interface{} { return v.Copy() }
+
+func RecordRangeAs[T2 Record, T1 Record](v *RecordRange[T1]) (*RecordRange[T2], error) {
+	if v == nil {
+		return nil, nil
+	}
+	vRecords := make([]T2, len(v.Records))
+	for i, v := range v.Records {
+		if u, ok := any(v).(T2); ok || any(u) == nil {
+			vRecords[i] = u
+		} else {
+			z := reflect.TypeOf(new(T2)).Elem()
+			return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v)
+		}
+	}
+
+	u := new(RecordRange[T2])
+	u.Records = vRecords
+	u.Start = v.Start
+	u.Total = v.Total
+	return u, nil
+}
 
 func (v *SignatureRecord) Copy() *SignatureRecord {
 	u := new(SignatureRecord)
@@ -2080,6 +2124,10 @@ var fieldNames_AccountRecord = []string{
 }
 
 func (v *AccountRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2149,6 +2197,10 @@ var fieldNames_AnchorSearchQuery = []string{
 }
 
 func (v *AnchorSearchQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2200,6 +2252,10 @@ var fieldNames_BlockEvent = []string{
 }
 
 func (v *BlockEvent) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2283,6 +2339,10 @@ var fieldNames_BlockQuery = []string{
 }
 
 func (v *BlockQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2344,6 +2404,10 @@ var fieldNames_ChainEntryRecord = []string{
 }
 
 func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2446,6 +2510,10 @@ var fieldNames_ChainQuery = []string{
 }
 
 func (v *ChainQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2500,6 +2568,10 @@ var fieldNames_ChainRecord = []string{
 }
 
 func (v *ChainRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2571,6 +2643,10 @@ var fieldNames_ConsensusPeerInfo = []string{
 }
 
 func (v *ConsensusPeerInfo) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2634,6 +2710,10 @@ var fieldNames_ConsensusStatus = []string{
 }
 
 func (v *ConsensusStatus) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2740,6 +2820,10 @@ var fieldNames_ConsensusStatusOptions = []string{
 }
 
 func (v *ConsensusStatusOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2790,6 +2874,10 @@ var fieldNames_DataQuery = []string{
 }
 
 func (v *DataQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2835,6 +2923,10 @@ var fieldNames_DefaultQuery = []string{
 }
 
 func (v *DefaultQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2874,6 +2966,10 @@ var fieldNames_DelegateSearchQuery = []string{
 }
 
 func (v *DelegateSearchQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2918,6 +3014,10 @@ var fieldNames_DirectoryQuery = []string{
 }
 
 func (v *DirectoryQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2962,6 +3062,10 @@ var fieldNames_ErrorEvent = []string{
 }
 
 func (v *ErrorEvent) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3005,6 +3109,10 @@ var fieldNames_FaucetOptions = []string{
 }
 
 func (v *FaucetOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3039,6 +3147,10 @@ var fieldNames_FindServiceOptions = []string{
 }
 
 func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3086,6 +3198,10 @@ var fieldNames_FindServiceResult = []string{
 }
 
 func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3127,6 +3243,10 @@ var fieldNames_GlobalsEvent = []string{
 }
 
 func (v *GlobalsEvent) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3179,6 +3299,10 @@ var fieldNames_IndexEntryRecord = []string{
 }
 
 func (v *IndexEntryRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3227,6 +3351,10 @@ var fieldNames_KeyRecord = []string{
 }
 
 func (v *KeyRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3306,6 +3434,10 @@ var fieldNames_LastBlock = []string{
 }
 
 func (v *LastBlock) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3380,6 +3512,10 @@ var fieldNames_MajorBlockRecord = []string{
 }
 
 func (v *MajorBlockRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3440,6 +3576,10 @@ var fieldNames_MessageHashSearchQuery = []string{
 }
 
 func (v *MessageHashSearchQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3483,6 +3623,10 @@ var fieldNames_Metrics = []string{
 }
 
 func (v *Metrics) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3519,6 +3663,10 @@ var fieldNames_MetricsOptions = []string{
 }
 
 func (v *MetricsOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3566,6 +3714,10 @@ var fieldNames_MinorBlockRecord = []string{
 }
 
 func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3645,6 +3797,10 @@ var fieldNames_NetworkStatus = []string{
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3711,6 +3867,10 @@ var fieldNames_NetworkStatusOptions = []string{
 }
 
 func (v *NetworkStatusOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3752,6 +3912,10 @@ var fieldNames_NodeInfo = []string{
 }
 
 func (v *NodeInfo) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3809,6 +3973,10 @@ var fieldNames_NodeInfoOptions = []string{
 }
 
 func (v *NodeInfoOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3849,6 +4017,10 @@ var fieldNames_PendingQuery = []string{
 }
 
 func (v *PendingQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3893,6 +4065,10 @@ var fieldNames_PublicKeyHashSearchQuery = []string{
 }
 
 func (v *PublicKeyHashSearchQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3938,6 +4114,10 @@ var fieldNames_PublicKeySearchQuery = []string{
 }
 
 func (v *PublicKeySearchQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -3992,6 +4172,10 @@ var fieldNames_RangeOptions = []string{
 }
 
 func (v *RangeOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4037,6 +4221,10 @@ var fieldNames_Receipt = []string{
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4099,6 +4287,10 @@ var fieldNames_RecordRange = []string{
 }
 
 func (v *RecordRange[T]) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4153,6 +4345,10 @@ var fieldNames_ServiceAddress = []string{
 }
 
 func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4200,6 +4396,10 @@ var fieldNames_SignatureRecord = []string{
 }
 
 func (v *SignatureRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4277,6 +4477,10 @@ var fieldNames_Submission = []string{
 }
 
 func (v *Submission) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4333,6 +4537,10 @@ var fieldNames_SubmitOptions = []string{
 }
 
 func (v *SubmitOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4370,6 +4578,10 @@ var fieldNames_SubscribeOptions = []string{
 }
 
 func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4413,6 +4625,10 @@ var fieldNames_TransactionRecord = []string{
 }
 
 func (v *TransactionRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4505,6 +4721,10 @@ var fieldNames_TxIDRecord = []string{
 }
 
 func (v *TxIDRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4549,6 +4769,10 @@ var fieldNames_UrlRecord = []string{
 }
 
 func (v *UrlRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4592,6 +4816,10 @@ var fieldNames_ValidateOptions = []string{
 }
 
 func (v *ValidateOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

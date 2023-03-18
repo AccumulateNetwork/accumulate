@@ -66,6 +66,9 @@ func UnmarshalEventFrom(rd io.Reader) (Event, error) {
 	// Read the type code
 	var typ EventType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 

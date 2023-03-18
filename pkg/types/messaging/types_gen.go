@@ -432,6 +432,10 @@ var fieldNames_BlockAnchor = []string{
 }
 
 func (v *BlockAnchor) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -488,6 +492,10 @@ var fieldNames_CreditPayment = []string{
 }
 
 func (v *CreditPayment) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -566,6 +574,10 @@ var fieldNames_Envelope = []string{
 }
 
 func (v *Envelope) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -624,6 +636,10 @@ var fieldNames_SequencedMessage = []string{
 }
 
 func (v *SequencedMessage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -678,6 +694,10 @@ var fieldNames_SignatureMessage = []string{
 }
 
 func (v *SignatureMessage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -732,6 +752,10 @@ var fieldNames_SignatureRequest = []string{
 }
 
 func (v *SignatureRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -793,6 +817,10 @@ var fieldNames_SyntheticMessage = []string{
 }
 
 func (v *SyntheticMessage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -845,6 +873,10 @@ var fieldNames_TransactionMessage = []string{
 }
 
 func (v *TransactionMessage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

@@ -172,6 +172,9 @@ func UnmarshalRecordFrom(rd io.Reader) (Record, error) {
 	// Read the type code
 	var typ RecordType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -364,6 +367,9 @@ func UnmarshalQueryFrom(rd io.Reader) (Query, error) {
 	// Read the type code
 	var typ QueryType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -476,6 +482,9 @@ func UnmarshalEventFrom(rd io.Reader) (Event, error) {
 	// Read the type code
 	var typ EventType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
