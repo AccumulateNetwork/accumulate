@@ -115,7 +115,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		if r.Router == nil {
 			return nil, errors.NotReady.With("cannot route: router not setup")
 		}
-		service.Argument, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
+		service.Argument, err = r.Router.Route(msg.Envelope)
 
 	case *message.ValidateRequest:
 		service.Type = api.ServiceTypeValidate
@@ -127,7 +127,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		if r.Router == nil {
 			return nil, errors.NotReady.With("cannot route: router not setup")
 		}
-		service.Argument, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
+		service.Argument, err = r.Router.Route(msg.Envelope)
 
 	case *message.SubscribeRequest:
 		service.Type = api.ServiceTypeEvent
