@@ -202,9 +202,21 @@ func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 }
 
 func (s *BlockStateV1) Commit() error {
-	err := s.Block.Batch.Commit()
+	if s.IsEmpty() {
+		s.Discard()
+		return nil
+	}
+
+	err := s.Executor.EventBus.Publish(execute.WillCommitBlock{
+		Block: s,
+	})
 	if err != nil {
-		return err
+		return errors.UnknownError.Wrap(err)
+	}
+
+	err = s.Block.Batch.Commit()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Start a new checkTx batch
