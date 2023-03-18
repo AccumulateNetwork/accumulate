@@ -46,10 +46,19 @@ func (d *Daemon) startCollector() error {
 	client := &message.Client{
 		Network: d.Config.Accumulate.Network.Id,
 		Dialer:  d.p2pnode.Dialer(),
-		Router:  routing.MessageRouter{Router: summaryRouter(d.Config.Accumulate.PartitionId)},
+		Router:  routing.MessageRouter{Router: summaryRouter(d.Config.Accumulate.SummaryNetwork)},
 	}
 
 	events.SubscribeAsync(d.eventBus, func(e bsn.DidCollectBlock) {
+		/*// Wait for the summary network to appear
+		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+		defer cancel()
+		err := d.p2pnode.WaitForService(ctx, api.ServiceTypeSubmit.AddressFor(d.Config.Accumulate.SummaryNetwork).Multiaddr())
+		if err != nil {
+			d.Logger.Error("Summary network did not appear after an hour", "error", err)
+			return
+		}//*/
+
 		env, err := build.SignatureForMessage(e.Summary).
 			Url(protocol.PartitionUrl(d.Config.Accumulate.PartitionId)).
 			PrivateKey(d.privVal.Key.PrivKey.Bytes()).

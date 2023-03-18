@@ -166,6 +166,8 @@ func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
 		s.StateTreeUpdates = append(s.StateTreeUpdates, &messaging.StateTreeUpdate{Key: r.Key[:2], Hash: hash})
 	}
 
+	s.Sort()
+
 	err := c.events.Publish(DidCollectBlock{Summary: s})
 	return errors.UnknownError.Wrap(err)
 }

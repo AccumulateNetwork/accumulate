@@ -101,7 +101,6 @@ func runDevNet(*cobra.Command, []string) {
 	var daemons []*accumulated.Daemon
 	started := new(sync.WaitGroup)
 
-	// Start the BSN first since the validators will send messages to it
 	for _, num := range bsns {
 		if skip[-num] {
 			continue
@@ -122,6 +121,9 @@ func runDevNet(*cobra.Command, []string) {
 
 		daemons = append(daemons, daemon)
 	}
+
+	// Wait for the BSN to start since the validators will send messages to it
+	started.Wait()
 
 	for _, node := range vals {
 		if skip[node] {

@@ -131,6 +131,7 @@
         "run",
         "--truncate",
         "-w=${workspaceFolder}/.nodes/node-1/dnn",
+        // "-w=${workspaceFolder}/.nodes/bsn-1/bsnn",
       ]
     },
 

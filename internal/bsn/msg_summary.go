@@ -41,6 +41,9 @@ func (BlockSummary) check(batch *ChangeSet, ctx *MessageContext) (*messaging.Blo
 	if msg.Index == 0 {
 		return nil, errors.BadRequest.With("missing index")
 	}
+	if !msg.IsSorted() {
+		return nil, errors.BadRequest.With("not sorted")
+	}
 
 	return msg, nil
 }
@@ -144,7 +147,7 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 	// through the key-value store. Thus we have to create a root batch and
 	// commit it, but without actually changing the database.
 
-	ctx.batch.logger.Info("Processing block summary",
+	ctx.executor.logger.Info("Processing block summary",
 		"source", msg.Partition,
 		"block", msg.Index,
 		"previous-block", msg.PreviousBlock,
