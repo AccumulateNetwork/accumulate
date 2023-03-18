@@ -245,7 +245,6 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 		Account(signerUrl).
 		Transaction(transaction.ID().Hash()).
 		Signatures().
-		Active().
 		Get()
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load %v signatures: %w", signerUrl, err)
