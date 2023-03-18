@@ -206,6 +206,9 @@ func UnmarshalAccountFrom(rd io.Reader) (Account, error) {
 	// Read the type code
 	var typ AccountType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -308,6 +311,9 @@ func UnmarshalDataEntryFrom(rd io.Reader) (DataEntry, error) {
 	// Read the type code
 	var typ DataEntryType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -710,6 +716,9 @@ func UnmarshalTransactionBodyFrom(rd io.Reader) (TransactionBody, error) {
 	// Read the type code
 	var typ TransactionType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -832,6 +841,9 @@ func UnmarshalAccountAuthOperationFrom(rd io.Reader) (AccountAuthOperation, erro
 	// Read the type code
 	var typ AccountAuthOperationType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -964,6 +976,9 @@ func UnmarshalKeyPageOperationFrom(rd io.Reader) (KeyPageOperation, error) {
 	// Read the type code
 	var typ KeyPageOperationType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -1176,6 +1191,9 @@ func UnmarshalSignatureFrom(rd io.Reader) (Signature, error) {
 	// Read the type code
 	var typ SignatureType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
