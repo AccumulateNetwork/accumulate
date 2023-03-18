@@ -51,15 +51,10 @@ func (s *SignatureContext) getAuthority() *url.URL {
 
 // authorityIsReady verifies that the authority is ready to vote.
 func (s *SignatureContext) authorityIsReady(batch *database.Batch, authority *url.URL) (bool, error) {
-	status, err := batch.Transaction(s.transaction.GetHash()).Status().Get()
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load status: %w", err)
-	}
-
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.AuthorityValidator](s.Executor, s.transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.AuthorityIsReady(s.Executor, batch, s.transaction, status, authority)
+		ready, fallback, err := val.AuthorityIsReady(s.Executor, batch, s.transaction, authority)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -68,7 +63,7 @@ func (s *SignatureContext) authorityIsReady(batch *database.Batch, authority *ur
 		}
 	}
 
-	ok, err = s.Executor.AuthorityIsReady(batch, s.transaction, status, authority)
+	ok, err := s.Executor.AuthorityIsReady(batch, s.transaction, authority)
 	return ok, errors.UnknownError.Wrap(err)
 }
 
