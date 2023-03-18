@@ -631,6 +631,10 @@ func (d *Daemon) ConnectDirectly(e *Daemon) error {
 		return err
 	}
 
+	if d.connectionManager == nil {
+		return nil
+	}
+
 	err = d.connectionManager.ConnectDirectly(e.connectionManager)
 	if err != nil {
 		return err

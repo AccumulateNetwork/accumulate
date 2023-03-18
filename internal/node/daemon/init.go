@@ -98,6 +98,11 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 				bvnn.P2P.ExternalAddress = node.Peer().TendermintP2P().BlockValidator().String()
 			}
 
+			if network.Bsn != nil {
+				dnn.Accumulate.SummaryNetwork = network.Bsn.Id
+				bvnn.Accumulate.SummaryNetwork = network.Bsn.Id
+			}
+
 			// No duplicate IPs
 			dnn.P2P.AllowDuplicateIP = false
 			bvnn.P2P.AllowDuplicateIP = false

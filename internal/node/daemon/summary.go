@@ -148,7 +148,6 @@ func (d *Daemon) startSummaryServices() error {
 	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
-		Database:         d.db,
 		PartitionID:      d.Config.Accumulate.PartitionId,
 		PartitionType:    d.Config.Accumulate.NetworkType,
 		EventBus:         d.eventBus,

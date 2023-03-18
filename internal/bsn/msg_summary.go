@@ -10,6 +10,7 @@ import (
 	"bytes"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -142,6 +143,13 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 	// the root batch actually updates the BPT, and that is done directly
 	// through the key-value store. Thus we have to create a root batch and
 	// commit it, but without actually changing the database.
+
+	ctx.batch.logger.Info("Processing block summary",
+		"source", msg.Partition,
+		"block", msg.Index,
+		"previous-block", msg.PreviousBlock,
+		"hash", logging.AsHex(msg.StateTreeHash).Slice(0, 4),
+		"updates", len(msg.RecordUpdates))
 
 	storeTxn := batch.kvstore.Begin(true)
 	defer func() { commitOrDiscard(storeTxn, &err) }()

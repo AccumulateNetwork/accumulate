@@ -124,6 +124,10 @@ func (c *Collector) willCommitBlock(e execute.WillCommitBlock) error {
 }
 
 func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
+	if e.Init {
+		return nil
+	}
+
 	var s *messaging.BlockSummary
 	select {
 	case s = <-c.latest:
