@@ -9,6 +9,7 @@ package execute
 import (
 	"sync/atomic"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	v1 "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -34,6 +35,11 @@ type ValidatorUpdate = execute.ValidatorUpdate
 
 // NewExecutor creates a new executor.
 func NewExecutor(opts Options) (Executor, error) {
+	// On DNs initialize the major block scheduler
+	if opts.Describe.NetworkType == protocol.PartitionTypeDirectory {
+		opts.MajorBlockScheduler = blockscheduler.Init(opts.EventBus)
+	}
+
 	// Get the current version
 	part := config.NetworkUrl{URL: protocol.PartitionUrl(opts.Describe.PartitionId)}
 	var ledger *protocol.SystemLedger
