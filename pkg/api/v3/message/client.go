@@ -147,17 +147,20 @@ type response[T any] interface {
 	rval() T
 }
 
-func (r *NodeInfoResponse) rval() *api.NodeInfo                 { return r.Value } //nolint:unused
-func (r *FindServiceResponse) rval() []*api.FindServiceResult   { return r.Value } //nolint:unused
-func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus   { return r.Value } //nolint:unused
-func (r *NetworkStatusResponse) rval() *api.NetworkStatus       { return r.Value } //nolint:unused
-func (r *MetricsResponse) rval() *api.Metrics                   { return r.Value } //nolint:unused
-func (r *RecordResponse) rval() api.Record                      { return r.Value } //nolint:unused
-func (r *SubmitResponse) rval() []*api.Submission               { return r.Value } //nolint:unused
-func (r *ValidateResponse) rval() []*api.Submission             { return r.Value } //nolint:unused
-func (r *FaucetResponse) rval() *api.Submission                 { return r.Value } //nolint:unused
-func (r *EventMessage) rval() []api.Event                       { return r.Value } //nolint:unused
-func (r *PrivateSequenceResponse) rval() *api.TransactionRecord { return r.Value } //nolint:unused
+func (r *NodeInfoResponse) rval() *api.NodeInfo               { return r.Value } //nolint:unused
+func (r *FindServiceResponse) rval() []*api.FindServiceResult { return r.Value } //nolint:unused
+func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus { return r.Value } //nolint:unused
+func (r *NetworkStatusResponse) rval() *api.NetworkStatus     { return r.Value } //nolint:unused
+func (r *MetricsResponse) rval() *api.Metrics                 { return r.Value } //nolint:unused
+func (r *RecordResponse) rval() api.Record                    { return r.Value } //nolint:unused
+func (r *SubmitResponse) rval() []*api.Submission             { return r.Value } //nolint:unused
+func (r *ValidateResponse) rval() []*api.Submission           { return r.Value } //nolint:unused
+func (r *FaucetResponse) rval() *api.Submission               { return r.Value } //nolint:unused
+func (r *EventMessage) rval() []api.Event                     { return r.Value } //nolint:unused
+
+func (r *PrivateSequenceResponse) rval() *api.MessageRecord[messaging.Message] { //nolint:unused
+	return r.Value
+}
 
 // RoundTrip routes each requests and executes a round-trip call. If there are
 // no transport errors, RoundTrip will only dial each address once. If multiple

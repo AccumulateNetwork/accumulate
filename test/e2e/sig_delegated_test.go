@@ -123,7 +123,7 @@ func TestSingleDelegated(t *testing.T) {
 	)
 
 	require.NotNil(t, cap)
-	pay := sim.QueryTransaction(cap.TxID, nil).Message.(*messaging.CreditPayment)
+	pay := sim.QueryMessage(cap.TxID, nil).Message.(*messaging.CreditPayment)
 	require.NotZero(t, pay.Paid)
 	fmt.Printf("Paid %s credits\n", FormatAmount(pay.Paid.AsUInt64(), CreditPrecisionPower))
 
