@@ -170,16 +170,17 @@ func (n *Node) Addrs() []multiaddr.Multiaddr {
 
 // ConnectDirectly connects this node directly to another node.
 func (n *Node) ConnectDirectly(m *Node) error {
-	if n.ID() == m.ID() {
+	// TODO Keep the [Node] around so we can create direct connections that
+	// avoid the TCP/IP overhead
+	return n.Connect(context.Background(), m.ID(), m.Addrs())
+}
+
+func (n *Node) Connect(ctx context.Context, id peer.ID, addrs []multiaddr.Multiaddr) error {
+	if n.ID() == id {
 		return nil
 	}
 
-	// TODO Keep the [Node] around so we can create direct connections that
-	// avoid the TCP/IP overhead
-	return n.host.Connect(context.Background(), peer.AddrInfo{
-		ID:    m.ID(),
-		Addrs: m.Addrs(),
-	})
+	return n.host.Connect(ctx, peer.AddrInfo{ID: id, Addrs: addrs})
 }
 
 // Close shuts down the host and topics.
