@@ -346,11 +346,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			continue
 		}
 		if !anchor {
-			if resp.Status == nil {
-				x.logger.Error("Response to query-synth is missing the status", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-				continue
-			}
-			if resp.Status.Proof == nil {
+			if resp.SourceReceipt == nil {
 				x.logger.Error("Response to query-synth is missing the proof", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 				continue
 			}
@@ -369,7 +365,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 				&messaging.SyntheticMessage{
 					Message: seq,
 					Proof: &protocol.AnnotatedReceipt{
-						Receipt: resp.Status.Proof,
+						Receipt: resp.SourceReceipt,
 						Anchor: &protocol.AnchorMetadata{
 							Account: protocol.DnUrl(),
 						},
@@ -378,7 +374,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			}
 			err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
 			if err != nil {
-				x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Transaction.Body.Type())
+				x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Message.Type())
 			}
 			continue
 		}
@@ -386,24 +382,20 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		anchor := &messaging.BlockAnchor{Anchor: seq}
 
 		var bad bool
-		for _, signature := range resp.Signatures.Records {
-			if signature.TxID.Hash() != resp.Message.Hash() {
-				x.logger.Error("Signature from query-synth does not match the transaction hash", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "txid", signature.TxID, "signature", signature)
-				bad = true
+		for _, set := range resp.Signatures.Records {
+			if set.Signatures == nil {
+				x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 				continue
 			}
 
-			set, ok := signature.Signature.(*protocol.SignatureSet)
-			if !ok {
-				x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected %T, got %T", (*protocol.SignatureSet)(nil), signature.Signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "txid", signature.TxID, "signature", signature)
-				bad = true
-				continue
-			}
-
-			for _, signature := range set.Signatures {
-				keySig, ok := signature.(protocol.KeySignature)
+			for _, r := range set.Signatures.Records {
+				msg, ok := r.Message.(*messaging.SignatureMessage)
 				if !ok {
-					x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "hash", logging.AsHex(signature.Hash()), "signature", signature)
+					continue
+				}
+				keySig, ok := msg.Signature.(protocol.KeySignature)
+				if !ok {
+					x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", msg.Signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "hash", logging.AsHex(msg.Signature.Hash()), "signature", msg.Signature)
 					bad = true
 					continue
 				}

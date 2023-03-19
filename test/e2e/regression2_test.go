@@ -538,9 +538,8 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	fwdFails := func(sim *Sim, sigId *url.TxID, errstr string) {
 		sim.StepUntil(
 			Txn(sigId).Fails())
-		st := sim.QuerySignature(sigId, nil).Status
-		require.NotNil(sim.TB, st.Error)
-		require.EqualError(sim.TB, st.Error, errstr)
+		msg := sim.QuerySignature(sigId, nil)
+		require.EqualError(sim.TB, msg.AsError(), errstr)
 	}
 
 	// Broken in V1

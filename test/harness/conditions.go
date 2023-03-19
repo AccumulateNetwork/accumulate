@@ -186,7 +186,7 @@ func (c msgCond) FailsWithCode(code errors.Status) Condition {
 // Completes waits until the messages has been delivered, verifies the
 // messages succeeded, and recursively waits on any produced messages.
 func (c msgCond) Completes() Condition {
-	return c.make("completes", deliveredThen(producedRecursive(succeeds)))
+	return c.make("completes", producedRecursive(succeeds))
 }
 
 type msgResult struct {
@@ -250,32 +250,35 @@ func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
 		panic("not reached")
 	}
 
-	// Convert the result
-	var res msgResult
-	var produced []*api.TxIDRecord
-	switch qr := qr.(type) {
-	case *api.SignatureRecord:
-		res.Status, produced = qr.Status, qr.Produced.Records
-		res.Message = &messaging.SignatureMessage{Signature: qr.Signature}
-		res.Type = qr.Signature.Type().String() + " signature"
-	case *api.TransactionRecord:
-		res.Status, produced = qr.Status, qr.Produced.Records
-		if qr.Message != nil {
-			res.Message = qr.Message
-			res.Type = qr.Message.Type().String()
-		} else {
-			res.Message = &messaging.TransactionMessage{Transaction: qr.Transaction}
-			res.Type = qr.Transaction.Body.Type().String() + " transaction"
-		}
-	default:
+	msg, ok := qr.(*api.MessageRecord[messaging.Message])
+	if !ok {
 		h.TB.Fatalf("Unsupported record type %v", qr.RecordType())
 		panic("not reached")
 	}
 
-	res.Status.TxID = id
-	res.Produced = make([]*url.TxID, len(produced))
-	for i, v := range produced {
-		res.Produced[i] = v.Value
+	// Convert the result
+	var res msgResult
+	res.Status = &protocol.TransactionStatus{
+		TxID:     id,
+		Code:     msg.Status,
+		Error:    msg.Error,
+		Result:   msg.Result,
+		Received: msg.Received,
+	}
+	if msg.Produced != nil {
+		for _, v := range msg.Produced.Records {
+			res.Produced = append(res.Produced, v.Value)
+		}
+	}
+	res.Message = msg.Message
+
+	switch msg := msg.Message.(type) {
+	case *messaging.SignatureMessage:
+		res.Type = msg.Signature.Type().String() + " signature"
+	case *messaging.TransactionMessage:
+		res.Type = msg.Transaction.Body.Type().String() + " transaction"
+	default:
+		res.Type = msg.Type().String()
 	}
 
 	return &res, true
@@ -371,10 +374,27 @@ func produced(predicate statusPredicate) statusPredicate {
 	}
 }
 
+func always(*Harness, *condition, *msgResult) bool { return true }
+
 func producedRecursive(predicate statusPredicate) statusPredicate {
 	var recursive statusPredicate
+	var isSig bool
 	recursive = func(h *Harness, c *condition, r *msgResult) bool {
 		h.TB.Helper()
+
+		// If a signature produces a transaction, ignore it. Sig(id).Completes()
+		// should *not* wait for the *transaction* to complete.
+		if r.Message.Type() == messaging.MessageTypeSignature {
+			isSig = true
+		}
+		if isSig && r.Message.Type() == messaging.MessageTypeTransaction {
+			return c.replace(h, always)
+		}
+
+		// If the transaction is pending, wait
+		if !r.Status.Delivered() {
+			return false
+		}
 
 		conditions := make([]*condition, len(r.Produced)+1)
 		conditions[0] = &condition{
@@ -390,7 +410,7 @@ func producedRecursive(predicate statusPredicate) statusPredicate {
 			m[n] = "produced"
 			m[n+1] = c.message[n]
 			conditions[i+1] = &condition{
-				predicate: waitFor(id)(deliveredThen(recursive)),
+				predicate: waitFor(id)(recursive),
 				message:   m,
 				capture:   c.capture,
 				prodMsg:   &m[n],
@@ -405,6 +425,7 @@ func producedRecursive(predicate statusPredicate) statusPredicate {
 			ok := true
 			for _, c := range conditions {
 				if !c.Satisfied(h) {
+					c.Satisfied(h)
 					ok = false
 				}
 			}
@@ -507,7 +528,7 @@ func succeeds(h *Harness, c *condition, r *msgResult) bool {
 	if h.VerboseConditions {
 		fmt.Println(c, "✔")
 	}
-	return c.replace(h, func(h *Harness, c *condition, r *msgResult) bool { return true })
+	return c.replace(h, always)
 }
 
 func fails(h *Harness, c *condition, r *msgResult) bool {
