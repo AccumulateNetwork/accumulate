@@ -7,6 +7,8 @@
 package private
 
 import (
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 )
 
@@ -14,6 +16,7 @@ type NetworkServiceParams = api.NetworkServiceParams
 type QuerierParams = api.QuerierParams
 type MetricsServiceParams = api.MetricsServiceParams
 type EventServiceParams = api.EventServiceParams
+type FaucetParams = api.FaucetParams
 type SequencerParams = api.SequencerParams
 
 func NewNetworkService(opts NetworkServiceParams) *api.NetworkService {
@@ -32,6 +35,11 @@ func NewEventService(opts EventServiceParams) *api.EventService {
 	return api.NewEventService(opts)
 }
 
+func NewFaucet(ctx context.Context, opts FaucetParams) (*api.Faucet, error) {
+	return api.NewFaucet(ctx, opts)
+}
+
 func NewSequencer(opts SequencerParams) *api.Sequencer {
 	return api.NewSequencer(opts)
 }
+
