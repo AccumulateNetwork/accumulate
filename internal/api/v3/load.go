@@ -236,7 +236,7 @@ func loadTransactionSignaturesV2(batch *database.Batch, r *api.MessageRecord[mes
 		}
 
 		account, err := batch.Account(s).Main().Get()
-		if err != nil {
+		if err != nil && !errors.Is(err, errors.NotFound) {
 			return errors.UnknownError.WithFormat("load %v: %w", s, err)
 		}
 
