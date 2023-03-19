@@ -128,7 +128,7 @@ type PrivateSequenceRequest struct {
 
 type PrivateSequenceResponse struct {
 	fieldsSet []bool
-	Value     *api.TransactionRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -2665,7 +2665,7 @@ func (v *PrivateSequenceResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *PrivateSequenceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(api.TransactionRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+	if x := new(api.MessageRecord[messaging.Message]); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Value = x
 	}
 
@@ -3208,8 +3208,8 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 
 func (v *PrivateSequenceResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                   `json:"type"`
-		Value *api.TransactionRecord `json:"value,omitempty"`
+		Type  Type                                  `json:"type"`
+		Value *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -3644,8 +3644,8 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 
 func (v *PrivateSequenceResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                   `json:"type"`
-		Value *api.TransactionRecord `json:"value,omitempty"`
+		Type  Type                                  `json:"type"`
+		Value *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value

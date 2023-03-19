@@ -249,7 +249,7 @@ func TestAdiUrlLengthLimit(t *testing.T) {
 	res := n.QueryTx(txn[0][:], time.Second, true)
 	h := res.Produced.Records[0].Value.Hash()
 	res = n.QueryTx(h[:], time.Second, true)
-	require.Equal(t, errors.BadUrlLength, res.Status.Code)
+	require.Equal(t, errors.BadUrlLength, res.Status)
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
@@ -707,7 +707,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	res := n.QueryTx(txnHashes[0][:], time.Second, true)
 	h := res.Produced.Records[0].Value.Hash()
 	res = n.QueryTx(h[:], time.Second, true)
-	require.Equal(t, errors.NotFound, res.Status.Code)
+	require.Equal(t, errors.NotFound, res.Status)
 
 	// Give the synthetic receipt a second to resolve - workaround AC-1238
 	time.Sleep(time.Second)
@@ -915,7 +915,7 @@ func TestUpdateKey(t *testing.T) {
 			Build())
 	})
 	r := n.QueryTx(txnHashes[0][:], 0, false)
-	require.False(t, r.Status.Pending(), "Transaction is still pending")
+	require.False(t, r.Status == errors.Pending, "Transaction is still pending")
 
 	spec = n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
