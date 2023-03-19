@@ -697,9 +697,9 @@ func (s *ValidationTestSuite) TestMain() {
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
 
-	st = s.QueryTransaction(st.TxID, nil).Status
-	s.Require().IsType((*WriteDataResult)(nil), st.Result)
-	wdr := st.Result.(*WriteDataResult)
+	msg := s.QueryTransaction(st.TxID, nil)
+	s.Require().IsType((*WriteDataResult)(nil), msg.Result)
+	wdr := msg.Result.(*WriteDataResult)
 	s.Require().Equal(lda.String(), wdr.AccountUrl.String())
 	s.Require().NotZero(wdr.EntryHash)
 	s.Require().NotEmpty(wdr.AccountID)
@@ -720,9 +720,9 @@ func (s *ValidationTestSuite) TestMain() {
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
 
-	st = s.QueryTransaction(st.TxID, nil).Status
-	s.Require().IsType((*WriteDataResult)(nil), st.Result)
-	wdr = st.Result.(*WriteDataResult)
+	msg = s.QueryTransaction(st.TxID, nil)
+	s.Require().IsType((*WriteDataResult)(nil), msg.Result)
+	wdr = msg.Result.(*WriteDataResult)
 	s.Require().NotZero(wdr.EntryHash)
 
 	s.TB.Log("Create a sub ADI")
@@ -761,7 +761,7 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).IsPending())
 
 	st = s.BuildAndSubmitTxnSuccessfully(
-		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Transaction).
+		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Message.Transaction).
 			Url(manager, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(keymgr))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -777,7 +777,7 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).IsPending())
 
 	st = s.BuildAndSubmitTxnSuccessfully(
-		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Transaction).
+		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Message.Transaction).
 			Url(manager, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(keymgr))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -793,7 +793,7 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).IsPending())
 
 	st = s.BuildAndSubmitTxnSuccessfully(
-		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Transaction).
+		build.SignatureForTransaction(s.QueryTransaction(st.TxID, nil).Message.Transaction).
 			Url(manager, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(keymgr))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -810,7 +810,7 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
-	s.Require().Equal("hello world", s.QueryTransaction(st.TxID, nil).Transaction.Header.Memo)
+	s.Require().Equal("hello world", s.QueryTransaction(st.TxID, nil).Message.Transaction.Header.Memo)
 
 	s.TB.Log("Refund on expensive synthetic txn failure")
 	creditsBefore := QueryAccountAs[*LiteIdentity](s.Harness, liteId).CreditBalance

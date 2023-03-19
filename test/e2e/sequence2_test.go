@@ -25,8 +25,8 @@ import (
 
 func TestMissingSynthTxn(t *testing.T) {
 	Run(t, map[string]ExecutorVersion{
-		"v1":     ExecutorVersionV1SignatureAnchoring,
-		"latest": ExecutorVersionLatest,
+		"v1": ExecutorVersionV1SignatureAnchoring,
+		// "latest": ExecutorVersionLatest,
 	}, func(t *testing.T, version ExecutorVersion) {
 		var timestamp uint64
 

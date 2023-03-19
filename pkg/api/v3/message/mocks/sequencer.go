@@ -7,6 +7,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 	api "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	messaging "gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	url "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -24,15 +25,15 @@ func (_m *Sequencer) EXPECT() *Sequencer_Expecter {
 }
 
 // Sequence provides a mock function with given fields: ctx, src, dst, num
-func (_m *Sequencer) Sequence(ctx context.Context, src *url.URL, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+func (_m *Sequencer) Sequence(ctx context.Context, src *url.URL, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	ret := _m.Called(ctx, src, dst, num)
 
-	var r0 *api.TransactionRecord
-	if rf, ok := ret.Get(0).(func(context.Context, *url.URL, *url.URL, uint64) *api.TransactionRecord); ok {
+	var r0 *api.MessageRecord[messaging.Message]
+	if rf, ok := ret.Get(0).(func(context.Context, *url.URL, *url.URL, uint64) *api.MessageRecord[messaging.Message]); ok {
 		r0 = rf(ctx, src, dst, num)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*api.TransactionRecord)
+			r0 = ret.Get(0).(*api.MessageRecord[messaging.Message])
 		}
 	}
 
@@ -67,7 +68,7 @@ func (_c *Sequencer_Sequence_Call) Run(run func(ctx context.Context, src *url.UR
 	return _c
 }
 
-func (_c *Sequencer_Sequence_Call) Return(_a0 *api.TransactionRecord, _a1 error) *Sequencer_Sequence_Call {
+func (_c *Sequencer_Sequence_Call) Return(_a0 *api.MessageRecord[messaging.Message], _a1 error) *Sequencer_Sequence_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
