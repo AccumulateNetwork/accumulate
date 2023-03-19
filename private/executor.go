@@ -11,5 +11,9 @@ import execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/mu
 type Executor = execute.Executor
 type Dispatcher = execute.Dispatcher
 type ExecutorOptions = execute.Options
+type Block = execute.Block
+type BlockParams = execute.BlockParams
+type BlockState = execute.BlockState
+type ValidatorUpdate = execute.ValidatorUpdate
 
 func NewExecutor(opts ExecutorOptions) (Executor, error) { return execute.NewExecutor(opts) }

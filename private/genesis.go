@@ -20,6 +20,8 @@ type Buffer = ioutil2.Buffer
 type SectionReader = ioutil2.SectionReader
 type GenesisOptions = genesis.InitOpts
 
+func NewBuffer(b []byte) *Buffer { return ioutil2.NewBuffer(b) }
+
 func Genesis(file io.WriteSeeker, opts GenesisOptions) ([]byte, error) {
 	return genesis.Init(file, opts)
 }

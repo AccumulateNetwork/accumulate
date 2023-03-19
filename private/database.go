@@ -20,6 +20,9 @@ type Batch = database.Batch
 type Viewer = database.Viewer
 type Updater = database.Updater
 type Beginner = database.Beginner
+type SnapshotHeader = snapshot.Header
+
+const SnapshotVersion1 = snapshot.Version1
 
 func NewDatabase(store KeyValueStore, logger log.Logger) *Database {
 	return database.New(store, logger)
@@ -27,4 +30,8 @@ func NewDatabase(store KeyValueStore, logger log.Logger) *Database {
 
 func CollectFullSnapshot(batch *database.Batch, file io.WriteSeeker, network *url.URL, logger log.Logger, preserve bool) error {
 	return snapshot.FullCollect(batch, file, network, logger, preserve)
+}
+
+func OpenSnapshot(file SectionReader) (*snapshot.Header, *snapshot.Reader, error) {
+	return snapshot.Open(file)
 }
