@@ -11,7 +11,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -73,7 +72,7 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 
 	// Load the partition's globals
 	g := new(core.GlobalValues)
-	u := config.NetworkUrl{URL: protocol.PartitionUrl(msg.Partition)}
+	u := protocol.PartitionUrl(msg.Partition)
 	err = g.Load(u, func(accountUrl *url.URL, target interface{}) error {
 		return partdb.Account(accountUrl).Main().GetAs(target)
 	})
@@ -92,7 +91,7 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 
 	// Check the block
 	var ledger *protocol.SystemLedger
-	err = partdb.Account(u.Ledger()).Main().GetAs(&ledger)
+	err = partdb.Account(u.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load %s system ledger: %w", msg.Partition, err)
 	}

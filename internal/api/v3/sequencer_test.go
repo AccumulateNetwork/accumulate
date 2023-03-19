@@ -16,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -47,7 +46,7 @@ func TestSequencer(t *testing.T) {
 	sim.SetRoute(bob, "BVN1")
 
 	g := new(core.GlobalValues)
-	require.NoError(t, g.Load(config.NetworkUrl{URL: PartitionUrl("BVN0")}, func(account *url.URL, target interface{}) error {
+	require.NoError(t, g.Load(PartitionUrl("BVN0"), func(account *url.URL, target interface{}) error {
 		return sim.DatabaseFor(alice).View(func(batch *database.Batch) error {
 			return batch.Account(account).GetStateAs(target)
 		})

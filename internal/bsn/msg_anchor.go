@@ -8,7 +8,6 @@ package bsn
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -64,7 +63,7 @@ func (x BlockAnchor) check(batch *ChangeSet, ctx *MessageContext) (*messaging.Bl
 
 	// Load the partition's globals
 	g := new(core.GlobalValues)
-	u := config.NetworkUrl{URL: protocol.PartitionUrl(summary.Partition)}
+	u := protocol.PartitionUrl(summary.Partition)
 	err := g.Load(u, func(accountUrl *url.URL, target interface{}) error {
 		return batch.Partition(summary.Partition).Account(accountUrl).Main().GetAs(target)
 	})
