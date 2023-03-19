@@ -98,7 +98,7 @@ func (n *FakeNode) Update(fn func(batch *database.Batch)) {
 	helpers.Update(n.T(), n.H.Database("BVN0"), fn)
 }
 
-func (n *FakeNode) QueryTx(txid []byte, wait time.Duration, ignorePending bool) *api.TransactionRecord {
+func (n *FakeNode) QueryTx(txid []byte, wait time.Duration, ignorePending bool) *api.MessageRecord[*messaging.TransactionMessage] {
 	n.T().Helper()
 	return n.H.QueryTransaction(protocol.PartitionUrl("BVN0").WithTxID(*(*[32]byte)(txid)), nil)
 }
@@ -137,7 +137,7 @@ func (n *FakeNode) GetDirectory(s string) []string {
 
 func (n *FakeNode) GetDataEntry(s string, q *api.DataQuery) protocol.DataEntry {
 	r := n.H.QueryDataEntry(n.parseUrl(s), q)
-	switch body := r.Value.Transaction.Body.(type) {
+	switch body := r.Value.Message.Transaction.Body.(type) {
 	case *protocol.WriteData:
 		return body.Entry
 	case *protocol.WriteDataTo:

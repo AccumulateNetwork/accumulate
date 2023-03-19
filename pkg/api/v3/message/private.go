@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -43,7 +44,7 @@ func (c *Client) Private() private.Sequencer {
 }
 
 // Sequence implements [private.Sequencer.Sequence].
-func (c *PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+func (c *PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	req := &PrivateSequenceRequest{Source: src, Destination: dst, SequenceNumber: num}
-	return typedRequest[*PrivateSequenceResponse, *api.TransactionRecord]((*Client)(c), ctx, req)
+	return typedRequest[*PrivateSequenceResponse, *api.MessageRecord[messaging.Message]]((*Client)(c), ctx, req)
 }
