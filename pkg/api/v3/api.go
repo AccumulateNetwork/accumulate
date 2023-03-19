@@ -99,3 +99,18 @@ type Validator interface {
 type Faucet interface {
 	Faucet(ctx context.Context, account *url.URL, opts FaucetOptions) (*Submission, error)
 }
+
+func (r *MessageRecord[T]) StatusNo() uint64 { return uint64(r.Status) }
+
+type MessageRecordError[T messaging.Message] struct {
+	*MessageRecord[T]
+}
+
+func (r *MessageRecord[T]) AsError() error {
+	if r.Error == nil {
+		return nil
+	}
+	return MessageRecordError[T]{r}
+}
+
+func (r MessageRecordError[T]) Error() string { return r.MessageRecord.Error.Error() }

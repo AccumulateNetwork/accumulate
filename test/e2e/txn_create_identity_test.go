@@ -11,11 +11,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -59,7 +59,7 @@ func TestCreateIdentity(t *testing.T) {
 		sim.CreateAccount(&LiteIdentity{Url: lite, CreditBalance: 1e9})
 		sim.CreateIdentity(alice, aliceKey[32:])
 		sim.CreateIdentity(charlie, acctesting.GenerateKey(charlie)[32:])
-		updateAccountOld(sim, alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
+		updateAccount(sim, alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
 
 		bld := acctesting.NewTransaction()
 		if c.Direct {
