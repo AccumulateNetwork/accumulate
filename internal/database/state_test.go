@@ -52,7 +52,7 @@ func TestState(t *testing.T) {
 	_ = bvn.Database.View(func(b *database.Batch) error {
 		blockHash, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
-		require.NoError(t, snapshot.FullCollect(b, f, bvn.Executor.Describe.PartitionUrl(), nil, false))
+		require.NoError(t, snapshot.FullCollect(b, f, bvn.Executor.Describe.NodeUrl(), nil, false))
 		bptRoot = b.BptRoot()
 		return nil
 	})

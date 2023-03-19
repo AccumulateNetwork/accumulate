@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -53,7 +52,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 		defer batch.Discard()
 		f, err := os.Create(filename(partition.ID))
 		require.NoError(t, err)
-		require.NoError(t, snapshot.FullCollect(batch, f, config.NetworkUrl{URL: PartitionUrl(partition.ID)}, nil, false))
+		require.NoError(t, snapshot.FullCollect(batch, f, PartitionUrl(partition.ID), nil, false))
 		require.NoError(t, f.Close())
 	}
 

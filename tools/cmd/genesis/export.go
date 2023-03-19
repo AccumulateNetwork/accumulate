@@ -120,7 +120,7 @@ func export(_ *cobra.Command, args []string) {
 		},
 	})
 	check(err)
-	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.PartitionUrl()))
+	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.NodeUrl()))
 
 	doc := new(types.GenesisDoc)
 	doc.InitialHeight = int64(ledger.Index) + 1

@@ -14,14 +14,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // FullCollect collects a snapshot including additional records required for a
 // fully-functioning node.
-func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.NetworkUrl, logger log.Logger, preserve bool) error {
+func FullCollect(batch *database.Batch, file io.WriteSeeker, network *url.URL, logger log.Logger, preserve bool) error {
 	var ledger *protocol.SystemLedger
-	err := batch.Account(network.Ledger()).Main().GetAs(&ledger)
+	err := batch.Account(network.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
@@ -53,9 +54,9 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.Netw
 
 // CollectAnchors collects anchors from the anchor ledger's anchor sequence
 // chain.
-func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl) error {
+func CollectAnchors(w *Writer, batch *database.Batch, network *url.URL) error {
 	txnHashes := new(HashSet)
-	record := batch.Account(network.AnchorPool())
+	record := batch.Account(network.JoinPath(protocol.AnchorPool))
 	err := txnHashes.CollectFromChain(record, record.AnchorSequenceChain())
 	if err != nil {
 		return errors.UnknownError.Wrap(err)

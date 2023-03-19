@@ -7,8 +7,12 @@
 package private
 
 import (
+	"io"
+
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type Database = database.Database
@@ -19,4 +23,8 @@ type Beginner = database.Beginner
 
 func NewDatabase(store KeyValueStore, logger log.Logger) *Database {
 	return database.New(store, logger)
+}
+
+func CollectFullSnapshot(batch *database.Batch, file io.WriteSeeker, network *url.URL, logger log.Logger, preserve bool) error {
+	return snapshot.FullCollect(batch, file, network, logger, preserve)
 }

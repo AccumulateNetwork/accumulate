@@ -83,7 +83,7 @@ func TestRepairIndices(t *testing.T) {
 	for _, p := range sim.Partitions() {
 		View(t, sim.Database(p.ID), func(batch *database.Batch) {
 			buf := new(ioutil2.Buffer)
-			err := snapshot.FullCollect(batch, buf, config.NetworkUrl{URL: PartitionUrl(p.ID)}, logger, true)
+			err := snapshot.FullCollect(batch, buf, PartitionUrl(p.ID), logger, true)
 			require.NoError(t, err)
 			snapshots[p.ID] = buf.Bytes()
 		})
