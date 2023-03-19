@@ -156,7 +156,7 @@ func (s *simService) Subscribe(ctx context.Context, opts api.SubscribeOptions) (
 
 // Sequence routes the source to a partition and calls Sequence on the first
 // node of that partition, returning the result.
-func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	part, err := s.router.RouteAccount(src)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
