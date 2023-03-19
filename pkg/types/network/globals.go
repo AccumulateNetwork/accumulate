@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package core
+package network
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
