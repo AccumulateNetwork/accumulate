@@ -23,7 +23,7 @@ import (
 
 func TestPrivateMessageRouting(t *testing.T) {
 	s := mocks.NewSequencer(t)
-	s.EXPECT().Sequence(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(new(api.TransactionRecord), nil)
+	s.EXPECT().Sequence(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(new(api.MessageRecord[messaging.Message]), nil)
 	c := SetupTest(t, &Sequencer{Sequencer: s})
 	c.Router = &routing.MessageRouter{
 		Router: routerFunc(func(*url.URL) (string, error) {

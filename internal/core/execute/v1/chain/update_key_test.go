@@ -50,6 +50,6 @@ func TestUpdateKey_Duplicate(t *testing.T) {
 	sim.H.StepUntil(
 		Txn(st.TxID).Fails())
 
-	st = sim.H.QueryTransaction(st.TxID, nil).Status
-	require.EqualError(t, st.AsError(), "cannot have duplicate entries on key page")
+	msg := sim.H.QueryTransaction(st.TxID, nil)
+	require.EqualError(t, msg.AsError(), "cannot have duplicate entries on key page")
 }
