@@ -26,8 +26,6 @@ import (
 type Router interface {
 	RouteAccount(*url.URL) (string, error)
 	Route(...*messaging.Envelope) (string, error)
-	RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error
-	Submit(ctx context.Context, partition string, tx *messaging.Envelope, pretend, async bool) (*ResponseSubmit, error)
 }
 
 // ResponseSubmit is the response from a call to Submit.
