@@ -98,7 +98,7 @@ func TestUpdateAccountAuth(t *testing.T) {
 	// Sign with the second authority
 	r := sim.QueryTransaction(st.TxID, nil)
 	st = sim.BuildAndSubmitTxnSuccessfully(
-		build.SignatureForTransaction(r.Transaction).
+		build.SignatureForTransaction(r.Message.Transaction).
 			Url(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
 
 	sim.StepUntil(

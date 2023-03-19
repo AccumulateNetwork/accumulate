@@ -18,6 +18,9 @@ import (
 // Success returns true if the status represents success.
 func (s Status) Success() bool { return s < 300 }
 
+// Delivered returns true if the status represents an executed transaction.
+func (s Status) Delivered() bool { return s >= 300 || s == Delivered }
+
 // IsKnownError returns true if the status is non-zero and not UnknownError.
 func (s Status) IsKnownError() bool { return s != 0 && s != UnknownError }
 
@@ -99,7 +102,7 @@ func (s Skip) WithFormat(format string, args ...interface{}) *Error {
 
 	e := convert(err)
 	e.Code = s.status
-	e.recordCallSite(2)
+	e.recordCallSite(2 + s.n)
 	return e
 }
 
