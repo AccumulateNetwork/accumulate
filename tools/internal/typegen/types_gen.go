@@ -49,9 +49,10 @@ type IndexRecord struct {
 
 type OtherRecord struct {
 	RecordFields
-	DataType  string `json:"dataType,omitempty" form:"dataType" query:"dataType" validate:"required"`
-	Pointer   bool   `json:"pointer,omitempty" form:"pointer" query:"pointer" validate:"required"`
-	HasChains bool   `json:"hasChains,omitempty" form:"hasChains" query:"hasChains" validate:"required"`
+	DataType    string `json:"dataType,omitempty" form:"dataType" query:"dataType" validate:"required"`
+	Pointer     bool   `json:"pointer,omitempty" form:"pointer" query:"pointer" validate:"required"`
+	HasChains   bool   `json:"hasChains,omitempty" form:"hasChains" query:"hasChains" validate:"required"`
+	Constructor string `json:"constructor,omitempty" form:"constructor" query:"constructor" validate:"required"`
 }
 
 type RecordFields struct {
@@ -315,6 +316,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 		DataType     string                    `json:"dataType,omitempty"`
 		Pointer      bool                      `json:"pointer,omitempty"`
 		HasChains    bool                      `json:"hasChains,omitempty"`
+		Constructor  string                    `json:"constructor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordFields.Name) == 0) {
@@ -357,6 +359,9 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.HasChains) {
 		u.HasChains = v.HasChains
+	}
+	if !(len(v.Constructor) == 0) {
+		u.Constructor = v.Constructor
 	}
 	return json.Marshal(&u)
 }
@@ -658,6 +663,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 		DataType     string                    `json:"dataType,omitempty"`
 		Pointer      bool                      `json:"pointer,omitempty"`
 		HasChains    bool                      `json:"hasChains,omitempty"`
+		Constructor  string                    `json:"constructor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordFields.Name
@@ -671,6 +677,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u.DataType = v.DataType
 	u.Pointer = v.Pointer
 	u.HasChains = v.HasChains
+	u.Constructor = v.Constructor
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -688,6 +695,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	v.DataType = u.DataType
 	v.Pointer = u.Pointer
 	v.HasChains = u.HasChains
+	v.Constructor = u.Constructor
 	return nil
 }
 

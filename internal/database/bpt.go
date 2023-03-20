@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"io"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -17,8 +18,20 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
+func newBPT(_ *Batch, logger log.Logger, store record.Store, key record.Key, name, label string) *pmt.Manager {
+	_ = name
+	return pmt.New(logger, store, key, label)
+}
+
+func (b *Batch) putBpt(key, value [32]byte) {
+	// Put it all the way up the chain. This is a hack but it works.
+	for b := b; b != nil; b = b.parent {
+		b.getBPT().InsertKV(key, value)
+	}
+}
+
 func (b *Batch) VisitAccounts(visit func(*Account) error) error {
-	bpt := pmt.NewBPTManager(b.kvstore)
+	bpt := b.getBPT()
 
 	place := pmt.FirstPossibleBptKey
 	const window = 1000 //                                       Process this many BPT entries at a time
@@ -45,8 +58,7 @@ func (b *Batch) VisitAccounts(visit func(*Account) error) error {
 }
 
 func (b *Batch) ForEachAccount(fn func(account *Account) error) error {
-	bpt := pmt.NewBPTManager(b.kvstore)
-	return bpt.Bpt.ForEach(func(key storage.Key, hash [32]byte) error {
+	return b.getBPT().Bpt.ForEach(func(key storage.Key, hash [32]byte) error {
 		// Create an Account object
 		u, err := b.getAccountUrl(record.Key{key})
 		if err != nil {
@@ -58,8 +70,7 @@ func (b *Batch) ForEachAccount(fn func(account *Account) error) error {
 }
 
 func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte, error)) error {
-	bpt := pmt.NewBPTManager(b.kvstore)
-	err := bpt.Bpt.SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
+	err := b.getBPT().Bpt.SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
 		u, err := b.getAccountUrl(record.Key{key})
 		if err != nil {
@@ -88,56 +99,42 @@ func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte
 	return errors.UnknownError.Wrap(err)
 }
 
-// putBpt adds an entry to the list of pending BPT updates.
-func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
-	if b.done {
-		panic("attempted to use a committed or discarded batch")
-	}
-	if b.bptEntries == nil {
-		panic("attempted to update the BPT after committing the BPT")
-	}
-
-	b.bptEntries[key] = hash
-}
-
 // commitBpt commits pending BPT updates.
 func (b *Batch) commitBpt() error {
-	if len(b.bptEntries) == 0 {
+	if !fieldIsDirty(b.bpt) {
 		return nil
 	}
 
-	bpt := pmt.NewBPTManager(b.kvstore)
-
-	for k, v := range b.bptEntries {
-		bpt.InsertKV(k, v)
-	}
-
+	bpt := b.getBPT()
 	err := bpt.Bpt.Update()
 	if err != nil {
-		return err
+		return errors.UnknownError.Wrap(err)
 	}
 
-	b.bptEntries = nil
-	return nil
+	err = bpt.Commit()
+	return errors.UnknownError.Wrap(err)
 }
 
 // BptRoot returns the root of the BPT. BptRoot panics if there are any
 // uncommitted BPT changes.
 func (b *Batch) BptRoot() []byte {
-	if len(b.bptEntries) > 0 {
+	bpt := b.getBPT()
+	if bpt.IsDirty() {
 		panic("attempted to get BPT root with uncommitted changes")
 	}
-	bpt := pmt.NewBPTManager(b.kvstore)
 	return bpt.Bpt.RootHash[:]
 }
 
 // BptReceipt builds a BPT receipt for the given key.
 func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*merkle.Receipt, error) {
-	if len(b.bptEntries) > 0 {
-		return nil, errors.InternalError.With("cannot generate a BPT receipt when there are uncommitted BPT entries")
+	bpt := b.getBPT()
+	if bpt.IsDirty() {
+		err := bpt.Commit()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 	}
 
-	bpt := pmt.NewBPTManager(b.kvstore)
 	receipt := bpt.Bpt.GetReceipt(key)
 	if receipt == nil {
 		return nil, errors.NotFound.WithFormat("BPT key %v not found", key)

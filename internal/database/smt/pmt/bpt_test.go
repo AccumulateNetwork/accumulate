@@ -16,8 +16,10 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 )
 
 const defaultNodeCnt = 1000
@@ -460,4 +462,28 @@ func TestNodeKey(t *testing.T) {
 		require.True(t, bytes.Equal(key[:i>>3], right[:i>>3]), "key must be part of child key")
 
 	}
+}
+
+func TestEmpty(t *testing.T) {
+	store := record.KvStore{Store: memory.New(nil).Begin(true)}
+	bpt := New(nil, store, record.Key{"BPT"}, "bpt")
+	require.NoError(t, bpt.Commit())
+
+	New(nil, store, record.Key{"BPT"}, "bpt")
+}
+
+func TestNoChange(t *testing.T) {
+	db := memory.New(nil)
+	store := record.KvStore{Store: db.Begin(true)}
+	bpt := New(nil, store, record.Key{"BPT"}, "bpt")
+	bpt.InsertKV([32]byte{1, 2, 3}, [32]byte{4, 5, 6})
+	require.NoError(t, bpt.Commit())
+	require.NoError(t, store.Store.Commit())
+
+	// Re-inserting the exact same value should not cause an update; using a
+	// read-only batch will make any writes fail
+	store = record.KvStore{Store: db.Begin(false)}
+	bpt = New(nil, store, record.Key{"BPT"}, "bpt")
+	bpt.InsertKV([32]byte{1, 2, 3}, [32]byte{4, 5, 6})
+	require.NoError(t, bpt.Commit())
 }

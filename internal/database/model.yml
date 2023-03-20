@@ -22,6 +22,13 @@
     type: map[storage.Key][32]byte
   attributes:
 
+  - name: BPT
+    type: other
+    dataType: pmt.Manager
+    pointer: true
+    private: true
+    constructor: newBPT
+
   - name: Account
     type: entity
     customCommit: true

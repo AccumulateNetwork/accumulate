@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
@@ -58,8 +57,7 @@ func (a *Account) BptReceipt() (*merkle.Receipt, error) {
 		return nil, errors.InternalError.With("cannot generate a BPT receipt when there are uncommitted changes")
 	}
 
-	bpt := pmt.NewBPTManager(a.parent.kvstore)
-	receipt := bpt.Bpt.GetReceipt(a.key.Hash())
+	receipt := a.parent.getBPT().Bpt.GetReceipt(a.key.Hash())
 	if receipt == nil {
 		return nil, errors.NotFound.WithFormat("BPT key %v not found", a.key.Hash())
 	}

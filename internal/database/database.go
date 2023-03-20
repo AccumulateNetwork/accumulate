@@ -110,11 +110,6 @@ func (d *Database) Close() error {
 	return d.store.Close()
 }
 
-// Import imports values from another database.
-func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) error {
-	return b.kvstore.PutAll(db.Export())
-}
-
 func (b *Batch) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, error) {
 	ledger := b.Account(describe.NodeUrl(protocol.Ledger))
 	chain, err := ledger.RootChain().Get()

@@ -125,3 +125,5 @@ OtherRecord:
       type: bool
     - name: HasChains
       type: bool
+    - name: Constructor
+      type: string

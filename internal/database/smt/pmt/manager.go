@@ -15,7 +15,6 @@ import (
 )
 
 type Manager struct {
-	// DBManager storage.KeyValueTxn
 	model *model.BPT
 	Dirty []*BptNode
 	Bpt   *BPT

@@ -160,7 +160,7 @@ func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 		{{- else if .Type.IsChain}}
 		return database.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
 		{{- else if .Type.IsOther}}
-		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+		return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
 		{{- else if .IsCounted}}
 		{{- template "newCounted" .}}
 		{{- else}}

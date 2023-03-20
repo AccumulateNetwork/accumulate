@@ -286,7 +286,7 @@ func GetNodeHash(n *BptNode) {
 		copy(n.Hash[:], L) //                       Just use L.  No hash required
 	case R != nil: //                               Just have R.  Again, just use R.
 		copy(n.Hash[:], R) //                       No Hash Required
-	default: //                                     The fourth condition never happens, and bad if it does.
+	case n.Height != 0: //                          The fourth condition never happens, and bad if it does.
 		panic("dead nodes should not exist") //     This is a node without a child somewhere up the tree.
 	}
 }
@@ -294,6 +294,9 @@ func GetNodeHash(n *BptNode) {
 // Update the Patricia Tree hashes with the values from the
 // updates since the last update
 func (b *BPT) Update() error {
+	if len(b.DirtyMap) == 0 {
+		return nil
+	}
 	for len(b.DirtyMap) > 0 { //                            While the DirtyMap has nodes to process
 		dirtyList := b.GetDirtyList() //                    Get the Dirty List. Note sorted by height, High to low
 

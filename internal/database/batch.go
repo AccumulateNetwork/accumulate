@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -52,9 +51,7 @@ func (d *Database) Begin(writable bool) *Batch {
 	b.observer = d.observer
 	b.writable = writable
 	b.logger.L = d.logger
-	b.kvstore = d.store.Begin(writable)
-	b.store = record.KvStore{Store: b.kvstore}
-	b.bptEntries = map[storage.Key][32]byte{}
+	b.store = record.KvStore{Store: d.store.Begin(writable)}
 	return b
 }
 
@@ -72,8 +69,6 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.parent = b
 	c.logger = b.logger
 	c.store = b
-	c.kvstore = b.kvstore.Begin(c.writable)
-	c.bptEntries = map[storage.Key][32]byte{}
 	return c
 }
 
@@ -81,7 +76,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 // account from the database.
 func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
 	a := record.Key{"Account", url, "Main"}
-	return b.kvstore.Put(a.Hash(), nil)
+	return b.store.(record.KvStore).Store.Put(a.Hash(), nil)
 }
 
 // View runs the function with a read-only transaction.
@@ -136,28 +131,24 @@ func (b *Batch) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if b.parent != nil {
-		for k, v := range b.bptEntries {
-			b.parent.bptEntries[k] = v
-		}
-		if db, ok := b.kvstore.(*storage.DebugBatch); ok {
-			db.PretendWrite()
-		}
-	} else {
-		err := b.commitBpt()
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
+	err = b.commitBpt()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
-	return b.kvstore.Commit()
+	if kvs, ok := b.store.(record.KvStore); ok {
+		err = kvs.Store.Commit()
+	}
+	return errors.UnknownError.Wrap(err)
 }
 
 // Discard discards pending writes. Attempting to use the Batch after calling
 // Discard will result in a panic.
 func (b *Batch) Discard() {
 	b.done = true
-	b.kvstore.Discard()
+	if kvs, ok := b.store.(record.KvStore); ok {
+		kvs.Store.Discard()
+	}
 }
 
 // Transaction returns an Transaction for the given hash.

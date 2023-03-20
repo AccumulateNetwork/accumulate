@@ -15,7 +15,7 @@ import (
 	"strconv"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -33,9 +33,8 @@ type Batch struct {
 	nextChildId int64
 	parent      *Batch
 	observer    Observer
-	kvstore     storage.KeyValueTxn
-	bptEntries  map[storage.Key][32]byte
 
+	bpt         *pmt.Manager
 	account     map[accountKey]*Account
 	message     map[messageKey]*Message
 	transaction map[transactionKey]*Transaction
@@ -72,6 +71,12 @@ type systemDataKey struct {
 
 func keyForSystemData(partition string) systemDataKey {
 	return systemDataKey{partition}
+}
+
+func (c *Batch) getBPT() *pmt.Manager {
+	return getOrCreateField(&c.bpt, func() *pmt.Manager {
+		return newBPT(c, c.logger.L, c.store, record.Key{}.Append("BPT"), "bpt", "bpt")
+	})
 }
 
 func (c *Batch) getAccount(url *url.URL) *Account {
@@ -128,6 +133,8 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 	}
 
 	switch key[0] {
+	case "BPT":
+		return c.getBPT(), key[1:], nil
 	case "Account":
 		if len(key) < 2 {
 			return nil, nil, errors.InternalError.With("bad key for batch")
@@ -178,6 +185,9 @@ func (c *Batch) IsDirty() bool {
 		return false
 	}
 
+	if fieldIsDirty(c.bpt) {
+		return true
+	}
 	for _, v := range c.account {
 		if v.IsDirty() {
 			return true
@@ -222,6 +232,7 @@ func (c *Batch) baseCommit() error {
 	}
 
 	var err error
+	commitField(&err, c.bpt)
 	for _, v := range c.account {
 		commitField(&err, v)
 	}
