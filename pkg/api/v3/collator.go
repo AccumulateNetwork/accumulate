@@ -57,6 +57,9 @@ func (c *Collator) messageHashSearch(ctx context.Context, scope *url.URL, query 
 	var values []Record
 	var total uint64
 	for _, part := range ns.Network.Partitions {
+		if part.Type == protocol.PartitionTypeBlockSummary {
+			continue
+		}
 		scope := protocol.PartitionUrl(part.ID).WithTxID(query.Hash).AsUrl()
 		r, err := c.Querier.Query(ctx, scope, query)
 		switch {
