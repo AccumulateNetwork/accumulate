@@ -46,20 +46,25 @@ func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		return nil, nil, errors.BadRequest.With("missing transaction ID")
 	}
 
-	// Verify the bundle contains the transaction
-	var hasTxn bool
-	for _, msg := range ctx.messages {
-		txn, ok := msg.(*messaging.TransactionMessage)
-		if !ok {
-			continue
+	// TODO FIXME If we're within MessageIsReady, presumably this validation has
+	// already been done, so it should be safe to skip it. But honestly, this is
+	// questionable logic and indicates a larger problem.
+	if !ctx.isWithin(internal.MessageTypeMessageIsReady) {
+		// Verify the bundle contains the transaction
+		var hasTxn bool
+		for _, msg := range ctx.messages {
+			txn, ok := msg.(*messaging.TransactionMessage)
+			if !ok {
+				continue
+			}
+			if txn.Hash() == sig.TxID.Hash() {
+				hasTxn = true
+				break
+			}
 		}
-		if txn.Hash() == sig.TxID.Hash() {
-			hasTxn = true
-			break
+		if !hasTxn {
+			return nil, nil, errors.BadRequest.With("cannot process a signature without its transaction")
 		}
-	}
-	if !hasTxn {
-		return nil, nil, errors.BadRequest.With("cannot process a signature without its transaction")
 	}
 
 	// Only allow authority signatures within a synthetic message and don't
