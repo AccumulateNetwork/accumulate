@@ -22,6 +22,8 @@ func NewMessage(typ MessageType) (Message, error) {
 	switch typ {
 	case MessageTypeBlockAnchor:
 		return new(BlockAnchor), nil
+	case MessageTypeBlockSummary:
+		return new(BlockSummary), nil
 	case MessageTypeCreditPayment:
 		return new(CreditPayment), nil
 	case MessageTypeSequenced:
@@ -50,6 +52,12 @@ func EqualMessage(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*BlockAnchor)
+		return ok && a.Equal(b)
+	case *BlockSummary:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BlockSummary)
 		return ok && a.Equal(b)
 	case *CreditPayment:
 		if a == nil {
@@ -96,6 +104,8 @@ func EqualMessage(a, b Message) bool {
 func CopyMessage(v Message) Message {
 	switch v := v.(type) {
 	case *BlockAnchor:
+		return v.Copy()
+	case *BlockSummary:
 		return v.Copy()
 	case *CreditPayment:
 		return v.Copy()

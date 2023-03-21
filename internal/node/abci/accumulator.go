@@ -287,6 +287,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 	// Notify the world of the committed block
 	err = app.EventBus.Publish(events.DidCommitBlock{
+		Init:  true,
 		Index: protocol.GenesisBlock,
 		Time:  req.Time,
 	})
