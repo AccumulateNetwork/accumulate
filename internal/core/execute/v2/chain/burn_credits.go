@@ -15,11 +15,12 @@ type BurnCredits struct{}
 
 func (BurnCredits) Type() protocol.TransactionType { return protocol.TransactionTypeBurnCredits }
 
-func (BurnCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (BurnCredits{}).Validate(st, tx)
+func (x BurnCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (BurnCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (BurnCredits) check(st *StateManager, tx *Delivery) (*protocol.BurnCredits, error) {
 	body, ok := tx.Transaction.Body.(*protocol.BurnCredits)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid payload: want %v, got %v", protocol.TransactionTypeBurnCredits, tx.Transaction.Body.Type())
@@ -30,6 +31,15 @@ func (BurnCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, errors.BadRequest.WithFormat("invalid amount %v, minimum is %v",
 			protocol.FormatAmount(body.Amount, protocol.CreditPrecisionPower),
 			protocol.FormatAmount(uint64(protocol.MinimumCreditPurchase), protocol.CreditPrecisionPower))
+	}
+
+	return body, nil
+}
+
+func (x BurnCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	// Ensure the principal is a credit account

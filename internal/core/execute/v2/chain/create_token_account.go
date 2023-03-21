@@ -44,11 +44,12 @@ func (CreateTokenAccount) TransactionIsReady(delegate AuthDelegate, batch *datab
 	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction)
 }
 
-func (CreateTokenAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (CreateTokenAccount{}).Validate(st, tx)
+func (x CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (CreateTokenAccount) check(st *StateManager, tx *Delivery) (*protocol.CreateTokenAccount, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateTokenAccount)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), tx.Transaction.Body)
@@ -64,13 +65,70 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		}
 	}
 
-	err := checkCreateAdiAccount(st, body.Url)
+	err := originIsParent(tx, body.Url)
 	if err != nil {
-		return nil, err
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	if body.TokenUrl == nil {
 		return nil, errors.BadRequest.WithFormat("token URL is missing")
+	}
+
+	// Check that the proof is present if required
+	if body.Proof == nil {
+		// Proof is not required for ACME
+		if body.TokenUrl.Equal(protocol.AcmeUrl()) {
+			return body, nil
+		}
+
+		// If the issuer and principal are local to each other, no proof is required
+		if tx.Transaction.Header.Principal.LocalTo(body.TokenUrl) {
+			return body, nil
+		}
+
+		return nil, errors.BadRequest.With("missing proof of existence for token issuer")
+	}
+
+	// Check the proof for missing fields and validity
+	proof := body.Proof
+	if proof.Transaction == nil {
+		return nil, errors.BadRequest.WithFormat("invalid proof: missing transaction")
+	}
+	if proof.Receipt == nil {
+		return nil, errors.BadRequest.WithFormat("invalid proof: missing receipt")
+	}
+	if !proof.Receipt.Validate() {
+		return nil, errors.BadRequest.WithFormat("proof is invalid")
+	}
+
+	// Check that the state matches expectations
+	if !body.TokenUrl.Equal(proof.Transaction.Url) {
+		return nil, errors.BadRequest.With("invalid proof: URL does not match token issuer URL")
+	}
+
+	// Check the state hash
+	b, err := proof.Transaction.MarshalBinary()
+	if err != nil {
+		return nil, errors.InternalError.WithFormat("marshal proof state: %v", err)
+	}
+
+	hash := sha256.Sum256(b)
+	if !bytes.Equal(proof.Receipt.Start, hash[:]) {
+		return nil, errors.BadRequest.WithFormat("invalid proof: state hash does not match proof start")
+	}
+
+	return body, nil
+}
+
+func (x CreateTokenAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = checkCreateAdiAccount(st, body.Url)
+	if err != nil {
+		return nil, err
 	}
 
 	err = verifyCreateTokenAccountProof(st.Describe, st.batch, tx.Transaction.Header.Principal, body)
@@ -112,47 +170,9 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 		}
 	}
 
-	// Check that the proof is present if required
+	// Validate the proof if present
 	if body.Proof == nil {
-		// Proof is not required for ACME
-		if body.TokenUrl.Equal(protocol.AcmeUrl()) {
-			return nil
-		}
-
-		// Proof is not required for local issuers
-		if local {
-			return nil
-		}
-
-		return errors.BadRequest.With("missing proof of existence for token issuer")
-	}
-
-	// Check the proof for missing fields and validity
-	proof := body.Proof
-	if proof.Transaction == nil {
-		return errors.BadRequest.WithFormat("invalid proof: missing transaction")
-	}
-	if proof.Receipt == nil {
-		return errors.BadRequest.WithFormat("invalid proof: missing receipt")
-	}
-	if !proof.Receipt.Validate() {
-		return errors.BadRequest.WithFormat("proof is invalid")
-	}
-
-	// Check that the state matches expectations
-	if !body.TokenUrl.Equal(proof.Transaction.Url) {
-		return errors.BadRequest.With("invalid proof: URL does not match token issuer URL")
-	}
-
-	// Check the state hash
-	b, err := proof.Transaction.MarshalBinary()
-	if err != nil {
-		return errors.InternalError.WithFormat("marshal proof state: %v", err)
-	}
-
-	hash := sha256.Sum256(b)
-	if !bytes.Equal(proof.Receipt.Start, hash[:]) {
-		return errors.BadRequest.WithFormat("invalid proof: state hash does not match proof start")
+		return nil
 	}
 
 	// Check the anchor - TODO this will not work for the DN
@@ -160,13 +180,13 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 	if err != nil {
 		return errors.InternalError.WithFormat("load anchor pool for directory anchors: %w", err)
 	}
-	_, err = chain.HeightOf(proof.Receipt.Anchor)
+	_, err = chain.HeightOf(body.Proof.Receipt.Anchor)
 	if err != nil {
 		code := errors.UnknownError
 		if errors.Is(err, errors.NotFound) {
 			code = errors.BadRequest
 		}
-		return code.WithFormat("invalid proof: lookup DN anchor %X: %w", proof.Receipt.Anchor[:4], err)
+		return code.WithFormat("invalid proof: lookup DN anchor %X: %w", body.Proof.Receipt.Anchor[:4], err)
 	}
 
 	return nil

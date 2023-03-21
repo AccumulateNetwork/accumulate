@@ -27,19 +27,41 @@ func (SyntheticWriteData) AllowMissingPrincipal(transaction *protocol.Transactio
 	return err == nil
 }
 
-func (SyntheticWriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (SyntheticWriteData{}).Validate(st, tx)
+func (x SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := new(protocol.WriteDataResult)
+	result.EntryHash = *(*[32]byte)(body.Entry.Hash())
+	result.AccountID = tx.Transaction.Header.Principal.AccountID()
+	result.AccountUrl = tx.Transaction.Header.Principal
+	return result, nil
 }
 
-func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (SyntheticWriteData) check(st *StateManager, tx *Delivery) (*protocol.SyntheticWriteData, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticWriteData)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
 	}
 
+	if body.Entry == nil {
+		return nil, errors.BadRequest.WithFormat("entry is nil")
+	}
+
 	err := validateDataEntry(st, body.Entry)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return body, nil
+}
+
+func (x SyntheticWriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	return executeWriteLiteDataAccount(st, body.Entry)
