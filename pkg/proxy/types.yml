@@ -76,7 +76,7 @@ SeedList:
     - name: BasePort
       type: uvarint
     - name: Type
-      type: config.NetworkType
+      type: protocol.PartitionType
       marshal-as: enum
     - name: Addresses
       type: string

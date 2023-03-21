@@ -130,7 +130,7 @@ var cmdSetRouting = &cobra.Command{
 
 func setNetworkValue(path string, update func(v *core.GlobalValues)) {
 	cfg, client := loadConfigAndClient()
-	if cfg.Accumulate.NetworkType != config.Directory {
+	if cfg.Accumulate.NetworkType != protocol.PartitionTypeDirectory {
 		fatalf("node is not a directory node")
 	}
 
