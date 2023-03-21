@@ -27,11 +27,12 @@ func (SyntheticCreateIdentity) AllowMissingPrincipal(transaction *protocol.Trans
 	return true
 }
 
-func (SyntheticCreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (SyntheticCreateIdentity{}).Validate(st, tx)
+func (x SyntheticCreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (SyntheticCreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (SyntheticCreateIdentity) check(st *StateManager, tx *Delivery) (*protocol.SyntheticCreateIdentity, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticCreateIdentity)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticCreateIdentity), tx.Transaction.Body)
@@ -41,8 +42,17 @@ func (SyntheticCreateIdentity) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, fmt.Errorf("cause is missing")
 	}
 
+	return body, nil
+}
+
+func (x SyntheticCreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
 	// Do basic validation and add everything to the state manager
-	err := st.Create(body.Accounts...)
+	err = st.Create(body.Accounts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create %v: %w", body.Accounts[0].GetUrl(), err)
 	}

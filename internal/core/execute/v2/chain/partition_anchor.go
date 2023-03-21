@@ -22,11 +22,12 @@ func (PartitionAnchor) Type() protocol.TransactionType {
 	return protocol.TransactionTypeBlockValidatorAnchor
 }
 
-func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (PartitionAnchor{}).Validate(st, tx)
+func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (PartitionAnchor) check(st *StateManager, tx *Delivery) (*protocol.BlockValidatorAnchor, error) {
 	// If a block validator anchor somehow makes it past validation on a BVN, reject it immediately
 	if st.NetworkType != protocol.PartitionTypeDirectory {
 		return nil, errors.InternalError.With("invalid attempt to process a block validator partition")
@@ -36,6 +37,21 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	body, ok := tx.Transaction.Body.(*protocol.BlockValidatorAnchor)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BlockValidatorAnchor), tx.Transaction.Body)
+	}
+
+	// Verify the source URL and get the partition name
+	_, ok = protocol.ParsePartitionUrl(body.Source)
+	if !ok {
+		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
+	}
+
+	return body, nil
+}
+
+func (x PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
