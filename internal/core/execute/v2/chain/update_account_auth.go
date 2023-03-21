@@ -84,14 +84,51 @@ func (UpdateAccountAuth) TransactionIsReady(delegate AuthDelegate, batch *databa
 	return false, true, nil
 }
 
-func (UpdateAccountAuth) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (UpdateAccountAuth{}).Validate(st, tx)
+func (x UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (UpdateAccountAuth) check(st *StateManager, tx *Delivery) (*protocol.UpdateAccountAuth, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateAccountAuth)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateAccountAuth), tx.Transaction.Body)
+	}
+
+	for _, op := range body.Operations {
+		switch op := op.(type) {
+		case *protocol.EnableAccountAuthOperation:
+			if op.Authority == nil {
+				return nil, errors.BadRequest.WithFormat("authority URL is missing")
+			}
+
+		case *protocol.DisableAccountAuthOperation:
+			if op.Authority == nil {
+				return nil, errors.BadRequest.WithFormat("authority URL is missing")
+			}
+
+		case *protocol.AddAccountAuthorityOperation:
+			if op.Authority == nil {
+				return nil, errors.BadRequest.WithFormat("authority URL is missing")
+			}
+
+		case *protocol.RemoveAccountAuthorityOperation:
+			if op.Authority == nil {
+				return nil, errors.BadRequest.WithFormat("authority URL is missing")
+			}
+
+		default:
+			return nil, errors.BadRequest.WithFormat("invalid operation: %v", op.Type())
+		}
+	}
+
+	return body, nil
+}
+
+func (x UpdateAccountAuth) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	account, ok := st.Origin.(protocol.FullAccount)
@@ -103,9 +140,6 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	for _, op := range body.Operations {
 		switch op := op.(type) {
 		case *protocol.EnableAccountAuthOperation:
-			if op.Authority == nil {
-				return nil, errors.BadRequest.WithFormat("authority URL is missing")
-			}
 			entry, ok := auth.GetAuthority(op.Authority)
 			if !ok {
 				return nil, fmt.Errorf("%v is not an authority of %v", op.Authority, st.OriginUrl)
@@ -113,9 +147,6 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			entry.Disabled = false
 
 		case *protocol.DisableAccountAuthOperation:
-			if op.Authority == nil {
-				return nil, errors.BadRequest.WithFormat("authority URL is missing")
-			}
 			entry, ok := auth.GetAuthority(op.Authority)
 			if !ok {
 				return nil, fmt.Errorf("%v is not an authority of %v", op.Authority, st.OriginUrl)
@@ -123,10 +154,6 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			entry.Disabled = true
 
 		case *protocol.AddAccountAuthorityOperation:
-			if op.Authority == nil {
-				return nil, errors.BadRequest.WithFormat("authority URL is missing")
-			}
-
 			if account.GetUrl().LocalTo(op.Authority) {
 				// If the authority is local, make sure it exists
 				_, err := st.batch.Account(op.Authority).GetState()
@@ -146,10 +173,6 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			}
 
 		case *protocol.RemoveAccountAuthorityOperation:
-			if op.Authority == nil {
-				return nil, errors.BadRequest.WithFormat("authority URL is missing")
-			}
-
 			if !auth.RemoveAuthority(op.Authority) {
 				// We could just ignore this case, but that is not a good user
 				// experience
@@ -162,7 +185,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			}
 
 		default:
-			return nil, fmt.Errorf("invalid operation: %v", op.Type())
+			return nil, errors.InternalError.WithFormat("invalid operation: %v", op.Type())
 		}
 	}
 
@@ -170,7 +193,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, errors.BadRequest.WithFormat("account will have too many authorities")
 	}
 
-	err := st.Update(st.Origin)
+	err = st.Update(st.Origin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update %v: %w", st.OriginUrl, err)
 	}
