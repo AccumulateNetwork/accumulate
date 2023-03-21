@@ -11,7 +11,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -115,7 +114,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	}
 
 	// Only push updates from the directory network
-	if x.Describe.NetworkType != config.Directory {
+	if x.Describe.NetworkType != protocol.PartitionTypeDirectory {
 		// Do not allow direct updates of the BVN accounts
 		if !delivery.WasProducedByPushedUpdate() {
 			return errors.BadRequest.WithFormat("%v cannot be updated directly", principal.GetUrl())
