@@ -204,7 +204,7 @@ func requireKeyHash(h []byte) error {
 	if len(h) == 0 {
 		return errors.BadRequest.WithFormat("public key hash is missing")
 	}
-	if len(h) > 64 {
+	if len(h) > 32 {
 		return errors.BadRequest.WithFormat("public key hash is too long to be a hash")
 	}
 	return nil
