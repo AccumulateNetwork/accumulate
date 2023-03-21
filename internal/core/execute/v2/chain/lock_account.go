@@ -17,14 +17,24 @@ type LockAccount struct{}
 
 func (LockAccount) Type() protocol.TransactionType { return protocol.TransactionTypeLockAccount }
 
-func (LockAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return LockAccount{}.Validate(st, tx)
+func (x LockAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (LockAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (LockAccount) check(st *StateManager, tx *Delivery) (*protocol.LockAccount, error) {
 	body, ok := tx.Transaction.Body.(*protocol.LockAccount)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.LockAccount), tx.Transaction.Body)
+	}
+
+	return body, nil
+}
+
+func (x LockAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	account, ok := st.Origin.(protocol.LockableAccount)
@@ -32,7 +42,7 @@ func (LockAccount) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, errors.BadRequest.WithFormat("locking is not supported for %v accounts", st.Origin.Type())
 	}
 
-	err := account.SetLockHeight(body.Height)
+	err = account.SetLockHeight(body.Height)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("set lock height: %w", err)
 	}

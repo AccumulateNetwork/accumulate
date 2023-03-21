@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,7 +12,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -57,7 +60,7 @@ func TestLockAccount_LiteToken(t *testing.T) {
 	require.Equal(t, int(10), int(simulator.GetAccount[*LiteTokenAccount](sim, lite).LockHeight))
 
 	// Locked, cannot send
-	_, err := sim.SubmitAndExecuteBlock(
+	st, err := sim.SubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(lite).
 			WithSigner(lite, 1).
@@ -66,7 +69,9 @@ func TestLockAccount_LiteToken(t *testing.T) {
 			Initiate(SignatureTypeED25519, liteKey).
 			Build(),
 	)
-	require.Error(t, err)
+	require.NoError(t, err)
+	sim.H.StepUntil(harness.Txn(st[0].TxID).Capture(&st[0]).Fails())
+	require.EqualError(t, st[0].AsError(), "account is locked until major block 10 (currently at 0)")
 
 	// Fake a major block
 	x := sim.PartitionFor(lite)
@@ -80,16 +85,15 @@ func TestLockAccount_LiteToken(t *testing.T) {
 	})
 
 	// Lock expired, can send
-	st, _ = sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(lite).
-			WithSigner(lite, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{To: []*TokenRecipient{{Url: recipient, Amount: *big.NewInt(1)}}}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
-	)...)
-	require.False(t, st[0].Failed(), "Expected the transaction to succeed")
+	st = sim.H.BuildAndSubmitSuccessfully(
+		build.Transaction().For(lite).
+			SendTokens(1, 0).To(recipient).
+			SignWith(lite).Version(1).Timestamp(&timestamp).PrivateKey(liteKey))
+
+	sim.H.StepUntil(
+		Txn(st[0].TxID).Completes(),
+		Sig(st[1].TxID).SingleCompletes())
+
 	require.Equal(t, int(2), int(simulator.GetAccount[*LiteTokenAccount](sim, recipient).Balance.Int64()))
 }
 
