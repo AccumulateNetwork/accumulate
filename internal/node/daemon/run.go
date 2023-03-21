@@ -135,6 +135,7 @@ func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
 func (d *Daemon) P2P_TESTONLY() *p2p.Node         { return d.p2pnode }
 func (d *Daemon) API() *nodeapi.Handler           { return d.api }
+func (d *Daemon) EventBus() *events.Bus           { return d.eventBus }
 
 // StartSecondary starts this daemon as a secondary process of the given daemon
 // (which must already be running).
