@@ -38,6 +38,7 @@ type NodeInit struct {
 	PrivValKey       []byte          `json:"privValKey,omitempty" form:"privValKey" query:"privValKey" validate:"required"`
 	DnNodeKey        []byte          `json:"dnNodeKey,omitempty" form:"dnNodeKey" query:"dnNodeKey" validate:"required"`
 	BvnNodeKey       []byte          `json:"bvnNodeKey,omitempty" form:"bvnNodeKey" query:"bvnNodeKey" validate:"required"`
+	BsnNodeKey       []byte          `json:"bsnNodeKey,omitempty" form:"bsnNodeKey" query:"bsnNodeKey" validate:"required"`
 }
 
 func (v *BvnInit) MarshalJSON() ([]byte, error) {
@@ -81,6 +82,7 @@ func (v *NodeInit) MarshalJSON() ([]byte, error) {
 		PrivValKey       *string         `json:"privValKey,omitempty"`
 		DnNodeKey        *string         `json:"dnNodeKey,omitempty"`
 		BvnNodeKey       *string         `json:"bvnNodeKey,omitempty"`
+		BsnNodeKey       *string         `json:"bsnNodeKey,omitempty"`
 	}{}
 	if !(v.DnnType == 0) {
 		u.DnnType = v.DnnType
@@ -110,6 +112,9 @@ func (v *NodeInit) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.BvnNodeKey) == 0) {
 		u.BvnNodeKey = encoding.BytesToJSON(v.BvnNodeKey)
+	}
+	if !(len(v.BsnNodeKey) == 0) {
+		u.BsnNodeKey = encoding.BytesToJSON(v.BsnNodeKey)
 	}
 	return json.Marshal(&u)
 }
@@ -157,6 +162,7 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 		PrivValKey       *string         `json:"privValKey,omitempty"`
 		DnNodeKey        *string         `json:"dnNodeKey,omitempty"`
 		BvnNodeKey       *string         `json:"bvnNodeKey,omitempty"`
+		BsnNodeKey       *string         `json:"bsnNodeKey,omitempty"`
 	}{}
 	u.DnnType = v.DnnType
 	u.BvnnType = v.BvnnType
@@ -169,6 +175,7 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 	u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
 	u.DnNodeKey = encoding.BytesToJSON(v.DnNodeKey)
 	u.BvnNodeKey = encoding.BytesToJSON(v.BvnNodeKey)
+	u.BsnNodeKey = encoding.BytesToJSON(v.BsnNodeKey)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -200,6 +207,11 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding BvnNodeKey: %w", err)
 	} else {
 		v.BvnNodeKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.BsnNodeKey); err != nil {
+		return fmt.Errorf("error decoding BsnNodeKey: %w", err)
+	} else {
+		v.BsnNodeKey = x
 	}
 	return nil
 }

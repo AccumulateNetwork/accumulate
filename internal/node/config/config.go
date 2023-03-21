@@ -32,6 +32,7 @@ import (
 
 const PortOffsetDirectory = 0
 const PortOffsetBlockValidator = 100
+const PortOffsetBlockSummary = 200
 
 const (
 	configDir     = "config"
@@ -40,15 +41,6 @@ const (
 )
 
 const DevNet = "devnet"
-
-type NetworkType = protocol.PartitionType
-
-const (
-	BlockValidator            = protocol.PartitionTypeBlockValidator
-	Directory                 = protocol.PartitionTypeDirectory
-	NetworkTypeBlockValidator = protocol.PartitionTypeBlockValidator
-	NetworkTypeDirectory      = protocol.PartitionTypeDirectory
-)
 
 type NodeType uint64
 type PortOffset uint64
@@ -130,7 +122,7 @@ var DefaultLogLevels = LogLevel{}.
 	// SetModule("init", "info").
 	String()
 
-func Default(netName string, net NetworkType, _ NodeType, partitionId string) *Config {
+func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId string) *Config {
 	c := new(Config)
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
@@ -279,7 +271,7 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 func (n *Network) GetBvnNames() []string {
 	var names []string
 	for _, partition := range n.Partitions {
-		if partition.Type == BlockValidator {
+		if partition.Type == protocol.PartitionTypeBlockValidator {
 			names = append(names, partition.Id)
 		}
 	}

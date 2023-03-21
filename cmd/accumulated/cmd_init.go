@@ -669,12 +669,14 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 	return "", nil
 }
 
-func netDir(networkType cfg.NetworkType) string {
+func netDir(networkType protocol.PartitionType) string {
 	switch networkType {
-	case cfg.Directory:
+	case protocol.PartitionTypeDirectory:
 		return "dnn"
-	case cfg.BlockValidator:
+	case protocol.PartitionTypeBlockValidator:
 		return "bvnn"
+	case protocol.PartitionTypeBlockSummary:
+		return "bsnn"
 	}
 	fatalf("Unsupported network type %v", networkType)
 	return ""
