@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/ulikunitz/xz"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -53,10 +53,10 @@ func TestAPIv2Consistency(t *testing.T) {
 	// Start the simulator
 	sim, err := simulator.New(
 		acctesting.NewTestLogger(t),
-		func(partition string, node int, logger log.Logger) database.Beginner {
+		func(partition string, node int, logger log.Logger) storage.KeyValueStore {
 			mem := memory.New(logger)
 			require.NoError(t, json.Unmarshal(testData.State[partition], mem))
-			return database.New(mem, logger)
+			return mem
 		},
 		testData.Network,
 		simulator.EmptySnapshots,

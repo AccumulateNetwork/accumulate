@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -27,6 +28,7 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -66,7 +68,6 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.partition = p
 	n.logger.Set(p.logger, "node", node)
 	n.eventBus = events.NewBus(n.logger)
-	n.database = s.database(p.ID, node, n.logger)
 	n.privValKey = init.PrivValKey
 	switch p.Type {
 	case protocol.PartitionTypeDirectory:
@@ -85,18 +86,47 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		events.SubscribeSync(n.eventBus, s.router.willChangeGlobals)
 	}
 
+	var err error
+	switch n.partition.Type {
+	case protocol.PartitionTypeDirectory,
+		protocol.PartitionTypeBlockValidator:
+		err = n.initValidator()
+	case protocol.PartitionTypeBlockSummary:
+		err = n.initSummary()
+	default:
+		err = errors.BadRequest.WithFormat("unknown partition type %v", n.partition.Type)
+	}
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Collect and submit block summaries
+	if s.init.Bsn != nil && n.partition.Type != protocol.PartitionTypeBlockSummary {
+		err := n.initCollector()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	return n, nil
+}
+
+func (n *Node) initValidator() error {
+	store := n.simulator.database(n.partition.ID, n.id, n.logger)
+	n.database = database.New(store, n.logger)
+
 	// Create a Querier service
 	n.querySvc = apiimpl.NewQuerier(apiimpl.QuerierParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
 		Database:  n,
-		Partition: p.ID,
+		Partition: n.partition.ID,
 	})
 
 	// Create an EventService
 	n.eventSvc = apiimpl.NewEventService(apiimpl.EventServiceParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
 		Database:  n.database,
-		Partition: p.ID,
+		Partition: n.partition.ID,
 		EventBus:  n.eventBus,
 	})
 
@@ -105,42 +135,42 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Logger:       n.logger.With("module", "acc-rpc"),
 		Database:     n,
 		EventBus:     n.eventBus,
-		Partition:    p.ID,
+		Partition:    n.partition.ID,
 		ValidatorKey: n.privValKey,
 	})
 
 	// Describe the network, from the node's perspective
 	network := config.Describe{
-		NetworkType:  p.Type,
-		PartitionId:  p.ID,
-		LocalAddress: init.AdvertizeAddress,
-		Network:      *s.netcfg,
+		NetworkType:  n.partition.Type,
+		PartitionId:  n.partition.ID,
+		LocalAddress: n.init.AdvertizeAddress,
+		Network:      *n.simulator.netcfg,
 	}
 
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
 		Logger:        n.logger,
 		Database:      n,
-		Key:           init.PrivValKey,
+		Key:           n.init.PrivValKey,
 		Describe:      network,
-		Router:        s.router,
+		Router:        n.simulator.router,
 		EventBus:      n.eventBus,
-		NewDispatcher: func() execute.Dispatcher { return &dispatcher{sim: s, envelopes: map[string][][]messaging.Message{}} },
-		Sequencer:     s.Services(),
-		Querier:       s.Services(),
+		NewDispatcher: n.simulator.newDispatcher,
+		Sequencer:     n.simulator.Services(),
+		Querier:       n.simulator.Services(),
 	}
 
 	// Add background tasks to the block's error group. The simulator must call
 	// Group.Wait before changing the group, to ensure no race conditions.
 	execOpts.BackgroundTaskLauncher = func(f func()) {
-		s.blockErrGroup.Go(func() error {
+		n.simulator.blockErrGroup.Go(func() error {
 			f()
 			return nil
 		})
 	}
 
 	// Initialize the major block scheduler
-	if p.Type == protocol.PartitionTypeDirectory {
+	if n.partition.Type == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(n.eventBus)
 	}
 
@@ -148,7 +178,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	var err error
 	n.executor, err = execute.NewExecutor(execOpts)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Set up the API
@@ -157,15 +187,15 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		TxMaxWaitTime: time.Hour,
 		Describe:      &network,
 		LocalV3:       (*nodeService)(n),
-		Querier:       (*simService)(s),
-		Submitter:     (*simService)(s),
-		Network:       (*simService)(s),
-		Faucet:        (*simService)(s),
-		Validator:     (*simService)(s),
-		Sequencer:     (*simService)(s),
+		Querier:       (*simService)(n.simulator),
+		Submitter:     (*simService)(n.simulator),
+		Network:       (*simService)(n.simulator),
+		Faucet:        (*simService)(n.simulator),
+		Validator:     (*simService)(n.simulator),
+		Sequencer:     (*simService)(n.simulator),
 	})
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Create an API client
@@ -174,7 +204,59 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	// Subscribe to global variable changes
 	events.SubscribeSync(n.eventBus, n.willChangeGlobals)
 
-	return n, nil
+	return nil
+}
+
+func (n *Node) initCollector() error {
+	// Collect block summaries
+	_, err := bsn.StartCollector(bsn.CollectorOptions{
+		Partition: n.partition.ID,
+		Database:  n,
+		Events:    n.eventBus,
+	})
+	if err != nil {
+		return errors.UnknownError.WithFormat("start collector: %w", err)
+	}
+
+	signer := nodeSigner{n}
+	events.SubscribeAsync(n.eventBus, func(e bsn.DidCollectBlock) {
+		env, err := build.SignatureForMessage(e.Summary).
+			Url(protocol.PartitionUrl(n.partition.ID)).
+			Signer(signer).
+			Done()
+		if err != nil {
+			n.logger.Error("Failed to sign block summary", "error", err)
+			return
+		}
+
+		msg := new(messaging.BlockAnchor)
+		msg.Anchor = e.Summary
+		msg.Signature = env.Signatures[0].(protocol.KeySignature)
+
+		st, err := n.simulator.SubmitTo(n.simulator.init.Bsn.Id, []messaging.Message{msg})
+		if err != nil {
+			n.logger.Error("Failed to submit block summary envelope", "error", err)
+			return
+		}
+		for _, st := range st {
+			if st.Error != nil {
+				n.logger.Error("Block summary envelope failed", "error", st.AsError())
+			}
+		}
+	})
+	return nil
+}
+
+func (n *Node) initSummary() error {
+	var err error
+	n.executor, err = bsn.NewExecutor(bsn.ExecutorOptions{
+		PartitionID: n.partition.ID,
+		Logger:      n.logger,
+		Store:       n.simulator.database(n.partition.ID, n.id, n.logger),
+		EventBus:    n.eventBus,
+	})
+
+	return errors.UnknownError.Wrap(err)
 }
 
 func (n *Node) Begin(writable bool) *database.Batch         { return n.database.Begin(writable) }
@@ -287,9 +369,8 @@ func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 		state.Discard()
 
 		// Get the old root
-		batch := n.database.Begin(false)
-		defer batch.Discard()
-		return batch.BptRoot(), nil
+		_, root, err := n.executor.LastBlock()
+		return root[:], errors.UnknownError.Wrap(err)
 	}
 
 	// Commit
@@ -309,8 +390,7 @@ func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 		return nil, errors.UnknownError.WithFormat("notify of commit: %w", err)
 	}
 
-	// Get the  root
-	batch := n.database.Begin(false)
-	defer batch.Discard()
-	return batch.BptRoot(), nil
+	// Get the root
+	_, hash, err := n.executor.LastBlock()
+	return hash[:], err
 }
