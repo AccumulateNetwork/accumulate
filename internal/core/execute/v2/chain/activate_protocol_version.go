@@ -17,11 +17,12 @@ func (ActivateProtocolVersion) Type() protocol.TransactionType {
 	return protocol.TransactionTypeActivateProtocolVersion
 }
 
-func (ActivateProtocolVersion) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (ActivateProtocolVersion{}).Validate(st, tx)
+func (x ActivateProtocolVersion) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (ActivateProtocolVersion) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (ActivateProtocolVersion) check(st *StateManager, tx *Delivery) (*protocol.ActivateProtocolVersion, error) {
 	// Verify the body
 	body, ok := tx.Transaction.Body.(*protocol.ActivateProtocolVersion)
 	if !ok {
@@ -39,9 +40,18 @@ func (ActivateProtocolVersion) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, errors.BadRequest.WithFormat("%d is not a recognized version number", body.Version)
 	}
 
+	return body, nil
+}
+
+func (x ActivateProtocolVersion) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
 	// Load the system ledger
 	var ledger *protocol.SystemLedger
-	err := st.batch.Account(st.Ledger()).Main().GetAs(&ledger)
+	err = st.batch.Account(st.Ledger()).Main().GetAs(&ledger)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load ledger: %w", err)
 	}

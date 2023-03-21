@@ -107,52 +107,52 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 	return ok, false, errors.UnknownError.Wrap(err)
 }
 
-func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, *protocol.KeyPage, *protocol.KeyBook, error) {
+func (UpdateKey) check(st *StateManager, tx *Delivery) (*protocol.UpdateKey, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKey)
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
 	}
 	switch len(body.NewKeyHash) {
 	case 0:
-		return nil, nil, nil, errors.BadRequest.WithFormat("public key hash is missing")
+		return nil, errors.BadRequest.WithFormat("public key hash is missing")
 	case 32:
 		// Ok
 	default:
-		return nil, nil, nil, errors.BadRequest.WithFormat("public key hash length is invalid")
+		return nil, errors.BadRequest.WithFormat("public key hash length is invalid")
 	}
 
-	page, ok := st.Origin.(*protocol.KeyPage)
+	_, _, ok = protocol.ParseKeyPageUrl(tx.Transaction.Header.Principal)
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("invalid principal: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
+		return nil, fmt.Errorf("invalid principal: page url is invalid: %s", tx.Transaction.Header.Principal)
 	}
 
-	bookUrl, _, ok := protocol.ParseKeyPageUrl(st.OriginUrl)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("invalid principal: page url is invalid: %s", page.Url)
-	}
-
-	var book *protocol.KeyBook
-	err := st.LoadUrlAs(bookUrl, &book)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid key book: %v", err)
-	}
-
-	if book.BookType == protocol.BookTypeValidator {
-		return nil, nil, nil, fmt.Errorf("UpdateKey cannot be used to modify the validator key book")
-	}
-
-	return body, page, book, nil
+	return body, nil
 }
 
 func (UpdateKey) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	_, _, _, err := UpdateKey{}.validate(st, tx)
+	_, err := UpdateKey{}.check(st, tx)
 	return nil, err
 }
 
 func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	body, page, book, err := UpdateKey{}.validate(st, tx)
+	body, err := UpdateKey{}.check(st, tx)
 	if err != nil {
 		return nil, err
+	}
+
+	page, ok := st.Origin.(*protocol.KeyPage)
+	if !ok {
+		return nil, fmt.Errorf("invalid principal: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
+	}
+
+	var book *protocol.KeyBook
+	err = st.LoadUrlAs(page.GetAuthority(), &book)
+	if err != nil {
+		return nil, fmt.Errorf("invalid key book: %v", err)
+	}
+
+	if book.BookType == protocol.BookTypeValidator {
+		return nil, fmt.Errorf("UpdateKey cannot be used to modify the validator key book")
 	}
 
 	// Do not update the key page version, do not reset LastUsedOn
@@ -204,15 +204,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 }
 
 func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protocol.KeySpecParams, preserveDelegate bool) error {
-	if new.IsEmpty() {
-		return fmt.Errorf("cannot add an empty entry")
-	}
-
 	if new.Delegate != nil {
-		if new.Delegate.ParentOf(page.Url) {
-			return fmt.Errorf("self-delegation is not allowed")
-		}
-
 		if err := verifyIsNotPage(&book.AccountAuth, new.Delegate); err != nil {
 			return errors.UnknownError.WithFormat("invalid delegate %v: %w", new.Delegate, err)
 		}

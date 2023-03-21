@@ -24,15 +24,38 @@ func (DirectoryAnchor) Type() protocol.TransactionType {
 	return protocol.TransactionTypeDirectoryAnchor
 }
 
-func (DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (DirectoryAnchor{}).Validate(st, tx)
+func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (DirectoryAnchor) check(st *StateManager, tx *Delivery) (*protocol.DirectoryAnchor, error) {
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.DirectoryAnchor)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.DirectoryAnchor), tx.Transaction.Body)
+	}
+
+	// Verify the source URL is from the DN
+	if !protocol.IsDnUrl(body.Source) {
+		return nil, fmt.Errorf("invalid source: not the DN")
+	}
+
+	// Process receipts
+	for i, receipt := range body.Receipts {
+		receipt := receipt // See docs/developer/rangevarref.md
+		if !bytes.Equal(receipt.RootChainReceipt.Anchor, body.RootChainAnchor[:]) {
+			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
+		}
+	}
+
+	return body, nil
+}
+
+func (x DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
@@ -40,11 +63,6 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.AnchorLedger); !ok {
 		return nil, fmt.Errorf("invalid principal: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
-	}
-
-	// Verify the source URL is from the DN
-	if !protocol.IsDnUrl(body.Source) {
-		return nil, fmt.Errorf("invalid source: not the DN")
 	}
 
 	// Trigger a major block?
@@ -75,13 +93,8 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		}
 	}
 
-	// Process receipts
-	for i, receipt := range body.Receipts {
-		receipt := receipt // See docs/developer/rangevarref.md
-		if !bytes.Equal(receipt.RootChainReceipt.Anchor, body.RootChainAnchor[:]) {
-			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
-		}
-
+	// Log receipts
+	for _, receipt := range body.Receipts {
 		st.logger.Info("Received receipt", "module", "anchoring", "from", logging.AsHex(receipt.RootChainReceipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source)
 	}
 
