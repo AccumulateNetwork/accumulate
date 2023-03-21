@@ -42,11 +42,6 @@ func (WriteDataTo) check(st *StateManager, tx *Delivery) (*protocol.WriteDataTo,
 		return nil, errors.BadRequest.WithFormat("recipient is missing")
 	}
 
-	err := validateDataEntry(st, body.Entry)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
 	if _, err := protocol.ParseLiteDataAddress(body.Recipient); err != nil {
 		return nil, errors.BadRequest.WithFormat("only writes to lite data accounts supported: %s: %v", body.Recipient, err)
 	}
@@ -58,6 +53,11 @@ func (x WriteDataTo) Execute(st *StateManager, tx *Delivery) (protocol.Transacti
 	body, err := x.check(st, tx)
 	if err != nil {
 		return nil, err
+	}
+
+	err = validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	writeThis := new(protocol.SyntheticWriteData)
