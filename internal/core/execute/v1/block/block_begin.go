@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -246,7 +245,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	switch x.Describe.NetworkType {
-	case config.Directory:
+	case protocol.PartitionTypeDirectory:
 		anchor := anchor.(*protocol.DirectoryAnchor)
 		if anchor.MakeMajorBlock > 0 {
 			x.logger.Info("Start major block", "major-index", anchor.MakeMajorBlock, "minor-index", ledger.Index)
@@ -270,23 +269,19 @@ func (x *Executor) finalizeBlock(block *Block) error {
 			return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
 		}
 
-	case config.BlockValidator:
+		// If we're the DN, send synthetic transactions produced by the block we're
+		// anchoring, but send them after the anchor
+		err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, ledger.Index, nil)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+	case protocol.PartitionTypeBlockValidator:
 		// BVN -> DN
 		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
 			return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
 		}
-	}
-
-	if x.Describe.NetworkType != config.Directory {
-		return nil
-	}
-
-	// If we're the DN, send synthetic transactions produced by the block we're
-	// anchoring, but send them after the anchor
-	err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, ledger.Index, nil)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
 	}
 
 	return nil
