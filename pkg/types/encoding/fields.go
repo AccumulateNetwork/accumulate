@@ -25,15 +25,24 @@ type Field[V any] struct {
 	Name      string
 	OmitEmpty bool
 	Required  bool
+	Number    uint
+	Binary    bool
 }
 
 // WriteTo writes the value's field to the writer, unless OmitEmpty is false and
 // the field is empty.
-func (f *Field[V]) WriteTo(w *Writer, n uint, v V) {
+func (f *Field[V]) WriteTo(w *Writer, v V) {
+	if !f.Binary {
+		return
+	}
 	if f.OmitEmpty && f.Accessor.IsEmpty(v) {
 		return
 	}
-	f.Accessor.WriteTo(w, n, v)
+	f.Accessor.WriteTo(w, f.Number, v)
+}
+
+func (f *Field[V]) ReadFrom(r *Reader, v V) {
+	f.Accessor.ReadFrom(r, f.Number, v)
 }
 
 // ToJSON writes the value's field (including the name) as JSON to the builder,
@@ -186,11 +195,11 @@ func (f SliceField[V, U, A]) FromJSON(b []byte, v V) error {
 }
 
 // StructField is an [Accessor] for a value's struct field.
-type StructField[V any, U structPtr[W], W comparable] func(v V) U
+type StructField[V any, U structPtr[W], W any] func(v V) U
 
 func (f StructField[V, U, W]) IsEmpty(v V) bool {
 	var z W
-	return *(*W)(f(v)) == z
+	return any(*(*W)(f(v))) == any(z)
 }
 
 func (f StructField[V, U, W]) CopyTo(dst, src V) {
