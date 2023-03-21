@@ -16,10 +16,6 @@
     pointer: true
   - name: observer
     type: Observer
-  - name: kvstore
-    type: storage.KeyValueTxn
-  - name: bptEntries
-    type: map[storage.Key][32]byte
   attributes:
 
   - name: BPT
