@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -98,6 +98,13 @@ func (b AddressBuilder) BlockValidator() AddressBuilder {
 	return b
 }
 
+// BlockSummary sets the partition type to
+// [protocol.PartitionTypeBlockSummary].
+func (b AddressBuilder) BlockSummary() AddressBuilder {
+	b.partition = protocol.PartitionTypeBlockSummary
+	return b
+}
+
 // TendermintP2P sets the service to [config.PortOffsetTendermintP2P].
 func (b AddressBuilder) TendermintP2P() AddressBuilder {
 	b.service = config.PortOffsetTendermintP2P
@@ -142,10 +149,12 @@ func (b AddressBuilder) String() string {
 	if b.partition != 0 {
 		port := b.node.BasePort + uint64(b.service)
 		switch b.partition {
-		case config.Directory:
+		case protocol.PartitionTypeDirectory:
 			port += config.PortOffsetDirectory
-		case config.BlockValidator:
+		case protocol.PartitionTypeBlockValidator:
 			port += config.PortOffsetBlockValidator
+		case protocol.PartitionTypeBlockSummary:
+			port += config.PortOffsetBlockSummary
 		default:
 			panic("invalid partition type")
 		}
@@ -156,10 +165,12 @@ func (b AddressBuilder) String() string {
 	if b.withKey {
 		var sk []byte
 		switch b.partition {
-		case config.Directory:
+		case protocol.PartitionTypeDirectory:
 			sk = b.node.DnNodeKey
-		case config.BlockValidator:
+		case protocol.PartitionTypeBlockValidator:
 			sk = b.node.BvnNodeKey
+		case protocol.PartitionTypeBlockSummary:
+			sk = b.node.BsnNodeKey
 		default:
 			panic("invalid partition type")
 		}
@@ -183,10 +194,12 @@ func (b AddressBuilder) Multiaddr() multiaddr.Multiaddr {
 	if b.scheme != "" {
 		port := b.node.BasePort + uint64(b.service)
 		switch b.partition {
-		case config.Directory:
+		case protocol.PartitionTypeDirectory:
 			port += config.PortOffsetDirectory
-		case config.BlockValidator:
+		case protocol.PartitionTypeBlockValidator:
 			port += config.PortOffsetBlockValidator
+		case protocol.PartitionTypeBlockSummary:
+			port += config.PortOffsetBlockSummary
 		default:
 			panic("invalid partition type")
 		}
@@ -200,10 +213,12 @@ func (b AddressBuilder) Multiaddr() multiaddr.Multiaddr {
 	if b.withKey {
 		var sk []byte
 		switch b.partition {
-		case config.Directory:
+		case protocol.PartitionTypeDirectory:
 			sk = b.node.DnNodeKey
-		case config.BlockValidator:
+		case protocol.PartitionTypeBlockValidator:
 			sk = b.node.BvnNodeKey
+		case protocol.PartitionTypeBlockSummary:
+			sk = b.node.BsnNodeKey
 		default:
 			panic("invalid partition type")
 		}
