@@ -145,10 +145,35 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 		}
 	}
 
-	// Make sure the transaction is signed
+	// Make sure user transactions are signed. Synthetic messages and network
+	// update messages do not require signatures.
+	//
+	// If we're within MessageIsReady, presumably this has already been checked.
+	// But if we're within MessageIsReady that is itself within CreditPayment,
+	// isWithin will return false (see isWithin for details). So instead we
+	// resolve MessageIsReady to whatever its actually supposed to be before
+	// checking for MessageForTransaction. That way we'll see the CreditPayment.
+	//
+	// TODO FIXME This is kind of screwy and indicative of a design flaw. The
+	// executor system makes assumptions/enforces requirements around how
+	// messages are bundled together. But there are various edge cases, such as
+	// situations that produce MessageIsReady, that complicate matters. So
+	// instead of having a bunch of edge cases that need to be dealt with,
+	// either production of MessageIsReady should be changed to match the normal
+	// process, or the normal process should be updated to be less fragile, or
+	// both.
 	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypeNetworkUpdate) {
 		var signed bool
 		for _, msg := range ctx.messages {
+			// Resolve MessageIsReady
+			if ready, ok := msg.(*internal.MessageIsReady); ok {
+				m, err := batch.Message(ready.TxID.Hash()).Main().Get()
+				if err != nil {
+					return nil, errors.InternalError.WithFormat("load ready message: %w", err)
+				}
+				msg = m
+			}
+
 			msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg)
 			if !ok {
 				continue

@@ -29,14 +29,24 @@ func (SyntheticDepositCredits) AllowMissingPrincipal(transaction *protocol.Trans
 	return key != nil
 }
 
-func (SyntheticDepositCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (SyntheticDepositCredits{}).Validate(st, tx)
+func (x SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (SyntheticDepositCredits) check(st *StateManager, tx *Delivery) (*protocol.SyntheticDepositCredits, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositCredits)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), tx.Transaction.Body)
+	}
+
+	return body, nil
+}
+
+func (x SyntheticDepositCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	// Update the signer
@@ -66,7 +76,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 
 	// Update the ledger
 	var ledgerState *protocol.SystemLedger
-	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
+	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return nil, err
 	}
