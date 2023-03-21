@@ -101,18 +101,15 @@ func (CreateIdentity) check(st *StateManager, tx *Delivery) (*protocol.CreateIde
 	// Create a new key book
 	if body.KeyBookUrl != nil {
 		// Verify the user provided a first key
-		if len(body.KeyHash) == 0 {
-			return nil, errors.BadRequest.WithFormat("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
+		err = requireKeyHash(body.KeyHash)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
 		// Verify the URL is ok
 		err := validateKeyBookUrl(body.KeyBookUrl, body.Url)
 		if err != nil {
 			return nil, err
-		}
-
-		if len(body.KeyHash) != 32 {
-			return nil, errors.BadRequest.WithFormat("invalid Key Hash: length must be equal to 32 bytes")
 		}
 	}
 

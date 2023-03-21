@@ -112,13 +112,10 @@ func (UpdateKey) check(st *StateManager, tx *Delivery) (*protocol.UpdateKey, err
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
 	}
-	switch len(body.NewKeyHash) {
-	case 0:
-		return nil, errors.BadRequest.WithFormat("public key hash is missing")
-	case 32:
-		// Ok
-	default:
-		return nil, errors.BadRequest.WithFormat("public key hash length is invalid")
+
+	err := requireKeyHash(body.NewKeyHash)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	_, _, ok = protocol.ParseKeyPageUrl(tx.Transaction.Header.Principal)
@@ -201,6 +198,16 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
 	}
 	return nil, nil
+}
+
+func requireKeyHash(h []byte) error {
+	if len(h) == 0 {
+		return errors.BadRequest.WithFormat("public key hash is missing")
+	}
+	if len(h) > 64 {
+		return errors.BadRequest.WithFormat("public key hash is too long to be a hash")
+	}
+	return nil
 }
 
 func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protocol.KeySpecParams, preserveDelegate bool) error {
