@@ -119,12 +119,17 @@ func (x *ExecutorV1) Validate(messages []messaging.Message, recheck bool) ([]*pr
 
 // Begin constructs a [BlockV1] and calls [block.Executor.BeginBlock].
 func (x *ExecutorV1) Begin(params execute.BlockParams) (execute.Block, error) {
+	err := x.EventBus.Publish(execute.WillBeginBlock{BlockParams: params})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	b := new(BlockV1)
 	b.Executor = (*block.Executor)(x)
 	b.Block = new(block.Block)
 	b.Block.Batch = x.Database.Begin(true)
 	b.Block.BlockMeta = params
-	err := b.Executor.BeginBlock(b.Block)
+	err = b.Executor.BeginBlock(b.Block)
 	if err != nil {
 		b.Block.Batch.Discard()
 	}
