@@ -1,6 +1,7 @@
 package node
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -70,3 +71,22 @@ func (x *Executor) Begin(bp BlockParams) (Block, error) {
 	b, err := x.x.Begin(bp.b)
 	return Block{b: &b}, err
 }
+
+type Event struct {
+	events.Event
+}
+
+type DidCommitBlock struct {
+	DidCommit events.DidCommitBlock
+}
+
+type DidSaveSnapshot struct {
+	DidSave events.DidSaveSnapshot
+}
+
+type FatalError struct {
+	Fatal events.FatalError
+}
+
+func (e FatalError) Error() string { return e.Fatal.Err.Error() }
+func (e FatalError) Unwrap() error { return e.Fatal.Err }
