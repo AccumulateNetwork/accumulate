@@ -38,6 +38,18 @@ func NewStateManager(net *config.Describe, globals *core.GlobalValues, authDeleg
 	return m
 }
 
+// NewStatelessManager creates a new state manager and does *not* hold a
+// reference to any state such as the transaction's principal or the current
+// network variables.
+func NewStatelessManager(net *config.Describe, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+	txid := *(*[32]byte)(transaction.GetHash())
+	m := new(StateManager)
+	m.OriginUrl = transaction.Header.Principal
+	m.stateCache = *newStatelessCache(net, transaction.Body.Type(), txid)
+	m.logger.L = logger
+	return m
+}
+
 func (m *StateManager) GetBatch() *database.Batch { return m.batch }
 func (m *StateManager) GetHash() []byte           { return m.txHash[:] }
 
