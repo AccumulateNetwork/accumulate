@@ -114,13 +114,8 @@ func (WriteData) check(st *StateManager, tx *Delivery) (*protocol.WriteData, err
 		return nil, errors.BadRequest.WithFormat("entry is nil")
 	}
 
-	err := validateDataEntry(st, body.Entry)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
 	//check will return error if there is too much data or no data for the entry
-	_, err = protocol.CheckDataEntrySize(body.Entry)
+	_, err := protocol.CheckDataEntrySize(body.Entry)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +145,11 @@ func (x WriteData) Execute(st *StateManager, tx *Delivery) (protocol.Transaction
 	body, err := x.check(st, tx)
 	if err != nil {
 		return nil, err
+	}
+
+	err = validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
