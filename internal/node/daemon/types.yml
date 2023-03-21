@@ -48,3 +48,5 @@ NodeInit:
     type: bytes
   - name: BvnNodeKey
     type: bytes
+  - name: BsnNodeKey
+    type: bytes
