@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -93,7 +93,7 @@ func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot find partition %s in network configuration, %v", partitionName, err)
 	}
 
-	if partition.Type == cfg.NetworkTypeDirectory {
+	if partition.Type != protocol.PartitionTypeBlockValidator {
 		return fmt.Errorf("network partition of second node configuration must be a block validator. Please specify {network-name}.{bvn-partition-id} first parameter to init dual")
 	}
 
@@ -176,7 +176,7 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 	}
 
 	//make sure we have a block validator type
-	if c.Accumulate.NetworkType != cfg.Directory {
+	if c.Accumulate.NetworkType != protocol.PartitionTypeDirectory {
 		return nil, fmt.Errorf("expecting directory but received %v", c.Accumulate.NetworkType)
 	}
 
@@ -213,7 +213,7 @@ func finalizeBvnn() (*cfg.Config, error) {
 		return nil, fmt.Errorf("cannot load configuration file for node, %v", err)
 	}
 
-	if c.Accumulate.NetworkType != cfg.NetworkTypeBlockValidator {
+	if c.Accumulate.NetworkType != protocol.PartitionTypeBlockValidator {
 		return nil, fmt.Errorf("network partition of second node configuration must be a block validator. Please specify {network-name}.{bvn-partition-id} first parameter to init dual")
 	}
 

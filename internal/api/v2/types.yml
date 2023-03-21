@@ -552,7 +552,7 @@ DescriptionResponse:
     - name: PartitionId
       type: string
     - name: NetworkType
-      type: config.NetworkType
+      type: protocol.PartitionType
       marshal-as: enum
     - name: Network
       type: config.Network

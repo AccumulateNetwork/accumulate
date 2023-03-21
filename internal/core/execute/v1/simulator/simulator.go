@@ -131,9 +131,9 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 	}
 
 	sim.Partitions = make([]config.Partition, 1)
-	sim.Partitions[0] = config.Partition{Type: config.Directory, Id: protocol.Directory, BasePort: 30000}
+	sim.Partitions[0] = config.Partition{Type: protocol.PartitionTypeDirectory, Id: protocol.Directory, BasePort: 30000}
 	for _, bvn := range sim.netInit.Bvns {
-		partition := config.Partition{Type: config.BlockValidator, Id: bvn.Id, BasePort: 30000}
+		partition := config.Partition{Type: protocol.PartitionTypeBlockValidator, Id: bvn.Id, BasePort: 30000}
 		sim.Partitions = append(sim.Partitions, partition)
 	}
 
@@ -147,7 +147,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
 
 		network := config.Describe{
-			NetworkType:  config.Directory,
+			NetworkType:  protocol.PartitionTypeDirectory,
 			PartitionId:  protocol.Directory,
 			LocalAddress: protocol.Directory,
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
@@ -604,7 +604,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		Sequencer:     sim.Services(),
 		Querier:       sim.Services(),
 	}
-	if execOpts.Describe.NetworkType == config.Directory {
+	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(eventBus)
 	}
 	var err error

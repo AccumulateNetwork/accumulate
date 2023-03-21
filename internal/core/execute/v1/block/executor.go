@@ -80,13 +80,13 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	}
 
 	switch opts.Describe.NetworkType {
-	case config.Directory:
+	case protocol.PartitionTypeDirectory:
 		executors = append(executors,
 			chain.PartitionAnchor{},
 			chain.DirectoryAnchor{},
 		)
 
-	case config.BlockValidator:
+	case protocol.PartitionTypeBlockValidator:
 		executors = append(executors,
 			chain.DirectoryAnchor{},
 		)

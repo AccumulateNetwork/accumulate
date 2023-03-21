@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -36,7 +36,7 @@ import (
 
 const nodeDirPerm = 0755
 
-type MakeConfigFunc func(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config
+type MakeConfigFunc func(networkName string, net protocol.PartitionType, node config.NodeType, netId string) *config.Config
 
 func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config.Config {
 	var allConfigs [][][2]*config.Config
@@ -48,7 +48,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 	netConfig := config.Network{Id: network.Id, Partitions: make([]config.Partition, 1)}
 	dnConfig := config.Partition{
 		Id:       protocol.Directory,
-		Type:     config.Directory,
+		Type:     protocol.PartitionTypeDirectory,
 		BasePort: int64(network.Bvns[0].Nodes[0].BasePort), // TODO This is not great
 	}
 
@@ -61,12 +61,12 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 		var bvnConfigs [][2]*config.Config
 		bvnConfig := config.Partition{
 			Id:       bvn.Id,
-			Type:     config.BlockValidator,
+			Type:     protocol.PartitionTypeBlockValidator,
 			BasePort: int64(bvn.Nodes[0].BasePort) + int64(config.PortOffsetBlockValidator), // TODO This is not great
 		}
 		for j, node := range bvn.Nodes {
 			i++
-			dnn := mkcfg(network.Id, config.Directory, node.DnnType, protocol.Directory)
+			dnn := mkcfg(network.Id, protocol.PartitionTypeDirectory, node.DnnType, protocol.Directory)
 			dnn.Moniker = fmt.Sprintf("Directory.%d", i)
 			ConfigureNodePorts(node, dnn, protocol.PartitionTypeDirectory)
 			dnConfig.Nodes = append(dnConfig.Nodes, config.Node{
@@ -74,7 +74,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 				Type:    node.DnnType,
 			})
 
-			bvnn := mkcfg(network.Id, config.BlockValidator, node.BvnnType, bvn.Id)
+			bvnn := mkcfg(network.Id, protocol.PartitionTypeBlockValidator, node.BvnnType, bvn.Id)
 			bvnn.Moniker = fmt.Sprintf("%s.%d", bvn.Id, j+1)
 			ConfigureNodePorts(node, bvnn, protocol.PartitionTypeBlockValidator)
 			bvnConfig.Nodes = append(bvnConfig.Nodes, config.Node{
@@ -203,9 +203,9 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 	globals.Network = netinfo
 
 	for id := range docs {
-		netType := config.BlockValidator
-		if id == protocol.Directory {
-			netType = config.Directory
+		netType := protocol.PartitionTypeBlockValidator
+		if strings.EqualFold(id, protocol.Directory) {
+			netType = protocol.PartitionTypeDirectory
 		}
 		snapshot := new(ioutil2.Buffer)
 		root, err := genesis.Init(snapshot, genesis.InitOpts{
