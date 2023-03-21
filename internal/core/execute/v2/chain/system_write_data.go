@@ -42,11 +42,6 @@ func (SystemWriteData) check(st *StateManager, tx *Delivery) (*protocol.SystemWr
 		return nil, errors.BadRequest.WithFormat("entry is nil")
 	}
 
-	err := validateDataEntry(st, body.Entry)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
 	if partition, ok := protocol.ParsePartitionUrl(st.OriginUrl); !ok {
 		return nil, errors.BadRequest.WithFormat("invalid principal: %v is not a system account", st.OriginUrl)
 	} else if partition != st.PartitionId {
@@ -60,6 +55,11 @@ func (x SystemWriteData) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 	body, err := x.check(st, tx)
 	if err != nil {
 		return nil, err
+	}
+
+	err = validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return executeWriteFullDataAccount(st, body.Entry, false, body.WriteToState)

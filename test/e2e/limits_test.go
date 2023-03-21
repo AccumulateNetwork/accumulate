@@ -200,6 +200,7 @@ func TestWriteData_LimitDataEntryParts(t *testing.T) {
 			WithBody(&WriteData{Entry: entry}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "data entry contains too many parts")
 }
 

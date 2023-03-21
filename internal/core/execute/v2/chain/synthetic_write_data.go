@@ -50,11 +50,6 @@ func (SyntheticWriteData) check(st *StateManager, tx *Delivery) (*protocol.Synth
 		return nil, errors.BadRequest.WithFormat("entry is nil")
 	}
 
-	err := validateDataEntry(st, body.Entry)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
 	return body, nil
 }
 
@@ -62,6 +57,11 @@ func (x SyntheticWriteData) Execute(st *StateManager, tx *Delivery) (protocol.Tr
 	body, err := x.check(st, tx)
 	if err != nil {
 		return nil, err
+	}
+
+	err = validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return executeWriteLiteDataAccount(st, body.Entry)
