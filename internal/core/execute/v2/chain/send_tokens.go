@@ -19,14 +19,33 @@ type SendTokens struct{}
 
 func (SendTokens) Type() protocol.TransactionType { return protocol.TransactionTypeSendTokens }
 
-func (SendTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (SendTokens{}).Validate(st, tx)
+func (x SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (SendTokens) check(st *StateManager, tx *Delivery) (*protocol.SendTokens, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SendTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SendTokens), tx.Transaction.Body)
+	}
+
+	for i, to := range body.To {
+		if to.Url == nil {
+			return nil, errors.BadRequest.WithFormat("output %d is missing recipient URL", i)
+		}
+		if to.Amount.Sign() < 0 {
+			return nil, fmt.Errorf("amount can't be a negative value")
+		}
+	}
+
+	return body, nil
+}
+
+func (x SendTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	var account protocol.AccountWithTokens
@@ -44,32 +63,18 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	//now check to see if the account is good to send tokens from
 	total := new(big.Int)
 	for _, to := range body.To {
-		if to.Amount.Sign() < 0 {
-			return nil, fmt.Errorf("amount can't be a negative value")
-		}
 		total.Add(total, &to.Amount)
 	}
 
 	if !account.DebitTokens(total) {
 		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), total)
 	}
-	err := st.Update(account)
+	err = st.Update(account)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update account %v: %v", account.GetUrl(), err)
 	}
 
-	m := make(map[[32]byte]bool)
-	for i, to := range body.To {
-		if to.Url == nil {
-			return nil, errors.BadRequest.WithFormat("output %d is missing recipient URL", i)
-		}
-		id := to.Url.AccountID32()
-		_, ok := m[id]
-		if !ok {
-			m[id] = true
-		} else {
-			return nil, fmt.Errorf("duplicate recipient passed in request")
-		}
+	for _, to := range body.To {
 		deposit := new(protocol.SyntheticDepositTokens)
 		deposit.Token = account.GetTokenUrl()
 		deposit.Amount = to.Amount

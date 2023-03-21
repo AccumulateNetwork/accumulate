@@ -76,7 +76,7 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	return true, nil
 }
 
-func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	// All new delegates must sign the transaction
 	newOwners, err := getNewOwners(batch, transaction)
 	if err != nil {
@@ -84,7 +84,7 @@ func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.B
 	}
 
 	for _, owner := range newOwners {
-		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, owner)
+		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, owner)
 		if !ok || err != nil {
 			return false, false, err
 		}
@@ -94,14 +94,36 @@ func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.B
 	return false, true, nil
 }
 
-func (UpdateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (UpdateKeyPage{}).Validate(st, tx)
+func (x UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (x UpdateKeyPage) check(st *StateManager, tx *Delivery) (*protocol.UpdateKeyPage, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
+	}
+
+	_, _, ok = protocol.ParseKeyPageUrl(tx.Transaction.Header.Principal)
+	if !ok {
+		return nil, fmt.Errorf("invalid principal: page url is invalid: %s", tx.Transaction.Header.Principal)
+	}
+
+	for _, op := range body.Operation {
+		err := x.checkOperation(tx, op)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return body, nil
+}
+
+func (x UpdateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
@@ -109,13 +131,8 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		return nil, fmt.Errorf("invalid principal: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
-	bookUrl, _, ok := protocol.ParseKeyPageUrl(st.OriginUrl)
-	if !ok {
-		return nil, fmt.Errorf("invalid principal: page url is invalid: %s", page.Url)
-	}
-
 	var book *protocol.KeyBook
-	err := st.LoadUrlAs(bookUrl, &book)
+	err = st.LoadUrlAs(page.GetAuthority(), &book)
 	if err != nil {
 		return nil, fmt.Errorf("invalid key book: %v", err)
 	}
@@ -125,7 +142,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	}
 
 	for _, op := range body.Operation {
-		err = UpdateKeyPage{}.executeOperation(page, book, op)
+		err = x.executeOperation(page, book, op)
 		if err != nil {
 			return nil, err
 		}
@@ -144,18 +161,71 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	return nil, nil
 }
 
-func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.KeyBook, op protocol.KeyPageOperation) error {
+func (UpdateKeyPage) checkOperation(tx *Delivery, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
-			return fmt.Errorf("cannot add an empty entry")
+			return errors.BadRequest.With("cannot add an empty entry")
 		}
 
 		if op.Entry.Delegate != nil {
-			if op.Entry.Delegate.ParentOf(page.Url) {
-				return fmt.Errorf("self-delegation is not allowed")
+			if op.Entry.Delegate.ParentOf(tx.Transaction.Header.Principal) {
+				return errors.BadRequest.With("self-delegation is not allowed")
 			}
+		}
 
+		return nil
+
+	case *protocol.RemoveKeyOperation:
+		if op.Entry.IsEmpty() {
+			return errors.BadRequest.With("cannot add an empty entry")
+		}
+		return nil
+
+	case *protocol.UpdateKeyOperation:
+		if op.OldEntry.IsEmpty() {
+			return errors.BadRequest.With("cannot update: old entry is empty")
+		}
+		if op.NewEntry.IsEmpty() {
+			return errors.BadRequest.With("cannot update: new entry is empty")
+		}
+		if op.NewEntry.Delegate != nil && op.NewEntry.Delegate.ParentOf(tx.Transaction.Header.Principal) {
+			return fmt.Errorf("self-delegation is not allowed")
+		}
+		return nil
+
+	case *protocol.SetThresholdKeyPageOperation:
+		if op.Threshold == 0 {
+			return errors.BadRequest.With("cannot require 0 signatures on a key page")
+		}
+		return nil
+
+	case *protocol.UpdateAllowedKeyPageOperation:
+		for _, txn := range op.Allow {
+			_, ok := txn.AllowedTransactionBit()
+			if !ok {
+				return errors.BadRequest.WithFormat("transaction type %v cannot be (dis)allowed", txn)
+			}
+		}
+
+		for _, txn := range op.Deny {
+			_, ok := txn.AllowedTransactionBit()
+			if !ok {
+				return errors.BadRequest.WithFormat("transaction type %v cannot be (dis)allowed", txn)
+			}
+		}
+
+		return nil
+
+	default:
+		return errors.BadRequest.WithFormat("invalid operation: %v", op.Type())
+	}
+}
+
+func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.KeyBook, op protocol.KeyPageOperation) error {
+	switch op := op.(type) {
+	case *protocol.AddKeyOperation:
+		if op.Entry.Delegate != nil {
 			if err := verifyIsNotPage(&book.AccountAuth, op.Entry.Delegate); err != nil {
 				return errors.UnknownError.WithFormat("invalid delegate %v: %w", op.Entry.Delegate, err)
 			}
@@ -163,7 +233,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 
 		_, _, found := findKeyPageEntry(page, &op.Entry)
 		if found {
-			return fmt.Errorf("cannot have duplicate entries on key page")
+			return errors.UnknownError.With("cannot have duplicate entries on key page")
 		}
 
 		entry := new(protocol.KeySpec)
@@ -175,7 +245,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 	case *protocol.RemoveKeyOperation:
 		index, _, found := findKeyPageEntry(page, &op.Entry)
 		if !found {
-			return fmt.Errorf("entry to be removed not found on the key page")
+			return errors.UnknownError.With("entry to be removed not found on the key page")
 		}
 
 		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
@@ -183,7 +253,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 			return errors.InternalError.WithFormat("principal is not a key page")
 		}
 		if len(page.Keys) == 1 && pageIndex == 1 {
-			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
+			return errors.UnknownError.With("cannot delete last key of the highest priority page of a key book")
 		}
 
 		page.RemoveKeySpecAt(index)
@@ -207,7 +277,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		for _, txn := range op.Allow {
 			bit, ok := txn.AllowedTransactionBit()
 			if !ok {
-				return fmt.Errorf("transaction type %v cannot be (dis)allowed", txn)
+				return errors.InternalError.WithFormat("transaction type %v cannot be (dis)allowed", txn)
 			}
 			page.TransactionBlacklist.Clear(bit)
 		}
@@ -215,7 +285,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		for _, txn := range op.Deny {
 			bit, ok := txn.AllowedTransactionBit()
 			if !ok {
-				return fmt.Errorf("transaction type %v cannot be (dis)allowed", txn)
+				return errors.InternalError.WithFormat("transaction type %v cannot be (dis)allowed", txn)
 			}
 			page.TransactionBlacklist.Set(bit)
 		}
@@ -226,7 +296,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		return nil
 
 	default:
-		return fmt.Errorf("invalid operation: %v", op.Type())
+		return errors.InternalError.WithFormat("invalid operation: %v", op.Type())
 	}
 }
 

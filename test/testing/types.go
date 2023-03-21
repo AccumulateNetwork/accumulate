@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -6,4 +6,4 @@
 
 package testing
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package testing types.yml --reference ../../protocol/accounts.yml,../../protocol/general.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --language go-alt --package testing types.yml --reference ../../protocol/accounts.yml,../../protocol/general.yml

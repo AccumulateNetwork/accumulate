@@ -50,6 +50,17 @@ func newStateCache(net *config.Describe, globals *core.GlobalValues, txtype prot
 	return c
 }
 
+func newStatelessCache(net *config.Describe, txtype protocol.TransactionType, txid [32]byte) *stateCache {
+	c := new(stateCache)
+	c.Describe = net
+	c.txType = txtype
+	c.txHash = txid
+	c.operations = c.operations[:0]
+	c.chains = map[[32]byte]protocol.Account{}
+	_ = c.logger // Get static analsis to shut up
+	return c
+}
+
 func (c *stateCache) Commit() ([]protocol.Account, error) {
 	var create []protocol.Account
 	for _, op := range c.operations {

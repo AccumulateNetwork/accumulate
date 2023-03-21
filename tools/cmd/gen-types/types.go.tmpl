@@ -82,6 +82,43 @@ func (v *{{.FullName true false}}) Copy() *{{.FullName true false}} {
 }
 
 func (v *{{.FullName true false}}) CopyAsInterface() interface{} { return v.Copy() }
+
+{{if .Params}}
+func {{.Name}}As[{{range .Params}}{{.Name}}2 {{.Type}},{{end}} {{range .Params}}{{.Name}}1 {{.Type}},{{end}}](v *{{.Name}}[{{range .Params}}{{.Name}}1,{{end}}]) (*{{.Name}}[{{range .Params}}{{.Name}}2,{{end}}], error) {
+	if v == nil {
+		return nil, nil
+	}
+	{{- range .Fields}}
+	{{-   if .TypeParam}}
+	{{-     if .Repeatable}}
+	v{{.Name}} := make([]{{.TypeParam.Name}}2, len(v.{{.Name}}))
+	for i, v := range v.{{.Name}} {
+		if u, ok := any(v).({{.TypeParam.Name}}2); ok || any(u) == nil {
+			v{{.Name}}[i] = u
+		} else {
+			z := reflect.TypeOf(new({{.TypeParam.Name}}2)).Elem()
+			return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v)
+		}
+	}
+	{{      else}}
+	v{{.Name}}, ok := any(v.{{.Name}}).({{.TypeParam.Name}}2)
+	if !ok && any(v.{{.Name}}) != nil {
+		z := reflect.TypeOf(new({{.TypeParam.Name}}2)).Elem()
+		return nil, errors2.Conflict.WithFormat("want %v, got %T", z, v.{{.Name}})
+	}
+	{{      end}}
+	{{-   end}}
+	{{- end}}
+
+	u := new({{.Name}}[{{range .Params}}{{.Name}}2,{{end}}])
+	{{- range .Fields}}
+	{{-   if and .IsMarshalled (not .Virtual)}}
+	u.{{.Name}} = v{{if not .TypeParam}}.{{end}}{{.Name}}
+	{{-   end}}
+	{{- end}}
+	return u, nil
+}
+{{end}}
 {{end}}{{end}}
 
 {{range .Types}}{{if and .IsComparable (not .CustomEqual)}}
@@ -116,6 +153,10 @@ var fieldNames_{{.Name}} = []string{
 }
 
 func (v *{{.FullName true false}}) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 	{{- if .IgnoreSizeLimit}}

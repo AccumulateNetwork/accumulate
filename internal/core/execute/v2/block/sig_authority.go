@@ -100,8 +100,8 @@ func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureC
 	entry.Hash = *(*[32]byte)(hash)
 
 	// Check for a previous vote
-	principal := batch.Account(sig.TxID.Account())
-	vote := principal.Transaction(sig.TxID.Hash()).Votes()
+	txn := batch.Account(sig.TxID.Account()).Transaction(sig.TxID.Hash())
+	vote := txn.Votes()
 	_, err := vote.Find(entry)
 	switch {
 	case err == nil:
@@ -117,9 +117,9 @@ func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureC
 	}
 
 	// Add the signature to the principal's chain
-	err = principal.SignatureChain().Inner().AddHash(hash, false)
+	err = txn.RecordHistory(ctx.message)
 	if err != nil {
-		return errors.UnknownError.WithFormat("add to signature chain: %w", err)
+		return errors.UnknownError.WithFormat("record history: %w", err)
 	}
 
 	// Record the vote
@@ -151,11 +151,12 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Add the signature to the transaction's signature set
+	// Add the signature to the transaction's signature set and chain
 	err = addSignature(batch, ctx, signer, &database.SignatureSetEntry{
 		KeyIndex: uint64(keyIndex),
 		Version:  signer.GetVersion(),
 		Hash:     ctx.message.Hash(),
+		Path:     sig.Delegator,
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -163,7 +164,7 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 
 	// If the signer's authority is satisfied
 	signerAuth := signer.GetAuthority()
-	ok, err = ctx.authorityIsSatisfied(batch, signerAuth)
+	ok, err = ctx.authorityIsReady(batch, signerAuth)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

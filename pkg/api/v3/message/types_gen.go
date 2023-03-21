@@ -128,7 +128,7 @@ type PrivateSequenceRequest struct {
 
 type PrivateSequenceResponse struct {
 	fieldsSet []bool
-	Value     *api.TransactionRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -851,6 +851,10 @@ var fieldNames_Addressed = []string{
 }
 
 func (v *Addressed) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -903,6 +907,10 @@ var fieldNames_ConsensusStatusRequest = []string{
 }
 
 func (v *ConsensusStatusRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -943,6 +951,10 @@ var fieldNames_ConsensusStatusResponse = []string{
 }
 
 func (v *ConsensusStatusResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -987,6 +999,10 @@ var fieldNames_ErrorResponse = []string{
 }
 
 func (v *ErrorResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1031,6 +1047,10 @@ var fieldNames_EventMessage = []string{
 }
 
 func (v *EventMessage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1078,6 +1098,10 @@ var fieldNames_FaucetRequest = []string{
 }
 
 func (v *FaucetRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1126,6 +1150,10 @@ var fieldNames_FaucetResponse = []string{
 }
 
 func (v *FaucetResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1170,6 +1198,10 @@ var fieldNames_FindServiceRequest = []string{
 }
 
 func (v *FindServiceRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1210,6 +1242,10 @@ var fieldNames_FindServiceResponse = []string{
 }
 
 func (v *FindServiceResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1256,6 +1292,10 @@ var fieldNames_MetricsRequest = []string{
 }
 
 func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1296,6 +1336,10 @@ var fieldNames_MetricsResponse = []string{
 }
 
 func (v *MetricsResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1340,6 +1384,10 @@ var fieldNames_NetworkStatusRequest = []string{
 }
 
 func (v *NetworkStatusRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1380,6 +1428,10 @@ var fieldNames_NetworkStatusResponse = []string{
 }
 
 func (v *NetworkStatusResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1424,6 +1476,10 @@ var fieldNames_NodeInfoRequest = []string{
 }
 
 func (v *NodeInfoRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1464,6 +1520,10 @@ var fieldNames_NodeInfoResponse = []string{
 }
 
 func (v *NodeInfoResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1510,6 +1570,10 @@ var fieldNames_PrivateSequenceRequest = []string{
 }
 
 func (v *PrivateSequenceRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1570,6 +1634,10 @@ var fieldNames_PrivateSequenceResponse = []string{
 }
 
 func (v *PrivateSequenceResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1615,6 +1683,10 @@ var fieldNames_QueryRequest = []string{
 }
 
 func (v *QueryRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1662,6 +1734,10 @@ var fieldNames_RecordResponse = []string{
 }
 
 func (v *RecordResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1707,6 +1783,10 @@ var fieldNames_SubmitRequest = []string{
 }
 
 func (v *SubmitRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1755,6 +1835,10 @@ var fieldNames_SubmitResponse = []string{
 }
 
 func (v *SubmitResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1801,6 +1885,10 @@ var fieldNames_SubscribeRequest = []string{
 }
 
 func (v *SubscribeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1840,6 +1928,10 @@ var fieldNames_SubscribeResponse = []string{
 }
 
 func (v *SubscribeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1877,6 +1969,10 @@ var fieldNames_ValidateRequest = []string{
 }
 
 func (v *ValidateRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1925,6 +2021,10 @@ var fieldNames_ValidateResponse = []string{
 }
 
 func (v *ValidateResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2565,7 +2665,7 @@ func (v *PrivateSequenceResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *PrivateSequenceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(api.TransactionRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+	if x := new(api.MessageRecord[messaging.Message]); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Value = x
 	}
 
@@ -3108,8 +3208,8 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 
 func (v *PrivateSequenceResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                   `json:"type"`
-		Value *api.TransactionRecord `json:"value,omitempty"`
+		Type  Type                                  `json:"type"`
+		Value *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -3544,8 +3644,8 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 
 func (v *PrivateSequenceResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                   `json:"type"`
-		Value *api.TransactionRecord `json:"value,omitempty"`
+		Type  Type                                  `json:"type"`
+		Value *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value

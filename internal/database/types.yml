@@ -22,10 +22,6 @@ SigSetEntry:
 
 SignatureSetEntry:
   fields:
-    - name: ChainIndex
-      description: is the index of the entry on the signer's signature chain
-      type: uint
-      keep-empty: true
     - name: KeyIndex
       description: is the index of the public key entry in the signer
       type: uint
@@ -33,6 +29,11 @@ SignatureSetEntry:
     - name: Version
       description: is the signer version
       type: uint
+    - name: Path
+      description: is the authority/delegation path
+      type: url
+      pointer: true
+      repeatable: true
     - name: Hash
       description: is the hash of the signature
       type: hash

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -78,6 +78,9 @@ func (x *TxID) Account() *URL { return x.url }
 
 // Hash returns the transaction hash.
 func (x *TxID) Hash() [32]byte { return x.hash }
+
+// HashSlice returns the transaction hash as a slice.
+func (x *TxID) HashSlice() []byte { return x.hash[:] }
 
 // Equal checks if X and Y are the same transaction ID.
 func (x *TxID) Equal(y *TxID) bool {

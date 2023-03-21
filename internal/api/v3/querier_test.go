@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -140,14 +141,14 @@ func boolp(v bool) *bool     { return &v }
 func (s *QuerierTestSuite) TestQueryTransaction() {
 	r, err := s.QuerierFor(s.faucet).QueryTransaction(context.Background(), s.createAlice.TxID, nil)
 	s.Require().NoError(err)
-	_ = s.NotNil(r.Transaction) &&
-		s.IsType((*CreateIdentity)(nil), r.Transaction.Body)
+	_ = s.NotNil(r.Message.Transaction) &&
+		s.IsType((*CreateIdentity)(nil), r.Message.Transaction.Body)
 	_ = s.NotNil(r.Status) &&
-		s.Equal(errors.Delivered, r.Status.Code)
+		s.Equal(errors.Delivered, r.Status)
 	_ = s.NotNil(r.Produced) &&
-		s.Len(r.Produced.Records, 1)
+		s.Len(r.Produced.Records, 2)
 	_ = s.NotNil(r.Signatures) &&
-		s.Len(r.Signatures.Records, 1)
+		s.Len(r.Signatures.Records, 2)
 }
 
 func (s *QuerierTestSuite) TestQueryAccount() {
@@ -209,19 +210,19 @@ func (s *QuerierTestSuite) TestQueryChainEntry() {
 		r, err := s.QuerierFor(s.alice).QueryChainEntry(context.Background(), s.alice, &api.ChainQuery{Name: "main", Index: uintp(0)})
 		s.Require().NoError(err)
 		s.Equal(txn.Hash(), r.Entry)
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
+		s.IsType((*api.MessageRecord[messaging.Message])(nil), r.Value)
 	})
 
 	s.Run("ByValue", func() {
 		r, err := s.QuerierFor(s.alice).QueryChainEntry(context.Background(), s.alice, &api.ChainQuery{Name: "main", Entry: hash[:]})
 		s.Require().NoError(err)
 		s.Equal(0, int(r.Index))
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
+		s.IsType((*api.MessageRecord[messaging.Message])(nil), r.Value)
 	})
 }
 
 func (s *QuerierTestSuite) TestQueryChainEntries() {
-	r, err := s.QuerierFor(s.alice).QueryTxnChainEntries(context.Background(), s.alice, &api.ChainQuery{Name: "main", Range: &api.RangeOptions{}})
+	r, err := s.QuerierFor(s.alice).QueryMainChainEntries(context.Background(), s.alice, &api.ChainQuery{Name: "main", Range: &api.RangeOptions{}})
 	s.Require().NoError(err)
 	s.Require().Len(r.Records, 2)
 }
@@ -234,21 +235,18 @@ func (s *QuerierTestSuite) TestQueryDataEntry() {
 		s.Require().NoError(err)
 		s.Equal(0, int(r.Index))
 		s.Equal(entry.Hash(), r.Entry[:])
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
 	})
 
 	s.Run("ByIndex", func() {
 		r, err := s.QuerierFor(s.alice).QueryDataEntry(context.Background(), s.alice.JoinPath("data"), &api.DataQuery{Index: uintp(0)})
 		s.Require().NoError(err)
 		s.Equal(entry.Hash(), r.Entry[:])
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
 	})
 
 	s.Run("ByValue", func() {
 		r, err := s.QuerierFor(s.alice).QueryDataEntry(context.Background(), s.alice.JoinPath("data"), &api.DataQuery{Entry: entry.Hash()})
 		s.Require().NoError(err)
 		s.Equal(0, int(r.Index))
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
 	})
 }
 
@@ -309,13 +307,28 @@ func (s *QuerierTestSuite) TestQueryMajorBlocks() {
 
 func (s *QuerierTestSuite) TestSearchForAnchor() {
 	u := PartitionUrl("BVN1").JoinPath(AnchorPool)
-	chr, err := s.QuerierFor(u).QueryChainEntries(context.Background(), u, &api.ChainQuery{Name: "anchor-sequence", Range: &api.RangeOptions{FromEnd: true, Count: uintp(1), Start: 0, Expand: boolp(true)}})
+	chr, err := s.QuerierFor(u).QueryMainChainEntries(context.Background(), u, &api.ChainQuery{Name: "anchor-sequence", Range: &api.RangeOptions{FromEnd: true, Count: uintp(1), Start: 0, Expand: boolp(true)}})
 	s.Require().NoError(err)
-	anchor := chr.Records[0].Value.(*api.TransactionRecord).Transaction.Body.(*BlockValidatorAnchor).RootChainAnchor
+	anchor := chr.Records[0].Value.Message.Transaction.Body.(*BlockValidatorAnchor).RootChainAnchor
 
 	r, err := s.QuerierFor(DnUrl()).SearchForAnchor(context.Background(), DnUrl().JoinPath(AnchorPool), &api.AnchorSearchQuery{Anchor: anchor[:]})
 	s.Require().NoError(err)
 	s.NotEmpty(r.Records)
+}
+
+func (s *QuerierTestSuite) TestQueryIncludesAnchorSignatures() {
+	r, err := s.QuerierFor(DnUrl()).QueryMainChainEntry(context.Background(), DnUrl().JoinPath(AnchorPool), &api.ChainQuery{Name: "main", Index: uintp(1)})
+	s.Require().NoError(err)
+
+	var hasAnchor bool
+	for _, set := range r.Value.Signatures.Records {
+		for _, sig := range set.Signatures.Records {
+			if sig.Message.Type() == messaging.MessageTypeBlockAnchor {
+				hasAnchor = true
+			}
+		}
+	}
+	s.Require().True(hasAnchor, "Expected anchor transaction to include anchor signatures")
 }
 
 func (s *QuerierTestSuite) TestSearchForPublicKey() {

@@ -91,55 +91,69 @@ KeyRecord:
       marshal-as: reference
       pointer: true
 
-TransactionRecord:
+MessageRecord[T messaging.Message]:
   union: { type: record }
   fields:
-    # TODO Change this to MessageRecord. Merge with SignatureRecord?
-    - name: TxID
+    - name: ID
       type: txid
       pointer: true
     - name: Message
-      type: messaging.Message
+      type: T
       marshal-as: union
-    - name: Transaction
-      type: protocol.Transaction
-      marshal-as: reference
-      pointer: true
     - name: Status
-      type: protocol.TransactionStatus
+      type: errors2.Status
+      marshal-as: enum
+    - { name: StatusNo, type: uint, virtual: true, non-binary: true }
+    - name: Error
+      type: errors2.Error
       marshal-as: reference
       pointer: true
+    - name: Result
+      type: protocol.TransactionResult
+      marshal-as: union
+    - name: Received
+      description: is the block when the transaction was first received
+      type: uint
     - name: Produced
       type: RecordRange[*TxIDRecord]
       marshal-as: reference
       pointer: true
-    - name: Signatures
-      type: RecordRange[*SignatureRecord]
+    - name: Cause
+      type: RecordRange[*TxIDRecord]
       marshal-as: reference
       pointer: true
+
+    # For transactions
+    - name: Signatures
+      type: RecordRange[*SignatureSetRecord]
+      marshal-as: reference
+      pointer: true
+
+    # For a signature's record within a transaction's record
+    - name: Historical
+      type: bool
+
+    # For sequenced messages
     - name: Sequence
       type: messaging.SequencedMessage
       marshal-as: reference
       pointer: true
+      optional: true
 
-SignatureRecord:
-  union: { type: record }
-  fields:
-    - name: Signature
-      type: protocol.Signature
-      marshal-as: union
-    - name: TxID
-      type: txid
-      pointer: true
-    - name: Signer
-      type: protocol.Signer
-      marshal-as: union
-    - name: Status
-      type: protocol.TransactionStatus
+    # For synthetic messages
+    - name: SourceReceipt
+      type: merkle.Receipt
       marshal-as: reference
       pointer: true
-    - name: Produced
-      type: RecordRange[*TxIDRecord]
+
+SignatureSetRecord:
+  union: { type: record }
+  fields:
+    - name: Account
+      type: protocol.Account
+      marshal-as: union
+    - name: Signatures
+      type: RecordRange[*MessageRecord[messaging.Message]]
       marshal-as: reference
       pointer: true
 

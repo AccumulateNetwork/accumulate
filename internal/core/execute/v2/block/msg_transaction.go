@@ -35,10 +35,6 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		return status, nil
 	}
 
-	// Discard changes (why is this necessary?)
-	batch = batch.Begin(false)
-	defer batch.Discard()
-
 	// As long as the transaction is well-formed, let it into the block. There
 	// are many cases where we cannot safely evaluate the transaction at this
 	// point. If we are evaluating a synthetic transaction, we _must not_ reject
@@ -63,45 +59,13 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// This is a temporary hack. The transaction executors need to be updated to
-	// make validation stateless. For now, if the bundle includes a user
-	// signature that's local to the transaction, validate the transaction.
-	if !txn.Transaction.Body.Type().IsUser() {
-		return nil, nil
-	}
-	var hasLocalSigner bool
-	for _, msg := range ctx.messages {
-		sig, ok := messaging.UnwrapAs[*messaging.SignatureMessage](msg)
-		if !ok || sig.Signature.Type() == protocol.SignatureTypeAuthority {
-			continue
-		}
-		if sig.Signature.GetSigner().LocalTo(txn.Transaction.Header.Principal) {
-			hasLocalSigner = true
-		}
-	}
-	if !hasLocalSigner {
-		return nil, nil
-	}
+	// Run stateless validation checks
 	exec, ok := ctx.Executor.executors[txn.Transaction.Body.Type()]
 	if !ok {
 		return nil, nil
 	}
 
-	principal, err := batch.Account(txn.Transaction.Header.Principal).Main().Get()
-	switch {
-	case err == nil:
-		// Ok
-	case !errors.Is(err, errors.NotFound):
-		return nil, errors.UnknownError.WithFormat("load principal: %w", err)
-	default:
-		val, ok := getValidator[chain.PrincipalValidator](ctx.Executor, txn.Transaction.Body.Type())
-		if !ok || !val.AllowMissingPrincipal(txn.Transaction) {
-			return nil, errors.NotFound.WithFormat("missing principal: %v not found", txn.Transaction.Header.Principal)
-		}
-	}
-
-	st := chain.NewStateManager(&ctx.Executor.Describe, &ctx.Executor.globals.Active, ctx.Executor, batch.Begin(false), principal, txn.Transaction, ctx.Executor.logger.With("operation", "ValidateEnvelope"))
-	defer st.Discard()
+	st := chain.NewStatelessManager(&ctx.Executor.Describe, txn.Transaction, ctx.Executor.logger.With("operation", "Validate"))
 	st.Pretend = true
 
 	r, err := exec.Validate(st, &chain.Delivery{Transaction: txn.Transaction})
@@ -145,10 +109,35 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 		}
 	}
 
-	// Make sure the transaction is signed
+	// Make sure user transactions are signed. Synthetic messages and network
+	// update messages do not require signatures.
+	//
+	// If we're within MessageIsReady, presumably this has already been checked.
+	// But if we're within MessageIsReady that is itself within CreditPayment,
+	// isWithin will return false (see isWithin for details). So instead we
+	// resolve MessageIsReady to whatever its actually supposed to be before
+	// checking for MessageForTransaction. That way we'll see the CreditPayment.
+	//
+	// TODO FIXME This is kind of screwy and indicative of a design flaw. The
+	// executor system makes assumptions/enforces requirements around how
+	// messages are bundled together. But there are various edge cases, such as
+	// situations that produce MessageIsReady, that complicate matters. So
+	// instead of having a bunch of edge cases that need to be dealt with,
+	// either production of MessageIsReady should be changed to match the normal
+	// process, or the normal process should be updated to be less fragile, or
+	// both.
 	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypeNetworkUpdate) {
 		var signed bool
 		for _, msg := range ctx.messages {
+			// Resolve MessageIsReady
+			if ready, ok := msg.(*internal.MessageIsReady); ok {
+				m, err := batch.Message(ready.TxID.Hash()).Main().Get()
+				if err != nil {
+					return nil, errors.InternalError.WithFormat("load ready message: %w", err)
+				}
+				msg = m
+			}
+
 			msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg)
 			if !ok {
 				continue

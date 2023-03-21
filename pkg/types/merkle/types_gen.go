@@ -151,6 +151,10 @@ var fieldNames_Receipt = []string{
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -233,6 +237,10 @@ var fieldNames_ReceiptEntry = []string{
 }
 
 func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 

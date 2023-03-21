@@ -11,10 +11,7 @@ package core
 //lint:file-ignore S1001,S1002,S1008,SA4013 generated code
 
 import (
-	"bytes"
-	"errors"
 	"io"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -32,169 +29,28 @@ type GlobalValues struct {
 	extraData       []byte
 }
 
-func (v *GlobalValues) Copy() *GlobalValues {
-	u := new(GlobalValues)
-
-	if v.Oracle != nil {
-		u.Oracle = (v.Oracle).Copy()
-	}
-	if v.Globals != nil {
-		u.Globals = (v.Globals).Copy()
-	}
-	if v.Network != nil {
-		u.Network = (v.Network).Copy()
-	}
-	if v.Routing != nil {
-		u.Routing = (v.Routing).Copy()
-	}
-	u.ExecutorVersion = v.ExecutorVersion
-
-	return u
+var machine_GlobalValues = &encoding.Machine[*GlobalValues]{
+	ExtraData: func(v *GlobalValues) *[]byte { return &v.extraData },
+	Seen:      func(v *GlobalValues) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*GlobalValues]{
+		{Name: "Oracle", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*GlobalValues, *protocol.AcmeOracle, protocol.AcmeOracle](func(v *GlobalValues) **protocol.AcmeOracle { return &v.Oracle })},
+		{Name: "Globals", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*GlobalValues, *protocol.NetworkGlobals, protocol.NetworkGlobals](func(v *GlobalValues) **protocol.NetworkGlobals { return &v.Globals })},
+		{Name: "Network", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*GlobalValues, *protocol.NetworkDefinition, protocol.NetworkDefinition](func(v *GlobalValues) **protocol.NetworkDefinition { return &v.Network })},
+		{Name: "Routing", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*GlobalValues, *protocol.RoutingTable, protocol.RoutingTable](func(v *GlobalValues) **protocol.RoutingTable { return &v.Routing })},
+		{Name: "ExecutorVersion", Number: 5, Binary: true, OmitEmpty: true, Accessor: encoding.EnumField[*GlobalValues, *protocol.ExecutorVersion, protocol.ExecutorVersion](func(v *GlobalValues) *protocol.ExecutorVersion { return &v.ExecutorVersion })},
+	},
 }
 
-func (v *GlobalValues) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *GlobalValues) Equal(u *GlobalValues) bool {
-	switch {
-	case v.Oracle == u.Oracle:
-		// equal
-	case v.Oracle == nil || u.Oracle == nil:
-		return false
-	case !((v.Oracle).Equal(u.Oracle)):
-		return false
-	}
-	switch {
-	case v.Globals == u.Globals:
-		// equal
-	case v.Globals == nil || u.Globals == nil:
-		return false
-	case !((v.Globals).Equal(u.Globals)):
-		return false
-	}
-	switch {
-	case v.Network == u.Network:
-		// equal
-	case v.Network == nil || u.Network == nil:
-		return false
-	case !((v.Network).Equal(u.Network)):
-		return false
-	}
-	switch {
-	case v.Routing == u.Routing:
-		// equal
-	case v.Routing == nil || u.Routing == nil:
-		return false
-	case !((v.Routing).Equal(u.Routing)):
-		return false
-	}
-	if !(v.ExecutorVersion == u.ExecutorVersion) {
-		return false
-	}
-
-	return true
-}
-
-var fieldNames_GlobalValues = []string{
-	1: "Oracle",
-	2: "Globals",
-	3: "Network",
-	4: "Routing",
-	5: "ExecutorVersion",
-}
-
-func (v *GlobalValues) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Oracle == nil) {
-		writer.WriteValue(1, v.Oracle.MarshalBinary)
-	}
-	if !(v.Globals == nil) {
-		writer.WriteValue(2, v.Globals.MarshalBinary)
-	}
-	if !(v.Network == nil) {
-		writer.WriteValue(3, v.Network.MarshalBinary)
-	}
-	if !(v.Routing == nil) {
-		writer.WriteValue(4, v.Routing.MarshalBinary)
-	}
-	if !(v.ExecutorVersion == 0) {
-		writer.WriteEnum(5, v.ExecutorVersion)
-	}
-
-	_, _, err := writer.Reset(fieldNames_GlobalValues)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *GlobalValues) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Oracle is missing")
-	} else if v.Oracle == nil {
-		errs = append(errs, "field Oracle is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Globals is missing")
-	} else if v.Globals == nil {
-		errs = append(errs, "field Globals is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Network is missing")
-	} else if v.Network == nil {
-		errs = append(errs, "field Network is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Routing is missing")
-	} else if v.Routing == nil {
-		errs = append(errs, "field Routing is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
+func (v *GlobalValues) IsValid() error                 { return machine_GlobalValues.IsValid(v) }
+func (v *GlobalValues) Copy() *GlobalValues            { return encoding.Copy(machine_GlobalValues, v) }
+func (v *GlobalValues) CopyAsInterface() interface{}   { return v.Copy() }
+func (v *GlobalValues) Equal(u *GlobalValues) bool     { return machine_GlobalValues.Equal(v, u) }
+func (v *GlobalValues) MarshalBinary() ([]byte, error) { return machine_GlobalValues.MarshalBinary(v) }
 func (v *GlobalValues) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+	return machine_GlobalValues.Unmarshal(data, v)
 }
-
 func (v *GlobalValues) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(protocol.AcmeOracle); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
-		v.Oracle = x
-	}
-	if x := new(protocol.NetworkGlobals); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.Globals = x
-	}
-	if x := new(protocol.NetworkDefinition); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
-		v.Network = x
-	}
-	if x := new(protocol.RoutingTable); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
-		v.Routing = x
-	}
-	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
-		v.ExecutorVersion = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_GlobalValues)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
+	return machine_GlobalValues.UnmarshalFrom(rd, v)
 }
+func (v *GlobalValues) MarshalJSON() ([]byte, error) { return machine_GlobalValues.JSONMarshal(v) }
+func (v *GlobalValues) UnmarshalJSON(b []byte) error { return machine_GlobalValues.JSONUnmarshal(b, v) }

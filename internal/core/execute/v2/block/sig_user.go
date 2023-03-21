@@ -337,7 +337,7 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 
 	// Verify the signer's authority is satisfied
 	authority := ctx.getAuthority()
-	ok, err := ctx.authorityIsSatisfied(batch, authority)
+	ok, err := ctx.authorityIsReady(batch, authority)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -381,11 +381,12 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 		return errors.UnknownError.WithFormat("store signer: %w", err)
 	}
 
-	// Add the signature to the signature set
+	// Add the signature to the signature set and chain
 	err = addSignature(batch, ctx.SignatureContext, ctx.signer, &database.SignatureSetEntry{
 		KeyIndex: uint64(ctx.keyIndex),
 		Version:  ctx.keySig.GetSignerVersion(),
 		Hash:     ctx.message.Hash(),
+		Path:     ctx.delegators,
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)

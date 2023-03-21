@@ -107,18 +107,18 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Del
 	typ := delivery.Transaction.Body.Type()
 	switch {
 	case typ.IsUser():
-		ready, err = x.userTransactionIsReady(batch, delivery, status, principal)
+		ready, err = x.userTransactionIsReady(batch, delivery, principal)
 	case typ.IsSynthetic():
-		ready, err = x.synthTransactionIsReady(batch, delivery, status, principal)
+		ready, err = x.synthTransactionIsReady(batch, delivery, principal)
 	case typ.IsSystem():
-		ready, err = x.systemTransactionIsReady(batch, delivery, status, principal)
+		ready, err = x.systemTransactionIsReady(batch, delivery, principal)
 	default:
 		return false, errors.InternalError.WithFormat("unknown transaction type %v", typ)
 	}
 	return ready, errors.UnknownError.Wrap(err)
 }
 
-func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
 	isInit, _, err := x.TransactionIsInitiated(batch, delivery.Transaction)
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
@@ -143,7 +143,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](x, delivery.Transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction, status)
+		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -173,7 +173,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 		}
 
 		// Check if any signer has reached its threshold
-		ok, err := x.AuthorityIsSatisfied(batch, delivery.Transaction, status, entry.Url)
+		ok, err := x.AuthorityIsSatisfied(batch, delivery.Transaction, entry.Url)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -197,7 +197,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	return len(voters) > 0, nil
 }
 
-func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error) {
+func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
 	_, err := batch.
 		Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
@@ -206,14 +206,21 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	case err == nil:
 		return true, nil
 	case errors.Is(err, errors.NotFound):
-		// return false, nil
+		return false, nil
 	default:
 		return false, errors.UnknownError.With("load vote: %w", err)
 	}
+}
 
-	// Check if any signer has reached its threshold (TODO Remove)
-	for _, signer := range status.FindSigners(authUrl) {
-		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer)
+func (x *Executor) AuthorityIsReady(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
+	var authority protocol.Authority
+	err := batch.Account(authUrl).Main().GetAs(&authority)
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load authority %v: %w", authUrl, err)
+	}
+
+	for _, signer := range authority.GetSigners() {
+		ok, err := x.SignerIsSatisfied(batch, transaction, signer)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -225,22 +232,39 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	return false, nil
 }
 
-func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error) {
-	// Load the signature set
-	signatures, err := batch.Transaction(transaction.GetHash()).ReadSignaturesForSigner(signer)
+func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, signerUrl *url.URL) (bool, error) {
+	// Load the signer
+	var signer protocol.Signer
+	err := batch.Account(signerUrl).Main().GetAs(&signer)
 	if err != nil {
-		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
+		return false, errors.UnknownError.WithFormat("load signer %v: %w", signerUrl, err)
 	}
 
-	// Check if the threshold has been reached
-	if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
-		return true, nil
+	// Load the active signature set
+	entries, err := batch.
+		Account(signerUrl).
+		Transaction(transaction.ID().Hash()).
+		Signatures().
+		Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load %v signatures: %w", signerUrl, err)
+	}
+
+	// Add up the number of signatures received for each delegation path. If the
+	// count for any path reaches the threshold, the signer is satisfied.
+	pathSigCount := map[[32]byte]uint64{}
+	for _, entry := range entries {
+		h := entry.PathHash()
+		pathSigCount[h]++
+		if pathSigCount[h] >= signer.GetSignatureThreshold() {
+			return true, nil
+		}
 	}
 
 	return false, nil
 }
 
-func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
 	// Do not check the principal until the transaction is ready (see below). Do
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
@@ -262,7 +286,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	return true, nil
 }
 
-func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
 	// Do not check the principal until the transaction is ready (see below). Do
 	// not delegate "is ready?" to the transaction executor - anchors _must_ be
 	// sequenced.

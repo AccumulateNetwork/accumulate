@@ -15,6 +15,7 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 )
 
 // NewRecord creates a new Record for the specified RecordType.
@@ -32,14 +33,14 @@ func NewRecord(typ RecordType) (Record, error) {
 		return new(KeyRecord), nil
 	case RecordTypeMajorBlock:
 		return new(MajorBlockRecord), nil
+	case RecordTypeMessage:
+		return new(MessageRecord[messaging.Message]), nil
 	case RecordTypeMinorBlock:
 		return new(MinorBlockRecord), nil
 	case RecordTypeRange:
 		return new(RecordRange[Record]), nil
-	case RecordTypeSignature:
-		return new(SignatureRecord), nil
-	case RecordTypeTransaction:
-		return new(TransactionRecord), nil
+	case RecordTypeSignatureSet:
+		return new(SignatureSetRecord), nil
 	case RecordTypeTxID:
 		return new(TxIDRecord), nil
 	case RecordTypeUrl:
@@ -91,6 +92,12 @@ func EqualRecord(a, b Record) bool {
 		}
 		b, ok := b.(*MajorBlockRecord)
 		return ok && a.Equal(b)
+	case *MessageRecord[messaging.Message]:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MessageRecord[messaging.Message])
+		return ok && a.Equal(b)
 	case *MinorBlockRecord:
 		if a == nil {
 			return b == nil
@@ -103,17 +110,11 @@ func EqualRecord(a, b Record) bool {
 		}
 		b, ok := b.(*RecordRange[Record])
 		return ok && a.Equal(b)
-	case *SignatureRecord:
+	case *SignatureSetRecord:
 		if a == nil {
 			return b == nil
 		}
-		b, ok := b.(*SignatureRecord)
-		return ok && a.Equal(b)
-	case *TransactionRecord:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*TransactionRecord)
+		b, ok := b.(*SignatureSetRecord)
 		return ok && a.Equal(b)
 	case *TxIDRecord:
 		if a == nil {
@@ -147,9 +148,7 @@ func CopyRecord(v Record) Record {
 		return v.Copy()
 	case *MinorBlockRecord:
 		return v.Copy()
-	case *SignatureRecord:
-		return v.Copy()
-	case *TransactionRecord:
+	case *SignatureSetRecord:
 		return v.Copy()
 	case *TxIDRecord:
 		return v.Copy()
@@ -172,6 +171,9 @@ func UnmarshalRecordFrom(rd io.Reader) (Record, error) {
 	// Read the type code
 	var typ RecordType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -364,6 +366,9 @@ func UnmarshalQueryFrom(rd io.Reader) (Query, error) {
 	// Read the type code
 	var typ QueryType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -476,6 +481,9 @@ func UnmarshalEventFrom(rd io.Reader) (Event, error) {
 	// Read the type code
 	var typ EventType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
