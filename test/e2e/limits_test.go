@@ -57,6 +57,7 @@ func TestCreateKeyPage_LimitBookPages(t *testing.T) {
 			WithBody(&CreateKeyPage{Keys: []*KeySpecParams{{KeyHash: hash([]byte{1})}}}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "book will have too many pages")
 }
 
@@ -89,6 +90,7 @@ func TestCreateKeyPage_LimitPageEntries(t *testing.T) {
 			WithBody(&CreateKeyPage{Keys: []*KeySpecParams{{KeyHash: hash([]byte{1})}, {KeyHash: hash([]byte{2})}}}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "page will have too many entries")
 }
 
@@ -123,6 +125,7 @@ func TestUpdateKeyPage_LimitPageEntries(t *testing.T) {
 			}}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "page will have too many entries")
 }
 
@@ -161,6 +164,7 @@ func TestUpdateAccountAuth_LimitAccountAuthorities(t *testing.T) {
 			WithSigner(alice.JoinPath("book2", "1"), 1).
 			Sign(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "account will have too many authorities")
 }
 
@@ -228,6 +232,7 @@ func TestCreateIdentity_LimitIdentityAccounts(t *testing.T) {
 			WithBody(&CreateIdentity{Url: alice.JoinPath("account"), KeyHash: make([]byte, 32), KeyBookUrl: alice.JoinPath("account", "book")}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "identity would have too many accounts")
 }
 
@@ -336,6 +341,7 @@ func TestCreateTokenAccount_LimitIdentityAccounts(t *testing.T) {
 			WithBody(&CreateTokenAccount{Url: alice.JoinPath("account"), TokenUrl: AcmeUrl()}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "identity would have too many accounts")
 }
 
@@ -368,6 +374,7 @@ func TestCreateDataAccount_LimitIdentityAccounts(t *testing.T) {
 			WithBody(&CreateDataAccount{Url: alice.JoinPath("account")}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "identity would have too many accounts")
 }
 
@@ -400,6 +407,7 @@ func TestCreateToken_LimitIdentityAccounts(t *testing.T) {
 			WithBody(&CreateToken{Url: alice.JoinPath("account")}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "identity would have too many accounts")
 }
 
@@ -432,5 +440,6 @@ func TestCreateKeyBook_LimitIdentityAccounts(t *testing.T) {
 			WithBody(&CreateKeyBook{Url: alice.JoinPath("account"), PublicKeyHash: make([]byte, 32)}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			Build())
+	sim.StepUntil(Txn(st.TxID).Capture(&st).Fails())
 	require.EqualError(t, st.AsError(), "identity would have too many accounts")
 }
