@@ -65,15 +65,20 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.eventBus = events.NewBus(n.logger)
 	n.database = s.database(p.ID, node, n.logger)
 	n.privValKey = init.PrivValKey
-	if p.Type == config.Directory {
+	switch p.Type {
+	case protocol.PartitionTypeDirectory:
 		n.nodeKey = init.DnNodeKey
-	} else {
+	case protocol.PartitionTypeBlockValidator:
 		n.nodeKey = init.BvnNodeKey
+	case protocol.PartitionTypeBlockSummary:
+		n.nodeKey = init.BsnNodeKey
+	default:
+		return nil, errors.InternalError.WithFormat("unknown partition type %v", p.Type)
 	}
 
 	// This is hacky, but 🤷 I don't see another choice that wouldn't be
 	// significantly less readable
-	if p.Type == config.Directory && node == 0 {
+	if p.Type == protocol.PartitionTypeDirectory && node == 0 {
 		events.SubscribeSync(n.eventBus, s.router.willChangeGlobals)
 	}
 
@@ -132,7 +137,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	}
 
 	// Initialize the major block scheduler
-	if p.Type == config.Directory {
+	if p.Type == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(n.eventBus)
 	}
 

@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -83,13 +82,13 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	}
 
 	switch opts.Describe.NetworkType {
-	case config.Directory:
+	case protocol.PartitionTypeDirectory:
 		txnX = append(txnX,
 			chain.PartitionAnchor{},
 			chain.DirectoryAnchor{},
 		)
 
-	case config.BlockValidator:
+	case protocol.PartitionTypeBlockValidator:
 		txnX = append(txnX,
 			chain.DirectoryAnchor{},
 		)

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,6 +13,7 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func TestPersistence(t *testing.T) {
@@ -20,7 +21,7 @@ func TestPersistence(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "config"), 0777))
 
 	// Create
-	cfg := Default("unittest", BlockValidator, Follower, t.Name())
+	cfg := Default("unittest", protocol.PartitionTypeBlockValidator, Follower, t.Name())
 	cfg.SetRoot(dir)
 	cfg.Accumulate.API.ListenAddress = "api-listen"
 
