@@ -65,10 +65,10 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 	s.netcfg.Id = network.Id
 	s.netcfg.Partitions = make([]config.Partition, len(network.Bvns)+1)
 	s.netcfg.Partitions[0].Id = protocol.Directory
-	s.netcfg.Partitions[0].Type = config.Directory
+	s.netcfg.Partitions[0].Type = protocol.PartitionTypeDirectory
 	for i, bvn := range network.Bvns {
 		s.netcfg.Partitions[i+1].Id = bvn.Id
-		s.netcfg.Partitions[i+1].Type = config.BlockValidator
+		s.netcfg.Partitions[i+1].Type = protocol.PartitionTypeBlockValidator
 		s.netcfg.Partitions[i+1].Nodes = make([]config.Node, len(bvn.Nodes))
 		for j, node := range bvn.Nodes {
 			s.netcfg.Partitions[i+1].Nodes[j].Address = node.AdvertizeAddress

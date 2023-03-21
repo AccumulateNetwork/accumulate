@@ -3,7 +3,7 @@ Describe:
   fields:
   - name: NetworkType
     toml: type
-    type: NetworkType
+    type: protocol.PartitionType
     marshal-as: enum
   - name: PartitionId
     alternative: SubnetId
@@ -49,7 +49,7 @@ Partition:
       type: string
     - name: Type
       toml: type
-      type: NetworkType
+      type: protocol.PartitionType
       marshal-as: enum
     - name: BasePort
       toml: port
