@@ -11,12 +11,7 @@ package testing
 //lint:file-ignore S1001,S1002,S1008,SA4013 generated code
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -30,6 +25,29 @@ type FakeAccount struct {
 	extraData []byte
 }
 
+var machine_FakeAccount = &encoding.Machine[*FakeAccount]{
+	ExtraData: func(v *FakeAccount) *[]byte { return &v.extraData },
+	Seen:      func(v *FakeAccount) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*FakeAccount]{
+		{Name: "FakeLiteAccount", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructField[*FakeAccount, *FakeLiteAccount, FakeLiteAccount](func(v *FakeAccount) *FakeLiteAccount { return &v.FakeLiteAccount })},
+		{Name: "AccountAuth", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructField[*FakeAccount, *protocol.AccountAuth, protocol.AccountAuth](func(v *FakeAccount) *protocol.AccountAuth { return &v.AccountAuth })},
+	},
+}
+
+func (v *FakeAccount) IsValid() error                 { return machine_FakeAccount.IsValid(v) }
+func (v *FakeAccount) Copy() *FakeAccount             { return encoding.Copy(machine_FakeAccount, v) }
+func (v *FakeAccount) CopyAsInterface() interface{}   { return v.Copy() }
+func (v *FakeAccount) Equal(u *FakeAccount) bool      { return machine_FakeAccount.Equal(v, u) }
+func (v *FakeAccount) MarshalBinary() ([]byte, error) { return machine_FakeAccount.MarshalBinary(v) }
+func (v *FakeAccount) UnmarshalBinary(data []byte) error {
+	return machine_FakeAccount.Unmarshal(data, v)
+}
+func (v *FakeAccount) UnmarshalBinaryFrom(rd io.Reader) error {
+	return machine_FakeAccount.UnmarshalFrom(rd, v)
+}
+func (v *FakeAccount) MarshalJSON() ([]byte, error) { return machine_FakeAccount.JSONMarshal(v) }
+func (v *FakeAccount) UnmarshalJSON(b []byte) error { return machine_FakeAccount.JSONUnmarshal(b, v) }
+
 type FakeAuthority struct {
 	fieldsSet []bool
 	FakeAccount
@@ -37,11 +55,67 @@ type FakeAuthority struct {
 	extraData []byte
 }
 
+var machine_FakeAuthority = &encoding.Machine[*FakeAuthority]{
+	ExtraData: func(v *FakeAuthority) *[]byte { return &v.extraData },
+	Seen:      func(v *FakeAuthority) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*FakeAuthority]{
+		{Name: "FakeAccount", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructField[*FakeAuthority, *FakeAccount, FakeAccount](func(v *FakeAuthority) *FakeAccount { return &v.FakeAccount })},
+		{Name: "Signers", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.UrlPtrField[*FakeAuthority](func(v *FakeAuthority) **url.URL { return &v.Signers })},
+	},
+}
+
+func (v *FakeAuthority) IsValid() error               { return machine_FakeAuthority.IsValid(v) }
+func (v *FakeAuthority) Copy() *FakeAuthority         { return encoding.Copy(machine_FakeAuthority, v) }
+func (v *FakeAuthority) CopyAsInterface() interface{} { return v.Copy() }
+func (v *FakeAuthority) Equal(u *FakeAuthority) bool  { return machine_FakeAuthority.Equal(v, u) }
+func (v *FakeAuthority) MarshalBinary() ([]byte, error) {
+	return machine_FakeAuthority.MarshalBinary(v)
+}
+func (v *FakeAuthority) UnmarshalBinary(data []byte) error {
+	return machine_FakeAuthority.Unmarshal(data, v)
+}
+func (v *FakeAuthority) UnmarshalBinaryFrom(rd io.Reader) error {
+	return machine_FakeAuthority.UnmarshalFrom(rd, v)
+}
+func (v *FakeAuthority) MarshalJSON() ([]byte, error) { return machine_FakeAuthority.JSONMarshal(v) }
+func (v *FakeAuthority) UnmarshalJSON(b []byte) error {
+	return machine_FakeAuthority.JSONUnmarshal(b, v)
+}
+
 type FakeLiteAccount struct {
 	fieldsSet []bool
 	TheType   protocol.AccountType `json:"theType,omitempty" form:"theType" query:"theType" validate:"required"`
 	Url       *url.URL             `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	extraData []byte
+}
+
+var machine_FakeLiteAccount = &encoding.Machine[*FakeLiteAccount]{
+	ExtraData: func(v *FakeLiteAccount) *[]byte { return &v.extraData },
+	Seen:      func(v *FakeLiteAccount) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*FakeLiteAccount]{
+		{Name: "TheType", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.EnumField[*FakeLiteAccount, *protocol.AccountType, protocol.AccountType](func(v *FakeLiteAccount) *protocol.AccountType { return &v.TheType })},
+		{Name: "Url", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.UrlPtrField[*FakeLiteAccount](func(v *FakeLiteAccount) **url.URL { return &v.Url })},
+	},
+}
+
+func (v *FakeLiteAccount) IsValid() error                { return machine_FakeLiteAccount.IsValid(v) }
+func (v *FakeLiteAccount) Copy() *FakeLiteAccount        { return encoding.Copy(machine_FakeLiteAccount, v) }
+func (v *FakeLiteAccount) CopyAsInterface() interface{}  { return v.Copy() }
+func (v *FakeLiteAccount) Equal(u *FakeLiteAccount) bool { return machine_FakeLiteAccount.Equal(v, u) }
+func (v *FakeLiteAccount) MarshalBinary() ([]byte, error) {
+	return machine_FakeLiteAccount.MarshalBinary(v)
+}
+func (v *FakeLiteAccount) UnmarshalBinary(data []byte) error {
+	return machine_FakeLiteAccount.Unmarshal(data, v)
+}
+func (v *FakeLiteAccount) UnmarshalBinaryFrom(rd io.Reader) error {
+	return machine_FakeLiteAccount.UnmarshalFrom(rd, v)
+}
+func (v *FakeLiteAccount) MarshalJSON() ([]byte, error) {
+	return machine_FakeLiteAccount.JSONMarshal(v)
+}
+func (v *FakeLiteAccount) UnmarshalJSON(b []byte) error {
+	return machine_FakeLiteAccount.JSONUnmarshal(b, v)
 }
 
 type FakeSignature struct {
@@ -55,6 +129,37 @@ type FakeSignature struct {
 	extraData     []byte
 }
 
+var machine_FakeSignature = &encoding.Machine[*FakeSignature]{
+	ExtraData: func(v *FakeSignature) *[]byte { return &v.extraData },
+	Seen:      func(v *FakeSignature) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*FakeSignature]{
+		{Name: "TheType", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.EnumField[*FakeSignature, *protocol.SignatureType, protocol.SignatureType](func(v *FakeSignature) *protocol.SignatureType { return &v.TheType })},
+		{Name: "Vote", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.EnumField[*FakeSignature, *protocol.VoteType, protocol.VoteType](func(v *FakeSignature) *protocol.VoteType { return &v.Vote })},
+		{Name: "PublicKey", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.BytesField[*FakeSignature](func(v *FakeSignature) *[]byte { return &v.PublicKey })},
+		{Name: "Signer", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.UrlPtrField[*FakeSignature](func(v *FakeSignature) **url.URL { return &v.Signer })},
+		{Name: "SignerVersion", Number: 5, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.UintField[*FakeSignature](func(v *FakeSignature) *uint64 { return &v.SignerVersion })},
+		{Name: "Timestamp", Number: 6, Binary: true, OmitEmpty: true, Accessor: encoding.UintField[*FakeSignature](func(v *FakeSignature) *uint64 { return &v.Timestamp })},
+	},
+}
+
+func (v *FakeSignature) IsValid() error               { return machine_FakeSignature.IsValid(v) }
+func (v *FakeSignature) Copy() *FakeSignature         { return encoding.Copy(machine_FakeSignature, v) }
+func (v *FakeSignature) CopyAsInterface() interface{} { return v.Copy() }
+func (v *FakeSignature) Equal(u *FakeSignature) bool  { return machine_FakeSignature.Equal(v, u) }
+func (v *FakeSignature) MarshalBinary() ([]byte, error) {
+	return machine_FakeSignature.MarshalBinary(v)
+}
+func (v *FakeSignature) UnmarshalBinary(data []byte) error {
+	return machine_FakeSignature.Unmarshal(data, v)
+}
+func (v *FakeSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	return machine_FakeSignature.UnmarshalFrom(rd, v)
+}
+func (v *FakeSignature) MarshalJSON() ([]byte, error) { return machine_FakeSignature.JSONMarshal(v) }
+func (v *FakeSignature) UnmarshalJSON(b []byte) error {
+	return machine_FakeSignature.JSONUnmarshal(b, v)
+}
+
 type FakeSigner struct {
 	fieldsSet []bool
 	FakeLiteAccount
@@ -65,909 +170,64 @@ type FakeSigner struct {
 	extraData     []byte
 }
 
+var machine_FakeSigner = &encoding.Machine[*FakeSigner]{
+	ExtraData: func(v *FakeSigner) *[]byte { return &v.extraData },
+	Seen:      func(v *FakeSigner) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*FakeSigner]{
+		{Name: "FakeLiteAccount", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructField[*FakeSigner, *FakeLiteAccount, FakeLiteAccount](func(v *FakeSigner) *FakeLiteAccount { return &v.FakeLiteAccount })},
+		{Name: "CreditBalance", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.UintField[*FakeSigner](func(v *FakeSigner) *uint64 { return &v.CreditBalance })},
+		{Name: "Threshold", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.UintField[*FakeSigner](func(v *FakeSigner) *uint64 { return &v.Threshold })},
+		{Name: "Version", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.UintField[*FakeSigner](func(v *FakeSigner) *uint64 { return &v.Version })},
+		{Name: "Keys", Number: 5, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.SliceField[*FakeSigner, *protocol.KeySpec, encoding.StructPtrField[encoding.SliceIndex[*protocol.KeySpec], *protocol.KeySpec, protocol.KeySpec]](func(v *FakeSigner) *[]*protocol.KeySpec { return &v.Keys })},
+	},
+}
+
+func (v *FakeSigner) IsValid() error                    { return machine_FakeSigner.IsValid(v) }
+func (v *FakeSigner) Copy() *FakeSigner                 { return encoding.Copy(machine_FakeSigner, v) }
+func (v *FakeSigner) CopyAsInterface() interface{}      { return v.Copy() }
+func (v *FakeSigner) Equal(u *FakeSigner) bool          { return machine_FakeSigner.Equal(v, u) }
+func (v *FakeSigner) MarshalBinary() ([]byte, error)    { return machine_FakeSigner.MarshalBinary(v) }
+func (v *FakeSigner) UnmarshalBinary(data []byte) error { return machine_FakeSigner.Unmarshal(data, v) }
+func (v *FakeSigner) UnmarshalBinaryFrom(rd io.Reader) error {
+	return machine_FakeSigner.UnmarshalFrom(rd, v)
+}
+func (v *FakeSigner) MarshalJSON() ([]byte, error) { return machine_FakeSigner.JSONMarshal(v) }
+func (v *FakeSigner) UnmarshalJSON(b []byte) error { return machine_FakeSigner.JSONUnmarshal(b, v) }
+
 type FakeTransactionBody struct {
 	fieldsSet []bool
 	TheType   protocol.TransactionType `json:"theType,omitempty" form:"theType" query:"theType" validate:"required"`
 	extraData []byte
 }
 
-func (v *FakeAccount) Copy() *FakeAccount {
-	u := new(FakeAccount)
-
-	u.FakeLiteAccount = *v.FakeLiteAccount.Copy()
-	u.AccountAuth = *v.AccountAuth.Copy()
-
-	return u
+var machine_FakeTransactionBody = &encoding.Machine[*FakeTransactionBody]{
+	ExtraData: func(v *FakeTransactionBody) *[]byte { return &v.extraData },
+	Seen:      func(v *FakeTransactionBody) *[]bool { return &v.fieldsSet },
+	Fields: []*encoding.Field[*FakeTransactionBody]{
+		{Name: "TheType", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.EnumField[*FakeTransactionBody, *protocol.TransactionType, protocol.TransactionType](func(v *FakeTransactionBody) *protocol.TransactionType { return &v.TheType })},
+	},
 }
 
-func (v *FakeAccount) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *FakeAuthority) Copy() *FakeAuthority {
-	u := new(FakeAuthority)
-
-	u.FakeAccount = *v.FakeAccount.Copy()
-	if v.Signers != nil {
-		u.Signers = v.Signers
-	}
-
-	return u
-}
-
-func (v *FakeAuthority) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *FakeLiteAccount) Copy() *FakeLiteAccount {
-	u := new(FakeLiteAccount)
-
-	u.TheType = v.TheType
-	if v.Url != nil {
-		u.Url = v.Url
-	}
-
-	return u
-}
-
-func (v *FakeLiteAccount) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *FakeSignature) Copy() *FakeSignature {
-	u := new(FakeSignature)
-
-	u.TheType = v.TheType
-	u.Vote = v.Vote
-	u.PublicKey = encoding.BytesCopy(v.PublicKey)
-	if v.Signer != nil {
-		u.Signer = v.Signer
-	}
-	u.SignerVersion = v.SignerVersion
-	u.Timestamp = v.Timestamp
-
-	return u
-}
-
-func (v *FakeSignature) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *FakeSigner) Copy() *FakeSigner {
-	u := new(FakeSigner)
-
-	u.FakeLiteAccount = *v.FakeLiteAccount.Copy()
-	u.CreditBalance = v.CreditBalance
-	u.Threshold = v.Threshold
-	u.Version = v.Version
-	u.Keys = make([]*protocol.KeySpec, len(v.Keys))
-	for i, v := range v.Keys {
-		if v != nil {
-			u.Keys[i] = (v).Copy()
-		}
-	}
-
-	return u
-}
-
-func (v *FakeSigner) CopyAsInterface() interface{} { return v.Copy() }
-
+func (v *FakeTransactionBody) IsValid() error { return machine_FakeTransactionBody.IsValid(v) }
 func (v *FakeTransactionBody) Copy() *FakeTransactionBody {
-	u := new(FakeTransactionBody)
-
-	u.TheType = v.TheType
-
-	return u
+	return encoding.Copy(machine_FakeTransactionBody, v)
 }
-
 func (v *FakeTransactionBody) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *FakeAccount) Equal(u *FakeAccount) bool {
-	if !v.FakeLiteAccount.Equal(&u.FakeLiteAccount) {
-		return false
-	}
-	if !v.AccountAuth.Equal(&u.AccountAuth) {
-		return false
-	}
-
-	return true
-}
-
-func (v *FakeAuthority) Equal(u *FakeAuthority) bool {
-	if !v.FakeAccount.Equal(&u.FakeAccount) {
-		return false
-	}
-	switch {
-	case v.Signers == u.Signers:
-		// equal
-	case v.Signers == nil || u.Signers == nil:
-		return false
-	case !((v.Signers).Equal(u.Signers)):
-		return false
-	}
-
-	return true
-}
-
-func (v *FakeLiteAccount) Equal(u *FakeLiteAccount) bool {
-	if !(v.TheType == u.TheType) {
-		return false
-	}
-	switch {
-	case v.Url == u.Url:
-		// equal
-	case v.Url == nil || u.Url == nil:
-		return false
-	case !((v.Url).Equal(u.Url)):
-		return false
-	}
-
-	return true
-}
-
-func (v *FakeSignature) Equal(u *FakeSignature) bool {
-	if !(v.TheType == u.TheType) {
-		return false
-	}
-	if !(v.Vote == u.Vote) {
-		return false
-	}
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
-		return false
-	}
-	switch {
-	case v.Signer == u.Signer:
-		// equal
-	case v.Signer == nil || u.Signer == nil:
-		return false
-	case !((v.Signer).Equal(u.Signer)):
-		return false
-	}
-	if !(v.SignerVersion == u.SignerVersion) {
-		return false
-	}
-	if !(v.Timestamp == u.Timestamp) {
-		return false
-	}
-
-	return true
-}
-
-func (v *FakeSigner) Equal(u *FakeSigner) bool {
-	if !v.FakeLiteAccount.Equal(&u.FakeLiteAccount) {
-		return false
-	}
-	if !(v.CreditBalance == u.CreditBalance) {
-		return false
-	}
-	if !(v.Threshold == u.Threshold) {
-		return false
-	}
-	if !(v.Version == u.Version) {
-		return false
-	}
-	if len(v.Keys) != len(u.Keys) {
-		return false
-	}
-	for i := range v.Keys {
-		if !((v.Keys[i]).Equal(u.Keys[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (v *FakeTransactionBody) Equal(u *FakeTransactionBody) bool {
-	if !(v.TheType == u.TheType) {
-		return false
-	}
-
-	return true
+	return machine_FakeTransactionBody.Equal(v, u)
 }
-
-var fieldNames_FakeAccount = []string{
-	1: "FakeLiteAccount",
-	2: "AccountAuth",
-}
-
-func (v *FakeAccount) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteValue(1, v.FakeLiteAccount.MarshalBinary)
-	writer.WriteValue(2, v.AccountAuth.MarshalBinary)
-
-	_, _, err := writer.Reset(fieldNames_FakeAccount)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *FakeAccount) IsValid() error {
-	var errs []string
-
-	if err := v.FakeLiteAccount.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if err := v.AccountAuth.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_FakeAuthority = []string{
-	1: "FakeAccount",
-	2: "Signers",
-}
-
-func (v *FakeAuthority) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteValue(1, v.FakeAccount.MarshalBinary)
-	if !(v.Signers == nil) {
-		writer.WriteUrl(2, v.Signers)
-	}
-
-	_, _, err := writer.Reset(fieldNames_FakeAuthority)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *FakeAuthority) IsValid() error {
-	var errs []string
-
-	if err := v.FakeAccount.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Signers is missing")
-	} else if v.Signers == nil {
-		errs = append(errs, "field Signers is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_FakeLiteAccount = []string{
-	1: "TheType",
-	2: "Url",
-}
-
-func (v *FakeLiteAccount) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.TheType == 0) {
-		writer.WriteEnum(1, v.TheType)
-	}
-	if !(v.Url == nil) {
-		writer.WriteUrl(2, v.Url)
-	}
-
-	_, _, err := writer.Reset(fieldNames_FakeLiteAccount)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *FakeLiteAccount) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field TheType is missing")
-	} else if v.TheType == 0 {
-		errs = append(errs, "field TheType is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Url is missing")
-	} else if v.Url == nil {
-		errs = append(errs, "field Url is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_FakeSignature = []string{
-	1: "TheType",
-	2: "Vote",
-	3: "PublicKey",
-	4: "Signer",
-	5: "SignerVersion",
-	6: "Timestamp",
-}
-
-func (v *FakeSignature) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.TheType == 0) {
-		writer.WriteEnum(1, v.TheType)
-	}
-	if !(v.Vote == 0) {
-		writer.WriteEnum(2, v.Vote)
-	}
-	if !(len(v.PublicKey) == 0) {
-		writer.WriteBytes(3, v.PublicKey)
-	}
-	if !(v.Signer == nil) {
-		writer.WriteUrl(4, v.Signer)
-	}
-	if !(v.SignerVersion == 0) {
-		writer.WriteUint(5, v.SignerVersion)
-	}
-	if !(v.Timestamp == 0) {
-		writer.WriteUint(6, v.Timestamp)
-	}
-
-	_, _, err := writer.Reset(fieldNames_FakeSignature)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *FakeSignature) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field TheType is missing")
-	} else if v.TheType == 0 {
-		errs = append(errs, "field TheType is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Vote is missing")
-	} else if v.Vote == 0 {
-		errs = append(errs, "field Vote is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field PublicKey is missing")
-	} else if len(v.PublicKey) == 0 {
-		errs = append(errs, "field PublicKey is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Signer is missing")
-	} else if v.Signer == nil {
-		errs = append(errs, "field Signer is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field SignerVersion is missing")
-	} else if v.SignerVersion == 0 {
-		errs = append(errs, "field SignerVersion is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_FakeSigner = []string{
-	1: "FakeLiteAccount",
-	2: "CreditBalance",
-	3: "Threshold",
-	4: "Version",
-	5: "Keys",
-}
-
-func (v *FakeSigner) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteValue(1, v.FakeLiteAccount.MarshalBinary)
-	if !(v.CreditBalance == 0) {
-		writer.WriteUint(2, v.CreditBalance)
-	}
-	if !(v.Threshold == 0) {
-		writer.WriteUint(3, v.Threshold)
-	}
-	if !(v.Version == 0) {
-		writer.WriteUint(4, v.Version)
-	}
-	if !(len(v.Keys) == 0) {
-		for _, v := range v.Keys {
-			writer.WriteValue(5, v.MarshalBinary)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_FakeSigner)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *FakeSigner) IsValid() error {
-	var errs []string
-
-	if err := v.FakeLiteAccount.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field CreditBalance is missing")
-	} else if v.CreditBalance == 0 {
-		errs = append(errs, "field CreditBalance is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Threshold is missing")
-	} else if v.Threshold == 0 {
-		errs = append(errs, "field Threshold is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Version is missing")
-	} else if v.Version == 0 {
-		errs = append(errs, "field Version is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Keys is missing")
-	} else if len(v.Keys) == 0 {
-		errs = append(errs, "field Keys is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_FakeTransactionBody = []string{
-	1: "TheType",
-}
-
 func (v *FakeTransactionBody) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.TheType == 0) {
-		writer.WriteEnum(1, v.TheType)
-	}
-
-	_, _, err := writer.Reset(fieldNames_FakeTransactionBody)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
+	return machine_FakeTransactionBody.MarshalBinary(v)
 }
-
-func (v *FakeTransactionBody) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field TheType is missing")
-	} else if v.TheType == 0 {
-		errs = append(errs, "field TheType is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-func (v *FakeAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *FakeAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	reader.ReadValue(1, v.FakeLiteAccount.UnmarshalBinaryFrom)
-	reader.ReadValue(2, v.AccountAuth.UnmarshalBinaryFrom)
-
-	seen, err := reader.Reset(fieldNames_FakeAccount)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *FakeAuthority) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *FakeAuthority) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	reader.ReadValue(1, v.FakeAccount.UnmarshalBinaryFrom)
-	if x, ok := reader.ReadUrl(2); ok {
-		v.Signers = x
-	}
-
-	seen, err := reader.Reset(fieldNames_FakeAuthority)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *FakeLiteAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *FakeLiteAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(protocol.AccountType); reader.ReadEnum(1, x) {
-		v.TheType = *x
-	}
-	if x, ok := reader.ReadUrl(2); ok {
-		v.Url = x
-	}
-
-	seen, err := reader.Reset(fieldNames_FakeLiteAccount)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *FakeSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *FakeSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(protocol.SignatureType); reader.ReadEnum(1, x) {
-		v.TheType = *x
-	}
-	if x := new(protocol.VoteType); reader.ReadEnum(2, x) {
-		v.Vote = *x
-	}
-	if x, ok := reader.ReadBytes(3); ok {
-		v.PublicKey = x
-	}
-	if x, ok := reader.ReadUrl(4); ok {
-		v.Signer = x
-	}
-	if x, ok := reader.ReadUint(5); ok {
-		v.SignerVersion = x
-	}
-	if x, ok := reader.ReadUint(6); ok {
-		v.Timestamp = x
-	}
-
-	seen, err := reader.Reset(fieldNames_FakeSignature)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *FakeSigner) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *FakeSigner) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	reader.ReadValue(1, v.FakeLiteAccount.UnmarshalBinaryFrom)
-	if x, ok := reader.ReadUint(2); ok {
-		v.CreditBalance = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Threshold = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.Version = x
-	}
-	for {
-		if x := new(protocol.KeySpec); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
-			v.Keys = append(v.Keys, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_FakeSigner)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *FakeTransactionBody) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+	return machine_FakeTransactionBody.Unmarshal(data, v)
 }
-
 func (v *FakeTransactionBody) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(protocol.TransactionType); reader.ReadEnum(1, x) {
-		v.TheType = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_FakeTransactionBody)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
+	return machine_FakeTransactionBody.UnmarshalFrom(rd, v)
 }
-
-func (v *FakeAccount) MarshalJSON() ([]byte, error) {
-	u := struct {
-		TheType     protocol.AccountType                       `json:"theType,omitempty"`
-		Url         *url.URL                                   `json:"url,omitempty"`
-		Authorities encoding.JsonList[protocol.AuthorityEntry] `json:"authorities,omitempty"`
-	}{}
-	if !(v.FakeLiteAccount.TheType == 0) {
-
-		u.TheType = v.FakeLiteAccount.TheType
-	}
-	if !(v.FakeLiteAccount.Url == nil) {
-
-		u.Url = v.FakeLiteAccount.Url
-	}
-	if !(len(v.AccountAuth.Authorities) == 0) {
-
-		u.Authorities = v.AccountAuth.Authorities
-	}
-	return json.Marshal(&u)
+func (v *FakeTransactionBody) MarshalJSON() ([]byte, error) {
+	return machine_FakeTransactionBody.JSONMarshal(v)
 }
-
-func (v *FakeAuthority) MarshalJSON() ([]byte, error) {
-	u := struct {
-		FakeLiteAccount FakeLiteAccount      `json:"fakeLiteAccount,omitempty"`
-		AccountAuth     protocol.AccountAuth `json:"accountAuth,omitempty"`
-		Signers         *url.URL             `json:"signers,omitempty"`
-	}{}
-	if !((v.FakeAccount.FakeLiteAccount).Equal(new(FakeLiteAccount))) {
-
-		u.FakeLiteAccount = v.FakeAccount.FakeLiteAccount
-	}
-	if !((v.FakeAccount.AccountAuth).Equal(new(protocol.AccountAuth))) {
-
-		u.AccountAuth = v.FakeAccount.AccountAuth
-	}
-	if !(v.Signers == nil) {
-		u.Signers = v.Signers
-	}
-	return json.Marshal(&u)
-}
-
-func (v *FakeSignature) MarshalJSON() ([]byte, error) {
-	u := struct {
-		TheType       protocol.SignatureType `json:"theType,omitempty"`
-		Vote          protocol.VoteType      `json:"vote,omitempty"`
-		PublicKey     *string                `json:"publicKey,omitempty"`
-		Signer        *url.URL               `json:"signer,omitempty"`
-		SignerVersion uint64                 `json:"signerVersion,omitempty"`
-		Timestamp     uint64                 `json:"timestamp,omitempty"`
-	}{}
-	if !(v.TheType == 0) {
-		u.TheType = v.TheType
-	}
-	if !(v.Vote == 0) {
-		u.Vote = v.Vote
-	}
-	if !(len(v.PublicKey) == 0) {
-		u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	}
-	if !(v.Signer == nil) {
-		u.Signer = v.Signer
-	}
-	if !(v.SignerVersion == 0) {
-		u.SignerVersion = v.SignerVersion
-	}
-	if !(v.Timestamp == 0) {
-		u.Timestamp = v.Timestamp
-	}
-	return json.Marshal(&u)
-}
-
-func (v *FakeSigner) MarshalJSON() ([]byte, error) {
-	u := struct {
-		TheType       protocol.AccountType                 `json:"theType,omitempty"`
-		Url           *url.URL                             `json:"url,omitempty"`
-		CreditBalance uint64                               `json:"creditBalance,omitempty"`
-		Threshold     uint64                               `json:"threshold,omitempty"`
-		Version       uint64                               `json:"version,omitempty"`
-		Keys          encoding.JsonList[*protocol.KeySpec] `json:"keys,omitempty"`
-	}{}
-	if !(v.FakeLiteAccount.TheType == 0) {
-
-		u.TheType = v.FakeLiteAccount.TheType
-	}
-	if !(v.FakeLiteAccount.Url == nil) {
-
-		u.Url = v.FakeLiteAccount.Url
-	}
-	if !(v.CreditBalance == 0) {
-		u.CreditBalance = v.CreditBalance
-	}
-	if !(v.Threshold == 0) {
-		u.Threshold = v.Threshold
-	}
-	if !(v.Version == 0) {
-		u.Version = v.Version
-	}
-	if !(len(v.Keys) == 0) {
-		u.Keys = v.Keys
-	}
-	return json.Marshal(&u)
-}
-
-func (v *FakeAccount) UnmarshalJSON(data []byte) error {
-	u := struct {
-		TheType     protocol.AccountType                       `json:"theType,omitempty"`
-		Url         *url.URL                                   `json:"url,omitempty"`
-		Authorities encoding.JsonList[protocol.AuthorityEntry] `json:"authorities,omitempty"`
-	}{}
-	u.TheType = v.FakeLiteAccount.TheType
-	u.Url = v.FakeLiteAccount.Url
-	u.Authorities = v.AccountAuth.Authorities
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.FakeLiteAccount.TheType = u.TheType
-	v.FakeLiteAccount.Url = u.Url
-	v.AccountAuth.Authorities = u.Authorities
-	return nil
-}
-
-func (v *FakeAuthority) UnmarshalJSON(data []byte) error {
-	u := struct {
-		FakeLiteAccount FakeLiteAccount      `json:"fakeLiteAccount,omitempty"`
-		AccountAuth     protocol.AccountAuth `json:"accountAuth,omitempty"`
-		Signers         *url.URL             `json:"signers,omitempty"`
-	}{}
-	u.FakeLiteAccount = v.FakeAccount.FakeLiteAccount
-	u.AccountAuth = v.FakeAccount.AccountAuth
-	u.Signers = v.Signers
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.FakeAccount.FakeLiteAccount = u.FakeLiteAccount
-	v.FakeAccount.AccountAuth = u.AccountAuth
-	v.Signers = u.Signers
-	return nil
-}
-
-func (v *FakeSignature) UnmarshalJSON(data []byte) error {
-	u := struct {
-		TheType       protocol.SignatureType `json:"theType,omitempty"`
-		Vote          protocol.VoteType      `json:"vote,omitempty"`
-		PublicKey     *string                `json:"publicKey,omitempty"`
-		Signer        *url.URL               `json:"signer,omitempty"`
-		SignerVersion uint64                 `json:"signerVersion,omitempty"`
-		Timestamp     uint64                 `json:"timestamp,omitempty"`
-	}{}
-	u.TheType = v.TheType
-	u.Vote = v.Vote
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Signer = v.Signer
-	u.SignerVersion = v.SignerVersion
-	u.Timestamp = v.Timestamp
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.TheType = u.TheType
-	v.Vote = u.Vote
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
-	} else {
-		v.PublicKey = x
-	}
-	v.Signer = u.Signer
-	v.SignerVersion = u.SignerVersion
-	v.Timestamp = u.Timestamp
-	return nil
-}
-
-func (v *FakeSigner) UnmarshalJSON(data []byte) error {
-	u := struct {
-		TheType       protocol.AccountType                 `json:"theType,omitempty"`
-		Url           *url.URL                             `json:"url,omitempty"`
-		CreditBalance uint64                               `json:"creditBalance,omitempty"`
-		Threshold     uint64                               `json:"threshold,omitempty"`
-		Version       uint64                               `json:"version,omitempty"`
-		Keys          encoding.JsonList[*protocol.KeySpec] `json:"keys,omitempty"`
-	}{}
-	u.TheType = v.FakeLiteAccount.TheType
-	u.Url = v.FakeLiteAccount.Url
-	u.CreditBalance = v.CreditBalance
-	u.Threshold = v.Threshold
-	u.Version = v.Version
-	u.Keys = v.Keys
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.FakeLiteAccount.TheType = u.TheType
-	v.FakeLiteAccount.Url = u.Url
-	v.CreditBalance = u.CreditBalance
-	v.Threshold = u.Threshold
-	v.Version = u.Version
-	v.Keys = u.Keys
-	return nil
+func (v *FakeTransactionBody) UnmarshalJSON(b []byte) error {
+	return machine_FakeTransactionBody.JSONUnmarshal(b, v)
 }

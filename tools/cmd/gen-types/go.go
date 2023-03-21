@@ -169,9 +169,14 @@ func goFieldAccessor(field *Field) (string, error) {
 		ptr1 = "Ptr"
 	}
 
-	typ := "*" + field.ParentType.Name
-	if field.Repeatable {
+	var typ string
+	switch {
+	case field.Repeatable:
 		typ = "encoding.SliceIndex[*" + field.Type.Name + "]"
+	case field.Virtual:
+		typ = field.Type.GoType()
+	default:
+		typ = "*" + field.ParentType.Name
 	}
 
 	switch field.Type.Code {
