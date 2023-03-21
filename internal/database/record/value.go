@@ -268,6 +268,7 @@ func (v *value[T]) LoadBytes(data []byte, put bool) error {
 	}
 
 	if put {
+		v.version++
 		v.status = valueDirty
 	} else {
 		v.status = valueClean

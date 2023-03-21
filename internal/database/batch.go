@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -47,13 +48,18 @@ func (b *Batch) SetObserver(observer Observer) {
 func (d *Database) Begin(writable bool) *Batch {
 	id := atomic.AddInt64(&d.nextBatchId, 1)
 
-	b := new(Batch)
-	b.id = fmt.Sprint(id)
+	b := NewBatch(fmt.Sprint(id), d.store.Begin(writable), writable, d.logger)
 	b.observer = d.observer
+	return b
+}
+
+func NewBatch(id string, store storage.KeyValueTxn, writable bool, logger log.Logger) *Batch {
+	b := new(Batch)
+	b.id = id
 	b.writable = writable
-	b.logger.L = d.logger
-	b.kvstore = d.store.Begin(writable)
-	b.store = record.KvStore{Store: b.kvstore}
+	b.logger.Set(logger)
+	b.kvstore = store
+	b.store = record.KvStore{Store: store}
 	b.bptEntries = map[storage.Key][32]byte{}
 	return b
 }
