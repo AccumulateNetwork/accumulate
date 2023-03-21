@@ -1,39 +1,72 @@
 package node
 
 import (
-	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Executor struct {
-	execute.Executor
+	x execute.Executor
 }
 
-func (e *Executor) LoadStateRoot(*database.Batch) ([]byte, error) {
-	return nil, nil
+type BlockParams struct {
+	b execute.BlockParams
 }
 
-// RestoreSnapshot restores the database from a snapshot.
-func (e *Executor) RestoreSnapshot(database.Beginner, ioutil2.SectionReader) error {
-	return nil
+type ValidatorUpdate struct {
+	v execute.ValidatorUpdate
 }
 
-// InitChainValidators validates the given initial validators and returns
-// any additional validators.
-func (e *Executor) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
-	return nil, nil
+type DataSet struct {
+	d logging.DataSet
+}
+
+type Block struct {
+	b *execute.Block
+}
+
+func (x *Executor) EnableTimers() {
+	x.x.EnableTimers()
+}
+
+func (x *Executor) StoreBlockTimers(ds *DataSet) {
+	x.x.StoreBlockTimers(&ds.d)
+}
+
+// LastBlock returns the height and hash of the last block.
+func (x *Executor) LastBlock() (bp *BlockParams, h [32]byte, err error) {
+	bp = new(BlockParams)
+	b, h, err := x.x.LastBlock()
+	bp.b = *b
+	return bp, h, err
+}
+
+// Restore restores the database from a snapshot, validates the initial
+// validators, and returns any additional validators.
+func (x *Executor) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
+	var vu []*execute.ValidatorUpdate
+	for _, v := range validators {
+		vu = append(vu, &v.v)
+	}
+	r, err := x.x.Restore(snapshot, vu)
+	if err == nil {
+		for _, v := range r {
+			additional = append(additional, &ValidatorUpdate{*v})
+		}
+	}
+	return additional, err
 }
 
 // Validate validates a set of messages.
-func (e *Executor) Validate(*database.Batch, []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	return nil, nil
+func (x *Executor) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
+	return x.x.Validate(messages, recheck)
 }
 
 // Begin begins a Tendermint block.
-func (e *Executor) Begin(execute.BlockParams) (execute.Block, error) {
-	return nil, nil
+func (x *Executor) Begin(bp BlockParams) (Block, error) {
+	b, err := x.x.Begin(bp.b)
+	return Block{b: &b}, err
 }
