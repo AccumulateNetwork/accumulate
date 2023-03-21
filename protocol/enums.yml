@@ -23,6 +23,9 @@ PartitionType:
   BlockValidator:
     value: 2
     aliases: [block-validator]
+  BlockSummary:
+    value: 3
+    aliases: [block-summary]
 
 DataEntryType:
   Unknown:
