@@ -28,9 +28,9 @@ var machine_CallSite = &encoding.Machine[*CallSite]{
 	ExtraData: func(v *CallSite) *[]byte { return &v.extraData },
 	Seen:      func(v *CallSite) *[]bool { return &v.fieldsSet },
 	Fields: []*encoding.Field[*CallSite]{
-		{Name: "FuncName", OmitEmpty: true, Required: true, Accessor: encoding.StringField[*CallSite](func(v *CallSite) *string { return &v.FuncName })},
-		{Name: "File", OmitEmpty: true, Required: true, Accessor: encoding.StringField[*CallSite](func(v *CallSite) *string { return &v.File })},
-		{Name: "Line", OmitEmpty: true, Required: true, Accessor: encoding.IntField[*CallSite](func(v *CallSite) *int64 { return &v.Line })},
+		{Name: "FuncName", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StringField[*CallSite](func(v *CallSite) *string { return &v.FuncName })},
+		{Name: "File", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StringField[*CallSite](func(v *CallSite) *string { return &v.File })},
+		{Name: "Line", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.IntField[*CallSite](func(v *CallSite) *int64 { return &v.Line })},
 	},
 }
 
@@ -59,10 +59,11 @@ var machine_Error = &encoding.Machine[*Error]{
 	ExtraData: func(v *Error) *[]byte { return &v.extraData },
 	Seen:      func(v *Error) *[]bool { return &v.fieldsSet },
 	Fields: []*encoding.Field[*Error]{
-		{Name: "Message", OmitEmpty: true, Required: true, Accessor: encoding.StringField[*Error](func(v *Error) *string { return &v.Message })},
-		{Name: "Code", OmitEmpty: true, Required: true, Accessor: encoding.EnumField[*Error, *Status, Status](func(v *Error) *Status { return &v.Code })},
-		{Name: "Cause", OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*Error, *Error, Error](func(v *Error) **Error { return &v.Cause })},
-		{Name: "CallStack", OmitEmpty: true, Required: true, Accessor: encoding.SliceField[*Error, *CallSite, encoding.StructPtrField[encoding.SliceIndex[*CallSite], *CallSite, CallSite]](func(v *Error) *[]*CallSite { return &v.CallStack })},
+		{Name: "Message", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StringField[*Error](func(v *Error) *string { return &v.Message })},
+		{Name: "Code", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.EnumField[*Error, *Status, Status](func(v *Error) *Status { return &v.Code })},
+		{Name: "CodeID", OmitEmpty: true, Accessor: encoding.ReadOnlyAccessor[*Error, uint64, encoding.UintField[uint64]]((*Error).CodeID)},
+		{Name: "Cause", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*Error, *Error, Error](func(v *Error) **Error { return &v.Cause })},
+		{Name: "CallStack", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.SliceField[*Error, *CallSite, encoding.StructPtrField[encoding.SliceIndex[*CallSite], *CallSite, CallSite]](func(v *Error) *[]*CallSite { return &v.CallStack })},
 	},
 }
 
