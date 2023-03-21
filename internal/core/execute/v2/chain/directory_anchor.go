@@ -11,7 +11,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -66,7 +65,7 @@ func (x DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 	}
 
 	// Trigger a major block?
-	if st.NetworkType != config.Directory {
+	if st.NetworkType != protocol.PartitionTypeDirectory {
 		st.State.MakeMajorBlock = body.MakeMajorBlock
 		st.State.MakeMajorBlockTime = body.MakeMajorBlockTime
 	}
@@ -86,7 +85,7 @@ func (x DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 	}
 
 	// Process updates when present
-	if len(body.Updates) > 0 && st.NetworkType != config.Directory {
+	if len(body.Updates) > 0 && st.NetworkType != protocol.PartitionTypeDirectory {
 		err := processNetworkAccountUpdates(st, body.Updates)
 		if err != nil {
 			return nil, err

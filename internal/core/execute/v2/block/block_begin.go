@@ -21,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -41,6 +40,11 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 			block.Batch.Discard()
 		}
 	}()
+
+	err = x.EventBus.Publish(execute.WillBeginBlock{BlockParams: params})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	//clear the timers
 	x.BlockTimers.Reset()
@@ -222,16 +226,11 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 		return errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
 
-	stateRoot, err := x.LoadStateRoot(block.Batch)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load state hash: %w", err)
-	}
-
 	anchor := ledger.Anchor.CopyAsInterface().(protocol.AnchorBody)
 	partAnchor := anchor.GetPartitionAnchor()
 	partAnchor.RootChainIndex = uint64(rootChain.Height()) - 1
 	partAnchor.RootChainAnchor = *(*[32]byte)(rootChain.Anchor())
-	partAnchor.StateTreeAnchor = *(*[32]byte)(stateRoot)
+	partAnchor.StateTreeAnchor = *(*[32]byte)(block.Batch.BptRoot())
 	anchorTxn := new(protocol.Transaction)
 	anchorTxn.Body = anchor
 
@@ -265,7 +264,7 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 	}
 
 	switch x.Describe.NetworkType {
-	case config.Directory:
+	case protocol.PartitionTypeDirectory:
 		anchor := anchor.(*protocol.DirectoryAnchor)
 		if anchor.MakeMajorBlock > 0 {
 			x.logger.Info("Start major block", "major-index", anchor.MakeMajorBlock, "minor-index", ledger.Index)
@@ -289,7 +288,7 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 			return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
 		}
 
-	case config.BlockValidator:
+	case protocol.PartitionTypeBlockValidator:
 		// BVN -> DN
 		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
@@ -343,7 +342,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block, ledger *protocol.Syst
 			continue
 		}
 
-		if x.Describe.NetworkType == config.Directory {
+		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
 			err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, anchor.MinorBlockIndex, nil)
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
@@ -501,7 +500,7 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	// a BVN, then we must send out the anchor as a v1 anchor since the BVNs
 	// will still be running v1
 	destPartUrl := protocol.PartitionUrl(destPart)
-	if x.Describe.NetworkType == config.Directory && didUpdateToV2(anchor) && !strings.EqualFold(destPart, protocol.Directory) {
+	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && didUpdateToV2(anchor) && !strings.EqualFold(destPart, protocol.Directory) {
 		env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
 		if err != nil {
 			return errors.InternalError.Wrap(err)

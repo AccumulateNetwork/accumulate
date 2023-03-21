@@ -317,9 +317,8 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 			messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: delivery.Transaction.ID()})
 		}
 	}
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(batch, messages)
+
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(messages, false)
 	require.NoError(t, err)
 	for _, result := range results {
 		if result.Error != nil {

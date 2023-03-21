@@ -43,10 +43,12 @@ type Partition struct {
 
 	submitHook SubmitHookFunc
 	blockHook  BlockHookFunc
+	commitHook CommitHookFunc
 }
 
 type SubmitHookFunc func([]messaging.Message) (drop, keepHook bool)
 type BlockHookFunc func(execute.BlockParams, []messaging.Message) (_ []messaging.Message, keepHook bool)
+type CommitHookFunc func(*protocol.PartitionInfo, execute.BlockState)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -141,6 +143,12 @@ func (p *Partition) SetBlockHook(fn BlockHookFunc) {
 	p.blockHook = fn
 }
 
+func (p *Partition) SetCommitHook(fn CommitHookFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.commitHook = fn
+}
+
 func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	results := make([][]byte, len(p.nodes))
 	for i, n := range p.nodes {
@@ -182,11 +190,11 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 		}
 	}
 
-	// var err error
 	results := make([][]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
 		var err error
-		results[i], err = node.checkTx(messages, types.CheckTxType_New)
+		// Set type = recheck to make the executor create a new batch to avoid timing issues
+		results[i], err = node.checkTx(messages, types.CheckTxType_Recheck)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -234,6 +242,12 @@ func (p *Partition) applyBlockHook(messages []messaging.Message) []messaging.Mes
 		p.blockHook = nil
 	}
 	return messages
+}
+
+func (p *Partition) getCommitHook() CommitHookFunc {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.commitHook
 }
 
 func (p *Partition) loadBlockIndex() {
@@ -386,6 +400,12 @@ func (p *Partition) execute() error {
 
 		default:
 			panic(fmt.Errorf("unknown validator update type %v", update.typ))
+		}
+	}
+
+	if !blockState[0].IsEmpty() {
+		if hook := p.getCommitHook(); hook != nil {
+			hook(&p.PartitionInfo, blockState[0])
 		}
 	}
 

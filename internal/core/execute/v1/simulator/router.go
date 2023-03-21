@@ -54,9 +54,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *messagin
 		}
 	}
 
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(batch, messages)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(messages, false)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

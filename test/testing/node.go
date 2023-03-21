@@ -54,13 +54,13 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("synthetic", "debug").
 	// SetModule("anchoring", "info").
 	// SetModule("block", "debug").
-	SetModule("storage", "debug").
+	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
 	// SetModule("fake-tendermint", "info").
 	String()
 
-func DefaultConfig(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config {
+func DefaultConfig(networkName string, net protocol.PartitionType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(networkName, net, node, netId) //
 	cfg.Mempool.MaxBatchBytes = 1048576                  //
 	cfg.Mempool.CacheSize = 1048576                      //
@@ -71,7 +71,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Accumulate.Network.Partitions = []config.Partition{
 		{
 			Id:   "local",
-			Type: config.BlockValidator,
+			Type: protocol.PartitionTypeBlockValidator,
 		},
 	}
 

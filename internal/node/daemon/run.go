@@ -56,6 +56,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -323,7 +324,7 @@ func (d *Daemon) startApp() (types.Application, error) {
 	}
 
 	// On DNs initialize the major block scheduler
-	if execOpts.Describe.NetworkType == config.Directory {
+	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
@@ -333,7 +334,6 @@ func (d *Daemon) startApp() (types.Application, error) {
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		DB:       d.db,
 		Address:  d.Key().PubKey().Address(),
 		Executor: exec,
 		Logger:   d.Logger,
