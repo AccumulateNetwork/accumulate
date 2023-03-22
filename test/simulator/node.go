@@ -9,6 +9,7 @@ package simulator
 import (
 	"bytes"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 
 type Node struct {
 	id         int
+	mu         *sync.Mutex
 	init       *accumulated.NodeInit
 	simulator  *Simulator
 	partition  *Partition
@@ -58,6 +60,7 @@ type Node struct {
 func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (*Node, error) {
 	n := new(Node)
 	n.id = node
+	n.mu = new(sync.Mutex)
 	n.init = init
 	n.simulator = s
 	n.partition = p
@@ -206,41 +209,33 @@ func (n *Node) willChangeGlobals(e events.WillChangeGlobals) error {
 
 func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	// Check if initialization is required
-	var root []byte
-	err := n.View(func(batch *database.Batch) (err error) {
-		root, err = n.executor.LoadStateRoot(batch)
-		return err
-	})
-	if err != nil {
+	_, root, err := n.executor.LastBlock()
+	switch {
+	case err == nil:
+		return root[:], nil
+	case errors.Is(err, errors.NotFound):
+		// Ok
+	default:
 		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
-	}
-	if root != nil {
-		return root, nil
 	}
 
 	// Restore the snapshot
-	err = n.executor.RestoreSnapshot(n, snapshot)
+	_, err = n.executor.Restore(snapshot, nil)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
 	}
 
-	err = n.View(func(batch *database.Batch) (err error) {
-		root, err = n.executor.LoadStateRoot(batch)
-		return err
-	})
+	_, root, err = n.executor.LastBlock()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
 	}
-	return root, nil
+	return root[:], nil
 }
 
 func (n *Node) checkTx(messages []messaging.Message, typ abcitypes.CheckTxType) ([]*protocol.TransactionStatus, error) {
-	// TODO: Maintain a shared batch if typ is not recheck. I tried to do this
-	// but it lead to "attempted to use a committed or discarded batch" panics.
-
-	batch := n.database.Begin(false)
-	defer batch.Discard()
-	s, err := n.executor.Validate(batch, messages)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	s, err := n.executor.Validate(messages, typ == abcitypes.CheckTxType_Recheck)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("check messages: %w", err)
 	}
@@ -248,6 +243,8 @@ func (n *Node) checkTx(messages []messaging.Message, typ abcitypes.CheckTxType) 
 }
 
 func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	block, err := n.executor.Begin(params)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
@@ -256,6 +253,8 @@ func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
 }
 
 func (n *Node) deliverTx(block execute.Block, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	s, err := block.Process(messages)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("deliver messages: %w", err)
@@ -264,6 +263,8 @@ func (n *Node) deliverTx(block execute.Block, messages []messaging.Message) ([]*
 }
 
 func (n *Node) endBlock(block execute.Block) (execute.BlockState, []*validatorUpdate, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	state, err := block.Close()
 	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("end block: %w", err)
@@ -279,6 +280,8 @@ func (n *Node) endBlock(block execute.Block) (execute.BlockState, []*validatorUp
 }
 
 func (n *Node) commit(state execute.BlockState) ([]byte, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	if state.IsEmpty() {
 		// Discard changes
 		state.Discard()
