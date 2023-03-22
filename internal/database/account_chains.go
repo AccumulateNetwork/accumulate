@@ -113,6 +113,13 @@ func (c *Chain2) Resolve(key record.Key) (record.Record, record.Key, error) {
 	return c.inner.Resolve(key)
 }
 
+func (c *Chain2) WalkChanges(fn record.WalkFunc) error {
+	var err error
+	walkChanges(&err, c.inner, fn)
+	walkChanges(&err, c.index, fn)
+	return err
+}
+
 func (c *Chain2) IsDirty() bool {
 	return fieldIsDirty(c.index) || fieldIsDirty(c.inner)
 }

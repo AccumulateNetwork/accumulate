@@ -25,12 +25,22 @@ type Record interface {
 	IsDirty() bool
 	// Commit writes any modifications to the store.
 	Commit() error
+	// WalkChanges walks the record and calls the function for any changed
+	// values.
+	WalkChanges(fn WalkFunc) error
+}
+
+type WalkFunc func(TerminalRecord) error
+
+type TerminalRecord interface {
+	Record
+	ValueReader
+	Key() Key
 }
 
 // Value records a value.
 type Value[T any] interface {
 	Record
-	Key(int) any
 	Get() (T, error)
 	GetAs(any) error
 	Put(T) error
@@ -130,7 +140,7 @@ type ValueWriter interface {
 	// LoadValue stores the value of the reader into the receiver.
 	LoadValue(value ValueReader, put bool) error
 	// LoadBytes unmarshals a value from bytes into the receiver.
-	LoadBytes(data []byte) error
+	LoadBytes(data []byte, put bool) error
 }
 
 // A Store loads and stores values.
