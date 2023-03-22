@@ -43,10 +43,12 @@ type Partition struct {
 
 	submitHook SubmitHookFunc
 	blockHook  BlockHookFunc
+	commitHook CommitHookFunc
 }
 
 type SubmitHookFunc func([]messaging.Message) (drop, keepHook bool)
 type BlockHookFunc func(execute.BlockParams, []messaging.Message) (_ []messaging.Message, keepHook bool)
+type CommitHookFunc func(*protocol.PartitionInfo, execute.BlockState)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -139,6 +141,12 @@ func (p *Partition) SetBlockHook(fn BlockHookFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.blockHook = fn
+}
+
+func (p *Partition) SetCommitHook(fn CommitHookFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.commitHook = fn
 }
 
 func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
@@ -234,6 +242,12 @@ func (p *Partition) applyBlockHook(messages []messaging.Message) []messaging.Mes
 		p.blockHook = nil
 	}
 	return messages
+}
+
+func (p *Partition) getCommitHook() CommitHookFunc {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.commitHook
 }
 
 func (p *Partition) loadBlockIndex() {
@@ -386,6 +400,12 @@ func (p *Partition) execute() error {
 
 		default:
 			panic(fmt.Errorf("unknown validator update type %v", update.typ))
+		}
+	}
+
+	if !blockState[0].IsEmpty() {
+		if hook := p.getCommitHook(); hook != nil {
+			hook(&p.PartitionInfo, blockState[0])
 		}
 	}
 
