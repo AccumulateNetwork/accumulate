@@ -54,7 +54,7 @@ func (x PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 		return nil, err
 	}
 
-	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
+	st.logger.Info("Received BVN anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "source-block", body.MinorBlockIndex)
 
 	// Verify the origin
 	ledger, ok := st.Origin.(*protocol.AnchorLedger)
