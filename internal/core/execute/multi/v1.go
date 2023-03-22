@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -220,4 +221,8 @@ func (s *BlockStateV1) Discard() {
 
 func (s *BlockStateV1) Hash() []byte {
 	return s.Block.Batch.BptRoot()
+}
+
+func (s *BlockStateV1) WalkChanges(fn record.WalkFunc) error {
+	return s.Block.Batch.WalkChanges(fn)
 }
