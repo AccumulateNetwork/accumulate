@@ -35,17 +35,15 @@ func (CreateKeyPage) check(st *StateManager, tx *Delivery) (*protocol.CreateKeyP
 	//check for duplicate entries
 	uniqueKeys := make(map[string]bool, len(body.Keys))
 	for _, key := range body.Keys {
-		switch len(key.KeyHash) {
-		case 0:
-			continue
-		case 32:
-			if uniqueKeys[string(key.KeyHash)] {
-				return nil, fmt.Errorf("duplicate keys: signing keys of a keypage must be unique")
-			}
-			uniqueKeys[string(key.KeyHash)] = true
-		default:
-			return nil, errors.BadRequest.WithFormat("public key hash length is invalid")
+		err := requireKeyHash(key.KeyHash)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
 		}
+
+		if uniqueKeys[string(key.KeyHash)] {
+			return nil, fmt.Errorf("duplicate keys: signing keys of a keypage must be unique")
+		}
+		uniqueKeys[string(key.KeyHash)] = true
 	}
 
 	return body, nil
