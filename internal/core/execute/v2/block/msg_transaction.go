@@ -126,7 +126,7 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 	// either production of MessageIsReady should be changed to match the normal
 	// process, or the normal process should be updated to be less fragile, or
 	// both.
-	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypeNetworkUpdate) {
+	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic, internal.MessageTypeNetworkUpdate) {
 		var signed bool
 		for _, msg := range ctx.messages {
 			// Resolve MessageIsReady
@@ -195,7 +195,7 @@ func (TransactionMessage) checkWrapper(ctx *MessageContext, txn *protocol.Transa
 	// Only allow synthetic transactions within a synthetic message, anchor
 	// transactions within a block anchor, and don't allow other transactions to
 	// be wrapped in either
-	if ctx.isWithin(messaging.MessageTypeSynthetic) {
+	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypePseudoSynthetic) {
 		if !txn.Body.Type().IsSynthetic() {
 			return errors.BadRequest.WithFormat("a synthetic message cannot carry a %v transaction", txn.Body.Type())
 		}
@@ -298,17 +298,6 @@ func (TransactionMessage) resolveTransaction(batch *database.Batch, msg *messagi
 	}
 }
 
-func (TransactionMessage) getSequence(ctx *MessageContext) (*messaging.SequencedMessage, error) {
-	seq, ok := getMessageContextAncestor[*messaging.SequencedMessage](ctx)
-	if !ok {
-		return nil, errors.InternalError.With("not within a sequence message")
-	}
-	if seq.Message != ctx.message {
-		return nil, errors.InternalError.With("within a sequence message belonging to a different message")
-	}
-	return seq, nil
-}
-
 func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *TransactionContext) (_ *protocol.TransactionStatus, err error) {
 	batch = batch.Begin(true)
 	defer func() { commitOrDiscard(batch, &err) }()
@@ -334,14 +323,6 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 	delivery := &chain.Delivery{
 		Transaction: ctx.transaction,
 		Internal:    ctx.isWithin(internal.MessageTypeNetworkUpdate),
-	}
-
-	// Load sequence info
-	if typ := ctx.transaction.Body.Type(); typ.IsSynthetic() || typ.IsAnchor() {
-		delivery.Sequence, err = x.getSequence(ctx.MessageContext)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load sequence info: %w", err)
-		}
 	}
 
 	status, state, err := ctx.Executor.ProcessTransaction(batch, delivery)
@@ -417,7 +398,10 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 
 	for _, newTxn := range state.ProducedTxns {
 		msg := &messaging.TransactionMessage{Transaction: newTxn}
-		ctx.didProduce(newTxn.Header.Principal, msg)
+		err = ctx.didProduce(batch, newTxn.Header.Principal, msg)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 	}
 	ctx.additional = append(ctx.additional, state.AdditionalMessages...)
 	ctx.state.Set(ctx.transaction.ID().Hash(), state)
