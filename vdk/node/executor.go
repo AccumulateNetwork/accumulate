@@ -25,9 +25,7 @@ type Block interface {
 
 //expose the bus and events used by a node
 
-type Bus struct {
-	Bus events.Bus
-}
+type Bus events.Bus
 
 type Event interface {
 	events.Event
@@ -41,23 +39,24 @@ type FatalError events.FatalError
 
 // SubscribeSync will expose the internal subscribe sync
 func SubscribeSync[T Event](b *Bus, sub func(T) error) {
-	events.SubscribeSync(&b.Bus, sub)
+	events.SubscribeSync((*events.Bus)(b), sub)
 }
 
 func SubscribeSyncDidCommitBlock(b *Bus, sub func(DidCommitBlock) error) {
-	events.SubscribeSync[events.DidCommitBlock](&b.Bus, func(block events.DidCommitBlock) error {
+
+	events.SubscribeSync[events.DidCommitBlock]((*events.Bus)(b), func(block events.DidCommitBlock) error {
 		return sub(DidCommitBlock(block))
 	})
 }
 
 func SubscribeSyncDidSaveSnapshot(b *Bus, sub func(DidSaveSnapshot) error) {
-	events.SubscribeSync[events.DidSaveSnapshot](&b.Bus, func(snapshot events.DidSaveSnapshot) error {
+	events.SubscribeSync[events.DidSaveSnapshot]((*events.Bus)(b), func(snapshot events.DidSaveSnapshot) error {
 		return sub(DidSaveSnapshot(snapshot))
 	})
 }
 
 func SubscribeSyncFatalError(b *Bus, sub func(FatalError) error) {
-	events.SubscribeSync[events.FatalError](&b.Bus, func(fatal events.FatalError) error {
+	events.SubscribeSync[events.FatalError]((*events.Bus)(b), func(fatal events.FatalError) error {
 		return sub(FatalError(fatal))
 	})
 }
