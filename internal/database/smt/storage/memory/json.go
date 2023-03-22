@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -17,7 +17,7 @@ import (
 func (m *DB) MarshalJSON() ([]byte, error) {
 	vv := make(map[string]string, len(m.entries))
 	for k, v := range m.entries {
-		vv[hex.EncodeToString(k[:])] = hex.EncodeToString(v) //nolint:rangevarref
+		vv[k.Prefix+hex.EncodeToString(k.Key[:])] = hex.EncodeToString(v) //nolint:rangevarref
 	}
 	return json.Marshal(vv)
 }
@@ -29,7 +29,11 @@ func (m *DB) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	for k, v := range vv {
-		kk, err := hex.DecodeString(k)
+		i := len(k) - 64
+		if i < 0 {
+			return fmt.Errorf("invalid key length: want ≥ 64, got %d", len(k))
+		}
+		kk, err := hex.DecodeString(k[i:])
 		if err != nil {
 			return err
 		}
@@ -40,7 +44,8 @@ func (m *DB) UnmarshalJSON(b []byte) error {
 		if err != nil {
 			return err
 		}
-		m.entries[storage.Key(*(*[32]byte)(kk))] = vv
+		sk := storage.Key(*(*[32]byte)(kk))
+		m.entries[PrefixedKey{k[:i], sk}] = vv
 	}
 	return nil
 }
