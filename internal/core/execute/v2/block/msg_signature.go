@@ -49,7 +49,7 @@ func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	// TODO FIXME If we're within MessageIsReady, presumably this validation has
 	// already been done, so it should be safe to skip it. But honestly, this is
 	// questionable logic and indicates a larger problem.
-	if !ctx.isWithin(internal.MessageTypeMessageIsReady) {
+	if !ctx.isWithin(internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		// Verify the bundle contains the transaction
 		var hasTxn bool
 		for _, msg := range ctx.messages {
@@ -69,7 +69,7 @@ func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 
 	// Only allow authority signatures within a synthetic message and don't
 	// allow them outside of one
-	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
+	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		if sig.Signature.Type() != protocol.SignatureTypeAuthority {
 			return nil, nil, errors.BadRequest.WithFormat("a synthetic message cannot carry a %v signature", sig.Signature.Type())
 		}

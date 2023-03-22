@@ -31,7 +31,6 @@ SignatureMessage:
   union: { type: message }
   fields:
     - name: Signature
-      # type: protocol.KeySignature
       type: protocol.Signature
       marshal-as: union
     - name: TxID
