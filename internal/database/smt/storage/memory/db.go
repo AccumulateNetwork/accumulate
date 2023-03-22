@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,7 +21,7 @@ import (
 // notes on InitDB for future improvements.
 type DB struct {
 	DBOpen        atomicBool
-	entries       map[storage.Key][]byte
+	entries       map[PrefixedKey][]byte
 	mutex         sync.Mutex
 	logger        storage.Logger
 	debugWriteLog []writeLogEntry
@@ -30,7 +30,7 @@ type DB struct {
 func New(logger storage.Logger) *DB {
 	m := new(DB)
 	m.logger = logger
-	m.entries = make(map[storage.Key][]byte)
+	m.entries = make(map[PrefixedKey][]byte)
 	m.DBOpen.Store(true)
 	return m
 }
@@ -51,7 +51,7 @@ func (m *DB) Ready() bool {
 // Takes all the key value pairs collected in a cache of mapped values and
 // adds them to the database.  The assumption here is that the order in which
 // the cache is applied to a key value store does not matter.
-func (m *DB) commit(txCache map[storage.Key][]byte) error {
+func (m *DB) commit(txCache map[PrefixedKey][]byte) error {
 	m.mutex.Lock()
 	if !m.Ready() {
 		return storage.ErrNotOpen
@@ -61,8 +61,8 @@ func (m *DB) commit(txCache map[storage.Key][]byte) error {
 		m.entries[k] = v
 		if debugLogWrites {
 			m.debugWriteLog = append(m.debugWriteLog, writeLogEntry{
-				key:    k,
-				keyStr: k.String(),
+				key:    k.Key,
+				keyStr: k.Key.String(),
 				value:  hex.EncodeToString(v),
 			})
 		}
@@ -71,14 +71,14 @@ func (m *DB) commit(txCache map[storage.Key][]byte) error {
 }
 
 // export writes the database to a map
-func (m *DB) export() map[storage.Key][]byte {
+func (m *DB) export() map[PrefixedKey][]byte {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if !m.Ready() {
 		return nil
 	}
 
-	ex := make(map[storage.Key][]byte, len(m.entries))
+	ex := make(map[PrefixedKey][]byte, len(m.entries))
 	for k, v := range m.entries {
 		ex[k] = v
 	}
@@ -112,14 +112,14 @@ func (m *DB) Close() error {
 	return nil
 }
 
-func (m *DB) get(key storage.Key) (value []byte, err error) {
+func (m *DB) get(prefix string, key storage.Key) (value []byte, err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if !m.Ready() {
 		return nil, storage.ErrNotOpen
 	}
 
-	v, ok := m.entries[key]
+	v, ok := m.entries[PrefixedKey{prefix, key}]
 	if !ok {
 		return nil, errors.NotFound.WithFormat("key %v not found", key)
 	}

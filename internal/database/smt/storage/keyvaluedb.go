@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -17,7 +17,18 @@ var ErrNotFound = errors.NotFound
 // not open.
 var ErrNotOpen = errors.InternalError.With("not open")
 
+type Beginner interface {
+	// Begin begins a transaction or sub-transaction.
+	Begin(writable bool) KeyValueTxn
+
+	// Begin begins a transaction or sub-transaction with the given prefix
+	// applied to keys.
+	BeginWithPrefix(writable bool, prefix string) KeyValueTxn
+}
+
 type KeyValueTxn interface {
+	Beginner
+
 	// Get gets a value.
 	Get(key Key) ([]byte, error)
 	// Put puts a value.
@@ -28,15 +39,13 @@ type KeyValueTxn interface {
 	Commit() error
 	// Discard discards the transaction.
 	Discard()
-	// Begin begins a sub-transaction.
-	Begin(writable bool) KeyValueTxn
 }
 
 type KeyValueStore interface {
+	Beginner
+
 	// Close closes the store.
 	Close() error
-	// Begin begins a transaction.
-	Begin(writable bool) KeyValueTxn
 }
 
 // Logger defines a generic logging interface compatible with Tendermint (stolen from Tendermint).

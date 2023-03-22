@@ -28,13 +28,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	etcd "go.etcd.io/etcd/client/v3"
 )
 
 var cmdInitNetwork = &cobra.Command{
@@ -163,13 +161,6 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 
 				if flagInit.NoEmptyBlocks {
 					config.Consensus.CreateEmptyBlocks = false
-				}
-
-				if len(flagInit.Etcd) > 0 {
-					config.Accumulate.Storage.Type = cfg.EtcdStorage
-					config.Accumulate.Storage.Etcd = new(etcd.Config)
-					config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
-					config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 				}
 			}
 			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
