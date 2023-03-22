@@ -145,7 +145,9 @@ type AuthoritySignature struct {
 	// Vote is the authority's vote.
 	Vote VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	// TxID is the ID of the transaction this was produced for.
-	TxID      *url.TxID  `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	TxID *url.TxID `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	// Cause is the ID of the signature that produced this.
+	Cause     *url.TxID  `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 	Delegator []*url.URL `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
 	extraData []byte
 }
@@ -1377,6 +1379,9 @@ func (v *AuthoritySignature) Copy() *AuthoritySignature {
 	u.Vote = v.Vote
 	if v.TxID != nil {
 		u.TxID = v.TxID
+	}
+	if v.Cause != nil {
+		u.Cause = v.Cause
 	}
 	u.Delegator = make([]*url.URL, len(v.Delegator))
 	for i, v := range v.Delegator {
@@ -3138,6 +3143,14 @@ func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
 	case v.TxID == nil || u.TxID == nil:
 		return false
 	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	switch {
+	case v.Cause == u.Cause:
+		// equal
+	case v.Cause == nil || u.Cause == nil:
+		return false
+	case !((v.Cause).Equal(u.Cause)):
 		return false
 	}
 	if len(v.Delegator) != len(u.Delegator) {
@@ -5870,7 +5883,8 @@ var fieldNames_AuthoritySignature = []string{
 	3: "Authority",
 	4: "Vote",
 	5: "TxID",
-	6: "Delegator",
+	6: "Cause",
+	7: "Delegator",
 }
 
 func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
@@ -5894,9 +5908,12 @@ func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
 	if !(v.TxID == nil) {
 		writer.WriteTxid(5, v.TxID)
 	}
+	if !(v.Cause == nil) {
+		writer.WriteTxid(6, v.Cause)
+	}
 	if !(len(v.Delegator) == 0) {
 		for _, v := range v.Delegator {
-			writer.WriteUrl(6, v)
+			writer.WriteUrl(7, v)
 		}
 	}
 
@@ -5930,6 +5947,11 @@ func (v *AuthoritySignature) IsValid() error {
 		errs = append(errs, "field TxID is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Cause is missing")
+	} else if v.Cause == nil {
+		errs = append(errs, "field Cause is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Delegator is missing")
 	} else if len(v.Delegator) == 0 {
 		errs = append(errs, "field Delegator is not set")
@@ -12451,8 +12473,11 @@ func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	if x, ok := reader.ReadTxid(5); ok {
 		v.TxID = x
 	}
+	if x, ok := reader.ReadTxid(6); ok {
+		v.Cause = x
+	}
 	for {
-		if x, ok := reader.ReadUrl(6); ok {
+		if x, ok := reader.ReadUrl(7); ok {
 			v.Delegator = append(v.Delegator, x)
 		} else {
 			break
@@ -16422,6 +16447,7 @@ func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 		Authority *url.URL                    `json:"authority,omitempty"`
 		Vote      VoteType                    `json:"vote,omitempty"`
 		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Cause     *url.TxID                   `json:"cause,omitempty"`
 		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -16436,6 +16462,9 @@ func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TxID == nil) {
 		u.TxID = v.TxID
+	}
+	if !(v.Cause == nil) {
+		u.Cause = v.Cause
 	}
 	if !(len(v.Delegator) == 0) {
 		u.Delegator = v.Delegator
@@ -18534,6 +18563,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 		Authority *url.URL                    `json:"authority,omitempty"`
 		Vote      VoteType                    `json:"vote,omitempty"`
 		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Cause     *url.TxID                   `json:"cause,omitempty"`
 		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -18541,6 +18571,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	u.Authority = v.Authority
 	u.Vote = v.Vote
 	u.TxID = v.TxID
+	u.Cause = v.Cause
 	u.Delegator = v.Delegator
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -18552,6 +18583,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	v.Authority = u.Authority
 	v.Vote = u.Vote
 	v.TxID = u.TxID
+	v.Cause = u.Cause
 	v.Delegator = u.Delegator
 	return nil
 }

@@ -8,7 +8,6 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -120,7 +119,6 @@ func TestMultiAuthority(t *testing.T) {
 		pay, err := batch.Account(alice).Transaction(st[0].TxID.Hash()).Payments().Get()
 		require.NoError(t, err)
 		require.NotEmpty(t, pay)
-		fmt.Println(pay)
 		votes, err := batch.Account(alice).Transaction(st[0].TxID.Hash()).Votes().Get()
 		require.NoError(t, err)
 		require.NotEmpty(t, votes)
@@ -132,7 +130,8 @@ func TestMultiAuthority(t *testing.T) {
 			Url(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
 
 	sim.StepUntil(
-		Txn(st[0].TxID).Succeeds())
+		Txn(st[0].TxID).Succeeds(),
+		Sig(st[1].TxID).Completes())
 
 	// Verify that payments and votes are wiped
 	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {

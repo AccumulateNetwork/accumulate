@@ -48,7 +48,7 @@ func (AuthoritySignature) check(batch *database.Batch, ctx *SignatureContext) (*
 	}
 
 	// An authority signature MUST NOT be submitted directly
-	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
+	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		return nil, errors.BadRequest.WithFormat("a non-synthetic message cannot carry an %v signature", ctx.signature.Type())
 	}
 
@@ -73,6 +73,12 @@ func (x AuthoritySignature) Process(batch *database.Batch, ctx *SignatureContext
 	}
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Record the cause
+	err = batch.Message(ctx.message.Hash()).Cause().Add(sig.Cause)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store message cause: %w", err)
 	}
 
 	// Once a signature has been included in the block, record the signature and
@@ -183,19 +189,19 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		Authority: signerAuth,
 		Vote:      protocol.VoteTypeAccept,
 		TxID:      ctx.transaction.ID(),
+		Cause:     ctx.message.ID(),
 		Delegator: sig.Delegator[1:],
 	}
 
 	// TODO Deduplicate
-	ctx.didProduce(
+	return ctx.didProduce(
+		batch,
 		auth.RoutingLocation(),
 		&messaging.SignatureMessage{
 			Signature: auth,
 			TxID:      ctx.transaction.ID(),
 		},
 	)
-
-	return nil
 }
 
 func (AuthoritySignature) signerCanSign(batch *database.Batch, ctx *SignatureContext, sig *protocol.AuthoritySignature, signer protocol.Signer) error {
