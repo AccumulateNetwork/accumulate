@@ -10,12 +10,17 @@ import (
 	"crypto/sha256"
 	"testing"
 
+	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -53,13 +58,16 @@ func TestCreateIdentity(t *testing.T) {
 		var timestamp uint64
 
 		// Initialize
-		sim := simulator.New(t, 3)
-		sim.InitFromGenesis()
+		sim := NewSim(t,
+			simulator.MemoryDatabase,
+			simulator.SimpleNetwork(t.Name(), 3, 3),
+			simulator.Genesis(GenesisTime),
+		)
 
-		sim.CreateAccount(&LiteIdentity{Url: lite, CreditBalance: 1e9})
-		sim.CreateIdentity(alice, aliceKey[32:])
-		sim.CreateIdentity(charlie, acctesting.GenerateKey(charlie)[32:])
-		updateAccount(sim, alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
+		MakeAccount(t, sim.DatabaseFor(lite), &LiteIdentity{Url: lite, CreditBalance: 1e9})
+		MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+		MakeIdentity(t, sim.DatabaseFor(charlie), charlie, acctesting.GenerateKey(charlie)[32:])
+		UpdateAccount(t, sim.DatabaseFor(alice), alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
 
 		bld := acctesting.NewTransaction()
 		if c.Direct {
@@ -68,7 +76,7 @@ func TestCreateIdentity(t *testing.T) {
 			bld = bld.WithPrincipal(c.SignerUrl)
 		}
 
-		st, err := sim.SubmitAndExecuteBlock(
+		st := sim.Submit(
 			bld.WithSigner(c.SignerUrl, 1).
 				WithTimestampVar(&timestamp).
 				WithBody(&CreateIdentity{
@@ -77,29 +85,30 @@ func TestCreateIdentity(t *testing.T) {
 					KeyBookUrl: c.IdentityUrl.JoinPath("book"),
 				}).
 				Initiate(SignatureTypeED25519, c.SignerKey).
-				Build(),
-		)
-		if c.Success {
-			require.NoError(t, err, "Expected the transaction to succeed")
-		} else if err != nil {
-			return // Failed to validate
-		}
+				Build())
 
-		h := st[0].TxID.Hash()
-		if c.Success {
-			// Should succeed
-			st, _ = sim.WaitForTransactionFlow(delivered, h[:])
-			require.Equal(t, errors.Delivered, st[0].Code, "Expected the transaction to succeed")
-		} else {
-			// Should fail or not be delivered
-			_, st, _ := sim.WaitForTransaction(delivered, h[:], 50)
-			if st != nil {
-				require.True(t, st.Failed(), "Expected the transaction to fail")
+		var didFail error
+		for _, st := range st {
+			if st.Error != nil {
+				didFail = st.AsError()
+				break
 			}
 		}
 
+		if c.Success {
+			// Should succeed
+			require.NoError(t, didFail)
+			sim.StepUntil(
+				Txn(st[0].TxID).Completes())
+
+		} else if didFail == nil {
+			// Should fail or not be delivered
+			sim.StepUntil(
+				Txn(st[0].TxID).Fails())
+		}
+
 		// Verify
-		_ = sim.PartitionFor(c.IdentityUrl).Database.View(func(batch *database.Batch) error {
+		_ = sim.DatabaseFor(c.IdentityUrl).View(func(batch *database.Batch) error {
 			err := batch.Account(c.IdentityUrl).Main().GetAs(new(*ADI))
 			if c.Success {
 				require.NoError(t, err, "Expected the ADI to have been created")
@@ -110,4 +119,31 @@ func TestCreateIdentity(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+func TestCreateIdentity_Eth(t *testing.T) {
+	seed := storage.MakeKey(t.Name())
+	sk, pk := btc.PrivKeyFromBytes(btc.S256(), seed[:])
+	lite := LiteAuthorityForKey(pk.SerializeUncompressed(), SignatureTypeETH)
+	alice := AccountUrl("alice")
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeAccount(t, sim.DatabaseFor(lite), &LiteIdentity{Url: lite, CreditBalance: 1e9})
+
+	// Execute
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(lite).
+			CreateIdentity(alice).WithKeyBook(alice, "book").WithKey(pk.SerializeUncompressed(), SignatureTypeETH).
+			SignWith(lite).Version(1).Timestamp(1).Type(SignatureTypeETH).PrivateKey(sk.Serialize()))
+	sim.StepUntil(
+		Txn(st.TxID).Completes())
+
+	// Verify
+	GetAccount[*ADI](t, sim.DatabaseFor(alice), alice)
 }

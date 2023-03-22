@@ -9,7 +9,6 @@ package block
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -95,29 +94,6 @@ func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
 	}
 }
 
-// getMessageContextAncestor returns the ancestor of the context that is the
-// given type.
-func getMessageContextAncestor[T any](m *MessageContext) (T, bool) {
-	for {
-		if m.parent == nil {
-			var z T
-			return z, false
-		}
-		m = m.parent
-		if x, ok := m.message.(T); ok {
-			return x, true
-		}
-
-		// For the same reasons as MessageContext.isWithin
-		switch m.message.Type() {
-		case messaging.MessageTypeSignature,
-			messaging.MessageTypeCreditPayment:
-			var z T
-			return z, false
-		}
-	}
-}
-
 // shouldExecuteTransaction checks if this context is one that is safe to
 // execute a transaction within.
 //
@@ -145,7 +121,7 @@ func (m *MessageContext) queueAdditional(msg messaging.Message) {
 }
 
 // didProduce queues a produced synthetic message for dispatch.
-func (m *MessageContext) didProduce(dest *url.URL, msg messaging.Message) {
+func (m *MessageContext) didProduce(batch *database.Batch, dest *url.URL, msg messaging.Message) error {
 	if dest == nil {
 		panic("nil destination for produced message")
 	}
@@ -154,6 +130,19 @@ func (m *MessageContext) didProduce(dest *url.URL, msg messaging.Message) {
 		Destination: dest,
 		Message:     msg,
 	})
+
+	err := batch.Message(m.message.Hash()).Produced().Add(msg.ID())
+	if err != nil {
+		return errors.UnknownError.WithFormat("store message cause: %w", err)
+	}
+
+	// Backwards compatibility
+	err = batch.Transaction2(m.message.Hash()).Produced().Add(msg.ID())
+	if err != nil {
+		return errors.UnknownError.WithFormat("store message cause: %w", err)
+	}
+
+	return nil
 }
 
 // callMessageExecutor creates a child context for the given message and calls
@@ -201,10 +190,8 @@ func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol
 }
 
 func (b *bundle) recordPending(batch *database.Batch, ctx *MessageContext, msg messaging.Message) (*protocol.TransactionStatus, error) {
-	h := msg.Hash()
-	ctx.Executor.logger.Debug("Pending sequenced message", "hash", logging.AsHex(h).Slice(0, 4), "module", "synthetic")
-
 	// Store the message
+	h := msg.Hash()
 	err := batch.Message(h).Main().Put(msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store message: %w", err)
