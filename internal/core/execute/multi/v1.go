@@ -119,12 +119,17 @@ func (x *ExecutorV1) Validate(messages []messaging.Message, recheck bool) ([]*pr
 
 // Begin constructs a [BlockV1] and calls [block.Executor.BeginBlock].
 func (x *ExecutorV1) Begin(params execute.BlockParams) (execute.Block, error) {
+	err := x.EventBus.Publish(execute.WillBeginBlock{BlockParams: params})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	b := new(BlockV1)
 	b.Executor = (*block.Executor)(x)
 	b.Block = new(block.Block)
 	b.Block.Batch = x.Database.Begin(true)
 	b.Block.BlockMeta = params
-	err := b.Executor.BeginBlock(b.Block)
+	err = b.Executor.BeginBlock(b.Block)
 	if err != nil {
 		b.Block.Batch.Discard()
 	}
@@ -202,9 +207,21 @@ func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 }
 
 func (s *BlockStateV1) Commit() error {
-	err := s.Block.Batch.Commit()
+	if s.IsEmpty() {
+		s.Discard()
+		return nil
+	}
+
+	err := s.Executor.EventBus.Publish(execute.WillCommitBlock{
+		Block: s,
+	})
 	if err != nil {
-		return err
+		return errors.UnknownError.Wrap(err)
+	}
+
+	err = s.Block.Batch.Commit()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Start a new checkTx batch
