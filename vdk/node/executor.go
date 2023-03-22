@@ -33,19 +33,31 @@ type Event interface {
 	events.Event
 }
 
-type DidCommitBlock struct {
-	DidCommit events.DidCommitBlock
-}
+type DidCommitBlock events.DidCommitBlock
 
-type DidSaveSnapshot struct {
-	DidSave events.DidSaveSnapshot
-}
+type DidSaveSnapshot events.DidSaveSnapshot
 
-type FatalError struct {
-	Fatal events.FatalError
-}
+type FatalError events.FatalError
 
 // SubscribeSync will expose the internal subscribe sync
 func SubscribeSync[T Event](b *Bus, sub func(T) error) {
 	events.SubscribeSync(&b.Bus, sub)
+}
+
+func SubscribeSyncDidCommitBlock(b *Bus, sub func(DidCommitBlock) error) {
+	events.SubscribeSync[events.DidCommitBlock](&b.Bus, func(block events.DidCommitBlock) error {
+		return sub(DidCommitBlock(block))
+	})
+}
+
+func SubscribeSyncDidSaveSnapshot(b *Bus, sub func(DidSaveSnapshot) error) {
+	events.SubscribeSync[events.DidSaveSnapshot](&b.Bus, func(snapshot events.DidSaveSnapshot) error {
+		return sub(DidSaveSnapshot(snapshot))
+	})
+}
+
+func SubscribeSyncFatalError(b *Bus, sub func(FatalError) error) {
+	events.SubscribeSync[events.FatalError](&b.Bus, func(fatal events.FatalError) error {
+		return sub(FatalError(fatal))
+	})
 }
