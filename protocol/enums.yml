@@ -16,7 +16,8 @@ ExecutorVersion:
     description: halts transaction processing in preparation for v2
   V2:
     value: 5
-    description: is the second version of the execute system
+    description: is the second version of the executor system
+
 PartitionType:
   Directory:
     value: 1
