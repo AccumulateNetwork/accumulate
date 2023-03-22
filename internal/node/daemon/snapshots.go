@@ -171,7 +171,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
-	err = exec.RestoreSnapshot(db, file)
+	_, err = exec.Restore(file, nil)
 	if err != nil {
 		return errors.UnknownError.WithFormat("failed to restore snapshot: %w", err)
 	}
