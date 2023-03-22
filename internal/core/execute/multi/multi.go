@@ -9,7 +9,6 @@ package execute
 import (
 	"sync/atomic"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	v1 "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -31,6 +30,7 @@ type Block = execute.Block
 type BlockParams = execute.BlockParams
 type BlockState = execute.BlockState
 type Options = execute.Options
+type ValidatorUpdate = execute.ValidatorUpdate
 
 // NewExecutor creates a new executor.
 func NewExecutor(opts Options) (Executor, error) {
@@ -122,34 +122,23 @@ func (m *Multi) StoreBlockTimers(ds *logging.DataSet) {
 	(*m.active.Load()).StoreBlockTimers(ds)
 }
 
-func (m *Multi) LoadStateRoot(batch *database.Batch) ([]byte, error) {
-	return (*m.active.Load()).LoadStateRoot(batch)
+func (m *Multi) LastBlock() (*execute.BlockParams, [32]byte, error) {
+	return (*m.active.Load()).LastBlock()
 }
 
-func (m *Multi) RestoreSnapshot(db database.Beginner, snapshot ioutil2.SectionReader) error {
-	err := (*m.active.Load()).RestoreSnapshot(db, snapshot)
+func (m *Multi) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
+	additional, err = (*m.active.Load()).Restore(snapshot, validators)
 	if err != nil || m.version >= m.newVersion {
-		return err
-	}
-
-	if db != m.opts.Database {
-		// If db is not the same one used for initializing the executor,
-		// NewExecutor will not see changes from RestoreSnapshot. TODO We
-		// probably should just remove the db parameter from this function.
-		return errors.Conflict.With("cannot activate the new executor version")
+		return additional, err
 	}
 
 	// Change the active executor implementation
 	err = m.updateActive()
-	return errors.UnknownError.Wrap(err)
+	return additional, errors.UnknownError.Wrap(err)
 }
 
-func (m *Multi) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
-	return (*m.active.Load()).InitChainValidators(initVal)
-}
-
-func (m *Multi) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	return (*m.active.Load()).Validate(batch, messages)
+func (m *Multi) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
+	return (*m.active.Load()).Validate(messages, recheck)
 }
 
 func (m *Multi) Begin(params BlockParams) (Block, error) {
