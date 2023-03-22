@@ -336,9 +336,8 @@ func (v *AccountAuthOperationType) SetEnumValue(id uint64) bool {
 	case AccountAuthOperationTypeUnknown, AccountAuthOperationTypeEnable, AccountAuthOperationTypeDisable, AccountAuthOperationTypeAddAuthority, AccountAuthOperationTypeRemoveAuthority:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Account Auth Operation Type.
@@ -354,9 +353,8 @@ func (v AccountAuthOperationType) String() string {
 		return "addAuthority"
 	case AccountAuthOperationTypeRemoveAuthority:
 		return "removeAuthority"
-	default:
-		return fmt.Sprintf("AccountAuthOperationType:%d", v)
 	}
+	return fmt.Sprintf("AccountAuthOperationType:%d", v)
 }
 
 // AccountAuthOperationTypeByName returns the named Account Auth Operation Type.
@@ -372,9 +370,8 @@ func AccountAuthOperationTypeByName(name string) (AccountAuthOperationType, bool
 		return AccountAuthOperationTypeAddAuthority, true
 	case "removeauthority":
 		return AccountAuthOperationTypeRemoveAuthority, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Account Auth Operation Type to JSON as a string.
@@ -408,9 +405,8 @@ func (v *AccountType) SetEnumValue(id uint64) bool {
 	case AccountTypeUnknown, AccountTypeAnchorLedger, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeBlockLedger, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Account Type.
@@ -446,9 +442,8 @@ func (v AccountType) String() string {
 		return "liteIdentity"
 	case AccountTypeSyntheticLedger:
 		return "syntheticLedger"
-	default:
-		return fmt.Sprintf("AccountType:%d", v)
 	}
+	return fmt.Sprintf("AccountType:%d", v)
 }
 
 // AccountTypeByName returns the named Account Type.
@@ -486,9 +481,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeLiteIdentity, true
 	case "syntheticledger":
 		return AccountTypeSyntheticLedger, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Account Type to JSON as a string.
@@ -522,9 +516,8 @@ func (v *AllowedTransactionBit) SetEnumValue(id uint64) bool {
 	case AllowedTransactionBitUpdateKeyPage, AllowedTransactionBitUpdateAccountAuth:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Allowed Transaction Bit.
@@ -534,9 +527,8 @@ func (v AllowedTransactionBit) String() string {
 		return "updateKeyPage"
 	case AllowedTransactionBitUpdateAccountAuth:
 		return "updateAccountAuth"
-	default:
-		return fmt.Sprintf("AllowedTransactionBit:%d", v)
 	}
+	return fmt.Sprintf("AllowedTransactionBit:%d", v)
 }
 
 // AllowedTransactionBitByName returns the named Allowed Transaction Bit.
@@ -546,9 +538,8 @@ func AllowedTransactionBitByName(name string) (AllowedTransactionBit, bool) {
 		return AllowedTransactionBitUpdateKeyPage, true
 	case "updateaccountauth":
 		return AllowedTransactionBitUpdateAccountAuth, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Allowed Transaction Bit to JSON as a string.
@@ -582,9 +573,8 @@ func (v *BookType) SetEnumValue(id uint64) bool {
 	case BookTypeNormal, BookTypeValidator, BookTypeOperator:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Book Type.
@@ -596,9 +586,8 @@ func (v BookType) String() string {
 		return "validator"
 	case BookTypeOperator:
 		return "operator"
-	default:
-		return fmt.Sprintf("BookType:%d", v)
 	}
+	return fmt.Sprintf("BookType:%d", v)
 }
 
 // BookTypeByName returns the named Book Type.
@@ -610,9 +599,8 @@ func BookTypeByName(name string) (BookType, bool) {
 		return BookTypeValidator, true
 	case "operator":
 		return BookTypeOperator, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Book Type to JSON as a string.
@@ -646,9 +634,8 @@ func (v *DataEntryType) SetEnumValue(id uint64) bool {
 	case DataEntryTypeUnknown, DataEntryTypeFactom, DataEntryTypeAccumulate:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Data Entry Type.
@@ -660,9 +647,8 @@ func (v DataEntryType) String() string {
 		return "factom"
 	case DataEntryTypeAccumulate:
 		return "accumulate"
-	default:
-		return fmt.Sprintf("DataEntryType:%d", v)
 	}
+	return fmt.Sprintf("DataEntryType:%d", v)
 }
 
 // DataEntryTypeByName returns the named Data Entry Type.
@@ -674,9 +660,8 @@ func DataEntryTypeByName(name string) (DataEntryType, bool) {
 		return DataEntryTypeFactom, true
 	case "accumulate":
 		return DataEntryTypeAccumulate, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Data Entry Type to JSON as a string.
@@ -710,9 +695,8 @@ func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeFailed, ErrorCodeDidPanic, ErrorCodeUnknownError:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Error Code.
@@ -728,9 +712,8 @@ func (v ErrorCode) String() string {
 		return "didPanic"
 	case ErrorCodeUnknownError:
 		return "unknownError"
-	default:
-		return fmt.Sprintf("ErrorCode:%d", v)
 	}
+	return fmt.Sprintf("ErrorCode:%d", v)
 }
 
 // ErrorCodeByName returns the named Error Code.
@@ -746,9 +729,8 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeDidPanic, true
 	case "unknownerror":
 		return ErrorCodeUnknownError, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Error Code to JSON as a string.
@@ -782,9 +764,8 @@ func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1ActivationFix, ExecutorVersionV1Halt, ExecutorVersionV2:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Executor Version.
@@ -800,9 +781,8 @@ func (v ExecutorVersion) String() string {
 		return "v1-halt"
 	case ExecutorVersionV2:
 		return "v2"
-	default:
-		return fmt.Sprintf("ExecutorVersion:%d", v)
 	}
+	return fmt.Sprintf("ExecutorVersion:%d", v)
 }
 
 // ExecutorVersionByName returns the named Executor Version.
@@ -824,9 +804,8 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV1Halt, true
 	case "v2":
 		return ExecutorVersionV2, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Executor Version to JSON as a string.
@@ -860,9 +839,8 @@ func (v *KeyPageOperationType) SetEnumValue(id uint64) bool {
 	case KeyPageOperationTypeUnknown, KeyPageOperationTypeUpdate, KeyPageOperationTypeRemove, KeyPageOperationTypeAdd, KeyPageOperationTypeSetThreshold, KeyPageOperationTypeUpdateAllowed:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Key Page Operation Type.
@@ -880,9 +858,8 @@ func (v KeyPageOperationType) String() string {
 		return "setThreshold"
 	case KeyPageOperationTypeUpdateAllowed:
 		return "updateAllowed"
-	default:
-		return fmt.Sprintf("KeyPageOperationType:%d", v)
 	}
+	return fmt.Sprintf("KeyPageOperationType:%d", v)
 }
 
 // KeyPageOperationTypeByName returns the named Key Page Operation Type.
@@ -900,9 +877,8 @@ func KeyPageOperationTypeByName(name string) (KeyPageOperationType, bool) {
 		return KeyPageOperationTypeSetThreshold, true
 	case "updateallowed":
 		return KeyPageOperationTypeUpdateAllowed, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Key Page Operation Type to JSON as a string.
@@ -936,9 +912,8 @@ func (v *ObjectType) SetEnumValue(id uint64) bool {
 	case ObjectTypeUnknown, ObjectTypeAccount, ObjectTypeTransaction:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Object Type.
@@ -950,9 +925,8 @@ func (v ObjectType) String() string {
 		return "account"
 	case ObjectTypeTransaction:
 		return "transaction"
-	default:
-		return fmt.Sprintf("ObjectType:%d", v)
 	}
+	return fmt.Sprintf("ObjectType:%d", v)
 }
 
 // ObjectTypeByName returns the named Object Type.
@@ -964,9 +938,8 @@ func ObjectTypeByName(name string) (ObjectType, bool) {
 		return ObjectTypeAccount, true
 	case "transaction":
 		return ObjectTypeTransaction, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Object Type to JSON as a string.
@@ -1000,9 +973,8 @@ func (v *PartitionType) SetEnumValue(id uint64) bool {
 	case PartitionTypeDirectory, PartitionTypeBlockValidator, PartitionTypeBlockSummary:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Partition Type.
@@ -1014,9 +986,8 @@ func (v PartitionType) String() string {
 		return "blockValidator"
 	case PartitionTypeBlockSummary:
 		return "blockSummary"
-	default:
-		return fmt.Sprintf("PartitionType:%d", v)
 	}
+	return fmt.Sprintf("PartitionType:%d", v)
 }
 
 // PartitionTypeByName returns the named Partition Type.
@@ -1032,9 +1003,8 @@ func PartitionTypeByName(name string) (PartitionType, bool) {
 		return PartitionTypeBlockSummary, true
 	case "block-summary":
 		return PartitionTypeBlockSummary, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Partition Type to JSON as a string.
@@ -1068,9 +1038,8 @@ func (v *SignatureType) SetEnumValue(id uint64) bool {
 	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal, SignatureTypeAuthority:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Signature Type.
@@ -1104,9 +1073,8 @@ func (v SignatureType) String() string {
 		return "internal"
 	case SignatureTypeAuthority:
 		return "authority"
-	default:
-		return fmt.Sprintf("SignatureType:%d", v)
 	}
+	return fmt.Sprintf("SignatureType:%d", v)
 }
 
 // SignatureTypeByName returns the named Signature Type.
@@ -1142,9 +1110,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeInternal, true
 	case "authority":
 		return SignatureTypeAuthority, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Signature Type to JSON as a string.
@@ -1178,9 +1145,8 @@ func (v *TransactionMax) SetEnumValue(id uint64) bool {
 	case TransactionMaxUser, TransactionMaxSynthetic, TransactionMaxSystem:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Transaction Max.
@@ -1192,9 +1158,8 @@ func (v TransactionMax) String() string {
 		return "synthetic"
 	case TransactionMaxSystem:
 		return "system"
-	default:
-		return fmt.Sprintf("TransactionMax:%d", v)
 	}
+	return fmt.Sprintf("TransactionMax:%d", v)
 }
 
 // TransactionMaxByName returns the named Transaction Max.
@@ -1206,9 +1171,8 @@ func TransactionMaxByName(name string) (TransactionMax, bool) {
 		return TransactionMaxSynthetic, true
 	case "system":
 		return TransactionMaxSystem, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Transaction Max to JSON as a string.
@@ -1242,9 +1206,8 @@ func (v *TransactionType) SetEnumValue(id uint64) bool {
 	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Transaction Type.
@@ -1316,9 +1279,8 @@ func (v TransactionType) String() string {
 		return "blockValidatorAnchor"
 	case TransactionTypeSystemWriteData:
 		return "systemWriteData"
-	default:
-		return fmt.Sprintf("TransactionType:%d", v)
 	}
+	return fmt.Sprintf("TransactionType:%d", v)
 }
 
 // TransactionTypeByName returns the named Transaction Type.
@@ -1392,9 +1354,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeBlockValidatorAnchor, true
 	case "systemwritedata":
 		return TransactionTypeSystemWriteData, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Transaction Type to JSON as a string.
@@ -1428,9 +1389,8 @@ func (v *VoteType) SetEnumValue(id uint64) bool {
 	case VoteTypeAccept, VoteTypeReject, VoteTypeAbstain, VoteTypeSuggest:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Vote Type.
@@ -1444,9 +1404,8 @@ func (v VoteType) String() string {
 		return "abstain"
 	case VoteTypeSuggest:
 		return "suggest"
-	default:
-		return fmt.Sprintf("VoteType:%d", v)
 	}
+	return fmt.Sprintf("VoteType:%d", v)
 }
 
 // VoteTypeByName returns the named Vote Type.
@@ -1460,9 +1419,8 @@ func VoteTypeByName(name string) (VoteType, bool) {
 		return VoteTypeAbstain, true
 	case "suggest":
 		return VoteTypeSuggest, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Vote Type to JSON as a string.

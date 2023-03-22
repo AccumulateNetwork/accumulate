@@ -36,9 +36,8 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(SyntheticMessage), nil
 	case MessageTypeTransaction:
 		return new(TransactionMessage), nil
-	default:
-		return nil, fmt.Errorf("unknown message %v", typ)
 	}
+	return nil, fmt.Errorf("unknown message %v", typ)
 }
 
 // EqualMessage is used to compare the values of the union
@@ -95,9 +94,8 @@ func EqualMessage(a, b Message) bool {
 		}
 		b, ok := b.(*TransactionMessage)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyMessage copies a Message.

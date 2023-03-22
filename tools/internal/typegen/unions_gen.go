@@ -26,9 +26,8 @@ func NewRecord(typ RecordType) (Record, error) {
 		return new(OtherRecord), nil
 	case RecordTypeState:
 		return new(StateRecord), nil
-	default:
-		return nil, fmt.Errorf("unknown record %v", typ)
 	}
+	return nil, fmt.Errorf("unknown record %v", typ)
 }
 
 // UnmarshalRecordJson unmarshals a Record.

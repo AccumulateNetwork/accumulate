@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,7 +8,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -32,6 +31,7 @@ var flags struct {
 	ExpandEmbedded         bool
 	LongUnionDiscriminator bool
 	ElidePackageType       bool
+	GoInclude              []string
 }
 
 func main() {
@@ -49,6 +49,7 @@ func main() {
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
 	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
 	cmd.Flags().BoolVar(&flags.ElidePackageType, "elide-package-type", false, "If there is a union type that has the same name as the package, elide it")
+	cmd.Flags().StringSliceVar(&flags.GoInclude, "go-include", nil, "Additional Go packages to include")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
@@ -73,13 +74,23 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 
 var moduleInfo = func() struct{ Dir string } {
 	buf := new(bytes.Buffer)
-	cmd := exec.Command("go", "list", "-m", "-json")
+	cmd := exec.Command("go", "list", "-m", "-f={{.Dir}}")
 	cmd.Stdout = buf
 	check(cmd.Run())
 
-	info := new(struct{ Dir string })
-	check(json.Unmarshal(buf.Bytes(), info))
-	return *info
+	cwd, err := os.Getwd()
+	checkf(err, "get working directory")
+
+	for _, s := range strings.Split(buf.String(), "\n") {
+		r, err := filepath.Rel(s, cwd)
+		checkf(err, "check module path")
+		if !strings.HasPrefix(r, ".") {
+			return struct{ Dir string }{s}
+		}
+	}
+
+	fatalf("cannot find module")
+	panic("not reached")
 }()
 
 func getPackagePath(dir string) string {

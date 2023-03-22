@@ -60,9 +60,8 @@ func (v *BlockTimerType) SetEnumValue(id uint64) bool {
 	case BlockTimerTypeExecuteEnvelope, BlockTimerTypeProcessSignature, BlockTimerTypeBeginBlock, BlockTimerTypeCheckTx, BlockTimerTypeDeliverTx, BlockTimerTypeEndBlock, BlockTimerTypeCommit, BlockTimerTypeSigning, BlockTimerTypeNetworkAccountUpdates, BlockTimerTypeProcessRemoteSignatures, BlockTimerTypeProcessTransaction, BlockTimerTypeTransactionOffset:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Block Timer Type.
@@ -92,9 +91,8 @@ func (v BlockTimerType) String() string {
 		return "processTransaction"
 	case BlockTimerTypeTransactionOffset:
 		return "transactionOffset"
-	default:
-		return fmt.Sprintf("BlockTimerType:%d", v)
 	}
+	return fmt.Sprintf("BlockTimerType:%d", v)
 }
 
 // BlockTimerTypeByName returns the named Block Timer Type.
@@ -124,9 +122,8 @@ func BlockTimerTypeByName(name string) (BlockTimerType, bool) {
 		return BlockTimerTypeProcessTransaction, true
 	case "transactionoffset":
 		return BlockTimerTypeTransactionOffset, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Block Timer Type to JSON as a string.

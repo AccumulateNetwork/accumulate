@@ -22,9 +22,8 @@ func newEvent(typ eventType) (event, error) {
 	switch typ {
 	case eventTypeServiceRegistered:
 		return new(serviceRegisteredEvent), nil
-	default:
-		return nil, fmt.Errorf("unknown event %v", typ)
 	}
+	return nil, fmt.Errorf("unknown event %v", typ)
 }
 
 // equalEvent is used to compare the values of the union
@@ -39,9 +38,8 @@ func equalEvent(a, b event) bool {
 		}
 		b, ok := b.(*serviceRegisteredEvent)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // copyEvent copies a event.

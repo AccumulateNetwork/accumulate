@@ -36,9 +36,8 @@ func (v *ChainType) SetEnumValue(id uint64) bool {
 	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeIndex:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Chain Type.
@@ -52,9 +51,8 @@ func (v ChainType) String() string {
 		return "anchor"
 	case ChainTypeIndex:
 		return "index"
-	default:
-		return fmt.Sprintf("ChainType:%d", v)
 	}
+	return fmt.Sprintf("ChainType:%d", v)
 }
 
 // ChainTypeByName returns the named Chain Type.
@@ -68,9 +66,8 @@ func ChainTypeByName(name string) (ChainType, bool) {
 		return ChainTypeAnchor, true
 	case "index":
 		return ChainTypeIndex, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Chain Type to JSON as a string.
