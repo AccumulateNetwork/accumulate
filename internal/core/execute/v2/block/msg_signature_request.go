@@ -34,7 +34,7 @@ func (SignatureRequest) check(batch *database.Batch, ctx *MessageContext) (*mess
 	}
 
 	// Must be synthetic
-	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
+	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		return nil, errors.BadRequest.WithFormat("cannot execute %v outside of a synthetic message", req.Type())
 	}
 
@@ -156,7 +156,10 @@ func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *
 		msg.Authority = auth.Url
 		msg.Cause = ctx.message.ID()
 		msg.TxID = req.TxID
-		ctx.didProduce(msg.Authority, msg)
+		err = ctx.didProduce(batch, msg.Authority, msg)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
 
 	return nil

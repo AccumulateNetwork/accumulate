@@ -130,6 +130,7 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 		st, err = ctx.callMessageExecutor(batch, seq.Message)
 	} else {
 		// Mark the message as pending
+		ctx.Executor.logger.Debug("Pending sequenced message", "hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4), "module", "synthetic")
 		st, err = ctx.recordPending(batch, ctx, seq.Message)
 	}
 	if err != nil {
