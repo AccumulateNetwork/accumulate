@@ -327,7 +327,10 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 	}
 
 	// Request additional signatures
-	x.sendSignatureRequests(batch, ctx2)
+	err = x.sendSignatureRequests(batch, ctx2)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	// Send the credit payment
 	err = x.sendCreditPayment(batch, ctx2)
@@ -346,7 +349,10 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 	}
 
 	// Send the authority signature
-	x.sendAuthoritySignature(batch, ctx2)
+	err = x.sendAuthoritySignature(batch, ctx2)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	err = clearActiveSignatures(batch, ctx)
 	if err != nil {
@@ -397,10 +403,10 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 
 // sendSignatureRequests sends signature requests so that the transaction
 // will appear on the appropriate pending lists.
-func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigContext) {
+func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigContext) error {
 	// If this is the initiator signature
 	if !ctx.isInitiator {
-		return
+		return nil
 	}
 
 	// Send a notice to the principal
@@ -408,7 +414,10 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 	msg.Authority = ctx.transaction.Header.Principal
 	msg.Cause = ctx.message.ID()
 	msg.TxID = ctx.transaction.ID()
-	ctx.didProduce(msg.Authority, msg)
+	err := ctx.didProduce(batch, msg.Authority, msg)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 
 	// If transaction requests additional authorities, send out signature requests
 	for _, auth := range ctx.transaction.GetAdditionalAuthorities() {
@@ -416,22 +425,29 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 		msg.Authority = auth
 		msg.Cause = ctx.message.ID()
 		msg.TxID = ctx.transaction.ID()
-		ctx.didProduce(msg.Authority, msg)
+		err = ctx.didProduce(batch, msg.Authority, msg)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
+
+	return nil
 }
 
 // sendAuthoritySignature sends the authority signature for the signer.
-func (UserSignature) sendAuthoritySignature(batch *database.Batch, ctx *userSigContext) {
+func (UserSignature) sendAuthoritySignature(batch *database.Batch, ctx *userSigContext) error {
 	auth := &protocol.AuthoritySignature{
 		Origin:    ctx.getSigner(),
 		Authority: ctx.getAuthority(),
 		Vote:      protocol.VoteTypeAccept,
 		TxID:      ctx.transaction.ID(),
+		Cause:     ctx.message.ID(),
 		Delegator: ctx.delegators,
 	}
 
 	// TODO Deduplicate
-	ctx.didProduce(
+	return ctx.didProduce(
+		batch,
 		auth.RoutingLocation(),
 		&messaging.SignatureMessage{
 			Signature: auth,
@@ -452,7 +468,8 @@ func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContex
 		return nil
 	}
 
-	ctx.didProduce(
+	return ctx.didProduce(
+		batch,
 		ctx.transaction.Header.Principal,
 		&messaging.CreditPayment{
 			Paid:      ctx.fee,
@@ -462,5 +479,4 @@ func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContex
 			Initiator: didInit,
 		},
 	)
-	return nil
 }
