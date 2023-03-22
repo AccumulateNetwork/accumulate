@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,13 +7,37 @@
 package badger
 
 import (
+	"crypto/rand"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 
 	"github.com/dgraph-io/badger"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 )
+
+func TestPrefix(t *testing.T) {
+	data := make([]byte, 10)
+	_, err := io.ReadFull(rand.Reader, data)
+	require.NoError(t, err)
+
+	db, err := New(t.TempDir(), nil)
+	require.NoError(t, err)
+
+	const prefix, key = "foo", "bar"
+	batch := db.BeginWithPrefix(true, prefix)
+	defer batch.Discard()
+	require.NoError(t, batch.Put(storage.MakeKey(key), data))
+	require.NoError(t, batch.Commit())
+
+	batch = db.BeginWithPrefix(true, prefix)
+	defer batch.Discard()
+	v, err := batch.Get(storage.MakeKey(key))
+	require.NoError(t, err)
+	require.Equal(t, data, v)
+}
 
 func TestDatabase(t *testing.T) {
 	dname, e := os.MkdirTemp("", "sampledir")
