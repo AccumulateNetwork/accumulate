@@ -60,7 +60,7 @@ func (p *parser) record(err ...error) {
 }
 
 func (p *parser) errorf(code errors.Status, format string, args ...interface{}) {
-	p.record(code.WithFormat(format, args...))
+	p.record(code.Skip(1).WithFormat(format, args...))
 }
 
 func (p *parser) parseUrl(v any, path ...string) *url.URL {
@@ -108,7 +108,7 @@ func (p *parser) parseHash32(v any) [32]byte {
 func (p *parser) parseHash(v any) []byte {
 	switch v := v.(type) {
 	case []byte:
-		if len(v) != 32 {
+		if len(v) != 32 && len(v) != 20 {
 			p.errorf(errors.BadRequest, "invalid hash length: want 32, got %d", len(v))
 			return nil
 		}
