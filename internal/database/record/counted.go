@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -199,4 +199,18 @@ func (c *counted[T]) Resolve(key Key) (Record, Key, error) {
 	}
 
 	return c.value(i), nil, nil
+}
+
+func (c *counted[T]) WalkChanges(fn WalkFunc) error {
+	err := c.count.WalkChanges(fn)
+	if err != nil {
+		return err
+	}
+	for _, v := range c.values {
+		err = v.WalkChanges(fn)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
