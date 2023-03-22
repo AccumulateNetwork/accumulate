@@ -86,6 +86,19 @@ func (a *Account) Commit() error {
 		}
 	}
 
+	// Ensure chains are added to the Chains index
+	var chains []*protocol.ChainMetadata
+	for _, c := range a.dirtyChains() {
+		chains = append(chains, &protocol.ChainMetadata{
+			Name: c.name,
+			Type: c.typ,
+		})
+	}
+	err := a.Chains().Add(chains...)
+	if err != nil {
+		return errors.UnknownError.WithFormat("update chains index: %w", err)
+	}
+
 	// Ensure the synthetic anchors index is up to date
 	for k, set := range a.syntheticForAnchor {
 		if !set.IsDirty() {
@@ -99,7 +112,7 @@ func (a *Account) Commit() error {
 	}
 
 	// If anything has changed, update the BPT entry
-	err := a.putBpt()
+	err = a.putBpt()
 	if err != nil {
 		return errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
 	}

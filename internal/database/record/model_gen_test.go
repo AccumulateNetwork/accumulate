@@ -98,6 +98,19 @@ func (c *changeSet) IsDirty() bool {
 	return false
 }
 
+func (c *changeSet) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	for _, v := range c.entity {
+		walkChanges(&err, v, fn)
+	}
+	walkChanges(&err, c.changeLog, fn)
+	return err
+}
+
 func (c *changeSet) Commit() error {
 	if c == nil {
 		return nil
@@ -195,6 +208,19 @@ func (c *entity) IsDirty() bool {
 	}
 
 	return false
+}
+
+func (c *entity) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	walkChanges(&err, c.union, fn)
+	walkChanges(&err, c.set, fn)
+	walkChanges(&err, c.countableRefType, fn)
+	walkChanges(&err, c.countableUnion, fn)
+	return err
 }
 
 func (c *entity) baseCommit() error {
@@ -347,6 +373,24 @@ func (c *TemplateTest) IsDirty() bool {
 	return false
 }
 
+func (c *TemplateTest) WalkChanges(fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	walkChanges(&err, c.wrapped, fn)
+	walkChanges(&err, c.structPtr, fn)
+	walkChanges(&err, c.union, fn)
+	walkChanges(&err, c.wrappedSet, fn)
+	walkChanges(&err, c.structSet, fn)
+	walkChanges(&err, c.unionSet, fn)
+	walkChanges(&err, c.wrappedList, fn)
+	walkChanges(&err, c.structList, fn)
+	walkChanges(&err, c.unionList, fn)
+	return err
+}
+
 func (c *TemplateTest) Commit() error {
 	if c == nil {
 		return nil
@@ -402,4 +446,13 @@ func commitField[T record.Record](lastErr *error, field T) {
 func fieldIsDirty[T record.Record](field T) bool {
 	var z T
 	return any(field) != any(z) && field.IsDirty()
+}
+
+func walkChanges[T record.Record](lastErr *error, field T, fn record.WalkFunc) {
+	var z T
+	if *lastErr != nil || any(field) == any(z) {
+		return
+	}
+
+	*lastErr = field.WalkChanges(fn)
 }
