@@ -41,6 +41,11 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 		}
 	}()
 
+	err = x.EventBus.Publish(execute.WillBeginBlock{BlockParams: params})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	//clear the timers
 	x.BlockTimers.Reset()
 
