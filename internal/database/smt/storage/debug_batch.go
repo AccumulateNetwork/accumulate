@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -45,6 +45,14 @@ var _ KeyValueTxn = (*DebugBatch)(nil)
 func (b *DebugBatch) Begin(writable bool) KeyValueTxn {
 	c := new(DebugBatch)
 	c.Batch = b.Batch.Begin(writable)
+	c.Logger = b.Logger
+	c.Writable = b.Writable && writable
+	return c
+}
+
+func (b *DebugBatch) BeginWithPrefix(writable bool, prefix string) KeyValueTxn {
+	c := new(DebugBatch)
+	c.Batch = b.Batch.BeginWithPrefix(writable, prefix)
 	c.Logger = b.Logger
 	c.Writable = b.Writable && writable
 	return c
