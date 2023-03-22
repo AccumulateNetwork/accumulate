@@ -30,7 +30,7 @@ func (s KvStore) GetValue(key Key, value ValueWriter) error {
 		return errors.NotFound.WithFormat("%v not found", key)
 	}
 
-	err = value.LoadBytes(b)
+	err = value.LoadBytes(b, false)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
