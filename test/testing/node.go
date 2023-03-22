@@ -9,6 +9,7 @@ package testing
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,11 +38,30 @@ func NewTestLogger(t testing.TB) log.Logger {
 		return logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
 
-	w, err := logging.NewConsoleWriter("plain")
+	var w io.Writer = &zerolog.ConsoleWriter{
+		Out:        os.Stderr,
+		TimeFormat: time.RFC3339,
+		// PartsExclude: []string{"time"},
+		FormatLevel: func(i interface{}) string {
+			if ll, ok := i.(string); ok {
+				return strings.ToUpper(ll)
+			}
+			return "????"
+		},
+	}
+
+	level, w, err := logging.ParseLogLevel(DefaultLogLevels, w)
 	require.NoError(t, err)
-	level, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
-	require.NoError(t, err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+
+	// w = logging.FilterWriter{
+	// 	Out: w,
+	// 	Predicate: func(level zerolog.Level, event map[string]interface{}) bool {
+	// 		n, ok := event["node"].(float64)
+	// 		return ok && n == 0
+	// 	},
+	// }
+
+	logger, err := logging.NewTendermintLogger(zerolog.New(w), level, false)
 	require.NoError(t, err)
 	return logger
 }

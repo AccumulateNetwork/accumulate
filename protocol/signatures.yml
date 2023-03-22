@@ -249,6 +249,10 @@ AuthoritySignature:
       description: is the ID of the transaction this was produced for
       type: txid
       pointer: true
+    - name: Cause
+      description: is the ID of the signature that produced this
+      type: txid
+      pointer: true
     - name: Delegator
       type: url
       pointer: true

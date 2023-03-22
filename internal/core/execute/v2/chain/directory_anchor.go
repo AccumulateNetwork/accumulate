@@ -57,7 +57,7 @@ func (x DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 		return nil, err
 	}
 
-	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
+	st.logger.Info("Received directory anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "source-block", body.MinorBlockIndex)
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.AnchorLedger); !ok {
@@ -94,7 +94,7 @@ func (x DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 
 	// Log receipts
 	for _, receipt := range body.Receipts {
-		st.logger.Info("Received receipt", "module", "anchoring", "from", logging.AsHex(receipt.RootChainReceipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source)
+		st.logger.Info("Received receipt", "module", "anchoring", "for", receipt.Anchor.Source, "from", logging.AsHex(receipt.RootChainReceipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "source-block", body.MinorBlockIndex, "source", body.Source)
 	}
 
 	return nil, nil
