@@ -126,7 +126,7 @@ func (h *Harness) Verify(conditions ...Condition) {
 	for _, c := range conditions {
 		if !c.Satisfied(h) {
 			ok = false
-			s += "\n  " + c.String()
+			s += c.Format("\n  ", "")
 		}
 	}
 	if !ok {

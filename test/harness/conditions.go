@@ -23,14 +23,14 @@ import (
 // some condition is met.
 type Condition interface {
 	Satisfied(*Harness) bool
-	String() string
+	Format(prefix, suffix string) string
 }
 
 type True func(*Harness) bool
 
 func (f True) Satisfied(h *Harness) bool { return f(h) }
 
-func (f True) String() string { return "(unknown predicate function)" }
+func (f True) Format(prefix, suffix string) string { return prefix + "(unknown predicate function)" }
 
 // Txn defines a condition on a transaction.
 func Txn(id *url.TxID) txnCond { return txnCond{msgCond{id: id, message: []string{"transaction"}}} }
@@ -201,6 +201,7 @@ type statusPredicate func(h *Harness, c *condition, r *msgResult) bool
 type predicateModifier func(statusPredicate) statusPredicate
 
 type condition struct {
+	children   []*condition
 	predicate  statusPredicate
 	lastResult *msgResult
 	capture    **protocol.TransactionStatus
@@ -208,30 +209,61 @@ type condition struct {
 	prodMsg    *string
 }
 
-func (c *condition) String() string {
-	return strings.Join(c.message, " ")
+func (c *condition) Format(prefix, suffix string) string {
+	if c.children == nil {
+		return prefix + strings.Join(c.message, " ") + suffix
+	}
+	var s string
+	for _, c := range c.children {
+		s += c.Format(prefix, suffix)
+	}
+	return s
 }
 
 func (c *condition) messageReplaceEnd(s string) string {
-	t := strings.Join(c.message[:len(c.message)-1], " ")
-	return t + " " + s
+	if c.children == nil {
+		t := strings.Join(c.message[:len(c.message)-1], " ")
+		return t + " " + s
+	}
+	var t string
+	for _, c := range c.children {
+		t += c.messageReplaceEnd(s)
+	}
+	return t
 }
 
 func (c *condition) Satisfied(h *Harness) bool {
 	h.TB.Helper()
-	return c.predicate(h, c, c.lastResult)
+	if c.children == nil {
+		return c.predicate(h, c, c.lastResult)
+	}
+	ok := true
+	for _, c := range c.children {
+		if !c.Satisfied(h) {
+			ok = false
+		}
+	}
+	return ok
 }
 
-func (c *condition) replace(h *Harness, new statusPredicate) bool {
+func (c *condition) replacePredicate(h *Harness, new statusPredicate) bool {
 	h.TB.Helper()
 	c.predicate = new
 	return c.Satisfied(h)
 }
 
-func (c *condition) replaceWith(h *Harness, d *condition) bool {
+func (c *condition) replaceWithCondition(h *Harness, d *condition) bool {
+	h.TB.Helper()
 	c.message = d.message
 	c.prodMsg = d.prodMsg
-	return c.replace(h, d.predicate)
+	return c.replacePredicate(h, d.predicate)
+}
+
+func (c *condition) replaceWithMultiple(h *Harness, d []*condition) bool {
+	h.TB.Helper()
+	c.children = d
+	c.predicate = nil
+	return c.Satisfied(h)
 }
 
 func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
@@ -306,7 +338,7 @@ func waitFor(id *url.TxID) predicateModifier {
 
 			// Evaluate the predicate (only replace if the status is final)
 			if r.Status.Delivered() {
-				return c.replace(h, predicate)
+				return c.replacePredicate(h, predicate)
 			}
 			return predicate(h, c, r)
 		}
@@ -322,7 +354,7 @@ func deliveredThen(predicate statusPredicate) statusPredicate {
 			return false
 		}
 
-		return c.replace(h, predicate)
+		return c.replacePredicate(h, predicate)
 	}
 }
 
@@ -332,7 +364,7 @@ func produced(predicate statusPredicate) statusPredicate {
 
 		// Expect produced transactions
 		if len(r.Produced) == 0 {
-			h.TB.Fatalf("%v did not produce transactions", r.Status.TxID)
+			h.TB.Fatalf("%v (%v) did not produce anything", r.Status.TxID, r.Type)
 		}
 
 		nProd := len(c.message) - 2
@@ -354,23 +386,17 @@ func produced(predicate statusPredicate) statusPredicate {
 
 			m := make([]string, len(c.message))
 			copy(m, c.message)
-			c.message = m
+			if nProd > 0 {
+				m[nProd-1] = r.Type
+			}
 			c.prodMsg = &m[nProd]
+			c.message = m
 		}
 
 		if len(conditions) == 1 {
-			return c.replaceWith(h, conditions[0])
+			return c.replaceWithCondition(h, conditions[0])
 		}
-
-		return c.replace(h, func(h *Harness, _ *condition, _ *msgResult) bool {
-			ok := true
-			for _, c := range conditions {
-				if !c.Satisfied(h) {
-					ok = false
-				}
-			}
-			return ok
-		})
+		return c.replaceWithMultiple(h, conditions)
 	}
 }
 
@@ -388,7 +414,7 @@ func producedRecursive(predicate statusPredicate) statusPredicate {
 			isSig = true
 		}
 		if isSig && r.Message.Type() == messaging.MessageTypeTransaction {
-			return c.replace(h, always)
+			return c.replacePredicate(h, always)
 		}
 
 		// If the transaction is pending, wait
@@ -418,19 +444,9 @@ func producedRecursive(predicate statusPredicate) statusPredicate {
 		}
 
 		if len(conditions) == 1 {
-			return c.replaceWith(h, conditions[0])
+			return c.replaceWithCondition(h, conditions[0])
 		}
-
-		return c.replace(h, func(h *Harness, _ *condition, _ *msgResult) bool {
-			ok := true
-			for _, c := range conditions {
-				if !c.Satisfied(h) {
-					c.Satisfied(h)
-					ok = false
-				}
-			}
-			return ok
-		})
+		return c.replaceWithMultiple(h, conditions)
 	}
 	return recursive
 }
@@ -442,7 +458,7 @@ func producedFiltered(filter func(*msgResult) bool) predicateModifier {
 
 			// Expect produced transactions
 			if len(r.Produced) == 0 {
-				h.TB.Fatalf("%v did not produce transactions", r.Status.TxID)
+				h.TB.Fatalf("%v (%v) did not produce anything", r.Status.TxID, r.Type)
 			}
 
 			// For each produced
@@ -463,7 +479,7 @@ func producedFiltered(filter func(*msgResult) bool) predicateModifier {
 				}
 
 				// Found it, delegate to the predicate
-				return c.replace(h, waitFor(id)(predicate))
+				return c.replacePredicate(h, waitFor(id)(predicate))
 			}
 
 			// The message we want hasn't appeared yet
@@ -473,14 +489,14 @@ func producedFiltered(filter func(*msgResult) bool) predicateModifier {
 }
 
 func received(h *Harness, c *condition, r *msgResult) bool {
-	return c.replace(h, func(h *Harness, c *condition, r *msgResult) bool {
+	return c.replacePredicate(h, func(h *Harness, c *condition, r *msgResult) bool {
 		h.TB.Helper()
 		return r.Status.Code != 0
 	})
 }
 
 func isDelivered(h *Harness, c *condition, r *msgResult) bool {
-	return c.replace(h, func(h *Harness, c *condition, r *msgResult) bool {
+	return c.replacePredicate(h, func(h *Harness, c *condition, r *msgResult) bool {
 		h.TB.Helper()
 		return r.Status.Delivered()
 	})
@@ -495,7 +511,7 @@ func isPending(h *Harness, c *condition, r *msgResult) bool {
 		if r.Status.Code == errors.Pending {
 			return true
 		}
-		h.TB.Fatal(c.messageReplaceEnd("is not pending"), "🗴")
+		h.TB.Fatal(c.messageReplaceEnd("is not pending 🗴\n"))
 	}
 
 	// Check if the account lists the transaction as pending
@@ -523,12 +539,12 @@ func succeeds(h *Harness, c *condition, r *msgResult) bool {
 	// Must be success
 	if r.Status.Failed() {
 		h.TB.Logf("%v\n", r.Status.AsError())
-		h.TB.Fatal(c.messageReplaceEnd("did not succeed"), "🗴")
+		h.TB.Fatal(c.messageReplaceEnd("did not succeed 🗴\n"))
 	}
 	if h.VerboseConditions {
-		fmt.Println(c, "✔")
+		fmt.Print(c.Format("", " ✔\n"))
 	}
-	return c.replace(h, always)
+	return c.replacePredicate(h, always)
 }
 
 func fails(h *Harness, c *condition, r *msgResult) bool {
@@ -536,7 +552,7 @@ func fails(h *Harness, c *condition, r *msgResult) bool {
 
 	// Must be failure
 	if !r.Status.Failed() {
-		h.TB.Fatal(c.messageReplaceEnd("did not fail"), "🗴")
+		h.TB.Fatal(c.messageReplaceEnd("did not fail 🗴\n"))
 	}
 	return true
 }
@@ -547,12 +563,12 @@ func failsWithCode(code errors.Status) statusPredicate {
 
 		// Must be failure
 		if !r.Status.Failed() {
-			h.TB.Fatal(c.messageReplaceEnd("did not fail"), "🗴")
+			h.TB.Fatal(c.messageReplaceEnd("did not fail 🗴\n"))
 		}
 
 		if r.Status.Code != code {
-			m := fmt.Sprintf("failed with %v, not %v", r.Status.Code, code)
-			h.TB.Fatal(c.messageReplaceEnd(m), "🗴")
+			m := fmt.Sprintf("failed with %v, not %v 🗴\n", r.Status.Code, code)
+			h.TB.Fatal(c.messageReplaceEnd(m))
 		}
 		return true
 	}

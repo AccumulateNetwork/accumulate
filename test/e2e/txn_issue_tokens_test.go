@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -37,7 +38,7 @@ func TestIssueTokens_Good(t *testing.T) {
 	lite := LiteAuthorityForKey(liteKey[32:], SignatureTypeED25519).JoinPath(alice.ShortString(), "tokens")
 
 	// Execute
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+	st := sim.H.SubmitSuccessfully(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("tokens")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -47,8 +48,10 @@ func TestIssueTokens_Good(t *testing.T) {
 				Amount:    *big.NewInt(123),
 			}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
-	)...)
+			Build())
+	sim.H.StepUntil(
+		Txn(st[0].TxID).Completes(),
+		Sig(st[1].TxID).SingleCompletes())
 
 	liteAcct := simulator.GetAccount[*LiteTokenAccount](sim, lite)
 	require.Equal(t, 123, int(liteAcct.Balance.Int64()))
@@ -108,7 +111,7 @@ func TestIssueTokens_Multi(t *testing.T) {
 	lite2 := LiteAuthorityForKey(lite2Key[32:], SignatureTypeED25519).JoinPath(alice.ShortString(), "tokens")
 
 	// Execute
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+	st := sim.H.SubmitSuccessfully(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("tokens")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -120,8 +123,10 @@ func TestIssueTokens_Multi(t *testing.T) {
 				},
 			}).
 			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
-	)...)
+			Build())
+	sim.H.StepUntil(
+		Txn(st[0].TxID).Completes(),
+		Sig(st[1].TxID).SingleCompletes())
 
 	// Verify
 	require.Equal(t, 123, int(simulator.GetAccount[*LiteTokenAccount](sim, lite1).Balance.Int64()))
