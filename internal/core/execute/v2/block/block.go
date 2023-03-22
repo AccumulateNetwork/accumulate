@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Block implements [execute.Block].
@@ -46,6 +47,18 @@ func (s *closedBlock) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 }
 
 func (s *closedBlock) Commit() error {
+	if s.IsEmpty() {
+		s.Discard()
+		return nil
+	}
+
+	err := s.Executor.EventBus.Publish(execute.WillCommitBlock{
+		Block: s,
+	})
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
 	return s.Batch.Commit()
 }
 
