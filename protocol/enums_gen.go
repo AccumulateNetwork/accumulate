@@ -125,7 +125,7 @@ const ExecutorVersionV1ActivationFix ExecutorVersion = 3
 // ExecutorVersionV1Halt halts transaction processing in preparation for v2.
 const ExecutorVersionV1Halt ExecutorVersion = 4
 
-// ExecutorVersionV2 is the second version of the execute system.
+// ExecutorVersionV2 is the second version of the executor system.
 const ExecutorVersionV2 ExecutorVersion = 5
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
