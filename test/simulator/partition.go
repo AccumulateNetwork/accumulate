@@ -182,11 +182,11 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 		}
 	}
 
-	// var err error
 	results := make([][]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
 		var err error
-		results[i], err = node.checkTx(messages, types.CheckTxType_New)
+		// Set type = recheck to make the executor create a new batch to avoid timing issues
+		results[i], err = node.checkTx(messages, types.CheckTxType_Recheck)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
