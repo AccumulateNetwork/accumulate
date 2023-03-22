@@ -64,13 +64,9 @@ func (CreateKeyBook) check(st *StateManager, tx *Delivery) (*protocol.CreateKeyB
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	switch len(body.PublicKeyHash) {
-	case 0:
-		return nil, errors.BadRequest.WithFormat("public key hash is missing")
-	case 32:
-		// Ok
-	default:
-		return nil, errors.BadRequest.WithFormat("public key hash length is invalid")
+	err = requireKeyHash(body.PublicKeyHash)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return body, nil
