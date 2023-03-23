@@ -75,7 +75,10 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 		badger.TruncateBadger = flagRun.Truncate
 
 		if flagRun.PprofListen != "" {
-			go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }() //nolint:gosec
+			s := new(http.Server)
+			s.Addr = flagRun.PprofListen
+			s.ReadHeaderTimeout = time.Minute
+			go func() { check(s.ListenAndServe()) }() //nolint:gosec
 		}
 
 		if flagRun.Debug {
