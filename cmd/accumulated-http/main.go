@@ -115,10 +115,12 @@ func run(_ *cobra.Command, args []string) {
 
 	fmt.Println("Fetching routing information")
 	client := &message.Client{
-		Network: args[0],
-		Dialer:  node.Dialer(),
+		Transport: &message.RoutedTransport{
+			Network: args[0],
+			Dialer:  node.Dialer(),
+		},
 	}
-	ns, err := client.GetNetInfo(ctx)
+	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	Check(err)
 	router, err := routing.NewStaticRouter(ns.Routing, nil, logger)
 	Check(err)
