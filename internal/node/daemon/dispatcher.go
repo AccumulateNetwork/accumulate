@@ -128,11 +128,11 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 		// Create a client using a batch dialer, but DO NOT set the router - all
 		// the messages are already addressed
-		client := new(message.Client)
-		client.Dialer = message.BatchDialer(ctx, d.dialer)
+		tr := new(message.RoutedTransport)
+		tr.Dialer = message.BatchDialer(ctx, d.dialer)
 
 		// Submit all messages over a single stream
-		err := client.RoundTrip(ctx, messages, func(res, req message.Message) error {
+		err := tr.RoundTrip(ctx, messages, func(res, req message.Message) error {
 			_ = req // Ignore unused warning
 
 			switch res := res.(type) {
