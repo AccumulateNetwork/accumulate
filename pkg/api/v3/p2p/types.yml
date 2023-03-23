@@ -1,5 +1,5 @@
-ServiceRegisteredEvent:
-  union: { type: event }
+serviceRegisteredEvent:
+  union: { type: event, private: true }
   fields:
     - name: PeerID
       type: p2p.PeerID
