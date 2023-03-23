@@ -49,21 +49,20 @@ func NewHandler(opts Options) (*Handler, error) {
 	h.logger.Set(opts.Logger)
 
 	// Message clients
-	client := &message.Client{
+	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: opts.Network.Network.Id,
 		Router:  routing.MessageRouter{Router: opts.Router},
 		Dialer:  opts.Node.DialNetwork(),
-	}
-
+	}}
 	var selfClient *message.Client
 	if opts.Network == nil {
 		selfClient = client
 	} else {
-		selfClient = &message.Client{
+		selfClient = &message.Client{Transport: &message.RoutedTransport{
 			Network: opts.Network.Network.Id,
 			Router:  unrouter(opts.Network.PartitionId),
 			Dialer:  opts.Node.DialSelf(),
-		}
+		}}
 	}
 
 	// JSON-RPC API v3

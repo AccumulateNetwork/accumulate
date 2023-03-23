@@ -57,21 +57,22 @@ func NewClientWith(node *Node) (*ClientNode, error) {
 	}
 
 	// Query the network status
-	client := &message.Client{
+	mr := new(routing.MessageRouter)
+	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: node.peermgr.network,
 		Dialer:  node.DialNetwork(),
-	}
+		Router:  mr,
+	}}
 	ns, err := client.NetworkStatus(context.Background(), api.NetworkStatusOptions{})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("query network status: %w", err)
 	}
 
 	// Create a router
-	router, err := routing.NewStaticRouter(ns.Routing, nil, nil)
+	mr.Router, err = routing.NewStaticRouter(ns.Routing, nil, nil)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize router: %w", err)
 	}
-	client.Router = routing.MessageRouter{Router: router}
 
 	return &ClientNode{node, client}, nil
 }
