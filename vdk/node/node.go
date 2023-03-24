@@ -294,13 +294,15 @@ func formatVersion(version string, known bool) string {
 		return "unknown"
 	}
 	return version
+	NetworkType
 }
 
-func netDir(networkType config.NetworkType) string {
+func netDir(networkType protocol.PartitionType) string {
+
 	switch networkType {
-	case config.Directory:
+	case protocol.PartitionTypeDirectory:
 		return "dnn"
-	case config.BlockValidator:
+	case protocol.PartitionTypeBlockValidator:
 		return "bvnn"
 	}
 	log.Fatalf("Unsupported network type %v", networkType)
