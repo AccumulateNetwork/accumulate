@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -75,7 +75,10 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 		badger.TruncateBadger = flagRun.Truncate
 
 		if flagRun.PprofListen != "" {
-			go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }() //nolint:gosec
+			s := new(http.Server)
+			s.Addr = flagRun.PprofListen
+			s.ReadHeaderTimeout = time.Minute
+			go func() { check(s.ListenAndServe()) }() //nolint:gosec
 		}
 
 		if flagRun.Debug {
