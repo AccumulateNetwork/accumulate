@@ -233,7 +233,11 @@ func LaunchFakeProxy(t *testing.T) (*proxy.Client, *client.Client, *url.URL, *ur
 		}
 		jsonrpc2.DebugMethodFunc = true
 		handler := jsonrpc2.HTTPRequestHandler(methods, stdlog.New(os.Stdout, "", 0))
-		require.NoError(t, http.ListenAndServe(":18888", handler)) //nolint:gosec
+		s := new(http.Server)
+		s.Handler = handler
+		s.ReadHeaderTimeout = time.Minute
+		s.Addr = ":18888"
+		require.NoError(t, s.ListenAndServe()) //nolint:gosec
 	}()
 
 	proxyClient, err := proxy.New(Endpoint)
