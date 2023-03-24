@@ -294,7 +294,6 @@ func formatVersion(version string, known bool) string {
 		return "unknown"
 	}
 	return version
-	NetworkType
 }
 
 func netDir(networkType protocol.PartitionType) string {
