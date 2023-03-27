@@ -34,6 +34,10 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 	var raw json.RawMessage
 	chains, err := c.v2.QueryAccountAs(ctx, &client.GeneralQuery{UrlQuery: client.UrlQuery{Url: acctUrl}}, &raw)
 	if err != nil {
+		var jerr jsonrpc2.Error
+		if errors.As(err, &jerr) && jerr.Code == client.ErrCodeNotFound {
+			return errors.NotFound.Wrap(err)
+		}
 		return errors.UnknownError.WithFormat("query account: %w", err)
 	}
 
@@ -178,6 +182,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 	defer batch.Discard()
 
 	missing := map[[32]byte]bool{}
+	didLoad := batch.Index().Account(account).DidLoadTransaction()
 	for _, name := range chains {
 		chain, err := batch.Account(account).ChainByName(name)
 		if err != nil {
@@ -202,7 +207,17 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 					continue
 				}
 
-				_, err := batch.Message(hash).Main().Get()
+				_, err = didLoad.Index(hash)
+				switch {
+				case err == nil:
+					missing[hash] = false
+				case errors.Is(err, errors.NotFound):
+					// Continue
+				default:
+					return errors.UnknownError.WithFormat("load account did-load index: %w", err)
+				}
+
+				_, err = batch.Message(hash).Main().Get()
 				switch {
 				case err == nil:
 					missing[hash] = false
@@ -210,6 +225,11 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 					missing[hash] = true
 				default:
 					return errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", e, err)
+				}
+
+				err = didLoad.Add(hash)
+				if err != nil {
+					return errors.UnknownError.WithFormat("store account did-load index: %w", err)
 				}
 			}
 		}
@@ -410,7 +430,7 @@ func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 	return errors.UnknownError.Wrap(err)
 }
 
-func (c *Client) IndexAccountTransactions(ctx context.Context, acctUrl *url.URL) error {
+func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.URL) error {
 	batch := c.OpenDB(true)
 	defer batch.Discard()
 
@@ -418,107 +438,134 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, acctUrl *url.URL)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	partId, err := router.RouteAccount(acctUrl)
-	if err != nil {
-		return errors.UnknownError.WithFormat("route account: %w", err)
-	}
-
-	mainIndex, err := batch.Index().Account(acctUrl).Chain("main").Index().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load main chain index: %w", err)
-	}
-
-	rootIndex, err := batch.Index().Account(protocol.PartitionUrl(partId).JoinPath(protocol.Ledger)).Chain("root").Index().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load root chain index: %w", err)
-	}
-
-	anchorIndex, err := batch.Index().Partition(protocol.PartitionUrl(partId)).Anchors().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load anchor index: %w", err)
-	}
-
-	name := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(partId).Root().Name()
-	dirAnchorIndex, err := batch.Index().Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).Chain(name).Index().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load directory anchor ledger main chain index: %w", err)
-	}
 
 	dirRootIndex, err := batch.Index().Account(protocol.DnUrl().JoinPath(protocol.Ledger)).Chain("root").Index().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load directory root chain index: %w", err)
 	}
 
-	head, err := batch.Account(acctUrl).MainChain().Head().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load main chain head: %w", err)
+	type PartData struct {
+		RootIndex, DirAnchorIndex []*protocol.IndexEntry
+		AnchorIndex               []*AnchorMetadata
 	}
-
-	fmt.Printf("Indexing %v's transactions\n", acctUrl)
-
-	const N = 1 << 10
-	for i := int64(0); i < head.Count; i += N {
-		entries, err := batch.Account(acctUrl).MainChain().Inner().GetRange(i, i+N)
+	parts := map[string]*PartData{}
+	routes := map[*url.URL]string{}
+	for _, account := range accounts {
+		partId, err := router.RouteAccount(account)
 		if err != nil {
-			return errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
+			return errors.UnknownError.WithFormat("route account: %w", err)
+		}
+		routes[account] = partId
+		if _, ok := parts[partId]; ok {
+			continue
 		}
 
-		for j, e := range entries {
-			hash := *(*[32]byte)(e)
-			_, err := batch.Index().Transaction(hash).Executed().Get()
-			switch {
-			case err == nil:
-				continue
-			case errors.Is(err, errors.NotFound):
-				// Build index
-			default:
-				return errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", e, err)
-			}
+		part := new(PartData)
+		parts[partId] = part
 
-			// Get main chain index entry (source, anchor, block index)
-			_, main, ok := FindEntry(mainIndex, ByIndexSource(uint64(i)+uint64(j)))
-			if !ok {
-				return errors.NotFound.WithFormat("cannot find index entry for main chain entry %d", i+int64(j))
-			}
+		part.RootIndex, err = batch.Index().Account(protocol.PartitionUrl(partId).JoinPath(protocol.Ledger)).Chain("root").Index().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load root chain index: %w", err)
+		}
 
-			// Get root chain index entry (block index, block time, source)
-			_, root, ok := FindEntry(rootIndex, ByIndexSource(main.Anchor))
-			if !ok {
-				return errors.NotFound.WithFormat("cannot find index entry for root chain entry %d", main.Source)
-			}
+		part.AnchorIndex, err = batch.Index().Partition(protocol.PartitionUrl(partId)).Anchors().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load anchor index: %w", err)
+		}
 
-			// Get anchor
-			_, anchor, ok := FindEntry(anchorIndex, ByAnchorBlock(root.BlockIndex))
-			if !ok || anchor.Anchor.MinorBlockIndex != root.BlockIndex {
-				return errors.NotFound.WithFormat("cannot find anchor for block %d", root.BlockIndex)
-			}
+		name := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(partId).Root().Name()
+		part.DirAnchorIndex, err = batch.Index().Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).Chain(name).Index().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load directory anchor ledger main chain index: %w", err)
+		}
+	}
 
-			// Find the index when the anchor was anchored
-			dirAnchorPos, err := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(partId).Root().IndexOf(anchor.Anchor.RootChainAnchor[:])
+	for _, account := range accounts {
+		mainIndex, err := batch.Index().Account(account).Chain("main").Index().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load main chain index: %w", err)
+		}
+
+		head, err := batch.Account(account).MainChain().Head().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load main chain head: %w", err)
+		}
+
+		const N = 1 << 10
+		part := parts[routes[account]]
+		didIndex := batch.Index().Account(account).DidIndexTransactionExecution()
+		var didLog bool
+		for i := int64(0); i < head.Count; i += N {
+			entries, err := batch.Account(account).MainChain().Inner().GetRange(i, i+N)
 			if err != nil {
-				return errors.UnknownError.WithFormat("locate chain entry for block %d anchor: %w", root.BlockIndex, err)
+				return errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
 			}
 
-			// Get directory anchor chain index entry (source, anchor, block index)
-			_, dirAnchor, ok := FindEntry(dirAnchorIndex, ByIndexSource(uint64(dirAnchorPos)))
-			if !ok {
-				return errors.NotFound.WithFormat("cannot find index entry for directory anchor chain entry %d", dirAnchorPos)
-			}
+			for j, e := range entries {
+				hash := *(*[32]byte)(e)
+				_, err = didIndex.Index(hash)
+				switch {
+				case err == nil:
+					continue
+				case errors.Is(err, errors.NotFound):
+					// Build index
+				default:
+					return errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", e, err)
+				}
+				err = didIndex.Add(hash)
+				if err != nil {
+					return errors.UnknownError.WithFormat("update did index index: %w", err)
+				}
+				if !didLog {
+					fmt.Printf("Indexing %v's transactions\n", account)
+					didLog = true
+				}
 
-			// Get directory root chain index entry (block index, block time, source)
-			_, dirRoot, ok := FindEntry(dirRootIndex, ByIndexSource(dirAnchor.Anchor))
-			if !ok {
-				return errors.NotFound.WithFormat("cannot find index entry for directory root chain entry %d", dirAnchor.Anchor)
-			}
+				// Get main chain index entry (source, anchor, block index)
+				_, main, ok := FindEntry(mainIndex, ByIndexSource(uint64(i)+uint64(j)))
+				if !ok {
+					return errors.NotFound.WithFormat("cannot find index entry for main chain entry %d", i+int64(j))
+				}
 
-			err = batch.Index().Transaction(hash).Executed().Put(&EventMetadata{
-				LocalBlock:     root.BlockIndex,
-				LocalTime:      *root.BlockTime,
-				DirectoryBlock: dirRoot.BlockIndex,
-				DirectoryTime:  *dirRoot.BlockTime,
-			})
-			if err != nil {
-				return errors.UnknownError.WithFormat("store transaction %x execution metadata: %w", e, err)
+				// Get root chain index entry (block index, block time, source)
+				_, root, ok := FindEntry(part.RootIndex, ByIndexSource(main.Anchor))
+				if !ok {
+					return errors.NotFound.WithFormat("cannot find index entry for root chain entry %d", main.Source)
+				}
+
+				// Get anchor
+				_, anchor, ok := FindEntry(part.AnchorIndex, ByAnchorBlock(root.BlockIndex))
+				if !ok || anchor.Anchor.MinorBlockIndex != root.BlockIndex {
+					return errors.NotFound.WithFormat("cannot find anchor for block %d", root.BlockIndex)
+				}
+
+				// Find the index when the anchor was anchored
+				dirAnchorPos, err := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(routes[account]).Root().IndexOf(anchor.Anchor.RootChainAnchor[:])
+				if err != nil {
+					return errors.UnknownError.WithFormat("locate chain entry for block %d anchor: %w", root.BlockIndex, err)
+				}
+
+				// Get directory anchor chain index entry (source, anchor, block index)
+				_, dirAnchor, ok := FindEntry(part.DirAnchorIndex, ByIndexSource(uint64(dirAnchorPos)))
+				if !ok {
+					return errors.NotFound.WithFormat("cannot find index entry for directory anchor chain entry %d", dirAnchorPos)
+				}
+
+				// Get directory root chain index entry (block index, block time, source)
+				_, dirRoot, ok := FindEntry(dirRootIndex, ByIndexSource(dirAnchor.Anchor))
+				if !ok {
+					return errors.NotFound.WithFormat("cannot find index entry for directory root chain entry %d", dirAnchor.Anchor)
+				}
+
+				err = batch.Index().Transaction(hash).Executed().Put(&EventMetadata{
+					LocalBlock:     root.BlockIndex,
+					LocalTime:      *root.BlockTime,
+					DirectoryBlock: dirRoot.BlockIndex,
+					DirectoryTime:  *dirRoot.BlockTime,
+				})
+				if err != nil {
+					return errors.UnknownError.WithFormat("store transaction %x execution metadata: %w", e, err)
+				}
 			}
 		}
 	}

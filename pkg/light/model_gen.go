@@ -202,6 +202,8 @@ func (c *indexDB) Commit() error {
 
 type IndexDBAccount interface {
 	record.Record
+	DidIndexTransactionExecution() record.Set[[32]byte]
+	DidLoadTransaction() record.Set[[32]byte]
 	Chain(name string) IndexDBAccountChain
 }
 
@@ -212,7 +214,9 @@ type indexDBAccount struct {
 	label  string
 	parent *indexDB
 
-	chain map[indexDBAccountChainKey]*indexDBAccountChain
+	didIndexTransactionExecution record.Set[[32]byte]
+	didLoadTransaction           record.Set[[32]byte]
+	chain                        map[indexDBAccountChainKey]*indexDBAccountChain
 }
 
 type indexDBAccountChainKey struct {
@@ -221,6 +225,18 @@ type indexDBAccountChainKey struct {
 
 func keyForIndexDBAccountChain(name string) indexDBAccountChainKey {
 	return indexDBAccountChainKey{name}
+}
+
+func (c *indexDBAccount) DidIndexTransactionExecution() record.Set[[32]byte] {
+	return getOrCreateField(&c.didIndexTransactionExecution, func() record.Set[[32]byte] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), c.label+" "+"did index transaction execution", record.Wrapped(record.HashWrapper), record.CompareHash)
+	})
+}
+
+func (c *indexDBAccount) DidLoadTransaction() record.Set[[32]byte] {
+	return getOrCreateField(&c.didLoadTransaction, func() record.Set[[32]byte] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), c.label+" "+"did load transaction", record.Wrapped(record.HashWrapper), record.CompareHash)
+	})
 }
 
 func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
@@ -241,6 +257,10 @@ func (c *indexDBAccount) Resolve(key record.Key) (record.Record, record.Key, err
 	}
 
 	switch key[0] {
+	case "DidIndexTransactionExecution":
+		return c.DidIndexTransactionExecution(), key[1:], nil
+	case "DidLoadTransaction":
+		return c.DidLoadTransaction(), key[1:], nil
 	case "Chain":
 		if len(key) < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account")
@@ -261,6 +281,12 @@ func (c *indexDBAccount) IsDirty() bool {
 		return false
 	}
 
+	if fieldIsDirty(c.didIndexTransactionExecution) {
+		return true
+	}
+	if fieldIsDirty(c.didLoadTransaction) {
+		return true
+	}
 	for _, v := range c.chain {
 		if v.IsDirty() {
 			return true
@@ -276,6 +302,8 @@ func (c *indexDBAccount) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
+	walkChanges(&err, c.didIndexTransactionExecution, fn)
+	walkChanges(&err, c.didLoadTransaction, fn)
 	for _, v := range c.chain {
 		walkChanges(&err, v, fn)
 	}
@@ -288,6 +316,8 @@ func (c *indexDBAccount) Commit() error {
 	}
 
 	var err error
+	commitField(&err, c.didIndexTransactionExecution)
+	commitField(&err, c.didLoadTransaction)
 	for _, v := range c.chain {
 		commitField(&err, v)
 	}

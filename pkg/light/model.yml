@@ -10,6 +10,14 @@
       type: url
       pointer: true
     attributes:
+    - name: DidIndexTransactionExecution
+      type: state
+      dataType: hash
+      collection: set
+    - name: DidLoadTransaction
+      type: state
+      dataType: hash
+      collection: set
     - name: Chain
       type: entity
       interface: true

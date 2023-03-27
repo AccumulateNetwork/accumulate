@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -63,7 +64,7 @@ func runStaking(t *testing.T, c *Client) {
 		executed, err := batch.Index().Transaction(hash).Executed().Get()
 		require.NoError(t, err)
 
-		i, _, ok := FindEntry(rootIndex, ByIndexBlock(executed.LocalBlock))
+		i, _, ok := FindEntry(rootIndex, ByIndexBlock(executed.DirectoryBlock))
 		require.True(t, ok)
 
 		var extra string
@@ -99,7 +100,7 @@ func pullForStaking(t *testing.T, c *Client, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	for _, p := range g.Network.Partitions[:0] {
+	for _, p := range g.Network.Partitions {
 		fmt.Printf("Load %s ledger\n", p.ID)
 
 		// Pull the partition's system ledger
@@ -124,6 +125,8 @@ func pullForStaking(t *testing.T, c *Client, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
+	fmt.Print("\n\n\n")
+
 	// Pull staking registered list
 	fmt.Println("Load staking")
 	registered := protocol.AccountUrl("staking.acme", "registered")
@@ -138,12 +141,15 @@ func pullForStaking(t *testing.T, c *Client, ctx context.Context) {
 	entries, err := batch.Account(registered).MainChain().Inner().GetRange(0, head.Count)
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}
-	for i := len(entries) - 1; i >= 0; i-- {
+	var accounts []*url.URL
+	for i := len(entries) - 1; i >= 300; i-- {
 		var msg *messaging.TransactionMessage
 		err = batch.Message2(entries[i]).Main().GetAs(&msg)
 		require.NoError(t, err)
-		require.IsType(t, (*protocol.WriteData)(nil), msg.Transaction.Body)
-		body := msg.Transaction.Body.(*protocol.WriteData)
+		body, ok := msg.Transaction.Body.(*protocol.WriteData)
+		if !ok {
+			continue
+		}
 
 		var entry struct{ Stake *url.URL }
 		err = json.Unmarshal(body.Entry.GetData()[0], &entry)
@@ -156,12 +162,18 @@ func pullForStaking(t *testing.T, c *Client, ctx context.Context) {
 
 		// Pull and index the staking account
 		err := c.PullAccount(ctx, entry.Stake)
+		if errors.Is(err, errors.NotFound) {
+			continue // Skip bad accounts
+		}
+		accounts = append(accounts, entry.Stake)
+
 		require.NoError(t, err)
 		err = c.PullTransactionsForAccount(ctx, entry.Stake, "main", "scratch")
 		require.NoError(t, err)
 		err = c.IndexAccountChains(ctx, entry.Stake)
 		require.NoError(t, err)
-		err = c.IndexAccountTransactions(ctx, entry.Stake)
-		require.NoError(t, err)
 	}
+
+	err = c.IndexAccountTransactions(ctx, accounts...)
+	require.NoError(t, err)
 }
