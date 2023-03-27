@@ -1,0 +1,50 @@
+- name: IndexDB
+  type: entity
+  interface: true
+  attributes:
+  - name: Account
+    type: entity
+    interface: true
+    parameters:
+    - name: Url
+      type: url
+      pointer: true
+    attributes:
+    - name: Chain
+      type: entity
+      interface: true
+      parameters:
+      - name: Name
+        type: string
+      attributes:
+      - name: Index
+        type: index
+        dataType: protocol.IndexEntry
+        pointer: true
+        collection: list
+
+  - name: Partition
+    type: entity
+    interface: true
+    parameters:
+    - name: Url
+      type: url
+      pointer: true
+    attributes:
+    - name: Anchors
+      type: state
+      dataType: AnchorMetadata
+      pointer: true
+      collection: list
+
+  - name: Transaction
+    type: entity
+    interface: true
+    parameters:
+    - name: Hash
+      type: hash
+    attributes:
+    - name: Executed
+      type: index
+      dataType: EventMetadata
+      pointer: true
