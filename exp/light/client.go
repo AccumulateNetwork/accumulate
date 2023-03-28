@@ -7,11 +7,14 @@
 package light
 
 import (
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -20,8 +23,37 @@ import (
 )
 
 type Client struct {
-	v2    *client.Client
-	store storage.KeyValueStore
+	logger logging.OptionalLogger
+	v2     *client.Client
+	store  storage.KeyValueStore
+}
+
+type ClientOptions struct {
+	Server   string
+	Database string
+	Logger   log.Logger
+}
+
+func NewClient(opts ClientOptions) (*Client, error) {
+	c := new(Client)
+	c.logger.Set(opts.Logger)
+
+	var err error
+	c.v2, err = client.New(opts.Server)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	c.store, err = badger.New(opts.Database, opts.Logger)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return c, nil
+}
+
+func (c *Client) Close() error {
+	return c.store.Close()
 }
 
 func (c *Client) router(batch *DB) (routing.Router, error) {
