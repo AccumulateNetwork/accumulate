@@ -479,6 +479,8 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 			return errors.UnknownError.WithFormat("load directory anchor ledger main chain index: %w", err)
 		}
 	}
+	(*protocol.TransactionStatus)(nil).Failed()
+
 
 	for _, account := range accounts {
 		mainIndex, err := batch.Index().Account(account).Chain("main").Index().Get()
@@ -538,6 +540,8 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 				if !ok || anchor.Anchor.MinorBlockIndex != root.BlockIndex {
 					return errors.NotFound.WithFormat("cannot find anchor for block %d", root.BlockIndex)
 				}
+
+				// TODO skip if not anchored
 
 				// Find the index when the anchor was anchored
 				dirAnchorPos, err := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(routes[account]).Root().IndexOf(anchor.Anchor.RootChainAnchor[:])
