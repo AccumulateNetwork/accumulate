@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package core holds core protocol types and constants
-package core
+// package network holds core protocol types and constants
+package network
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --language go-alt --package core types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package network types.yml

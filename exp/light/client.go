@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -27,7 +26,7 @@ type Client struct {
 
 func (c *Client) router(batch *DB) (routing.Router, error) {
 	g := new(core.GlobalValues)
-	err := g.Load(config.NetworkUrl{URL: protocol.DnUrl()}, func(accountUrl *url.URL, target interface{}) error {
+	err := g.Load(protocol.DnUrl(), func(accountUrl *url.URL, target interface{}) error {
 		return batch.Account(accountUrl).Main().GetAs(target)
 	})
 	if err != nil {
