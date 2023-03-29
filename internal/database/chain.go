@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -72,9 +72,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 			return nil, err
 		}
 
-		for i := range h {
-			entries = append(entries, h[i])
-		}
+		entries = append(entries, h...)
 		start += int64(len(h))
 	}
 
