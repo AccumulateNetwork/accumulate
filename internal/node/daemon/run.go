@@ -304,11 +304,11 @@ func (d *Daemon) loadKeys() error {
 
 func (d *Daemon) startApp() (types.Application, error) {
 	dialer := d.p2pnode.DialNetwork()
-	client := &message.Client{
+	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: d.Config.Accumulate.Network.Id,
 		Dialer:  dialer,
 		Router:  routing.MessageRouter{Router: d.router},
-	}
+	}}
 	execOpts := execute.Options{
 		Logger:    d.Logger,
 		Database:  d.db,
