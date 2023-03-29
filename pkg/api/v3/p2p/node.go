@@ -9,8 +9,6 @@ package p2p
 import (
 	"context"
 
-	"github.com/multiformats/go-multiaddr"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -20,38 +18,36 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// This package exists so the peer to peer implementation can be internal, but
-// we still provide something for external parties to use.
-
-// Node is a peer to peer node. Node acts as a client, routing messages to its
+// ClientNode is a peer to peer node. ClientNode acts as a client, routing messages to its
 // peers, and as a server that can register services to the network.
-type Node struct {
+type ClientNode struct {
+	*Node
 	client *message.Client
-	node   *p2p.Node
 }
 
-// Options are the options for a [Node].
-type Options = p2p.Options
-
-// New creates a new node. New waits for the Network service of the Directory
+// NewClient creates a new node. NewClient waits for the Network service of the Directory
 // network to be available and queries it to determine the routing table. Thus
-// New must not be used by the core nodes themselves.
-func New(opts Options) (*Node, error) {
+// NewClient must not be used by the core nodes themselves.
+func NewClient(opts Options) (*ClientNode, error) {
 	if opts.Network == "" {
 		return nil, errors.BadRequest.With("missing network")
 	}
 
-	node, err := p2p.New(opts)
+	node, err := New(opts)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize node: %w", err)
 	}
 
-	return NewWith(node, opts)
+	return NewClientWith(node)
 }
 
-func NewWith(node *p2p.Node, opts Options) (*Node, error) {
+// NewClientWith creates a new client for the given node. NewClientWith waits
+// for the Network service of the Directory network to be available and queries
+// it to determine the routing table. Thus NewClientWith must not be used by the
+// core nodes themselves.
+func NewClientWith(node *Node) (*ClientNode, error) {
 	// Wait for the directory service
-	dnAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(opts.Network)
+	dnAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(node.peermgr.network)
 	if err != nil {
 		return nil, err
 	}
@@ -62,10 +58,10 @@ func NewWith(node *p2p.Node, opts Options) (*Node, error) {
 
 	// Query the network status
 	client := &message.Client{
-		Network: opts.Network,
-		Dialer:  node.Dialer(),
+		Network: node.peermgr.network,
+		Dialer:  node.DialNetwork(),
 	}
-	ns, err := client.GetNetInfo(context.Background())
+	ns, err := client.NetworkStatus(context.Background(), api.NetworkStatusOptions{})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("query network status: %w", err)
 	}
@@ -77,84 +73,64 @@ func NewWith(node *p2p.Node, opts Options) (*Node, error) {
 	}
 	client.Router = routing.MessageRouter{Router: router}
 
-	return &Node{client, node}, nil
+	return &ClientNode{node, client}, nil
 }
 
-// Close shuts down the node.
-func (n *Node) Close() error { return n.node.Close() }
-
-// Addresses returns the advertized addresses of the node.
-func (n *Node) Addresses() []multiaddr.Multiaddr { return n.node.Addrs() }
-
-// WaitForService blocks until the given service is available. WaitForService
-// will return once the service is registered on the current node or until the
-// node is informed of a peer with the given service. WaitForService will return
-// immediately if the service is already registered or known.
-func (n *Node) WaitForService(ctx context.Context, addr multiaddr.Multiaddr) error {
-	return n.node.WaitForService(ctx, addr)
-}
-
-// RegisterService registers a service handler and registers the service with
-// the network.
-func (n *Node) RegisterService(sa *api.ServiceAddress, handler func(message.Stream)) bool {
-	return n.node.RegisterService(sa, handler)
-}
-
-var _ api.NodeService = (*Node)(nil)
-var _ api.ConsensusService = (*Node)(nil)
-var _ api.NetworkService = (*Node)(nil)
-var _ api.MetricsService = (*Node)(nil)
-var _ api.Querier = (*Node)(nil)
-var _ api.Submitter = (*Node)(nil)
-var _ api.Validator = (*Node)(nil)
-var _ api.Faucet = (*Node)(nil)
+var _ api.NodeService = (*ClientNode)(nil)
+var _ api.ConsensusService = (*ClientNode)(nil)
+var _ api.NetworkService = (*ClientNode)(nil)
+var _ api.MetricsService = (*ClientNode)(nil)
+var _ api.Querier = (*ClientNode)(nil)
+var _ api.Submitter = (*ClientNode)(nil)
+var _ api.Validator = (*ClientNode)(nil)
+var _ api.Faucet = (*ClientNode)(nil)
 
 // NodeInfo implements [api.NodeService.NodeInfo].
-func (n *Node) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
+func (n *ClientNode) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
 	return n.client.NodeInfo(ctx, opts)
 }
 
 // FindService implements [api.NodeService.FindService].
-func (n *Node) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
+func (n *ClientNode) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
 	return n.client.FindService(ctx, opts)
 }
 
 // ConsensusStatus implements [api.ConsensusService.ConsensusStatus].
-func (n *Node) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+func (n *ClientNode) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	return n.client.ConsensusStatus(ctx, opts)
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
-func (n *Node) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
+func (n *ClientNode) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return n.client.NetworkStatus(ctx, opts)
 }
 
 // Metrics implements [api.MetricsService.Metrics].
-func (n *Node) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
+func (n *ClientNode) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	return n.client.Metrics(ctx, opts)
 }
 
 // Query implements [api.Querier.Query].
-func (n *Node) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+func (n *ClientNode) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	return n.client.Query(ctx, scope, query)
 }
 
 // Submit implements [api.Submitter.Submit].
-func (n *Node) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (n *ClientNode) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	return n.client.Submit(ctx, envelope, opts)
 }
 
 // Validate implements [api.Validator.Validate].
-func (n *Node) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (n *ClientNode) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	return n.client.Validate(ctx, envelope, opts)
 }
 
 // Faucet implements [api.Faucet.Faucet].
-func (n *Node) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+func (n *ClientNode) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
 	return n.client.Faucet(ctx, account, opts)
 }
 
 // Subscribe implements [api.EventService.Subscribe].
-func (n *Node) Subscribe(ctx context.Context, opts api.SubscribeOptions) (<-chan api.Event, error) {
+func (n *ClientNode) Subscribe(ctx context.Context, opts api.SubscribeOptions) (<-chan api.Event, error) {
 	return n.client.Subscribe(ctx, opts)
 }

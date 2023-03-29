@@ -23,7 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 )
 
-type ServiceRegisteredEvent struct {
+type serviceRegisteredEvent struct {
 	fieldsSet []bool
 	PeerID    p2p.PeerID          `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
 	Network   string              `json:"network,omitempty" form:"network" query:"network" validate:"required"`
@@ -31,10 +31,10 @@ type ServiceRegisteredEvent struct {
 	extraData []byte
 }
 
-func (*ServiceRegisteredEvent) Type() EventType { return EventTypeServiceRegistered }
+func (*serviceRegisteredEvent) Type() eventType { return eventTypeServiceRegistered }
 
-func (v *ServiceRegisteredEvent) Copy() *ServiceRegisteredEvent {
-	u := new(ServiceRegisteredEvent)
+func (v *serviceRegisteredEvent) Copy() *serviceRegisteredEvent {
+	u := new(serviceRegisteredEvent)
 
 	if v.PeerID != "" {
 		u.PeerID = p2p.CopyPeerID(v.PeerID)
@@ -47,9 +47,9 @@ func (v *ServiceRegisteredEvent) Copy() *ServiceRegisteredEvent {
 	return u
 }
 
-func (v *ServiceRegisteredEvent) CopyAsInterface() interface{} { return v.Copy() }
+func (v *serviceRegisteredEvent) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *ServiceRegisteredEvent) Equal(u *ServiceRegisteredEvent) bool {
+func (v *serviceRegisteredEvent) Equal(u *serviceRegisteredEvent) bool {
 	if !(p2p.EqualPeerID(v.PeerID, u.PeerID)) {
 		return false
 	}
@@ -68,14 +68,14 @@ func (v *ServiceRegisteredEvent) Equal(u *ServiceRegisteredEvent) bool {
 	return true
 }
 
-var fieldNames_ServiceRegisteredEvent = []string{
+var fieldNames_serviceRegisteredEvent = []string{
 	1: "Type",
 	2: "PeerID",
 	3: "Network",
 	4: "Address",
 }
 
-func (v *ServiceRegisteredEvent) MarshalBinary() ([]byte, error) {
+func (v *serviceRegisteredEvent) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
 	}
@@ -94,7 +94,7 @@ func (v *ServiceRegisteredEvent) MarshalBinary() ([]byte, error) {
 		writer.WriteValue(4, v.Address.MarshalBinary)
 	}
 
-	_, _, err := writer.Reset(fieldNames_ServiceRegisteredEvent)
+	_, _, err := writer.Reset(fieldNames_serviceRegisteredEvent)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -102,7 +102,7 @@ func (v *ServiceRegisteredEvent) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *ServiceRegisteredEvent) IsValid() error {
+func (v *serviceRegisteredEvent) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -134,15 +134,15 @@ func (v *ServiceRegisteredEvent) IsValid() error {
 	}
 }
 
-func (v *ServiceRegisteredEvent) UnmarshalBinary(data []byte) error {
+func (v *serviceRegisteredEvent) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *ServiceRegisteredEvent) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *serviceRegisteredEvent) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var vType EventType
-	if x := new(EventType); reader.ReadEnum(1, x) {
+	var vType eventType
+	if x := new(eventType); reader.ReadEnum(1, x) {
 		vType = *x
 	}
 	if !(v.Type() == vType) {
@@ -152,7 +152,7 @@ func (v *ServiceRegisteredEvent) UnmarshalBinaryFrom(rd io.Reader) error {
 	return v.UnmarshalFieldsFrom(reader)
 }
 
-func (v *ServiceRegisteredEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+func (v *serviceRegisteredEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	reader.ReadValue(2, func(r io.Reader) error {
 		x, err := p2p.UnmarshalPeerIDFrom(r)
 		if err == nil {
@@ -167,7 +167,7 @@ func (v *ServiceRegisteredEvent) UnmarshalFieldsFrom(reader *encoding.Reader) er
 		v.Address = x
 	}
 
-	seen, err := reader.Reset(fieldNames_ServiceRegisteredEvent)
+	seen, err := reader.Reset(fieldNames_serviceRegisteredEvent)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -179,9 +179,9 @@ func (v *ServiceRegisteredEvent) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	return nil
 }
 
-func (v *ServiceRegisteredEvent) MarshalJSON() ([]byte, error) {
+func (v *serviceRegisteredEvent) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    EventType                               `json:"type"`
+		Type    eventType                               `json:"type"`
 		PeerID  *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
 		Network string                                  `json:"network,omitempty"`
 		Address *api.ServiceAddress                     `json:"address,omitempty"`
@@ -199,9 +199,9 @@ func (v *ServiceRegisteredEvent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *ServiceRegisteredEvent) UnmarshalJSON(data []byte) error {
+func (v *serviceRegisteredEvent) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    EventType                               `json:"type"`
+		Type    eventType                               `json:"type"`
 		PeerID  *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
 		Network string                                  `json:"network,omitempty"`
 		Address *api.ServiceAddress                     `json:"address,omitempty"`

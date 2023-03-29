@@ -14,12 +14,12 @@ import (
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -269,6 +269,6 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	p2p.RegisterService(api.ServiceTypeEvent.AddressFor(n.partition.ID), h.Handle)
 	p2p.RegisterService(private.ServiceTypeSequencer.AddressFor(n.partition.ID), h.Handle)
 
-	n.logger.Info("Node P2P up", "addresses", p2p.Addrs())
+	n.logger.Info("Node P2P up", "addresses", p2p.Addresses())
 	return nil
 }

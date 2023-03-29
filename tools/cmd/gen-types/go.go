@@ -55,15 +55,7 @@ func init() {
 }
 
 var goFuncs = template.FuncMap{
-	"elideInterface": func(u *UnionSpec) string {
-		if !flags.ElidePackageType {
-			return u.Interface()
-		}
-		if !strings.EqualFold(u.Name, u.Package) {
-			return u.Interface()
-		}
-		return ""
-	},
+	"unionMethod": GoTmplUnionMethod,
 	"isPkg": func(s string) bool {
 		return s == PackagePath
 	},
@@ -149,6 +141,16 @@ var goFuncs = template.FuncMap{
 	},
 
 	"accessor": goFieldAccessor,
+}
+
+func GoTmplUnionMethod(u *UnionSpec, method string) string {
+	if u.Private {
+		method = typegen.LowerFirstWord(method)
+	}
+	if flags.ElidePackageType && strings.EqualFold(u.Name, u.Package) {
+		return method
+	}
+	return method + u.interfaceName(true)
 }
 
 func GoGetField(field *Field) string {

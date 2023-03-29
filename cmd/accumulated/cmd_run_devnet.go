@@ -23,7 +23,6 @@ import (
 	"github.com/spf13/cobra"
 	tmconfig "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/log"
-	ip2p "gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -253,7 +252,7 @@ func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *s
 		Key:     sk,
 		Logger:  logger,
 	}
-	inode, err := ip2p.New(opts)
+	inode, err := p2p.New(opts)
 	check(err)
 
 	// Directly connect to all the validator nodes
@@ -261,7 +260,7 @@ func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *s
 		check(inode.ConnectDirectly(d.P2P_TESTONLY()))
 	}
 
-	node, err := p2p.NewWith(inode, opts)
+	node, err := p2p.NewClientWith(inode)
 	check(err)
 
 	// Create the faucet service
