@@ -87,6 +87,10 @@ func (m *CreditPayment) ID() *url.TxID {
 	return m.TxID.Account().WithTxID(m.Hash())
 }
 
+func (m *BlockSummary) ID() *url.TxID {
+	return protocol.PartitionUrl(m.Partition).WithTxID(m.Hash())
+}
+
 func (m *SyntheticMessage) Unwrap() Message { return m.Message }
 func (m *SequencedMessage) Unwrap() Message { return m.Message }
 
@@ -163,6 +167,7 @@ func (m *SequencedMessage) Hash() [32]byte { return marshalAndHash(m) }
 func (m *BlockAnchor) Hash() [32]byte      { return marshalAndHash(m) }
 func (m *SignatureRequest) Hash() [32]byte { return marshalAndHash(m) }
 func (m *CreditPayment) Hash() [32]byte    { return marshalAndHash(m) }
+func (m *BlockSummary) Hash() [32]byte     { return marshalAndHash(m) }
 
 func marshalAndHash(m Message) [32]byte {
 	// If this fails something is seriously wrong
