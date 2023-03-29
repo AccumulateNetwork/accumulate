@@ -2,6 +2,7 @@
 accumulated
 accumulate
 play-accumulate
+golangci-lint
 !*/
 tools/cmd/gen-types/gen-types
 tools/cmd/gen-enum/gen-enum
