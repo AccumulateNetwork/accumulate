@@ -17,7 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (x *Executor) ProduceSynthetic(batch *database.Batch, produced []*ProducedMessage) error {
+func (x *Executor) produceSynthetic(batch *database.Batch, produced []*ProducedMessage, block uint64) error {
 	if len(produced) == 0 {
 		return nil
 	}
@@ -30,7 +30,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, produced []*ProducedM
 
 	// Finalize the produced transactions
 	for _, p := range produced {
-		seq, err := x.buildSynthTxn(state, batch, p)
+		seq, err := x.buildSynthTxn(state, batch, p, block)
 		if err != nil {
 			return err
 		}
@@ -90,7 +90,7 @@ func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Tran
 	return nil
 }
 
-func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, prod *ProducedMessage) (*messaging.SequencedMessage, error) {
+func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, prod *ProducedMessage, block uint64) (*messaging.SequencedMessage, error) {
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
@@ -115,7 +115,12 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	seq.Source = m.Describe.NodeUrl()
 	seq.Destination = destPartUrl
 	seq.Number = destLedger.Produced
-	m.logger.Debug("Built synthetic transaction", "module", "synthetic", "txid", logging.AsHex(prod.Message.Hash()), "destination", prod.Destination, "seq-num", destLedger.Produced)
+	m.logger.Debug("Built synthetic transaction", "module", "synthetic",
+		"block", block,
+		"txid", logging.AsHex(prod.Message.Hash()),
+		"destination", prod.Destination,
+		"seq-num", destLedger.Produced,
+		"type", seq.Message.Type())
 
 	// Update the ledger
 	err = record.PutState(ledger)

@@ -237,6 +237,14 @@ func (s *Simulator) BlockIndex(partition string) uint64 {
 	return p.blockIndex
 }
 
+func (s *Simulator) BlockIndexFor(account *url.URL) uint64 {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	return s.BlockIndex(partition)
+}
+
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
 	s.blockErrGroup = new(errgroup.Group)

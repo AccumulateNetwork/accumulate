@@ -24,7 +24,6 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	etcd "go.etcd.io/etcd/client/v3"
 )
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum  --package config enums.yml
@@ -57,7 +56,6 @@ type StorageType string
 const (
 	MemoryStorage StorageType = "memory"
 	BadgerStorage StorageType = "badger"
-	EtcdStorage   StorageType = "etcd"
 )
 
 // LogLevel defines the default and per-module log level for Accumulate's
@@ -224,9 +222,8 @@ func (a *AnalysisLog) Flush() {
 }
 
 type Storage struct {
-	Type StorageType  `toml:"type" mapstructure:"type"`
-	Path string       `toml:"path" mapstructure:"path"`
-	Etcd *etcd.Config `toml:"etcd" mapstructure:"etcd"`
+	Type StorageType `toml:"type" mapstructure:"type"`
+	Path string      `toml:"path" mapstructure:"path"`
 }
 
 type API struct {

@@ -29,6 +29,10 @@ const (
 	// MessageTypeMessageIsReady indicates that a message is ready to be
 	// processed.
 	MessageTypeMessageIsReady
+
+	// MessageTypePseudoSynthetic wraps produced messages between accounts in
+	// the same domain that would otherwise be synthetic.
+	MessageTypePseudoSynthetic
 )
 
 // NetworkUpdate is an update to a network account that has been pushed from the
@@ -40,10 +44,17 @@ type NetworkUpdate struct {
 	Body    protocol.TransactionBody
 }
 
-// MessageIsReady indicates that ta transaction is ready to be executed.
+// MessageIsReady indicates that the transaction is ready to be executed.
 type MessageIsReady struct {
 	internalMessage
 	TxID *url.TxID
+}
+
+// PseudoSynthetic wraps produced messages between accounts in the same domain
+// that would otherwise be synthetic.
+type PseudoSynthetic struct {
+	internalMessage
+	Message messaging.Message
 }
 
 func (m *NetworkUpdate) Type() messaging.MessageType { return MessageTypeNetworkUpdate }
@@ -53,6 +64,11 @@ func (m *NetworkUpdate) CopyAsInterface() any        { return m }
 func (m *MessageIsReady) Type() messaging.MessageType { return MessageTypeMessageIsReady }
 func (m *MessageIsReady) ID() *url.TxID               { return m.TxID }
 func (m *MessageIsReady) CopyAsInterface() any        { return m }
+
+func (m *PseudoSynthetic) Type() messaging.MessageType { return MessageTypePseudoSynthetic }
+func (m *PseudoSynthetic) ID() *url.TxID               { return m.Message.ID() }
+func (m *PseudoSynthetic) CopyAsInterface() any        { return m }
+func (m *PseudoSynthetic) Unwrap() messaging.Message   { return m.Message }
 
 // internalMessage can be embedded in another type to implement an internal
 // [messaging.Message]. The message is internal in that it cannot be marshalled,

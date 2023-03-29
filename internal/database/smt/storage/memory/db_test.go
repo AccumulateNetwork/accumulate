@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,9 +7,14 @@
 package memory
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 )
 
 func GetKey(key []byte) (dbKey [32]byte) {
@@ -39,4 +44,24 @@ func TestDatabase(t *testing.T) {
 			t.Error("Did not read data properly")
 		}
 	}
+}
+
+func TestPrefix(t *testing.T) {
+	data := make([]byte, 10)
+	_, err := io.ReadFull(rand.Reader, data)
+	require.NoError(t, err)
+
+	db := New(nil)
+
+	const prefix, key = "foo", "bar"
+	batch := db.BeginWithPrefix(true, prefix)
+	defer batch.Discard()
+	require.NoError(t, batch.Put(storage.MakeKey(key), data))
+	require.NoError(t, batch.Commit())
+
+	batch = db.BeginWithPrefix(true, prefix)
+	defer batch.Discard()
+	v, err := batch.Get(storage.MakeKey(key))
+	require.NoError(t, err)
+	require.Equal(t, data, v)
 }

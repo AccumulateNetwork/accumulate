@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -37,7 +36,6 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	etcd "go.etcd.io/etcd/client/v3"
 )
 
 var cmdInit = &cobra.Command{
@@ -60,7 +58,6 @@ var flagInit struct {
 	NoEmptyBlocks    bool
 	Reset            bool
 	LogLevels        string
-	Etcd             []string
 	EnableTimingLogs bool
 	FactomAddresses  string
 	Snapshots        []string
@@ -120,7 +117,6 @@ func initInitFlags() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
-	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	cmdInit.PersistentFlags().StringVar(&flagInit.FactomAddresses, "factom-addresses", "", "A text file containing Factoid addresses to import")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Snapshots, "snapshot", nil, "A snapshot of accounts to import")
@@ -627,13 +623,6 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		}
 
 		config.LogLevel = flagInit.LogLevels
-	}
-
-	if len(flagInit.Etcd) > 0 {
-		config.Accumulate.Storage.Type = cfg.EtcdStorage
-		config.Accumulate.Storage.Etcd = new(etcd.Config)
-		config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
-		config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 	}
 
 	if flagInit.Reset {
