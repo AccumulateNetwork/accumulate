@@ -75,9 +75,11 @@ func NewClient(server, network string, logger log.Logger) (*Client, error) {
 func newClient(network string, s message.StreamOf[*Message], logger log.Logger) *Client {
 	c := new(Client)
 	c.logger.Set(logger)
-	c.inner.Network = network
-	c.inner.Dialer = (*clientDialer)(c)
-	c.inner.Router = clientRouter{}
+	c.inner.Transport = &message.RoutedTransport{
+		Network: network,
+		Dialer:  (*clientDialer)(c),
+		Router:  clientRouter{},
+	}
 	c.conn = s
 	c.context, c.cancel = context.WithCancel(context.Background())
 	c.outgoing = make(chan *Message)
