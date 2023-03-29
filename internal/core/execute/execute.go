@@ -117,9 +117,6 @@ type BlockState interface {
 	// Discard discards changes made by this block.
 	Discard()
 
-	// Hash returns the state hash
-	Hash() []byte
-
 	// WalkChanges walks changes made by this block.
 	WalkChanges(record.WalkFunc) error
 }

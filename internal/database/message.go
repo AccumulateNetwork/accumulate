@@ -92,6 +92,6 @@ func (m *messageMain) Resolve(key record.Key) (record.Record, record.Key, error)
 
 func (m *messageMain) WalkChanges(fn record.WalkFunc) error {
 	var err error
-	walkChanges(&err, m.main, fn)
+	record.FieldWalkChanges(&err, m.main, fn)
 	return err
 }

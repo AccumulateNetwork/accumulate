@@ -1,0 +1,66 @@
+parameters:
+  non-binary: true
+  fields:
+    - name: RootHash
+      type: hash
+    - name: MaxHeight
+      type: uint
+    - name: Power
+      type: uint
+    - name: Mask
+      type: uint
+
+emptyNode:
+  non-binary: true
+  union: { type: node, private: true }
+  fields:
+    - name: parent
+      type: branch
+      pointer: true
+      marshal-as: none
+
+branch:
+  non-binary: true
+  union: { type: node, private: true }
+  fields:
+    - name: bpt
+      type: BPT
+      pointer: true
+      marshal-as: none
+    - name: parent
+      type: branch
+      pointer: true
+      marshal-as: none
+    - name: status
+      type: branchStatus
+      marshal-as: none
+
+    - name: Height
+      type: uint
+    - name: Key
+      type: hash
+    - name: Hash
+      type: hash
+
+    - name: Left
+      type: node
+      marshal-as: none
+      zero-value: nil
+    - name: Right
+      type: node
+      marshal-as: none
+      zero-value: nil
+
+leaf:
+  non-binary: true
+  union: { type: node, private: true }
+  fields:
+    - name: Key
+      type: hash
+    - name: Hash
+      type: hash
+
+    - name: parent
+      type: branch
+      pointer: true
+      marshal-as: none

@@ -25,11 +25,21 @@ EntityRecord:
       type: bool
     - name: CustomIsDirty
       type: bool
+    - name: CustomWalkChanges
+      type: bool
     - name: Parameters
       type: Field
       pointer: true
       marshal-as: reference
       repeatable: true
+    - name: OmitCommit
+      type: bool
+    - name: OmitResolve
+      type: bool
+    - name: OmitIsDirty
+      type: bool
+    - name: ValueStore # Use a custom store for values
+      type: string
     - name: Root
       type: bool
     - name: Interface
@@ -162,3 +172,5 @@ OtherRecord:
       type: bool
     - name: HasChains
       type: bool
+    - name: Constructor
+      type: string

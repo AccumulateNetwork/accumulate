@@ -289,7 +289,8 @@ func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 		// Get the old root
 		batch := n.database.Begin(false)
 		defer batch.Discard()
-		return batch.BptRoot(), nil
+		h, err := batch.BPT().GetRootHash()
+		return h[:], err
 	}
 
 	// Commit
@@ -312,5 +313,6 @@ func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 	// Get the  root
 	batch := n.database.Begin(false)
 	defer batch.Discard()
-	return batch.BptRoot(), nil
+	h, err := batch.BPT().GetRootHash()
+	return h[:], err
 }
