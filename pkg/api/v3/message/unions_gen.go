@@ -17,6 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
+var messageRegistry = new(encoding.UnionRegistry[Type, Message])
+
 // New creates a new Message for the specified Type.
 func New(typ Type) (Message, error) {
 	switch typ {
@@ -70,9 +72,11 @@ func New(typ Type) (Message, error) {
 		return new(ValidateRequest), nil
 	case TypeValidateResponse:
 		return new(ValidateResponse), nil
-	default:
-		return nil, fmt.Errorf("unknown message %v", typ)
 	}
+	if v, ok := messageRegistry.New(typ); ok {
+		return v, nil
+	}
+	return nil, fmt.Errorf("unknown message %v", typ)
 }
 
 // Equal is used to compare the values of the union
@@ -231,9 +235,8 @@ func Equal(a, b Message) bool {
 		}
 		b, ok := b.(*ValidateResponse)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return messageRegistry.Equal(a, b)
 }
 
 // Copy copies a Message.

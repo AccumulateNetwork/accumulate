@@ -114,9 +114,8 @@ func (v *CollectionType) SetEnumValue(id uint64) bool {
 	case CollectionTypeNone, CollectionTypeSet, CollectionTypeList, CollectionTypeCounted:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Collection Type.
@@ -130,9 +129,8 @@ func (v CollectionType) String() string {
 		return "list"
 	case CollectionTypeCounted:
 		return "counted"
-	default:
-		return fmt.Sprintf("CollectionType:%d", v)
 	}
+	return fmt.Sprintf("CollectionType:%d", v)
 }
 
 // CollectionTypeByName returns the named Collection Type.
@@ -146,9 +144,8 @@ func CollectionTypeByName(name string) (CollectionType, bool) {
 		return CollectionTypeList, true
 	case "counted":
 		return CollectionTypeCounted, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Collection Type to JSON as a string.
@@ -182,9 +179,8 @@ func (v *MarshalAs) SetEnumValue(id uint64) bool {
 	case MarshalAsBasic, MarshalAsNone, MarshalAsEnum, MarshalAsValue, MarshalAsReference, MarshalAsUnion:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Marshal As.
@@ -202,9 +198,8 @@ func (v MarshalAs) String() string {
 		return "reference"
 	case MarshalAsUnion:
 		return "union"
-	default:
-		return fmt.Sprintf("MarshalAs:%d", v)
 	}
+	return fmt.Sprintf("MarshalAs:%d", v)
 }
 
 // MarshalAsByName returns the named Marshal As.
@@ -222,9 +217,8 @@ func MarshalAsByName(name string) (MarshalAs, bool) {
 		return MarshalAsReference, true
 	case "union":
 		return MarshalAsUnion, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Marshal As to JSON as a string.
@@ -258,9 +252,8 @@ func (v *RecordType) SetEnumValue(id uint64) bool {
 	case RecordTypeEntity, RecordTypeState, RecordTypeChain, RecordTypeIndex, RecordTypeOther:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Record Type.
@@ -276,9 +269,8 @@ func (v RecordType) String() string {
 		return "index"
 	case RecordTypeOther:
 		return "other"
-	default:
-		return fmt.Sprintf("RecordType:%d", v)
 	}
+	return fmt.Sprintf("RecordType:%d", v)
 }
 
 // RecordTypeByName returns the named Record Type.
@@ -294,9 +286,8 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeIndex, true
 	case "other":
 		return RecordTypeOther, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Record Type to JSON as a string.
@@ -330,9 +321,8 @@ func (v *TypeCode) SetEnumValue(id uint64) bool {
 	case TypeCodeUnknown, TypeCodeInt, TypeCodeUint, TypeCodeBool, TypeCodeString, TypeCodeHash, TypeCodeBytes, TypeCodeUrl, TypeCodeTime, TypeCodeDuration, TypeCodeBigInt, TypeCodeAny, TypeCodeRawJson, TypeCodeFloat, TypeCodeTxid:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Type Code.
@@ -368,9 +358,8 @@ func (v TypeCode) String() string {
 		return "float"
 	case TypeCodeTxid:
 		return "txid"
-	default:
-		return fmt.Sprintf("TypeCode:%d", v)
 	}
+	return fmt.Sprintf("TypeCode:%d", v)
 }
 
 // TypeCodeByName returns the named Type Code.
@@ -414,9 +403,8 @@ func TypeCodeByName(name string) (TypeCode, bool) {
 		return TypeCodeFloat, true
 	case "txid":
 		return TypeCodeTxid, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Type Code to JSON as a string.
