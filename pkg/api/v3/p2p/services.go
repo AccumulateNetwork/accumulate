@@ -26,7 +26,8 @@ func idRpc(sa *api.ServiceAddress) protocol.ID {
 	return "/acc/rpc/" + protocol.ID(sa.String()) + "/1.0.0"
 }
 
-// RegisterService registers a service handler.
+// RegisterService registers a service handler and registers the service with
+// the network.
 func (n *Node) RegisterService(sa *api.ServiceAddress, handler MessageStreamHandler) bool {
 	ptr, ok := sortutil.BinaryInsert(&n.services, func(s *serviceHandler) int { return s.address.Compare(sa) })
 	if !ok {
@@ -52,6 +53,8 @@ type serviceHandler struct {
 	handler MessageStreamHandler
 }
 
+// WaitForService IS NOT RELIABLE.
+//
 // WaitForService blocks until the given service is available. WaitForService
 // will return once the service is registered on the current node or until the
 // node is informed of a peer with the given service. WaitForService will return

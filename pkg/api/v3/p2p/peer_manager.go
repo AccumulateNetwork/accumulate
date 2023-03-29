@@ -31,7 +31,7 @@ type peerManager struct {
 	getServices func() []*serviceHandler
 	dht         *dht.IpfsDHT
 	routing     *routing.RoutingDiscovery
-	sendEvent   chan<- Event
+	sendEvent   chan<- event
 	broadcast   chan struct{}
 	wait        chan chan struct{}
 }
@@ -57,7 +57,7 @@ func newPeerManager(ctx context.Context, host host.Host, getServices func() []*s
 	m.routing = routing.NewRoutingDiscovery(m.dht)
 
 	// Setup events
-	var recvEvent <-chan Event
+	var recvEvent <-chan event
 	m.sendEvent, recvEvent, err = startServiceDiscovery(ctx, host, m.logger)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (m *peerManager) advertizeNewService(sa *api.ServiceAddress) error {
 
 	util.Advertise(m.context, m.routing, addr.String())
 
-	m.sendEvent <- &ServiceRegisteredEvent{
+	m.sendEvent <- &serviceRegisteredEvent{
 		PeerID:  m.host.ID(),
 		Network: m.network,
 		Address: sa,
