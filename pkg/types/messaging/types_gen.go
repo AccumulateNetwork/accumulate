@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -28,6 +29,21 @@ type BlockAnchor struct {
 	Signature protocol.KeySignature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Anchor    Message               `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	extraData []byte
+}
+
+type BlockSummary struct {
+	fieldsSet []bool
+	// Partition is the ID of the partition of the block.
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	// Index is the index of the block.
+	Index uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	// StateTreeHash is the state tree hash after the block.
+	StateTreeHash [32]byte `json:"stateTreeHash,omitempty" form:"stateTreeHash" query:"stateTreeHash" validate:"required"`
+	// PreviousBlock is the index of the previous block (excludes any empty blocks).
+	PreviousBlock    uint64             `json:"previousBlock,omitempty" form:"previousBlock" query:"previousBlock" validate:"required"`
+	RecordUpdates    []*RecordUpdate    `json:"recordUpdates,omitempty" form:"recordUpdates" query:"recordUpdates" validate:"required"`
+	StateTreeUpdates []*StateTreeUpdate `json:"stateTreeUpdates,omitempty" form:"stateTreeUpdates" query:"stateTreeUpdates" validate:"required"`
+	extraData        []byte
 }
 
 type CreditPayment struct {
@@ -48,6 +64,13 @@ type Envelope struct {
 	Transaction []*protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
 	Messages    []Message               `json:"messages,omitempty" form:"messages" query:"messages"`
 	extraData   []byte
+}
+
+type RecordUpdate struct {
+	fieldsSet []bool
+	Key       record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Value     []byte     `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
 }
 
 type SequencedMessage struct {
@@ -77,6 +100,13 @@ type SignatureRequest struct {
 	extraData []byte
 }
 
+type StateTreeUpdate struct {
+	fieldsSet []bool
+	Key       record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Hash      [32]byte   `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
 type SyntheticMessage struct {
 	fieldsSet []bool
 	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
@@ -91,6 +121,8 @@ type TransactionMessage struct {
 }
 
 func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
+
+func (*BlockSummary) Type() MessageType { return MessageTypeBlockSummary }
 
 func (*CreditPayment) Type() MessageType { return MessageTypeCreditPayment }
 
@@ -118,6 +150,31 @@ func (v *BlockAnchor) Copy() *BlockAnchor {
 }
 
 func (v *BlockAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockSummary) Copy() *BlockSummary {
+	u := new(BlockSummary)
+
+	u.Partition = v.Partition
+	u.Index = v.Index
+	u.StateTreeHash = v.StateTreeHash
+	u.PreviousBlock = v.PreviousBlock
+	u.RecordUpdates = make([]*RecordUpdate, len(v.RecordUpdates))
+	for i, v := range v.RecordUpdates {
+		if v != nil {
+			u.RecordUpdates[i] = (v).Copy()
+		}
+	}
+	u.StateTreeUpdates = make([]*StateTreeUpdate, len(v.StateTreeUpdates))
+	for i, v := range v.StateTreeUpdates {
+		if v != nil {
+			u.StateTreeUpdates[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *BlockSummary) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *CreditPayment) Copy() *CreditPayment {
 	u := new(CreditPayment)
@@ -166,6 +223,17 @@ func (v *Envelope) Copy() *Envelope {
 }
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RecordUpdate) Copy() *RecordUpdate {
+	u := new(RecordUpdate)
+
+	u.Key = *(&v.Key).Copy()
+	u.Value = encoding.BytesCopy(v.Value)
+
+	return u
+}
+
+func (v *RecordUpdate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SequencedMessage) Copy() *SequencedMessage {
 	u := new(SequencedMessage)
@@ -219,6 +287,17 @@ func (v *SignatureRequest) Copy() *SignatureRequest {
 
 func (v *SignatureRequest) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *StateTreeUpdate) Copy() *StateTreeUpdate {
+	u := new(StateTreeUpdate)
+
+	u.Key = *(&v.Key).Copy()
+	u.Hash = v.Hash
+
+	return u
+}
+
+func (v *StateTreeUpdate) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SyntheticMessage) Copy() *SyntheticMessage {
 	u := new(SyntheticMessage)
 
@@ -252,6 +331,39 @@ func (v *BlockAnchor) Equal(u *BlockAnchor) bool {
 	}
 	if !(EqualMessage(v.Anchor, u.Anchor)) {
 		return false
+	}
+
+	return true
+}
+
+func (v *BlockSummary) Equal(u *BlockSummary) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !(v.StateTreeHash == u.StateTreeHash) {
+		return false
+	}
+	if !(v.PreviousBlock == u.PreviousBlock) {
+		return false
+	}
+	if len(v.RecordUpdates) != len(u.RecordUpdates) {
+		return false
+	}
+	for i := range v.RecordUpdates {
+		if !((v.RecordUpdates[i]).Equal(u.RecordUpdates[i])) {
+			return false
+		}
+	}
+	if len(v.StateTreeUpdates) != len(u.StateTreeUpdates) {
+		return false
+	}
+	for i := range v.StateTreeUpdates {
+		if !((v.StateTreeUpdates[i]).Equal(u.StateTreeUpdates[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -324,6 +436,17 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	return true
 }
 
+func (v *RecordUpdate) Equal(u *RecordUpdate) bool {
+	if !((&v.Key).Equal(&u.Key)) {
+		return false
+	}
+	if !(bytes.Equal(v.Value, u.Value)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SequencedMessage) Equal(u *SequencedMessage) bool {
 	if !(EqualMessage(v.Message, u.Message)) {
 		return false
@@ -390,6 +513,17 @@ func (v *SignatureRequest) Equal(u *SignatureRequest) bool {
 	case v.Cause == nil || u.Cause == nil:
 		return false
 	case !((v.Cause).Equal(u.Cause)):
+		return false
+	}
+
+	return true
+}
+
+func (v *StateTreeUpdate) Equal(u *StateTreeUpdate) bool {
+	if !((&v.Key).Equal(&u.Key)) {
+		return false
+	}
+	if !(v.Hash == u.Hash) {
 		return false
 	}
 
@@ -470,6 +604,103 @@ func (v *BlockAnchor) IsValid() error {
 		errs = append(errs, "field Anchor is missing")
 	} else if EqualMessage(v.Anchor, nil) {
 		errs = append(errs, "field Anchor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockSummary = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Index",
+	4: "StateTreeHash",
+	5: "PreviousBlock",
+	6: "RecordUpdates",
+	7: "StateTreeUpdates",
+}
+
+func (v *BlockSummary) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+	if !(v.Index == 0) {
+		writer.WriteUint(3, v.Index)
+	}
+	if !(v.StateTreeHash == ([32]byte{})) {
+		writer.WriteHash(4, &v.StateTreeHash)
+	}
+	if !(v.PreviousBlock == 0) {
+		writer.WriteUint(5, v.PreviousBlock)
+	}
+	if !(len(v.RecordUpdates) == 0) {
+		for _, v := range v.RecordUpdates {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
+	if !(len(v.StateTreeUpdates) == 0) {
+		for _, v := range v.StateTreeUpdates {
+			writer.WriteValue(7, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockSummary)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockSummary) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field StateTreeHash is missing")
+	} else if v.StateTreeHash == ([32]byte{}) {
+		errs = append(errs, "field StateTreeHash is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field PreviousBlock is missing")
+	} else if v.PreviousBlock == 0 {
+		errs = append(errs, "field PreviousBlock is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field RecordUpdates is missing")
+	} else if len(v.RecordUpdates) == 0 {
+		errs = append(errs, "field RecordUpdates is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field StateTreeUpdates is missing")
+	} else if len(v.StateTreeUpdates) == 0 {
+		errs = append(errs, "field StateTreeUpdates is not set")
 	}
 
 	switch len(errs) {
@@ -615,6 +846,58 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RecordUpdate = []string{
+	1: "Key",
+	2: "Value",
+}
+
+func (v *RecordUpdate) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !((v.Key).Equal(new(record.Key))) {
+		writer.WriteValue(1, v.Key.MarshalBinary)
+	}
+	if !(len(v.Value) == 0) {
+		writer.WriteBytes(2, v.Value)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RecordUpdate)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *RecordUpdate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Key is missing")
+	} else if (v.Key).Equal(new(record.Key)) {
+		errs = append(errs, "field Key is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -810,6 +1093,58 @@ func (v *SignatureRequest) IsValid() error {
 	}
 }
 
+var fieldNames_StateTreeUpdate = []string{
+	1: "Key",
+	2: "Hash",
+}
+
+func (v *StateTreeUpdate) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !((v.Key).Equal(new(record.Key))) {
+		writer.WriteValue(1, v.Key.MarshalBinary)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(2, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_StateTreeUpdate)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *StateTreeUpdate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Key is missing")
+	} else if (v.Key).Equal(new(record.Key)) {
+		errs = append(errs, "field Key is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SyntheticMessage = []string{
 	1: "Type",
 	2: "Message",
@@ -961,6 +1296,64 @@ func (v *BlockAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *BlockSummary) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockSummary) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BlockSummary) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.StateTreeHash = *x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.PreviousBlock = x
+	}
+	for {
+		if x := new(RecordUpdate); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+			v.RecordUpdates = append(v.RecordUpdates, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(StateTreeUpdate); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+			v.StateTreeUpdates = append(v.StateTreeUpdates, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockSummary)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *CreditPayment) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1051,6 +1444,32 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Envelope)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *RecordUpdate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RecordUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(record.Key); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Key = *x
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RecordUpdate)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1193,6 +1612,32 @@ func (v *SignatureRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *StateTreeUpdate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *StateTreeUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(record.Key); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Key = *x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_StateTreeUpdate)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SyntheticMessage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1286,6 +1731,38 @@ func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BlockSummary) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type             MessageType                         `json:"type"`
+		Partition        string                              `json:"partition,omitempty"`
+		Index            uint64                              `json:"index,omitempty"`
+		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
+		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
+		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(v.Index == 0) {
+		u.Index = v.Index
+	}
+	if !(v.StateTreeHash == ([32]byte{})) {
+		u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+	}
+	if !(v.PreviousBlock == 0) {
+		u.PreviousBlock = v.PreviousBlock
+	}
+	if !(len(v.RecordUpdates) == 0) {
+		u.RecordUpdates = v.RecordUpdates
+	}
+	if !(len(v.StateTreeUpdates) == 0) {
+		u.StateTreeUpdates = v.StateTreeUpdates
+	}
+	return json.Marshal(&u)
+}
+
 func (v *CreditPayment) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      MessageType  `json:"type"`
@@ -1332,6 +1809,20 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Messages) == 0) {
 		u.Messages = &encoding.JsonUnmarshalListWith[Message]{Value: v.Messages, Func: UnmarshalMessageJSON}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *RecordUpdate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Key   record.Key `json:"key,omitempty"`
+		Value *string    `json:"value,omitempty"`
+	}{}
+	if !((v.Key).Equal(new(record.Key))) {
+		u.Key = v.Key
+	}
+	if !(len(v.Value) == 0) {
+		u.Value = encoding.BytesToJSON(v.Value)
 	}
 	return json.Marshal(&u)
 }
@@ -1396,6 +1887,20 @@ func (v *SignatureRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *StateTreeUpdate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Key  record.Key `json:"key,omitempty"`
+		Hash string     `json:"hash,omitempty"`
+	}{}
+	if !((v.Key).Equal(new(record.Key))) {
+		u.Key = v.Key
+	}
+	if !(v.Hash == ([32]byte{})) {
+		u.Hash = encoding.ChainToJSON(v.Hash)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    MessageType                          `json:"type"`
@@ -1447,6 +1952,42 @@ func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
 		v.Anchor = u.Anchor.Value
 	}
 
+	return nil
+}
+
+func (v *BlockSummary) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type             MessageType                         `json:"type"`
+		Partition        string                              `json:"partition,omitempty"`
+		Index            uint64                              `json:"index,omitempty"`
+		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
+		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
+		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Index = v.Index
+	u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+	u.PreviousBlock = v.PreviousBlock
+	u.RecordUpdates = v.RecordUpdates
+	u.StateTreeUpdates = v.StateTreeUpdates
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Index = u.Index
+	if x, err := encoding.ChainFromJSON(u.StateTreeHash); err != nil {
+		return fmt.Errorf("error decoding StateTreeHash: %w", err)
+	} else {
+		v.StateTreeHash = x
+	}
+	v.PreviousBlock = u.PreviousBlock
+	v.RecordUpdates = u.RecordUpdates
+	v.StateTreeUpdates = u.StateTreeUpdates
 	return nil
 }
 
@@ -1510,6 +2051,25 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 		for i, x := range u.Messages.Value {
 			v.Messages[i] = x
 		}
+	}
+	return nil
+}
+
+func (v *RecordUpdate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Key   record.Key `json:"key,omitempty"`
+		Value *string    `json:"value,omitempty"`
+	}{}
+	u.Key = v.Key
+	u.Value = encoding.BytesToJSON(v.Value)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Key = u.Key
+	if x, err := encoding.BytesFromJSON(u.Value); err != nil {
+		return fmt.Errorf("error decoding Value: %w", err)
+	} else {
+		v.Value = x
 	}
 	return nil
 }
@@ -1586,6 +2146,25 @@ func (v *SignatureRequest) UnmarshalJSON(data []byte) error {
 	v.Authority = u.Authority
 	v.TxID = u.TxID
 	v.Cause = u.Cause
+	return nil
+}
+
+func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Key  record.Key `json:"key,omitempty"`
+		Hash string     `json:"hash,omitempty"`
+	}{}
+	u.Key = v.Key
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Key = u.Key
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
 	return nil
 }
 

@@ -215,6 +215,14 @@ func (d *Daemon) Start() (err error) {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Start the block summary collector
+	if d.Config.Accumulate.SummaryNetwork != "" {
+		err = d.startCollector()
+		if err != nil {
+			return errors.UnknownError.WithFormat("start collector: %w", err)
+		}
+	}
+
 	// Start the executor and ABCI
 	app, err := d.startApp()
 	if err != nil {

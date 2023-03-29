@@ -111,3 +111,47 @@ CreditPayment:
     - name: Cause
       type: txid
       pointer: true
+
+BlockSummary:
+  union: { type: message }
+  fields:
+    - name: Partition
+      description: is the ID of the partition of the block
+      type: string
+    - name: Index
+      description: is the index of the block
+      type: uint
+    - name: StateTreeHash
+      description: is the state tree hash after the block
+      type: hash
+    - name: PreviousBlock
+      description: is the index of the previous block (excludes any empty blocks)
+      type: uint
+    - name: RecordUpdates
+      type: RecordUpdate
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: StateTreeUpdates
+      type: StateTreeUpdate
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+# Components
+
+RecordUpdate:
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+    - name: Value
+      type: bytes
+
+StateTreeUpdate:
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+    - name: Hash
+      type: hash
