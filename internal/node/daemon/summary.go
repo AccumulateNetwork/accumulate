@@ -32,11 +32,11 @@ func (d *Daemon) startCollector() error {
 		return errors.UnknownError.WithFormat("start collector: %w", err)
 	}
 
-	client := &message.Client{
+	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: d.Config.Accumulate.Network.Id,
-		Dialer:  d.p2pnode.Dialer(),
+		Dialer:  d.p2pnode.DialNetwork(),
 		Router:  routing.MessageRouter{Router: summaryRouter(d.Config.Accumulate.SummaryNetwork)},
-	}
+	}}
 
 	events.SubscribeAsync(d.eventBus, func(e bsn.DidCollectBlock) {
 		/*// Wait for the summary network to appear
