@@ -50,9 +50,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(UnknownAccount), nil
 	case AccountTypeUnknownSigner:
 		return new(UnknownSigner), nil
-	default:
-		return nil, fmt.Errorf("unknown account %v", typ)
 	}
+	return nil, fmt.Errorf("unknown account %v", typ)
 }
 
 // EqualAccount is used to compare the values of the union
@@ -151,9 +150,8 @@ func EqualAccount(a, b Account) bool {
 		}
 		b, ok := b.(*UnknownSigner)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyAccount copies a Account.
@@ -259,9 +257,8 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 		return new(AccumulateDataEntry), nil
 	case DataEntryTypeFactom:
 		return new(FactomDataEntryWrapper), nil
-	default:
-		return nil, fmt.Errorf("unknown data entry %v", typ)
 	}
+	return nil, fmt.Errorf("unknown data entry %v", typ)
 }
 
 // EqualDataEntry is used to compare the values of the union
@@ -282,9 +279,8 @@ func EqualDataEntry(a, b DataEntry) bool {
 		}
 		b, ok := b.(*FactomDataEntryWrapper)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyDataEntry copies a DataEntry.
@@ -424,9 +420,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(WriteData), nil
 	case TransactionTypeWriteDataTo:
 		return new(WriteDataTo), nil
-	default:
-		return nil, fmt.Errorf("unknown transaction %v", typ)
 	}
+	return nil, fmt.Errorf("unknown transaction %v", typ)
 }
 
 // EqualTransactionBody is used to compare the values of the union
@@ -627,9 +622,8 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*WriteDataTo)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyTransactionBody copies a TransactionBody.
@@ -773,9 +767,8 @@ func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation
 		return new(EnableAccountAuthOperation), nil
 	case AccountAuthOperationTypeRemoveAuthority:
 		return new(RemoveAccountAuthorityOperation), nil
-	default:
-		return nil, fmt.Errorf("unknown account auth operation %v", typ)
 	}
+	return nil, fmt.Errorf("unknown account auth operation %v", typ)
 }
 
 // EqualAccountAuthOperation is used to compare the values of the union
@@ -808,9 +801,8 @@ func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 		}
 		b, ok := b.(*RemoveAccountAuthorityOperation)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyAccountAuthOperation copies a AccountAuthOperation.
@@ -900,9 +892,8 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 		return new(UpdateAllowedKeyPageOperation), nil
 	case KeyPageOperationTypeUpdate:
 		return new(UpdateKeyOperation), nil
-	default:
-		return nil, fmt.Errorf("unknown key page operation %v", typ)
 	}
+	return nil, fmt.Errorf("unknown key page operation %v", typ)
 }
 
 // EqualKeyPageOperation is used to compare the values of the union
@@ -941,9 +932,8 @@ func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 		}
 		b, ok := b.(*UpdateKeyOperation)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyKeyPageOperation copies a KeyPageOperation.
@@ -1051,9 +1041,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(RemoteSignature), nil
 	case SignatureTypeSet:
 		return new(SignatureSet), nil
-	default:
-		return nil, fmt.Errorf("unknown signature %v", typ)
 	}
+	return nil, fmt.Errorf("unknown signature %v", typ)
 }
 
 // EqualSignature is used to compare the values of the union
@@ -1140,9 +1129,8 @@ func EqualSignature(a, b Signature) bool {
 		}
 		b, ok := b.(*SignatureSet)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopySignature copies a Signature.
