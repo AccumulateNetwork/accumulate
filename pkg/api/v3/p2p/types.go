@@ -10,11 +10,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
-type EventType uint64
+type eventType uint64
 
-type Event interface {
+type event interface {
 	encoding.UnionValue
-	Type() EventType
+	Type() eventType
 }
 
 //go:generate go run github.com/vektra/mockery/v2
