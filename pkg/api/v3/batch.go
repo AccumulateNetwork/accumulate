@@ -24,9 +24,9 @@ func (contextKeyBatch) String() string { return "batch context key" }
 // and a noop cancel function. If the incoming context does not have batch data,
 // ContextWithBatch will create a new cancellable context with batch data.
 func ContextWithBatchData(ctx context.Context) (context.Context, context.CancelFunc, *BatchData) {
-	v := ctx.Value(contextKeyBatch{})
+	v, _ := ctx.Value(contextKeyBatch{}).(*BatchData)
 	if v != nil {
-		return ctx, func() {}, v.(*BatchData)
+		return ctx, func() {}, v
 	}
 
 	bd := new(BatchData)
@@ -34,4 +34,9 @@ func ContextWithBatchData(ctx context.Context) (context.Context, context.CancelF
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = context.WithValue(ctx, contextKeyBatch{}, bd)
 	return ctx, cancel, bd
+}
+
+func GetBatchData(ctx context.Context) *BatchData {
+	v, _ := ctx.Value(contextKeyBatch{}).(*BatchData)
+	return v
 }
