@@ -32,6 +32,7 @@ type SingleTypeFile struct {
 type Type struct {
 	Name       string
 	SubPackage string
+	Registry   string
 	Values     []*TypeValue
 }
 

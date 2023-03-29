@@ -99,9 +99,8 @@ func (v *Status) SetEnumValue(id uint64) bool {
 	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Status.
@@ -157,9 +156,8 @@ func (v Status) String() string {
 		return "noPeer"
 	case PeerMisbehaved:
 		return "peerMisbehaved"
-	default:
-		return fmt.Sprintf("Status:%d", v)
 	}
+	return fmt.Sprintf("Status:%d", v)
 }
 
 // StatusByName returns the named Status.
@@ -215,9 +213,8 @@ func StatusByName(name string) (Status, bool) {
 		return NoPeer, true
 	case "peermisbehaved":
 		return PeerMisbehaved, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Status to JSON as a string.

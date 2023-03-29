@@ -42,9 +42,8 @@ func (v *BlockFilterMode) SetEnumValue(id uint64) bool {
 	case BlockFilterModeExcludeNone, BlockFilterModeExcludeEmpty:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Block Filter Mode.
@@ -54,9 +53,8 @@ func (v BlockFilterMode) String() string {
 		return "excludeNone"
 	case BlockFilterModeExcludeEmpty:
 		return "excludeEmpty"
-	default:
-		return fmt.Sprintf("BlockFilterMode:%d", v)
 	}
+	return fmt.Sprintf("BlockFilterMode:%d", v)
 }
 
 // BlockFilterModeByName returns the named Block Filter Mode.
@@ -66,9 +64,8 @@ func BlockFilterModeByName(name string) (BlockFilterMode, bool) {
 		return BlockFilterModeExcludeNone, true
 	case "excludeempty":
 		return BlockFilterModeExcludeEmpty, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Block Filter Mode to JSON as a string.
@@ -102,9 +99,8 @@ func (v *TxFetchMode) SetEnumValue(id uint64) bool {
 	case TxFetchModeExpand, TxFetchModeIds, TxFetchModeCountOnly, TxFetchModeOmit:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Tx Fetch Mode.
@@ -118,9 +114,8 @@ func (v TxFetchMode) String() string {
 		return "countOnly"
 	case TxFetchModeOmit:
 		return "omit"
-	default:
-		return fmt.Sprintf("TxFetchMode:%d", v)
 	}
+	return fmt.Sprintf("TxFetchMode:%d", v)
 }
 
 // TxFetchModeByName returns the named Tx Fetch Mode.
@@ -134,9 +129,8 @@ func TxFetchModeByName(name string) (TxFetchMode, bool) {
 		return TxFetchModeCountOnly, true
 	case "omit":
 		return TxFetchModeOmit, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Tx Fetch Mode to JSON as a string.

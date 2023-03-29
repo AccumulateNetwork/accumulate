@@ -10,12 +10,14 @@ linters:
   - bidichk       # Check for questionable Unicode
   - exportloopref # Smarter version of rangevarref?
   - goheader      # Enforce the copyright header
-  - gosec         # Security
   - maintidx      # Maintainability
   - misspell      # Spelling
   - nakedret      # Not really sure what this one does
   - nilerr        # Bugs (error checking)
   - unconvert     # Lint (unnecessary conversions)
+
+  # Gosec panics on some of the generic code
+  # - gosec         # Security
 
   # - nestif # I'd like to enable this but I don't want to deal with the issues yet
   # - godox # Enable to find TODO/BUG/FIXME

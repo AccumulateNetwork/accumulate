@@ -300,6 +300,8 @@ type Union struct {
 	Value string
 	// Private indicates the union is a private type.
 	Private bool
+	// Registry indicates the union supports registering new members.
+	Registry bool
 }
 
 // Field is a field of a type.
