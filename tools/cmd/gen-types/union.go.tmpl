@@ -20,6 +20,10 @@ import (
 {{ $lud := .LongUnionDiscriminator }}
 {{- range .Unions}}{{if not (eq .Type "result")}}
 
+{{- if .Registry}}
+var {{lcName .Name}}Registry = new(encoding.UnionRegistry[{{.Enumeration}}, {{.Interface}}])
+{{- end}}
+
 // {{unionMethod . "New"}} creates a new {{.Interface}} for the specified {{.Enumeration}}.
 func {{unionMethod . "New"}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 	switch typ {
@@ -27,9 +31,13 @@ func {{unionMethod . "New"}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 	case {{.UnionType}}{{.UnionValue}}:
 		return new({{.FullName false true}}), nil
 	{{- end}}
-	default:
-		return nil, fmt.Errorf("unknown {{natural .Type}} %v", typ)
 	}
+	{{- if .Registry}}
+	if v, ok := {{lcName .Name}}Registry.New(typ); ok {
+		return v, nil
+	}
+	{{- end}}
+	return nil, fmt.Errorf("unknown {{natural .Type}} %v", typ)
 }
 
 {{if (index .Members 0).IsComparable}}
@@ -47,9 +55,12 @@ func {{unionMethod . "Equal"}}(a, b {{.Interface}}) bool {
 		b, ok := b.(*{{.Type.FullName false true}})
 		return ok && a.Equal(b)
 	{{- end}}
-	default:
-		return false
 	}
+	{{- if .Registry}}
+	return {{lcName .Name}}Registry.Equal(a, b)
+	{{- else}}
+	return false
+	{{- end}}
 }
 
 // {{unionMethod . "Copy"}} copies a {{.Interface}}.

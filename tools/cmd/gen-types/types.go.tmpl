@@ -20,6 +20,9 @@ import (
 	"strings"
 	"time"
 
+	{{- range .GoInclude}}
+	"{{.}}"
+	{{- end}}
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"

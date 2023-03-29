@@ -45,9 +45,8 @@ func NewRecord(typ RecordType) (Record, error) {
 		return new(TxIDRecord), nil
 	case RecordTypeUrl:
 		return new(UrlRecord), nil
-	default:
-		return nil, fmt.Errorf("unknown record %v", typ)
 	}
+	return nil, fmt.Errorf("unknown record %v", typ)
 }
 
 // EqualRecord is used to compare the values of the union
@@ -128,9 +127,8 @@ func EqualRecord(a, b Record) bool {
 		}
 		b, ok := b.(*UrlRecord)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyRecord copies a Record.
@@ -242,9 +240,8 @@ func NewQuery(typ QueryType) (Query, error) {
 		return new(PublicKeyHashSearchQuery), nil
 	case QueryTypePublicKeySearch:
 		return new(PublicKeySearchQuery), nil
-	default:
-		return nil, fmt.Errorf("unknown query %v", typ)
 	}
+	return nil, fmt.Errorf("unknown query %v", typ)
 }
 
 // EqualQuery is used to compare the values of the union
@@ -319,9 +316,8 @@ func EqualQuery(a, b Query) bool {
 		}
 		b, ok := b.(*PublicKeySearchQuery)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyQuery copies a Query.
@@ -421,9 +417,8 @@ func NewEvent(typ EventType) (Event, error) {
 		return new(ErrorEvent), nil
 	case EventTypeGlobals:
 		return new(GlobalsEvent), nil
-	default:
-		return nil, fmt.Errorf("unknown event %v", typ)
 	}
+	return nil, fmt.Errorf("unknown event %v", typ)
 }
 
 // EqualEvent is used to compare the values of the union
@@ -450,9 +445,8 @@ func EqualEvent(a, b Event) bool {
 		}
 		b, ok := b.(*GlobalsEvent)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyEvent copies a Event.

@@ -99,9 +99,12 @@ func (v *Type) SetEnumValue(id uint64) bool {
 	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	if u, ok := messageRegistry.TypeByValue(id); ok {
+		*v = u
+		return true
+	}
+	return false
 }
 
 // String returns the name of the Type.
@@ -157,9 +160,11 @@ func (v Type) String() string {
 		return "privateSequenceResponse"
 	case TypeAddressed:
 		return "addressed"
-	default:
-		return fmt.Sprintf("Type:%d", v)
 	}
+	if s, ok := messageRegistry.TypeName(v); ok {
+		return s
+	}
+	return fmt.Sprintf("Type:%d", v)
 }
 
 // TypeByName returns the named Type.
@@ -215,9 +220,11 @@ func TypeByName(name string) (Type, bool) {
 		return TypePrivateSequenceResponse, true
 	case "addressed":
 		return TypeAddressed, true
-	default:
-		return 0, false
 	}
+	if typ, ok := messageRegistry.TypeByName(name); ok {
+		return typ, true
+	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Type to JSON as a string.

@@ -26,6 +26,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 	// Initialize
 	ttypes := new(Types)
 	ttypes.Package = pkgName
+	ttypes.GoInclude = flags.GoInclude
 	ttypes.LongUnionDiscriminator = flags.LongUnionDiscriminator
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
@@ -73,6 +74,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 			union.Name = typ.Union.Name
 			union.Type = typ.Union.Type
 			union.Private = typ.Union.Private
+			union.Registry = typ.Union.Registry
 			union.Package = pkgName
 			union.SubPackage = subPkgName
 			ttypes.Unions = append(ttypes.Unions, union)
@@ -190,6 +192,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 
 type Types struct {
 	Package                string
+	GoInclude              []string
 	LongUnionDiscriminator bool
 	Types                  []*Type
 	Unions                 []*UnionSpec
@@ -216,6 +219,7 @@ type UnionSpec struct {
 	Members    []*Type
 	SubPackage string
 	Private    bool
+	Registry   bool
 }
 
 type Type struct {

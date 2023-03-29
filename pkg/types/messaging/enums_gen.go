@@ -48,9 +48,8 @@ func (v *MessageType) SetEnumValue(id uint64) bool {
 	case MessageTypeTransaction, MessageTypeSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Message Type.
@@ -72,9 +71,8 @@ func (v MessageType) String() string {
 		return "creditPayment"
 	case MessageTypeBlockSummary:
 		return "blockSummary"
-	default:
-		return fmt.Sprintf("MessageType:%d", v)
 	}
+	return fmt.Sprintf("MessageType:%d", v)
 }
 
 // MessageTypeByName returns the named Message Type.
@@ -96,9 +94,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeCreditPayment, true
 	case "blocksummary":
 		return MessageTypeBlockSummary, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Message Type to JSON as a string.
