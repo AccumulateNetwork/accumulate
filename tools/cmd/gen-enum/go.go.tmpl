@@ -34,9 +34,14 @@ func (v *{{.Name}}) SetEnumValue(id uint64) bool {
 	case {{range $i, $v := .Values}}{{if gt $i 0}}, {{end}}{{valueName .}}{{end}}:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	{{- if .Registry}}
+	if u, ok := {{.Registry}}.TypeByValue(id); ok {
+		*v = u
+		return true
+	}
+	{{- end}}
+	return false
 }
 
 // String returns the name of the {{natural .Name}}.
@@ -47,9 +52,13 @@ func (v {{.Name}}) String() string {
 	case {{valueName .}}:
 		return "{{if .Label}}{{.Label}}{{else}}{{lowerCamel .Name}}{{end}}"
 	{{- end}}
-	default:
-		return fmt.Sprintf("{{.Name}}:%d", v)
 	}
+	{{- if .Registry}}
+	if s, ok := {{.Registry}}.TypeName(v); ok {
+		return s
+	}
+	{{- end}}
+	return fmt.Sprintf("{{.Name}}:%d", v)
 }
 
 {{/* // GoString returns the Go constant name.
@@ -82,9 +91,13 @@ func {{.Name}}ByName(name string) ({{.Name}}, bool) {
 		return {{$typ}}, true
 	{{- end}}
 	{{- end}}
-	default:
-		return 0, false
 	}
+	{{- if .Registry}}
+	if typ, ok := {{.Registry}}.TypeByName(name); ok {
+		return typ, true
+	}
+	{{- end}}
+	return 0, false
 }
 
 // MarshalJSON marshals the {{natural .Name}} to JSON as a string.

@@ -69,9 +69,8 @@ func (v *typeCode) SetEnumValue(id uint64) bool {
 	case typeCodeUnknown, typeCodeInt, typeCodeUint, typeCodeBool, typeCodeString, typeCodeHash, typeCodeBytes, typeCodeUrl, typeCodeTime, typeCodeDuration, typeCodeBigInt, typeCodeAny, typeCodeRawJson, typeCodeFloat, typeCodeTxid:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the type Code.
@@ -107,9 +106,8 @@ func (v typeCode) String() string {
 		return "float"
 	case typeCodeTxid:
 		return "txid"
-	default:
-		return fmt.Sprintf("typeCode:%d", v)
 	}
+	return fmt.Sprintf("typeCode:%d", v)
 }
 
 // typeCodeByName returns the named type Code.
@@ -153,9 +151,8 @@ func typeCodeByName(name string) (typeCode, bool) {
 		return typeCodeFloat, true
 	case "txid":
 		return typeCodeTxid, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the type Code to JSON as a string.
