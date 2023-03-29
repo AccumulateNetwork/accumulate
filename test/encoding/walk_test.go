@@ -8,15 +8,19 @@ package encoding
 
 import (
 	"bytes"
-	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -29,12 +33,16 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
+func init() {
+	acctesting.EnableDebugFeatures()
+}
+
 func TestWalkAndReplay(t *testing.T) {
 	liteKey := acctesting.GenerateKey("Lite")
 	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
 
 	// Use the simulator to create genesis documents
-	net := simulator.SimpleNetwork("Gold/1.0.0", 3, 1)
+	net := simulator.SimpleNetwork(t.Name(), 3, 1)
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		net,
@@ -130,18 +138,20 @@ func TestWalkAndReplay(t *testing.T) {
 
 	sim.StepN(100)
 
+	// Restore snapshot into BSN database
+	logger := acctesting.NewTestLogger(t)
+	store := memory.New(logger.With("module", "storage"))
+	bsndb := bsn.NewChangeSet(store, logger.With("module", "database"))
+	for _, part := range sim.Partitions() {
+		err := snapshot.Restore(bsndb.Partition(part.ID), ioutil2.NewBuffer(genesis[part.ID]), logger.With("module", "snapshot"))
+		require.NoError(t, err)
+	}
+	require.NoError(t, bsndb.Commit())
+
 	// Replay blocks
-	sim = NewSim(t,
-		simulator.MemoryDatabase,
-		net,
-		simulator.SnapshotMap(genesis),
-	)
-
-	fmt.Println()
-	fmt.Println()
-
 	for id, blocks := range blocks {
-		db := sim.Database(id)
+		id = strings.ToLower(id)
+		db := &partitionBeginner{logger: logger, store: store, partition: id}
 		for _, block := range blocks {
 			require.NotNil(t, block.Hash)
 
@@ -183,5 +193,39 @@ func TestWalkAndReplay(t *testing.T) {
 		}
 	}
 
-	require.NotZero(t, GetAccount[*protocol.LiteTokenAccount](t, sim.DatabaseFor(lite2), lite2).Balance)
+	bsndb = bsn.NewChangeSet(store, logger.With("module", "database"))
+	p, err := sim.Router().RouteAccount(lite2)
+	require.NoError(t, err)
+	require.NotZero(t, GetAccount[*protocol.LiteTokenAccount](t, bsndb.Partition(p), lite2).Balance)
+}
+
+type partitionBeginner struct {
+	logger    log.Logger
+	store     storage.Beginner
+	partition string
+}
+
+func (p *partitionBeginner) SetObserver(observer database.Observer) {}
+
+func (p *partitionBeginner) Begin(writable bool) *database.Batch {
+	s := p.store.BeginWithPrefix(true, p.partition+"·")
+	b := database.NewBatch(p.partition, s, writable, p.logger)
+	b.SetObserver(execute.NewDatabaseObserver())
+	return b
+}
+
+func (p *partitionBeginner) View(fn func(*database.Batch) error) error {
+	b := p.Begin(false)
+	defer b.Discard()
+	return fn(b)
+}
+
+func (p *partitionBeginner) Update(fn func(*database.Batch) error) error {
+	b := p.Begin(true)
+	defer b.Discard()
+	err := fn(b)
+	if err != nil {
+		return err
+	}
+	return b.Commit()
 }

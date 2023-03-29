@@ -1,0 +1,6 @@
+LastBlock:
+  fields:
+  - name: Index
+    type: uint
+  - name: Time
+    type: time
