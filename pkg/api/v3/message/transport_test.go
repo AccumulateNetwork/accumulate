@@ -48,7 +48,7 @@ func TestTransport(t *testing.T) {
 	addr, err := multiaddr.NewComponent(api.N_ACC_SVC, "query:foo")
 	require.NoError(t, err)
 
-	c := &Client{Network: "foo", Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
+	c := &RoutedTransport{Network: "foo", Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
 	err = c.RoundTrip(context.Background(), []Message{
 		&Addressed{Address: addr},
 		&Addressed{Address: addr},
