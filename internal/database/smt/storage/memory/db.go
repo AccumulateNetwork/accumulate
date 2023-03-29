@@ -61,8 +61,8 @@ func (m *DB) commit(txCache map[PrefixedKey][]byte) error {
 		m.entries[k] = v
 		if debugLogWrites {
 			m.debugWriteLog = append(m.debugWriteLog, writeLogEntry{
-				key:    k.Key,
-				keyStr: k.Key.String(),
+				key:    k,
+				keyStr: k.String(),
 				value:  hex.EncodeToString(v),
 			})
 		}
