@@ -58,7 +58,7 @@ func startDHT(host host.Host, logger log.Logger, ctx context.Context, mode dht.M
 }
 
 // startServiceDiscovery sets up pubsub for node events.
-func startServiceDiscovery(ctx context.Context, host host.Host, logger log.Logger) (chan<- Event, <-chan Event, error) {
+func startServiceDiscovery(ctx context.Context, host host.Host, logger log.Logger) (chan<- event, <-chan event, error) {
 	// Create the pubsub
 	ps, err := pubsub.NewGossipSub(ctx, host)
 	if err != nil {
@@ -78,7 +78,7 @@ func startServiceDiscovery(ctx context.Context, host host.Host, logger log.Logge
 	}
 
 	// Parse events and forward them to a channel
-	recv := make(chan Event)
+	recv := make(chan event)
 	go func() {
 		defer close(recv)
 
@@ -92,7 +92,7 @@ func startServiceDiscovery(ctx context.Context, host host.Host, logger log.Logge
 				return
 			}
 
-			event, err := UnmarshalEvent(msg.Data)
+			event, err := unmarshalEvent(msg.Data)
 			if err != nil {
 				logger.Info("Received bad message", "error", err)
 				continue
@@ -107,10 +107,10 @@ func startServiceDiscovery(ctx context.Context, host host.Host, logger log.Logge
 	}()
 
 	// Publish events read from a channel
-	send := make(chan Event)
+	send := make(chan event)
 	go func() {
 		for {
-			var event Event
+			var event event
 			select {
 			case <-ctx.Done():
 				return
