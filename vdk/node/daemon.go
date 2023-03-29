@@ -8,6 +8,4 @@ package node
 
 import accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 
-type Daemon struct {
-	accumulated.Daemon
-}
+type Daemon = accumulated.Daemon

@@ -2,40 +2,21 @@ package node
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 )
 
 //This package will expose some internal capability and is subject to change, use with caution
 
-type Executor interface {
-	execute.Executor
-}
-
-type BlockParams struct {
-	execute.BlockParams
-}
-
-type ValidatorUpdate struct {
-	execute.ValidatorUpdate
-}
-
-type Block interface {
-	execute.Block
-}
-
 //expose the bus and events used by a node
 
-type Bus events.Bus
+type Bus = events.Bus
 
-type Event interface {
-	events.Event
-}
+type Event = events.Event
 
-type DidCommitBlock events.DidCommitBlock
+type DidCommitBlock = events.DidCommitBlock
 
-type DidSaveSnapshot events.DidSaveSnapshot
+type DidSaveSnapshot = events.DidSaveSnapshot
 
-type FatalError events.FatalError
+type FatalError = events.FatalError
 
 // SubscribeSync will expose the internal subscribe sync
 func SubscribeSync[T Event](b *Bus, sub func(T) error) {
@@ -43,7 +24,6 @@ func SubscribeSync[T Event](b *Bus, sub func(T) error) {
 }
 
 func SubscribeSyncDidCommitBlock(b *Bus, sub func(DidCommitBlock) error) {
-
 	events.SubscribeSync[events.DidCommitBlock]((*events.Bus)(b), func(block events.DidCommitBlock) error {
 		return sub(DidCommitBlock(block))
 	})

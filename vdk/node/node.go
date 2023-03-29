@@ -50,7 +50,7 @@ func NewNode(workDir string, logWriter logger.LogWriter, nodeIndex int) (*Daemon
 	if err != nil {
 		return nil, err //err
 	}
-	return &Daemon{*node}, nil
+	return node, nil
 }
 
 func InitializeFollowerFromSeed(workDir string, expectedPartitionType protocol.PartitionType, seedNodeUrl string) error {
