@@ -20,3 +20,6 @@ MessageType:
   CreditPayment:
     value: 7
     description: is a payment of credits towards a transaction's fee
+  BlockSummary:
+    value: 8
+    description: is a summary of a block
