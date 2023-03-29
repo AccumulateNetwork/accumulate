@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -30,6 +31,10 @@ func SignatureForTxID(txid *url.TxID) SignatureBuilder {
 
 func SignatureForTransaction(txn *protocol.Transaction) SignatureBuilder {
 	return SignatureBuilder{transaction: txn}
+}
+
+func SignatureForMessage(msg messaging.Message) SignatureBuilder {
+	return SignatureBuilder{message: msg}
 }
 
 func Transaction() TransactionBuilder {
