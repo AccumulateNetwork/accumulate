@@ -27,9 +27,8 @@ func (v *eventType) SetEnumValue(id uint64) bool {
 	case eventTypeServiceRegistered:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the event Type.
@@ -37,9 +36,8 @@ func (v eventType) String() string {
 	switch v {
 	case eventTypeServiceRegistered:
 		return "serviceRegistered"
-	default:
-		return fmt.Sprintf("eventType:%d", v)
 	}
+	return fmt.Sprintf("eventType:%d", v)
 }
 
 // eventTypeByName returns the named event Type.
@@ -47,9 +45,8 @@ func eventTypeByName(name string) (eventType, bool) {
 	switch strings.ToLower(name) {
 	case "serviceregistered":
 		return eventTypeServiceRegistered, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the event Type to JSON as a string.
