@@ -7,7 +7,9 @@
 package messaging
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -150,5 +152,28 @@ func getTxnHash(txn *protocol.Transaction, defaultTxID *url.TxID) ([]byte, error
 	default:
 		// No hash
 		return nil, errors.BadRequest.With("remote transaction: missing hash")
+	}
+}
+
+// Sort sorts the summary's record and state tree update lists.
+func (s *BlockSummary) Sort() {
+	sort.Slice(s.RecordUpdates, sortUpdates(s.RecordUpdates))
+	sort.Slice(s.StateTreeUpdates, sortUpdates(s.StateTreeUpdates))
+}
+
+// Sort sorts the summary's record and state tree update lists.
+func (s *BlockSummary) IsSorted() bool {
+	return true &&
+		sort.SliceIsSorted(s.RecordUpdates, sortUpdates(s.RecordUpdates)) &&
+		sort.SliceIsSorted(s.StateTreeUpdates, sortUpdates(s.StateTreeUpdates))
+}
+
+func (u *RecordUpdate) keyHash() [32]byte    { return u.Key.Hash() }
+func (u *StateTreeUpdate) keyHash() [32]byte { return u.Key.Hash() }
+
+func sortUpdates[T interface{ keyHash() [32]byte }](l []T) func(i, j int) bool {
+	return func(i, j int) bool {
+		a, b := l[i].keyHash(), l[j].keyHash()
+		return bytes.Compare(a[:], b[:]) < 0
 	}
 }
