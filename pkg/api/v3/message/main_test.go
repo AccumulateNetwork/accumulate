@@ -123,7 +123,7 @@ func SetupTest(t testing.TB, services ...Service) *Client {
 	require.NoError(t, err)
 	addr, err := multiaddr.NewComponent(api.N_ACC_SVC, "unknown:foo")
 	require.NoError(t, err)
-	return &Client{
+	return &Client{&RoutedTransport{
 		Network: "foo",
 		Router:  routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil }),
 		Dialer: dialerFunc(func(ctx context.Context, _ multiaddr.Multiaddr) (Stream, error) {
@@ -132,5 +132,5 @@ func SetupTest(t testing.TB, services ...Service) *Client {
 			go handler.Handle(s)
 			return s, nil
 		}),
-	}
+	}}
 }

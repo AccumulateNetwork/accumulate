@@ -90,6 +90,7 @@ func (h *Handler) Handle(s Stream) {
 				h.logger.Error("Unable to send error response to peer", "error", err)
 				return
 			}
+			continue
 		}
 
 		// And call it
