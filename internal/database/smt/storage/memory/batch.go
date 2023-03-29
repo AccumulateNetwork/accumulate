@@ -33,7 +33,7 @@ type Batch struct {
 }
 
 type writeLogEntry struct {
-	key    storage.Key
+	key    PrefixedKey
 	keyStr string
 	value  string
 }
@@ -49,6 +49,19 @@ func NewBatch(prefix string, get GetFunc, commit CommitFunc) storage.KeyValueTxn
 		prefix:   prefix,
 	}
 	return b
+}
+
+func (k PrefixedKey) String() string { return k.Prefix + k.Key.String() }
+
+func (b *Batch) write(k PrefixedKey, v []byte) {
+	b.values[k] = v
+	if debugLogWrites {
+		b.debugWriteLog = append(b.debugWriteLog, writeLogEntry{
+			key:    k,
+			keyStr: k.String(),
+			value:  hex.EncodeToString(v),
+		})
+	}
 }
 
 func (db *DB) Begin(writable bool) storage.KeyValueTxn {
@@ -89,14 +102,7 @@ func (b *Batch) put(prefix string, key storage.Key, value []byte) error {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.values[b.makeKey(prefix, key)] = value
-	if debugLogWrites {
-		b.debugWriteLog = append(b.debugWriteLog, writeLogEntry{
-			key:    key,
-			keyStr: key.String(),
-			value:  hex.EncodeToString(value),
-		})
-	}
+	b.write(b.makeKey(prefix, key), value)
 	return nil
 }
 
@@ -107,14 +113,7 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for k, v := range values {
-		b.values[b.makeKey("", k)] = v
-		if debugLogWrites {
-			b.debugWriteLog = append(b.debugWriteLog, writeLogEntry{
-				key:    k,
-				keyStr: k.String(),
-				value:  hex.EncodeToString(v),
-			})
-		}
+		b.write(b.makeKey("", k), v)
 	}
 	return nil
 }
@@ -126,14 +125,7 @@ func (b *Batch) commit(values map[PrefixedKey][]byte) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for k, v := range values {
-		b.values[k] = v
-		if debugLogWrites {
-			b.debugWriteLog = append(b.debugWriteLog, writeLogEntry{
-				key:    k.Key,
-				keyStr: k.Key.String(),
-				value:  hex.EncodeToString(v),
-			})
-		}
+		b.write(k, v)
 	}
 	return nil
 }

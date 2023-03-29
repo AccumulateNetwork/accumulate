@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -121,4 +122,8 @@ type BlockState interface {
 
 	// WalkChanges walks changes made by this block.
 	WalkChanges(record.WalkFunc) error
+}
+
+func NewDatabaseObserver() database.Observer {
+	return internal.NewDatabaseObserver()
 }
