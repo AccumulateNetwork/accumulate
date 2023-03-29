@@ -149,7 +149,8 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return batch.BptRoot(), nil
+	h, err := batch.BPT().GetRootHash()
+	return h[:], err
 }
 
 type bootstrap struct {
