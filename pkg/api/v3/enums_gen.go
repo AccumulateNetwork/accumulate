@@ -132,9 +132,8 @@ func (v *EventType) SetEnumValue(id uint64) bool {
 	case EventTypeError, EventTypeBlock, EventTypeGlobals:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Event Type.
@@ -146,9 +145,8 @@ func (v EventType) String() string {
 		return "block"
 	case EventTypeGlobals:
 		return "globals"
-	default:
-		return fmt.Sprintf("EventType:%d", v)
 	}
+	return fmt.Sprintf("EventType:%d", v)
 }
 
 // EventTypeByName returns the named Event Type.
@@ -160,9 +158,8 @@ func EventTypeByName(name string) (EventType, bool) {
 		return EventTypeBlock, true
 	case "globals":
 		return EventTypeGlobals, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Event Type to JSON as a string.
@@ -196,9 +193,8 @@ func (v *QueryType) SetEnumValue(id uint64) bool {
 	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Query Type.
@@ -226,9 +222,8 @@ func (v QueryType) String() string {
 		return "delegateSearch"
 	case QueryTypeMessageHashSearch:
 		return "messageHashSearch"
-	default:
-		return fmt.Sprintf("QueryType:%d", v)
 	}
+	return fmt.Sprintf("QueryType:%d", v)
 }
 
 // QueryTypeByName returns the named Query Type.
@@ -256,9 +251,8 @@ func QueryTypeByName(name string) (QueryType, bool) {
 		return QueryTypeDelegateSearch, true
 	case "messagehashsearch":
 		return QueryTypeMessageHashSearch, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Query Type to JSON as a string.
@@ -292,9 +286,8 @@ func (v *RecordType) SetEnumValue(id uint64) bool {
 	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Record Type.
@@ -324,9 +317,8 @@ func (v RecordType) String() string {
 		return "txID"
 	case RecordTypeIndexEntry:
 		return "indexEntry"
-	default:
-		return fmt.Sprintf("RecordType:%d", v)
 	}
+	return fmt.Sprintf("RecordType:%d", v)
 }
 
 // RecordTypeByName returns the named Record Type.
@@ -356,9 +348,8 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeTxID, true
 	case "indexentry":
 		return RecordTypeIndexEntry, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Record Type to JSON as a string.
@@ -392,9 +383,8 @@ func (v *ServiceType) SetEnumValue(id uint64) bool {
 	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Service Type.
@@ -420,9 +410,8 @@ func (v ServiceType) String() string {
 		return "validate"
 	case ServiceTypeFaucet:
 		return "faucet"
-	default:
-		return fmt.Sprintf("ServiceType:%d", v)
 	}
+	return fmt.Sprintf("ServiceType:%d", v)
 }
 
 // ServiceTypeByName returns the named Service Type.
@@ -448,9 +437,8 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 		return ServiceTypeValidate, true
 	case "faucet":
 		return ServiceTypeFaucet, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Service Type to JSON as a string.

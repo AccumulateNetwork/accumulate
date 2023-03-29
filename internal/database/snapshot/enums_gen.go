@@ -39,9 +39,8 @@ func (v *SectionType) SetEnumValue(id uint64) bool {
 	case SectionTypeHeader, SectionTypeAccounts, SectionTypeTransactions, SectionTypeSignatures, SectionTypeGzTransactions:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Section Type.
@@ -57,9 +56,8 @@ func (v SectionType) String() string {
 		return "signatures"
 	case SectionTypeGzTransactions:
 		return "gzTransactions"
-	default:
-		return fmt.Sprintf("SectionType:%d", v)
 	}
+	return fmt.Sprintf("SectionType:%d", v)
 }
 
 // SectionTypeByName returns the named Section Type.
@@ -75,9 +73,8 @@ func SectionTypeByName(name string) (SectionType, bool) {
 		return SectionTypeSignatures, true
 	case "gztransactions":
 		return SectionTypeGzTransactions, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Section Type to JSON as a string.
