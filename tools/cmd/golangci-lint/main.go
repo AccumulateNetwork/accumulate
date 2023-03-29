@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,7 +23,12 @@ var (
 )
 
 func main() {
-	e := commands.NewExecutor(version, commit, date)
+	e := commands.NewExecutor(commands.BuildInfo{
+		GoVersion: "go",
+		Version:   version,
+		Commit:    commit,
+		Date:      date,
+	})
 	addCustomLinters(e.DBManager)
 
 	if err := e.Execute(); err != nil {

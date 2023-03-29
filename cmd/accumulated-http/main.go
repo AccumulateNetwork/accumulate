@@ -24,7 +24,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -32,6 +31,7 @@ import (
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -115,10 +115,12 @@ func run(_ *cobra.Command, args []string) {
 
 	fmt.Println("Fetching routing information")
 	client := &message.Client{
-		Network: args[0],
-		Dialer:  node.Dialer(),
+		Transport: &message.RoutedTransport{
+			Network: args[0],
+			Dialer:  node.DialNetwork(),
+		},
 	}
-	ns, err := client.GetNetInfo(ctx)
+	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	Check(err)
 	router, err := routing.NewStaticRouter(ns.Routing, nil, logger)
 	Check(err)

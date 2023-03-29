@@ -1,5 +1,5 @@
 Addressed:
-  union: { type: message }
+  union: { type: message, registry: true }
   fields:
     - name: Message
       type: Message

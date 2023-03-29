@@ -17,54 +17,52 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
-// NewEvent creates a new Event for the specified EventType.
-func NewEvent(typ EventType) (Event, error) {
+// newEvent creates a new event for the specified eventType.
+func newEvent(typ eventType) (event, error) {
 	switch typ {
-	case EventTypeServiceRegistered:
-		return new(ServiceRegisteredEvent), nil
-	default:
-		return nil, fmt.Errorf("unknown event %v", typ)
+	case eventTypeServiceRegistered:
+		return new(serviceRegisteredEvent), nil
 	}
+	return nil, fmt.Errorf("unknown event %v", typ)
 }
 
-// EqualEvent is used to compare the values of the union
-func EqualEvent(a, b Event) bool {
+// equalEvent is used to compare the values of the union
+func equalEvent(a, b event) bool {
 	if a == b {
 		return true
 	}
 	switch a := a.(type) {
-	case *ServiceRegisteredEvent:
+	case *serviceRegisteredEvent:
 		if a == nil {
 			return b == nil
 		}
-		b, ok := b.(*ServiceRegisteredEvent)
+		b, ok := b.(*serviceRegisteredEvent)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
-// CopyEvent copies a Event.
-func CopyEvent(v Event) Event {
+// copyEvent copies a event.
+func copyEvent(v event) event {
 	switch v := v.(type) {
-	case *ServiceRegisteredEvent:
+	case *serviceRegisteredEvent:
 		return v.Copy()
 	default:
-		return v.CopyAsInterface().(Event)
+		return v.CopyAsInterface().(event)
 	}
 }
 
-// UnmarshalEvent unmarshals a Event.
-func UnmarshalEvent(data []byte) (Event, error) {
-	return UnmarshalEventFrom(bytes.NewReader(data))
+// unmarshalEvent unmarshals a event.
+func unmarshalEvent(data []byte) (event, error) {
+	return unmarshalEventFrom(bytes.NewReader(data))
 }
 
-// UnmarshalEventFrom unmarshals a Event.
-func UnmarshalEventFrom(rd io.Reader) (Event, error) {
+// unmarshalEventFrom unmarshals a event.
+func unmarshalEventFrom(rd io.Reader) (event, error) {
 	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	var typ EventType
+	var typ eventType
 	if !reader.ReadEnum(1, &typ) {
 		if reader.IsEmpty() {
 			return nil, nil
@@ -73,7 +71,7 @@ func UnmarshalEventFrom(rd io.Reader) (Event, error) {
 	}
 
 	// Create a new event
-	v, err := NewEvent(EventType(typ))
+	v, err := newEvent(eventType(typ))
 	if err != nil {
 		return nil, err
 	}
@@ -87,9 +85,9 @@ func UnmarshalEventFrom(rd io.Reader) (Event, error) {
 	return v, nil
 }
 
-// UnmarshalEventJson unmarshals a Event.
-func UnmarshalEventJSON(data []byte) (Event, error) {
-	var typ *struct{ Type EventType }
+// unmarshalEventJson unmarshals a event.
+func unmarshalEventJSON(data []byte) (event, error) {
+	var typ *struct{ Type eventType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
@@ -99,7 +97,7 @@ func UnmarshalEventJSON(data []byte) (Event, error) {
 		return nil, nil
 	}
 
-	acnt, err := NewEvent(typ.Type)
+	acnt, err := newEvent(typ.Type)
 	if err != nil {
 		return nil, err
 	}

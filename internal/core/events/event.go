@@ -22,6 +22,7 @@ func (WillChangeGlobals) IsEvent() {}
 func (FatalError) IsEvent()        {}
 
 type DidCommitBlock struct {
+	Init  bool
 	Index uint64
 	Time  time.Time
 	Major uint64

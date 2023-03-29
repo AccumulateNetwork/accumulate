@@ -298,6 +298,10 @@ type Union struct {
 	Type string
 	// Value is the name of the corresponding enumeration value.
 	Value string
+	// Private indicates the union is a private type.
+	Private bool
+	// Registry indicates the union supports registering new members.
+	Registry bool
 }
 
 // Field is a field of a type.

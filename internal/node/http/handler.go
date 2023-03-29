@@ -13,7 +13,6 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -22,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -49,21 +49,21 @@ func NewHandler(opts Options) (*Handler, error) {
 	h.logger.Set(opts.Logger)
 
 	// Message clients
-	client := &message.Client{
+	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: opts.Network.Network.Id,
 		Router:  routing.MessageRouter{Router: opts.Router},
-		Dialer:  opts.Node.Dialer(),
-	}
+		Dialer:  opts.Node.DialNetwork(),
+	}}
 
 	var selfClient *message.Client
 	if opts.Network == nil {
 		selfClient = client
 	} else {
-		selfClient = &message.Client{
+		selfClient = &message.Client{Transport: &message.RoutedTransport{
 			Network: opts.Network.Network.Id,
 			Router:  unrouter(opts.Network.PartitionId),
-			Dialer:  opts.Node.SelfDialer(),
-		}
+			Dialer:  opts.Node.DialSelf(),
+		}}
 	}
 
 	// JSON-RPC API v3

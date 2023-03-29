@@ -20,8 +20,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 )
 
 func main() {
@@ -71,7 +71,7 @@ func run(*cobra.Command, []string) {
 	defer func() { _ = node.Close() }()
 
 	fmt.Println("We are")
-	for _, a := range node.Addrs() {
+	for _, a := range node.Addresses() {
 		fmt.Printf("  %s\n", a)
 	}
 	fmt.Println()

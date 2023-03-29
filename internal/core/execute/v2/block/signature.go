@@ -7,14 +7,11 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-type sigExecMetadata = chain.SignatureValidationMetadata
 
 func loadSigner(batch *database.Batch, signerUrl *url.URL) (protocol.Signer, error) {
 	// Load signer

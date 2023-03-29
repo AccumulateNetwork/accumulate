@@ -36,7 +36,6 @@ import (
 	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
@@ -54,6 +53,7 @@ import (
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -216,6 +216,14 @@ func (d *Daemon) Start() (err error) {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Start the block summary collector
+	if d.Config.Accumulate.SummaryNetwork != "" {
+		err = d.startCollector()
+		if err != nil {
+			return errors.UnknownError.WithFormat("start collector: %w", err)
+		}
+	}
+
 	// Start the executor and ABCI
 	app, err := d.startApp()
 	if err != nil {
@@ -304,12 +312,12 @@ func (d *Daemon) loadKeys() error {
 }
 
 func (d *Daemon) startApp() (types.Application, error) {
-	dialer := d.p2pnode.Dialer()
-	client := &message.Client{
+	dialer := d.p2pnode.DialNetwork()
+	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: d.Config.Accumulate.Network.Id,
 		Dialer:  dialer,
 		Router:  routing.MessageRouter{Router: d.router},
-	}
+	}}
 	execOpts := execute.Options{
 		Logger:    d.Logger,
 		Database:  d.db,
