@@ -46,9 +46,9 @@ type stream struct {
 	stream message.Stream
 }
 
-// Dialer returns a [message.MultiDialer] that knows how to dial any partition
-// or node in the network.
-func (n *Node) Dialer() message.MultiDialer {
+// DialNetwork returns a [message.MultiDialer] that opens a stream to a node
+// that can provides a given service.
+func (n *Node) DialNetwork() message.MultiDialer {
 	return dialer{n, n.peermgr}
 }
 
@@ -228,8 +228,8 @@ func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, ne
 // selfDialer always dials the [Node] directly.
 type selfDialer Node
 
-// SelfDialer returns a [message.Dialer] that always returns a stream for the current node.
-func (n *Node) SelfDialer() message.Dialer { return (*selfDialer)(n) }
+// DialSelf returns a [message.Dialer] that always returns a stream for the current node.
+func (n *Node) DialSelf() message.Dialer { return (*selfDialer)(n) }
 
 // Dial returns a stream for the current node.
 func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
