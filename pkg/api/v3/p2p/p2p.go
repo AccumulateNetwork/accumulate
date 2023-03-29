@@ -29,6 +29,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+var BootstrapNodes = func() []multiaddr.Multiaddr {
+	p := func(s string) multiaddr.Multiaddr {
+		addr, err := multiaddr.NewMultiaddr(s)
+		if err != nil {
+			panic(err)
+		}
+		return addr
+	}
+
+	return []multiaddr.Multiaddr{
+		// Defi Devs bootstrap node
+		p("/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg"),
+	}
+}()
+
 // Node implements peer-to-peer routing of API v3 messages over via binary
 // message transport.
 type Node struct {
@@ -153,8 +168,8 @@ func New(opts Options) (_ *Node, err error) {
 
 func (n *Node) ID() peer.ID { return n.host.ID() }
 
-// Addrs lists the node's addresses.
-func (n *Node) Addrs() []multiaddr.Multiaddr {
+// Addresses lists the node's addresses.
+func (n *Node) Addresses() []multiaddr.Multiaddr {
 	// Wrap the TCP/IP address with /p2p/{id}
 	id, err := multiaddr.NewComponent("p2p", n.host.ID().String())
 	if err != nil {
@@ -178,7 +193,7 @@ func (n *Node) ConnectDirectly(m *Node) error {
 	// avoid the TCP/IP overhead
 	return n.host.Connect(context.Background(), peer.AddrInfo{
 		ID:    m.ID(),
-		Addrs: m.Addrs(),
+		Addrs: m.Addresses(),
 	})
 }
 
