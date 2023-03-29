@@ -75,7 +75,7 @@ func TestValidateAPI(t *testing.T) {
 	// Set up the P2P client node
 	t.Log("Create the client")
 	logger := logging.ConsoleLoggerForTest(t, "info")
-	node, err := p2p.New(p2p.Options{
+	node, err := p2p.NewClient(p2p.Options{
 		Network: net.Id,
 		Logger:  logger,
 		BootstrapPeers: []multiaddr.Multiaddr{
@@ -147,7 +147,7 @@ func TestValidateNetwork(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func waitFor(t *testing.T, node *p2p.Node, network string, sa *api.ServiceAddress, timeout time.Duration) {
+func waitFor(t *testing.T, node *p2p.ClientNode, network string, sa *api.ServiceAddress, timeout time.Duration) {
 	ma, err := sa.MultiaddrFor(network)
 	require.NoError(t, err)
 
@@ -165,7 +165,7 @@ type ValidationTestSuite struct {
 	sim       *simulator.Simulator
 	nonce     uint64
 	faucetSvc api.Faucet
-	node      *p2p.Node
+	node      *p2p.ClientNode
 }
 
 func (s *ValidationTestSuite) SetupSuite() {
@@ -210,10 +210,10 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 	return sim, faucetSvc
 }
 
-func setupNetClient(t *testing.T, network string, addrs ...multiaddr.Multiaddr) (*Harness, *p2p.Node) {
+func setupNetClient(t *testing.T, network string, addrs ...multiaddr.Multiaddr) (*Harness, *p2p.ClientNode) {
 	// Set up the client
 	t.Log("Create the client")
-	node, err := p2p.New(p2p.Options{
+	node, err := p2p.NewClient(p2p.Options{
 		Network:        network,
 		Logger:         logging.ConsoleLoggerForTest(t, "info"),
 		BootstrapPeers: addrs,
