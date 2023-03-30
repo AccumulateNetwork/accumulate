@@ -76,8 +76,7 @@ func zero[T any]() T {
 }
 
 // resolveValue resolves the value for the given key.
-func resolveValue[T any](c *ChangeSet, key record.Key) (T, error) {
-	var r record.Record = c
+func resolveValue[T any](r record.Record, key record.Key) (T, error) {
 	var err error
 	for len(key) > 0 {
 		r, key, err = r.Resolve(key)
