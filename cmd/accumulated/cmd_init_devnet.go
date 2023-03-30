@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -49,8 +49,8 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 	}
 
 	if !flagInitDevnet.Compose {
-		initOpts.GenerateKeys = func() (privVal, dnn, bvnn []byte) {
-			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
+		initOpts.GenerateKeys = func() (privVal, dnn, bvnn, bsnn []byte) {
+			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
 		}
 	}
 
