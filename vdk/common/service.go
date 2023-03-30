@@ -22,6 +22,12 @@ import (
 	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/logging"
 )
 
+type ServiceOptions struct {
+	WorkDir         string
+	LogFilename     string
+	JsonLogFilename string
+}
+
 type logAnnotator func(io.Writer, string, bool) io.Writer
 
 var _ = NewLogWriter
