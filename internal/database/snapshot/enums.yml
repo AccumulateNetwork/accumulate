@@ -9,3 +9,5 @@ SectionType:
     value: 4
   GzTransactions:
     value: 5
+  Snapshot:
+    value: 6

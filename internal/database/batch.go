@@ -235,20 +235,6 @@ func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 	return errors.UnknownError.Wrap(err)
 }
 
-func (b *Batch) PutRawValue(key record.Key, value []byte) error {
-	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
-	}
-
-	v, err := resolveValue[record.ValueWriter](b, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	err = v.LoadBytes(value, true)
-	return errors.UnknownError.Wrap(err)
-}
-
 func zero[T any]() T {
 	var z T
 	return z
