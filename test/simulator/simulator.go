@@ -20,6 +20,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -50,7 +53,7 @@ type Simulator struct {
 	DropDispatchedMessages bool
 }
 
-type OpenDatabaseFunc func(partition string, node int, logger log.Logger) database.Beginner
+type OpenDatabaseFunc func(partition string, node int, logger log.Logger) storage.KeyValueStore
 type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
 
 func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
@@ -97,33 +100,56 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 		}
 	}
 
-	for _, p := range s.partitions {
-		snapshot, err := snapshot(p.ID, s.init, s.logger)
+	if network.Bsn != nil {
+		s.partitions[network.Bsn.Id], err = newBsn(s, network.Bsn)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	ids := []string{protocol.Directory}
+	for _, b := range network.Bvns {
+		ids = append(ids, b.Id)
+	}
+	if network.Bsn != nil {
+		ids = append(ids, network.Bsn.Id)
+	}
+
+	for _, id := range ids {
+		snapshot, err := snapshot(id, s.init, s.logger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 		}
-		err = p.initChain(snapshot)
+		// fmt.Println("Init", id)
+		err = s.partitions[id].initChain(snapshot)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("init %s: %w", p.ID, err)
+			return nil, errors.UnknownError.WithFormat("init %s: %w", id, err)
 		}
 	}
 
 	return s, nil
 }
 
-func MemoryDatabase(_ string, _ int, logger log.Logger) database.Beginner {
-	return database.OpenInMemory(logger)
+func MemoryDatabase(_ string, _ int, logger log.Logger) storage.KeyValueStore {
+	if logger != nil {
+		logger = logger.With("module", "storage")
+	}
+	return memory.New(logger)
 }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc {
-	return func(partition string, node int, logger log.Logger) database.Beginner {
+	return func(partition string, node int, logger log.Logger) storage.KeyValueStore {
+		if logger != nil {
+			logger = logger.With("module", "storage")
+		}
+
 		err := os.MkdirAll(dir, 0700)
 		if err != nil {
 			onErr(err)
 			panic(err)
 		}
 
-		db, err := database.OpenBadger(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)), logger)
+		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)), logger)
 		if err != nil {
 			onErr(err)
 			panic(err)
