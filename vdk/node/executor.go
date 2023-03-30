@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-//This package will expose some internal capability and is subject to change, use at your own risk
+// This package will expose some internal capability and is subject to change, use at your own risk
 package node
 
 import (
