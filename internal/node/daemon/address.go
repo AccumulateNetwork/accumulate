@@ -276,6 +276,11 @@ func (b AddressSliceBuilder) BlockValidator() AddressSliceBuilder {
 	return b.Do(AddressBuilder.BlockValidator)
 }
 
+// [protocol.PartitionTypeBlockSummary].
+func (b AddressSliceBuilder) BlockSummary() AddressSliceBuilder {
+	return b.Do(AddressBuilder.BlockSummary)
+}
+
 // TendermintP2P sets the service to [config.PortOffsetTendermintP2P].
 func (b AddressSliceBuilder) TendermintP2P() AddressSliceBuilder {
 	return b.Do(AddressBuilder.TendermintP2P)
