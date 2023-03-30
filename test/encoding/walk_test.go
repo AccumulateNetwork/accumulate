@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -157,7 +158,10 @@ func TestWalkAndReplay(t *testing.T) {
 
 			Update(t, db, func(batch *database.Batch) {
 				for _, v := range block.Changes {
-					require.NoError(t, batch.PutRawValue(v.Key, v.Value))
+					w, err := resolveValue[record.ValueWriter](batch, v.Key)
+					require.NoError(t, err)
+					err = w.LoadBytes(v.Value, true)
+					require.NoError(t, err)
 				}
 			})
 
@@ -228,4 +232,31 @@ func (p *partitionBeginner) Update(fn func(*database.Batch) error) error {
 		return err
 	}
 	return b.Commit()
+}
+
+func zero[T any]() T {
+	var z T
+	return z
+}
+
+// resolveValue resolves the value for the given key.
+func resolveValue[T any](r record.Record, key record.Key) (T, error) {
+	var err error
+	for len(key) > 0 {
+		r, key, err = r.Resolve(key)
+		if err != nil {
+			return zero[T](), errors.UnknownError.Wrap(err)
+		}
+	}
+
+	if s, _, err := r.Resolve(nil); err == nil {
+		r = s
+	}
+
+	v, ok := r.(T)
+	if !ok {
+		return zero[T](), errors.InternalError.WithFormat("bad key: %T is not value", r)
+	}
+
+	return v, nil
 }

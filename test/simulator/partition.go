@@ -98,6 +98,22 @@ func newDn(s *Simulator, init *accumulated.NetworkInit) (*Partition, error) {
 	return p, nil
 }
 
+func newBsn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
+	p := newPartition(s, protocol.PartitionInfo{
+		ID:   init.Id,
+		Type: protocol.PartitionTypeBlockSummary,
+	})
+
+	for _, node := range init.Nodes {
+		n, err := newNode(s, p, len(p.nodes), node)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		p.nodes = append(p.nodes, n)
+	}
+	return p, nil
+}
+
 func (p *Partition) View(fn func(*database.Batch) error) error { return p.nodes[0].View(fn) }
 
 func (p *Partition) Update(fn func(*database.Batch) error) error {
@@ -255,24 +271,12 @@ func (p *Partition) loadBlockIndex() {
 		return
 	}
 
-	err := p.View(func(batch *database.Batch) error {
-		record := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger))
-		c, err := record.RootChain().Index().Get()
-		if err != nil {
-			return errors.FatalError.WithFormat("load root index chain: %w", err)
-		}
-		entry := new(protocol.IndexEntry)
-		err = c.EntryAs(c.Height()-1, entry)
-		if err != nil {
-			return errors.FatalError.WithFormat("load root index chain entry 0: %w", err)
-		}
-		p.blockIndex = entry.BlockIndex
-		p.blockTime = *entry.BlockTime
-		return nil
-	})
+	b, _, err := p.nodes[0].executor.LastBlock()
 	if err != nil {
 		panic(err)
 	}
+	p.blockIndex = b.Index
+	p.blockTime = b.Time
 }
 
 func (p *Partition) execute() error {

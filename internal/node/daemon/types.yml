@@ -9,6 +9,10 @@ NetworkInit:
     marshal-as: reference
     pointer: true
     repeatable: true
+  - name: Bsn
+    type: BvnInit
+    marshal-as: reference
+    pointer: true
 
 BvnInit:
   non-binary: true
@@ -30,6 +34,9 @@ NodeInit:
     type: config.NodeType
     marshal-as: enum
   - name: BvnnType
+    type: config.NodeType
+    marshal-as: enum
+  - name: BsnnType
     type: config.NodeType
     marshal-as: enum
   - name: BasePort
