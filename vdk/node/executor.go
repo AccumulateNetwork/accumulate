@@ -26,5 +26,5 @@ type FatalError = events.FatalError
 
 // SubscribeSync will expose the internal subscribe sync
 func SubscribeSync[T Event](b *Bus, sub func(T) error) {
-	events.SubscribeSync((*events.Bus)(b), sub)
+	events.SubscribeSync(b, sub)
 }
