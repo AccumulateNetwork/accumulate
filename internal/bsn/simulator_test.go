@@ -80,7 +80,7 @@ func TestSimulator(t *testing.T) {
 	require.Equal(t, 123, int(account.Balance.Int64()))
 
 	// Wait for the BSN to sync
-	sim.StepN(10)
+	sim.StepN(100)
 
 	// Verify the BSN's version is the same
 	batch := bsn.NewChangeSet(bsnStore, nil)
