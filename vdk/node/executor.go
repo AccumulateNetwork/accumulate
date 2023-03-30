@@ -4,13 +4,12 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//This package will expose some internal capability and is subject to change, use at your own risk
 package node
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 )
-
-//This package will expose some internal capability and is subject to change, use with caution
 
 //expose the bus and events used by a node
 
