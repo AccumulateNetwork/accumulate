@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package vdk
 
 import (
@@ -17,6 +23,9 @@ import (
 )
 
 type logAnnotator func(io.Writer, string, bool) io.Writer
+
+var _ = NewLogWriter
+var _ = Interrupt
 
 func NewLogWriter(s service.Service, logFilename, jsonLogFilename string) func(string, logAnnotator) (io.Writer, error) {
 	// Each log file writer must be created once, otherwise different copies
@@ -173,14 +182,14 @@ func (w *rotateWriter) Rotate() {
 
 	err := w.w.Close()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "rotate writer failed to close file: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "rotate writer failed to close file: %v\n", err)
 	}
 
 	w.w = nil
 }
 
 func fatalf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	_, _ = fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
 	os.Exit(1)
 }
 

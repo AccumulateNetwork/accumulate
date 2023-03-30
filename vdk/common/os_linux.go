@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package vdk
 
 import (
@@ -8,6 +14,9 @@ import (
 )
 
 var ErrNotRoot = errors.New("cannot use 1Password: accumulate and the directory it is in must be owned by root")
+
+var _ = isOnePassWarn
+var _ = canExecOnePass
 
 func isOnePassWarn(err error) bool {
 	return errors.Is(err, ErrNotRoot)

@@ -50,7 +50,7 @@ func (w *rotateWriter) Rotate() {
 
 	err := w.w.Close()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "rotate writer failed to close file: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "rotate writer failed to close file: %v\n", err)
 	}
 
 	w.w = nil

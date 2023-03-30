@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package node
 
 import (
@@ -21,22 +27,4 @@ type FatalError = events.FatalError
 // SubscribeSync will expose the internal subscribe sync
 func SubscribeSync[T Event](b *Bus, sub func(T) error) {
 	events.SubscribeSync((*events.Bus)(b), sub)
-}
-
-func SubscribeSyncDidCommitBlock(b *Bus, sub func(DidCommitBlock) error) {
-	events.SubscribeSync[events.DidCommitBlock]((*events.Bus)(b), func(block events.DidCommitBlock) error {
-		return sub(DidCommitBlock(block))
-	})
-}
-
-func SubscribeSyncDidSaveSnapshot(b *Bus, sub func(DidSaveSnapshot) error) {
-	events.SubscribeSync[events.DidSaveSnapshot]((*events.Bus)(b), func(snapshot events.DidSaveSnapshot) error {
-		return sub(DidSaveSnapshot(snapshot))
-	})
-}
-
-func SubscribeSyncFatalError(b *Bus, sub func(FatalError) error) {
-	events.SubscribeSync[events.FatalError]((*events.Bus)(b), func(fatal events.FatalError) error {
-		return sub(FatalError(fatal))
-	})
 }
