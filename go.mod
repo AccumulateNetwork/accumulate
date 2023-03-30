@@ -44,7 +44,6 @@ require (
 	github.com/chzyer/readline v1.5.1
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
-	github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef
 	github.com/libp2p/go-libp2p v0.25.1
 	github.com/libp2p/go-libp2p-kad-dht v0.21.1
 	github.com/libp2p/go-libp2p-pubsub v0.9.1
@@ -55,10 +54,8 @@ require (
 	github.com/multiformats/go-multihash v0.2.1
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/sergi/go-diff v1.0.0
-	github.com/twpayne/go-pinentry v0.2.0
 	github.com/ulikunitz/xz v0.5.11
 	github.com/vektra/mockery/v2 v2.14.0
-	gitlab.com/accumulatenetwork/core/wallet v0.4.0
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.10.0
 	go.opentelemetry.io/otel/sdk v1.10.0
