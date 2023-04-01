@@ -235,8 +235,7 @@ func (p *partitionBeginner) Update(fn func(*database.Batch) error) error {
 func (x *Executor) loadGlobals(partition string, batch *ChangeSet, old *core.GlobalValues, publish bool) (*core.GlobalValues, error) {
 	// Load from the database
 	g := new(core.GlobalValues)
-	u := config.NetworkUrl{URL: protocol.PartitionUrl(partition)}
-	err := g.Load(u, func(account *url.URL, target interface{}) error {
+	err := g.Load(protocol.PartitionUrl(partition), func(account *url.URL, target interface{}) error {
 		return batch.Partition(partition).View(func(batch *database.Batch) error {
 			return batch.Account(account).GetStateAs(target)
 		})
