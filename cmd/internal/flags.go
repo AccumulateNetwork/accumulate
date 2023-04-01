@@ -7,9 +7,11 @@
 package internal
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type MultiaddrFlag struct {
@@ -52,5 +54,20 @@ func (m *MultiaddrSliceFlag) Set(s string) error {
 		return err
 	}
 	*m = append(*m, a)
+	return nil
+}
+
+type UrlFlag struct {
+	V **url.URL
+}
+
+func (f UrlFlag) Type() string   { return "acc-url" }
+func (f UrlFlag) String() string { return fmt.Sprint(*f.V) }
+func (f UrlFlag) Set(s string) error {
+	u, err := url.Parse(s)
+	if err != nil {
+		return err
+	}
+	*f.V = u
 	return nil
 }
