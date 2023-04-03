@@ -66,12 +66,12 @@ func TestReceiptList(t *testing.T) {
 				require.True(t, receiptList.Included(element)) // Check that the element is included in the receiptList
 			}
 
-			receipt, err := GetReceipt(manager2, anchor, anchor) // Build a receipt of the anchor in the second chain
-			require.NoError(t, err)                              //
-			require.NotNil(t, receipt)                           //
-			require.True(t, receipt.Validate())                  // Make sure the first receipt validates
-			receiptList.ContinuedReceipt = receipt               // Now use the combined receipt in the receiptList
-			require.True(t, receiptList.Validate(), startTest)   // Test the modified receiptList
+			receipt, err := GetReceipt(manager2, anchor, anchor)  // Build a receipt of the anchor in the second chain
+			require.NoError(t, err)                               //
+			require.NotNil(t, receipt)                            //
+			require.True(t, receipt.Validate(nil))                // Make sure the first receipt validates
+			receiptList.ContinuedReceipt = receipt                // Now use the combined receipt in the receiptList
+			require.True(t, receiptList.Validate(nil), startTest) // Test the modified receiptList
 
 			cnt++
 			for i := startTest; i <= endTest; i++ { //            Rerun the test of every list we can make for the given range
@@ -89,17 +89,17 @@ func TestReceiptList(t *testing.T) {
 			for i, e := range receiptList.Elements {
 				_ = e
 				receiptList.Elements[i][0] ^= 1 // Flip a bit in the Elements
-				require.False(t, receiptList.Validate())
+				require.False(t, receiptList.Validate(nil))
 				receiptList.Elements[i][0] ^= 1 // Flip a bit in the Elements
 			}
 			for i := range receiptList.Receipt.Entries {
 				receiptList.Receipt.Entries[i].Hash[0] ^= 1
-				require.False(t, receiptList.Validate())
+				require.False(t, receiptList.Validate(nil))
 				receiptList.Receipt.Entries[i].Hash[0] ^= 1
 			}
 			for i := range receiptList.ContinuedReceipt.Entries {
 				receiptList.ContinuedReceipt.Entries[i].Hash[0] ^= 1
-				require.False(t, receiptList.Validate())
+				require.False(t, receiptList.Validate(nil))
 				receiptList.ContinuedReceipt.Entries[i].Hash[0] ^= 1
 			}
 
