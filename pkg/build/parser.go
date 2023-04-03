@@ -63,6 +63,41 @@ func (p *parser) errorf(code errors.Status, format string, args ...interface{}) 
 	p.record(errors.Format(code, format, args...))
 }
 
+func (p *parser) parseDataEntry(v ...any) protocol.DataEntry {
+	if len(v) == 1 {
+		if e, ok := v[0].(protocol.DataEntry); ok {
+			return e
+		}
+	}
+
+	e := new(protocol.AccumulateDataEntry)
+	for _, v := range v {
+		switch v := v.(type) {
+		case string:
+			e.Data = append(e.Data, []byte(v))
+		case []byte:
+			e.Data = append(e.Data, v)
+		case [32]byte:
+			e.Data = append(e.Data, v[:])
+		case []string:
+			for _, v := range v {
+				e.Data = append(e.Data, []byte(v))
+			}
+		case [][]byte:
+			e.Data = append(e.Data, v...)
+		case [][32]byte:
+			for _, v := range v {
+				v := v
+				e.Data = append(e.Data, v[:])
+			}
+		default:
+			p.errorf(errors.StatusBadRequest, "cannot convert %T to bytes", v)
+			return nil
+		}
+	}
+	return e
+}
+
 func (p *parser) parseUrl(v any, path ...string) *url.URL {
 	var str string
 	switch v := v.(type) {

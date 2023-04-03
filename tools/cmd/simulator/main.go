@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -40,6 +41,7 @@ var flag = struct {
 	Snapshot string
 	Log      string
 	Step     string
+	Globals  string
 	BvnCount int
 	ValCount int
 	BasePort int
@@ -48,17 +50,21 @@ var flag = struct {
 func init() {
 	cmd.Flags().StringVarP(&flag.Database, "database", "d", "memory", "The directory to store badger databases in, or 'memory' to use an in-memory database")
 	cmd.Flags().StringVarP(&flag.Network, "network", "n", "simple", "A file used to define the network, or 'simple' to use a simple predefined network")
-	cmd.Flags().StringVar(&flag.Snapshot, "snapshot", "genesis", "A directory containing snapshots used to initialize the network, or 'genesis' to initialize from genesis")
+	cmd.Flags().StringVar(&flag.Snapshot, "snapshot", "", "A directory containing snapshots used to initialize the network; uses genesis if unspecified")
+	cmd.Flags().StringVar(&flag.Globals, "globals", "", "Override network globals")
 	cmd.Flags().StringVarP(&flag.Step, "step", "s", "on-wait", "Frequency at which to step the simulator, or 'on-wait' to step when an API query waits for a transaction")
 	cmd.Flags().StringVar(&flag.Log, "log", DefaultLogLevels, "Log levels")
 	cmd.Flags().IntVarP(&flag.BvnCount, "bvns", "b", 3, "Number of BVNs to create; applicable only when --network=simple")
 	cmd.Flags().IntVarP(&flag.ValCount, "validators", "v", 3, "Number of validators to create per BVN; applicable only when --network=simple")
 	cmd.Flags().IntVarP(&flag.BasePort, "port", "p", 26656, "Base port to listen on")
+
+	cmd.MarkFlagsMutuallyExclusive("snapshot", "globals")
 }
 
 var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
 	SetModule("sim", "info").
+	SetModule("executor", "info").
 	String()
 
 func main() { _ = cmd.Execute() }
@@ -91,9 +97,14 @@ func run(*cobra.Command, []string) {
 		checkf(err, "--network")
 	}
 
+	values := new(core.GlobalValues)
+	if flag.Globals != "" {
+		checkf(json.Unmarshal([]byte(flag.Globals), values), "--globals")
+	}
+
 	var snapshot simulator.SnapshotFunc
-	if flag.Snapshot == "genesis" {
-		snapshot = simulator.Genesis(time.Now())
+	if flag.Snapshot == "" {
+		snapshot = simulator.GenesisWith(time.Now(), values)
 	} else {
 		snapshot = simulator.SnapshotFromDirectory(flag.Snapshot)
 	}

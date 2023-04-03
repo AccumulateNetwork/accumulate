@@ -309,6 +309,10 @@ func (v *DataEntryQuery) Copy() *DataEntryQuery {
 		u.Url = v.Url
 	}
 	u.EntryHash = v.EntryHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -327,6 +331,10 @@ func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
 	}
 	if v.CauseTxId != nil {
 		u.CauseTxId = v.CauseTxId
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u

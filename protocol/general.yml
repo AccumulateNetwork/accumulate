@@ -99,6 +99,13 @@ AccumulateDataEntry:
       repeatable: true
       type: bytes
 
+DoubleHashDataEntry:
+  union: { type: dataEntry }
+  fields:
+    - name: Data
+      repeatable: true
+      type: bytes
+
 FactomDataEntryWrapper:
   union: { type: dataEntry, value: Factom }
   fields:
