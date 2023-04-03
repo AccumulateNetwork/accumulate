@@ -35,6 +35,8 @@ DataEntryType:
     value: 1
   Accumulate:
     value: 2
+  DoubleHash:
+    value: 3
 
 ObjectType:
   Unknown:

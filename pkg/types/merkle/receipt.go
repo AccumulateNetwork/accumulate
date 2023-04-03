@@ -21,13 +21,36 @@ func (n *ReceiptEntry) apply(hash []byte) []byte {
 	return combineHashes(n.Hash, hash)
 }
 
+type ValidateOptions struct {
+	Relaxed bool
+}
+
+func (o *ValidateOptions) allowEntry(e *ReceiptEntry) bool {
+	// 32-byte entries are always allowed
+	if len(e.Hash) == 32 {
+		return true
+	}
+
+	// Unpack the options without allocating
+	var relaxed bool
+	if o != nil {
+		relaxed = o.Relaxed
+	}
+
+	// Only allow entries that are not 32-bytes if Relaxed is true
+	return relaxed
+}
+
 // Validate
 // Take a receipt and validate that the element hash progresses to the
 // Merkle Dag Root hash (MDRoot) in the receipt
-func (r *Receipt) Validate() bool {
+func (r *Receipt) Validate(opts *ValidateOptions) bool {
 	MDRoot := r.Start // To begin with, we start with the object as the MDRoot
 	// Now apply all the path hashes to the MDRoot
 	for _, node := range r.Entries {
+		if !opts.allowEntry(node) {
+			return false
+		}
 		MDRoot = node.apply(MDRoot)
 	}
 	// In the end, MDRoot should be the same hash the receipt expects.

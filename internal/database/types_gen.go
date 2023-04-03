@@ -108,6 +108,10 @@ func (v *BlockStateSynthTxnEntry) Copy() *BlockStateSynthTxnEntry {
 	}
 	u.Transaction = encoding.BytesCopy(v.Transaction)
 	u.ChainEntry = v.ChainEntry
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -130,6 +134,10 @@ func (v *ReceiptList) Copy() *ReceiptList {
 	if v.ContinuedReceipt != nil {
 		u.ContinuedReceipt = (v.ContinuedReceipt).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -148,6 +156,10 @@ func (v *SigOrTxn) Copy() *SigOrTxn {
 	if v.Txid != nil {
 		u.Txid = v.Txid
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -163,6 +175,10 @@ func (v *SigSetEntry) Copy() *SigSetEntry {
 	if v.ValidatorKeyHash != nil {
 		u.ValidatorKeyHash = new([32]byte)
 		*u.ValidatorKeyHash = *v.ValidatorKeyHash
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -182,6 +198,10 @@ func (v *SignatureSetEntry) Copy() *SignatureSetEntry {
 		}
 	}
 	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -197,6 +217,10 @@ func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
 	u.Chain = v.Chain
 	u.ChainIndex = v.ChainIndex
 	u.AnchorIndex = v.AnchorIndex
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -210,6 +234,10 @@ func (v *VoteEntry) Copy() *VoteEntry {
 		u.Authority = v.Authority
 	}
 	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -223,6 +251,10 @@ func (v *sigSetData) Copy() *sigSetData {
 	u.Entries = make([]SigSetEntry, len(v.Entries))
 	for i, v := range v.Entries {
 		u.Entries[i] = *(&v).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u

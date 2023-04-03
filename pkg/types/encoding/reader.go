@@ -35,6 +35,7 @@ type Reader struct {
 	seen    []bool
 	err     error
 	last    uint
+	empty   bool
 
 	IgnoreSizeLimit bool
 }
@@ -155,6 +156,7 @@ func (r *Reader) nextField() bool {
 			return false
 		}
 		if b == EmptyObject {
+			r.empty = true
 			r.current = EmptyObject
 			return false
 		}
@@ -175,7 +177,13 @@ func (r *Reader) nextField() bool {
 		r.err = fmt.Errorf("failed to read field number: %w", err)
 		return false
 	}
-	if v < 1 || v > 32 {
+	if v < 1 {
+		// Allow extension with zeros
+		r.current = EmptyObject
+		r.last = 0
+		return false
+	}
+	if v > 32 {
 		r.last = 0
 		r.err = fmt.Errorf("failed to read field number: %w", ErrInvalidFieldNumber)
 		return false
@@ -424,7 +432,7 @@ func (r *Reader) IsEmpty() bool { return r.current == EmptyObject }
 
 // ReadAll reads the entire value from the current position
 func (r *Reader) ReadAll() ([]byte, error) {
-	if r.current == EmptyObject {
+	if r.empty {
 		return nil, nil
 	}
 	if r.current != 0 {

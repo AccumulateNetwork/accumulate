@@ -98,6 +98,9 @@ const DataEntryTypeFactom DataEntryType = 1
 // DataEntryTypeAccumulate .
 const DataEntryTypeAccumulate DataEntryType = 2
 
+// DataEntryTypeDoubleHash .
+const DataEntryTypeDoubleHash DataEntryType = 3
+
 // ErrorCodeOK indicates the request succeeded.
 const ErrorCodeOK ErrorCode = 0
 
@@ -631,7 +634,7 @@ func (v DataEntryType) GetEnumValue() uint64 { return uint64(v) }
 func (v *DataEntryType) SetEnumValue(id uint64) bool {
 	u := DataEntryType(id)
 	switch u {
-	case DataEntryTypeUnknown, DataEntryTypeFactom, DataEntryTypeAccumulate:
+	case DataEntryTypeUnknown, DataEntryTypeFactom, DataEntryTypeAccumulate, DataEntryTypeDoubleHash:
 		*v = u
 		return true
 	}
@@ -647,6 +650,8 @@ func (v DataEntryType) String() string {
 		return "factom"
 	case DataEntryTypeAccumulate:
 		return "accumulate"
+	case DataEntryTypeDoubleHash:
+		return "doubleHash"
 	}
 	return fmt.Sprintf("DataEntryType:%d", v)
 }
@@ -660,6 +665,8 @@ func DataEntryTypeByName(name string) (DataEntryType, bool) {
 		return DataEntryTypeFactom, true
 	case "accumulate":
 		return DataEntryTypeAccumulate, true
+	case "doublehash":
+		return DataEntryTypeDoubleHash, true
 	}
 	return 0, false
 }
