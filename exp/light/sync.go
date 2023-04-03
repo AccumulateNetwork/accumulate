@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// PullAccount fetches the latest version of the account and its chains.
 func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -69,7 +70,7 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 		}
 	}
 
-	// Update chains
+	// Update chains, 1000 entries at a time
 	const N = 1000
 	first := true
 	for len(starts) > 0 {
@@ -84,12 +85,9 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 		}
 		first = false
 
+		// For each chain that needs to be updated
 		for name, start := range starts {
-			chain, err := batch.Account(acctUrl).ChainByName(name)
-			if err != nil {
-				return errors.UnknownError.WithFormat("load %s chain: %w", name, err)
-			}
-
+			// Query the next 1000 entries
 			var res *client.MultiResponse
 			u := acctUrl.WithFragment(fmt.Sprintf("chain/%s", name)).WithQuery(fmt.Sprintf("start=%d&count=%d", start, N))
 			c.logger.Debug("Request", "url", u)
@@ -98,19 +96,29 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 				return errors.UnknownError.WithFormat("load %s chain entries [%d, %d): %w", name, start, start+N, err)
 			}
 
+			// If there are no more entries...
 			if start+uint64(len(res.Items)) >= res.Total {
+				// Remove the chain from the map
 				delete(starts, name)
 			} else {
+				// Otherwise update the start position
 				starts[name] += uint64(len(res.Items))
 			}
 
+			chain, err := batch.Account(acctUrl).ChainByName(name)
+			if err != nil {
+				return errors.UnknownError.WithFormat("load %s chain: %w", name, err)
+			}
+
+			// For each entry
 			for _, raw := range res.Items {
 				b, err := json.Marshal(raw)
 				if err != nil {
 					return errors.InternalError.WithFormat("unable to remarshal response: %w", err)
 				}
 
-				// API v2 has a bug, so index entries have to be unmarshalled and remarshalled
+				// Unmarshal the entry; API v2 has a bug, so index entries have
+				// to be unmarshalled and remarshalled
 				if chain.Type() == merkle.ChainTypeIndex {
 					var entry *protocol.IndexEntry
 					err = json.Unmarshal(b, &entry)
@@ -147,6 +155,7 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 					}
 				}
 
+				// Add it to the chain
 				err = chain.Inner().AddHash(b, false)
 				if err != nil {
 					return errors.UnknownError.WithFormat("add entry to %s chain: %w", name, err)
@@ -159,6 +168,7 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 	return errors.UnknownError.Wrap(err)
 }
 
+// PullTransactionsForAccount fetches transactions from the account's chains.
 func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.URL, chains ...string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -166,6 +176,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 	batch := c.OpenDB(true)
 	defer batch.Discard()
 
+	// For each chain
 	missing := map[[32]byte]bool{}
 	didLoad := batch.Index().Account(account).DidLoadTransaction()
 	for _, name := range chains {
@@ -179,6 +190,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 			return errors.UnknownError.WithFormat("load main chain head: %w", err)
 		}
 
+		// Scan all the entries
 		const N = 1 << 10
 		for i := int64(0); i < head.Count; i += N {
 			entries, err := chain.Inner().GetRange(i, i+N)
@@ -186,12 +198,14 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 				return errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
 			}
 
+			// For each entry
 			for _, e := range entries {
 				hash := *(*[32]byte)(e)
 				if _, ok := missing[hash]; ok {
 					continue
 				}
 
+				// Check if it has already been fetched
 				_, err = didLoad.Index(hash)
 				switch {
 				case err == nil:
@@ -202,6 +216,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 					return errors.UnknownError.WithFormat("load account did-load index: %w", err)
 				}
 
+				// Check if it has been fetched for a different account or chain
 				_, err = batch.Message(hash).Main().Get()
 				switch {
 				case err == nil:
@@ -212,6 +227,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 					return errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", e, err)
 				}
 
+				// Record that it has been fetched
 				err = didLoad.Add(hash)
 				if err != nil {
 					return errors.UnknownError.WithFormat("store account did-load index: %w", err)
@@ -221,7 +237,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 	}
 
 	// Build a slice of transaction IDs. Sorting this is not necessary but makes
-	// the process less random.
+	// the process less random and thus easier to debug.
 	txids := make([]*url.TxID, 0, len(missing))
 	for hash, missing := range missing {
 		if missing {
@@ -242,6 +258,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 	return c.PullTransactions(ctx, txids...)
 }
 
+// PullTransaction fetches a set of transactions.
 func (c *Client) PullTransactions(ctx context.Context, txids ...*url.TxID) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -249,6 +266,7 @@ func (c *Client) PullTransactions(ctx context.Context, txids ...*url.TxID) error
 	batch := c.OpenDB(true)
 	defer batch.Discard()
 
+	// Create a JSON-RPC request for each
 	var requests jsonrpc2.BatchRequest
 	for _, id := range txids {
 		requests = append(requests, jsonrpc2.Request{
@@ -264,6 +282,7 @@ func (c *Client) PullTransactions(ctx context.Context, txids ...*url.TxID) error
 		})
 	}
 
+	// Fetch the transactions
 	const N = 100
 	total := len(requests)
 	for i := 0; len(requests) > 0; i++ {
@@ -275,6 +294,7 @@ func (c *Client) PullTransactions(ctx context.Context, txids ...*url.TxID) error
 			req, requests = requests, nil
 		}
 
+		// Send the batch
 		c.logger.Info("Requesting transactions", "count", len(req), "batch-num", i+1, "batch-count", (total+N-1)/N)
 		var responses []*client.TransactionQueryResponse
 		err := c.v2.RequestAPIv2(ctx, "", req, &responses)
@@ -282,6 +302,7 @@ func (c *Client) PullTransactions(ctx context.Context, txids ...*url.TxID) error
 			return errors.UnknownError.WithFormat("query transactions: %w", err)
 		}
 
+		// Process the responses
 		for _, r := range responses {
 			err = batch.Message(r.Txid.Hash()).Main().Put(&messaging.TransactionMessage{Transaction: r.Transaction})
 			if err != nil {
@@ -295,6 +316,7 @@ func (c *Client) PullTransactions(ctx context.Context, txids ...*url.TxID) error
 	return errors.UnknownError.Wrap(err)
 }
 
+// IndexAccountChains collates the index chain entries for an account's chains.
 func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error {
 	batch := c.OpenDB(true)
 	defer batch.Discard()
@@ -304,55 +326,61 @@ func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error
 		return errors.UnknownError.WithFormat("load chains index: %w", err)
 	}
 
+	// For each chain
 	for _, x := range chains {
-		if strings.HasSuffix(x.Name, "-index") {
+		if x.Type != merkle.ChainTypeIndex {
 			continue
 		}
 
+		// Remove the -index suffix for chains like main-index so the index is
+		// associated with the unsuffixed name (e.g. main). But there are also
+		// index chains that don't have a suffix, such as major-block (currently
+		// that's the only one but there could be others in the future).
+		name := strings.TrimSuffix(x.Name, "-index")
+
+		// Compare the chain head and index to identify new entries
 		chain, err := batch.Account(acctUrl).ChainByName(x.Name)
 		if err != nil {
-			return errors.UnknownError.WithFormat("load %s index chain: %w", x.Name, err)
-		}
-
-		if x.Type != merkle.ChainTypeIndex {
-			chain = chain.Index()
+			return errors.UnknownError.WithFormat("load %s index chain: %w", name, err)
 		}
 
 		head, err := chain.Head().Get()
 		if err != nil {
-			return errors.UnknownError.WithFormat("load %s index chain head: %w", x.Name, err)
+			return errors.UnknownError.WithFormat("load %s index chain head: %w", name, err)
 		}
 
-		index, err := batch.Index().Account(acctUrl).Chain(x.Name).Index().Get()
+		index, err := batch.Index().Account(acctUrl).Chain(name).Index().Get()
 		if err != nil {
-			return errors.UnknownError.WithFormat("load index of %s index chain: %w", x.Name, err)
+			return errors.UnknownError.WithFormat("load index of %s index chain: %w", name, err)
 		}
 		if len(index) >= int(head.Count) {
 			continue
 		}
 
-		c.logger.Info("Indexing an index chain", "account", acctUrl, "chain", x.Name)
+		c.logger.Info("Indexing an index chain", "account", acctUrl, "chain", name)
 
+		// Load the new entries
 		start := int64(len(index))
 		entries, err := chain.Inner().GetRange(start, start+head.Count)
 		if err != nil {
-			return errors.UnknownError.WithFormat("load %s index chain entries [%d, %d): %w", x.Name, start, start+head.Count, err)
+			return errors.UnknownError.WithFormat("load %s index chain entries [%d, %d): %w", name, start, start+head.Count, err)
 		}
 
+		// Add them to the index
 		index = nil
 		for _, b := range entries {
 			entry := new(protocol.IndexEntry)
 			err = entry.UnmarshalBinary(b)
 			if err != nil {
-				return errors.UnknownError.WithFormat("unmarshal %s index chain entry: %w", x.Name, err)
+				return errors.UnknownError.WithFormat("unmarshal %s index chain entry: %w", name, err)
 			}
 
 			index = append(index, entry)
 		}
 
-		err = batch.Index().Account(acctUrl).Chain(x.Name).Index().Add(index...)
+		err = batch.Index().Account(acctUrl).Chain(name).Index().Add(index...)
 		if err != nil {
-			return errors.UnknownError.WithFormat("store index of %s index chain: %w", x.Name, err)
+			return errors.UnknownError.WithFormat("store index of %s index chain: %w", name, err)
 		}
 	}
 
@@ -360,10 +388,13 @@ func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error
 	return errors.UnknownError.Wrap(err)
 }
 
+// IndexAnchors collates a partition's block anchors.
 func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 	batch := c.OpenDB(true)
 	defer batch.Discard()
 
+	// Compare the anchor sequence chain head to the index to identify new
+	// entries
 	chain := batch.Account(partUrl.JoinPath(protocol.AnchorPool)).AnchorSequenceChain()
 	head, err := chain.Head().Get()
 	if err != nil {
@@ -380,14 +411,17 @@ func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 
 	c.logger.Info("Indexing anchors", "account", partUrl)
 
+	// Load the new entries
 	start := int64(len(anchors))
 	entries, err := chain.Inner().GetRange(start, start+head.Count)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load %v anchor sequence chain entries [%d, %d): %w", partUrl, start, start+head.Count, err)
 	}
 
+	// For each entry
 	anchors = nil
 	for i, e := range entries {
+		// Load the transaction
 		hash := *(*[32]byte)(e)
 		var msg *messaging.TransactionMessage
 		err := batch.Message(hash).Main().GetAs(&msg)
@@ -399,6 +433,7 @@ func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 			return errors.UnknownError.WithFormat("%v anchor %d is invalid: expected anchor, got %T", partUrl, start+int64(i), msg.Transaction.Body)
 		}
 
+		// Add it to the index
 		anchors = append(anchors, &AnchorMetadata{
 			Index:  uint64(start) + uint64(i),
 			Hash:   hash,
@@ -415,20 +450,26 @@ func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 	return errors.UnknownError.Wrap(err)
 }
 
+// IndexAccountTransaction indexes the local and directory block index and time
+// for the accounts' main chain transactions.
 func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.URL) error {
 	batch := c.OpenDB(true)
 	defer batch.Discard()
 
+	// Get a router to determine which partition each account belongs to
 	router, err := c.router(batch)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Load the directory's root chain index
 	dirRootIndex, err := batch.Index().Account(protocol.DnUrl().JoinPath(protocol.Ledger)).Chain("root").Index().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load directory root chain index: %w", err)
 	}
 
+	// Load the root chain and anchor index of each partition, and the
+	// directory's anchor chain index for each partition
 	type PartData struct {
 		RootIndex, DirAnchorIndex []*protocol.IndexEntry
 		AnchorIndex               []*AnchorMetadata
@@ -436,11 +477,14 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 	parts := map[string]*PartData{}
 	routes := map[*url.URL]string{}
 	for _, account := range accounts {
+		// For each account... route the account
 		partId, err := router.RouteAccount(account)
 		if err != nil {
 			return errors.UnknownError.WithFormat("route account: %w", err)
 		}
 		routes[account] = partId
+
+		// Check if we've already loaded the indices for that account
 		if _, ok := parts[partId]; ok {
 			continue
 		}
@@ -448,16 +492,19 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 		part := new(PartData)
 		parts[partId] = part
 
+		// Load the partition's root chain index
 		part.RootIndex, err = batch.Index().Account(protocol.PartitionUrl(partId).JoinPath(protocol.Ledger)).Chain("root").Index().Get()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load root chain index: %w", err)
 		}
 
+		// Load the partition's anchor index
 		part.AnchorIndex, err = batch.Index().Partition(protocol.PartitionUrl(partId)).Anchors().Get()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load anchor index: %w", err)
 		}
 
+		// Load the directory's anchor chain index for the partition
 		name := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(partId).Root().Name()
 		part.DirAnchorIndex, err = batch.Index().Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).Chain(name).Index().Get()
 		if err != nil {
@@ -465,17 +512,21 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 		}
 	}
 
+	// For each account
 	for _, account := range accounts {
+		// Load the main chain index
 		mainIndex, err := batch.Index().Account(account).Chain("main").Index().Get()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load main chain index: %w", err)
 		}
 
+		// Process all of the main chain entries
 		head, err := batch.Account(account).MainChain().Head().Get()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load main chain head: %w", err)
 		}
 
+		// In batches of 1024
 		const N = 1 << 10
 		part := parts[routes[account]]
 		didIndex := batch.Index().Account(account).DidIndexTransactionExecution()
@@ -486,21 +537,26 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 				return errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
 			}
 
+			// For each entry
 			for j, e := range entries {
+				// Check if it has already been indexed
 				hash := *(*[32]byte)(e)
 				_, err = didIndex.Index(hash)
 				switch {
 				case err == nil:
 					continue
 				case errors.Is(err, errors.NotFound):
-					// Build index
+					// Ok
 				default:
 					return errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", e, err)
 				}
+
+				// Record that it has been indexed
 				err = didIndex.Add(hash)
 				if err != nil {
 					return errors.UnknownError.WithFormat("update did index index: %w", err)
 				}
+
 				if !didLog {
 					c.logger.Info("Indexing transactions", "account", account)
 					didLog = true

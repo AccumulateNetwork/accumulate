@@ -22,28 +22,33 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
+// Client is a light client instance.
 type Client struct {
 	logger logging.OptionalLogger
 	v2     *client.Client
 	store  storage.KeyValueStore
 }
 
+// ClientOptions are the options for [NewClient].
 type ClientOptions struct {
 	Server   string
 	Database string
 	Logger   log.Logger
 }
 
+// NewClient creates a new light client instance.
 func NewClient(opts ClientOptions) (*Client, error) {
 	c := new(Client)
 	c.logger.Set(opts.Logger)
 
+	// Create the API client - use API v2 until v3 is deployed on the mainnet
 	var err error
 	c.v2, err = client.New(opts.Server)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Open the badger database
 	c.store, err = badger.New(opts.Database, opts.Logger)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -52,10 +57,12 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	return c, nil
 }
 
+// Close frees any resources opened by the light client.
 func (c *Client) Close() error {
 	return c.store.Close()
 }
 
+// router loads the global values and creates a static router.
 func (c *Client) router(batch *DB) (routing.Router, error) {
 	g := new(core.GlobalValues)
 	err := g.Load(protocol.DnUrl(), func(accountUrl *url.URL, target interface{}) error {
@@ -73,11 +80,7 @@ func (c *Client) router(batch *DB) (routing.Router, error) {
 	return router, nil
 }
 
-type DB struct {
-	*database.Batch
-	index IndexDB
-}
-
+// OpenDB opens a [DB].
 func (c *Client) OpenDB(writable bool) *DB {
 	kvb := c.store.Begin(true)
 	batch := database.NewBatch("", kvb, true, nil)
@@ -89,8 +92,15 @@ func (c *Client) OpenDB(writable bool) *DB {
 	return &DB{batch, index}
 }
 
+// DB is the light client database.
+type DB struct {
+	*database.Batch
+	index IndexDB
+}
+
 func (db *DB) Index() IndexDB { return db.index }
 
+// Commit commits changes to the database.
 func (db *DB) Commit() error {
 	// IndexDB reuses the main batch's key-value store so it must be committed
 	// first
