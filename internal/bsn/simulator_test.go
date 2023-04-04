@@ -30,8 +30,6 @@ func init() {
 }
 
 func TestSimulator(t *testing.T) {
-	acctesting.SkipCI(t, "Broken but only in CI - no clue why")
-
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
