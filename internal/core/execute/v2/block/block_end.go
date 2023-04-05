@@ -507,8 +507,8 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 			continue
 		}
 
-		partition, ok := chain.Key(3).(string)
-		if chain.Key(2) != "AnchorChain" || !ok {
+		partition, ok := chain.Key().Get(3).(string)
+		if chain.Key().Get(2) != "AnchorChain" || !ok {
 			continue
 		}
 

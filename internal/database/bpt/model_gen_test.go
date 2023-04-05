@@ -11,8 +11,9 @@ package bpt
 //lint:file-ignore S1008,U1000 generated code
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -23,8 +24,10 @@ type ChangeSet struct {
 	bpt *BPT
 }
 
+func (c *ChangeSet) Key() *record.Key { return nil }
+
 func (c *ChangeSet) BPT() *BPT {
-	return record.FieldGetOrCreate(&c.bpt, func() *BPT {
+	return values.GetOrCreate(&c.bpt, func() *BPT {
 		return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt", "bpt")
 	})
 }
@@ -47,20 +50,23 @@ func (c *ChangeSet) IsDirty() bool {
 		return false
 	}
 
-	if record.FieldIsDirty(c.bpt) {
+	if values.IsDirty(c.bpt) {
 		return true
 	}
 
 	return false
 }
 
-func (c *ChangeSet) WalkChanges(fn record.WalkFunc) error {
+func (c *ChangeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
 
-	var err error
-	record.FieldWalkChanges(&err, c.bpt, fn)
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	values.Walk(&err, c.bpt, opts, fn)
 	return err
 }
 
@@ -70,7 +76,7 @@ func (c *ChangeSet) Commit() error {
 	}
 
 	var err error
-	record.FieldCommit(&err, c.bpt)
+	values.Commit(&err, c.bpt)
 
 	return err
 }

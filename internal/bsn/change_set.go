@@ -10,6 +10,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -25,7 +26,7 @@ func NewChangeSet(store storage.Beginner, logger log.Logger) *ChangeSet {
 func (c *ChangeSet) Begin() *ChangeSet {
 	d := new(ChangeSet)
 	d.logger = c.logger
-	d.store = c
+	d.store = values.RecordStore{Record: c}
 	d.parent = c
 	d.kvstore = c.kvstore.Begin(true)
 	return d
@@ -46,53 +47,4 @@ func (c *ChangeSet) Discard() {
 		b.Discard()
 	}
 	c.kvstore.Discard()
-}
-
-// GetValue implements record.Store.
-func (c *ChangeSet) GetValue(key *record.Key, value record.ValueWriter) error {
-	v, err := resolveValue[record.ValueReader](c, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	err = value.LoadValue(v, false)
-	return errors.UnknownError.Wrap(err)
-}
-
-// PutValue implements record.Store.
-func (c *ChangeSet) PutValue(key *record.Key, value record.ValueReader) error {
-	v, err := resolveValue[record.ValueWriter](c, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	err = v.LoadValue(value, true)
-	return errors.UnknownError.Wrap(err)
-}
-
-func zero[T any]() T {
-	var z T
-	return z
-}
-
-// resolveValue resolves the value for the given key.
-func resolveValue[T any](r record.Record, key *record.Key) (T, error) {
-	var err error
-	for key.Len() > 0 {
-		r, key, err = r.Resolve(key)
-		if err != nil {
-			return zero[T](), errors.UnknownError.Wrap(err)
-		}
-	}
-
-	if s, _, err := r.Resolve(nil); err == nil {
-		r = s
-	}
-
-	v, ok := r.(T)
-	if !ok {
-		return zero[T](), errors.InternalError.WithFormat("bad key: %T is not value", r)
-	}
-
-	return v, nil
 }
