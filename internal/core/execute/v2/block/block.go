@@ -35,10 +35,8 @@ func (b *Block) Close() (execute.BlockState, error) {
 type closedBlock Block
 
 func (b *closedBlock) Params() execute.BlockParams { return b.BlockParams }
-
-func (s *closedBlock) IsEmpty() bool {
-	return s.State.Empty()
-}
+func (s *closedBlock) ChangeSet() record.Record    { return s.Batch }
+func (s *closedBlock) IsEmpty() bool               { return s.State.Empty() }
 
 func (s *closedBlock) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 	return s.State.MakeMajorBlock,
@@ -66,6 +64,10 @@ func (s *closedBlock) Discard() {
 	s.Batch.Discard()
 }
 
-func (s *closedBlock) WalkChanges(fn record.WalkFunc) error {
-	return s.Batch.WalkChanges(fn)
+func (s *closedBlock) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+	return s.Batch.Walk(opts, fn)
 }
+
+// func (s *closedBlock) Hash() []byte {
+// 	return s.Batch.BptRoot()
+// }

@@ -3,7 +3,7 @@
   omitResolve: true
   customCommit: true
   customIsDirty: true
-  customWalkChanges: true
+  customWalk: true
   fields:
   - name: pending
     type: map[[32]byte][32]byte

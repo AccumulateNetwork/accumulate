@@ -4,27 +4,32 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package record
+package values
 
 import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type counted[T any] struct {
+	key    *database.Key
 	count  *value[uint64]
 	new    func() encodableValue[T]
 	values []*value[T]
 }
 
-func newCounted[T any](logger log.Logger, store Store, key *Key, namefmt string, new func() encodableValue[T]) *counted[T] {
+func newCounted[T any](logger log.Logger, store database.Store, key *database.Key, namefmt string, new func() encodableValue[T]) *counted[T] {
 	c := &counted[T]{}
+	c.key = key
 	c.count = newValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
 	c.new = new
 	return c
 }
+
+func (c *counted[T]) Key() *database.Key { return c.key }
 
 // Count loads the size of the list.
 func (c *counted[T]) Count() (int, error) {
@@ -184,7 +189,7 @@ func (c *counted[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (c *counted[T]) Resolve(key *Key) (Record, *Key, error) {
+func (c *counted[T]) Resolve(key *database.Key) (database.Record, *database.Key, error) {
 	if key.Len() == 0 {
 		return c.count, nil, nil
 	}
@@ -201,13 +206,17 @@ func (c *counted[T]) Resolve(key *Key) (Record, *Key, error) {
 	return c.value(i), nil, nil
 }
 
-func (c *counted[T]) WalkChanges(fn WalkFunc) error {
-	err := c.count.WalkChanges(fn)
+func (c *counted[T]) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
+	skip, err := WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return err
+	}
+	err = c.count.Walk(opts, fn)
 	if err != nil {
 		return err
 	}
 	for _, v := range c.values {
-		err = v.WalkChanges(fn)
+		err = v.Walk(opts, fn)
 		if err != nil {
 			return err
 		}

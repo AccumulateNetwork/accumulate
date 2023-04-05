@@ -103,13 +103,13 @@ func recordType(r typegen.Record, noInterface bool) string {
 		var typ string
 		switch r.CollectionType() {
 		case typegen.CollectionTypeSet:
-			typ = "record.Set"
+			typ = "values.Set"
 		case typegen.CollectionTypeList:
-			typ = "record.List"
+			typ = "values.List"
 		case typegen.CollectionTypeCounted:
-			typ = "record.Counted"
+			typ = "values.Counted"
 		default:
-			typ = "record.Value"
+			typ = "values.Value"
 		}
 		return fmt.Sprintf("%s[%s]", typ, stateType(r, false))
 	case *typegen.ChainRecord:
@@ -163,9 +163,9 @@ func keyType(p *typegen.Field) string {
 func asKey(p *typegen.Field, varName string) string {
 	switch p.Type.Code {
 	case typegen.TypeCodeBytes:
-		return "record.MapKeyBytes(" + varName + ")"
+		return "values.MapKeyBytes(" + varName + ")"
 	case typegen.TypeCodeUrl:
-		return "record.MapKeyUrl(" + varName + ")"
+		return "values.MapKeyUrl(" + varName + ")"
 	default:
 		return varName
 	}
