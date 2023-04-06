@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,7 +15,7 @@ type ValidatorUpdate int
 const ValidatorUpdateAdd = 1
 const ValidatorUpdateRemove = 2
 
-func (g *GlobalValues) DiffValidators(h *GlobalValues, partitionID string) (map[[32]byte]ValidatorUpdate, error) {
+func DiffValidators(g, h *GlobalValues, partitionID string) (map[[32]byte]ValidatorUpdate, error) {
 	updates := map[[32]byte]ValidatorUpdate{}
 
 	// Mark the old keys for deletion
