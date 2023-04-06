@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,56 +8,17 @@ package core
 
 import (
 	"crypto/sha256"
-	"math"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-type globalValueMemos struct {
-	threshold map[string]uint64
-	active    map[string]int
-}
-
-func (g *GlobalValues) memoizeValidators() {
-	if g.memoize.active != nil {
-		return
-	}
-
-	active := make(map[string]int, len(g.Network.Partitions))
-	for _, v := range g.Network.Validators {
-		for _, p := range v.Partitions {
-			if p.Active {
-				active[strings.ToLower(p.ID)]++
-			}
-		}
-	}
-
-	threshold := make(map[string]uint64, len(g.Network.Partitions))
-	for partition, active := range active {
-		threshold[partition] = g.Globals.ValidatorAcceptThreshold.Threshold(active)
-	}
-
-	g.memoize.active = active
-	g.memoize.threshold = threshold
-}
-
-func (g *GlobalValues) ValidatorThreshold(partition string) uint64 {
-	g.memoizeValidators()
-	v, ok := g.memoize.threshold[strings.ToLower(partition)]
-	if !ok {
-		return math.MaxUint64
-	}
-	return v
-}
 
 type globalSigner struct {
 	Partition string
 	*protocol.NetworkDefinition
 }
 
-func (g *GlobalValues) AsSigner(partition string) *globalSigner {
+func AnchorSigner(g *GlobalValues, partition string) *globalSigner {
 	s := new(globalSigner)
 	s.Partition = partition
 	s.NetworkDefinition = g.Network
