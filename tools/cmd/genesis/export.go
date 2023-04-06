@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -76,7 +76,7 @@ func export(_ *cobra.Command, args []string) {
 	check(err)
 
 	globals := new(core.GlobalValues)
-	check(globals.Load(partUrl, func(account *url.URL, target interface{}) error {
+	check(globals.Load(partUrl.URL, func(account *url.URL, target interface{}) error {
 		return batch.Account(account).Main().GetAs(target)
 	}))
 
