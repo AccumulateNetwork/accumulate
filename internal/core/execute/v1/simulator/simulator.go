@@ -197,7 +197,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 // willChangeGlobals is responsible for updating the validator list.
 func (s *Simulator) willChangeGlobals(e events.WillChangeGlobals) error {
 	for id, x := range s.Executors {
-		updates, err := e.Old.DiffValidators(e.New, id)
+		updates, err := core.DiffValidators(e.Old, e.New, id)
 		if err != nil {
 			return err
 		}
