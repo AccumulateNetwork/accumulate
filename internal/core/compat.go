@@ -4,7 +4,10 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package core holds core protocol types and constants
 package core
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --language go-alt --package core types.yml
+import "gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
+
+type GlobalValues = network.GlobalValues
+
+func NewGlobals(g *GlobalValues) *GlobalValues { return network.NewGlobals(g) }
