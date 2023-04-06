@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -48,21 +49,21 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var err error
 	switch signature := signature.(type) {
 	case *protocol.PartitionSignature:
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
 		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 		if err != nil {
 			return nil, err
 		}
 
 	case *protocol.ReceiptSignature:
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
 		if err != nil {
 			return nil, err
 		}
 
 	case *protocol.InternalSignature:
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
 		err = verifyInternalSignature(delivery, signature, md)
 		if err != nil {
 			return nil, err
@@ -760,7 +761,7 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 		return nil, errors.BadRequest.WithFormat("partition signature source is not a partition")
 	}
 
-	signer := x.globals.Active.AsSigner(partition)
+	signer := core.AnchorSigner(&x.globals.Active, partition)
 
 	// TODO: Consider checking the version. However this can get messy because
 	// it takes some time for changes to propagate, so we'd need an activation

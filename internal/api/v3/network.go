@@ -15,7 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -56,7 +55,7 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 	if values == nil {
 		values = new(core.GlobalValues)
 		err := s.database.View(func(batch *database.Batch) error {
-			return values.Load(config.NetworkUrl{URL: protocol.PartitionUrl(s.partition)}, func(accountUrl *url.URL, target interface{}) error {
+			return values.Load(protocol.PartitionUrl(s.partition), func(accountUrl *url.URL, target interface{}) error {
 				return batch.Account(accountUrl).Main().GetAs(target)
 			})
 		})
