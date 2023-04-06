@@ -96,10 +96,16 @@ func (h *Harness) StepN(n int) {
 // StepUntil calls the stepper until all conditions are satisfied. StepUntil
 // fails if the conditions are not met within 50 steps.
 func (h *Harness) StepUntil(conditions ...Condition) {
+	h.StepUntilN(50, conditions...)
+}
+
+// StepUntilN calls the stepper until all conditions are satisfied. StepUntilN
+// fails if the conditions are not met within N steps.
+func (h *Harness) StepUntilN(n int, conditions ...Condition) {
 	h.TB.Helper()
 
 outer:
-	for i := 0; i < 50; i++ {
+	for i := 0; i < n; i++ {
 		// Step (except for the first time)
 		if i > 0 {
 			h.Step()
