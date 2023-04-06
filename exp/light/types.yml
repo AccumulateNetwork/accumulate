@@ -1,0 +1,21 @@
+AnchorMetadata:
+  fields:
+  - name: Index
+    type: uint
+  - name: Hash
+    type: hash
+  - name: Anchor
+    type: protocol.PartitionAnchor
+    marshal-as: reference
+    pointer: true
+
+EventMetadata:
+  fields:
+  - name: LocalBlock
+    type: uint
+  - name: LocalTime
+    type: time
+  - name: DirectoryBlock
+    type: uint
+  - name: DirectoryTime
+    type: time
