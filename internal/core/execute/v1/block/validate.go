@@ -9,6 +9,7 @@ package block
 import (
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -201,11 +202,11 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 			status.SequenceNumber = signature.SequenceNumber
 		}
 
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
 		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
-		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
+		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
 
 	case *protocol.RemoteSignature:

@@ -18,6 +18,7 @@ import (
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -268,7 +269,7 @@ func (n *Node) willChangeGlobals(e events.WillChangeGlobals) error {
 	n.globals.Store(e.New)
 
 	// Compare the old and new partition definitions
-	updates, err := e.Old.DiffValidators(e.New, n.partition.ID)
+	updates, err := core.DiffValidators(e.Old, e.New, n.partition.ID)
 	if err != nil {
 		return err
 	}
