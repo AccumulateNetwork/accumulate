@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package core
+package network
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -88,7 +88,7 @@ const labelGlobals = "network globals"
 const labelNetwork = "network definition"
 const labelRouting = "routing table"
 
-func (g *GlobalValues) Load(net config.NetworkUrl, getState getStateFunc) error {
+func (g *GlobalValues) Load(net *url.URL, getState getStateFunc) error {
 	// Load the oracle
 	if err := loadAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -111,7 +111,7 @@ func (g *GlobalValues) Load(net config.NetworkUrl, getState getStateFunc) error 
 
 	// Load the executor version
 	var ledger *protocol.SystemLedger
-	if err := getState(net.Ledger(), &ledger); err != nil {
+	if err := getState(net.JoinPath(protocol.Ledger), &ledger); err != nil {
 		return errors.BadRequest.WithFormat("load system ledger: %w", err)
 	} else {
 		g.ExecutorVersion = ledger.ExecutorVersion

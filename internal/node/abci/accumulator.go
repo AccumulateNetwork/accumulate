@@ -145,7 +145,7 @@ func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
 	}
 
 	// Compare the old and new partition definitions
-	updates, err := e.Old.DiffValidators(e.New, app.Accumulate.PartitionId)
+	updates, err := core.DiffValidators(e.Old, e.New, app.Accumulate.PartitionId)
 	if err != nil {
 		return err
 	}

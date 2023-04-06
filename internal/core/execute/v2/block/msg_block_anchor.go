@@ -7,6 +7,7 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -154,7 +155,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 	// it takes some time for changes to propagate, so we'd need an activation
 	// height or something.
 
-	signer := ctx.Executor.globals.Active.AsSigner(partition)
+	signer := core.AnchorSigner(&ctx.Executor.globals.Active, partition)
 	_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
 	if !ok {
 		return nil, nil, nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
