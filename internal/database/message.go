@@ -18,7 +18,7 @@ func (b *Batch) Message2(hash []byte) *Message {
 }
 
 func (m *Message) hash() [32]byte {
-	return m.key[1].([32]byte)
+	return m.key.Get(1).([32]byte)
 }
 
 func (m *Message) Main() record.Value[messaging.Message] {
@@ -83,8 +83,8 @@ func (m *messageMain) GetAs(target interface{}) error {
 }
 
 // Resolve implements Record.Resolve.
-func (m *messageMain) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (m *messageMain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return m, nil, nil
 	}
 	return nil, nil, errors.InternalError.With("bad key for value")

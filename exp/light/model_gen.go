@@ -30,7 +30,7 @@ type IndexDB interface {
 type indexDB struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 
 	account     map[indexDBAccountKey]*indexDBAccount
@@ -98,42 +98,42 @@ func (c *indexDB) Transaction(hash [32]byte) IndexDBTransaction {
 	})
 }
 
-func (c *indexDB) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *indexDB) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for index db")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Account":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for index db")
 		}
-		url, okUrl := key[1].(*url.URL)
+		url, okUrl := key.Get(1).(*url.URL)
 		if !okUrl {
 			return nil, nil, errors.InternalError.With("bad key for index db")
 		}
 		v := c.Account(url)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Partition":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for index db")
 		}
-		url, okUrl := key[1].(*url.URL)
+		url, okUrl := key.Get(1).(*url.URL)
 		if !okUrl {
 			return nil, nil, errors.InternalError.With("bad key for index db")
 		}
 		v := c.Partition(url)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Transaction":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for index db")
 		}
-		hash, okHash := key[1].([32]byte)
+		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
 			return nil, nil, errors.InternalError.With("bad key for index db")
 		}
 		v := c.Transaction(hash)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for index db")
 	}
@@ -210,7 +210,7 @@ type IndexDBAccount interface {
 type indexDBAccount struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *indexDB
 
@@ -251,26 +251,26 @@ func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
 	})
 }
 
-func (c *indexDBAccount) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *indexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for account")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "DidIndexTransactionExecution":
-		return c.DidIndexTransactionExecution(), key[1:], nil
+		return c.DidIndexTransactionExecution(), key.SliceI(1), nil
 	case "DidLoadTransaction":
-		return c.DidLoadTransaction(), key[1:], nil
+		return c.DidLoadTransaction(), key.SliceI(1), nil
 	case "Chain":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
-		name, okName := key[1].(string)
+		name, okName := key.Get(1).(string)
 		if !okName {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
 		v := c.Chain(name)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for account")
 	}
@@ -333,7 +333,7 @@ type IndexDBAccountChain interface {
 type indexDBAccountChain struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *indexDBAccount
 
@@ -346,14 +346,14 @@ func (c *indexDBAccountChain) Index() record.List[*protocol.IndexEntry] {
 	})
 }
 
-func (c *indexDBAccountChain) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *indexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for chain")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Index":
-		return c.Index(), key[1:], nil
+		return c.Index(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for chain")
 	}
@@ -399,7 +399,7 @@ type IndexDBPartition interface {
 type indexDBPartition struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *indexDB
 
@@ -412,14 +412,14 @@ func (c *indexDBPartition) Anchors() record.List[*AnchorMetadata] {
 	})
 }
 
-func (c *indexDBPartition) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *indexDBPartition) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for partition")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Anchors":
-		return c.Anchors(), key[1:], nil
+		return c.Anchors(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for partition")
 	}
@@ -466,7 +466,7 @@ type IndexDBTransaction interface {
 type indexDBTransaction struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *indexDB
 
@@ -479,14 +479,14 @@ func (c *indexDBTransaction) Executed() record.Value[*EventMetadata] {
 	})
 }
 
-func (c *indexDBTransaction) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *indexDBTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for transaction")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Executed":
-		return c.Executed(), key[1:], nil
+		return c.Executed(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for transaction")
 	}

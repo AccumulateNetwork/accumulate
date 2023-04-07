@@ -77,7 +77,7 @@ func TestWalkAndReplay(t *testing.T) {
 
 	// Capture blocks
 	type Value struct {
-		Key   record.Key
+		Key   *record.Key
 		Value []byte
 	}
 	type Account struct {
@@ -243,9 +243,9 @@ func zero[T any]() T {
 }
 
 // resolveValue resolves the value for the given key.
-func resolveValue[T any](r record.Record, key record.Key) (T, error) {
+func resolveValue[T any](r record.Record, key *record.Key) (T, error) {
 	var err error
-	for len(key) > 0 {
+	for key.Len() > 0 {
 		r, key, err = r.Resolve(key)
 		if err != nil {
 			return zero[T](), errors.UnknownError.Wrap(err)

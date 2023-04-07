@@ -61,7 +61,7 @@ func keyForPartition(id string) partitionKey {
 
 func (c *ChangeSet) LastBlock() record.Value[*LastBlock] {
 	return record.FieldGetOrCreate(&c.lastBlock, func() record.Value[*LastBlock] {
-		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
+		return record.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
 	})
 }
 
@@ -70,7 +70,7 @@ func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 		v := new(Summary)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Summary", hash)
+		v.key = (*record.Key)(nil).Append("Summary", hash)
 		v.parent = c
 		v.label = "summary" + " " + hex.EncodeToString(hash[:])
 		return v
@@ -82,51 +82,51 @@ func (c *ChangeSet) Pending(partition string) *Pending {
 		v := new(Pending)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Pending", partition)
+		v.key = (*record.Key)(nil).Append("Pending", partition)
 		v.parent = c
 		v.label = "pending" + " " + partition
 		return v
 	})
 }
 
-func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *ChangeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "LastBlock":
-		return c.LastBlock(), key[1:], nil
+		return c.LastBlock(), key.SliceI(1), nil
 	case "Summary":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
-		hash, okHash := key[1].([32]byte)
+		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
 		v := c.Summary(hash)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Pending":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
-		partition, okPartition := key[1].(string)
+		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
 		v := c.Pending(partition)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Partition":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
-		id, okID := key[1].(string)
+		id, okID := key.Get(1).(string)
 		if !okID {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
 		v := c.Partition(id)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
@@ -201,7 +201,7 @@ func (c *ChangeSet) baseCommit() error {
 type Summary struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *ChangeSet
 
@@ -221,16 +221,16 @@ func (c *Summary) Signatures() record.Set[protocol.KeySignature] {
 	})
 }
 
-func (c *Summary) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *Summary) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for summary")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Main":
-		return c.Main(), key[1:], nil
+		return c.Main(), key.SliceI(1), nil
 	case "Signatures":
-		return c.Signatures(), key[1:], nil
+		return c.Signatures(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for summary")
 	}
@@ -277,7 +277,7 @@ func (c *Summary) Commit() error {
 type Pending struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *ChangeSet
 
@@ -298,22 +298,22 @@ func (c *Pending) OnBlock(index uint64) record.Value[[32]byte] {
 	})
 }
 
-func (c *Pending) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *Pending) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for pending")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "OnBlock":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for pending")
 		}
-		index, okIndex := key[1].(uint64)
+		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
 			return nil, nil, errors.InternalError.With("bad key for pending")
 		}
 		v := c.OnBlock(index)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for pending")
 	}

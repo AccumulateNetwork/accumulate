@@ -31,6 +31,12 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
 
+	for i, pkg := range ttypes.GoInclude {
+		if strings.HasPrefix(pkg, "./") {
+			ttypes.GoInclude[i] = "gitlab.com/accumulatenetwork/accumulate" + pkg[1:]
+		}
+	}
+
 	// Fixup reference names
 	for _, typ := range refTypes {
 		if typ.Package == PackagePath {
