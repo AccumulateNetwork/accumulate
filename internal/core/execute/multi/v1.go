@@ -54,7 +54,8 @@ func (x *ExecutorV1) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	b.Index = entry.BlockIndex
 	b.Time = *entry.BlockTime
 
-	return b, *(*[32]byte)(batch.BptRoot()), nil
+	h, err := batch.BPT().GetRootHash()
+	return b, h, err
 }
 
 func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
@@ -234,10 +235,6 @@ func (s *BlockStateV1) Commit() error {
 
 func (s *BlockStateV1) Discard() {
 	s.Block.Batch.Discard()
-}
-
-func (s *BlockStateV1) Hash() []byte {
-	return s.Block.Batch.BptRoot()
 }
 
 func (s *BlockStateV1) WalkChanges(fn record.WalkFunc) error {

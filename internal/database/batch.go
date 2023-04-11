@@ -60,7 +60,6 @@ func NewBatch(id string, store storage.KeyValueTxn, writable bool, logger log.Lo
 	b.logger.Set(logger)
 	b.kvstore = store
 	b.store = record.KvStore{Store: store}
-	b.bptEntries = map[storage.Key][32]byte{}
 	return b
 }
 
@@ -79,7 +78,6 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.logger = b.logger
 	c.store = b
 	c.kvstore = b.kvstore.Begin(c.writable)
-	c.bptEntries = map[storage.Key][32]byte{}
 	return c
 }
 
@@ -142,18 +140,10 @@ func (b *Batch) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if b.parent != nil {
-		for k, v := range b.bptEntries {
-			b.parent.bptEntries[k] = v
-		}
-		if db, ok := b.kvstore.(*storage.DebugBatch); ok {
-			db.PretendWrite()
-		}
-	} else {
-		err := b.commitBpt()
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
+	// Committing may have changed the BPT, so commit it
+	record.FieldCommit(&err, b.bpt)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	return b.kvstore.Commit()
