@@ -247,7 +247,8 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	_, err := batch.Account(m.Describe.NodeUrl()).GetState()
 	switch {
 	case err == nil:
-		return batch.BptRoot(), nil
+		h, err := batch.BPT().GetRootHash()
+		return h[:], err
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
