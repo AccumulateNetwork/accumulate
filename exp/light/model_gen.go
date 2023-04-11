@@ -63,7 +63,7 @@ func keyForIndexDBTransaction(hash [32]byte) indexDBTransactionKey {
 }
 
 func (c *indexDB) Account(url *url.URL) IndexDBAccount {
-	return getOrCreateMap(&c.account, keyForIndexDBAccount(url), func() *indexDBAccount {
+	return record.FieldGetOrCreateMap(&c.account, keyForIndexDBAccount(url), func() *indexDBAccount {
 		v := new(indexDBAccount)
 		v.logger = c.logger
 		v.store = c.store
@@ -75,7 +75,7 @@ func (c *indexDB) Account(url *url.URL) IndexDBAccount {
 }
 
 func (c *indexDB) Partition(url *url.URL) IndexDBPartition {
-	return getOrCreateMap(&c.partition, keyForIndexDBPartition(url), func() *indexDBPartition {
+	return record.FieldGetOrCreateMap(&c.partition, keyForIndexDBPartition(url), func() *indexDBPartition {
 		v := new(indexDBPartition)
 		v.logger = c.logger
 		v.store = c.store
@@ -87,7 +87,7 @@ func (c *indexDB) Partition(url *url.URL) IndexDBPartition {
 }
 
 func (c *indexDB) Transaction(hash [32]byte) IndexDBTransaction {
-	return getOrCreateMap(&c.transaction, keyForIndexDBTransaction(hash), func() *indexDBTransaction {
+	return record.FieldGetOrCreateMap(&c.transaction, keyForIndexDBTransaction(hash), func() *indexDBTransaction {
 		v := new(indexDBTransaction)
 		v.logger = c.logger
 		v.store = c.store
@@ -170,13 +170,13 @@ func (c *indexDB) WalkChanges(fn record.WalkFunc) error {
 
 	var err error
 	for _, v := range c.account {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	for _, v := range c.partition {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	for _, v := range c.transaction {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	return err
 }
@@ -188,13 +188,13 @@ func (c *indexDB) Commit() error {
 
 	var err error
 	for _, v := range c.account {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.partition {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.transaction {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 
 	return err
@@ -228,19 +228,19 @@ func keyForIndexDBAccountChain(name string) indexDBAccountChainKey {
 }
 
 func (c *indexDBAccount) DidIndexTransactionExecution() record.Set[[32]byte] {
-	return getOrCreateField(&c.didIndexTransactionExecution, func() record.Set[[32]byte] {
+	return record.FieldGetOrCreate(&c.didIndexTransactionExecution, func() record.Set[[32]byte] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), c.label+" "+"did index transaction execution", record.Wrapped(record.HashWrapper), record.CompareHash)
 	})
 }
 
 func (c *indexDBAccount) DidLoadTransaction() record.Set[[32]byte] {
-	return getOrCreateField(&c.didLoadTransaction, func() record.Set[[32]byte] {
+	return record.FieldGetOrCreate(&c.didLoadTransaction, func() record.Set[[32]byte] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), c.label+" "+"did load transaction", record.Wrapped(record.HashWrapper), record.CompareHash)
 	})
 }
 
 func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
-	return getOrCreateMap(&c.chain, keyForIndexDBAccountChain(name), func() *indexDBAccountChain {
+	return record.FieldGetOrCreateMap(&c.chain, keyForIndexDBAccountChain(name), func() *indexDBAccountChain {
 		v := new(indexDBAccountChain)
 		v.logger = c.logger
 		v.store = c.store
@@ -281,10 +281,10 @@ func (c *indexDBAccount) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.didIndexTransactionExecution) {
+	if record.FieldIsDirty(c.didIndexTransactionExecution) {
 		return true
 	}
-	if fieldIsDirty(c.didLoadTransaction) {
+	if record.FieldIsDirty(c.didLoadTransaction) {
 		return true
 	}
 	for _, v := range c.chain {
@@ -302,10 +302,10 @@ func (c *indexDBAccount) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.didIndexTransactionExecution, fn)
-	walkChanges(&err, c.didLoadTransaction, fn)
+	record.FieldWalkChanges(&err, c.didIndexTransactionExecution, fn)
+	record.FieldWalkChanges(&err, c.didLoadTransaction, fn)
 	for _, v := range c.chain {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	return err
 }
@@ -316,10 +316,10 @@ func (c *indexDBAccount) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.didIndexTransactionExecution)
-	commitField(&err, c.didLoadTransaction)
+	record.FieldCommit(&err, c.didIndexTransactionExecution)
+	record.FieldCommit(&err, c.didLoadTransaction)
 	for _, v := range c.chain {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 
 	return err
@@ -341,7 +341,7 @@ type indexDBAccountChain struct {
 }
 
 func (c *indexDBAccountChain) Index() record.List[*protocol.IndexEntry] {
-	return getOrCreateField(&c.index, func() record.List[*protocol.IndexEntry] {
+	return record.FieldGetOrCreate(&c.index, func() record.List[*protocol.IndexEntry] {
 		return record.NewList(c.logger.L, c.store, c.key.Append("Index"), c.label+" "+"index", record.Struct[protocol.IndexEntry]())
 	})
 }
@@ -364,7 +364,7 @@ func (c *indexDBAccountChain) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.index) {
+	if record.FieldIsDirty(c.index) {
 		return true
 	}
 
@@ -386,7 +386,7 @@ func (c *indexDBAccountChain) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.index)
+	record.FieldCommit(&err, c.index)
 
 	return err
 }
@@ -407,7 +407,7 @@ type indexDBPartition struct {
 }
 
 func (c *indexDBPartition) Anchors() record.List[*AnchorMetadata] {
-	return getOrCreateField(&c.anchors, func() record.List[*AnchorMetadata] {
+	return record.FieldGetOrCreate(&c.anchors, func() record.List[*AnchorMetadata] {
 		return record.NewList(c.logger.L, c.store, c.key.Append("Anchors"), c.label+" "+"anchors", record.Struct[AnchorMetadata]())
 	})
 }
@@ -430,7 +430,7 @@ func (c *indexDBPartition) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.anchors) {
+	if record.FieldIsDirty(c.anchors) {
 		return true
 	}
 
@@ -443,7 +443,7 @@ func (c *indexDBPartition) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.anchors, fn)
+	record.FieldWalkChanges(&err, c.anchors, fn)
 	return err
 }
 
@@ -453,7 +453,7 @@ func (c *indexDBPartition) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.anchors)
+	record.FieldCommit(&err, c.anchors)
 
 	return err
 }
@@ -474,7 +474,7 @@ type indexDBTransaction struct {
 }
 
 func (c *indexDBTransaction) Executed() record.Value[*EventMetadata] {
-	return getOrCreateField(&c.executed, func() record.Value[*EventMetadata] {
+	return record.FieldGetOrCreate(&c.executed, func() record.Value[*EventMetadata] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Executed"), c.label+" "+"executed", false, record.Struct[EventMetadata]())
 	})
 }
@@ -497,7 +497,7 @@ func (c *indexDBTransaction) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.executed) {
+	if record.FieldIsDirty(c.executed) {
 		return true
 	}
 
@@ -519,54 +519,7 @@ func (c *indexDBTransaction) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.executed)
+	record.FieldCommit(&err, c.executed)
 
 	return err
-}
-
-func getOrCreateField[T any](ptr *T, create func() T) T {
-	var z T
-	if any(*ptr) != any(z) {
-		return *ptr
-	}
-
-	*ptr = create()
-	return *ptr
-}
-
-func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
-	if *ptr == nil {
-		*ptr = map[K]T{}
-	}
-
-	if v, ok := (*ptr)[key]; ok {
-		return v
-	}
-
-	v := create()
-	(*ptr)[key] = v
-	return v
-}
-
-func commitField[T record.Record](lastErr *error, field T) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
-		return
-	}
-
-	*lastErr = field.Commit()
-}
-
-func fieldIsDirty[T record.Record](field T) bool {
-	var z T
-	return any(field) != any(z) && field.IsDirty()
-}
-
-func walkChanges[T record.Record](lastErr *error, field T, fn record.WalkFunc) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
-		return
-	}
-
-	*lastErr = field.WalkChanges(fn)
 }

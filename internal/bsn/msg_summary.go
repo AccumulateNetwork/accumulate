@@ -7,7 +7,6 @@
 package bsn
 
 import (
-	"bytes"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
@@ -190,7 +189,11 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 	part = batch.Partition(msg.Partition)
 
 	// Verify the root hash is the same
-	if !bytes.Equal(msg.StateTreeHash[:], part.BptRoot()) {
+	hash, err := part.BPT().GetRootHash()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if msg.StateTreeHash != hash {
 		return errors.BadRequest.With("state hash does not match")
 	}
 
