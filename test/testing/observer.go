@@ -17,7 +17,9 @@ import (
 type NullObserver struct{}
 
 func (NullObserver) DidChangeAccount(batch *database.Batch, account *database.Account) (hash.Hasher, error) {
-	return hash.Hasher{}, nil
+	// Don't use a null hash because that will trick the BPT into thinking it
+	// doesn't need to do anything
+	return hash.Hasher{account.Url().AccountID()}, nil
 }
 
 // VisitorObserver builds a list of hashes from a snapshot and then returns

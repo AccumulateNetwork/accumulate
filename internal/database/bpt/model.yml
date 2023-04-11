@@ -1,0 +1,23 @@
+- name: BPT
+  type: entity
+  omitResolve: true
+  customCommit: true
+  customIsDirty: true
+  customWalkChanges: true
+  fields:
+  - name: pending
+    type: map[[32]byte][32]byte
+  attributes:
+  - name: State
+    private: true
+    omitAccessor: true
+    type: state
+    key: Root
+    dataType: parameters
+    pointer: true
+  - name: Root
+    private: true
+    omitAccessor: true
+    type: other
+    dataType: rootRecord
+    pointer: true
