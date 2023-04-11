@@ -41,7 +41,7 @@ func keyForEntity(name string) entityKey {
 }
 
 func (c *changeSet) Entity(name string) Entity {
-	return getOrCreateMap(&c.entity, keyForEntity(name), func() *entity {
+	return record.FieldGetOrCreateMap(&c.entity, keyForEntity(name), func() *entity {
 		v := new(entity)
 		v.logger = c.logger
 		v.store = c.store
@@ -53,7 +53,7 @@ func (c *changeSet) Entity(name string) Entity {
 }
 
 func (c *changeSet) ChangeLog() record.Counted[string] {
-	return getOrCreateField(&c.changeLog, func() record.Counted[string] {
+	return record.FieldGetOrCreate(&c.changeLog, func() record.Counted[string] {
 		return record.NewCounted(c.logger.L, c.store, record.Key{}.Append("ChangeLog"), "change log", record.WrappedFactory(record.StringWrapper))
 	})
 }
@@ -91,7 +91,7 @@ func (c *changeSet) IsDirty() bool {
 			return true
 		}
 	}
-	if fieldIsDirty(c.changeLog) {
+	if record.FieldIsDirty(c.changeLog) {
 		return true
 	}
 
@@ -105,9 +105,9 @@ func (c *changeSet) WalkChanges(fn record.WalkFunc) error {
 
 	var err error
 	for _, v := range c.entity {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
-	walkChanges(&err, c.changeLog, fn)
+	record.FieldWalkChanges(&err, c.changeLog, fn)
 	return err
 }
 
@@ -118,9 +118,9 @@ func (c *changeSet) Commit() error {
 
 	var err error
 	for _, v := range c.entity {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
-	commitField(&err, c.changeLog)
+	record.FieldCommit(&err, c.changeLog)
 
 	return err
 }
@@ -147,25 +147,25 @@ type entity struct {
 }
 
 func (c *entity) Union() record.Value[protocol.Account] {
-	return getOrCreateField(&c.union, func() record.Value[protocol.Account] {
+	return record.FieldGetOrCreate(&c.union, func() record.Value[protocol.Account] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, record.Union(protocol.UnmarshalAccount))
 	})
 }
 
 func (c *entity) Set() record.Set[*url.TxID] {
-	return getOrCreateField(&c.set, func() record.Set[*url.TxID] {
+	return record.FieldGetOrCreate(&c.set, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Set"), c.label+" "+"set", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *entity) CountableRefType() record.Counted[*protocol.Transaction] {
-	return getOrCreateField(&c.countableRefType, func() record.Counted[*protocol.Transaction] {
+	return record.FieldGetOrCreate(&c.countableRefType, func() record.Counted[*protocol.Transaction] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableRefType"), c.label+" "+"countable ref type", record.Struct[protocol.Transaction])
 	})
 }
 
 func (c *entity) CountableUnion() record.Counted[protocol.Account] {
-	return getOrCreateField(&c.countableUnion, func() record.Counted[protocol.Account] {
+	return record.FieldGetOrCreate(&c.countableUnion, func() record.Counted[protocol.Account] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), c.label+" "+"countable union", record.UnionFactory(protocol.UnmarshalAccount))
 	})
 }
@@ -194,16 +194,16 @@ func (c *entity) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.union) {
+	if record.FieldIsDirty(c.union) {
 		return true
 	}
-	if fieldIsDirty(c.set) {
+	if record.FieldIsDirty(c.set) {
 		return true
 	}
-	if fieldIsDirty(c.countableRefType) {
+	if record.FieldIsDirty(c.countableRefType) {
 		return true
 	}
-	if fieldIsDirty(c.countableUnion) {
+	if record.FieldIsDirty(c.countableUnion) {
 		return true
 	}
 
@@ -216,10 +216,10 @@ func (c *entity) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.union, fn)
-	walkChanges(&err, c.set, fn)
-	walkChanges(&err, c.countableRefType, fn)
-	walkChanges(&err, c.countableUnion, fn)
+	record.FieldWalkChanges(&err, c.union, fn)
+	record.FieldWalkChanges(&err, c.set, fn)
+	record.FieldWalkChanges(&err, c.countableRefType, fn)
+	record.FieldWalkChanges(&err, c.countableUnion, fn)
 	return err
 }
 
@@ -229,10 +229,10 @@ func (c *entity) baseCommit() error {
 	}
 
 	var err error
-	commitField(&err, c.union)
-	commitField(&err, c.set)
-	commitField(&err, c.countableRefType)
-	commitField(&err, c.countableUnion)
+	record.FieldCommit(&err, c.union)
+	record.FieldCommit(&err, c.set)
+	record.FieldCommit(&err, c.countableRefType)
+	record.FieldCommit(&err, c.countableUnion)
 
 	return err
 }
@@ -255,55 +255,55 @@ type TemplateTest struct {
 }
 
 func (c *TemplateTest) Wrapped() record.Value[string] {
-	return getOrCreateField(&c.wrapped, func() record.Value[string] {
+	return record.FieldGetOrCreate(&c.wrapped, func() record.Value[string] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), c.label+" "+"wrapped", false, record.Wrapped(record.StringWrapper))
 	})
 }
 
 func (c *TemplateTest) StructPtr() record.Value[*StructType] {
-	return getOrCreateField(&c.structPtr, func() record.Value[*StructType] {
+	return record.FieldGetOrCreate(&c.structPtr, func() record.Value[*StructType] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), c.label+" "+"struct ptr", false, record.Struct[StructType]())
 	})
 }
 
 func (c *TemplateTest) Union() record.Value[UnionType] {
-	return getOrCreateField(&c.union, func() record.Value[UnionType] {
+	return record.FieldGetOrCreate(&c.union, func() record.Value[UnionType] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, record.Union(UnmarshalUnionType))
 	})
 }
 
 func (c *TemplateTest) WrappedSet() record.Set[*url.URL] {
-	return getOrCreateField(&c.wrappedSet, func() record.Set[*url.URL] {
+	return record.FieldGetOrCreate(&c.wrappedSet, func() record.Set[*url.URL] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("WrappedSet"), c.label+" "+"wrapped set", record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
 
 func (c *TemplateTest) StructSet() record.Set[*StructType] {
-	return getOrCreateField(&c.structSet, func() record.Set[*StructType] {
+	return record.FieldGetOrCreate(&c.structSet, func() record.Set[*StructType] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("StructSet"), c.label+" "+"struct set", record.Struct[StructType](), func(u, v *StructType) int { return u.Compare(v) })
 	})
 }
 
 func (c *TemplateTest) UnionSet() record.Set[UnionType] {
-	return getOrCreateField(&c.unionSet, func() record.Set[UnionType] {
+	return record.FieldGetOrCreate(&c.unionSet, func() record.Set[UnionType] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), c.label+" "+"union set", record.Union(UnmarshalUnionType), func(u, v UnionType) int { return u.Compare(v) })
 	})
 }
 
 func (c *TemplateTest) WrappedList() record.Counted[string] {
-	return getOrCreateField(&c.wrappedList, func() record.Counted[string] {
+	return record.FieldGetOrCreate(&c.wrappedList, func() record.Counted[string] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("WrappedList"), c.label+" "+"wrapped list", record.WrappedFactory(record.StringWrapper))
 	})
 }
 
 func (c *TemplateTest) StructList() record.Counted[*StructType] {
-	return getOrCreateField(&c.structList, func() record.Counted[*StructType] {
+	return record.FieldGetOrCreate(&c.structList, func() record.Counted[*StructType] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("StructList"), c.label+" "+"struct list", record.Struct[StructType])
 	})
 }
 
 func (c *TemplateTest) UnionList() record.Counted[UnionType] {
-	return getOrCreateField(&c.unionList, func() record.Counted[UnionType] {
+	return record.FieldGetOrCreate(&c.unionList, func() record.Counted[UnionType] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), c.label+" "+"union list", record.UnionFactory(UnmarshalUnionType))
 	})
 }
@@ -342,31 +342,31 @@ func (c *TemplateTest) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.wrapped) {
+	if record.FieldIsDirty(c.wrapped) {
 		return true
 	}
-	if fieldIsDirty(c.structPtr) {
+	if record.FieldIsDirty(c.structPtr) {
 		return true
 	}
-	if fieldIsDirty(c.union) {
+	if record.FieldIsDirty(c.union) {
 		return true
 	}
-	if fieldIsDirty(c.wrappedSet) {
+	if record.FieldIsDirty(c.wrappedSet) {
 		return true
 	}
-	if fieldIsDirty(c.structSet) {
+	if record.FieldIsDirty(c.structSet) {
 		return true
 	}
-	if fieldIsDirty(c.unionSet) {
+	if record.FieldIsDirty(c.unionSet) {
 		return true
 	}
-	if fieldIsDirty(c.wrappedList) {
+	if record.FieldIsDirty(c.wrappedList) {
 		return true
 	}
-	if fieldIsDirty(c.structList) {
+	if record.FieldIsDirty(c.structList) {
 		return true
 	}
-	if fieldIsDirty(c.unionList) {
+	if record.FieldIsDirty(c.unionList) {
 		return true
 	}
 
@@ -379,15 +379,15 @@ func (c *TemplateTest) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.wrapped, fn)
-	walkChanges(&err, c.structPtr, fn)
-	walkChanges(&err, c.union, fn)
-	walkChanges(&err, c.wrappedSet, fn)
-	walkChanges(&err, c.structSet, fn)
-	walkChanges(&err, c.unionSet, fn)
-	walkChanges(&err, c.wrappedList, fn)
-	walkChanges(&err, c.structList, fn)
-	walkChanges(&err, c.unionList, fn)
+	record.FieldWalkChanges(&err, c.wrapped, fn)
+	record.FieldWalkChanges(&err, c.structPtr, fn)
+	record.FieldWalkChanges(&err, c.union, fn)
+	record.FieldWalkChanges(&err, c.wrappedSet, fn)
+	record.FieldWalkChanges(&err, c.structSet, fn)
+	record.FieldWalkChanges(&err, c.unionSet, fn)
+	record.FieldWalkChanges(&err, c.wrappedList, fn)
+	record.FieldWalkChanges(&err, c.structList, fn)
+	record.FieldWalkChanges(&err, c.unionList, fn)
 	return err
 }
 
@@ -397,62 +397,15 @@ func (c *TemplateTest) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.wrapped)
-	commitField(&err, c.structPtr)
-	commitField(&err, c.union)
-	commitField(&err, c.wrappedSet)
-	commitField(&err, c.structSet)
-	commitField(&err, c.unionSet)
-	commitField(&err, c.wrappedList)
-	commitField(&err, c.structList)
-	commitField(&err, c.unionList)
+	record.FieldCommit(&err, c.wrapped)
+	record.FieldCommit(&err, c.structPtr)
+	record.FieldCommit(&err, c.union)
+	record.FieldCommit(&err, c.wrappedSet)
+	record.FieldCommit(&err, c.structSet)
+	record.FieldCommit(&err, c.unionSet)
+	record.FieldCommit(&err, c.wrappedList)
+	record.FieldCommit(&err, c.structList)
+	record.FieldCommit(&err, c.unionList)
 
 	return err
-}
-
-func getOrCreateField[T any](ptr *T, create func() T) T {
-	var z T
-	if any(*ptr) != any(z) {
-		return *ptr
-	}
-
-	*ptr = create()
-	return *ptr
-}
-
-func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
-	if *ptr == nil {
-		*ptr = map[K]T{}
-	}
-
-	if v, ok := (*ptr)[key]; ok {
-		return v
-	}
-
-	v := create()
-	(*ptr)[key] = v
-	return v
-}
-
-func commitField[T record.Record](lastErr *error, field T) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
-		return
-	}
-
-	*lastErr = field.Commit()
-}
-
-func fieldIsDirty[T record.Record](field T) bool {
-	var z T
-	return any(field) != any(z) && field.IsDirty()
-}
-
-func walkChanges[T record.Record](lastErr *error, field T, fn record.WalkFunc) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
-		return
-	}
-
-	*lastErr = field.WalkChanges(fn)
 }
