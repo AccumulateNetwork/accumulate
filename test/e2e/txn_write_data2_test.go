@@ -5,12 +5,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestDoubleHashEntries(t *testing.T) {
@@ -34,7 +35,7 @@ func TestDoubleHashEntries(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
 
 	// V1SignatureAnchoring allows AccumulateDataEntries
-	st := sim.Submit(MustBuild(t,
+	st := sim.SubmitTxn(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData(&AccumulateDataEntry{Data: [][]byte{[]byte("foo")}}).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -44,7 +45,7 @@ func TestDoubleHashEntries(t *testing.T) {
 		Txn(st.TxID).Succeeds())
 
 	// V1SignatureAnchoring does not allow DoubleHashDataEntries
-	st = sim.Submit(MustBuild(t,
+	st = sim.SubmitTxn(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData(&DoubleHashDataEntry{Data: [][]byte{[]byte("foo")}}).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -52,7 +53,7 @@ func TestDoubleHashEntries(t *testing.T) {
 	require.EqualError(t, st.AsError(), "doubleHash data entries are not accepted")
 
 	// Update the version
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV1DoubleHashEntries).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
@@ -70,7 +71,7 @@ func TestDoubleHashEntries(t *testing.T) {
 	require.Equal(t, ExecutorVersionV1DoubleHashEntries, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
 
 	// V1DoubleHashEntries does not allow AccumulateDataEntries
-	st = sim.Submit(MustBuild(t,
+	st = sim.SubmitTxn(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData(&AccumulateDataEntry{Data: [][]byte{[]byte("foo")}}).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -78,7 +79,7 @@ func TestDoubleHashEntries(t *testing.T) {
 	require.EqualError(t, st.AsError(), "accumulate data entries are not accepted")
 
 	// V1DoubleHashEntries allows DoubleHashDataEntries
-	st = sim.Submit(MustBuild(t,
+	st = sim.SubmitTxn(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData(&DoubleHashDataEntry{Data: [][]byte{[]byte("foo")}}).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
@@ -135,7 +136,7 @@ func Test64ByteBody(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens")})
 
-	st := sim.Submit(MustBuild(t,
+	st := sim.SubmitTxn(MustBuild(t,
 		build.SignatureForTransaction(txn).
 			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 	require.EqualError(t, st.AsError(), "cannot process transaction: body is 64 bytes long")
@@ -197,7 +198,7 @@ func Test65ByteBody(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), Balance: body.Amount, TokenUrl: AcmeUrl()})
 
-	st := sim.Submit(MustBuild(t,
+	st := sim.SubmitTxn(MustBuild(t,
 		build.SignatureForTransaction(txn).
 			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 	require.NoError(t, st.AsError())
