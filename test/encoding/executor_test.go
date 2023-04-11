@@ -110,7 +110,11 @@ type snapVisitor struct {
 }
 
 func (v *snapVisitor) VisitHeader(h *snapshot.Header) error {
-	v.ok = assert.Equal(v, v.batch.BptRoot(), h.RootHash[:], "%v block %v", v.partition, h.Height)
+	hash, err := v.batch.BPT().GetRootHash()
+	if err != nil {
+		return err
+	}
+	v.ok = assert.Equal(v, hash[:], h.RootHash[:], "%v block %v", v.partition, h.Height)
 	return nil
 }
 
