@@ -195,7 +195,8 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	b.Index = entry.BlockIndex
 	b.Time = *entry.BlockTime
 
-	return b, *(*[32]byte)(batch.BptRoot()), nil
+	h, err := batch.BPT().GetRootHash()
+	return b, h, err
 }
 
 func (x *Executor) Restore(file ioutil2.SectionReader, validators []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
