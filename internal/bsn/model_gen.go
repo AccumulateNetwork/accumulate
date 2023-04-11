@@ -60,13 +60,13 @@ func keyForPartition(id string) partitionKey {
 }
 
 func (c *ChangeSet) LastBlock() record.Value[*LastBlock] {
-	return getOrCreateField(&c.lastBlock, func() record.Value[*LastBlock] {
+	return record.FieldGetOrCreate(&c.lastBlock, func() record.Value[*LastBlock] {
 		return record.NewValue(c.logger.L, c.store, record.Key{}.Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
 	})
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
-	return getOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
+	return record.FieldGetOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
 		v := new(Summary)
 		v.logger = c.logger
 		v.store = c.store
@@ -78,7 +78,7 @@ func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 }
 
 func (c *ChangeSet) Pending(partition string) *Pending {
-	return getOrCreateMap(&c.pending, keyForPending(partition), func() *Pending {
+	return record.FieldGetOrCreateMap(&c.pending, keyForPending(partition), func() *Pending {
 		v := new(Pending)
 		v.logger = c.logger
 		v.store = c.store
@@ -137,7 +137,7 @@ func (c *ChangeSet) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.lastBlock) {
+	if record.FieldIsDirty(c.lastBlock) {
 		return true
 	}
 	for _, v := range c.summary {
@@ -165,15 +165,15 @@ func (c *ChangeSet) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.lastBlock, fn)
+	record.FieldWalkChanges(&err, c.lastBlock, fn)
 	for _, v := range c.summary {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	for _, v := range c.pending {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	for _, v := range c.partition {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	return err
 }
@@ -184,15 +184,15 @@ func (c *ChangeSet) baseCommit() error {
 	}
 
 	var err error
-	commitField(&err, c.lastBlock)
+	record.FieldCommit(&err, c.lastBlock)
 	for _, v := range c.summary {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.pending {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.partition {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 
 	return err
@@ -210,13 +210,13 @@ type Summary struct {
 }
 
 func (c *Summary) Main() record.Value[*messaging.BlockSummary] {
-	return getOrCreateField(&c.main, func() record.Value[*messaging.BlockSummary] {
+	return record.FieldGetOrCreate(&c.main, func() record.Value[*messaging.BlockSummary] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Struct[messaging.BlockSummary]())
 	})
 }
 
 func (c *Summary) Signatures() record.Set[protocol.KeySignature] {
-	return getOrCreateField(&c.signatures, func() record.Set[protocol.KeySignature] {
+	return record.FieldGetOrCreate(&c.signatures, func() record.Set[protocol.KeySignature] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", record.Union(protocol.UnmarshalKeySignature), compareSignatures)
 	})
 }
@@ -241,10 +241,10 @@ func (c *Summary) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.main) {
+	if record.FieldIsDirty(c.main) {
 		return true
 	}
-	if fieldIsDirty(c.signatures) {
+	if record.FieldIsDirty(c.signatures) {
 		return true
 	}
 
@@ -257,8 +257,8 @@ func (c *Summary) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.main, fn)
-	walkChanges(&err, c.signatures, fn)
+	record.FieldWalkChanges(&err, c.main, fn)
+	record.FieldWalkChanges(&err, c.signatures, fn)
 	return err
 }
 
@@ -268,8 +268,8 @@ func (c *Summary) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.main)
-	commitField(&err, c.signatures)
+	record.FieldCommit(&err, c.main)
+	record.FieldCommit(&err, c.signatures)
 
 	return err
 }
@@ -293,7 +293,7 @@ func keyForPendingOnBlock(index uint64) pendingOnBlockKey {
 }
 
 func (c *Pending) OnBlock(index uint64) record.Value[[32]byte] {
-	return getOrCreateMap(&c.onBlock, keyForPendingOnBlock(index), func() record.Value[[32]byte] {
+	return record.FieldGetOrCreateMap(&c.onBlock, keyForPendingOnBlock(index), func() record.Value[[32]byte] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", index), c.label+" "+"on block"+" "+strconv.FormatUint(index, 10), false, record.Wrapped(record.HashWrapper))
 	})
 }
@@ -340,7 +340,7 @@ func (c *Pending) WalkChanges(fn record.WalkFunc) error {
 
 	var err error
 	for _, v := range c.onBlock {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	return err
 }
@@ -352,55 +352,8 @@ func (c *Pending) Commit() error {
 
 	var err error
 	for _, v := range c.onBlock {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 
 	return err
-}
-
-func getOrCreateField[T any](ptr *T, create func() T) T {
-	var z T
-	if any(*ptr) != any(z) {
-		return *ptr
-	}
-
-	*ptr = create()
-	return *ptr
-}
-
-func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
-	if *ptr == nil {
-		*ptr = map[K]T{}
-	}
-
-	if v, ok := (*ptr)[key]; ok {
-		return v
-	}
-
-	v := create()
-	(*ptr)[key] = v
-	return v
-}
-
-func commitField[T record.Record](lastErr *error, field T) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
-		return
-	}
-
-	*lastErr = field.Commit()
-}
-
-func fieldIsDirty[T record.Record](field T) bool {
-	var z T
-	return any(field) != any(z) && field.IsDirty()
-}
-
-func walkChanges[T record.Record](lastErr *error, field T, fn record.WalkFunc) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
-		return
-	}
-
-	*lastErr = field.WalkChanges(fn)
 }

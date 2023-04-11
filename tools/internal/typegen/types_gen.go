@@ -28,19 +28,24 @@ type ChainRecord struct {
 }
 
 type EntityRecord struct {
-	Parent        *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
-	Description   string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
-	OmitAccessor  bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
-	Private       bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
-	Name          string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Fields        []*Field      `json:"fields,omitempty" form:"fields" query:"fields" validate:"required"`
-	CustomCommit  bool          `json:"customCommit,omitempty" form:"customCommit" query:"customCommit" validate:"required"`
-	CustomResolve bool          `json:"customResolve,omitempty" form:"customResolve" query:"customResolve" validate:"required"`
-	CustomIsDirty bool          `json:"customIsDirty,omitempty" form:"customIsDirty" query:"customIsDirty" validate:"required"`
-	Parameters    []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
-	Root          bool          `json:"root,omitempty" form:"root" query:"root" validate:"required"`
-	Interface     bool          `json:"interface,omitempty" form:"interface" query:"interface" validate:"required"`
-	Attributes    []Record      `json:"attributes,omitempty" form:"attributes" query:"attributes" validate:"required"`
+	Parent            *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	Description       string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
+	OmitAccessor      bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
+	Private           bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
+	Name              string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Fields            []*Field      `json:"fields,omitempty" form:"fields" query:"fields" validate:"required"`
+	CustomCommit      bool          `json:"customCommit,omitempty" form:"customCommit" query:"customCommit" validate:"required"`
+	CustomResolve     bool          `json:"customResolve,omitempty" form:"customResolve" query:"customResolve" validate:"required"`
+	CustomIsDirty     bool          `json:"customIsDirty,omitempty" form:"customIsDirty" query:"customIsDirty" validate:"required"`
+	CustomWalkChanges bool          `json:"customWalkChanges,omitempty" form:"customWalkChanges" query:"customWalkChanges" validate:"required"`
+	Parameters        []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
+	OmitCommit        bool          `json:"omitCommit,omitempty" form:"omitCommit" query:"omitCommit" validate:"required"`
+	OmitResolve       bool          `json:"omitResolve,omitempty" form:"omitResolve" query:"omitResolve" validate:"required"`
+	OmitIsDirty       bool          `json:"omitIsDirty,omitempty" form:"omitIsDirty" query:"omitIsDirty" validate:"required"`
+	ValueStore        string        `json:"valueStore,omitempty" form:"valueStore" query:"valueStore" validate:"required"`
+	Root              bool          `json:"root,omitempty" form:"root" query:"root" validate:"required"`
+	Interface         bool          `json:"interface,omitempty" form:"interface" query:"interface" validate:"required"`
+	Attributes        []Record      `json:"attributes,omitempty" form:"attributes" query:"attributes" validate:"required"`
 }
 
 type IndexRecord struct {
@@ -68,6 +73,7 @@ type OtherRecord struct {
 	Parameters   []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
 	Pointer      bool          `json:"pointer,omitempty" form:"pointer" query:"pointer" validate:"required"`
 	HasChains    bool          `json:"hasChains,omitempty" form:"hasChains" query:"hasChains" validate:"required"`
+	Constructor  string        `json:"constructor,omitempty" form:"constructor" query:"constructor" validate:"required"`
 }
 
 type StateRecord struct {
@@ -133,20 +139,25 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 
 func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          RecordType                              `json:"type"`
-		Parent        *EntityRecord                           `json:"parent,omitempty"`
-		Description   string                                  `json:"description,omitempty"`
-		OmitAccessor  bool                                    `json:"omitAccessor,omitempty"`
-		Private       bool                                    `json:"private,omitempty"`
-		Name          string                                  `json:"name,omitempty"`
-		Fields        encoding.JsonList[*Field]               `json:"fields,omitempty"`
-		CustomCommit  bool                                    `json:"customCommit,omitempty"`
-		CustomResolve bool                                    `json:"customResolve,omitempty"`
-		CustomIsDirty bool                                    `json:"customIsDirty,omitempty"`
-		Parameters    encoding.JsonList[*Field]               `json:"parameters,omitempty"`
-		Root          bool                                    `json:"root,omitempty"`
-		Interface     bool                                    `json:"interface,omitempty"`
-		Attributes    *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type              RecordType                              `json:"type"`
+		Parent            *EntityRecord                           `json:"parent,omitempty"`
+		Description       string                                  `json:"description,omitempty"`
+		OmitAccessor      bool                                    `json:"omitAccessor,omitempty"`
+		Private           bool                                    `json:"private,omitempty"`
+		Name              string                                  `json:"name,omitempty"`
+		Fields            encoding.JsonList[*Field]               `json:"fields,omitempty"`
+		CustomCommit      bool                                    `json:"customCommit,omitempty"`
+		CustomResolve     bool                                    `json:"customResolve,omitempty"`
+		CustomIsDirty     bool                                    `json:"customIsDirty,omitempty"`
+		CustomWalkChanges bool                                    `json:"customWalkChanges,omitempty"`
+		Parameters        encoding.JsonList[*Field]               `json:"parameters,omitempty"`
+		OmitCommit        bool                                    `json:"omitCommit,omitempty"`
+		OmitResolve       bool                                    `json:"omitResolve,omitempty"`
+		OmitIsDirty       bool                                    `json:"omitIsDirty,omitempty"`
+		ValueStore        string                                  `json:"valueStore,omitempty"`
+		Root              bool                                    `json:"root,omitempty"`
+		Interface         bool                                    `json:"interface,omitempty"`
+		Attributes        *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
@@ -176,8 +187,23 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	if !(!v.CustomIsDirty) {
 		u.CustomIsDirty = v.CustomIsDirty
 	}
+	if !(!v.CustomWalkChanges) {
+		u.CustomWalkChanges = v.CustomWalkChanges
+	}
 	if !(len(v.Parameters) == 0) {
 		u.Parameters = v.Parameters
+	}
+	if !(!v.OmitCommit) {
+		u.OmitCommit = v.OmitCommit
+	}
+	if !(!v.OmitResolve) {
+		u.OmitResolve = v.OmitResolve
+	}
+	if !(!v.OmitIsDirty) {
+		u.OmitIsDirty = v.OmitIsDirty
+	}
+	if !(len(v.ValueStore) == 0) {
+		u.ValueStore = v.ValueStore
 	}
 	if !(!v.Root) {
 		u.Root = v.Root
@@ -259,6 +285,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 		Parameters   encoding.JsonList[*Field] `json:"parameters,omitempty"`
 		Pointer      bool                      `json:"pointer,omitempty"`
 		HasChains    bool                      `json:"hasChains,omitempty"`
+		Constructor  string                    `json:"constructor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
@@ -287,6 +314,9 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.HasChains) {
 		u.HasChains = v.HasChains
+	}
+	if !(len(v.Constructor) == 0) {
+		u.Constructor = v.Constructor
 	}
 	return json.Marshal(&u)
 }
@@ -384,20 +414,25 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 
 func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          RecordType                              `json:"type"`
-		Parent        *EntityRecord                           `json:"parent,omitempty"`
-		Description   string                                  `json:"description,omitempty"`
-		OmitAccessor  bool                                    `json:"omitAccessor,omitempty"`
-		Private       bool                                    `json:"private,omitempty"`
-		Name          string                                  `json:"name,omitempty"`
-		Fields        encoding.JsonList[*Field]               `json:"fields,omitempty"`
-		CustomCommit  bool                                    `json:"customCommit,omitempty"`
-		CustomResolve bool                                    `json:"customResolve,omitempty"`
-		CustomIsDirty bool                                    `json:"customIsDirty,omitempty"`
-		Parameters    encoding.JsonList[*Field]               `json:"parameters,omitempty"`
-		Root          bool                                    `json:"root,omitempty"`
-		Interface     bool                                    `json:"interface,omitempty"`
-		Attributes    *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type              RecordType                              `json:"type"`
+		Parent            *EntityRecord                           `json:"parent,omitempty"`
+		Description       string                                  `json:"description,omitempty"`
+		OmitAccessor      bool                                    `json:"omitAccessor,omitempty"`
+		Private           bool                                    `json:"private,omitempty"`
+		Name              string                                  `json:"name,omitempty"`
+		Fields            encoding.JsonList[*Field]               `json:"fields,omitempty"`
+		CustomCommit      bool                                    `json:"customCommit,omitempty"`
+		CustomResolve     bool                                    `json:"customResolve,omitempty"`
+		CustomIsDirty     bool                                    `json:"customIsDirty,omitempty"`
+		CustomWalkChanges bool                                    `json:"customWalkChanges,omitempty"`
+		Parameters        encoding.JsonList[*Field]               `json:"parameters,omitempty"`
+		OmitCommit        bool                                    `json:"omitCommit,omitempty"`
+		OmitResolve       bool                                    `json:"omitResolve,omitempty"`
+		OmitIsDirty       bool                                    `json:"omitIsDirty,omitempty"`
+		ValueStore        string                                  `json:"valueStore,omitempty"`
+		Root              bool                                    `json:"root,omitempty"`
+		Interface         bool                                    `json:"interface,omitempty"`
+		Attributes        *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
@@ -409,7 +444,12 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u.CustomCommit = v.CustomCommit
 	u.CustomResolve = v.CustomResolve
 	u.CustomIsDirty = v.CustomIsDirty
+	u.CustomWalkChanges = v.CustomWalkChanges
 	u.Parameters = v.Parameters
+	u.OmitCommit = v.OmitCommit
+	u.OmitResolve = v.OmitResolve
+	u.OmitIsDirty = v.OmitIsDirty
+	u.ValueStore = v.ValueStore
 	u.Root = v.Root
 	u.Interface = v.Interface
 	u.Attributes = &encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
@@ -428,7 +468,12 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	v.CustomCommit = u.CustomCommit
 	v.CustomResolve = u.CustomResolve
 	v.CustomIsDirty = u.CustomIsDirty
+	v.CustomWalkChanges = u.CustomWalkChanges
 	v.Parameters = u.Parameters
+	v.OmitCommit = u.OmitCommit
+	v.OmitResolve = u.OmitResolve
+	v.OmitIsDirty = u.OmitIsDirty
+	v.ValueStore = u.ValueStore
 	v.Root = u.Root
 	v.Interface = u.Interface
 	if u.Attributes != nil {
@@ -502,6 +547,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 		Parameters   encoding.JsonList[*Field] `json:"parameters,omitempty"`
 		Pointer      bool                      `json:"pointer,omitempty"`
 		HasChains    bool                      `json:"hasChains,omitempty"`
+		Constructor  string                    `json:"constructor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
@@ -513,6 +559,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u.Parameters = v.Parameters
 	u.Pointer = v.Pointer
 	u.HasChains = v.HasChains
+	u.Constructor = v.Constructor
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -528,6 +575,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	v.Parameters = u.Parameters
 	v.Pointer = u.Pointer
 	v.HasChains = u.HasChains
+	v.Constructor = u.Constructor
 	return nil
 }
 

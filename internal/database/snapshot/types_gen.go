@@ -1487,8 +1487,6 @@ func (v *Account) MarshalJSON() ([]byte, error) {
 		Url       *url.URL                                      `json:"url,omitempty"`
 		Chains    encoding.JsonList[*Chain]                     `json:"chains,omitempty"`
 	}{}
-	if !(v.Hash == ([32]byte{})) {
-	}
 	if !(protocol.EqualAccount(v.Main, nil)) {
 		u.Main = &encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	}
