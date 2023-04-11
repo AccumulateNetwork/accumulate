@@ -238,10 +238,10 @@ func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if put && version <= v.version {
-		// TODO Is it safe to make this an error?
+	// Warn if a value is modified incorrectly - except for the BPT since it
+	// doesn't follow the rules
+	if put && version <= v.version && !isBptValue(v.key) {
 		v.logger.Error("Conflicting values written from concurrent batches", "key", v.key)
-		// return errors.Format(errors.StatusConflict, "conflicting values written to %v from concurrent batches", v.key)
 	}
 	v.version = version
 
@@ -258,6 +258,14 @@ func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 		v.status = valueClean
 	}
 	return nil
+}
+
+func isBptValue(key Key) bool {
+	if len(key) < 2 {
+		return false
+	}
+	s, ok := key[len(key)-2].(string)
+	return ok && s == "BPT"
 }
 
 // LoadBytes unmarshals the value from bytes.
