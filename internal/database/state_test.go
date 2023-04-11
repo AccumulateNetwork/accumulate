@@ -48,12 +48,14 @@ func TestState(t *testing.T) {
 	defer f.Close()
 
 	bvn := sim.PartitionFor(aliceUrl)
-	var blockHash, bptRoot []byte
+	var blockHash []byte
+	var bptRoot [32]byte
 	_ = bvn.Database.View(func(b *database.Batch) error {
 		blockHash, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
 		require.NoError(t, snapshot.FullCollect(b, f, bvn.Executor.Describe.PartitionUrl(), nil, false))
-		bptRoot = b.BptRoot()
+		bptRoot, err = b.BPT().GetRootHash()
+		require.NoError(t, err)
 		return nil
 	})
 
@@ -75,8 +77,10 @@ func TestState(t *testing.T) {
 		// Does it match?
 		blockHash2, err := b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
+		bptRoot2, err := b.BPT().GetRootHash()
+		require.NoError(t, err)
 		require.Equal(t, blockHash, blockHash2)
-		require.Equal(t, bptRoot, b.BptRoot())
+		require.Equal(t, bptRoot, bptRoot2)
 		return nil
 	}))
 

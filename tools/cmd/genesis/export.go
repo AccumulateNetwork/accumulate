@@ -122,12 +122,15 @@ func export(_ *cobra.Command, args []string) {
 	check(err)
 	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.PartitionUrl()))
 
+	rootHash, err := batch.BPT().GetRootHash()
+	check(err)
+
 	doc := new(types.GenesisDoc)
 	doc.InitialHeight = int64(ledger.Index) + 1
 	doc.GenesisTime = ledger.Timestamp
 	doc.ChainID = netID + "-" + daemon.Config.Accumulate.PartitionId
 	doc.ConsensusParams = oldDoc.ConsensusParams
-	doc.AppHash = batch.BptRoot()
+	doc.AppHash = rootHash[:]
 	doc.AppState, err = json.Marshal(buf.Bytes())
 	check(err)
 
