@@ -71,7 +71,7 @@ func (x BlockAnchor) check(batch *ChangeSet, ctx *MessageContext) (*messaging.Bl
 	}
 
 	// Verify the signer is a validator of this partition
-	signer := core.AnchorSigner(g, summary.Partition)
+	signer := core.ValidatorSigner(g, summary.Partition)
 	_, _, ok = signer.EntryByKeyHash(msg.Signature.GetPublicKeyHash())
 	if !ok {
 		return nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", summary.Partition)

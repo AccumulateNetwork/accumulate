@@ -71,7 +71,7 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *MessageContext, msg *me
 	// Record the anchor signature
 	err := batch.Account(txn.Header.Principal).
 		Transaction(txn.ID().Hash()).
-		AnchorSignatures().
+		ValidatorSignatures().
 		Add(msg.Signature)
 	if err != nil {
 		// A system error occurred
@@ -155,7 +155,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 	// it takes some time for changes to propagate, so we'd need an activation
 	// height or something.
 
-	signer := core.AnchorSigner(&ctx.Executor.globals.Active, partition)
+	signer := core.ValidatorSigner(&ctx.Executor.globals.Active, partition)
 	_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
 	if !ok {
 		return nil, nil, nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
@@ -167,7 +167,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *MessageContext, txn *protocol.Transaction, seq *messaging.SequencedMessage) (bool, error) {
 	sigs, err := batch.Account(txn.Header.Principal).
 		Transaction(txn.ID().Hash()).
-		AnchorSignatures().
+		ValidatorSignatures().
 		Get()
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load anchor signatures: %w", err)

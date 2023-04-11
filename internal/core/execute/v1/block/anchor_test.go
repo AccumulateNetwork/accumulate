@@ -30,7 +30,7 @@ func TestValidatorSignature(t *testing.T) {
 	helpers.View(t, dn, func(batch *database.Batch) {
 		globals := dn.Globals()
 		globals.Network.Version = 1
-		signer := core.AnchorSigner(globals, protocol.Directory)
+		signer := core.ValidatorSigner(globals, protocol.Directory)
 		sigset, err := batch.Transaction(make([]byte, 32)).SignaturesForSigner(signer)
 		require.NoError(t, err)
 		count, err := sigset.Add(0, &protocol.ED25519Signature{PublicKey: bvn0.Executor.Key[32:], Signer: signer.GetUrl(), SignerVersion: signer.GetVersion()})
@@ -41,7 +41,7 @@ func TestValidatorSignature(t *testing.T) {
 		require.Equal(t, count, 2)
 
 		globals.Network.Version++
-		signer = core.AnchorSigner(globals, protocol.Directory)
+		signer = core.ValidatorSigner(globals, protocol.Directory)
 		sigset, err = batch.Transaction(make([]byte, 32)).SignaturesForSigner(signer)
 		require.NoError(t, err)
 		count, err = sigset.Add(0, &protocol.ED25519Signature{PublicKey: bvn1.Executor.Key[32:], Signer: signer.GetUrl(), SignerVersion: signer.GetVersion()})

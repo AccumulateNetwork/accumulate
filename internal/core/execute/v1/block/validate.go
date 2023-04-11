@@ -210,11 +210,11 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 			status.SequenceNumber = signature.SequenceNumber
 		}
 
-		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
+		signer = core.ValidatorSigner(&x.globals.Active, x.Describe.PartitionId)
 		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
-		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
+		signer = core.ValidatorSigner(&x.globals.Active, x.Describe.PartitionId)
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
 
 	case *protocol.RemoteSignature:

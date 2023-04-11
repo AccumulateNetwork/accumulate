@@ -9,6 +9,7 @@ package block
 import (
 	"bytes"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -46,6 +47,9 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	if syn.Message == nil {
 		return nil, errors.BadRequest.With("missing message")
 	}
+	if syn.Signature == nil {
+		return nil, errors.BadRequest.With("missing signature")
+	}
 	if syn.Proof == nil {
 		return nil, errors.BadRequest.With("missing proof")
 	}
@@ -65,8 +69,29 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		return nil, errors.BadRequest.With("a synthetic message must be sequenced")
 	}
 
-	// Verify the proof starts with the transaction hash
+	// Verify the signature
 	h := syn.Message.ID().Hash()
+	if syn.Signature.Verify(nil, h[:]) {
+		return nil, errors.BadRequest.With("invalid signature")
+	}
+
+	// Verify the signer is a validator of this partition
+	partition, ok := protocol.ParsePartitionUrl(seq.Source)
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("signature source is not a partition")
+	}
+
+	// TODO: Consider checking the version. However this can get messy because
+	// it takes some time for changes to propagate, so we'd need an activation
+	// height or something.
+
+	signer := core.ValidatorSigner(&ctx.Executor.globals.Active, partition)
+	_, _, ok = signer.EntryByKeyHash(syn.Signature.GetPublicKeyHash())
+	if !ok {
+		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
+	}
+
+	// Verify the proof starts with the transaction hash
 	if !bytes.Equal(h[:], syn.Proof.Receipt.Start) {
 		return nil, errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)
 	}
@@ -113,6 +138,15 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	syn, err := x.check(batch, ctx)
 	if err == nil {
 		_, err = ctx.callMessageExecutor(batch, syn.Message)
+	}
+
+	// Record the signature
+	err = batch.Account(syn.Signature.GetSigner()).
+		Transaction(syn.Message.Hash()).
+		ValidatorSignatures().
+		Add(syn.Signature)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Record the message and its status

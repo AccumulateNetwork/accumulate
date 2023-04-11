@@ -18,7 +18,7 @@ type globalSigner struct {
 	*protocol.NetworkDefinition
 }
 
-func AnchorSigner(g *GlobalValues, partition string) *globalSigner {
+func ValidatorSigner(g *GlobalValues, partition string) *globalSigner {
 	s := new(globalSigner)
 	s.Partition = partition
 	s.NetworkDefinition = g.Network
