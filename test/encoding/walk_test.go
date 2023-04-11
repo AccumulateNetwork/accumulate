@@ -7,7 +7,6 @@
 package encoding
 
 import (
-	"bytes"
 	"math/big"
 	"strings"
 	"testing"
@@ -87,7 +86,7 @@ func TestWalkAndReplay(t *testing.T) {
 	}
 	type Block struct {
 		Index    uint64
-		Hash     []byte
+		Hash     [32]byte
 		Changes  []*Value
 		Accounts map[[32]byte]*Account
 	}
@@ -114,7 +113,9 @@ func TestWalkAndReplay(t *testing.T) {
 			block.Accounts = map[[32]byte]*Account{}
 			require.Equal(t, e.Index, block.Index)
 			View(t, sim.Database(p.ID), func(batch *database.Batch) {
-				block.Hash = batch.BptRoot()
+				var err error
+				block.Hash, err = batch.BPT().GetRootHash()
+				require.NoError(t, err)
 				require.NoError(t, batch.ForEachAccount(func(account *database.Account, hash [32]byte) error {
 					u := account.Url()
 					block.Accounts[u.AccountID32()] = &Account{u, hash}
@@ -166,7 +167,9 @@ func TestWalkAndReplay(t *testing.T) {
 			})
 
 			View(t, db, func(batch *database.Batch) {
-				if bytes.Equal(block.Hash, batch.BptRoot()) {
+				hash, err := batch.BPT().GetRootHash()
+				require.NoError(t, err)
+				if block.Hash == hash {
 					return
 				}
 				t.Errorf("Root hash does not match for %s block %d", id, block.Index)

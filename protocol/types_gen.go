@@ -17995,8 +17995,6 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 	if !(EqualTransactionBody(v.Body, nil)) {
 		u.Body = &encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionBodyJSON}
 	}
-	if !(len(v.hash) == 0) {
-	}
 	return json.Marshal(&u)
 }
 

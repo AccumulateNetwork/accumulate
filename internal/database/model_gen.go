@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"strconv"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -34,8 +35,8 @@ type Batch struct {
 	parent      *Batch
 	observer    Observer
 	kvstore     storage.KeyValueTxn
-	bptEntries  map[storage.Key][32]byte
 
+	bpt         *bpt.BPT
 	account     map[accountKey]*Account
 	message     map[messageKey]*Message
 	transaction map[transactionKey]*Transaction
@@ -74,8 +75,14 @@ func keyForSystemData(partition string) systemDataKey {
 	return systemDataKey{partition}
 }
 
+func (c *Batch) BPT() *bpt.BPT {
+	return record.FieldGetOrCreate(&c.bpt, func() *bpt.BPT {
+		return newBPT(c, c.logger.L, c.store, record.Key{}.Append("BPT"), "bpt", "bpt")
+	})
+}
+
 func (c *Batch) getAccount(url *url.URL) *Account {
-	return getOrCreateMap(&c.account, keyForAccount(url), func() *Account {
+	return record.FieldGetOrCreateMap(&c.account, keyForAccount(url), func() *Account {
 		v := new(Account)
 		v.logger = c.logger
 		v.store = c.store
@@ -87,7 +94,7 @@ func (c *Batch) getAccount(url *url.URL) *Account {
 }
 
 func (c *Batch) Message(hash [32]byte) *Message {
-	return getOrCreateMap(&c.message, keyForMessage(hash), func() *Message {
+	return record.FieldGetOrCreateMap(&c.message, keyForMessage(hash), func() *Message {
 		v := new(Message)
 		v.logger = c.logger
 		v.store = c.store
@@ -99,7 +106,7 @@ func (c *Batch) Message(hash [32]byte) *Message {
 }
 
 func (c *Batch) getTransaction(hash [32]byte) *Transaction {
-	return getOrCreateMap(&c.transaction, keyForTransaction(hash), func() *Transaction {
+	return record.FieldGetOrCreateMap(&c.transaction, keyForTransaction(hash), func() *Transaction {
 		v := new(Transaction)
 		v.logger = c.logger
 		v.store = c.store
@@ -111,7 +118,7 @@ func (c *Batch) getTransaction(hash [32]byte) *Transaction {
 }
 
 func (c *Batch) SystemData(partition string) *SystemData {
-	return getOrCreateMap(&c.systemData, keyForSystemData(partition), func() *SystemData {
+	return record.FieldGetOrCreateMap(&c.systemData, keyForSystemData(partition), func() *SystemData {
 		v := new(SystemData)
 		v.logger = c.logger
 		v.store = c.store
@@ -128,6 +135,8 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 	}
 
 	switch key[0] {
+	case "BPT":
+		return c.BPT(), key[1:], nil
 	case "Account":
 		if len(key) < 2 {
 			return nil, nil, errors.InternalError.With("bad key for batch")
@@ -178,6 +187,9 @@ func (c *Batch) IsDirty() bool {
 		return false
 	}
 
+	if record.FieldIsDirty(c.bpt) {
+		return true
+	}
 	for _, v := range c.account {
 		if v.IsDirty() {
 			return true
@@ -222,17 +234,18 @@ func (c *Batch) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
+	record.FieldWalkChanges(&err, c.bpt, fn)
 	for _, v := range c.account {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	for _, v := range c.message {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	for _, v := range c.transaction {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	for _, v := range c.systemData {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	return err
 }
@@ -243,17 +256,18 @@ func (c *Batch) baseCommit() error {
 	}
 
 	var err error
+	record.FieldCommit(&err, c.bpt)
 	for _, v := range c.account {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.message {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.transaction {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.systemData {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 
 	return err
@@ -318,37 +332,37 @@ func keyForAccountAnchorChain(partition string) accountAnchorChainKey {
 }
 
 func (c *Account) getUrl() record.Value[*url.URL] {
-	return getOrCreateField(&c.url, func() record.Value[*url.URL] {
+	return record.FieldGetOrCreate(&c.url, func() record.Value[*url.URL] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Url"), c.label+" "+"url", false, record.Wrapped(record.UrlWrapper))
 	})
 }
 
 func (c *Account) Main() record.Value[protocol.Account] {
-	return getOrCreateField(&c.main, func() record.Value[protocol.Account] {
+	return record.FieldGetOrCreate(&c.main, func() record.Value[protocol.Account] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Union(protocol.UnmarshalAccount))
 	})
 }
 
 func (c *Account) Pending() record.Set[*url.TxID] {
-	return getOrCreateField(&c.pending, func() record.Set[*url.TxID] {
+	return record.FieldGetOrCreate(&c.pending, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Pending"), c.label+" "+"pending", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Account) SyntheticForAnchor(anchor [32]byte) record.Set[*url.TxID] {
-	return getOrCreateMap(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), func() record.Set[*url.TxID] {
+	return record.FieldGetOrCreateMap(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", anchor), c.label+" "+"synthetic for anchor"+" "+hex.EncodeToString(anchor[:]), record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Account) Directory() record.Set[*url.URL] {
-	return getOrCreateField(&c.directory, func() record.Set[*url.URL] {
+	return record.FieldGetOrCreate(&c.directory, func() record.Set[*url.URL] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" "+"directory", record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
 
 func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
-	return getOrCreateMap(&c.transaction, keyForAccountTransaction(hash), func() *AccountTransaction {
+	return record.FieldGetOrCreateMap(&c.transaction, keyForAccountTransaction(hash), func() *AccountTransaction {
 		v := new(AccountTransaction)
 		v.logger = c.logger
 		v.store = c.store
@@ -360,49 +374,49 @@ func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
 }
 
 func (c *Account) MainChain() *Chain2 {
-	return getOrCreateField(&c.mainChain, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.mainChain, func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("MainChain"), "main", c.label+" "+"main chain")
 	})
 }
 
 func (c *Account) ScratchChain() *Chain2 {
-	return getOrCreateField(&c.scratchChain, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.scratchChain, func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("ScratchChain"), "scratch", c.label+" "+"scratch chain")
 	})
 }
 
 func (c *Account) SignatureChain() *Chain2 {
-	return getOrCreateField(&c.signatureChain, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.signatureChain, func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("SignatureChain"), "signature", c.label+" "+"signature chain")
 	})
 }
 
 func (c *Account) RootChain() *Chain2 {
-	return getOrCreateField(&c.rootChain, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.rootChain, func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("RootChain"), "root", c.label+" "+"root chain")
 	})
 }
 
 func (c *Account) AnchorSequenceChain() *Chain2 {
-	return getOrCreateField(&c.anchorSequenceChain, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.anchorSequenceChain, func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("AnchorSequenceChain"), "anchor-sequence", c.label+" "+"anchor sequence chain")
 	})
 }
 
 func (c *Account) MajorBlockChain() *Chain2 {
-	return getOrCreateField(&c.majorBlockChain, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.majorBlockChain, func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("MajorBlockChain"), "major-block", c.label+" "+"major block chain")
 	})
 }
 
 func (c *Account) getSyntheticSequenceChain(partition string) *Chain2 {
-	return getOrCreateMap(&c.syntheticSequenceChain, keyForAccountSyntheticSequenceChain(partition), func() *Chain2 {
+	return record.FieldGetOrCreateMap(&c.syntheticSequenceChain, keyForAccountSyntheticSequenceChain(partition), func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", partition), "synthetic-sequence(%[4]v)", c.label+" "+"synthetic sequence chain"+" "+partition)
 	})
 }
 
 func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
-	return getOrCreateMap(&c.anchorChain, keyForAccountAnchorChain(partition), func() *AccountAnchorChain {
+	return record.FieldGetOrCreateMap(&c.anchorChain, keyForAccountAnchorChain(partition), func() *AccountAnchorChain {
 		v := new(AccountAnchorChain)
 		v.logger = c.logger
 		v.store = c.store
@@ -414,19 +428,19 @@ func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
 }
 
 func (c *Account) Chains() record.Set[*protocol.ChainMetadata] {
-	return getOrCreateField(&c.chains, func() record.Set[*protocol.ChainMetadata] {
+	return record.FieldGetOrCreate(&c.chains, func() record.Set[*protocol.ChainMetadata] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" "+"chains", record.Struct[protocol.ChainMetadata](), func(u, v *protocol.ChainMetadata) int { return u.Compare(v) })
 	})
 }
 
 func (c *Account) SyntheticAnchors() record.Set[[32]byte] {
-	return getOrCreateField(&c.syntheticAnchors, func() record.Set[[32]byte] {
+	return record.FieldGetOrCreate(&c.syntheticAnchors, func() record.Set[[32]byte] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), c.label+" "+"synthetic anchors", record.Wrapped(record.HashWrapper), record.CompareHash)
 	})
 }
 
 func (c *Account) Data() *AccountData {
-	return getOrCreateField(&c.data, func() *AccountData {
+	return record.FieldGetOrCreate(&c.data, func() *AccountData {
 		v := new(AccountData)
 		v.logger = c.logger
 		v.store = c.store
@@ -519,13 +533,13 @@ func (c *Account) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.url) {
+	if record.FieldIsDirty(c.url) {
 		return true
 	}
-	if fieldIsDirty(c.main) {
+	if record.FieldIsDirty(c.main) {
 		return true
 	}
-	if fieldIsDirty(c.pending) {
+	if record.FieldIsDirty(c.pending) {
 		return true
 	}
 	for _, v := range c.syntheticForAnchor {
@@ -533,7 +547,7 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
-	if fieldIsDirty(c.directory) {
+	if record.FieldIsDirty(c.directory) {
 		return true
 	}
 	for _, v := range c.transaction {
@@ -541,22 +555,22 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
-	if fieldIsDirty(c.mainChain) {
+	if record.FieldIsDirty(c.mainChain) {
 		return true
 	}
-	if fieldIsDirty(c.scratchChain) {
+	if record.FieldIsDirty(c.scratchChain) {
 		return true
 	}
-	if fieldIsDirty(c.signatureChain) {
+	if record.FieldIsDirty(c.signatureChain) {
 		return true
 	}
-	if fieldIsDirty(c.rootChain) {
+	if record.FieldIsDirty(c.rootChain) {
 		return true
 	}
-	if fieldIsDirty(c.anchorSequenceChain) {
+	if record.FieldIsDirty(c.anchorSequenceChain) {
 		return true
 	}
-	if fieldIsDirty(c.majorBlockChain) {
+	if record.FieldIsDirty(c.majorBlockChain) {
 		return true
 	}
 	for _, v := range c.syntheticSequenceChain {
@@ -569,13 +583,13 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
-	if fieldIsDirty(c.chains) {
+	if record.FieldIsDirty(c.chains) {
 		return true
 	}
-	if fieldIsDirty(c.syntheticAnchors) {
+	if record.FieldIsDirty(c.syntheticAnchors) {
 		return true
 	}
-	if fieldIsDirty(c.data) {
+	if record.FieldIsDirty(c.data) {
 		return true
 	}
 
@@ -611,29 +625,29 @@ func (c *Account) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.url, fn)
-	walkChanges(&err, c.main, fn)
-	walkChanges(&err, c.pending, fn)
+	record.FieldWalkChanges(&err, c.url, fn)
+	record.FieldWalkChanges(&err, c.main, fn)
+	record.FieldWalkChanges(&err, c.pending, fn)
 	for _, v := range c.syntheticForAnchor {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
-	walkChanges(&err, c.directory, fn)
+	record.FieldWalkChanges(&err, c.directory, fn)
 	for _, v := range c.transaction {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
-	walkChanges(&err, c.mainChain, fn)
-	walkChanges(&err, c.scratchChain, fn)
-	walkChanges(&err, c.signatureChain, fn)
-	walkChanges(&err, c.rootChain, fn)
-	walkChanges(&err, c.anchorSequenceChain, fn)
-	walkChanges(&err, c.majorBlockChain, fn)
+	record.FieldWalkChanges(&err, c.mainChain, fn)
+	record.FieldWalkChanges(&err, c.scratchChain, fn)
+	record.FieldWalkChanges(&err, c.signatureChain, fn)
+	record.FieldWalkChanges(&err, c.rootChain, fn)
+	record.FieldWalkChanges(&err, c.anchorSequenceChain, fn)
+	record.FieldWalkChanges(&err, c.majorBlockChain, fn)
 	for _, v := range c.syntheticSequenceChain {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	for _, v := range c.anchorChain {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
-	walkChanges(&err, c.data, fn)
+	record.FieldWalkChanges(&err, c.data, fn)
 	return err
 }
 
@@ -643,31 +657,31 @@ func (c *Account) baseCommit() error {
 	}
 
 	var err error
-	commitField(&err, c.url)
-	commitField(&err, c.main)
-	commitField(&err, c.pending)
+	record.FieldCommit(&err, c.url)
+	record.FieldCommit(&err, c.main)
+	record.FieldCommit(&err, c.pending)
 	for _, v := range c.syntheticForAnchor {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
-	commitField(&err, c.directory)
+	record.FieldCommit(&err, c.directory)
 	for _, v := range c.transaction {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
-	commitField(&err, c.mainChain)
-	commitField(&err, c.scratchChain)
-	commitField(&err, c.signatureChain)
-	commitField(&err, c.rootChain)
-	commitField(&err, c.anchorSequenceChain)
-	commitField(&err, c.majorBlockChain)
+	record.FieldCommit(&err, c.mainChain)
+	record.FieldCommit(&err, c.scratchChain)
+	record.FieldCommit(&err, c.signatureChain)
+	record.FieldCommit(&err, c.rootChain)
+	record.FieldCommit(&err, c.anchorSequenceChain)
+	record.FieldCommit(&err, c.majorBlockChain)
 	for _, v := range c.syntheticSequenceChain {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.anchorChain {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
-	commitField(&err, c.chains)
-	commitField(&err, c.syntheticAnchors)
-	commitField(&err, c.data)
+	record.FieldCommit(&err, c.chains)
+	record.FieldCommit(&err, c.syntheticAnchors)
+	record.FieldCommit(&err, c.data)
 
 	return err
 }
@@ -687,31 +701,31 @@ type AccountTransaction struct {
 }
 
 func (c *AccountTransaction) Payments() record.Set[[32]byte] {
-	return getOrCreateField(&c.payments, func() record.Set[[32]byte] {
+	return record.FieldGetOrCreate(&c.payments, func() record.Set[[32]byte] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Payments"), c.label+" "+"payments", record.Wrapped(record.HashWrapper), record.CompareHash)
 	})
 }
 
 func (c *AccountTransaction) Votes() record.Set[*VoteEntry] {
-	return getOrCreateField(&c.votes, func() record.Set[*VoteEntry] {
+	return record.FieldGetOrCreate(&c.votes, func() record.Set[*VoteEntry] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Votes"), c.label+" "+"votes", record.Struct[VoteEntry](), compareVoteEntries)
 	})
 }
 
 func (c *AccountTransaction) Signatures() record.Set[*SignatureSetEntry] {
-	return getOrCreateField(&c.signatures, func() record.Set[*SignatureSetEntry] {
+	return record.FieldGetOrCreate(&c.signatures, func() record.Set[*SignatureSetEntry] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", record.Struct[SignatureSetEntry](), compareSignatureSetEntries)
 	})
 }
 
 func (c *AccountTransaction) AnchorSignatures() record.Set[protocol.KeySignature] {
-	return getOrCreateField(&c.anchorSignatures, func() record.Set[protocol.KeySignature] {
+	return record.FieldGetOrCreate(&c.anchorSignatures, func() record.Set[protocol.KeySignature] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("AnchorSignatures"), c.label+" "+"anchor signatures", record.Union(protocol.UnmarshalKeySignature), compareAnchorSignatures)
 	})
 }
 
 func (c *AccountTransaction) History() record.Set[uint64] {
-	return getOrCreateField(&c.history, func() record.Set[uint64] {
+	return record.FieldGetOrCreate(&c.history, func() record.Set[uint64] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("History"), c.label+" "+"history", record.Wrapped(record.UintWrapper), record.CompareUint)
 	})
 }
@@ -742,19 +756,19 @@ func (c *AccountTransaction) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.payments) {
+	if record.FieldIsDirty(c.payments) {
 		return true
 	}
-	if fieldIsDirty(c.votes) {
+	if record.FieldIsDirty(c.votes) {
 		return true
 	}
-	if fieldIsDirty(c.signatures) {
+	if record.FieldIsDirty(c.signatures) {
 		return true
 	}
-	if fieldIsDirty(c.anchorSignatures) {
+	if record.FieldIsDirty(c.anchorSignatures) {
 		return true
 	}
-	if fieldIsDirty(c.history) {
+	if record.FieldIsDirty(c.history) {
 		return true
 	}
 
@@ -767,10 +781,10 @@ func (c *AccountTransaction) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.payments, fn)
-	walkChanges(&err, c.votes, fn)
-	walkChanges(&err, c.signatures, fn)
-	walkChanges(&err, c.anchorSignatures, fn)
+	record.FieldWalkChanges(&err, c.payments, fn)
+	record.FieldWalkChanges(&err, c.votes, fn)
+	record.FieldWalkChanges(&err, c.signatures, fn)
+	record.FieldWalkChanges(&err, c.anchorSignatures, fn)
 	return err
 }
 
@@ -780,11 +794,11 @@ func (c *AccountTransaction) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.payments)
-	commitField(&err, c.votes)
-	commitField(&err, c.signatures)
-	commitField(&err, c.anchorSignatures)
-	commitField(&err, c.history)
+	record.FieldCommit(&err, c.payments)
+	record.FieldCommit(&err, c.votes)
+	record.FieldCommit(&err, c.signatures)
+	record.FieldCommit(&err, c.anchorSignatures)
+	record.FieldCommit(&err, c.history)
 
 	return err
 }
@@ -801,13 +815,13 @@ type AccountAnchorChain struct {
 }
 
 func (c *AccountAnchorChain) Root() *Chain2 {
-	return getOrCreateField(&c.root, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.root, func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("Root"), "anchor(%[4]v)-root", c.label+" "+"root")
 	})
 }
 
 func (c *AccountAnchorChain) BPT() *Chain2 {
-	return getOrCreateField(&c.bpt, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.bpt, func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("BPT"), "anchor(%[4]v)-bpt", c.label+" "+"bpt")
 	})
 }
@@ -832,10 +846,10 @@ func (c *AccountAnchorChain) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.root) {
+	if record.FieldIsDirty(c.root) {
 		return true
 	}
-	if fieldIsDirty(c.bpt) {
+	if record.FieldIsDirty(c.bpt) {
 		return true
 	}
 
@@ -861,8 +875,8 @@ func (c *AccountAnchorChain) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.root, fn)
-	walkChanges(&err, c.bpt, fn)
+	record.FieldWalkChanges(&err, c.root, fn)
+	record.FieldWalkChanges(&err, c.bpt, fn)
 	return err
 }
 
@@ -872,8 +886,8 @@ func (c *AccountAnchorChain) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.root)
-	commitField(&err, c.bpt)
+	record.FieldCommit(&err, c.root)
+	record.FieldCommit(&err, c.bpt)
 
 	return err
 }
@@ -898,13 +912,13 @@ func keyForAccountDataTransaction(entryHash [32]byte) accountDataTransactionKey 
 }
 
 func (c *AccountData) Entry() record.Counted[[32]byte] {
-	return getOrCreateField(&c.entry, func() record.Counted[[32]byte] {
+	return record.FieldGetOrCreate(&c.entry, func() record.Counted[[32]byte] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), c.label+" "+"entry", record.WrappedFactory(record.HashWrapper))
 	})
 }
 
 func (c *AccountData) Transaction(entryHash [32]byte) record.Value[[32]byte] {
-	return getOrCreateMap(&c.transaction, keyForAccountDataTransaction(entryHash), func() record.Value[[32]byte] {
+	return record.FieldGetOrCreateMap(&c.transaction, keyForAccountDataTransaction(entryHash), func() record.Value[[32]byte] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), c.label+" "+"transaction"+" "+hex.EncodeToString(entryHash[:]), false, record.Wrapped(record.HashWrapper))
 	})
 }
@@ -937,7 +951,7 @@ func (c *AccountData) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.entry) {
+	if record.FieldIsDirty(c.entry) {
 		return true
 	}
 	for _, v := range c.transaction {
@@ -964,9 +978,9 @@ func (c *AccountData) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.entry)
+	record.FieldCommit(&err, c.entry)
 	for _, v := range c.transaction {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 
 	return err
@@ -986,25 +1000,25 @@ type Message struct {
 }
 
 func (c *Message) getMain() record.Value[messaging.Message] {
-	return getOrCreateField(&c.main, func() record.Value[messaging.Message] {
+	return record.FieldGetOrCreate(&c.main, func() record.Value[messaging.Message] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Union(messaging.UnmarshalMessage))
 	})
 }
 
 func (c *Message) Cause() record.Set[*url.TxID] {
-	return getOrCreateField(&c.cause, func() record.Set[*url.TxID] {
+	return record.FieldGetOrCreate(&c.cause, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Cause"), c.label+" "+"cause", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Message) Produced() record.Set[*url.TxID] {
-	return getOrCreateField(&c.produced, func() record.Set[*url.TxID] {
+	return record.FieldGetOrCreate(&c.produced, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" "+"produced", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Message) Signers() record.Set[*url.URL] {
-	return getOrCreateField(&c.signers, func() record.Set[*url.URL] {
+	return record.FieldGetOrCreate(&c.signers, func() record.Set[*url.URL] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Signers"), c.label+" "+"signers", record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
@@ -1033,16 +1047,16 @@ func (c *Message) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.main) {
+	if record.FieldIsDirty(c.main) {
 		return true
 	}
-	if fieldIsDirty(c.cause) {
+	if record.FieldIsDirty(c.cause) {
 		return true
 	}
-	if fieldIsDirty(c.produced) {
+	if record.FieldIsDirty(c.produced) {
 		return true
 	}
-	if fieldIsDirty(c.signers) {
+	if record.FieldIsDirty(c.signers) {
 		return true
 	}
 
@@ -1055,7 +1069,7 @@ func (c *Message) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.main, fn)
+	record.FieldWalkChanges(&err, c.main, fn)
 	return err
 }
 
@@ -1065,10 +1079,10 @@ func (c *Message) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.main)
-	commitField(&err, c.cause)
-	commitField(&err, c.produced)
-	commitField(&err, c.signers)
+	record.FieldCommit(&err, c.main)
+	record.FieldCommit(&err, c.cause)
+	record.FieldCommit(&err, c.produced)
+	record.FieldCommit(&err, c.signers)
 
 	return err
 }
@@ -1096,31 +1110,31 @@ func keyForTransactionSignatures(signer *url.URL) transactionSignaturesKey {
 }
 
 func (c *Transaction) Main() record.Value[*SigOrTxn] {
-	return getOrCreateField(&c.main, func() record.Value[*SigOrTxn] {
+	return record.FieldGetOrCreate(&c.main, func() record.Value[*SigOrTxn] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Struct[SigOrTxn]())
 	})
 }
 
 func (c *Transaction) Status() record.Value[*protocol.TransactionStatus] {
-	return getOrCreateField(&c.status, func() record.Value[*protocol.TransactionStatus] {
+	return record.FieldGetOrCreate(&c.status, func() record.Value[*protocol.TransactionStatus] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" "+"status", true, record.Struct[protocol.TransactionStatus]())
 	})
 }
 
 func (c *Transaction) Produced() record.Set[*url.TxID] {
-	return getOrCreateField(&c.produced, func() record.Set[*url.TxID] {
+	return record.FieldGetOrCreate(&c.produced, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" "+"produced", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Transaction) getSignatures(signer *url.URL) record.Value[*sigSetData] {
-	return getOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() record.Value[*sigSetData] {
+	return record.FieldGetOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() record.Value[*sigSetData] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" "+"signatures"+" "+signer.RawString(), true, record.Struct[sigSetData]())
 	})
 }
 
 func (c *Transaction) Chains() record.Set[*TransactionChainEntry] {
-	return getOrCreateField(&c.chains, func() record.Set[*TransactionChainEntry] {
+	return record.FieldGetOrCreate(&c.chains, func() record.Set[*TransactionChainEntry] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" "+"chains", record.Struct[TransactionChainEntry](), func(u, v *TransactionChainEntry) int { return u.Compare(v) })
 	})
 }
@@ -1159,13 +1173,13 @@ func (c *Transaction) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.main) {
+	if record.FieldIsDirty(c.main) {
 		return true
 	}
-	if fieldIsDirty(c.status) {
+	if record.FieldIsDirty(c.status) {
 		return true
 	}
-	if fieldIsDirty(c.produced) {
+	if record.FieldIsDirty(c.produced) {
 		return true
 	}
 	for _, v := range c.signatures {
@@ -1173,7 +1187,7 @@ func (c *Transaction) IsDirty() bool {
 			return true
 		}
 	}
-	if fieldIsDirty(c.chains) {
+	if record.FieldIsDirty(c.chains) {
 		return true
 	}
 
@@ -1186,11 +1200,11 @@ func (c *Transaction) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.main, fn)
-	walkChanges(&err, c.status, fn)
-	walkChanges(&err, c.produced, fn)
+	record.FieldWalkChanges(&err, c.main, fn)
+	record.FieldWalkChanges(&err, c.status, fn)
+	record.FieldWalkChanges(&err, c.produced, fn)
 	for _, v := range c.signatures {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	return err
 }
@@ -1201,13 +1215,13 @@ func (c *Transaction) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.main)
-	commitField(&err, c.status)
-	commitField(&err, c.produced)
+	record.FieldCommit(&err, c.main)
+	record.FieldCommit(&err, c.status)
+	record.FieldCommit(&err, c.produced)
 	for _, v := range c.signatures {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
-	commitField(&err, c.chains)
+	record.FieldCommit(&err, c.chains)
 
 	return err
 }
@@ -1231,7 +1245,7 @@ func keyForSystemDataSyntheticIndexIndex(block uint64) systemDataSyntheticIndexI
 }
 
 func (c *SystemData) SyntheticIndexIndex(block uint64) record.Value[uint64] {
-	return getOrCreateMap(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), func() record.Value[uint64] {
+	return record.FieldGetOrCreateMap(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), func() record.Value[uint64] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("SyntheticIndexIndex", block), c.label+" "+"synthetic index index"+" "+strconv.FormatUint(block, 10), false, record.Wrapped(record.UintWrapper))
 	})
 }
@@ -1287,7 +1301,7 @@ func (c *SystemData) Commit() error {
 
 	var err error
 	for _, v := range c.syntheticIndexIndex {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 
 	return err
@@ -1335,25 +1349,25 @@ func keyForMerkleManagerElement(index uint64) merkleManagerElementKey {
 }
 
 func (c *MerkleManager) Head() record.Value[*MerkleState] {
-	return getOrCreateField(&c.head, func() record.Value[*MerkleState] {
+	return record.FieldGetOrCreate(&c.head, func() record.Value[*MerkleState] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" "+"head", true, record.Struct[MerkleState]())
 	})
 }
 
 func (c *MerkleManager) States(index uint64) record.Value[*MerkleState] {
-	return getOrCreateMap(&c.states, keyForMerkleManagerStates(index), func() record.Value[*MerkleState] {
+	return record.FieldGetOrCreateMap(&c.states, keyForMerkleManagerStates(index), func() record.Value[*MerkleState] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" "+"states"+" "+strconv.FormatUint(index, 10), false, record.Struct[MerkleState]())
 	})
 }
 
 func (c *MerkleManager) ElementIndex(hash []byte) record.Value[uint64] {
-	return getOrCreateMap(&c.elementIndex, keyForMerkleManagerElementIndex(hash), func() record.Value[uint64] {
+	return record.FieldGetOrCreateMap(&c.elementIndex, keyForMerkleManagerElementIndex(hash), func() record.Value[uint64] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" "+"element index"+" "+hex.EncodeToString(hash), false, record.Wrapped(record.UintWrapper))
 	})
 }
 
 func (c *MerkleManager) Element(index uint64) record.Value[[]byte] {
-	return getOrCreateMap(&c.element, keyForMerkleManagerElement(index), func() record.Value[[]byte] {
+	return record.FieldGetOrCreateMap(&c.element, keyForMerkleManagerElement(index), func() record.Value[[]byte] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" "+"element"+" "+strconv.FormatUint(index, 10), false, record.Wrapped(record.BytesWrapper))
 	})
 }
@@ -1406,7 +1420,7 @@ func (c *MerkleManager) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.head) {
+	if record.FieldIsDirty(c.head) {
 		return true
 	}
 	for _, v := range c.states {
@@ -1434,9 +1448,9 @@ func (c *MerkleManager) WalkChanges(fn record.WalkFunc) error {
 	}
 
 	var err error
-	walkChanges(&err, c.head, fn)
+	record.FieldWalkChanges(&err, c.head, fn)
 	for _, v := range c.states {
-		walkChanges(&err, v, fn)
+		record.FieldWalkChanges(&err, v, fn)
 	}
 	return err
 }
@@ -1447,63 +1461,16 @@ func (c *MerkleManager) Commit() error {
 	}
 
 	var err error
-	commitField(&err, c.head)
+	record.FieldCommit(&err, c.head)
 	for _, v := range c.states {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.elementIndex {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 	for _, v := range c.element {
-		commitField(&err, v)
+		record.FieldCommit(&err, v)
 	}
 
 	return err
-}
-
-func getOrCreateField[T any](ptr *T, create func() T) T {
-	var z T
-	if any(*ptr) != any(z) {
-		return *ptr
-	}
-
-	*ptr = create()
-	return *ptr
-}
-
-func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
-	if *ptr == nil {
-		*ptr = map[K]T{}
-	}
-
-	if v, ok := (*ptr)[key]; ok {
-		return v
-	}
-
-	v := create()
-	(*ptr)[key] = v
-	return v
-}
-
-func commitField[T record.Record](lastErr *error, field T) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
-		return
-	}
-
-	*lastErr = field.Commit()
-}
-
-func fieldIsDirty[T record.Record](field T) bool {
-	var z T
-	return any(field) != any(z) && field.IsDirty()
-}
-
-func walkChanges[T record.Record](lastErr *error, field T, fn record.WalkFunc) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
-		return
-	}
-
-	*lastErr = field.WalkChanges(fn)
 }
