@@ -44,7 +44,7 @@ func TestEmptyObject(t *testing.T) {
 
 	// Write extra data
 	extra := []byte{4, 5, 6, 7}
-	buf.Write(extra)
+	_, _ = buf.Write(extra)
 
 	// Attempt to read something
 	r.ReadUint(1)
@@ -68,7 +68,7 @@ func TestZeroExtension(t *testing.T) {
 
 	// Write zeros
 	zeros := make([]byte, 4)
-	buf.Write(zeros)
+	_, _ = buf.Write(zeros)
 
 	// Attempt to read something
 	r.ReadUint(1)
