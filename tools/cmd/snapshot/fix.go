@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -83,13 +83,14 @@ func restoreSnapshot(filename, badgerPath, partitionID string) (uint64, []byte) 
 	partition := protocol.PartitionUrl(partitionID)
 	batch := db.Begin(false)
 	defer batch.Discard()
-	rootHash := batch.BptRoot()
+	rootHash, err := batch.BPT().GetRootHash()
+	check(err)
 
 	var ledger *protocol.SystemLedger
 	err = batch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
 	check(err)
 
-	return ledger.Index, rootHash
+	return ledger.Index, rootHash[:]
 }
 
 func copyFile(dst, src string) {
