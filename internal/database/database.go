@@ -79,6 +79,12 @@ func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 	}
 }
 
+// Store returns the underlying key-value store. Store may return an error in
+// the future.
+func (d *Database) Store() (storage.KeyValueStore, error) {
+	return d.store, nil
+}
+
 // SetObserver sets the database observer.
 func (d *Database) SetObserver(observer Observer) {
 	if observer == nil {
