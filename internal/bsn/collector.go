@@ -142,7 +142,11 @@ func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
 	batch := c.db.Begin(false)
 	defer batch.Discard()
 
-	s.StateTreeHash = *(*[32]byte)(batch.BptRoot())
+	var err error
+	s.StateTreeHash, err = batch.BPT().GetRootHash()
+	if err != nil {
+		return errors.UnknownError.WithFormat("get BPT root: %w", err)
+	}
 
 	seen := map[[32]byte]bool{}
 	for _, r := range s.RecordUpdates {
@@ -168,6 +172,6 @@ func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
 
 	s.Sort()
 
-	err := c.events.Publish(DidCollectBlock{Summary: s})
+	err = c.events.Publish(DidCollectBlock{Summary: s})
 	return errors.UnknownError.Wrap(err)
 }

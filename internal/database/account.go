@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -61,7 +62,7 @@ func (a *Account) Commit() error {
 		return nil
 	}
 
-	if fieldIsDirty(a.main) {
+	if record.FieldIsDirty(a.main) {
 		acc, err := a.Main().Get()
 		switch {
 		case err == nil:

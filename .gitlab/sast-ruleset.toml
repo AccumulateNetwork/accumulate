@@ -8,6 +8,14 @@
       type = "semgrep_id"
       value = "gosec.G301-1"
 
+  # This rule is complaining about permissions when creating files. I don't see
+  # how that is at all relevant to Accumulate so I'm disabling it.
+  [[semgrep.ruleset]]
+    disable = true
+    [semgrep.ruleset.identifier]
+      type = "semgrep_id"
+      value = "gosec.G302-1"
+
   # This rule is complaining about path traversal. I don't see how that is at
   # all relevant to Accumulate so I'm disabling it.
   [[semgrep.ruleset]]
