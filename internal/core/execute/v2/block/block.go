@@ -66,10 +66,6 @@ func (s *closedBlock) Discard() {
 	s.Batch.Discard()
 }
 
-func (s *closedBlock) Hash() []byte {
-	return s.Batch.BptRoot()
-}
-
 func (s *closedBlock) WalkChanges(fn record.WalkFunc) error {
 	return s.Batch.WalkChanges(fn)
 }
