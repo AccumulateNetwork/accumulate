@@ -114,7 +114,12 @@ func TestValidateNetwork(t *testing.T) {
 	var bootstrap []multiaddr.Multiaddr
 	var network string
 	if addr, err := multiaddr.NewMultiaddr(*validateNetwork); err == nil { //nolint
-		t.Fatalf("Not supported - we have to figure out how to get the network")
+		network, err = addr.ValueForProtocol(api.P_ACC)
+		require.NoError(t, err, "Address must include the network")
+		c, err := multiaddr.NewComponent(api.N_ACC, network)
+		require.NoError(t, err)
+		addr = addr.Decapsulate(c)
+		require.NotNil(t, addr, "Address must end with the network")
 		bootstrap = append(bootstrap, addr)
 	} else {
 		if st, err := os.Stat(*validateNetwork); err != nil || !st.IsDir() {
