@@ -70,6 +70,9 @@ func TestZeroExtension(t *testing.T) {
 	zeros := make([]byte, 4)
 	_, _ = buf.Write(zeros)
 
+	_, err = buf.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
 	// Attempt to read something
 	r.ReadUint(1)
 	r.ReadUint(2)
