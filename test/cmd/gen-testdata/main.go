@@ -12,7 +12,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/binary"
-	"encoding/json"
+	"flag"
 	"fmt"
 	"math/big"
 	"os"
@@ -29,6 +29,7 @@ import (
 var keySeed = sha256.Sum256([]byte("test data"))
 var key = ed25519.NewKeyFromSeed(keySeed[:])
 var rand = randPkg.New(randPkg.NewSource(binary.BigEndian.Uint64(keySeed[:])))
+var useSimpleHash = flag.Bool("simple", false, "Use simple hashes for signatures")
 
 func fatalf(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
@@ -77,7 +78,6 @@ var txnTests = []*TCG{
 	}},
 	{Name: "SendTokens", Cases: []*TC{
 		txnTest(AccountUrl("adi", "ACME"), &SendTokens{To: []*TokenRecipient{{Url: AccountUrl("other", "ACME"), Amount: *new(big.Int).SetInt64(100)}}}),
-		txnTest(AccountUrl("adi", "ACME"), &SendTokens{To: []*TokenRecipient{{Url: AccountUrl("other", "ACME"), Amount: *new(big.Int).SetInt64(100)}}, Meta: json.RawMessage(`{"foo":"bar"}`)}),
 		txnTest(AccountUrl("adi", "ACME"), &SendTokens{To: []*TokenRecipient{{Url: AccountUrl("alice", "ACME"), Amount: *new(big.Int).SetInt64(100)}, {Url: AccountUrl("bob", "ACME"), Amount: *new(big.Int).SetInt64(100)}}}),
 	}},
 	{Name: "CreateDataAccount", Cases: []*TC{
@@ -184,6 +184,10 @@ func txnTest(originUrl *url.URL, body TransactionBody) *TC {
 	env.Transaction = []*Transaction{txn}
 	txn.Header.Principal = originUrl
 	txn.Body = body
+
+	if *useSimpleHash {
+		signer.InitMode = signing.InitWithSimpleHash
+	}
 
 	sig, err := signer.Initiate(txn)
 	if err != nil {
