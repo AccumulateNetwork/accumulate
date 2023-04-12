@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -24,34 +25,77 @@ import (
 
 // Client is a light client instance.
 type Client struct {
-	logger logging.OptionalLogger
-	v2     *client.Client
-	store  storage.KeyValueStore
+	logger      logging.OptionalLogger
+	v2          *client.Client
+	store       storage.KeyValueStore
+	storePrefix string
 }
 
-// ClientOptions are the options for [NewClient].
-type ClientOptions struct {
-	Server   string
-	Database string
-	Logger   log.Logger
+type ClientOption func(c *Client) error
+
+func BadgerStore(filepath string) ClientOption {
+	return func(c *Client) error {
+		// Open the badger database
+		var err error
+		c.store, err = badger.New(filepath, c.logger)
+		return errors.UnknownError.Wrap(err)
+	}
+}
+
+func MemoryStore() ClientOption {
+	return func(c *Client) error {
+		c.store = memory.New(c.logger)
+		return nil
+	}
+}
+
+func Store(s storage.KeyValueStore, prefix string) ClientOption {
+	return func(c *Client) error {
+		c.store = s
+		c.storePrefix = prefix
+		return nil
+	}
+}
+
+func Logger(logger log.Logger, keyVals ...any) ClientOption {
+	return func(c *Client) error {
+		c.logger.Set(logger, keyVals...)
+		return nil
+	}
+}
+
+func Server(server string) ClientOption {
+	return func(c *Client) error {
+		// Create the API client - use API v2 until v3 is deployed on the mainnet
+		var err error
+		c.v2, err = client.New(server)
+		return errors.UnknownError.Wrap(err)
+	}
+}
+
+func ClientV2(client *client.Client) ClientOption {
+	return func(c *Client) error {
+		c.v2 = client
+		return nil
+	}
 }
 
 // NewClient creates a new light client instance.
-func NewClient(opts ClientOptions) (*Client, error) {
+func NewClient(opts ...ClientOption) (*Client, error) {
 	c := new(Client)
-	c.logger.Set(opts.Logger)
 
-	// Create the API client - use API v2 until v3 is deployed on the mainnet
-	var err error
-	c.v2, err = client.New(opts.Server)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	for _, opt := range opts {
+		err := opt(c)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 	}
 
-	// Open the badger database
-	c.store, err = badger.New(opts.Database, opts.Logger)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	if c.store == nil {
+		return nil, errors.BadRequest.WithFormat("missing store")
+	}
+	if c.v2 == nil {
+		return nil, errors.BadRequest.WithFormat("missing server")
 	}
 
 	return c, nil
@@ -82,8 +126,8 @@ func (c *Client) router(batch *DB) (routing.Router, error) {
 
 // OpenDB opens a [DB].
 func (c *Client) OpenDB(writable bool) *DB {
-	kvb := c.store.Begin(true)
-	batch := database.NewBatch("", kvb, true, nil)
+	kvb := c.store.BeginWithPrefix(writable, c.storePrefix)
+	batch := database.NewBatch("", kvb, writable, nil)
 	batch.SetObserver(testing.NullObserver{}) // Ignore the BPT
 	index := new(indexDB)
 	index.key = record.Key{"Light", "Index"}
