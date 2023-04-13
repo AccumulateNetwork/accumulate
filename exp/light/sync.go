@@ -168,6 +168,114 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 	return errors.UnknownError.Wrap(err)
 }
 
+func (c *Client) PullPendingTransactionsForAccount(ctx context.Context, account *url.URL) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	batch := c.OpenDB(true)
+	defer batch.Discard()
+
+	// Get the resp list. It would be better to update this in the database,
+	// but that's problematic since API v2 only returns the transaction hash,
+	// not the ID.
+	var resp struct {
+		Items []string `json:"items"`
+	}
+	err := c.v2.RequestAPIv2(ctx, "query", &client.GeneralQuery{UrlQuery: client.UrlQuery{Url: account.WithFragment("pending")}}, &resp)
+	if err != nil {
+		return errors.UnknownError.WithFormat("query pending: %w", err)
+	}
+
+	missing := map[[32]byte]bool{}
+	didLoad := batch.Index().Account(account).DidLoadTransaction()
+	for _, s := range resp.Items {
+		b, err := hex.DecodeString(s)
+		if err != nil {
+			return errors.UnknownError.WithFormat("query pending: invalid item: %w", err)
+		}
+		if len(b) != 32 {
+			return errors.UnknownError.WithFormat("query pending: invalid item: not 32 bytes")
+		}
+		hash := *(*[32]byte)(b)
+
+		// Check if it has already been fetched
+		_, err = didLoad.Index(hash)
+		switch {
+		case err == nil:
+			missing[hash] = false
+		case errors.Is(err, errors.NotFound):
+			// Continue
+		default:
+			return errors.UnknownError.WithFormat("load account did-load index: %w", err)
+		}
+
+		// Check if it has been fetched for a different account or chain
+		_, err = batch.Message(hash).Main().Get()
+		switch {
+		case err == nil:
+			missing[hash] = false
+		case errors.Is(err, errors.NotFound):
+			missing[hash] = true
+		default:
+			return errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", b, err)
+		}
+
+		// Record that it has been fetched
+		err = didLoad.Add(hash)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store account did-load index: %w", err)
+		}
+	}
+
+	// Build a slice of transaction IDs. Sorting this is not necessary but makes
+	// the process less random and thus easier to debug.
+	txids := make([]*url.TxID, 0, len(missing))
+	for hash, missing := range missing {
+		if missing {
+			// We don't know the account ID so use unknown
+			txids = append(txids, protocol.UnknownUrl().WithTxID(hash))
+		}
+	}
+	sort.Slice(txids, func(i, j int) bool {
+		a, b := txids[i], txids[j]
+		return a.Compare(b) < 0
+	})
+
+	if len(txids) == 0 {
+		return nil
+	}
+
+	// Pull the transactions
+	c.logger.Info("Pulling transactions", "count", len(txids), "account", account)
+	err = c.pullTransactions(ctx, batch, txids)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Update the pending list. This is gross but there's not much we can do
+	// until API v3 is live.
+	pending := batch.Account(account).Pending()
+	for hash := range missing {
+		var msg *messaging.TransactionMessage
+		err = batch.Message(hash).Main().GetAs(&msg)
+		switch {
+		case err == nil:
+			err = pending.Add(msg.Transaction.ID())
+		case errors.Is(err, errors.NotFound):
+			continue // ☹
+		default:
+			return errors.UnknownError.Wrap(err)
+		}
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// This commits the main batch and the key-value store batch
+	err = batch.Commit()
+	return errors.UnknownError.Wrap(err)
+}
+
 // PullTransactionsForAccount fetches transactions from the account's chains.
 func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.URL, chains ...string) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -255,7 +363,14 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 
 	// Pull the transactions
 	c.logger.Info("Pulling transactions", "count", len(txids), "account", account)
-	return c.PullTransactions(ctx, txids...)
+	err := c.pullTransactions(ctx, batch, txids)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// This commits the main batch and the key-value store batch
+	err = batch.Commit()
+	return errors.UnknownError.Wrap(err)
 }
 
 // PullTransaction fetches a set of transactions.
@@ -266,19 +381,38 @@ func (c *Client) PullTransactions(ctx context.Context, txids ...*url.TxID) error
 	batch := c.OpenDB(true)
 	defer batch.Discard()
 
+	err := c.pullTransactions(ctx, batch, txids)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// This commits the main batch and the key-value store batch
+	err = batch.Commit()
+	return errors.UnknownError.Wrap(err)
+}
+
+func (c *Client) pullTransactions(ctx context.Context, batch *DB, txids []*url.TxID) error {
 	// Create a JSON-RPC request for each
 	var requests jsonrpc2.BatchRequest
 	for _, id := range txids {
+		params := &client.TxnQuery{
+			IgnorePending: false,
+			QueryOptions: client.QueryOptions{
+				IncludeRemote: true,
+			},
+		}
+
+		if protocol.IsUnknown(id.Account()) {
+			h := id.Hash()
+			params.Txid = h[:]
+		} else {
+			params.TxIdUrl = id
+		}
+
 		requests = append(requests, jsonrpc2.Request{
 			ID:     1,
 			Method: "query-tx",
-			Params: &client.TxnQuery{
-				TxIdUrl:       id,
-				IgnorePending: false,
-				QueryOptions: client.QueryOptions{
-					IncludeRemote: true,
-				},
-			},
+			Params: params,
 		})
 	}
 
@@ -311,9 +445,7 @@ func (c *Client) PullTransactions(ctx context.Context, txids ...*url.TxID) error
 		}
 	}
 
-	// This commits the main batch and the key-value store batch
-	err := batch.Commit()
-	return errors.UnknownError.Wrap(err)
+	return nil
 }
 
 // IndexAccountChains collates the index chain entries for an account's chains.
