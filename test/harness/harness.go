@@ -8,6 +8,7 @@ package harness
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -96,6 +97,7 @@ func (h *Harness) StepN(n int) {
 // StepUntil calls the stepper until all conditions are satisfied. StepUntil
 // fails if the conditions are not met within 50 steps.
 func (h *Harness) StepUntil(conditions ...Condition) {
+	h.TB.Helper()
 	h.StepUntilN(50, conditions...)
 }
 
@@ -106,8 +108,10 @@ func (h *Harness) StepUntilN(n int, conditions ...Condition) {
 
 outer:
 	for i := 0; i < n; i++ {
-		// Step (except for the first time)
+		// Step (except for the first time). Call Gosched to give concurrent
+		// tests a chance to run.
 		if i > 0 {
+			runtime.Gosched()
 			h.Step()
 		}
 
