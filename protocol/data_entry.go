@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package protocol
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
@@ -25,8 +26,6 @@ type DataEntry interface {
 const TransactionSizeMax = 20480 // Must be over 10k to accommodate Factom entries
 const SignatureSizeMax = 1024
 
-// Hash
-// returns the entry hash given external id's and data associated with an entry
 func (e *AccumulateDataEntry) Hash() []byte {
 	h := make(hash.Hasher, 0, len(e.Data))
 	for _, data := range e.Data {
@@ -36,6 +35,21 @@ func (e *AccumulateDataEntry) Hash() []byte {
 }
 
 func (e *AccumulateDataEntry) GetData() [][]byte {
+	return e.Data
+}
+
+func (e *DoubleHashDataEntry) Hash() []byte {
+	h := make(hash.Hasher, 0, len(e.Data))
+	for _, data := range e.Data {
+		h.AddBytes(data)
+	}
+
+	// Double hash the Merkle root
+	hh := sha256.Sum256(h.MerkleHash())
+	return hh[:]
+}
+
+func (e *DoubleHashDataEntry) GetData() [][]byte {
 	return e.Data
 }
 
