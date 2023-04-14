@@ -7,6 +7,7 @@
 package protocol
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -25,8 +26,6 @@ type DataEntry interface {
 const TransactionSizeMax = 20480 // Must be over 10k to accommodate Factom entries
 const SignatureSizeMax = 1024
 
-// Hash
-// returns the entry hash given external id's and data associated with an entry
 func (e *AccumulateDataEntry) Hash() []byte {
 	h := make(hash.Hasher, 0, len(e.Data))
 	for _, data := range e.Data {
@@ -39,8 +38,23 @@ func (e *AccumulateDataEntry) GetData() [][]byte {
 	return e.Data
 }
 
-//CheckDataEntrySize is the marshaled size minus the implicit type header,
-//returns error if there is too much or no data
+func (e *DoubleHashDataEntry) Hash() []byte {
+	h := make(hash.Hasher, 0, len(e.Data))
+	for _, data := range e.Data {
+		h.AddBytes(data)
+	}
+
+	// Double hash the Merkle root
+	hh := sha256.Sum256(h.MerkleHash())
+	return hh[:]
+}
+
+func (e *DoubleHashDataEntry) GetData() [][]byte {
+	return e.Data
+}
+
+// CheckDataEntrySize is the marshaled size minus the implicit type header,
+// returns error if there is too much or no data
 func CheckDataEntrySize(e DataEntry) (int, error) {
 	b, err := e.MarshalBinary()
 	if err != nil {
@@ -56,7 +70,7 @@ func CheckDataEntrySize(e DataEntry) (int, error) {
 	return size, nil
 }
 
-//Cost will return the number of credits to be used for the data write
+// Cost will return the number of credits to be used for the data write
 func DataEntryCost(e DataEntry) (uint64, error) {
 	size, err := CheckDataEntrySize(e)
 	if err != nil {

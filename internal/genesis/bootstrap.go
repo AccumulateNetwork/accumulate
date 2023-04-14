@@ -303,7 +303,11 @@ func (b *bootstrap) createVoteScratchChain() error {
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
 	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	if b.GenesisGlobals.ExecutorVersion.DoubleHashEntriesEnabled() {
+		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
+	} else {
+		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	}
 	wd.Scratch = true
 
 	da := new(protocol.DataAccount)

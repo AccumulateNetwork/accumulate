@@ -295,6 +295,12 @@ type DisableAccountAuthOperation struct {
 	extraData []byte
 }
 
+type DoubleHashDataEntry struct {
+	fieldsSet []bool
+	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	extraData []byte
+}
+
 type ED25519Signature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -841,6 +847,7 @@ type Transaction struct {
 	Header    TransactionHeader `json:"header,omitempty" form:"header" query:"header" validate:"required"`
 	Body      TransactionBody   `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	hash      []byte
+	is64bytes bool
 	extraData []byte
 }
 
@@ -1031,6 +1038,8 @@ func (*DisableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeDisable
 }
 
+func (*DoubleHashDataEntry) Type() DataEntryType { return DataEntryTypeDoubleHash }
+
 func (*ED25519Signature) Type() SignatureType { return SignatureTypeED25519 }
 
 func (*ETHSignature) Type() SignatureType { return SignatureTypeETH }
@@ -1140,6 +1149,10 @@ func (v *ADI) Copy() *ADI {
 		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1152,6 +1165,10 @@ func (v *AccountAuth) Copy() *AccountAuth {
 	u.Authorities = make([]AuthorityEntry, len(v.Authorities))
 	for i, v := range v.Authorities {
 		u.Authorities[i] = *(&v).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1166,6 +1183,10 @@ func (v *AccumulateDataEntry) Copy() *AccumulateDataEntry {
 	for i, v := range v.Data {
 		u.Data[i] = encoding.BytesCopy(v)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1178,6 +1199,10 @@ func (v *AcmeFaucet) Copy() *AcmeFaucet {
 	if v.Url != nil {
 		u.Url = v.Url
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1188,6 +1213,10 @@ func (v *AcmeOracle) Copy() *AcmeOracle {
 	u := new(AcmeOracle)
 
 	u.Price = v.Price
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1198,6 +1227,10 @@ func (v *ActivateProtocolVersion) Copy() *ActivateProtocolVersion {
 	u := new(ActivateProtocolVersion)
 
 	u.Version = v.Version
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1209,6 +1242,10 @@ func (v *AddAccountAuthorityOperation) Copy() *AddAccountAuthorityOperation {
 
 	if v.Authority != nil {
 		u.Authority = v.Authority
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1224,6 +1261,10 @@ func (v *AddCredits) Copy() *AddCredits {
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.Oracle = v.Oracle
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1236,6 +1277,10 @@ func (v *AddCreditsResult) Copy() *AddCreditsResult {
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.Credits = v.Credits
 	u.Oracle = v.Oracle
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1246,6 +1291,10 @@ func (v *AddKeyOperation) Copy() *AddKeyOperation {
 	u := new(AddKeyOperation)
 
 	u.Entry = *(&v.Entry).Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1273,6 +1322,10 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 			u.Sequence[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1290,6 +1343,10 @@ func (v *AnchorMetadata) Copy() *AnchorMetadata {
 	u.SourceIndex = v.SourceIndex
 	u.SourceBlock = v.SourceBlock
 	u.Entry = encoding.BytesCopy(v.Entry)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1303,6 +1360,10 @@ func (v *AuthorityEntry) Copy() *AuthorityEntry {
 		u.Url = v.Url
 	}
 	u.Disabled = v.Disabled
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1321,6 +1382,10 @@ func (v *BTCLegacySignature) Copy() *BTCLegacySignature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1339,6 +1404,10 @@ func (v *BTCSignature) Copy() *BTCSignature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1353,6 +1422,10 @@ func (v *BlockEntry) Copy() *BlockEntry {
 	}
 	u.Chain = v.Chain
 	u.Index = v.Index
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1373,6 +1446,10 @@ func (v *BlockLedger) Copy() *BlockLedger {
 			u.Entries[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1384,6 +1461,10 @@ func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 
 	u.PartitionAnchor = *v.PartitionAnchor.Copy()
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1394,6 +1475,10 @@ func (v *BurnTokens) Copy() *BurnTokens {
 	u := new(BurnTokens)
 
 	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1405,6 +1490,10 @@ func (v *ChainMetadata) Copy() *ChainMetadata {
 
 	u.Name = v.Name
 	u.Type = v.Type
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1416,6 +1505,10 @@ func (v *ChainParams) Copy() *ChainParams {
 
 	u.Data = encoding.BytesCopy(v.Data)
 	u.IsUpdate = v.IsUpdate
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1433,6 +1526,10 @@ func (v *CreateDataAccount) Copy() *CreateDataAccount {
 		if v != nil {
 			u.Authorities[i] = v
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1456,6 +1553,10 @@ func (v *CreateIdentity) Copy() *CreateIdentity {
 			u.Authorities[i] = v
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1475,6 +1576,10 @@ func (v *CreateKeyBook) Copy() *CreateKeyBook {
 			u.Authorities[i] = v
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1490,6 +1595,10 @@ func (v *CreateKeyPage) Copy() *CreateKeyPage {
 			u.Keys[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1498,6 +1607,11 @@ func (v *CreateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *CreateLiteTokenAccount) Copy() *CreateLiteTokenAccount {
 	u := new(CreateLiteTokenAccount)
+
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1524,6 +1638,10 @@ func (v *CreateToken) Copy() *CreateToken {
 			u.Authorities[i] = v
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1548,6 +1666,10 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1564,6 +1686,10 @@ func (v *DataAccount) Copy() *DataAccount {
 	if v.Entry != nil {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1578,6 +1704,10 @@ func (v *DelegatedSignature) Copy() *DelegatedSignature {
 	}
 	if v.Delegator != nil {
 		u.Delegator = v.Delegator
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1601,6 +1731,10 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	}
 	u.MakeMajorBlock = v.MakeMajorBlock
 	u.MakeMajorBlockTime = v.MakeMajorBlockTime
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1613,11 +1747,32 @@ func (v *DisableAccountAuthOperation) Copy() *DisableAccountAuthOperation {
 	if v.Authority != nil {
 		u.Authority = v.Authority
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
 
 func (v *DisableAccountAuthOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DoubleHashDataEntry) Copy() *DoubleHashDataEntry {
+	u := new(DoubleHashDataEntry)
+
+	u.Data = make([][]byte, len(v.Data))
+	for i, v := range v.Data {
+		u.Data[i] = encoding.BytesCopy(v)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *DoubleHashDataEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ED25519Signature) Copy() *ED25519Signature {
 	u := new(ED25519Signature)
@@ -1631,6 +1786,10 @@ func (v *ED25519Signature) Copy() *ED25519Signature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1649,6 +1808,10 @@ func (v *ETHSignature) Copy() *ETHSignature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1657,6 +1820,11 @@ func (v *ETHSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *EmptyResult) Copy() *EmptyResult {
 	u := new(EmptyResult)
+
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1668,6 +1836,10 @@ func (v *EnableAccountAuthOperation) Copy() *EnableAccountAuthOperation {
 
 	if v.Authority != nil {
 		u.Authority = v.Authority
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1690,6 +1862,10 @@ func (v *Envelope) Copy() *Envelope {
 		if v != nil {
 			u.Transaction[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1716,6 +1892,10 @@ func (v *FactomDataEntryWrapper) Copy() *FactomDataEntryWrapper {
 	u := new(FactomDataEntryWrapper)
 
 	u.FactomDataEntry = *v.FactomDataEntry.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1728,6 +1908,10 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 	u.CreateIdentitySliding = make([]Fee, len(v.CreateIdentitySliding))
 	for i, v := range v.CreateIdentitySliding {
 		u.CreateIdentitySliding[i] = v
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1746,6 +1930,10 @@ func (v *IndexEntry) Copy() *IndexEntry {
 		*u.BlockTime = *v.BlockTime
 	}
 	u.RootIndexIndex = v.RootIndexIndex
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1757,6 +1945,10 @@ func (v *InternalSignature) Copy() *InternalSignature {
 
 	u.Cause = v.Cause
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1776,6 +1968,10 @@ func (v *IssueTokens) Copy() *IssueTokens {
 			u.To[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1791,6 +1987,10 @@ func (v *KeyBook) Copy() *KeyBook {
 	u.BookType = v.BookType
 	u.AccountAuth = *v.AccountAuth.Copy()
 	u.PageCount = v.PageCount
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1819,6 +2019,10 @@ func (v *KeyPage) Copy() *KeyPage {
 		u.TransactionBlacklist = new(AllowedTransactions)
 		*u.TransactionBlacklist = *v.TransactionBlacklist
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1833,6 +2037,10 @@ func (v *KeySpec) Copy() *KeySpec {
 	if v.Delegate != nil {
 		u.Delegate = v.Delegate
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1845,6 +2053,10 @@ func (v *KeySpecParams) Copy() *KeySpecParams {
 	u.KeyHash = encoding.BytesCopy(v.KeyHash)
 	if v.Delegate != nil {
 		u.Delegate = v.Delegate
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1864,6 +2076,10 @@ func (v *LegacyED25519Signature) Copy() *LegacyED25519Signature {
 	u.SignerVersion = v.SignerVersion
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1875,6 +2091,10 @@ func (v *LiteDataAccount) Copy() *LiteDataAccount {
 
 	if v.Url != nil {
 		u.Url = v.Url
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1890,6 +2110,10 @@ func (v *LiteIdentity) Copy() *LiteIdentity {
 	}
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1907,6 +2131,10 @@ func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
 	u.LockHeight = v.LockHeight
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1917,6 +2145,10 @@ func (v *LockAccount) Copy() *LockAccount {
 	u := new(LockAccount)
 
 	u.Height = v.Height
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1928,6 +2160,10 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 
 	u.Metric = v.Metric
 	u.Duration = v.Duration
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1940,6 +2176,10 @@ func (v *NetworkAccountUpdate) Copy() *NetworkAccountUpdate {
 	u.Name = v.Name
 	if v.Body != nil {
 		u.Body = (v.Body).CopyAsInterface().(TransactionBody)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1964,6 +2204,10 @@ func (v *NetworkDefinition) Copy() *NetworkDefinition {
 			u.Validators[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1983,6 +2227,10 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	if v.Limits != nil {
 		u.Limits = (v.Limits).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1997,6 +2245,10 @@ func (v *NetworkLimits) Copy() *NetworkLimits {
 	u.BookPages = v.BookPages
 	u.PageEntries = v.PageEntries
 	u.IdentityAccounts = v.IdentityAccounts
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2012,6 +2264,10 @@ func (v *Object) Copy() *Object {
 		u.Chains[i] = *(&v).Copy()
 	}
 	u.Pending = *(&v.Pending).Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2029,6 +2285,10 @@ func (v *PartitionAnchor) Copy() *PartitionAnchor {
 	u.RootChainIndex = v.RootChainIndex
 	u.RootChainAnchor = v.RootChainAnchor
 	u.StateTreeAnchor = v.StateTreeAnchor
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2044,6 +2304,10 @@ func (v *PartitionAnchorReceipt) Copy() *PartitionAnchorReceipt {
 	if v.RootChainReceipt != nil {
 		u.RootChainReceipt = (v.RootChainReceipt).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2055,6 +2319,10 @@ func (v *PartitionInfo) Copy() *PartitionInfo {
 
 	u.ID = v.ID
 	u.Type = v.Type
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2072,6 +2340,10 @@ func (v *PartitionSignature) Copy() *PartitionSignature {
 	}
 	u.SequenceNumber = v.SequenceNumber
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2093,6 +2365,10 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 			u.Pending[i] = v
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2111,6 +2387,10 @@ func (v *RCD1Signature) Copy() *RCD1Signature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2122,6 +2402,10 @@ func (v *Rational) Copy() *Rational {
 
 	u.Numerator = v.Numerator
 	u.Denominator = v.Denominator
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2136,6 +2420,10 @@ func (v *ReceiptSignature) Copy() *ReceiptSignature {
 	}
 	u.Proof = *(&v.Proof).Copy()
 	u.TransactionHash = v.TransactionHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2155,6 +2443,10 @@ func (v *RemoteSignature) Copy() *RemoteSignature {
 	for i, v := range v.Cause {
 		u.Cause[i] = v
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2165,6 +2457,10 @@ func (v *RemoteTransaction) Copy() *RemoteTransaction {
 	u := new(RemoteTransaction)
 
 	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2177,6 +2473,10 @@ func (v *RemoveAccountAuthorityOperation) Copy() *RemoveAccountAuthorityOperatio
 	if v.Authority != nil {
 		u.Authority = v.Authority
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2187,6 +2487,10 @@ func (v *RemoveKeyOperation) Copy() *RemoveKeyOperation {
 	u := new(RemoveKeyOperation)
 
 	u.Entry = *(&v.Entry).Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2199,6 +2503,10 @@ func (v *Route) Copy() *Route {
 	u.Length = v.Length
 	u.Value = v.Value
 	u.Partition = v.Partition
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2212,6 +2520,10 @@ func (v *RouteOverride) Copy() *RouteOverride {
 		u.Account = v.Account
 	}
 	u.Partition = v.Partition
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2228,6 +2540,10 @@ func (v *RoutingTable) Copy() *RoutingTable {
 	u.Routes = make([]Route, len(v.Routes))
 	for i, v := range v.Routes {
 		u.Routes[i] = *(&v).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -2246,6 +2562,10 @@ func (v *SendTokens) Copy() *SendTokens {
 			u.To[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2256,6 +2576,10 @@ func (v *SetThresholdKeyPageOperation) Copy() *SetThresholdKeyPageOperation {
 	u := new(SetThresholdKeyPageOperation)
 
 	u.Threshold = v.Threshold
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2276,6 +2600,10 @@ func (v *SignatureSet) Copy() *SignatureSet {
 			u.Signatures[i] = (v).CopyAsInterface().(Signature)
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2288,6 +2616,10 @@ func (v *SyntheticBurnTokens) Copy() *SyntheticBurnTokens {
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.IsRefund = v.IsRefund
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2304,6 +2636,10 @@ func (v *SyntheticCreateIdentity) Copy() *SyntheticCreateIdentity {
 			u.Accounts[i] = (v).CopyAsInterface().(Account)
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2319,6 +2655,10 @@ func (v *SyntheticDepositCredits) Copy() *SyntheticDepositCredits {
 		u.AcmeRefundAmount = encoding.BigintCopy(v.AcmeRefundAmount)
 	}
 	u.IsRefund = v.IsRefund
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2335,6 +2675,10 @@ func (v *SyntheticDepositTokens) Copy() *SyntheticDepositTokens {
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.IsIssuer = v.IsIssuer
 	u.IsRefund = v.IsRefund
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2350,6 +2694,10 @@ func (v *SyntheticForwardTransaction) Copy() *SyntheticForwardTransaction {
 	}
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -2369,6 +2717,10 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 			u.Sequence[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2385,6 +2737,10 @@ func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 		u.Initiator = v.Initiator
 	}
 	u.FeeRefund = v.FeeRefund
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2398,6 +2754,10 @@ func (v *SyntheticWriteData) Copy() *SyntheticWriteData {
 	if v.Entry != nil {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2406,6 +2766,11 @@ func (v *SyntheticWriteData) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SystemGenesis) Copy() *SystemGenesis {
 	u := new(SystemGenesis)
+
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2429,6 +2794,10 @@ func (v *SystemLedger) Copy() *SystemLedger {
 		u.Anchor = (v.Anchor).CopyAsInterface().(AnchorBody)
 	}
 	u.ExecutorVersion = v.ExecutorVersion
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2442,6 +2811,10 @@ func (v *SystemWriteData) Copy() *SystemWriteData {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
 	}
 	u.WriteToState = v.WriteToState
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2459,6 +2832,10 @@ func (v *TokenAccount) Copy() *TokenAccount {
 		u.TokenUrl = v.TokenUrl
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2481,6 +2858,10 @@ func (v *TokenIssuer) Copy() *TokenIssuer {
 	if v.SupplyLimit != nil {
 		u.SupplyLimit = encoding.BigintCopy(v.SupplyLimit)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2496,6 +2877,10 @@ func (v *TokenIssuerProof) Copy() *TokenIssuerProof {
 	if v.Receipt != nil {
 		u.Receipt = (v.Receipt).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2509,6 +2894,10 @@ func (v *TokenRecipient) Copy() *TokenRecipient {
 		u.Url = v.Url
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2521,6 +2910,10 @@ func (v *Transaction) Copy() *Transaction {
 	u.Header = *(&v.Header).Copy()
 	if v.Body != nil {
 		u.Body = (v.Body).CopyAsInterface().(TransactionBody)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -2537,6 +2930,10 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	u.Initiator = v.Initiator
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesCopy(v.Metadata)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2551,6 +2948,10 @@ func (v *TransactionResultSet) Copy() *TransactionResultSet {
 		if v != nil {
 			u.Results[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -2596,6 +2997,10 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	for i, v := range v.AnchorSigners {
 		u.AnchorSigners[i] = encoding.BytesCopy(v)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2611,6 +3016,10 @@ func (v *TxIdSet) Copy() *TxIdSet {
 			u.Entries[i] = v
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2622,6 +3031,10 @@ func (v *UnknownAccount) Copy() *UnknownAccount {
 
 	if v.Url != nil {
 		u.Url = v.Url
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -2636,6 +3049,10 @@ func (v *UnknownSigner) Copy() *UnknownSigner {
 		u.Url = v.Url
 	}
 	u.Version = v.Version
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2650,6 +3067,10 @@ func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 		if v != nil {
 			u.Operations[i] = (v).CopyAsInterface().(AccountAuthOperation)
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -2668,6 +3089,10 @@ func (v *UpdateAllowedKeyPageOperation) Copy() *UpdateAllowedKeyPageOperation {
 	for i, v := range v.Deny {
 		u.Deny[i] = v
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2678,6 +3103,10 @@ func (v *UpdateKey) Copy() *UpdateKey {
 	u := new(UpdateKey)
 
 	u.NewKeyHash = encoding.BytesCopy(v.NewKeyHash)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2689,6 +3118,10 @@ func (v *UpdateKeyOperation) Copy() *UpdateKeyOperation {
 
 	u.OldEntry = *(&v.OldEntry).Copy()
 	u.NewEntry = *(&v.NewEntry).Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2703,6 +3136,10 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 		if v != nil {
 			u.Operation[i] = (v).CopyAsInterface().(KeyPageOperation)
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -2724,6 +3161,10 @@ func (v *ValidatorInfo) Copy() *ValidatorInfo {
 			u.Partitions[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2735,6 +3176,10 @@ func (v *ValidatorPartitionInfo) Copy() *ValidatorPartitionInfo {
 
 	u.ID = v.ID
 	u.Active = v.Active
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2749,6 +3194,10 @@ func (v *WriteData) Copy() *WriteData {
 	}
 	u.Scratch = v.Scratch
 	u.WriteToState = v.WriteToState
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2763,6 +3212,10 @@ func (v *WriteDataResult) Copy() *WriteDataResult {
 		u.AccountUrl = v.AccountUrl
 	}
 	u.AccountID = encoding.BytesCopy(v.AccountID)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -2777,6 +3230,10 @@ func (v *WriteDataTo) Copy() *WriteDataTo {
 	}
 	if v.Entry != nil {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -3388,6 +3845,19 @@ func (v *DisableAccountAuthOperation) Equal(u *DisableAccountAuthOperation) bool
 		return false
 	case !((v.Authority).Equal(u.Authority)):
 		return false
+	}
+
+	return true
+}
+
+func (v *DoubleHashDataEntry) Equal(u *DoubleHashDataEntry) bool {
+	if len(v.Data) != len(u.Data) {
+		return false
+	}
+	for i := range v.Data {
+		if !(bytes.Equal(v.Data[i], u.Data[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -6664,6 +7134,52 @@ func (v *DisableAccountAuthOperation) IsValid() error {
 		errs = append(errs, "field Authority is missing")
 	} else if v.Authority == nil {
 		errs = append(errs, "field Authority is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_DoubleHashDataEntry = []string{
+	1: "Type",
+	2: "Data",
+}
+
+func (v *DoubleHashDataEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Data) == 0) {
+		for _, v := range v.Data {
+			writer.WriteBytes(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_DoubleHashDataEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *DoubleHashDataEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Data is missing")
+	} else if len(v.Data) == 0 {
+		errs = append(errs, "field Data is not set")
 	}
 
 	switch len(errs) {
@@ -12209,6 +12725,40 @@ func (v *DisableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *DoubleHashDataEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DoubleHashDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType DataEntryType
+	if x := new(DataEntryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	for {
+		if x, ok := reader.ReadBytes(2); ok {
+			v.Data = append(v.Data, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_DoubleHashDataEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ED25519Signature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -15280,6 +15830,19 @@ func (v *DisableAccountAuthOperation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DoubleHashDataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type DataEntryType              `json:"type"`
+		Data encoding.JsonList[*string] `json:"data,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Data = make(encoding.JsonList[*string], len(v.Data))
+	for i, x := range v.Data {
+		u.Data[i] = encoding.BytesToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *ED25519Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -16965,6 +17528,33 @@ func (v *DisableAccountAuthOperation) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Authority = u.Authority
+	return nil
+}
+
+func (v *DoubleHashDataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type DataEntryType              `json:"type"`
+		Data encoding.JsonList[*string] `json:"data,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Data = make(encoding.JsonList[*string], len(v.Data))
+	for i, x := range v.Data {
+		u.Data[i] = encoding.BytesToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Data = make([][]byte, len(u.Data))
+	for i, x := range u.Data {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Data: %w", err)
+		} else {
+			v.Data[i] = x
+		}
+	}
 	return nil
 }
 

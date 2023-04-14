@@ -141,3 +141,24 @@ func (tx *SendTokens) AddRecipient(to *url.URL, amount *big.Int) {
 	recipient.Amount = *amount
 	tx.To = append(tx.To, recipient)
 }
+
+// TransactionStatusError wraps a [TransactionStatus] and implements [error].
+type TransactionStatusError struct {
+	*TransactionStatus
+}
+
+// AsError returns nil or the status wrapped as a [TransactionStatusError].
+func (s *TransactionStatus) AsError() error {
+	if s.Error == nil {
+		return nil
+	}
+	return TransactionStatusError{s}
+}
+
+func (e TransactionStatusError) Error() string {
+	return e.TransactionStatus.Error.Error()
+}
+
+func (e TransactionStatusError) Unwrap() error {
+	return e.TransactionStatus.Error
+}

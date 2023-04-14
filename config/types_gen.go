@@ -59,6 +59,10 @@ func (v *Describe) Copy() *Describe {
 	u.PartitionId = v.PartitionId
 	u.LocalAddress = v.LocalAddress
 	u.Network = *(&v.Network).Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -73,6 +77,10 @@ func (v *Network) Copy() *Network {
 	for i, v := range v.Partitions {
 		u.Partitions[i] = *(&v).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -84,6 +92,10 @@ func (v *Node) Copy() *Node {
 
 	u.Address = v.Address
 	u.Type = v.Type
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -99,6 +111,10 @@ func (v *Partition) Copy() *Partition {
 	u.Nodes = make([]Node, len(v.Nodes))
 	for i, v := range v.Nodes {
 		u.Nodes[i] = *(&v).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u

@@ -54,5 +54,5 @@ func TestDatabaseQueryLayer_QueryState(t *testing.T) {
 	require.Equal(t, uint64(protocol.AcmePrecision*protocol.AcmeFaucetAmount), lite.Balance.Uint64())
 
 	// Validate the proof
-	require.True(t, arec.Proof.Proof.Validate())
+	require.True(t, arec.Proof.Proof.Validate(nil))
 }
