@@ -241,6 +241,10 @@ func (v *Addressed) Copy() *Addressed {
 	if v.Address != nil {
 		u.Address = p2p.CopyMultiaddr(v.Address)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -251,6 +255,10 @@ func (v *ConsensusStatusRequest) Copy() *ConsensusStatusRequest {
 	u := new(ConsensusStatusRequest)
 
 	u.ConsensusStatusOptions = *v.ConsensusStatusOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -263,6 +271,10 @@ func (v *ConsensusStatusResponse) Copy() *ConsensusStatusResponse {
 	if v.Value != nil {
 		u.Value = (v.Value).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -274,6 +286,10 @@ func (v *ErrorResponse) Copy() *ErrorResponse {
 
 	if v.Error != nil {
 		u.Error = (v.Error).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -290,6 +306,10 @@ func (v *EventMessage) Copy() *EventMessage {
 			u.Value[i] = api.CopyEvent(v)
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -303,6 +323,10 @@ func (v *FaucetRequest) Copy() *FaucetRequest {
 		u.Account = v.Account
 	}
 	u.FaucetOptions = *v.FaucetOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -315,6 +339,10 @@ func (v *FaucetResponse) Copy() *FaucetResponse {
 	if v.Value != nil {
 		u.Value = (v.Value).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -325,6 +353,10 @@ func (v *FindServiceRequest) Copy() *FindServiceRequest {
 	u := new(FindServiceRequest)
 
 	u.FindServiceOptions = *v.FindServiceOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -340,6 +372,10 @@ func (v *FindServiceResponse) Copy() *FindServiceResponse {
 			u.Value[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -350,6 +386,10 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
 
 	u.MetricsOptions = *v.MetricsOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -362,6 +402,10 @@ func (v *MetricsResponse) Copy() *MetricsResponse {
 	if v.Value != nil {
 		u.Value = (v.Value).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -372,6 +416,10 @@ func (v *NetworkStatusRequest) Copy() *NetworkStatusRequest {
 	u := new(NetworkStatusRequest)
 
 	u.NetworkStatusOptions = *v.NetworkStatusOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -384,6 +432,10 @@ func (v *NetworkStatusResponse) Copy() *NetworkStatusResponse {
 	if v.Value != nil {
 		u.Value = (v.Value).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -394,6 +446,10 @@ func (v *NodeInfoRequest) Copy() *NodeInfoRequest {
 	u := new(NodeInfoRequest)
 
 	u.NodeInfoOptions = *v.NodeInfoOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -405,6 +461,10 @@ func (v *NodeInfoResponse) Copy() *NodeInfoResponse {
 
 	if v.Value != nil {
 		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -422,6 +482,10 @@ func (v *PrivateSequenceRequest) Copy() *PrivateSequenceRequest {
 		u.Destination = v.Destination
 	}
 	u.SequenceNumber = v.SequenceNumber
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -433,6 +497,10 @@ func (v *PrivateSequenceResponse) Copy() *PrivateSequenceResponse {
 
 	if v.Value != nil {
 		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -449,6 +517,10 @@ func (v *QueryRequest) Copy() *QueryRequest {
 	if v.Query != nil {
 		u.Query = api.CopyQuery(v.Query)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -460,6 +532,10 @@ func (v *RecordResponse) Copy() *RecordResponse {
 
 	if v.Value != nil {
 		u.Value = api.CopyRecord(v.Value)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -474,6 +550,10 @@ func (v *SubmitRequest) Copy() *SubmitRequest {
 		u.Envelope = (v.Envelope).Copy()
 	}
 	u.SubmitOptions = *v.SubmitOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -489,6 +569,10 @@ func (v *SubmitResponse) Copy() *SubmitResponse {
 			u.Value[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -499,6 +583,10 @@ func (v *SubscribeRequest) Copy() *SubscribeRequest {
 	u := new(SubscribeRequest)
 
 	u.SubscribeOptions = *v.SubscribeOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -507,6 +595,11 @@ func (v *SubscribeRequest) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SubscribeResponse) Copy() *SubscribeResponse {
 	u := new(SubscribeResponse)
+
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -520,6 +613,10 @@ func (v *ValidateRequest) Copy() *ValidateRequest {
 		u.Envelope = (v.Envelope).Copy()
 	}
 	u.ValidateOptions = *v.ValidateOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -534,6 +631,10 @@ func (v *ValidateResponse) Copy() *ValidateResponse {
 		if v != nil {
 			u.Value[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u

@@ -43,6 +43,10 @@ func (v *serviceRegisteredEvent) Copy() *serviceRegisteredEvent {
 	if v.Address != nil {
 		u.Address = (v.Address).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }

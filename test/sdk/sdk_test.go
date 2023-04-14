@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -22,91 +23,116 @@ import (
 )
 
 func TestSDK(t *testing.T) {
-	ts, err := Load("../testdata/sdk/protocol.1.json")
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		t.Skip("Submodule is not set up")
+	cases := []string{
+		"protocol.1",
+		"protocol.2",
 	}
-	require.NoError(t, err)
+	for _, c := range cases {
+		t.Run(c, func(t *testing.T) {
+			ts, err := Load(filepath.Join("..", "testdata", "sdk", c+".json"))
+			if err != nil && errors.Is(err, fs.ErrNotExist) {
+				t.Skip("Submodule is not set up")
+			}
+			require.NoError(t, err)
 
-	// For the Unmarshal tests, we're JSON marshalling and comparing the result.
-	// It doesn't actually matter if the JSON marshalling is identical, but Go's
-	// JSON marshalling is deterministic and comparing the marshalled JSON is
-	// easier than comparing structs and less potentially error prone than using
-	// Equal.
+			// For the Unmarshal tests, we're JSON marshalling and comparing the result.
+			// It doesn't actually matter if the JSON marshalling is identical, but Go's
+			// JSON marshalling is deterministic and comparing the marshalled JSON is
+			// easier than comparing structs and less potentially error prone than using
+			// Equal.
 
-	t.Run("Transaction", func(t *testing.T) {
-		for _, tcg := range ts.Transactions {
-			t.Run(tcg.Name, func(t *testing.T) {
-				for i, tc := range tcg.Cases {
-					t.Run(fmt.Sprintf("Case %d", i+1), func(t *testing.T) {
-						t.Run("Marshal", func(t *testing.T) {
-							// Unmarshal the envelope from the TC
-							env := new(messaging.Envelope)
-							require.NoError(t, json.Unmarshal(tc.JSON, env))
-							flattenRawJson(t, reflect.ValueOf(env))
+			t.Run("Transaction", func(t *testing.T) {
+				for _, tcg := range ts.Transactions {
+					t.Run(tcg.Name, func(t *testing.T) {
+						for i, tc := range tcg.Cases {
+							t.Run(fmt.Sprintf("Case %d", i+1), func(t *testing.T) {
+								t.Run("Signatures", func(t *testing.T) {
+									env := new(messaging.Envelope)
+									require.NoError(t, json.Unmarshal(tc.JSON, env))
+									if len(env.Transaction) != 1 {
+										t.Skip("Envelope has more or less than 1 transaction")
+									}
 
-							// TEST Binary marshal the envelope
-							bin, err := env.MarshalBinary()
-							require.NoError(t, err)
+									for _, sig := range env.Signatures {
+										sig, ok := sig.(protocol.UserSignature)
+										if !ok {
+											continue
+										}
 
-							// Compare the result to the TC
-							require.Equal(t, tc.Binary, bin)
-						})
+										require.True(t, sig.Verify(nil, env.Transaction[0].GetHash()), "Signature is valid")
+									}
+								})
 
-						t.Run("Unmarshal", func(t *testing.T) {
-							// TEST Binary unmarshal the envelope from the TC
-							env := new(messaging.Envelope)
-							require.NoError(t, env.UnmarshalBinary(tc.Binary))
+								t.Run("Marshal", func(t *testing.T) {
+									// Unmarshal the envelope from the TC
+									env := new(messaging.Envelope)
+									require.NoError(t, json.Unmarshal(tc.JSON, env))
+									flattenRawJson(t, reflect.ValueOf(env))
 
-							// Marshal the envelope
-							json, err := json.Marshal(env)
-							require.NoError(t, err)
+									// TEST Binary marshal the envelope
+									bin, err := env.MarshalBinary()
+									require.NoError(t, err)
 
-							// Compare the result to the TC
-							require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
-						})
+									// Compare the result to the TC
+									require.Equal(t, tc.Binary, bin)
+								})
+
+								t.Run("Unmarshal", func(t *testing.T) {
+									// TEST Binary unmarshal the envelope from the TC
+									env := new(messaging.Envelope)
+									require.NoError(t, env.UnmarshalBinary(tc.Binary))
+
+									// Marshal the envelope
+									json, err := json.Marshal(env)
+									require.NoError(t, err)
+
+									// Compare the result to the TC
+									require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
+								})
+							})
+						}
 					})
 				}
 			})
-		}
-	})
 
-	t.Run("Account", func(t *testing.T) {
-		for _, tcg := range ts.Accounts {
-			t.Run(tcg.Name, func(t *testing.T) {
-				for i, tc := range tcg.Cases {
-					t.Run(fmt.Sprintf("Case %d", i+1), func(t *testing.T) {
-						t.Run("Marshal", func(t *testing.T) {
-							// Unmarshal the account from the TC
-							acnt, err := protocol.UnmarshalAccountJSON(tc.JSON)
-							require.NoError(t, err)
-							flattenRawJson(t, reflect.ValueOf(acnt))
+			t.Run("Account", func(t *testing.T) {
+				for _, tcg := range ts.Accounts {
+					t.Run(tcg.Name, func(t *testing.T) {
+						for i, tc := range tcg.Cases {
+							t.Run(fmt.Sprintf("Case %d", i+1), func(t *testing.T) {
+								t.Run("Marshal", func(t *testing.T) {
+									// Unmarshal the account from the TC
+									acnt, err := protocol.UnmarshalAccountJSON(tc.JSON)
+									require.NoError(t, err)
+									flattenRawJson(t, reflect.ValueOf(acnt))
 
-							// TEST Binary marshal the account
-							bin, err := acnt.MarshalBinary()
-							require.NoError(t, err)
+									// TEST Binary marshal the account
+									bin, err := acnt.MarshalBinary()
+									require.NoError(t, err)
 
-							// Compare the result to the TC
-							require.Equal(t, tc.Binary, bin)
-						})
+									// Compare the result to the TC
+									require.Equal(t, tc.Binary, bin)
+								})
 
-						t.Run("Unmarshal", func(t *testing.T) {
-							// TEST Binary unmarshal the account from the TC
-							acnt, err := protocol.UnmarshalAccount(tc.Binary)
-							require.NoError(t, err)
+								t.Run("Unmarshal", func(t *testing.T) {
+									// TEST Binary unmarshal the account from the TC
+									acnt, err := protocol.UnmarshalAccount(tc.Binary)
+									require.NoError(t, err)
 
-							// Marshal the account
-							json, err := json.Marshal(acnt)
-							require.NoError(t, err)
+									// Marshal the account
+									json, err := json.Marshal(acnt)
+									require.NoError(t, err)
 
-							// Compare the result to the TC
-							require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
-						})
+									// Compare the result to the TC
+									require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
+								})
+							})
+						}
 					})
 				}
 			})
-		}
-	})
+		})
+	}
 }
 
 func tokenize(t *testing.T, in []byte) []json.Token {

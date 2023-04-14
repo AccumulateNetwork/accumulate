@@ -241,7 +241,7 @@ func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 	if put && version <= v.version {
 		// TODO Is it safe to make this an error?
 		v.logger.Error("Conflicting values written from concurrent batches", "key", v.key)
-		// return errors.Format(errors.StatusConflict, "conflicting values written to %v from concurrent batches", v.key)
+		// return errors.Conflict.WithFormat("conflicting values written to %v from concurrent batches", v.key)
 	}
 	v.version = version
 
