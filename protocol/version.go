@@ -11,3 +11,8 @@ const ExecutorVersionLatest = ExecutorVersionV1SignatureAnchoring
 func (v ExecutorVersion) SignatureAnchoringEnabled() bool {
 	return v >= ExecutorVersionV1SignatureAnchoring
 }
+
+// DoubleHashEntriesEnabled checks if the version is at least V1 double-hash entries.
+func (v ExecutorVersion) DoubleHashEntriesEnabled() bool {
+	return v >= ExecutorVersionV1DoubleHashEntries
+}

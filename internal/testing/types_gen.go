@@ -76,6 +76,10 @@ func (v *FakeAccount) Copy() *FakeAccount {
 
 	u.FakeLiteAccount = *v.FakeLiteAccount.Copy()
 	u.AccountAuth = *v.AccountAuth.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -89,6 +93,10 @@ func (v *FakeAuthority) Copy() *FakeAuthority {
 	if v.Signers != nil {
 		u.Signers = v.Signers
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -101,6 +109,10 @@ func (v *FakeLiteAccount) Copy() *FakeLiteAccount {
 	u.TheType = v.TheType
 	if v.Url != nil {
 		u.Url = v.Url
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -119,6 +131,10 @@ func (v *FakeSignature) Copy() *FakeSignature {
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -138,6 +154,10 @@ func (v *FakeSigner) Copy() *FakeSigner {
 			u.Keys[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -148,6 +168,10 @@ func (v *FakeTransactionBody) Copy() *FakeTransactionBody {
 	u := new(FakeTransactionBody)
 
 	u.TheType = v.TheType
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
