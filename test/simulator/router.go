@@ -30,6 +30,16 @@ type Router struct {
 	overrides  map[[32]byte]string
 }
 
+// ResponseSubmit is the response from a call to Submit.
+type ResponseSubmit struct {
+	Code         uint32
+	Data         []byte
+	Log          string
+	Info         string
+	Codespace    string
+	MempoolError string
+}
+
 func newRouter(logger log.Logger, partitions map[string]*Partition) *Router {
 	r := new(Router)
 	r.logger.Set(logger, "module", "router")
@@ -94,7 +104,7 @@ func (r *Router) RequestAPIv2(ctx context.Context, partition, method string, par
 	return c.RequestAPIv2(ctx, method, params, result)
 }
 
-func (r *Router) Submit(ctx context.Context, partition string, envelope *messaging.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (r *Router) Submit(ctx context.Context, partition string, envelope *messaging.Envelope, pretend, async bool) (*ResponseSubmit, error) {
 	if async {
 		go func() {
 			_, err := r.Submit(ctx, partition, envelope, pretend, false)
@@ -109,7 +119,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *messagi
 				r.logger.Error("Error during async submit", "partition", partition, "pretend", pretend, "error", err)
 			}
 		}()
-		return new(routing.ResponseSubmit), nil
+		return new(ResponseSubmit), nil
 	}
 
 	p, ok := r.partitions[partition]
@@ -127,7 +137,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *messagi
 		msgById[msg.ID().Hash()] = msg
 	}
 
-	resp := new(routing.ResponseSubmit)
+	resp := new(ResponseSubmit)
 	results, err := p.Submit(messages, pretend)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
