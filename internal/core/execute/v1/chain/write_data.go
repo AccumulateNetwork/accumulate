@@ -148,9 +148,30 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	return result, nil
 }
 
+func entryIsAccepted(st *StateManager, entry protocol.DataEntry) bool {
+	switch entry.(type) {
+	case *protocol.FactomDataEntryWrapper:
+		// Factom entries are accepted
+		return true
+
+	case *protocol.AccumulateDataEntry:
+		// Accumulate entries are not accepted after v1-doubleHashEntries
+		return !st.Globals.ExecutorVersion.DoubleHashEntriesEnabled()
+
+	case *protocol.DoubleHashDataEntry:
+		// Double hash entries are not accepted before v1-doubleHashEntries
+		return st.Globals.ExecutorVersion.DoubleHashEntriesEnabled()
+	}
+
+	return false
+}
+
 func validateDataEntry(st *StateManager, entry protocol.DataEntry) error {
 	if entry == nil {
 		return errors.BadRequest.WithFormat("entry is missing")
+	}
+	if !entryIsAccepted(st, entry) {
+		return errors.BadRequest.WithFormat("%v data entries are not accepted", entry.Type())
 	}
 
 	limit := int(st.Globals.Globals.Limits.DataEntryParts)

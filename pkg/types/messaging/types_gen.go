@@ -145,6 +145,10 @@ func (v *BlockAnchor) Copy() *BlockAnchor {
 	if v.Anchor != nil {
 		u.Anchor = CopyMessage(v.Anchor)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -170,6 +174,10 @@ func (v *BlockSummary) Copy() *BlockSummary {
 			u.StateTreeUpdates[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -189,6 +197,10 @@ func (v *CreditPayment) Copy() *CreditPayment {
 	}
 	if v.Cause != nil {
 		u.Cause = v.Cause
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -218,6 +230,10 @@ func (v *Envelope) Copy() *Envelope {
 			u.Messages[i] = CopyMessage(v)
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -229,6 +245,10 @@ func (v *RecordUpdate) Copy() *RecordUpdate {
 
 	u.Key = *(&v.Key).Copy()
 	u.Value = encoding.BytesCopy(v.Value)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -248,6 +268,10 @@ func (v *SequencedMessage) Copy() *SequencedMessage {
 		u.Destination = v.Destination
 	}
 	u.Number = v.Number
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -262,6 +286,10 @@ func (v *SignatureMessage) Copy() *SignatureMessage {
 	}
 	if v.TxID != nil {
 		u.TxID = v.TxID
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -281,6 +309,10 @@ func (v *SignatureRequest) Copy() *SignatureRequest {
 	if v.Cause != nil {
 		u.Cause = v.Cause
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -292,6 +324,10 @@ func (v *StateTreeUpdate) Copy() *StateTreeUpdate {
 
 	u.Key = *(&v.Key).Copy()
 	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -307,6 +343,10 @@ func (v *SyntheticMessage) Copy() *SyntheticMessage {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -318,6 +358,10 @@ func (v *TransactionMessage) Copy() *TransactionMessage {
 
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u

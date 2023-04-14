@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -42,10 +42,46 @@ func TestEmptyObject(t *testing.T) {
 	// Write nothing
 	wrOk(t, buf, w)
 
+	// Write extra data
+	extra := []byte{4, 5, 6, 7}
+	_, _ = buf.Write(extra)
+
 	// Attempt to read something
 	r.ReadUint(1)
 	r.ReadUint(2)
 	rdOk(t, r)
+
+	// Verify the the extra data is ignored
+	b, err := r.ReadAll()
+	require.NoError(t, err)
+	require.Empty(t, b)
+	require.Equal(t, extra, buf.Bytes())
+}
+
+func TestZeroExtension(t *testing.T) {
+	buf, r, w := pipe()
+
+	// Write something
+	w.WriteUint(1, 77)
+	_, _, err := w.Reset(nil)
+	require.NoError(t, err)
+
+	// Write zeros
+	zeros := make([]byte, 4)
+	_, _ = buf.Write(zeros)
+	_, err = buf.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
+	// Attempt to read something
+	r.ReadUint(1)
+	r.ReadUint(2)
+	r.ReadUint(3)
+	rdOk(t, r)
+
+	// Verify the zeros will be captured as extra data
+	b, err := r.ReadAll()
+	require.NoError(t, err)
+	require.Equal(t, zeros, b)
 }
 
 func TestTypes(t *testing.T) {
