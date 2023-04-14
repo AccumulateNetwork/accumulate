@@ -90,13 +90,61 @@ func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Tran
 	return nil
 }
 
+func adjust64(prod *ProducedMessage) error {
+	txn, ok := prod.Message.(*messaging.TransactionMessage)
+	if !ok {
+		return nil
+	}
+
+	// Are the body or header exactly 64 bytes?
+	body, err := txn.Transaction.Body.MarshalBinary()
+	if err != nil {
+		return errors.EncodingError.WithFormat("marshal body: %w", err)
+	}
+	header, err := txn.Transaction.Header.MarshalBinary()
+	if err != nil {
+		return errors.EncodingError.WithFormat("marshal header: %w", err)
+	}
+	if len(body) != 64 && len(header) != 64 {
+		return nil
+	}
+
+	// Copy to reset the cached hash if there is one
+	txn = txn.Copy()
+
+	// Pad the body and/or header with a zero
+	if len(body) == 64 {
+		body = append(body, 0)
+		txn.Transaction.Body, err = protocol.UnmarshalTransactionBody(body)
+		if err != nil {
+			return errors.EncodingError.WithFormat("unmarshal body: %w", err)
+		}
+	}
+	if len(header) == 64 {
+		header = append(header, 0)
+		txn.Transaction.Header = protocol.TransactionHeader{}
+		err = txn.Transaction.Header.UnmarshalBinary(header)
+		if err != nil {
+			return errors.EncodingError.WithFormat("unmarshal header: %w", err)
+		}
+	}
+
+	prod.Message = txn
+	return nil
+}
+
 func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, prod *ProducedMessage, block uint64) (*messaging.SequencedMessage, error) {
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
+	err := adjust64(prod)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("pad synthetic message: %w", err)
+	}
+
 	var ledger *protocol.SyntheticLedger
 	record := batch.Account(m.Describe.Synthetic())
-	err := record.GetStateAs(&ledger)
+	err = record.GetStateAs(&ledger)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
