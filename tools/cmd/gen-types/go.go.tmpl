@@ -74,6 +74,13 @@ func (v *{{.Name}}) Copy() *{{.Name}} {
 	{{- end}}
 	{{- end}}
 
+	{{- if .IsBinary}}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+	{{- end}}
+
 	return u
 }
 
