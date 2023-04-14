@@ -89,13 +89,13 @@
         collection: set
         pointer: true
         comparator: compareSignatureSetEntries
-      - name: AnchorSignatures
-        description: records validators' anchor transaction signatures
+      - name: ValidatorSignatures
+        description: records validators' signatures
         type: state
         dataType: protocol.KeySignature
         union: true
         collection: set
-        comparator: compareAnchorSignatures
+        comparator: compareSignatureByKey
       - name: History
         type: index
         description: records the signature chain index of entries for the transaction
