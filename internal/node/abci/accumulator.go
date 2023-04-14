@@ -394,12 +394,12 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	const maxPriority = (1 << 32) - 1
 
-	txns := map[[32]byte]protocol.TransactionType{}
+	txns := map[[32]byte]*protocol.Transaction{}
 	seq := map[[32]byte]uint64{}
 	for _, msg := range messages {
 		switch msg := msg.(type) {
 		case *messaging.TransactionMessage:
-			txns[*(*[32]byte)(msg.Transaction.GetHash())] = msg.Transaction.Body.Type()
+			txns[*(*[32]byte)(msg.Transaction.GetHash())] = msg.Transaction
 		case *messaging.SignatureMessage:
 			sig, ok := msg.Signature.(*protocol.PartitionSignature)
 			if !ok {
@@ -411,15 +411,15 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
-		typ, ok := txns[result.TxID.Hash()]
+		txn, ok := txns[result.TxID.Hash()]
 		if !ok {
 			continue
 		}
 
 		var priority int64
-		if typ.IsSystem() {
+		if txn.Body.Type().IsSystem() {
 			priority = maxPriority
-		} else if typ.IsSynthetic() {
+		} else if txn.Body.Type().IsSynthetic() {
 			// Set the priority based on the sequence number to try to keep them in order
 			seq := seq[result.TxID.Hash()]
 			priority = maxPriority - 1 - int64(seq)
@@ -430,11 +430,22 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if result.Error == nil {
 			continue
 		}
-		if !result.Code.Success() && !typ.IsUser() {
+		if !result.Code.Success() && !txn.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
 		resp.Log += fmt.Sprintf("envelope(%d/%s) %v;", i, result.Code.String(), result.Error)
+	}
+
+	// If a transaction header or body is 64 bytes, the batch fails
+	if resp.Code == abci.CodeTypeOK {
+		for i, txn := range txns {
+			_, is64 := txn.GetHash2()
+			if is64 {
+				resp.Code = 1
+				resp.Log += fmt.Sprintf("envelope(%d) transaction has 64 byte header or body;", i)
+			}
+		}
 	}
 
 	return resp
