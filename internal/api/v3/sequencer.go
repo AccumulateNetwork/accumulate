@@ -242,6 +242,18 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 
 	r.ID = r.Message.ID()
 
+	// Sign the message
+	keySig, err := new(signing.Builder).
+		SetType(protocol.SignatureTypeED25519).
+		SetPrivateKey(s.valKey).
+		SetUrl(s.partition.JoinPath(protocol.Network)).
+		SetVersion(globals.Network.Version).
+		SetTimestamp(1).
+		Sign(hash)
+	if err != nil {
+		return nil, errors.InternalError.Wrap(err)
+	}
+
 	if globals.ExecutorVersion.V2() {
 		// Get the synthetic main chain receipt
 		synthReceipt, entry, err := s.getReceiptForChainEntry(ledger.MainChain(), entry.Source)
@@ -267,9 +279,26 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		}
 
 		r.SourceReceipt = receipt
-	}
 
-	if !globals.ExecutorVersion.V2() {
+		sigMsg := &messaging.SignatureMessage{
+			Signature: keySig,
+			TxID:      r.ID,
+		}
+		r.Signatures = &api.RecordRange[*api.SignatureSetRecord]{
+			Total: 1,
+			Records: []*api.SignatureSetRecord{{
+				Account: &protocol.UnknownAccount{Url: keySig.GetSigner()},
+				Signatures: &api.RecordRange[*api.MessageRecord[messaging.Message]]{
+					Total: 1,
+					Records: []*api.MessageRecord[messaging.Message]{{
+						ID:      sigMsg.ID(),
+						Message: sigMsg,
+					}},
+				},
+			}},
+		}
+
+	} else {
 		var signatures []protocol.Signature
 
 		// Add the partition signature
@@ -288,17 +317,6 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		signatures = append(signatures, receiptSig)
 
 		// Add the key signature
-		signer := &protocol.UnknownSigner{Url: s.partition.JoinPath(protocol.Network)}
-		keySig, err := new(signing.Builder).
-			SetType(protocol.SignatureTypeED25519).
-			SetPrivateKey(s.valKey).
-			SetUrl(signer.Url).
-			SetVersion(globals.Network.Version).
-			SetTimestamp(1).
-			Sign(hash)
-		if err != nil {
-			return nil, errors.InternalError.Wrap(err)
-		}
 		signatures = append(signatures, keySig)
 
 		sigSet := new(api.RecordRange[*api.MessageRecord[messaging.Message]])
@@ -306,7 +324,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		sigSet.Records = make([]*api.MessageRecord[messaging.Message], len(signatures))
 		for i, sig := range signatures {
 			sigSet.Records[i] = &api.MessageRecord[messaging.Message]{
-				ID:      signer.Url.WithTxID(*(*[32]byte)(sig.Hash())),
+				ID:      keySig.GetSigner().WithTxID(*(*[32]byte)(sig.Hash())),
 				Message: &messaging.SignatureMessage{Signature: sig},
 			}
 		}

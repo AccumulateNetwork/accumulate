@@ -97,7 +97,7 @@ func (CreateTokenAccount) check(st *StateManager, tx *Delivery) (*protocol.Creat
 	if proof.Receipt == nil {
 		return nil, errors.BadRequest.WithFormat("invalid proof: missing receipt")
 	}
-	if !proof.Receipt.Validate() {
+	if !proof.Receipt.Validate(nil) {
 		return nil, errors.BadRequest.WithFormat("proof is invalid")
 	}
 

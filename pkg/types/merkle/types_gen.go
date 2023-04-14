@@ -67,6 +67,10 @@ func (v *Receipt) Copy() *Receipt {
 			u.Entries[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -78,6 +82,10 @@ func (v *ReceiptEntry) Copy() *ReceiptEntry {
 
 	u.Right = v.Right
 	u.Hash = encoding.BytesCopy(v.Hash)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }

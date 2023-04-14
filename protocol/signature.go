@@ -865,7 +865,7 @@ func (s *ReceiptSignature) GetVote() VoteType {
 
 // Verify returns true if this receipt is a valid receipt of the hash.
 func (s *ReceiptSignature) Verify(hash []byte) bool {
-	return bytes.Equal(s.Proof.Start, hash) && s.Proof.Validate()
+	return bytes.Equal(s.Proof.Start, hash) && s.Proof.Validate(nil)
 }
 
 /*
