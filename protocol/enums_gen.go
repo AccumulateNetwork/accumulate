@@ -98,6 +98,9 @@ const DataEntryTypeFactom DataEntryType = 1
 // DataEntryTypeAccumulate .
 const DataEntryTypeAccumulate DataEntryType = 2
 
+// DataEntryTypeDoubleHash .
+const DataEntryTypeDoubleHash DataEntryType = 3
+
 // ErrorCodeOK indicates the request succeeded.
 const ErrorCodeOK ErrorCode = 0
 
@@ -119,8 +122,8 @@ const ExecutorVersionV1 ExecutorVersion = 1
 // ExecutorVersionV1SignatureAnchoring introduces anchoring of signature chains into the root chain.
 const ExecutorVersionV1SignatureAnchoring ExecutorVersion = 2
 
-// ExecutorVersionV1ActivationFix fixes a problem that prevented v1-signatureAnchoring from being activated correctly.
-const ExecutorVersionV1ActivationFix ExecutorVersion = 3
+// ExecutorVersionV1DoubleHashEntries fixes a problem that prevented v1-signatureAnchoring from being activated correctly and enables double-hashed data entries.
+const ExecutorVersionV1DoubleHashEntries ExecutorVersion = 3
 
 // ExecutorVersionV1Halt halts transaction processing in preparation for v2.
 const ExecutorVersionV1Halt ExecutorVersion = 4
@@ -631,7 +634,7 @@ func (v DataEntryType) GetEnumValue() uint64 { return uint64(v) }
 func (v *DataEntryType) SetEnumValue(id uint64) bool {
 	u := DataEntryType(id)
 	switch u {
-	case DataEntryTypeUnknown, DataEntryTypeFactom, DataEntryTypeAccumulate:
+	case DataEntryTypeUnknown, DataEntryTypeFactom, DataEntryTypeAccumulate, DataEntryTypeDoubleHash:
 		*v = u
 		return true
 	}
@@ -647,6 +650,8 @@ func (v DataEntryType) String() string {
 		return "factom"
 	case DataEntryTypeAccumulate:
 		return "accumulate"
+	case DataEntryTypeDoubleHash:
+		return "doubleHash"
 	}
 	return fmt.Sprintf("DataEntryType:%d", v)
 }
@@ -660,6 +665,8 @@ func DataEntryTypeByName(name string) (DataEntryType, bool) {
 		return DataEntryTypeFactom, true
 	case "accumulate":
 		return DataEntryTypeAccumulate, true
+	case "doublehash":
+		return DataEntryTypeDoubleHash, true
 	}
 	return 0, false
 }
@@ -761,7 +768,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1ActivationFix, ExecutorVersionV1Halt, ExecutorVersionV2:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2:
 		*v = u
 		return true
 	}
@@ -775,8 +782,8 @@ func (v ExecutorVersion) String() string {
 		return "v1"
 	case ExecutorVersionV1SignatureAnchoring:
 		return "v1-signatureAnchoring"
-	case ExecutorVersionV1ActivationFix:
-		return "v1-activationFix"
+	case ExecutorVersionV1DoubleHashEntries:
+		return "v1-doubleHashEntries"
 	case ExecutorVersionV1Halt:
 		return "v1-halt"
 	case ExecutorVersionV2:
@@ -794,10 +801,10 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV1SignatureAnchoring, true
 	case "v1-signatureanchoring":
 		return ExecutorVersionV1SignatureAnchoring, true
-	case "v1activationfix":
-		return ExecutorVersionV1ActivationFix, true
-	case "v1-activationfix":
-		return ExecutorVersionV1ActivationFix, true
+	case "v1doublehashentries":
+		return ExecutorVersionV1DoubleHashEntries, true
+	case "v1-doublehashentries":
+		return ExecutorVersionV1DoubleHashEntries, true
 	case "v1halt":
 		return ExecutorVersionV1Halt, true
 	case "v1-halt":

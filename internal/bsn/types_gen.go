@@ -32,6 +32,10 @@ func (v *LastBlock) Copy() *LastBlock {
 
 	u.Index = v.Index
 	u.Time = v.Time
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
