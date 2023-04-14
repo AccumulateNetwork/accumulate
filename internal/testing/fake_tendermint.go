@@ -269,7 +269,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			ev.Validator.Address = c.address
 			ev.Type = abci.MisbehaviorType_LIGHT_CLIENT_ATTACK
 			ev.Height = height
-			ev.Time.Add(interval * time.Duration(ev.Height))
+			ev.Time.Add(interval * time.Duration(ev.Height)) //nolint:staticcheck
 			ev.TotalVotingPower = 1
 			begin.ByzantineValidators = append(begin.ByzantineValidators, ev)
 		}

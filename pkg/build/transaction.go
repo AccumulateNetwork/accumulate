@@ -180,9 +180,9 @@ type WriteDataBuilder struct {
 	body protocol.WriteData
 }
 
-func (b TransactionBuilder) WriteData(data ...[]byte) WriteDataBuilder {
+func (b TransactionBuilder) WriteData(data ...any) WriteDataBuilder {
 	c := WriteDataBuilder{t: b}
-	c.body.Entry = &protocol.AccumulateDataEntry{Data: data}
+	c.body.Entry = c.t.parseDataEntry(data...)
 	return c
 }
 
