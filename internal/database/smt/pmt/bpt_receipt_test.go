@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -68,7 +68,7 @@ func TestBPT_receipt(t *testing.T) {
 	for i := range keys.List { // go through the list of keys
 		r := bpt.GetReceipt(keys.GetAElement(i))
 		require.NotNil(t, r, "Should not be nil")
-		v := r.Validate()
+		v := r.Validate(nil)
 		require.Truef(t, v, "should validate BPT with %d element %d", i+1, i+1)
 	}
 
