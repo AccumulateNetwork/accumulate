@@ -502,7 +502,7 @@ func (d *Daemon) startAPI() error {
 	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
 		return client.New(server)
 	})
-	d.router = routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
+	d.router = routing.NewRouter(d.eventBus, d.Logger)
 
 	// Setup the p2p node
 	var err error

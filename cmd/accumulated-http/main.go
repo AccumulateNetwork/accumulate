@@ -122,7 +122,7 @@ func run(_ *cobra.Command, args []string) {
 	}
 	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	Check(err)
-	router, err := routing.NewStaticRouter(ns.Routing, nil, logger)
+	router, err := routing.NewStaticRouter(ns.Routing, logger)
 	Check(err)
 
 	api, err := nodehttp.NewHandler(nodehttp.Options{
