@@ -117,8 +117,8 @@ func (a *observedAccount) hashPending() (hash.Hasher, error) {
 func (a *observedAccount) hashPendingV2(err *error, hasher *hash.Hasher, txid *url.TxID) {
 	txn := a.Transaction(txid.Hash())
 
-	// Anchor signatures
-	for _, sig := range loadState(err, true, txn.AnchorSignatures().Get) {
+	// Validator signatures
+	for _, sig := range loadState(err, true, txn.ValidatorSignatures().Get) {
 		hasher.AddHash((*[32]byte)(sig.Hash()))
 	}
 
