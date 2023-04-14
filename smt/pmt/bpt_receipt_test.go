@@ -68,7 +68,7 @@ func TestBPT_receipt(t *testing.T) {
 	for i := range keys.List { // go through the list of keys
 		r := bpt.GetReceipt(keys.GetAElement(i))
 		require.NotNil(t, r, "Should not be nil")
-		v := r.Validate()
+		v := r.Validate(nil)
 		require.Truef(t, v, "should validate BPT with %d element %d", i+1, i+1)
 	}
 

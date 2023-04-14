@@ -73,7 +73,7 @@ func TestReceipt(t *testing.T) {
 		t.Fatal("Failed to generate receipt")
 	}
 	fmt.Println(r.String())
-	if !r.Validate() {
+	if !r.Validate(nil) {
 		t.Fatal("Receipt fails")
 	}
 }
@@ -115,7 +115,7 @@ func TestReceiptAll(t *testing.T) {
 				if r == nil {
 					t.Fatal("Failed to generate receipt", i, j)
 				}
-				if !r.Validate() {
+				if !r.Validate(nil) {
 					t.Errorf("Receipt fails for element/anchor [%d %d]\n", i, int64(j))
 				}
 				//require.Truef(t, bytes.Equal(r.MDRoot, mdRoots[j]),
@@ -165,7 +165,7 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 					t.Error("Failed to generate receipt", i, j)
 					return
 				}
-				if !r.Validate() {
+				if !r.Validate(nil) {
 					t.Error("Receipt fails for element ", i, " anchor ", j)
 					return
 				}
@@ -253,17 +253,17 @@ func TestReceipt_Combine(t *testing.T) {
 			element, _ := m1.Get(i)
 			anchor, _ := m1.Get(j)
 			r1, _ := GetReceipt(m1, element, anchor)
-			require.Truef(t, r1.Validate(), "receipt failed %d %d", i, j)
+			require.Truef(t, r1.Validate(nil), "receipt failed %d %d", i, j)
 			require.NotNilf(t, r1, "test case i %d j %d failed to create r1", i, j)
 			for k := j; k < testCnt; k++ {
 				element, _ = m2.Get(j)
 				anchor, _ = m2.Get(k)
 				r2, _ := GetReceipt(m2, element, anchor)
-				require.Truef(t, r2.Validate(), "receipt failed %d %d", i, j, k)
+				require.Truef(t, r2.Validate(nil), "receipt failed %d %d", i, j, k)
 				require.NotNilf(t, r2, "test case i %d j %d k %d failed to create r2", i, j, k)
 				r3, err := r1.Combine(r2)
 				require.NoErrorf(t, err, "no error expected combining receipts %d %d %d", i, j, k)
-				require.Truef(t, r3.Validate(), "combined receipt failed. %d %d %d", i, j, k)
+				require.Truef(t, r3.Validate(nil), "combined receipt failed. %d %d %d", i, j, k)
 			}
 		}
 	}
@@ -292,6 +292,6 @@ func TestReceiptSimple(t *testing.T) {
 	// We can now generate a receipt
 	receipt, err := GetReceipt(m, list[0], list[cnt-1])
 	require.Nil(t, err, "fail GetReceipt")
-	require.True(t, receipt.Validate(), "Receipt failed")
+	require.True(t, receipt.Validate(nil), "Receipt failed")
 
 }
