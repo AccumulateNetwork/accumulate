@@ -151,7 +151,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	}
 
 	eventBus := events.NewBus(d.Logger.With("module", "events"))
-	router := routing.NewRouter(eventBus, nil, d.Logger)
+	router := routing.NewRouter(eventBus, d.Logger)
 	execOpts := execute.Options{
 		Logger:   d.Logger,
 		Database: db,
