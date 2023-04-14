@@ -679,11 +679,11 @@ type AccountTransaction struct {
 	label  string
 	parent *Account
 
-	payments         record.Set[[32]byte]
-	votes            record.Set[*VoteEntry]
-	signatures       record.Set[*SignatureSetEntry]
-	anchorSignatures record.Set[protocol.KeySignature]
-	history          record.Set[uint64]
+	payments            record.Set[[32]byte]
+	votes               record.Set[*VoteEntry]
+	signatures          record.Set[*SignatureSetEntry]
+	validatorSignatures record.Set[protocol.KeySignature]
+	history             record.Set[uint64]
 }
 
 func (c *AccountTransaction) Payments() record.Set[[32]byte] {
@@ -704,9 +704,9 @@ func (c *AccountTransaction) Signatures() record.Set[*SignatureSetEntry] {
 	})
 }
 
-func (c *AccountTransaction) AnchorSignatures() record.Set[protocol.KeySignature] {
-	return getOrCreateField(&c.anchorSignatures, func() record.Set[protocol.KeySignature] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("AnchorSignatures"), c.label+" "+"anchor signatures", record.Union(protocol.UnmarshalKeySignature), compareAnchorSignatures)
+func (c *AccountTransaction) ValidatorSignatures() record.Set[protocol.KeySignature] {
+	return getOrCreateField(&c.validatorSignatures, func() record.Set[protocol.KeySignature] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("ValidatorSignatures"), c.label+" "+"validator signatures", record.Union(protocol.UnmarshalKeySignature), compareSignatureByKey)
 	})
 }
 
@@ -728,8 +728,8 @@ func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key,
 		return c.Votes(), key[1:], nil
 	case "Signatures":
 		return c.Signatures(), key[1:], nil
-	case "AnchorSignatures":
-		return c.AnchorSignatures(), key[1:], nil
+	case "ValidatorSignatures":
+		return c.ValidatorSignatures(), key[1:], nil
 	case "History":
 		return c.History(), key[1:], nil
 	default:
@@ -751,7 +751,7 @@ func (c *AccountTransaction) IsDirty() bool {
 	if fieldIsDirty(c.signatures) {
 		return true
 	}
-	if fieldIsDirty(c.anchorSignatures) {
+	if fieldIsDirty(c.validatorSignatures) {
 		return true
 	}
 	if fieldIsDirty(c.history) {
@@ -770,7 +770,7 @@ func (c *AccountTransaction) WalkChanges(fn record.WalkFunc) error {
 	walkChanges(&err, c.payments, fn)
 	walkChanges(&err, c.votes, fn)
 	walkChanges(&err, c.signatures, fn)
-	walkChanges(&err, c.anchorSignatures, fn)
+	walkChanges(&err, c.validatorSignatures, fn)
 	return err
 }
 
@@ -783,7 +783,7 @@ func (c *AccountTransaction) Commit() error {
 	commitField(&err, c.payments)
 	commitField(&err, c.votes)
 	commitField(&err, c.signatures)
-	commitField(&err, c.anchorSignatures)
+	commitField(&err, c.validatorSignatures)
 	commitField(&err, c.history)
 
 	return err
