@@ -43,6 +43,10 @@ func (v *CallSite) Copy() *CallSite {
 	u.FuncName = v.FuncName
 	u.File = v.File
 	u.Line = v.Line
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -62,6 +66,10 @@ func (v *Error) Copy() *Error {
 		if v != nil {
 			u.CallStack[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u

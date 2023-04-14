@@ -127,6 +127,10 @@ func (v *NetworkState) Copy() *NetworkState {
 	u.Commit = v.Commit
 	u.VersionIsKnown = v.VersionIsKnown
 	u.IsTestNet = v.IsTestNet
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -139,6 +143,10 @@ func (v *PartitionList) Copy() *PartitionList {
 	u.Partitions = make([]string, len(v.Partitions))
 	for i, v := range v.Partitions {
 		u.Partitions[i] = v
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -174,6 +182,10 @@ func (v *SeedCount) Copy() *SeedCount {
 	u := new(SeedCount)
 
 	u.Count = v.Count
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -213,6 +225,10 @@ func (v *SeedList) Copy() *SeedList {
 	u.Addresses = make([]string, len(v.Addresses))
 	for i, v := range v.Addresses {
 		u.Addresses[i] = v
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
