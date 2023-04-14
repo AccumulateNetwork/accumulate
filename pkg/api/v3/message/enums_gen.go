@@ -14,56 +14,68 @@ import (
 	"strings"
 )
 
-// TypeNodeStatusRequest .
-const TypeNodeStatusRequest Type = 1
+// TypeNodeInfoRequest .
+const TypeNodeInfoRequest Type = 1
+
+// TypeFindServiceRequest .
+const TypeFindServiceRequest Type = 2
+
+// TypeConsensusStatusRequest .
+const TypeConsensusStatusRequest Type = 3
 
 // TypeNetworkStatusRequest .
-const TypeNetworkStatusRequest Type = 2
+const TypeNetworkStatusRequest Type = 4
 
 // TypeMetricsRequest .
-const TypeMetricsRequest Type = 3
+const TypeMetricsRequest Type = 5
 
 // TypeQueryRequest .
-const TypeQueryRequest Type = 4
+const TypeQueryRequest Type = 6
 
 // TypeSubmitRequest .
-const TypeSubmitRequest Type = 5
+const TypeSubmitRequest Type = 7
 
 // TypeValidateRequest .
-const TypeValidateRequest Type = 6
+const TypeValidateRequest Type = 8
 
 // TypeSubscribeRequest .
-const TypeSubscribeRequest Type = 7
+const TypeSubscribeRequest Type = 9
 
 // TypeFaucetRequest .
-const TypeFaucetRequest Type = 8
+const TypeFaucetRequest Type = 10
 
 // TypeErrorResponse .
 const TypeErrorResponse Type = 32
 
-// TypeNodeStatusResponse .
-const TypeNodeStatusResponse Type = 33
+// TypeNodeInfoResponse .
+const TypeNodeInfoResponse Type = 33
+
+// TypeFindServiceResponse .
+const TypeFindServiceResponse Type = 34
+
+// TypeConsensusStatusResponse .
+const TypeConsensusStatusResponse Type = 35
 
 // TypeNetworkStatusResponse .
-const TypeNetworkStatusResponse Type = 34
+const TypeNetworkStatusResponse Type = 36
 
 // TypeMetricsResponse .
-const TypeMetricsResponse Type = 35
+const TypeMetricsResponse Type = 37
 
 // TypeRecordResponse .
-const TypeRecordResponse Type = 36
+const TypeRecordResponse Type = 38
 
 // TypeSubmitResponse .
-const TypeSubmitResponse Type = 37
+const TypeSubmitResponse Type = 39
 
 // TypeValidateResponse .
-const TypeValidateResponse Type = 38
+const TypeValidateResponse Type = 40
 
 // TypeSubscribeResponse .
-const TypeSubscribeResponse Type = 39
+const TypeSubscribeResponse Type = 41
 
 // TypeFaucetResponse .
-const TypeFaucetResponse Type = 40
+const TypeFaucetResponse Type = 42
 
 // TypeEvent .
 const TypeEvent Type = 64
@@ -84,19 +96,26 @@ func (v Type) GetEnumValue() uint64 { return uint64(v) }
 func (v *Type) SetEnumValue(id uint64) bool {
 	u := Type(id)
 	switch u {
-	case TypeNodeStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeErrorResponse, TypeNodeStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
+	case TypeNodeInfoRequest, TypeFindServiceRequest, TypeConsensusStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeFaucetRequest, TypeErrorResponse, TypeNodeInfoResponse, TypeFindServiceResponse, TypeConsensusStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeFaucetResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	if u, ok := messageRegistry.TypeByValue(id); ok {
+		*v = u
+		return true
+	}
+	return false
 }
 
 // String returns the name of the Type.
 func (v Type) String() string {
 	switch v {
-	case TypeNodeStatusRequest:
-		return "nodeStatusRequest"
+	case TypeNodeInfoRequest:
+		return "nodeInfoRequest"
+	case TypeFindServiceRequest:
+		return "findServiceRequest"
+	case TypeConsensusStatusRequest:
+		return "consensusStatusRequest"
 	case TypeNetworkStatusRequest:
 		return "networkStatusRequest"
 	case TypeMetricsRequest:
@@ -113,8 +132,12 @@ func (v Type) String() string {
 		return "faucetRequest"
 	case TypeErrorResponse:
 		return "errorResponse"
-	case TypeNodeStatusResponse:
-		return "nodeStatusResponse"
+	case TypeNodeInfoResponse:
+		return "nodeInfoResponse"
+	case TypeFindServiceResponse:
+		return "findServiceResponse"
+	case TypeConsensusStatusResponse:
+		return "consensusStatusResponse"
 	case TypeNetworkStatusResponse:
 		return "networkStatusResponse"
 	case TypeMetricsResponse:
@@ -137,16 +160,22 @@ func (v Type) String() string {
 		return "privateSequenceResponse"
 	case TypeAddressed:
 		return "addressed"
-	default:
-		return fmt.Sprintf("Type:%d", v)
 	}
+	if s, ok := messageRegistry.TypeName(v); ok {
+		return s
+	}
+	return fmt.Sprintf("Type:%d", v)
 }
 
 // TypeByName returns the named Type.
 func TypeByName(name string) (Type, bool) {
 	switch strings.ToLower(name) {
-	case "nodestatusrequest":
-		return TypeNodeStatusRequest, true
+	case "nodeinforequest":
+		return TypeNodeInfoRequest, true
+	case "findservicerequest":
+		return TypeFindServiceRequest, true
+	case "consensusstatusrequest":
+		return TypeConsensusStatusRequest, true
 	case "networkstatusrequest":
 		return TypeNetworkStatusRequest, true
 	case "metricsrequest":
@@ -163,8 +192,12 @@ func TypeByName(name string) (Type, bool) {
 		return TypeFaucetRequest, true
 	case "errorresponse":
 		return TypeErrorResponse, true
-	case "nodestatusresponse":
-		return TypeNodeStatusResponse, true
+	case "nodeinforesponse":
+		return TypeNodeInfoResponse, true
+	case "findserviceresponse":
+		return TypeFindServiceResponse, true
+	case "consensusstatusresponse":
+		return TypeConsensusStatusResponse, true
 	case "networkstatusresponse":
 		return TypeNetworkStatusResponse, true
 	case "metricsresponse":
@@ -187,9 +220,11 @@ func TypeByName(name string) (Type, bool) {
 		return TypePrivateSequenceResponse, true
 	case "addressed":
 		return TypeAddressed, true
-	default:
-		return 0, false
 	}
+	if typ, ok := messageRegistry.TypeByName(name); ok {
+		return typ, true
+	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Type to JSON as a string.

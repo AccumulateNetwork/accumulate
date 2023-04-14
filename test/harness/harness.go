@@ -8,6 +8,7 @@ package harness
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -33,6 +35,8 @@ type Harness struct {
 	TB       testing.TB
 	services Services
 	stepper  Stepper
+
+	VerboseConditions bool
 }
 
 // Services defines the services required by the harness.
@@ -40,6 +44,11 @@ type Services interface {
 	api.Querier
 	api.Submitter
 	api.NetworkService
+}
+
+// EnvelopeBuilder builds an envelope.
+type EnvelopeBuilder interface {
+	Done() (*messaging.Envelope, error)
 }
 
 // Stepper steps the simulation or waits for a block to complete.
@@ -85,71 +94,139 @@ func (h *Harness) StepN(n int) {
 	}
 }
 
-// StepUntil calls the stepper until all conditions are met. StepUntil fails if
-// the conditions are not met within 50 steps.
+// StepUntil calls the stepper until all conditions are satisfied. StepUntil
+// fails if the conditions are not met within 50 steps.
 func (h *Harness) StepUntil(conditions ...Condition) {
 	h.TB.Helper()
-	for i := 0; ; i++ {
-		if i >= 50 {
-			h.TB.Fatal(color.RedString("Condition not met after 50 blocks"))
+	h.StepUntilN(50, conditions...)
+}
+
+// StepUntilN calls the stepper until all conditions are satisfied. StepUntilN
+// fails if the conditions are not met within N steps.
+func (h *Harness) StepUntilN(n int, conditions ...Condition) {
+	h.TB.Helper()
+
+outer:
+	for i := 0; i < n; i++ {
+		// Step (except for the first time). Call Gosched to give concurrent
+		// tests a chance to run.
+		if i > 0 {
+			runtime.Gosched()
+			h.Step()
 		}
-		ok := true
+
+		// Check every condition
 		for _, c := range conditions {
-			if !c(h) {
-				ok = false
+			if !c.Satisfied(h) {
+				continue outer
 			}
 		}
-		if ok {
-			break
+
+		// Conditions have been satisfied
+		return
+	}
+
+	h.Verify(conditions...)
+}
+
+func (h *Harness) Verify(conditions ...Condition) {
+	h.TB.Helper()
+	ok := true
+	s := "Condition(s) not satisfied after 50 blocks:"
+	for _, c := range conditions {
+		if !c.Satisfied(h) {
+			ok = false
+			s += c.Format("\n  ", "")
 		}
-		h.Step()
+	}
+	if !ok {
+		h.TB.Fatal(color.RedString(s))
 	}
 }
 
-// Submit submits an envelope and returns the status.
-func (h *Harness) Submit(envelope *messaging.Envelope) *protocol.TransactionStatus {
+// Submit submits the envelope.
+func (h *Harness) Submit(envelope *messaging.Envelope) []*protocol.TransactionStatus {
 	h.TB.Helper()
 	subs, err := h.services.Submit(context.Background(), envelope, api.SubmitOptions{})
 	require.NoError(h.TB, err)
-	require.Len(h.TB, subs, 1)
-	return subs[0].Status
-}
-
-// SubmitSuccessfully submits an envelope and returns the status.
-// SubmitSuccessfully fails if the transaction failed.
-func (h *Harness) SubmitSuccessfully(envelope *messaging.Envelope) *protocol.TransactionStatus {
-	h.TB.Helper()
-	status := h.Submit(envelope)
-	if status.Error != nil {
-		require.NoError(h.TB, status.Error)
+	status := make([]*protocol.TransactionStatus, len(subs))
+	for i, sub := range subs {
+		status[i] = sub.Status
 	}
 	return status
 }
 
-// EnvelopeBuilder builds an envelope.
-type EnvelopeBuilder interface {
-	Done() (*messaging.Envelope, error)
+// SubmitSuccessfully submits the envelope and asserts that all transactions and
+// signatures succeeded.
+func (h *Harness) SubmitSuccessfully(envelope *messaging.Envelope) []*protocol.TransactionStatus {
+	h.TB.Helper()
+	status := h.Submit(envelope)
+	for _, s := range status {
+		require.NoError(h.TB, s.AsError())
+	}
+	return status
 }
 
-// BuildAndSubmit calls the envelope builder and submits the envelope.
-func (h *Harness) BuildAndSubmit(b EnvelopeBuilder) *protocol.TransactionStatus {
+// BuildAndSubmit builds and submits the envelope.
+func (h *Harness) BuildAndSubmit(b EnvelopeBuilder) []*protocol.TransactionStatus {
 	h.TB.Helper()
 	env, err := b.Done()
 	require.NoError(h.TB, err)
-	require.Len(h.TB, env.Transaction, 1)
-	subs, err := h.services.Submit(context.Background(), env, api.SubmitOptions{})
-	require.NoError(h.TB, err)
-	require.Len(h.TB, subs, 1)
-	return subs[0].Status
+	return h.Submit(env)
 }
 
-// BuildAndSubmitSuccessfully calls the envelope builder and submits the
-// envelope. BuildAndSubmitSuccessfully fails if the transaction failed.
-func (h *Harness) BuildAndSubmitSuccessfully(b EnvelopeBuilder) *protocol.TransactionStatus {
+// BuildAndSubmitSuccessfully builds and submits the envelope and asserts that
+// all transactions and signatures succeeded.
+func (h *Harness) BuildAndSubmitSuccessfully(b EnvelopeBuilder) []*protocol.TransactionStatus {
 	h.TB.Helper()
 	status := h.BuildAndSubmit(b)
-	if status.Error != nil {
-		require.NoError(h.TB, status.Error)
+	for _, s := range status {
+		require.NoError(h.TB, s.AsError())
 	}
 	return status
+}
+
+// SubmitTxn submits a single transaction.
+func (h *Harness) SubmitTxn(envelope *messaging.Envelope) *protocol.TransactionStatus {
+	h.TB.Helper()
+	require.Len(h.TB, envelope.Transaction, 1)
+	id := envelope.Transaction[0].ID()
+	return pickStatusForTxn(h.TB, id, h.Submit(envelope))
+}
+
+// SubmitTxnSuccessfully submits a single transaction and asserts that it and
+// its signatures succeeded.
+func (h *Harness) SubmitTxnSuccessfully(envelope *messaging.Envelope) *protocol.TransactionStatus {
+	h.TB.Helper()
+	require.Len(h.TB, envelope.Transaction, 1)
+	id := envelope.Transaction[0].ID()
+	return pickStatusForTxn(h.TB, id, h.SubmitSuccessfully(envelope))
+}
+
+// BuildAndSubmitTxn builds and submits a single transaction.
+func (h *Harness) BuildAndSubmitTxn(b EnvelopeBuilder) *protocol.TransactionStatus {
+	h.TB.Helper()
+	env, err := b.Done()
+	require.NoError(h.TB, err)
+	return h.SubmitTxn(env)
+}
+
+// BuildAndSubmitTxnSuccessfully builds and submits a single transaction and
+// asserts that it and its signatures succeeded.
+func (h *Harness) BuildAndSubmitTxnSuccessfully(b EnvelopeBuilder) *protocol.TransactionStatus {
+	h.TB.Helper()
+	env, err := b.Done()
+	require.NoError(h.TB, err)
+	return h.SubmitTxnSuccessfully(env)
+}
+
+func pickStatusForTxn(t testing.TB, id *url.TxID, statuses []*protocol.TransactionStatus) *protocol.TransactionStatus {
+	t.Helper()
+	for _, s := range statuses {
+		if s.TxID.Hash() == id.Hash() {
+			return s
+		}
+	}
+	t.Fatalf("No status for %v", id)
+	panic("not reached")
 }

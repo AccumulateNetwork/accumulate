@@ -29,14 +29,28 @@ func (SyntheticDepositTokens) AllowMissingPrincipal(transaction *protocol.Transa
 	return key != nil
 }
 
-func (SyntheticDepositTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (SyntheticDepositTokens{}).Validate(st, tx)
+func (x SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (SyntheticDepositTokens) check(st *StateManager, tx *Delivery) (*protocol.SyntheticDepositTokens, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), tx.Transaction.Body)
+	}
+
+	if body.Amount.Sign() < 0 {
+		return nil, fmt.Errorf("amount can't be a negative value")
+	}
+
+	return body, nil
+}
+
+func (x SyntheticDepositTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	var account protocol.AccountWithTokens
@@ -98,14 +112,10 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		}
 	}
 
-	if body.Amount.Sign() < 0 {
-		return nil, fmt.Errorf("amount can't be a negative value")
-	}
-
 	if !account.CreditTokens(&body.Amount) {
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
-	err := st.Update(account)
+	err = st.Update(account)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
 	}

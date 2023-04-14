@@ -152,7 +152,7 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 				account.Hash = hash
 				err = vAccount.VisitAccount(account, i)
 				if err != nil {
-					return errors.UnknownError.WithFormat("visit account: %w", err)
+					return errors.UnknownError.WithFormat("visit account %v: %w", account.Url, err)
 				}
 				i++
 				return nil

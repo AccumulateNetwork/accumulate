@@ -7,7 +7,6 @@
 package accumulated
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -23,14 +22,15 @@ import (
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
-	if event.Major == 0 {
+	if event.Major == 0 || !d.Config.Accumulate.Snapshots.Enable {
 		return nil
 	}
 
@@ -58,7 +58,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, blockTime time.Time, maj
 		return
 	}
 
-	d.Logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot", "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+	d.Logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
 	err := os.Mkdir(snapDir, 0755)
 	if err != nil && !errors.Is(err, fs.ErrExist) {
@@ -161,7 +161,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	}
 
 	// On DNs initialize the major block scheduler
-	if execOpts.Describe.NetworkType == config.Directory {
+	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
@@ -170,9 +170,9 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
-	err = exec.RestoreSnapshot(db, file)
+	_, err = exec.Restore(file, nil)
 	if err != nil {
-		return fmt.Errorf("failed to restore snapshot: %v", err)
+		return errors.UnknownError.WithFormat("failed to restore snapshot: %w", err)
 	}
 
 	return nil

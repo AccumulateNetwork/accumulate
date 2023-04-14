@@ -26,6 +26,19 @@ import (
 
 var ErrCannotInitiate = errors.BadRequest.With("signature cannot initiate a transaction: values are missing")
 
+// VerifyUserSignature verifies that the user signature signs the given message.
+func VerifyUserSignature(sig UserSignature, message []byte) bool {
+	if sig.Verify(sig.Metadata().Hash(), message) {
+		return true
+	}
+
+	h, err := sig.Initiator()
+	if err != nil {
+		return false
+	}
+	return sig.Verify(h.MerkleHash(), message)
+}
+
 type Signature interface {
 	encoding.UnionValue
 	Type() SignatureType
@@ -37,17 +50,23 @@ type Signature interface {
 
 	Hash() []byte
 	Metadata() Signature
+}
+
+// UserSignature is a type of signature that can initiate transactions with a
+// special initiator hash. This type of initiator hash has been deprecated.
+type UserSignature interface {
+	Signature
 	Initiator() (hash.Hasher, error)
+	Verify(sigMdHash, hash []byte) bool
 }
 
 type KeySignature interface {
-	Signature
+	UserSignature
 	GetSignature() []byte
 	GetPublicKeyHash() []byte
 	GetPublicKey() []byte
 	GetSignerVersion() uint64
 	GetTimestamp() uint64
-	Verify(sigMdHash, hash []byte) bool
 }
 
 // IsSystem returns true if the signature type is a system signature type.
@@ -171,11 +190,16 @@ func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signatur
 			return true
 		}
 
-		init, err := sig.Initiator()
+		init, ok := sig.(UserSignature)
+		if !ok {
+			continue
+		}
+
+		hash, err := init.Initiator()
 		if err != nil {
 			return false
 		}
-		if bytes.Equal(txnInitHash, init.MerkleHash()) {
+		if bytes.Equal(txnInitHash, hash.MerkleHash()) {
 			if initiator != nil {
 				*initiator = sig
 			}
@@ -834,11 +858,6 @@ func (s *ReceiptSignature) Metadata() Signature {
 	return r
 }
 
-// InitiatorHash returns an error.
-func (s *ReceiptSignature) Initiator() (hash.Hasher, error) {
-	return nil, fmt.Errorf("a receipt signature cannot initiate a transaction")
-}
-
 // GetVote returns how the signer votes on a particular transaction
 func (s *ReceiptSignature) GetVote() VoteType {
 	return VoteTypeAccept
@@ -886,11 +905,6 @@ func (s *PartitionSignature) Metadata() Signature {
 	return r
 }
 
-// Initiator returns an error.
-func (s *PartitionSignature) Initiator() (hash.Hasher, error) {
-	return nil, errors.BadRequest.With("use of the initiator hash for a synthetic signature is not supported")
-}
-
 // GetVote returns VoteTypeAccept.
 func (s *PartitionSignature) GetVote() VoteType {
 	return VoteTypeAccept
@@ -915,11 +929,6 @@ func (s *SignatureSet) Hash() []byte { return signatureHash(s) }
 // RoutingLocation returns Signer.
 func (s *SignatureSet) RoutingLocation() *url.URL { return s.Signer }
 
-// Initiator returns an error.
-func (s *SignatureSet) Initiator() (hash.Hasher, error) {
-	return nil, fmt.Errorf("cannot initate a transaction")
-}
-
 // Metadata panics.
 func (s *SignatureSet) Metadata() Signature { panic("not supported") }
 
@@ -936,11 +945,6 @@ func (s *RemoteSignature) Hash() []byte { return signatureHash(s) }
 
 // RoutingLocation returns Destination.
 func (s *RemoteSignature) RoutingLocation() *url.URL { return s.Destination }
-
-// Initiator returns an error.
-func (s *RemoteSignature) Initiator() (hash.Hasher, error) {
-	return nil, fmt.Errorf("cannot initate a transaction")
-}
 
 // Metadata panics.
 func (s *RemoteSignature) Metadata() Signature { panic("not supported") }
@@ -969,7 +973,12 @@ func (s *DelegatedSignature) Initiator() (hash.Hasher, error) {
 		return nil, ErrCannotInitiate
 	}
 
-	hasher, err := s.Signature.Initiator()
+	init, ok := s.Signature.(UserSignature)
+	if !ok {
+		return nil, ErrCannotInitiate
+	}
+
+	hasher, err := init.Initiator()
 	if err != nil {
 		return nil, err
 	}
@@ -1015,11 +1024,6 @@ func (s *InternalSignature) Metadata() Signature {
 	return r
 }
 
-// InitiatorHash returns an error.
-func (s *InternalSignature) Initiator() (hash.Hasher, error) {
-	return nil, errors.BadRequest.With("use of the initiator hash for an internal signature is not supported")
-}
-
 // GetVote returns VoteTypeAccept.
 func (s *InternalSignature) GetVote() VoteType {
 	return VoteTypeAccept
@@ -1035,4 +1039,21 @@ func UnmarshalKeySignatureFrom(rd io.Reader) (KeySignature, error) {
 		return nil, errors.Conflict.WithFormat("%v is not a key signature", s.Type())
 	}
 	return ks, nil
+}
+
+/*
+ * Authority Signature
+ */
+
+func (s *AuthoritySignature) GetVote() VoteType            { return s.Vote }
+func (s *AuthoritySignature) GetSigner() *url.URL          { return s.RoutingLocation() }
+func (s *AuthoritySignature) GetTransactionHash() [32]byte { return s.TxID.Hash() }
+func (s *AuthoritySignature) Hash() []byte                 { return signatureHash(s) }
+func (s *AuthoritySignature) Metadata() Signature          { return s }
+
+func (s *AuthoritySignature) RoutingLocation() *url.URL {
+	if len(s.Delegator) > 0 {
+		return s.Delegator[0]
+	}
+	return s.TxID.Account()
 }

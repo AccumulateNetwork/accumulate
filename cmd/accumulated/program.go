@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -112,43 +113,18 @@ func (p *Program) Stop(service.Service) error {
 	return stopDual(p.primary, p.secondary)
 }
 
-func startDual(primary, secondary *accumulated.Daemon) (err error) {
-	var didStartPrimary, didStartSecondary bool
-	errg := new(errgroup.Group)
-	errg.Go(func() error {
-		err := primary.Start()
-		if err == nil {
-			didStartPrimary = true
-		}
-		return err
-	})
-	errg.Go(func() error {
-		err := secondary.Start()
-		if err == nil {
-			didStartSecondary = true
-		}
-		return err
-	})
-
-	defer func() {
-		if err != nil {
-			errg = new(errgroup.Group)
-			if didStartPrimary {
-				errg.Go(primary.Stop)
-			}
-			if didStartSecondary {
-				errg.Go(secondary.Stop)
-			}
-			_ = errg.Wait()
-		}
-	}()
-
-	err = errg.Wait()
+func startDual(primary, secondary *accumulated.Daemon) error {
+	err := primary.Start()
 	if err != nil {
-		return err
+		return errors.UnknownError.WithFormat("start primary: %w", err)
 	}
 
-	return primary.ConnectDirectly(secondary)
+	err = secondary.StartSecondary(primary)
+	if err != nil {
+		_ = primary.Stop()
+		return errors.UnknownError.WithFormat("start secondary: %w", err)
+	}
+	return nil
 }
 
 func stopDual(primary, secondary *accumulated.Daemon) error {

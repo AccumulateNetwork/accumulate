@@ -9,10 +9,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -73,13 +77,61 @@ func healSynth(_ *cobra.Command, args []string) {
 		}
 	}
 
-	// // Check produced vs received
-	// for i, a := range desc.Values.Network.Partitions {
-	// 	for _, b := range desc.Values.Network.Partitions[i+1:] {
-	// 		checkSequence2(a, b, bad, "synthetic transactions",
-	// 			synths[a.ID].Partition(protocol.PartitionUrl(b.ID)),
-	// 			synths[b.ID].Partition(protocol.PartitionUrl(a.ID)),
-	// 		)
-	// 	}
-	// }
+	// Check produced vs received
+	for i, a := range desc.Values.Network.Partitions {
+		for _, b := range desc.Values.Network.Partitions[i:] {
+			ab := synths[a.ID].Partition(protocol.PartitionUrl(b.ID))
+			ba := synths[b.ID].Partition(protocol.PartitionUrl(a.ID))
+
+			for i := ba.Received + 1; i <= ab.Produced; i++ {
+				resubmitByNumber(desc, c, a.ID, b.ID, i, false)
+			}
+			if a == b {
+				continue
+			}
+			for i := ab.Received + 1; i <= ba.Produced; i++ {
+				resubmitByNumber(desc, c, b.ID, a.ID, i, false)
+			}
+		}
+	}
+}
+
+func resubmitByNumber(desc *api.DescriptionResponse, c *client.Client, source, destination string, number uint64, anchor bool) {
+	// Get a client for the destination partition
+	var d *client.Client
+	for _, p := range desc.Network.Partitions {
+		if !strings.EqualFold(p.Id, destination) {
+			continue
+		}
+		if len(p.Nodes) == 0 {
+			fatalf("no nodes for %v", p.Id)
+		}
+		u, err := url.Parse(p.Nodes[0].Address)
+		check(err)
+		port, err := strconv.ParseUint(u.Port(), 10, 16)
+		check(err)
+		d, err = client.New(fmt.Sprintf("http://%s:%d", u.Hostname(), port+config.PortOffsetAccumulateApi.GetEnumValue()))
+		check(err)
+	}
+
+	// Query the synthetic transaction
+	req := new(api.SyntheticTransactionRequest)
+	req.Source = protocol.PartitionUrl(source)
+	req.Destination = protocol.PartitionUrl(destination)
+	req.SequenceNumber = number
+	req.Anchor = anchor
+	res, err := c.QuerySynth(context.Background(), req)
+	check(err)
+
+	// Submit the synthetic transaction directly to the destination partition
+	fmt.Printf("Resubmitting %v\n", res.Txid)
+	xreq := new(api.ExecuteRequest)
+	xreq.Envelope = new(messaging.Envelope)
+	xreq.Envelope.Transaction = []*protocol.Transaction{res.Transaction}
+	xreq.Envelope.Signatures = res.Signatures
+	xres, err := d.ExecuteLocal(context.Background(), xreq)
+	check(err)
+	if xres.Message != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", xres.Message)
+	}
 }

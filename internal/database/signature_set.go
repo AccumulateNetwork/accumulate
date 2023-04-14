@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,6 +21,7 @@ type SignatureSet struct {
 	writable bool
 	value    record.Value[*sigSetData]
 	entries  *sigSetData
+	other    []*SignatureSetEntry
 }
 
 // newSigSet creates a new SignatureSet.
@@ -37,6 +38,15 @@ func newSigSet(txn *Transaction, signer protocol.Signer2, writable bool) (*Signa
 		return nil, err
 	}
 
+	s.other, err = txn.parent.
+		Account(signer.GetUrl()).
+		Transaction(txn.hash32()).
+		Signatures().
+		Get()
+	if err != nil {
+		return nil, err
+	}
+
 	// Reset if the set is writable and the version is different
 	if writable && s.entries.Version != signer.GetVersion() {
 		s.entries.Reset(signer.GetVersion())
@@ -45,7 +55,7 @@ func newSigSet(txn *Transaction, signer protocol.Signer2, writable bool) (*Signa
 }
 
 func (s *SignatureSet) Count() int {
-	return len(s.entries.Entries)
+	return len(s.entries.Entries) + len(s.other)
 }
 
 func (s *SignatureSet) Version() uint64 {
@@ -53,8 +63,14 @@ func (s *SignatureSet) Version() uint64 {
 }
 
 func (s *SignatureSet) Entries() []SigSetEntry {
-	entries := make([]SigSetEntry, len(s.entries.Entries))
-	copy(entries, s.entries.Entries)
+	entries := make([]SigSetEntry, len(s.entries.Entries)+len(s.other))
+	n := copy(entries, s.entries.Entries)
+	for i, v := range s.other {
+		entries[i+n] = SigSetEntry{
+			KeyEntryIndex: v.KeyIndex,
+			SignatureHash: v.Hash,
+		}
+	}
 	return entries
 }
 

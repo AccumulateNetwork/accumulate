@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -22,7 +22,7 @@ import (
 
 var ErrFieldsOutOfOrder = errors.New("fields are out of order")
 
-const MaxValueSize = 1 << 15
+const MaxValueSize = 1 << 24
 
 type BytesReader interface {
 	io.Reader
@@ -193,6 +193,9 @@ func (r *Reader) readField(field uint) bool {
 	if r.err != nil {
 		return false
 	}
+	if field == 0 {
+		return r.current == 0 && r.last == 0
+	}
 
 	if field < 1 || field > 32 {
 		r.err = ErrInvalidFieldNumber
@@ -229,6 +232,14 @@ func (r *Reader) ReadHash(n uint) (*[32]byte, bool) {
 		return nil, false
 	}
 	return (*[32]byte)(v), true
+}
+
+func (r *Reader) ReadHash2(n uint) ([32]byte, bool) {
+	v, ok := r.ReadHash(n)
+	if !ok {
+		return [32]byte{}, false
+	}
+	return *v, true
 }
 
 // ReadInt reads the value as a varint-encoded signed integer.
@@ -406,6 +417,10 @@ func (r *Reader) ReadEnum(n uint, v EnumValueSetter) bool {
 	r.didRead(n, fmt.Errorf("%d is not a valid value", u), "failed to unmarshal value")
 	return false
 }
+
+// IsEmpty returns true if the object is empty. IsEmpty will always return false
+// if called prior to any other Read method.
+func (r *Reader) IsEmpty() bool { return r.current == EmptyObject }
 
 // ReadAll reads the entire value from the current position
 func (r *Reader) ReadAll() ([]byte, error) {

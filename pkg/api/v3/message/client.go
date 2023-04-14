@@ -14,21 +14,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// Client is a binary message transport client for API v3.
+// Client is a binary message client for API v3.
 type Client struct {
-	// Dialer dials connections to a given address. The client indicates that
-	// the stream can be closed by canceling the context passed to Dial.
-	Dialer Dialer
-
-	// Router determines the address a message should be routed to.
-	Router Router
-
-	// DisableFanout disables request fanout and response aggregation for
-	// requests such as transaction hash searches.
-	DisableFanout bool
+	Transport Transport
 }
 
 // A Router determines the address a message should be routed to.
@@ -38,6 +28,7 @@ type Router interface {
 
 // Ensure Client satisfies the service definitions.
 var _ api.NodeService = (*Client)(nil)
+var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
@@ -45,11 +36,25 @@ var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
 var _ api.Faucet = (*Client)(nil)
 
-// NodeStatus implements [api.NodeService.NodeStatus].
-func (c *Client) NodeStatus(ctx context.Context, opts NodeStatusOptions) (*api.NodeStatus, error) {
+// NodeInfo implements [api.NodeService.NodeInfo].
+func (c *Client) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
-	// which is unpacked into a NodeStatus
-	return typedRequest[*NodeStatusResponse, *api.NodeStatus](c, ctx, &NodeStatusRequest{NodeStatusOptions: opts})
+	// which is unpacked into a NodeInfo
+	return typedRequest[*NodeInfoResponse, *api.NodeInfo](c, ctx, &NodeInfoRequest{NodeInfoOptions: opts})
+}
+
+// FindService implements [api.NodeService.FindService].
+func (c *Client) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
+	// which is unpacked into a FindServiceResult
+	return typedRequest[*FindServiceResponse, []*api.FindServiceResult](c, ctx, &FindServiceRequest{FindServiceOptions: opts})
+}
+
+// ConsensusStatus implements [api.NodeService.ConsensusStatus].
+func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
+	// which is unpacked into a ConsensusStatus
+	return typedRequest[*ConsensusStatusResponse, *api.ConsensusStatus](c, ctx, &ConsensusStatusRequest{ConsensusStatusOptions: opts})
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
@@ -104,7 +109,7 @@ func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOp
 func typedRequest[M response[T], T any](c *Client, ctx context.Context, req Message) (T, error) {
 	var typRes M
 	var errRes *ErrorResponse
-	err := c.RoundTrip(ctx, []Message{req}, func(res, _ Message) error {
+	err := c.Transport.RoundTrip(ctx, []Message{req}, func(res, _ Message) error {
 		switch res := res.(type) {
 		case *ErrorResponse:
 			errRes = res
@@ -132,310 +137,17 @@ type response[T any] interface {
 	rval() T
 }
 
-func (r *NodeStatusResponse) rval() *api.NodeStatus             { return r.Value } //nolint:unused
-func (r *NetworkStatusResponse) rval() *api.NetworkStatus       { return r.Value } //nolint:unused
-func (r *MetricsResponse) rval() *api.Metrics                   { return r.Value } //nolint:unused
-func (r *RecordResponse) rval() api.Record                      { return r.Value } //nolint:unused
-func (r *SubmitResponse) rval() []*api.Submission               { return r.Value } //nolint:unused
-func (r *ValidateResponse) rval() []*api.Submission             { return r.Value } //nolint:unused
-func (r *FaucetResponse) rval() *api.Submission                 { return r.Value } //nolint:unused
-func (r *EventMessage) rval() []api.Event                       { return r.Value } //nolint:unused
-func (r *PrivateSequenceResponse) rval() *api.TransactionRecord { return r.Value } //nolint:unused
+func (r *NodeInfoResponse) rval() *api.NodeInfo               { return r.Value } //nolint:unused
+func (r *FindServiceResponse) rval() []*api.FindServiceResult { return r.Value } //nolint:unused
+func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus { return r.Value } //nolint:unused
+func (r *NetworkStatusResponse) rval() *api.NetworkStatus     { return r.Value } //nolint:unused
+func (r *MetricsResponse) rval() *api.Metrics                 { return r.Value } //nolint:unused
+func (r *RecordResponse) rval() api.Record                    { return r.Value } //nolint:unused
+func (r *SubmitResponse) rval() []*api.Submission             { return r.Value } //nolint:unused
+func (r *ValidateResponse) rval() []*api.Submission           { return r.Value } //nolint:unused
+func (r *FaucetResponse) rval() *api.Submission               { return r.Value } //nolint:unused
+func (r *EventMessage) rval() []api.Event                     { return r.Value } //nolint:unused
 
-// RoundTrip routes each requests and executes a round-trip call. If there are
-// no transport errors, RoundTrip will only dial each address once. If multiple
-// requests route to the same address, the first request will dial a stream and
-// subsequent requests to that address will reuse the existing stream.
-//
-// Certain types of requests, such as transaction hash searches, are fanned out
-// to every partition. If requests contains such a request, RoundTrip queries
-// the network for a list of partitions, submits the request to every partition,
-// and aggregates the responses into a single response.
-//
-// RoundTrip is a low-level interface not intended for general use.
-func (c *Client) RoundTrip(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
-	if c.DisableFanout {
-		return c.roundTrip(ctx, requests, callback)
-	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// TODO Move the aggregation logic into a separate module
-
-	// Collect aggregate requests
-	var parts []multiaddr.Multiaddr
-	aggregate := map[Message]aggregator{}
-	for i, n := 0, len(requests); i < n; i++ {
-		// If the request is a transaction hash search query request, fan it out
-		req, ok := requests[i].(*QueryRequest)
-		if !ok {
-			continue
-		}
-		if req.Scope == nil || !protocol.IsUnknown(req.Scope) {
-			continue
-		}
-		if _, ok := req.Query.(*api.MessageHashSearchQuery); !ok {
-			continue
-		}
-
-		// Query the network for a list of partitions
-		if parts == nil {
-			var err error
-			parts, err = c.getParts(ctx, api.ServiceTypeQuery)
-			if err != nil {
-				return errors.UnknownError.Wrap(err)
-			}
-		}
-
-		// Overwrite the existing entry in requests with an Addressed message
-		// for the first partition
-		agg := new(recordRangeAggregator)
-		ar := &Addressed{Message: req, Address: parts[0]}
-		aggregate[ar] = agg
-		requests[i] = ar
-
-		// Create a new Addressed message for every other partition
-		for _, part := range parts[1:] {
-			ar := &Addressed{Message: req, Address: part}
-			aggregate[ar] = agg
-			requests = append(requests, ar)
-		}
-	}
-
-	// If there are no requests to fanout, just call roundTrip
-	if len(aggregate) == 0 {
-		return c.roundTrip(ctx, requests, callback)
-	}
-
-	// Send the requests
-	err := c.roundTrip(ctx, requests, func(res, req Message) error {
-		// If the request was a fanout request, aggregate the response
-		agg, ok := aggregate[req]
-		if !ok {
-			return callback(res, req)
-		}
-		return agg.Add(res)
-	})
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Finalize aggregates and pass them to the callback
-	for req, agg := range aggregate {
-		err := callback(agg.Done(), req)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-	return nil
-}
-
-// roundTrip routes each request, dials a stream, and executes a round-trip
-// call, sending the request and waiting for the response. roundTrip calls the
-// callback for each request-response pair. The callback may be called more than
-// once if there are transport errors.
-//
-// roundTrip maintains a stream dictionary, which is passed to dial. Since dial
-// will reuse an existing stream when appropriate, if there are no transport
-// errors, roundTrip will only dial each address once. If multiple requests
-// route to the same address, the first request will dial a stream and
-// subsequent requests to that address will reuse the existing stream.
-func (c *Client) roundTrip(ctx context.Context, req []Message, callback func(res, req Message) error) error {
-	// Setup the context and stream dictionary
-	streams := map[string]Stream{}
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// Process each request
-	for _, req := range req {
-		addr := AddressOf(req)
-
-		// Route it
-		var err error
-		if addr == nil {
-			if c.Router == nil {
-				return errors.BadRequest.With("cannot route message: router is missing")
-			}
-			addr, err = c.Router.Route(req)
-			if err != nil {
-				return errors.UnknownError.Wrap(err)
-			}
-		}
-
-		// Dial the address
-		_, err = c.dial(ctx, addr, streams, func(s Stream) error {
-			// Send the request
-			err := s.Write(req)
-			if err != nil {
-				return errors.PeerMisbehaved.WithFormat("write request: %w", err)
-			}
-
-			// Wait for the response
-			res, err := s.Read()
-			if err != nil {
-				return errors.PeerMisbehaved.WithFormat("read request: %w", err)
-			}
-
-			// Call the callback
-			err = callback(res, req)
-			return errors.UnknownError.Wrap(err)
-		})
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-	return nil
-}
-
-// dial dials a given address and calls send with the stream, returning the
-// stream. If the call provides a stream dictionary dial will use a stream from
-// the dictionary if there is one, add the dialed stream if there is not, and
-// remove the stream from the dictionary if a transport error occurs.
-//
-// If the client's dialer implements [MultiDialer], dial may make multiple
-// attempts. This may result in calling send multiple times. When a transport
-// error occurs, dial will report the error to [MultiDialer.BadDial]. If that
-// returns true, dial will try again.
-func (c *Client) dial(ctx context.Context, addr multiaddr.Multiaddr, streams map[string]Stream, send func(Stream) error) (Stream, error) {
-	addrStr := addr.String()
-	multi, isMulti := c.Dialer.(MultiDialer)
-
-	for i := 0; ; i++ {
-		// Check for an existing stream
-		var err error
-		s, ok := streams[addrStr]
-		if !ok {
-			// Dial a new stream
-			s, err = c.Dialer.Dial(ctx, addr)
-			if err != nil {
-				return nil, errors.UnknownError.WithFormat("dial %v: %w", addrStr, err)
-			}
-			if streams != nil {
-				streams[addrStr] = s
-			}
-		}
-
-		err = send(s)
-		if err == nil {
-			return s, nil // Success
-		}
-
-		// Return the error if it's a client error (e.g. misdial)
-		var err2 *errors.Error
-		if errors.As(err, &err2) && err2.Code.IsClientError() {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		// Remove the stream from the dictionary
-		if streams != nil {
-			delete(streams, addrStr)
-		}
-
-		// Return the error if the dialer does not support error reporting
-		if !isMulti {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		// Report the error and try again
-		if !multi.BadDial(ctx, addr, s, err) {
-			return nil, errors.NoPeer.WithFormat("unable to submit request to %v after %d attempts", addrStr, i+1)
-		}
-	}
-}
-
-// GetNetInfo queries the directory network for the network status. GetNetInfo
-// is intended to be used to initialize the message router.
-func (c *Client) GetNetInfo(ctx context.Context) (*api.NetworkStatus, error) {
-	// Route the message to /acc/directory
-	dirMa, err := multiaddr.NewComponent(api.N_ACC, (&api.ServiceAddress{Type: api.ServiceTypeNetwork, Partition: protocol.Directory}).String())
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
-	}
-
-	// Construct an Addressed NetworkStatusRequest
-	req := new(NetworkStatusRequest)
-	req.Partition = protocol.Directory
-	areq := &Addressed{Message: req, Address: dirMa}
-
-	// Send it and wait for a NetworkStatusResponse
-	var res *NetworkStatusResponse
-	err = c.roundTrip(ctx, []Message{areq}, func(r, _ Message) error {
-		var ok bool
-		res, ok = r.(*NetworkStatusResponse)
-		if !ok {
-			return errors.WrongType.WithFormat("expected %T, got %T", res, r)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("get network status: %w", err)
-	}
-
-	return res.Value, nil
-}
-
-// getParts queries the network for the list of partitions.
-func (c *Client) getParts(ctx context.Context, service api.ServiceType) ([]multiaddr.Multiaddr, error) {
-	ns, err := c.GetNetInfo(ctx)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Pre-calculate a list of multiaddresses for each partition of the form
-	// /acc/{partition}
-	ma := make([]multiaddr.Multiaddr, len(ns.Network.Partitions))
-	for i, part := range ns.Network.Partitions {
-		sa := new(api.ServiceAddress)
-		sa.Type = service
-		sa.Partition = part.ID
-		ma[i], err = multiaddr.NewComponent(api.N_ACC, sa.String())
-		if err != nil {
-			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
-		}
-	}
-
-	return ma, nil
-}
-
-// An aggregator aggregates responses.
-type aggregator interface {
-	// Add adds a response.
-	Add(Message) error
-
-	// Done returns the aggregated response.
-	Done() Message
-}
-
-// A recordRangeRecord aggregates RecordResponses. Start is not preserved.
-type recordRangeAggregator struct {
-	value []api.Record
-	total uint64
-}
-
-// Add checks if the message is a RecordResponse containing a RecordRange and
-// adds its records to the aggregator.
-func (agg *recordRangeAggregator) Add(m Message) error {
-	res, ok := m.(*RecordResponse)
-	if !ok {
-		return errors.Conflict.WithFormat("invalid response type %T", res)
-	}
-
-	v, ok := res.Value.(*api.RecordRange[api.Record])
-	if !ok {
-		return errors.Conflict.WithFormat("invalid response value type %T", res.Value)
-	}
-
-	agg.value = append(agg.value, v.Records...)
-	agg.total += v.Total
-	return nil
-}
-
-// Done constructs a new RecordResponse containing a RecordRange containing all
-// of the records.
-func (agg *recordRangeAggregator) Done() Message {
-	rr := new(api.RecordRange[api.Record])
-	rr.Records = agg.value
-	rr.Total = agg.total
-	return &RecordResponse{Value: rr}
+func (r *PrivateSequenceResponse) rval() *api.MessageRecord[messaging.Message] { //nolint:unused
+	return r.Value
 }

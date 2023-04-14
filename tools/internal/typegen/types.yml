@@ -6,6 +6,8 @@ EntityRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -23,11 +25,21 @@ EntityRecord:
       type: bool
     - name: CustomIsDirty
       type: bool
+    - name: CustomWalkChanges
+      type: bool
     - name: Parameters
       type: Field
       pointer: true
       marshal-as: reference
       repeatable: true
+    - name: OmitCommit
+      type: bool
+    - name: OmitResolve
+      type: bool
+    - name: OmitIsDirty
+      type: bool
+    - name: ValueStore # Use a custom store for values
+      type: string
     - name: Root
       type: bool
     - name: Interface
@@ -45,6 +57,8 @@ ChainRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -67,6 +81,8 @@ StateRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -90,6 +106,8 @@ StateRecord:
     - name: Collection
       type: CollectionType
       marshal-as: enum
+    - name: Comparator
+      type: string
 
 IndexRecord:
   non-binary: true
@@ -99,6 +117,8 @@ IndexRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -122,6 +142,8 @@ IndexRecord:
     - name: Collection
       type: CollectionType
       marshal-as: enum
+    - name: Comparator
+      type: string
 
 OtherRecord:
   non-binary: true
@@ -131,6 +153,8 @@ OtherRecord:
     - name: Parent
       type: EntityRecord
       pointer: true
+    - name: Description
+      type: string
     - name: OmitAccessor
       type: bool
     - name: Private
@@ -148,3 +172,5 @@ OtherRecord:
       type: bool
     - name: HasChains
       type: bool
+    - name: Constructor
+      type: string

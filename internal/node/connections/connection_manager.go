@@ -199,7 +199,7 @@ func (cm *connectionManager) buildNodeInventory() {
 			switch connCtx.nodeConfig.Type {
 			case config.Validator:
 				switch connCtx.partition.Type {
-				case config.BlockValidator:
+				case protocol.PartitionTypeBlockValidator:
 					bvnName := protocol.BvnNameFromPartitionId(partition.Id)
 					if partition.Id == protocol.Directory {
 						panic("Directory partition node is misconfigured as blockvalidator")
@@ -213,7 +213,7 @@ func (cm *connectionManager) buildNodeInventory() {
 						cm.bvnCtxMap[bvnName] = nodeList
 					}
 					cm.all = append(cm.all, connCtx)
-				case config.Directory:
+				case protocol.PartitionTypeDirectory:
 					cm.dnCtxList = append(cm.dnCtxList, connCtx)
 					cm.all = append(cm.all, connCtx)
 				}

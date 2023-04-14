@@ -7,7 +7,7 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/internal"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -22,6 +22,10 @@ func init() {
 // for processing.
 type NetworkUpdate struct{}
 
+func (NetworkUpdate) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	return nil, errors.InternalError.With("invalid attempt to validate an internal message")
+}
+
 func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
 	msg, ok := ctx.message.(*internal.NetworkUpdate)
 	if !ok {
@@ -33,10 +37,6 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	txn.Header.Initiator = msg.Cause
 	txn.Body = msg.Body
 
-	// Mark the transaction as internal and queue it for processing
-	ctx.internal.Add(txn.ID().Hash())
-	ctx.transactionsToProcess.Add(txn.ID().Hash())
-
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
@@ -47,21 +47,38 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 	}
 
 	// Store the transaction
-	err = batch.Message(txn.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: txn})
+	err = batch.Message(txn.ID().Hash()).Main().Put(&messaging.TransactionMessage{Transaction: txn})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
 
-	// Store the transaction status
-	signer := ctx.Executor.globals.Active.AsSigner(ctx.Executor.Describe.PartitionId)
-	status := new(protocol.TransactionStatus)
-	status.TxID = txn.ID()
-	status.Initiator = signer.GetUrl()
-	status.AddSigner(signer)
-
-	err = batch.Transaction(txn.GetHash()).Status().Put(status)
+	// Store a fake payment
+	pay := new(messaging.CreditPayment)
+	pay.Payer = protocol.DnUrl().JoinPath(protocol.Network)
+	pay.Cause = pay.Payer.WithTxID(msg.Cause)
+	pay.Initiator = true
+	pay.TxID = txn.ID()
+	err = batch.Message(pay.Hash()).Main().Put(pay)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store transaction status: %w", err)
+		return nil, errors.UnknownError.WithFormat("store payment: %w", err)
+	}
+	err = batch.Message(pay.Hash()).Cause().Add(pay.Cause)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store payment cause: %w", err)
+	}
+
+	err = batch.Account(msg.Account).
+		Transaction(txn.ID().Hash()).
+		Payments().
+		Add(pay.Hash())
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store payment hash: %w", err)
+	}
+
+	// Execute the transaction
+	st, err := ctx.callMessageExecutor(batch, &messaging.TransactionMessage{Transaction: txn})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	err = batch.Commit()
@@ -69,6 +86,5 @@ func (NetworkUpdate) Process(batch *database.Batch, ctx *MessageContext) (*proto
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// The transaction has not been executed so don't add the status yet
-	return nil, nil
+	return st, nil
 }

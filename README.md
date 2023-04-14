@@ -1,77 +1,94 @@
+[![Go Reference](https://pkg.go.dev/badge/gitlab.com/accumulatenetwork/accumulate.svg)](https://pkg.go.dev/gitlab.com/accumulatenetwork/accumulate)
+
 # Accumulate
 
-Accumulate is a novel blockchain network designed to be hugely scalable while maintaining
-security. [More details](docs/Accumulate.md)
+Accumulate is a novel blockchain network designed to be hugely scalable while
+maintaining security.
 
-## Command Line Interface (CLI)
+- Wallets & Apps
+  - [Explorer](https://explorer.accumulatenetwork.io/)
+  - [Mobile](https://accumulatenetwork.io/wallet/)
+  - [CLI](https://gitlab.com/accumulatenetwork/core/wallet)
+- Documentation
+  - [User documentation](https://docs.accumulatenetwork.io/accumulate/)
+  - [Architecture](https://docs.accumulatenetwork.io/core/)
 
-The CLI lives in `./cmd/accumulate`. It can be run directly via `go run ./cmd/accumulate`, which builds to a
-temporary directory and executes the binary in one go. It can be built via `go build ./cmd/accumulate`, which
-creates `accumulate` or `accumulate.exe` in the current directory. It can be installed to `$GOPATH/bin/accumulate` (
-GOPATH defaults to `$HOME/go`) via
-`go install ./cmd/accumulate`.
+## Repository organization
 
-### Main TestNet
+### Commands
 
-To initialize node configuration in `~/.accumulate`, choose a network from
-`networks/networks.go`, and run `accumulated init -n <name>`.
+- `cmd/accumulated` initializes and runs node daemons.
+- `cmd/accumulated-bootstrap` runs a libp2p bootstrap node.
+- `cmd/accumulated-faucet` runs a token faucet.
+- `cmd/accumulated-http` runs an HTTP API node.
 
-Once `~/.accumulate` is initialized, run `accumulated run -n <n>` where `<n>` is the index of the node you want to run.
-For example, "Arches" has two nodes, index 0 and index 1.
+### SDK
 
-### Local TestNet
+- `pkg/api/v3` contains specifications for API v3 and transport implementations.
+- `pkg/build` provides utilities for building and signing transactions.
+- `pkg/client/api/v2` is a JSON-RPC client for API v2.
+- `pkg/errors` defines Accumulate's status and error codes and a serializable
+  error implementation.
+- `pkg/types` contains the protocol's data types.
+- `pkg/url` implements custom types for Accumulate URLs and transaction/message
+  IDs.
+- `protocol` contains additional protocol data types and will eventually be
+  migrated to `pkg/types`.
 
-To set up a testnet on your PC, using localhost addresses, run `accumulated testnet -w <config-dir>`,
-e.g. `accumulated testnet -w ./nodes`.
+### Experimental
 
-- `-v/--validators` sets the number of nodes created, default 3.
-- `--ip` sets the IP address of the first node, default `127.0.1.1`. Nodes after the first will increment the IP,
-  e.g. `127.0.1.2`.
-- `--port` sets the base port, default `26656`. Tendermint P2P will run on the base port, Tendermint RPC on base port +
-  1, Tendermint GRPC on +2, Accumulate RPC on +3, Accumulate JSONRPC API on +4, and Accumulate REST API on +5.
+Experimental packages should be used with caution and may change without notice.
 
-To run a node in the testnet, run `accumulated run -w <dir>/Node<n>`, e.g.
-`accumulated run -w ./nodes/Node0`.
+- `exp/light` is a light client prototype.
+- `vdk` is a validator development kit prototype.
 
-## Code organization
+### Internal
 
-Accumulate is broken into the following components:
+Internal packages should not be used outside of this repository.
 
-- `cmd/accumulated` - Daemon
-- `cmd/accumulate` - CLI wallet
-- `config` - Daemon configuration types
-- `internal/node/abci` - [ABCI](https://docs.tendermint.com/master/spec/abci/)
-  implementation
-- `internal/api`- JSON-RPC v1; **Deprecated**: use `internal/api/v2`
-- `internal/api/v2`- JSON-RPC v2
-- `internal/core/chain` - Transaction validation and processing (aka chain
-  validators)
-- `internal/cmd/gentypes` - Type generator for `internal/api` and `protocol`
-- `pkg/types/encoding` - Shared code used by generated types in `internal/api`
-  and `protocol`
-- `internal/node/genesis` - Objects that are created when the node first starts up
-- `internal/logging` - Logging setup
-- `internal/node` - Node configuration, initialization, and execution
-- `internal/relay` - The relay, responsible for relaying transactions to the
-  appropriate BVC; **Deprecated**: use `internal/api/v2`
-- `test/testing` - Test helpers
-- `pkg/url` - Accumulate URL parser
-- `internal/node/web/static` - Embedded web server content
-- `networks` - Accumulate network definitions
-- `protocol` - Protocol types and definitions
-- `router` - Accumulate API
-- `smt` - Stateful Merkle Tree
-- `types` - Data type definitions, used for RPC and persistence; **Deprecated**:
-  these packages will eventually be moved or replaced, new work should happen
-  elsewhere
+- `internal/api` contains API service implementations.
+- `internal/bsn` is the block summary network (prototype).
+- `internal/core` is the core executor system.
+- `internal/database` is the core data model.
+- `internal/node` is plumbing for the node daemon.
 
-### Load Test
+### Testing
 
-To load test an Accumulate network, run `accumulated testnet --network <name>`
-or `accumulated testnet --remote <ip-addr>`. These flags can be combined.
+Testing packages are primarily intended for testing this repository. A few are
+stable enough to be used externally.
 
-- `--network` adds the first IP of the named or numbered network to the target list.
-- `--remote` adds the given IP to the target list.
-- `--wallets` sets the number of generated wallets.
-- `--transactions` sets the number of generated transactions.
+- `test/harness` is a harness for building Go tests against an Accumulate
+  network. The harness can be used to test a simulated network or a real network
+  and exposes the same interface for both. The network **must** support API v3.
+- `test/simulator` is an Accumulate network simulator, capable of running
+  multiple partitions with multiple nodes each with a basic consensus mechanism.
+  The simulator must be stepped manually or via a timer.
+- `test/testing` is deprecated and should not be used by new tests.
 
+The other packages are either nothing but tests or not intended for external use
+and not guaranteed to be stable.
+
+### Tools
+
+These tools were not designed to be used externally and may change without
+notice. Use at your own risk.
+
+- `tools/cmd/debug` is a collection of debugging utilities.
+- `tools/cmd/explore` is an experimental database explorer.
+- `tools/cmd/factom` converts Factom database dumps to snapshots for genesis.
+- `tools/cmd/gen-api` generates JSON-RPC API implementations.
+- `tools/cmd/gen-enum` generates enumeration types.
+- `tools/cmd/gen-model` generates data models.
+- `tools/cmd/gen-sdk` generates JSON-RPC API clients.
+- `tools/cmd/gen-types` generates serializable data types.
+- `tools/cmd/genesis` is a collection of utilities for building snapshots for
+  genesis.
+- `tools/cmd/golangci-lint` is a fork of golangci-lint that includes custom
+  linters.
+- `tools/cmd/repair-indices` rebuilds database indices for a core node.
+- `tools/cmd/resend-anchor` scans the network and resends anchor transactions
+  and signatures.
+- `tools/cmd/sendinterrupt` does the equivalent to sending Ctrl-C to a Windows
+  console window.
+- `tools/cmd/simulator` simulates an Accumulate network.
+- `tools/cmd/snapshot` is a collection of utilities for database snapshots.

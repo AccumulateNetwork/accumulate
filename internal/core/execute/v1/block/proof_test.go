@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -25,7 +26,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1})
 
 	// Create a lite address
 	alice := acctesting.GenerateTmKey(t.Name(), "Alice")

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,3 +16,15 @@ func Is(err, target error) bool { return errors.Is(err, target) }
 
 // Unwrap calls stdlib errors.Unwrap.
 func Unwrap(err error) error { return errors.Unwrap(err) }
+
+// Code returns the status code if the error is an [Error], or 0.
+func Code(err error) Status {
+	var err2 *Error
+	if !As(err, &err2) {
+		return 0
+	}
+	for err2.Code == UnknownError && err2.Cause != nil {
+		err2 = err2.Cause
+	}
+	return err2.Code
+}

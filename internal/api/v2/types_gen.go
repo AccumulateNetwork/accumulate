@@ -82,12 +82,12 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	PartitionId   string             `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
-	NetworkType   config.NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
-	Network       config.Network     `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	NetworkAnchor [32]byte           `json:"networkAnchor,omitempty" form:"networkAnchor" query:"networkAnchor" validate:"required"`
-	Values        core.GlobalValues  `json:"values,omitempty" form:"values" query:"values" validate:"required"`
-	Error         *errors2.Error     `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	PartitionId   string                 `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
+	NetworkType   protocol.PartitionType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
+	Network       config.Network         `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	NetworkAnchor [32]byte               `json:"networkAnchor,omitempty" form:"networkAnchor" query:"networkAnchor" validate:"required"`
+	Values        core.GlobalValues      `json:"values,omitempty" form:"values" query:"values" validate:"required"`
+	Error         *errors2.Error         `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
 type DirectoryQuery struct {
@@ -1455,6 +1455,10 @@ var fieldNames_ChainState = []string{
 }
 
 func (v *ChainState) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1521,6 +1525,10 @@ var fieldNames_DataEntryQuery = []string{
 }
 
 func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1566,6 +1574,10 @@ var fieldNames_DataEntryQueryResponse = []string{
 }
 
 func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1634,6 +1646,10 @@ var fieldNames_GeneralReceipt = []string{
 }
 
 func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1716,6 +1732,10 @@ var fieldNames_ResponseDataEntry = []string{
 }
 
 func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1780,6 +1800,10 @@ var fieldNames_ResponseDataEntrySet = []string{
 }
 
 func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1831,6 +1855,10 @@ var fieldNames_ResponseKeyPageIndex = []string{
 }
 
 func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1884,6 +1912,10 @@ var fieldNames_TxReceipt = []string{
 }
 
 func (v *TxReceipt) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -2366,12 +2398,12 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PartitionId   string             `json:"partitionId,omitempty"`
-		NetworkType   config.NetworkType `json:"networkType,omitempty"`
-		Network       config.Network     `json:"network,omitempty"`
-		NetworkAnchor string             `json:"networkAnchor,omitempty"`
-		Values        core.GlobalValues  `json:"values,omitempty"`
-		Error         *errors2.Error     `json:"error,omitempty"`
+		PartitionId   string                 `json:"partitionId,omitempty"`
+		NetworkType   protocol.PartitionType `json:"networkType,omitempty"`
+		Network       config.Network         `json:"network,omitempty"`
+		NetworkAnchor string                 `json:"networkAnchor,omitempty"`
+		Values        core.GlobalValues      `json:"values,omitempty"`
+		Error         *errors2.Error         `json:"error,omitempty"`
 	}{}
 	if !(len(v.PartitionId) == 0) {
 		u.PartitionId = v.PartitionId
@@ -3425,12 +3457,12 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PartitionId   string             `json:"partitionId,omitempty"`
-		NetworkType   config.NetworkType `json:"networkType,omitempty"`
-		Network       config.Network     `json:"network,omitempty"`
-		NetworkAnchor string             `json:"networkAnchor,omitempty"`
-		Values        core.GlobalValues  `json:"values,omitempty"`
-		Error         *errors2.Error     `json:"error,omitempty"`
+		PartitionId   string                 `json:"partitionId,omitempty"`
+		NetworkType   protocol.PartitionType `json:"networkType,omitempty"`
+		Network       config.Network         `json:"network,omitempty"`
+		NetworkAnchor string                 `json:"networkAnchor,omitempty"`
+		Values        core.GlobalValues      `json:"values,omitempty"`
+		Error         *errors2.Error         `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
 	u.NetworkType = v.NetworkType
@@ -3932,9 +3964,11 @@ func (v *SignaturePage) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Signer = u.Signer
-	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	return nil
 }
@@ -4131,9 +4165,11 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	}
 	v.Txid = u.Txid
 	v.Transaction = u.Transaction
-	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	v.Status = u.Status
 	if !(len(u.Produced) == 0) {

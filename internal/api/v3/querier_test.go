@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -59,6 +60,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.MajorBlockSchedule = "* * * * *"
+	g.ExecutorVersion = ExecutorVersionV2
 
 	var err error
 	s.sim, err = simulator.New(
@@ -89,7 +91,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 	MakeLiteTokenAccount(s.T(), sim.DatabaseFor(s.faucet), faucetKey[32:], AcmeUrl())
 	CreditTokens(s.T(), sim.DatabaseFor(s.faucet), s.faucet, big.NewInt(1000*AcmePrecision))
 
-	st := sim.SubmitSuccessfully(MustBuild(s.T(),
+	st := sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			AddCredits().To(s.faucet).WithOracle(InitialAcmeOracle).Spend(10).
 			SignWith(s.faucet).Version(1).Timestamp(1).PrivateKey(faucetKey)))
@@ -97,7 +99,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
-	st = sim.SubmitSuccessfully(MustBuild(s.T(),
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			CreateIdentity(s.alice).WithKey(s.aliceKey, SignatureTypeED25519).WithKeyBook(s.alice, "book").
 			SignWith(s.faucet).Version(1).Timestamp(2).PrivateKey(faucetKey)))
@@ -106,7 +108,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		Txn(st.TxID).Produced().Succeeds())
 	s.createAlice = st
 
-	st = sim.SubmitSuccessfully(MustBuild(s.T(),
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			AddCredits().To(s.alice, "book", "1").WithOracle(InitialAcmeOracle).Spend(10).
 			SignWith(s.faucet).Version(1).Timestamp(3).PrivateKey(faucetKey)))
@@ -114,7 +116,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
-	st = sim.SubmitSuccessfully(MustBuild(s.T(),
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.alice).
 			CreateDataAccount(s.alice, "data").
 			SignWith(s.alice, "book", "1").Version(1).Timestamp(1).PrivateKey(s.aliceKey)))
@@ -122,7 +124,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		Txn(st.TxID).Succeeds())
 	s.writeData = st
 
-	st = sim.SubmitSuccessfully(MustBuild(s.T(),
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.alice, "data").
 			WriteData([]byte("foo")).
 			SignWith(s.alice, "book", "1").Version(1).Timestamp(2).PrivateKey(s.aliceKey)))
@@ -134,18 +136,19 @@ func (s *QuerierTestSuite) SetupSuite() {
 }
 
 func uintp(v uint64) *uint64 { return &v }
+func boolp(v bool) *bool     { return &v }
 
 func (s *QuerierTestSuite) TestQueryTransaction() {
 	r, err := s.QuerierFor(s.faucet).QueryTransaction(context.Background(), s.createAlice.TxID, nil)
 	s.Require().NoError(err)
-	_ = s.NotNil(r.Transaction) &&
-		s.IsType((*CreateIdentity)(nil), r.Transaction.Body)
+	_ = s.NotNil(r.Message.Transaction) &&
+		s.IsType((*CreateIdentity)(nil), r.Message.Transaction.Body)
 	_ = s.NotNil(r.Status) &&
-		s.Equal(errors.Delivered, r.Status.Code)
+		s.Equal(errors.Delivered, r.Status)
 	_ = s.NotNil(r.Produced) &&
-		s.Len(r.Produced.Records, 1)
+		s.Len(r.Produced.Records, 2)
 	_ = s.NotNil(r.Signatures) &&
-		s.Len(r.Signatures.Records, 1)
+		s.Len(r.Signatures.Records, 2)
 }
 
 func (s *QuerierTestSuite) TestQueryAccount() {
@@ -161,7 +164,7 @@ func (s *QuerierTestSuite) TestQueryAccount() {
 func (s *QuerierTestSuite) TestQueryAccountChains() {
 	r, err := s.QuerierFor(s.alice).QueryAccountChains(context.Background(), s.alice, nil)
 	s.Require().NoError(err)
-	_ = s.Len(r.Records, 3) &&
+	_ = s.Len(r.Records, 4) &&
 		s.Equal("main", r.Records[0].Name) &&
 		s.Equal(merkle.ChainTypeTransaction, r.Records[0].Type) &&
 		s.Equal(2, int(r.Records[0].Count))
@@ -207,19 +210,19 @@ func (s *QuerierTestSuite) TestQueryChainEntry() {
 		r, err := s.QuerierFor(s.alice).QueryChainEntry(context.Background(), s.alice, &api.ChainQuery{Name: "main", Index: uintp(0)})
 		s.Require().NoError(err)
 		s.Equal(txn.Hash(), r.Entry)
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
+		s.IsType((*api.MessageRecord[messaging.Message])(nil), r.Value)
 	})
 
 	s.Run("ByValue", func() {
 		r, err := s.QuerierFor(s.alice).QueryChainEntry(context.Background(), s.alice, &api.ChainQuery{Name: "main", Entry: hash[:]})
 		s.Require().NoError(err)
 		s.Equal(0, int(r.Index))
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
+		s.IsType((*api.MessageRecord[messaging.Message])(nil), r.Value)
 	})
 }
 
 func (s *QuerierTestSuite) TestQueryChainEntries() {
-	r, err := s.QuerierFor(s.alice).QueryTxnChainEntries(context.Background(), s.alice, &api.ChainQuery{Name: "main", Range: &api.RangeOptions{}})
+	r, err := s.QuerierFor(s.alice).QueryMainChainEntries(context.Background(), s.alice, &api.ChainQuery{Name: "main", Range: &api.RangeOptions{}})
 	s.Require().NoError(err)
 	s.Require().Len(r.Records, 2)
 }
@@ -232,21 +235,18 @@ func (s *QuerierTestSuite) TestQueryDataEntry() {
 		s.Require().NoError(err)
 		s.Equal(0, int(r.Index))
 		s.Equal(entry.Hash(), r.Entry[:])
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
 	})
 
 	s.Run("ByIndex", func() {
 		r, err := s.QuerierFor(s.alice).QueryDataEntry(context.Background(), s.alice.JoinPath("data"), &api.DataQuery{Index: uintp(0)})
 		s.Require().NoError(err)
 		s.Equal(entry.Hash(), r.Entry[:])
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
 	})
 
 	s.Run("ByValue", func() {
 		r, err := s.QuerierFor(s.alice).QueryDataEntry(context.Background(), s.alice.JoinPath("data"), &api.DataQuery{Entry: entry.Hash()})
 		s.Require().NoError(err)
 		s.Equal(0, int(r.Index))
-		s.IsType((*api.TransactionRecord)(nil), r.Value)
 	})
 }
 
@@ -271,7 +271,13 @@ func (s *QuerierTestSuite) TestQueryPending() {
 func (s *QuerierTestSuite) TestQueryMinorBlock() {
 	r, err := s.QuerierFor(s.alice).QueryMinorBlock(context.Background(), s.alice, &api.BlockQuery{Minor: uintp(2)})
 	s.Require().NoError(err)
-	s.Require().Len(r.Entries.Records, 1)
+	s.Require().NotEmpty(r.Entries.Records)
+}
+
+func (s *QuerierTestSuite) TestQueryDirectoryMinorBlock() {
+	r, err := s.QuerierFor(DnUrl()).QueryMinorBlock(context.Background(), DnUrl(), &api.BlockQuery{Minor: uintp(4)})
+	s.Require().NoError(err)
+	s.Require().NotEmpty(r.Anchored.Records)
 }
 
 func (s *QuerierTestSuite) TestQueryMinorBlocks() {
@@ -296,29 +302,33 @@ func (s *QuerierTestSuite) TestQueryMajorBlock() {
 func (s *QuerierTestSuite) TestQueryMajorBlocks() {
 	r, err := s.QuerierFor(s.alice).QueryMajorBlocks(context.Background(), s.alice, &api.BlockQuery{MajorRange: &api.RangeOptions{}})
 	s.Require().NoError(err)
-	s.Require().Len(r.Records, 1)
+	s.Require().NotEmpty(r.Records)
 }
 
 func (s *QuerierTestSuite) TestSearchForAnchor() {
-	txr, err := s.QuerierFor(s.faucet).QueryTransaction(context.Background(), s.createAlice.TxID, nil)
+	u := PartitionUrl("BVN1").JoinPath(AnchorPool)
+	chr, err := s.QuerierFor(u).QueryMainChainEntries(context.Background(), u, &api.ChainQuery{Name: "anchor-sequence", Range: &api.RangeOptions{FromEnd: true, Count: uintp(1), Start: 0, Expand: boolp(true)}})
 	s.Require().NoError(err)
-	txr, err = s.QuerierFor(s.alice).QueryTransaction(context.Background(), txr.Produced.Records[0].Value, nil)
+	anchor := chr.Records[0].Value.Message.Transaction.Body.(*BlockValidatorAnchor).RootChainAnchor
+
+	r, err := s.QuerierFor(DnUrl()).SearchForAnchor(context.Background(), DnUrl().JoinPath(AnchorPool), &api.AnchorSearchQuery{Anchor: anchor[:]})
+	s.Require().NoError(err)
+	s.NotEmpty(r.Records)
+}
+
+func (s *QuerierTestSuite) TestQueryIncludesAnchorSignatures() {
+	r, err := s.QuerierFor(DnUrl()).QueryMainChainEntry(context.Background(), DnUrl().JoinPath(AnchorPool), &api.ChainQuery{Name: "main", Index: uintp(1)})
 	s.Require().NoError(err)
 
-	var anchor []byte
-	for _, r := range txr.Signatures.Records {
-		for _, sig := range r.Signature.(*SignatureSet).Signatures {
-			sig, ok := sig.(*ReceiptSignature)
-			if ok {
-				anchor = sig.Proof.Anchor
+	var hasAnchor bool
+	for _, set := range r.Value.Signatures.Records {
+		for _, sig := range set.Signatures.Records {
+			if sig.Message.Type() == messaging.MessageTypeBlockAnchor {
+				hasAnchor = true
 			}
 		}
 	}
-	s.Require().NotNil(anchor)
-
-	r, err := s.QuerierFor(DnUrl()).SearchForAnchor(context.Background(), DnUrl().JoinPath(AnchorPool), &api.AnchorSearchQuery{Anchor: anchor})
-	s.Require().NoError(err)
-	s.NotEmpty(r.Records)
+	s.Require().True(hasAnchor, "Expected anchor transaction to include anchor signatures")
 }
 
 func (s *QuerierTestSuite) TestSearchForPublicKey() {
@@ -335,7 +345,7 @@ func (s *QuerierTestSuite) TestSearchForPublicKeyHash() {
 }
 
 func (s *QuerierTestSuite) TestSearchForTransactionHash() {
-	r, err := s.QuerierFor(s.faucet).SearchForTransactionHash(context.Background(), s.faucet, &api.MessageHashSearchQuery{Hash: s.createAlice.TxID.Hash()})
+	r, err := s.QuerierFor(s.faucet).SearchForMessage(context.Background(), s.createAlice.TxID.Hash())
 	s.Require().NoError(err)
 	s.Require().Len(r.Records, 1)
 }

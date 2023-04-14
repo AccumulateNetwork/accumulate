@@ -18,7 +18,6 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -40,7 +39,13 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 		m.logger = opts.Logger.With("module", "jrpc")
 	}
 
-	if opts.LocalV3 == nil || opts.NetV3 == nil {
+	if opts.LocalV3 == nil ||
+		opts.Querier == nil ||
+		opts.Submitter == nil ||
+		opts.Network == nil ||
+		opts.Faucet == nil ||
+		opts.Validator == nil ||
+		opts.Sequencer == nil {
 		return nil, errors.BadRequest.With("missing P2P clients")
 	}
 
@@ -96,30 +101,31 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
-	ns, err := m.LocalV3.NodeStatus(ctx, api.NodeStatusOptions{})
+	s, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
 	}
 
 	status := new(StatusResponse)
 	status.Ok = true
-	status.LastDirectoryAnchorHeight = ns.LastBlock.DirectoryAnchorHeight
-	if ns.PartitionType == config.Directory {
-		status.DnHeight = ns.LastBlock.Height
-		status.DnTime = ns.LastBlock.Time
-		status.DnRootHash = ns.LastBlock.ChainRoot
-		status.DnBptHash = ns.LastBlock.StateRoot
-	} else {
-		status.BvnHeight = ns.LastBlock.Height
-		status.BvnTime = ns.LastBlock.Time
-		status.BvnRootHash = ns.LastBlock.ChainRoot
-		status.BvnBptHash = ns.LastBlock.StateRoot
+	status.LastDirectoryAnchorHeight = s.LastBlock.DirectoryAnchorHeight
+	switch s.PartitionType {
+	case protocol.PartitionTypeDirectory:
+		status.DnHeight = s.LastBlock.Height
+		status.DnTime = s.LastBlock.Time
+		status.DnRootHash = s.LastBlock.ChainRoot
+		status.DnBptHash = s.LastBlock.StateRoot
+	case protocol.PartitionTypeBlockValidator:
+		status.BvnHeight = s.LastBlock.Height
+		status.BvnTime = s.LastBlock.Time
+		status.BvnRootHash = s.LastBlock.ChainRoot
+		status.BvnBptHash = s.LastBlock.StateRoot
 	}
 	return status
 }
 
 func (m *JrpcMethods) Version(ctx context.Context, _ json.RawMessage) interface{} {
-	node, err := m.LocalV3.NodeStatus(ctx, api.NodeStatusOptions{})
+	node, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -140,9 +146,11 @@ func (m *JrpcMethods) Describe(ctx context.Context, _ json.RawMessage) interface
 	}
 
 	res := new(DescriptionResponse)
-	res.PartitionId = m.Options.Describe.PartitionId
-	res.NetworkType = m.Options.Describe.NetworkType
-	res.Network = m.Options.Describe.Network
+	if m.Options.Describe != nil {
+		res.PartitionId = m.Options.Describe.PartitionId
+		res.NetworkType = m.Options.Describe.NetworkType
+		res.Network = m.Options.Describe.Network
+	}
 	res.Values.Globals = net.Globals
 	res.Values.Network = net.Network
 	res.Values.Oracle = net.Oracle

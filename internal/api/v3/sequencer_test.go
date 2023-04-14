@@ -16,8 +16,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -47,7 +47,7 @@ func TestSequencer(t *testing.T) {
 	sim.SetRoute(bob, "BVN1")
 
 	g := new(core.GlobalValues)
-	require.NoError(t, g.Load(config.NetworkUrl{URL: PartitionUrl("BVN0")}, func(account *url.URL, target interface{}) error {
+	require.NoError(t, g.Load(PartitionUrl("BVN0"), func(account *url.URL, target interface{}) error {
 		return sim.DatabaseFor(alice).View(func(batch *database.Batch) error {
 			return batch.Account(account).GetStateAs(target)
 		})
@@ -57,7 +57,7 @@ func TestSequencer(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.RootIdentity(), 1e9)
 	CreditTokens(t, sim.DatabaseFor(alice), alice, big.NewInt(1e12))
 
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice).
 			SendTokens(123, 0).To(bob).
 			SignWith(alice).Version(1).Timestamp(1).PrivateKey(aliceKey)))
@@ -77,22 +77,22 @@ func TestSequencer(t *testing.T) {
 
 	anchor, err := svc.Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(AnchorPool), DnUrl().JoinPath(AnchorPool), 1)
 	require.NoError(t, err)
-	require.IsType(t, (*BlockValidatorAnchor)(nil), anchor.Transaction.Body)
+	require.IsType(t, (*messaging.TransactionMessage)(nil), anchor.Message)
+	require.IsType(t, (*BlockValidatorAnchor)(nil), anchor.Message.(*messaging.TransactionMessage).Transaction.Body)
 	require.Len(t, anchor.Signatures.Records, 1)
-	require.IsType(t, (*SignatureSet)(nil), anchor.Signatures.Records[0].Signature)
-	sigs := anchor.Signatures.Records[0].Signature.(*SignatureSet).Signatures
+	sigs := anchor.Signatures.Records[0].Signatures.Records
 	require.Len(t, sigs, 2)
-	require.IsType(t, (*PartitionSignature)(nil), sigs[0])
-	require.IsType(t, (*ED25519Signature)(nil), sigs[1])
+	require.IsType(t, (*PartitionSignature)(nil), sigs[0].Message.(*messaging.SignatureMessage).Signature)
+	require.IsType(t, (*ED25519Signature)(nil), sigs[1].Message.(*messaging.SignatureMessage).Signature)
 
 	synth, err := svc.Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(Synthetic), PartitionUrl("BVN1").JoinPath(Synthetic), 1)
 	require.NoError(t, err)
-	require.IsType(t, (*SyntheticDepositTokens)(nil), synth.Transaction.Body)
+	require.IsType(t, (*messaging.TransactionMessage)(nil), anchor.Message)
+	require.IsType(t, (*SyntheticDepositTokens)(nil), synth.Message.(*messaging.TransactionMessage).Transaction.Body)
 	require.Len(t, synth.Signatures.Records, 1)
-	require.IsType(t, (*SignatureSet)(nil), synth.Signatures.Records[0].Signature)
-	sigs = synth.Signatures.Records[0].Signature.(*SignatureSet).Signatures
+	sigs = synth.Signatures.Records[0].Signatures.Records
 	require.Len(t, sigs, 3)
-	require.IsType(t, (*PartitionSignature)(nil), sigs[0])
-	require.IsType(t, (*ReceiptSignature)(nil), sigs[1])
-	require.IsType(t, (*ED25519Signature)(nil), sigs[2])
+	require.IsType(t, (*PartitionSignature)(nil), sigs[0].Message.(*messaging.SignatureMessage).Signature)
+	require.IsType(t, (*ReceiptSignature)(nil), sigs[1].Message.(*messaging.SignatureMessage).Signature)
+	require.IsType(t, (*ED25519Signature)(nil), sigs[2].Message.(*messaging.SignatureMessage).Signature)
 }

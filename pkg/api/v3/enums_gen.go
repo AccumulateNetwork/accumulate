@@ -68,11 +68,11 @@ const RecordTypeChainEntry RecordType = 3
 // RecordTypeKey .
 const RecordTypeKey RecordType = 4
 
-// RecordTypeTransaction .
-const RecordTypeTransaction RecordType = 16
+// RecordTypeMessage .
+const RecordTypeMessage RecordType = 16
 
-// RecordTypeSignature .
-const RecordTypeSignature RecordType = 17
+// RecordTypeSignatureSet .
+const RecordTypeSignatureSet RecordType = 17
 
 // RecordTypeMinorBlock .
 const RecordTypeMinorBlock RecordType = 32
@@ -92,32 +92,35 @@ const RecordTypeTxID RecordType = 130
 // RecordTypeIndexEntry .
 const RecordTypeIndexEntry RecordType = 131
 
-// ServiceTypeUnknown .
+// ServiceTypeUnknown indicates an unknown service type.
 const ServiceTypeUnknown ServiceType = 0
 
-// ServiceTypeNode .
+// ServiceTypeNode is the type of [NodeService].
 const ServiceTypeNode ServiceType = 1
 
-// ServiceTypeNetwork .
-const ServiceTypeNetwork ServiceType = 2
+// ServiceTypeConsensus is the type of [ConsensusService].
+const ServiceTypeConsensus ServiceType = 2
 
-// ServiceTypeMetrics .
-const ServiceTypeMetrics ServiceType = 3
+// ServiceTypeNetwork is the type of [NetworkService].
+const ServiceTypeNetwork ServiceType = 3
 
-// ServiceTypeQuery .
-const ServiceTypeQuery ServiceType = 4
+// ServiceTypeMetrics is the type of [MetricsService].
+const ServiceTypeMetrics ServiceType = 4
 
-// ServiceTypeEvent .
-const ServiceTypeEvent ServiceType = 5
+// ServiceTypeQuery is the type of [Querier].
+const ServiceTypeQuery ServiceType = 5
 
-// ServiceTypeSubmit .
-const ServiceTypeSubmit ServiceType = 6
+// ServiceTypeEvent is the type of [EventService].
+const ServiceTypeEvent ServiceType = 6
 
-// ServiceTypeValidate .
-const ServiceTypeValidate ServiceType = 7
+// ServiceTypeSubmit is the type of [Submitter].
+const ServiceTypeSubmit ServiceType = 7
 
-// ServiceTypeFaucet .
-const ServiceTypeFaucet ServiceType = 8
+// ServiceTypeValidate is the type of [Validator].
+const ServiceTypeValidate ServiceType = 8
+
+// ServiceTypeFaucet is the type of [Faucet].
+const ServiceTypeFaucet ServiceType = 9
 
 // GetEnumValue returns the value of the Event Type
 func (v EventType) GetEnumValue() uint64 { return uint64(v) }
@@ -129,9 +132,8 @@ func (v *EventType) SetEnumValue(id uint64) bool {
 	case EventTypeError, EventTypeBlock, EventTypeGlobals:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Event Type.
@@ -143,9 +145,8 @@ func (v EventType) String() string {
 		return "block"
 	case EventTypeGlobals:
 		return "globals"
-	default:
-		return fmt.Sprintf("EventType:%d", v)
 	}
+	return fmt.Sprintf("EventType:%d", v)
 }
 
 // EventTypeByName returns the named Event Type.
@@ -157,9 +158,8 @@ func EventTypeByName(name string) (EventType, bool) {
 		return EventTypeBlock, true
 	case "globals":
 		return EventTypeGlobals, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Event Type to JSON as a string.
@@ -193,9 +193,8 @@ func (v *QueryType) SetEnumValue(id uint64) bool {
 	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Query Type.
@@ -223,9 +222,8 @@ func (v QueryType) String() string {
 		return "delegateSearch"
 	case QueryTypeMessageHashSearch:
 		return "messageHashSearch"
-	default:
-		return fmt.Sprintf("QueryType:%d", v)
 	}
+	return fmt.Sprintf("QueryType:%d", v)
 }
 
 // QueryTypeByName returns the named Query Type.
@@ -253,9 +251,8 @@ func QueryTypeByName(name string) (QueryType, bool) {
 		return QueryTypeDelegateSearch, true
 	case "messagehashsearch":
 		return QueryTypeMessageHashSearch, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Query Type to JSON as a string.
@@ -286,12 +283,11 @@ func (v RecordType) GetEnumValue() uint64 { return uint64(v) }
 func (v *RecordType) SetEnumValue(id uint64) bool {
 	u := RecordType(id)
 	switch u {
-	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeTransaction, RecordTypeSignature, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry:
+	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Record Type.
@@ -305,10 +301,10 @@ func (v RecordType) String() string {
 		return "chainEntry"
 	case RecordTypeKey:
 		return "key"
-	case RecordTypeTransaction:
-		return "transaction"
-	case RecordTypeSignature:
-		return "signature"
+	case RecordTypeMessage:
+		return "message"
+	case RecordTypeSignatureSet:
+		return "signatureSet"
 	case RecordTypeMinorBlock:
 		return "minorBlock"
 	case RecordTypeMajorBlock:
@@ -321,9 +317,8 @@ func (v RecordType) String() string {
 		return "txID"
 	case RecordTypeIndexEntry:
 		return "indexEntry"
-	default:
-		return fmt.Sprintf("RecordType:%d", v)
 	}
+	return fmt.Sprintf("RecordType:%d", v)
 }
 
 // RecordTypeByName returns the named Record Type.
@@ -337,10 +332,10 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeChainEntry, true
 	case "key":
 		return RecordTypeKey, true
-	case "transaction":
-		return RecordTypeTransaction, true
-	case "signature":
-		return RecordTypeSignature, true
+	case "message":
+		return RecordTypeMessage, true
+	case "signatureset":
+		return RecordTypeSignatureSet, true
 	case "minorblock":
 		return RecordTypeMinorBlock, true
 	case "majorblock":
@@ -353,9 +348,8 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeTxID, true
 	case "indexentry":
 		return RecordTypeIndexEntry, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Record Type to JSON as a string.
@@ -386,12 +380,11 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet:
+	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Service Type.
@@ -401,6 +394,8 @@ func (v ServiceType) String() string {
 		return "unknown"
 	case ServiceTypeNode:
 		return "node"
+	case ServiceTypeConsensus:
+		return "consensus"
 	case ServiceTypeNetwork:
 		return "network"
 	case ServiceTypeMetrics:
@@ -415,9 +410,8 @@ func (v ServiceType) String() string {
 		return "validate"
 	case ServiceTypeFaucet:
 		return "faucet"
-	default:
-		return fmt.Sprintf("ServiceType:%d", v)
 	}
+	return fmt.Sprintf("ServiceType:%d", v)
 }
 
 // ServiceTypeByName returns the named Service Type.
@@ -427,6 +421,8 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 		return ServiceTypeUnknown, true
 	case "node":
 		return ServiceTypeNode, true
+	case "consensus":
+		return ServiceTypeConsensus, true
 	case "network":
 		return ServiceTypeNetwork, true
 	case "metrics":
@@ -441,9 +437,8 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 		return ServiceTypeValidate, true
 	case "faucet":
 		return ServiceTypeFaucet, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Service Type to JSON as a string.

@@ -75,14 +75,28 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 		return err
 	}
 
-	txrq, body, err := constructFaucetTxn(req)
+	ns, err := m.Network.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
 	if err != nil {
-		return err
+		return accumulateError(err)
 	}
-	return m.execute(ctx, txrq, body)
+
+	if !ns.ExecutorVersion.V2() {
+		txrq, body, err := constructFaucetTxnV1(req)
+		if err != nil {
+			return err
+		}
+		return m.execute(ctx, txrq, body)
+	}
+
+	sub, err := m.Options.Faucet.Faucet(ctx, req.Url, api.FaucetOptions{})
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return submissionV3(sub)
 }
 
-func constructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
+func constructFaucetTxnV1(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.FaucetUrl
 	txn.Body = req
@@ -181,7 +195,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		return err
 	}
 
-	return m.submit(m.NetV3, ctx, env, req.CheckOnly)
+	return m.submit(m.Submitter, m.Validator, ctx, env, req.CheckOnly)
 }
 
 func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage) interface{} {
@@ -191,7 +205,7 @@ func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage)
 		return validatorError(err)
 	}
 
-	return m.submit(m.NetV3, ctx, req.Envelope, req.CheckOnly)
+	return m.submit(m.Submitter, m.Validator, ctx, req.Envelope, req.CheckOnly)
 }
 
 func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) interface{} {
@@ -201,10 +215,10 @@ func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) 
 		return validatorError(err)
 	}
 
-	return m.submit(m.LocalV3, ctx, req.Envelope, req.CheckOnly)
+	return m.submit(m.LocalV3, m.LocalV3, ctx, req.Envelope, req.CheckOnly)
 }
 
-func (m *JrpcMethods) submit(v3 V3, ctx context.Context, env *messaging.Envelope, checkOnly bool) interface{} {
+func (m *JrpcMethods) submit(sub api.Submitter, val api.Validator, ctx context.Context, env *messaging.Envelope, checkOnly bool) interface{} {
 	// Marshal the envelope
 	txData, err := env.MarshalBinary()
 	if err != nil {
@@ -215,35 +229,46 @@ func (m *JrpcMethods) submit(v3 V3, ctx context.Context, env *messaging.Envelope
 	var resp []*api.Submission
 	var yes, no = true, false
 	if checkOnly {
-		resp, err = v3.Validate(ctx, env, api.ValidateOptions{Full: &no})
+		resp, err = val.Validate(ctx, env, api.ValidateOptions{Full: &no})
 	} else {
-		resp, err = v3.Submit(ctx, env, api.SubmitOptions{Verify: &no, Wait: &yes})
+		resp, err = sub.Submit(ctx, env, api.SubmitOptions{Verify: &no, Wait: &yes})
 	}
 	if err != nil {
 		return accumulateError(err)
 	}
 
 	// Build the response
+	res := submissionV3(resp...)
 	simpleHash := sha256.Sum256(txData)
-	res := new(TxResponse)
-	if len(resp) > 0 && !resp[0].Success {
-		res.Code = 1
-		res.Message = resp[0].Message
-	}
-	res.Txid = env.Transaction[0].ID()
-	res.TransactionHash = env.Transaction[0].GetHash()
-	res.SignatureHashes = make([][]byte, len(env.Signatures))
 	res.SimpleHash = simpleHash[:]
+	return res
+}
 
-	for i, sig := range env.Signatures {
-		res.SignatureHashes[i] = sig.Hash()
+func submissionV3(sub ...*api.Submission) *TxResponse {
+	// Build the response
+	res := new(TxResponse)
+	for _, r := range sub {
+		if !r.Success {
+			res.Code = 1
+			res.Message = r.Message + "; "
+		}
 	}
 
-	if len(resp) == 1 {
-		res.Result = resp[0].Status
-	} else if len(resp) > 0 {
+	res.Txid = sub[0].Status.TxID
+	h := sub[0].Status.TxID.Hash()
+	res.TransactionHash = h[:]
+
+	res.SignatureHashes = make([][]byte, len(sub)-1)
+	for i, sub := range sub[1:] {
+		h := sub.Status.TxID.Hash()
+		res.SignatureHashes[i] = h[:]
+	}
+
+	if len(sub) == 1 {
+		res.Result = sub[0].Status
+	} else if len(sub) > 0 {
 		var st []*protocol.TransactionStatus
-		for _, r := range resp {
+		for _, r := range sub {
 			st = append(st, r.Status)
 		}
 		res.Result = st

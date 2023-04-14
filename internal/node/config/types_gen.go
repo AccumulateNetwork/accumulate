@@ -19,14 +19,15 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Describe struct {
 	fieldsSet    []bool
-	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
-	PartitionId  string      `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required" toml:"partition-id" mapstructure:"partition-id"`
-	LocalAddress string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
-	Network      Network     `json:"network,omitempty" form:"network" query:"network" validate:"required" toml:"network" mapstructure:"network"`
+	NetworkType  protocol.PartitionType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
+	PartitionId  string                 `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required" toml:"partition-id" mapstructure:"partition-id"`
+	LocalAddress string                 `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
+	Network      Network                `json:"network,omitempty" form:"network" query:"network" validate:"required" toml:"network" mapstructure:"network"`
 	extraData    []byte
 }
 
@@ -53,10 +54,10 @@ type P2P struct {
 
 type Partition struct {
 	fieldsSet []bool
-	Id        string      `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
-	Type      NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
-	BasePort  int64       `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required" toml:"port" mapstructure:"port"`
-	Nodes     []Node      `json:"nodes,omitempty" form:"nodes" query:"nodes" validate:"required" toml:"nodes" mapstructure:"nodes"`
+	Id        string                 `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
+	Type      protocol.PartitionType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
+	BasePort  int64                  `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required" toml:"port" mapstructure:"port"`
+	Nodes     []Node                 `json:"nodes,omitempty" form:"nodes" query:"nodes" validate:"required" toml:"nodes" mapstructure:"nodes"`
 	extraData []byte
 }
 
@@ -230,6 +231,10 @@ var fieldNames_Describe = []string{
 }
 
 func (v *Describe) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -294,6 +299,10 @@ var fieldNames_Network = []string{
 }
 
 func (v *Network) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -344,6 +353,10 @@ var fieldNames_Node = []string{
 }
 
 func (v *Node) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -392,6 +405,10 @@ var fieldNames_P2P = []string{
 }
 
 func (v *P2P) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -446,6 +463,10 @@ var fieldNames_Partition = []string{
 }
 
 func (v *Partition) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -513,7 +534,7 @@ func (v *Describe) UnmarshalBinary(data []byte) error {
 func (v *Describe) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(NetworkType); reader.ReadEnum(1, x) {
+	if x := new(protocol.PartitionType); reader.ReadEnum(1, x) {
 		v.NetworkType = *x
 	}
 	if x, ok := reader.ReadString(2); ok {
@@ -648,7 +669,7 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(1); ok {
 		v.Id = x
 	}
-	if x := new(NetworkType); reader.ReadEnum(2, x) {
+	if x := new(protocol.PartitionType); reader.ReadEnum(2, x) {
 		v.Type = *x
 	}
 	if x, ok := reader.ReadInt(3); ok {
@@ -676,11 +697,11 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *Describe) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkType  NetworkType `json:"networkType,omitempty"`
-		PartitionId  string      `json:"partitionId,omitempty"`
-		SubnetId     string      `json:"subnetId,omitempty"`
-		LocalAddress string      `json:"localAddress,omitempty"`
-		Network      Network     `json:"network,omitempty"`
+		NetworkType  protocol.PartitionType `json:"networkType,omitempty"`
+		PartitionId  string                 `json:"partitionId,omitempty"`
+		SubnetId     string                 `json:"subnetId,omitempty"`
+		LocalAddress string                 `json:"localAddress,omitempty"`
+		Network      Network                `json:"network,omitempty"`
 	}{}
 	if !(v.NetworkType == 0) {
 		u.NetworkType = v.NetworkType
@@ -731,7 +752,7 @@ func (v *P2P) MarshalJSON() ([]byte, error) {
 func (v *Partition) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Id       string                  `json:"id,omitempty"`
-		Type     NetworkType             `json:"type,omitempty"`
+		Type     protocol.PartitionType  `json:"type,omitempty"`
 		BasePort int64                   `json:"basePort,omitempty"`
 		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}
@@ -752,11 +773,11 @@ func (v *Partition) MarshalJSON() ([]byte, error) {
 
 func (v *Describe) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkType  NetworkType `json:"networkType,omitempty"`
-		PartitionId  string      `json:"partitionId,omitempty"`
-		SubnetId     string      `json:"subnetId,omitempty"`
-		LocalAddress string      `json:"localAddress,omitempty"`
-		Network      Network     `json:"network,omitempty"`
+		NetworkType  protocol.PartitionType `json:"networkType,omitempty"`
+		PartitionId  string                 `json:"partitionId,omitempty"`
+		SubnetId     string                 `json:"subnetId,omitempty"`
+		LocalAddress string                 `json:"localAddress,omitempty"`
+		Network      Network                `json:"network,omitempty"`
 	}{}
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
@@ -808,13 +829,17 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
-	for i, x := range u.Listen.Value {
-		v.Listen[i] = x
+	if u.Listen != nil {
+		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
+		for i, x := range u.Listen.Value {
+			v.Listen[i] = x
+		}
 	}
-	v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
-	for i, x := range u.BootstrapPeers.Value {
-		v.BootstrapPeers[i] = x
+	if u.BootstrapPeers != nil {
+		v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
+		for i, x := range u.BootstrapPeers.Value {
+			v.BootstrapPeers[i] = x
+		}
 	}
 	return nil
 }
@@ -822,7 +847,7 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 func (v *Partition) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Id       string                  `json:"id,omitempty"`
-		Type     NetworkType             `json:"type,omitempty"`
+		Type     protocol.PartitionType  `json:"type,omitempty"`
 		BasePort int64                   `json:"basePort,omitempty"`
 		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}

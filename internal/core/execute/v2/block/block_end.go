@@ -7,7 +7,6 @@
 package block
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -20,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -334,7 +332,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		// Sanity check: the response includes a transaction
-		if resp.Transaction == nil {
+		if resp.Message == nil {
 			x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
@@ -347,85 +345,75 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			continue
 		}
 		if !anchor {
-			if resp.Status == nil {
-				x.logger.Error("Response to query-synth is missing the status", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-				continue
-			}
-			if resp.Status.Proof == nil {
+			if resp.SourceReceipt == nil {
 				x.logger.Error("Response to query-synth is missing the proof", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 				continue
 			}
 		}
 
 		seq := &messaging.SequencedMessage{
-			Message: &messaging.UserTransaction{
-				Transaction: resp.Transaction,
-			},
+			Message:     resp.Message,
 			Source:      resp.Sequence.Source,
 			Destination: resp.Sequence.Destination,
 			Number:      resp.Sequence.Number,
 		}
 
-		var messages []messaging.Message
-		if anchor {
-			messages = []messaging.Message{seq}
-		} else {
-			messages = []messaging.Message{
+		// Don't include signatures if the transaction is synthetic
+		if !anchor {
+			messages := []messaging.Message{
 				&messaging.SyntheticMessage{
 					Message: seq,
 					Proof: &protocol.AnnotatedReceipt{
-						Receipt: resp.Status.Proof,
+						Receipt: resp.SourceReceipt,
 						Anchor: &protocol.AnchorMetadata{
 							Account: protocol.DnUrl(),
 						},
 					},
 				},
 			}
+			err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
+			if err != nil {
+				x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Message.Type())
+			}
+			continue
 		}
 
-		var gotKey, bad bool
-		for _, signature := range resp.Signatures.Records {
-			h := signature.TxID.Hash()
-			if !bytes.Equal(h[:], resp.Transaction.GetHash()) {
-				x.logger.Error("Signature from query-synth does not match the transaction hash", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "txid", signature.TxID, "signature", signature)
-				bad = true
+		anchor := &messaging.BlockAnchor{Anchor: seq}
+
+		var bad bool
+		for _, set := range resp.Signatures.Records {
+			if set.Signatures == nil {
+				x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 				continue
 			}
 
-			set, ok := signature.Signature.(*protocol.SignatureSet)
-			if !ok {
-				x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected %T, got %T", (*protocol.SignatureSet)(nil), signature.Signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "txid", signature.TxID, "signature", signature)
-				bad = true
-				continue
-			}
-
-			for _, signature := range set.Signatures {
-				keySig, ok := signature.(protocol.KeySignature)
+			for _, r := range set.Signatures.Records {
+				msg, ok := r.Message.(*messaging.SignatureMessage)
 				if !ok {
-					x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "hash", logging.AsHex(signature.Hash()), "signature", signature)
+					continue
+				}
+				keySig, ok := msg.Signature.(protocol.KeySignature)
+				if !ok {
+					x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", msg.Signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "hash", logging.AsHex(msg.Signature.Hash()), "signature", msg.Signature)
 					bad = true
 					continue
 				}
-				gotKey = true
-				messages = append(messages, &messaging.ValidatorSignature{
-					Signature: keySig,
-					Source:    partition.Url,
-				})
+				anchor.Signature = keySig
 			}
 
 		}
 
-		if !gotKey {
-			x.logger.Error("Invalid synthetic transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
+		if anchor.Signature == nil {
+			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Message.Hash()).Slice(0, 4))
 			bad = true
 		}
 		if bad {
 			continue
 		}
 
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
+		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{anchor}})
 		if err != nil {
-			x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
+			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
 			continue
 		}
 	}
@@ -470,7 +458,7 @@ func (x *Executor) shouldPrepareAnchor(block *Block) {
 
 func (x *Executor) shouldOpenMajorBlock(batch *database.Batch, blockTime time.Time) (bool, time.Time) {
 	// Only the directory network can open a major block
-	if x.Describe.NetworkType != config.Directory {
+	if x.Describe.NetworkType != protocol.PartitionTypeDirectory {
 		return false, time.Time{}
 	}
 
@@ -570,9 +558,10 @@ func (x *Executor) prepareAnchor(block *Block) error {
 
 	// Update the system ledger
 	_, err = database.UpdateAccount(block.Batch, x.Describe.Ledger(), func(ledger *protocol.SystemLedger) error {
-		if x.Describe.NetworkType == config.Directory {
+		switch x.Describe.NetworkType {
+		case protocol.PartitionTypeDirectory:
 			ledger.Anchor, err = x.buildDirectoryAnchor(block, ledger, anchorLedger)
-		} else {
+		case protocol.PartitionTypeBlockValidator:
 			ledger.Anchor, err = x.buildPartitionAnchor(block, ledger)
 		}
 		return errors.UnknownError.Wrap(err)

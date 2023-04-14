@@ -52,6 +52,8 @@
         "-b=2",
         "-v=2",
         "-f=0",
+        "--globals={\"executorVersion\": \"v2\"}",
+        "--faucet-seed=ci",
       ]
     },
     {
@@ -66,6 +68,7 @@
         "devnet",
         "-w=${workspaceFolder}/.nodes",
         "--truncate",
+        "--faucet-seed=ci",
       ]
     },
     {
@@ -83,6 +86,7 @@
         "${workspaceFolder}/.nodes",
         "--truncate",
         "--debug",
+        "--faucet-seed=ci",
       ]
     },
     {
@@ -126,6 +130,21 @@
         "run",
         "--truncate",
         "-w=${workspaceFolder}/.nodes/node-1/dnn",
+      ]
+    },
+
+    // Services
+    {
+      "name": "API (testnet)",
+      "presentation": { "group": "30-Services" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated-http",
+      "args": [
+        "TestNet",
+        "--peer=/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
+        // "--peer=/dns/bvn0-seed.testnet.accumulatenetwork.io/tcp/16593/p2p/12D3KooWKuua795EgHLgNZ8Z9sHc1R9Mdfk82WiBb9YV4VTqYXRs",
       ]
     },
 
@@ -176,12 +195,15 @@
     },
     {
       "name": "Validate: Go test (devnet)",
+      "presentation": { "group": "80-Validate" },
       "type": "go",
       "request": "launch",
       "mode": "test",
       "program": "${workspaceFolder}/test/validate",
       "args": [
-        "-test.validate", "http://127.0.1.1:26660/v3",
+        "-test.v",
+        "-test.validate.network", "${workspaceFolder}/.nodes/node-1/dnn",
+        "-test.run", "TestValidateNetwork",
       ]
     },
 
@@ -354,6 +376,19 @@
       ]
     },
     {
+      "name": "Debug sequence",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "sequence",
+        "mainnet",
+      ]
+    },
+    {
       "name": "Lint",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
@@ -390,14 +425,29 @@
       "port": 2345,
       "host": "127.0.0.1",
       "substitutePath": [
+        // // Full paths (GitLab Docker build)
+        // {
+        //   "to": "/go/",
+        //   "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
+        // },
+        // {
+        //   "to": "/root/",
+        //   "from": "${workspaceFolder}",
+        // },
+
+        // Trimmed paths
         {
-          "to": "/go/",
-          "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
+          "to": "gitlab.com/accumulatenetwork/accumulate/",
+          "from": "${workspaceFolder}/",
         },
         {
-          "to": "/root/",
-          "from": "${workspaceFolder}",
+          "to": "github.com/AccumulateNetwork/",
+          "from": "${env:HOME}/go/pkg/mod/github.com/!accumulate!network/", // <-- MODIFY THIS if you're not using the default GOPATH
         },
+        // {
+        //   "to": "",
+        //   "from": "${env:HOME}/go/pkg/mod/", // <-- MODIFY THIS if you're not using the default GOPATH
+        // },
       ],
     },
     {

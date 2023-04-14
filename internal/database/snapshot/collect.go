@@ -31,7 +31,11 @@ type CollectOptions struct {
 }
 
 func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts CollectOptions) (*Writer, error) {
-	header.RootHash = *(*[32]byte)(batch.BptRoot())
+	var err error
+	header.RootHash, err = batch.BPT().GetRootHash()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
+	}
 
 	w, err := Create(file, header)
 	if err != nil {
@@ -44,7 +48,7 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 	// need to scan the BPT in order to know what transactions need to be saved.
 	var accounts []*url.URL
 	txnHashes := new(HashSet)
-	err = batch.VisitAccounts(func(record *database.Account) error {
+	err = batch.ForEachAccount(func(record *database.Account, hash [32]byte) error {
 		accounts = append(accounts, record.Url())
 		pending, err := record.Pending().Get()
 		if err != nil {
@@ -239,6 +243,10 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opt
 				continue
 			}
 			return errors.UnknownError.WithFormat("collect signature %x: %w", h[:4], err)
+		}
+		if sig == nil {
+			w.Logger.Info("Skipping signature chain message that is not a signature", "hash", logging.AsHex(h).Slice(0, 4))
+			continue
 		}
 
 		if opts.VisitSignature != nil {

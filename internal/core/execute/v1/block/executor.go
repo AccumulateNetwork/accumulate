@@ -9,12 +9,12 @@ package block
 import (
 	"crypto/ed25519"
 
-	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -37,6 +37,8 @@ type Executor struct {
 	isValidator    bool
 	isGenesis      bool
 	mainDispatcher Dispatcher
+
+	CheckTxBatch *database.Batch
 }
 
 type ExecutorOptions = execute.Options
@@ -79,13 +81,13 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	}
 
 	switch opts.Describe.NetworkType {
-	case config.Directory:
+	case protocol.PartitionTypeDirectory:
 		executors = append(executors,
 			chain.PartitionAnchor{},
 			chain.DirectoryAnchor{},
 		)
 
-	case config.BlockValidator:
+	case protocol.PartitionTypeBlockValidator:
 		executors = append(executors,
 			chain.DirectoryAnchor{},
 		)
@@ -135,8 +137,12 @@ func newExecutor(opts ExecutorOptions, isGenesis bool, executors ...chain.Transa
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
 	m.db = opts.Database
-	m.mainDispatcher = opts.NewDispatcher()
+	if opts.NewDispatcher != nil {
+		m.mainDispatcher = opts.NewDispatcher()
+	}
 	m.isGenesis = isGenesis
+
+	m.db.SetObserver(internal.NewDatabaseObserver())
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -192,7 +198,7 @@ func (m *Executor) StoreBlockTimers(ds *logging.DataSet) {
 	m.BlockTimers.Store(ds)
 }
 
-func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
+func (m *Executor) ActiveGlobals() *core.GlobalValues {
 	return &m.globals.Active
 }
 
@@ -213,9 +219,6 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	txn.Body = new(protocol.SystemGenesis)
 	delivery := new(chain.Delivery)
 	delivery.Transaction = txn
-
-	st := chain.NewStateManager(&m.Describe, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
-	defer st.Discard()
 
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
 		Initiator: txn.Header.Principal,
@@ -244,7 +247,8 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	_, err := batch.Account(m.Describe.NodeUrl()).GetState()
 	switch {
 	case err == nil:
-		return batch.BptRoot(), nil
+		h, err := batch.BPT().GetRootHash()
+		return h[:], err
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
@@ -266,18 +270,17 @@ func (m *Executor) RestoreSnapshot(db database.Beginner, file ioutil2.SectionRea
 	return nil
 }
 
-func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (additional [][]byte, err error) {
+func (x *Executor) InitChainValidators(initVal []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
 	// Verify the initial keys are ED25519 and build a map
 	initValMap := map[[32]byte]bool{}
 	for _, val := range initVal {
-		key := val.PubKey.GetEd25519()
-		if key == nil {
-			return nil, errors.BadRequest.WithFormat("validator key type %T is not supported", val.PubKey.Sum)
+		if val.Type != protocol.SignatureTypeED25519 {
+			return nil, errors.BadRequest.WithFormat("validator key type %T is not supported", val.Type)
 		}
-		if len(key) != ed25519.PublicKeySize {
-			return nil, errors.BadRequest.WithFormat("invalid ED25519 key: want length %d, got %d", ed25519.PublicKeySize, len(key))
+		if len(val.PublicKey) != ed25519.PublicKeySize {
+			return nil, errors.BadRequest.WithFormat("invalid ED25519 key: want length %d, got %d", ed25519.PublicKeySize, len(val.PublicKey))
 		}
-		initValMap[*(*[32]byte)(key)] = true
+		initValMap[*(*[32]byte)(val.PublicKey)] = true
 	}
 
 	// Capture any validators missing from the initial set
@@ -289,7 +292,11 @@ func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (addition
 		if initValMap[*(*[32]byte)(val.PublicKey)] {
 			delete(initValMap, *(*[32]byte)(val.PublicKey))
 		} else {
-			additional = append(additional, val.PublicKey)
+			additional = append(additional, &execute.ValidatorUpdate{
+				Type:      protocol.SignatureTypeED25519,
+				PublicKey: val.PublicKey,
+				Power:     1,
+			})
 		}
 	}
 

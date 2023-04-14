@@ -131,9 +131,9 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 	}
 
 	sim.Partitions = make([]config.Partition, 1)
-	sim.Partitions[0] = config.Partition{Type: config.Directory, Id: protocol.Directory, BasePort: 30000}
+	sim.Partitions[0] = config.Partition{Type: protocol.PartitionTypeDirectory, Id: protocol.Directory, BasePort: 30000}
 	for _, bvn := range sim.netInit.Bvns {
-		partition := config.Partition{Type: config.BlockValidator, Id: bvn.Id, BasePort: 30000}
+		partition := config.Partition{Type: protocol.PartitionTypeBlockValidator, Id: bvn.Id, BasePort: 30000}
 		sim.Partitions = append(sim.Partitions, partition)
 	}
 
@@ -147,7 +147,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
 
 		network := config.Describe{
-			NetworkType:  config.Directory,
+			NetworkType:  protocol.PartitionTypeDirectory,
 			PartitionId:  protocol.Directory,
 			LocalAddress: protocol.Directory,
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
@@ -197,7 +197,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 // willChangeGlobals is responsible for updating the validator list.
 func (s *Simulator) willChangeGlobals(e events.WillChangeGlobals) error {
 	for id, x := range s.Executors {
-		updates, err := e.Old.DiffValidators(e.New, id)
+		updates, err := core.DiffValidators(e.Old, e.New, id)
 		if err != nil {
 			return err
 		}
@@ -397,10 +397,8 @@ func (s *Simulator) SubmitTo(partition string, envelope *messaging.Envelope) err
 		return err
 	}
 
-	// Check
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(batch, deliveries)
+	// Check - set recheck = true to make the executor create a new batch to avoid timing issues
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(deliveries, true)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -604,7 +602,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		Sequencer:     sim.Services(),
 		Querier:       sim.Services(),
 	}
-	if execOpts.Describe.NetworkType == config.Directory {
+	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(eventBus)
 	}
 	var err error
@@ -618,7 +616,12 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		Logger:        logger,
 		TxMaxWaitTime: time.Hour,
 		LocalV3:       x.service,
-		NetV3:         sim.Services(),
+		Querier:       sim.Services(),
+		Submitter:     sim.Services(),
+		Network:       sim.Services(),
+		Faucet:        sim.Services(),
+		Validator:     sim.Services(),
+		Sequencer:     sim.Services(),
 	})
 	require.NoError(sim, err)
 	x.API = acctesting.DirectJrpcClient(jrpc)
@@ -627,6 +630,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 func (x *ExecEntry) Begin(writable bool) *database.Batch         { return x.Database.Begin(writable) }
 func (x *ExecEntry) Update(fn func(*database.Batch) error) error { return x.Database.Update(fn) }
 func (x *ExecEntry) View(fn func(*database.Batch) error) error   { return x.Database.View(fn) }
+func (x *ExecEntry) SetObserver(observer database.Observer)      { x.Database.SetObserver(observer) }
 
 // Submit adds the envelopes to the next block's queue.
 //
@@ -713,9 +717,9 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
-				messages = append(messages, &messaging.UserTransaction{Transaction: deliveries[i].Transaction})
+				messages = append(messages, &messaging.TransactionMessage{Transaction: deliveries[i].Transaction})
 				for _, sig := range deliveries[i].Signatures {
-					messages = append(messages, &messaging.UserSignature{Signature: sig, TxID: deliveries[i].Transaction.ID()})
+					messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: deliveries[i].Transaction.ID()})
 				}
 				continue
 			}

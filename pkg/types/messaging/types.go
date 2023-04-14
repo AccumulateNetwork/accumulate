@@ -7,7 +7,10 @@
 package messaging
 
 import (
+	"crypto/sha256"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -35,7 +38,22 @@ type Message interface {
 	Hash() [32]byte
 }
 
-func (m *UserTransaction) ID() *url.TxID { return m.Transaction.ID() }
+// UnwrapAs returns the message as the given type, unwrapping any wrappers.
+func UnwrapAs[T any](msg Message) (T, bool) {
+	for {
+		switch m := msg.(type) {
+		case T:
+			return m, true
+		case interface{ Unwrap() Message }:
+			msg = m.Unwrap()
+		default:
+			var z T
+			return z, false
+		}
+	}
+}
+
+func (m *TransactionMessage) ID() *url.TxID { return m.Transaction.ID() }
 
 func (m *SequencedMessage) ID() *url.TxID {
 	return m.Destination.WithTxID(m.Hash())
@@ -45,12 +63,12 @@ func (m *SyntheticMessage) ID() *url.TxID {
 	return m.Message.ID().Account().WithTxID(m.Hash())
 }
 
-func (m *ValidatorSignature) ID() *url.TxID {
+func (m *BlockAnchor) ID() *url.TxID {
 	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
 }
 
-func (m *UserSignature) ID() *url.TxID {
-	hash := *(*[32]byte)(m.Signature.Hash())
+func (m *SignatureMessage) ID() *url.TxID {
+	hash := m.Hash()
 	switch sig := m.Signature.(type) {
 	case *protocol.ReceiptSignature:
 		return sig.SourceNetwork.WithTxID(hash)
@@ -61,6 +79,18 @@ func (m *UserSignature) ID() *url.TxID {
 	}
 }
 
+func (m *SignatureRequest) ID() *url.TxID {
+	return m.Authority.WithTxID(m.Hash())
+}
+
+func (m *CreditPayment) ID() *url.TxID {
+	return m.TxID.Account().WithTxID(m.Hash())
+}
+
+func (m *BlockSummary) ID() *url.TxID {
+	return protocol.PartitionUrl(m.Partition).WithTxID(m.Hash())
+}
+
 func (m *SyntheticMessage) Unwrap() Message { return m.Message }
 func (m *SequencedMessage) Unwrap() Message { return m.Message }
 
@@ -69,31 +99,61 @@ type MessageWithTransaction interface {
 	GetTransaction() *protocol.Transaction
 }
 
-func (m *UserTransaction) GetTransaction() *protocol.Transaction { return m.Transaction }
+func (m *TransactionMessage) GetTransaction() *protocol.Transaction { return m.Transaction }
 
-type MessageWithSignature interface {
+type MessageForTransaction interface {
 	Message
-	GetSignature() protocol.Signature
 	GetTxID() *url.TxID
 }
 
-func (m *UserSignature) GetSignature() protocol.Signature      { return m.Signature }
-func (m *ValidatorSignature) GetSignature() protocol.Signature { return m.Signature }
-func (m *UserSignature) GetTxID() *url.TxID                    { return m.TxID }
+func (m *SignatureMessage) GetTxID() *url.TxID { return m.TxID }
+func (m *SignatureRequest) GetTxID() *url.TxID { return m.TxID }
+func (m *CreditPayment) GetTxID() *url.TxID    { return m.TxID }
 
-func (m *ValidatorSignature) GetTxID() *url.TxID {
-	return protocol.UnknownUrl().WithTxID(m.Signature.GetTransactionHash())
+func (m *BlockAnchor) GetTxID() *url.TxID {
+	if seq, ok := m.Anchor.(*SequencedMessage); ok {
+		return seq.Message.ID()
+	}
+
+	// Should never happen
+	return m.Anchor.ID()
 }
 
-func (m *UserTransaction) Hash() [32]byte {
+type MessageWithSignature interface {
+	MessageForTransaction
+	GetSignature() protocol.Signature
+}
+
+func (m *SignatureMessage) GetSignature() protocol.Signature { return m.Signature }
+func (m *BlockAnchor) GetSignature() protocol.Signature      { return m.Signature }
+
+type MessageWithCauses interface {
+	Message
+	GetCauses() []*url.TxID
+}
+
+func (m *SignatureRequest) GetCauses() []*url.TxID { return []*url.TxID{m.Cause} }
+
+type MessageWithProduced interface {
+	Message
+	GetProduced() []*url.TxID
+}
+
+func (m *SequencedMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
+func (m *SyntheticMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
+func (m *SignatureRequest) GetProduced() []*url.TxID { return []*url.TxID{m.TxID} }
+
+func (m *BlockAnchor) GetProduced() []*url.TxID {
+	id := m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
+	return []*url.TxID{id, m.Anchor.ID()}
+}
+
+func (m *TransactionMessage) Hash() [32]byte {
 	return *(*[32]byte)(m.Transaction.GetHash())
 }
 
-func (m *UserSignature) Hash() [32]byte {
-	var h hash.Hasher
-	h.AddHash((*[32]byte)(m.Signature.Hash()))
-	h.AddTxID(m.TxID)
-	return *(*[32]byte)(h.MerkleHash())
+func (m *SignatureMessage) Hash() [32]byte {
+	return *(*[32]byte)(m.Signature.Hash())
 }
 
 func (m *SyntheticMessage) Hash() [32]byte {
@@ -103,18 +163,17 @@ func (m *SyntheticMessage) Hash() [32]byte {
 	return *(*[32]byte)(h.MerkleHash())
 }
 
-func (m *SequencedMessage) Hash() [32]byte {
-	var h hash.Hasher
-	h.AddHash2(m.Message.Hash())
-	h.AddUrl2(m.Source)
-	h.AddUrl2(m.Destination)
-	h.AddUint(m.Number)
-	return *(*[32]byte)(h.MerkleHash())
-}
+func (m *SequencedMessage) Hash() [32]byte { return marshalAndHash(m) }
+func (m *BlockAnchor) Hash() [32]byte      { return marshalAndHash(m) }
+func (m *SignatureRequest) Hash() [32]byte { return marshalAndHash(m) }
+func (m *CreditPayment) Hash() [32]byte    { return marshalAndHash(m) }
+func (m *BlockSummary) Hash() [32]byte     { return marshalAndHash(m) }
 
-func (m *ValidatorSignature) Hash() [32]byte {
-	var h hash.Hasher
-	h.AddHash((*[32]byte)(m.Signature.Hash()))
-	h.AddUrl2(m.Source)
-	return *(*[32]byte)(h.MerkleHash())
+func marshalAndHash(m Message) [32]byte {
+	// If this fails something is seriously wrong
+	b, err := m.MarshalBinary()
+	if err != nil {
+		panic(errors.InternalError.WithFormat("marshaling message: %w", err))
+	}
+	return sha256.Sum256(b)
 }

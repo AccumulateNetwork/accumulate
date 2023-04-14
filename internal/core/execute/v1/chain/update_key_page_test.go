@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -42,6 +43,7 @@ func doHash(b []byte) []byte {
 
 func TestUpdateKeyPage_Priority(t *testing.T) {
 	db := database.OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	batch := db.Begin(true)
@@ -366,7 +368,7 @@ func TestUpdateKeyPage_SelfDelegation_Update(t *testing.T) {
 func TestUpdateKeyPage_PageDelegate_Add(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 1)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1})
 
 	alice := protocol.AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -394,7 +396,7 @@ func TestUpdateKeyPage_PageDelegate_Add(t *testing.T) {
 func TestUpdateKeyPage_PageDelegate_Update(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 1)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1})
 
 	alice := protocol.AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)

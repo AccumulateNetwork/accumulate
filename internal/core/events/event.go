@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,15 +13,16 @@ import (
 )
 
 type Event interface {
-	isEvent()
+	IsEvent()
 }
 
-func (DidCommitBlock) isEvent()    {}
-func (DidSaveSnapshot) isEvent()   {}
-func (WillChangeGlobals) isEvent() {}
-func (FatalError) isEvent()        {}
+func (DidCommitBlock) IsEvent()    {}
+func (DidSaveSnapshot) IsEvent()   {}
+func (WillChangeGlobals) IsEvent() {}
+func (FatalError) IsEvent()        {}
 
 type DidCommitBlock struct {
+	Init  bool
 	Index uint64
 	Time  time.Time
 	Major uint64

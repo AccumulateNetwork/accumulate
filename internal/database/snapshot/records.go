@@ -15,22 +15,26 @@ import (
 // TODO: Check for existing records when restoring?
 
 func CollectSignature(batch *database.Batch, hash [32]byte) (*Signature, error) {
-	var msg messaging.MessageWithSignature
-	err := batch.Message(hash).Main().GetAs(&msg)
+	msg, err := batch.Message(hash).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	smsg, ok := msg.(*messaging.SignatureMessage)
+	if !ok {
+		return nil, nil
+	}
+
 	sig := new(Signature)
-	sig.Signature = msg.GetSignature()
-	sig.Txid = msg.GetTxID()
+	sig.Signature = smsg.GetSignature()
+	sig.Txid = smsg.GetTxID()
 	return sig, nil
 }
 
 func (s *Signature) Restore(header *Header, batch *database.Batch) error {
 	var err error
 	if header.ExecutorVersion.V2() {
-		err = batch.Message2(s.Signature.Hash()).Main().Put(&messaging.UserSignature{
+		err = batch.Message2(s.Signature.Hash()).Main().Put(&messaging.SignatureMessage{
 			Signature: s.Signature,
 			TxID:      s.Txid,
 		})
@@ -44,14 +48,25 @@ func (s *Signature) Restore(header *Header, batch *database.Batch) error {
 }
 
 func CollectTransaction(batch *database.Batch, hash [32]byte) (*Transaction, error) {
-	var msg messaging.MessageWithTransaction
-	err := batch.Message(hash).Main().GetAs(&msg)
+	msg, err := batch.Message(hash).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	for {
+		if m, ok := msg.(interface{ Unwrap() messaging.Message }); ok {
+			msg = m.Unwrap()
+		} else {
+			break
+		}
+	}
 
 	txn := new(Transaction)
-	txn.Transaction = msg.GetTransaction()
+	if m, ok := msg.(*messaging.TransactionMessage); ok {
+		txn.Transaction = m.GetTransaction()
+	} else {
+		return nil, errors.NotFound.WithFormat("%v is not a transaction", msg.Type())
+	}
+
 	txn.Status = loadState(&err, true, batch.Transaction(hash[:]).Status().Get)
 
 	if err != nil {
@@ -77,7 +92,7 @@ func CollectTransaction(batch *database.Batch, hash [32]byte) (*Transaction, err
 func (t *Transaction) Restore(header *Header, batch *database.Batch) error {
 	var err error
 	if header.ExecutorVersion.V2() {
-		saveState[messaging.Message](&err, batch.Message(t.Transaction.ID().Hash()).Main().Put, &messaging.UserTransaction{Transaction: t.Transaction})
+		saveState[messaging.Message](&err, batch.Message(t.Transaction.ID().Hash()).Main().Put, &messaging.TransactionMessage{Transaction: t.Transaction})
 	} else {
 		saveState(&err, batch.Transaction(t.Transaction.GetHash()).Main().Put, &database.SigOrTxn{Transaction: t.Transaction})
 	}

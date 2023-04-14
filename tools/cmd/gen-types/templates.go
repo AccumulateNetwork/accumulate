@@ -27,6 +27,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 	// Initialize
 	ttypes := new(Types)
 	ttypes.Package = pkgName
+	ttypes.GoInclude = flags.GoInclude
 	ttypes.LongUnionDiscriminator = flags.LongUnionDiscriminator
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
@@ -73,6 +74,8 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 			union = new(UnionSpec)
 			union.Name = typ.Union.Name
 			union.Type = typ.Union.Type
+			union.Private = typ.Union.Private
+			union.Registry = typ.Union.Registry
 			union.Package = pkgName
 			union.SubPackage = subPkgName
 			ttypes.Unions = append(ttypes.Unions, union)
@@ -190,6 +193,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 
 type Types struct {
 	Package                string
+	GoInclude              []string
 	LongUnionDiscriminator bool
 	Types                  []*Type
 	Unions                 []*UnionSpec
@@ -222,6 +226,8 @@ type UnionSpec struct {
 	Type       string
 	Members    []*Type
 	SubPackage string
+	Private    bool
+	Registry   bool
 }
 
 type Type struct {
@@ -236,6 +242,11 @@ type Field struct {
 	TypeRef    *Type
 	ParentType *Type
 	IsEmbedded bool
+}
+
+func (f *Field) TypeParam() *typegen.TypeParam {
+	p, _ := f.ParentType.ResolveTypeParam(&f.Field)
+	return p
 }
 
 func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }
@@ -269,13 +280,20 @@ func (t *Type) UnionType() string {
 }
 
 func (t *Type) UnionValue() string {
-	return t.Union.Value
+	return typegen.TitleCase(t.Union.Value)
 }
 
 func (u *UnionSpec) Interface() string {
+	return u.interfaceName(false)
+}
+
+func (u *UnionSpec) interfaceName(ignorePrivate bool) string {
 	switch u.Name {
 	case "transaction":
 		return "TransactionBody"
+	}
+	if !ignorePrivate && u.Private {
+		return typegen.LowerFirstWord(u.Name)
 	}
 	return typegen.TitleCase(u.Name)
 }
@@ -291,6 +309,9 @@ func (u *UnionSpec) Enumeration() string {
 	if flags.ElidePackageType && strings.EqualFold(u.Name, u.Package) {
 		return "Type"
 	}
+	if u.Private {
+		return typegen.LowerFirstWord(u.Type) + "Type"
+	}
 	return typegen.TitleCase(u.Type) + "Type"
 }
 
@@ -304,6 +325,13 @@ func (f *Field) AsEnum() bool            { return f.MarshalAs == typegen.Marshal
 func (f *Field) IsOptional() bool        { return f.Optional }
 func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
+
+func (f *Field) EffectiveMarshalType() typegen.TypeCode {
+	if f.MarshalAsType == typegen.TypeCodeUnknown {
+		return f.Type.Code
+	}
+	return f.MarshalAsType
+}
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"lcName":              typegen.LowerFirstWord,

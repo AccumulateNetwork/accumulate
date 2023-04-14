@@ -17,9 +17,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-//go:generate go run ../../cmd/gen-enum --package typegen --out enums_gen.go enums.yml
-//go:generate go run ../../cmd/gen-types --package typegen --out types_gen.go types.yml
-//go:generate go run ../../cmd/gen-types --package typegen --language go-union --out unions_gen.go types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package typegen --out enums_gen.go enums.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package typegen --out types_gen.go types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package typegen --language go-union --out unions_gen.go types.yml
 
 type MarshalAs int
 
@@ -28,6 +28,10 @@ type TypeCode int
 type FieldType struct {
 	Code TypeCode
 	Name string
+}
+
+func (t TypeCode) Title() string {
+	return TitleCase(t.String())
 }
 
 func (f *FieldType) Equal(g *FieldType) bool {
@@ -102,6 +106,25 @@ func (f *FieldType) UnmarshalJSON(data []byte) error {
 	} else {
 		f.SetNamed(s)
 	}
+	return nil
+}
+
+func (f TypeCode) MarshalYAML() (interface{}, error) {
+	return f.String(), nil
+}
+
+func (f *TypeCode) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	err := value.Decode(&s)
+	if err != nil {
+		return err
+	}
+
+	code, ok := TypeCodeByName(s)
+	if !ok {
+		return fmt.Errorf("cannot unmarshal %q as TypeCode", s)
+	}
+	*f = code
 	return nil
 }
 
@@ -275,6 +298,10 @@ type Union struct {
 	Type string
 	// Value is the name of the corresponding enumeration value.
 	Value string
+	// Private indicates the union is a private type.
+	Private bool
+	// Registry indicates the union supports registering new members.
+	Registry bool
 }
 
 // Field is a field of a type.
@@ -289,6 +316,8 @@ type Field struct {
 	Type FieldType
 	// MarshalAs specifies how to marshal the field.
 	MarshalAs MarshalAs `yaml:"marshal-as"`
+	// MarshalType specifies that the field should be marshalled as the given type.
+	MarshalAsType TypeCode `yaml:"marshal-as-type"`
 	// Repeatable specifies whether the the field is repeatable (represented as a slice).
 	Repeatable bool
 	// Pointer specifies whether the field is a pointer.

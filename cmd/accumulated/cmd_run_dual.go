@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -53,7 +53,10 @@ func init() {
 
 func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	if flagRun.PprofListen != "" {
-		go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }() //nolint:gosec
+		s := new(http.Server)
+		s.Addr = flagRun.PprofListen
+		s.ReadHeaderTimeout = time.Minute
+		go func() { check(s.ListenAndServe()) }() //nolint:gosec
 	}
 
 	prog := NewProgram(cmd, func(cmd *cobra.Command) (string, error) {

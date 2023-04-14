@@ -7,15 +7,12 @@
 package record
 
 import (
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"strings"
-
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
+
+type Key = record.Key
 
 // A Record is a component of a data model.
 type Record interface {
@@ -25,12 +22,22 @@ type Record interface {
 	IsDirty() bool
 	// Commit writes any modifications to the store.
 	Commit() error
+	// WalkChanges walks the record and calls the function for any changed
+	// values.
+	WalkChanges(fn WalkFunc) error
+}
+
+type WalkFunc func(TerminalRecord) error
+
+type TerminalRecord interface {
+	Record
+	ValueReader
+	Key() Key
 }
 
 // Value records a value.
 type Value[T any] interface {
 	Record
-	Key(int) any
 	Get() (T, error)
 	GetAs(any) error
 	Put(T) error
@@ -82,43 +89,6 @@ func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, 
 	return newCounted(logger, store, key, namefmt, new)
 }
 
-// A Key is the key for a record.
-type Key []interface{}
-
-// Append creates a child key of this key.
-func (k Key) Append(v ...interface{}) Key {
-	l := make(Key, len(k)+len(v))
-	n := copy(l, k)
-	copy(l[n:], v)
-	return l
-}
-
-// Hash converts the record key to a storage key.
-func (k Key) Hash() storage.Key {
-	return storage.MakeKey(k...)
-}
-
-// String returns a human-readable string for the key.
-func (k Key) String() string {
-	s := make([]string, len(k))
-	for i, v := range k {
-		switch v := v.(type) {
-		case []byte:
-			s[i] = hex.EncodeToString(v)
-		case [32]byte:
-			s[i] = hex.EncodeToString(v[:])
-		default:
-			s[i] = fmt.Sprint(v)
-		}
-	}
-	return strings.Join(s, ".")
-}
-
-// MarshalJSON is implemented so keys are formatted nicely by zerolog.
-func (k Key) MarshalJSON() ([]byte, error) {
-	return json.Marshal(k.String())
-}
-
 // A ValueReader holds a readable value.
 type ValueReader interface {
 	// GetValue returns the value.
@@ -130,7 +100,7 @@ type ValueWriter interface {
 	// LoadValue stores the value of the reader into the receiver.
 	LoadValue(value ValueReader, put bool) error
 	// LoadBytes unmarshals a value from bytes into the receiver.
-	LoadBytes(data []byte) error
+	LoadBytes(data []byte, put bool) error
 }
 
 // A Store loads and stores values.

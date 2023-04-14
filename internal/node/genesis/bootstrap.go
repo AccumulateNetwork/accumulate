@@ -37,7 +37,7 @@ import (
 
 type InitOpts struct {
 	PartitionId     string
-	NetworkType     config.NetworkType
+	NetworkType     protocol.PartitionType
 	GenesisTime     time.Time
 	Logger          log.Logger
 	FactomAddresses func() (io.Reader, error)
@@ -55,7 +55,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Build the routing table
 	var bvns []string
 	for _, partition := range gg.Network.Partitions {
-		if partition.Type != protocol.PartitionTypeDirectory {
+		if partition.Type == protocol.PartitionTypeBlockValidator {
 			bvns = append(bvns, partition.ID)
 		}
 	}
@@ -67,6 +67,9 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	}
 	gg.Routing.AddOverride(protocol.AcmeUrl(), protocol.Directory)
 	for _, partition := range gg.Network.Partitions {
+		if partition.Type == protocol.PartitionTypeBlockSummary {
+			continue
+		}
 		gg.Routing.AddOverride(protocol.PartitionUrl(partition.ID), partition.ID)
 	}
 
@@ -146,7 +149,8 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return batch.BptRoot(), nil
+	h, err := batch.BPT().GetRootHash()
+	return h[:], err
 }
 
 type bootstrap struct {
@@ -289,7 +293,7 @@ func (b *bootstrap) createAnchorPool() {
 	anchorLedger := new(protocol.AnchorLedger)
 	anchorLedger.Url = b.partition.AnchorPool()
 
-	if b.NetworkType == config.Directory {
+	if b.NetworkType == protocol.PartitionTypeDirectory {
 		// Initialize the last major block time to prevent a major block from
 		// being created immediately once the network boots
 		anchorLedger.MajorBlockTime = b.GenesisTime
@@ -341,12 +345,16 @@ func (b *bootstrap) maybeCreateAcme() {
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
+	if !protocol.IsTestNet {
+		return
+	}
+
 	// Always do this so the DN has the proper issued amount
 	amount := new(big.Int)
 	amount.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 	b.acmeIssued.Add(b.acmeIssued, amount)
 
-	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
+	if !b.shouldCreate(protocol.FaucetUrl) {
 		return
 	}
 

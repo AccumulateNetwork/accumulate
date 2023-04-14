@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -47,11 +48,11 @@ func TestGenerateDbTestdata(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		func(partition string, _ int, logger log.Logger) database.Beginner {
+		func(partition string, _ int, logger log.Logger) storage.KeyValueStore {
 			if strings.EqualFold(partition, protocol.Directory) {
-				return database.OpenInMemory(logger)
+				return memory.New(logger)
 			}
-			return db
+			return store
 		},
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
@@ -65,7 +66,7 @@ func TestGenerateDbTestdata(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &protocol.TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl()})
 
 	// Execute
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "tokens").
 			SendTokens(123, 0).To(bob, "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
@@ -103,6 +104,7 @@ func TestDbEncoding(t *testing.T) {
 	require.NoError(t, err)
 
 	db := database.New(store, logger)
+	// db.SetObserver(block.NewDatabaseObserver())
 	batch := db.Begin(false)
 	defer batch.Discard()
 	buf := new(ioutil2.Buffer)

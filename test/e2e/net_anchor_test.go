@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -40,7 +41,7 @@ func TestAnchorThreshold(t *testing.T) {
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 
-	sim.SubmitSuccessfully(
+	sim.SubmitTxnSuccessfully(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithSigner(alice.JoinPath("book", "1"), 1).
@@ -50,31 +51,22 @@ func TestAnchorThreshold(t *testing.T) {
 			Build())
 
 	// Capture the BVN's anchors and verify they're the same
-	var anchors []*messaging.Envelope
-	sim.SetSubmitHook("Directory", func(messages []messaging.Message) (drop bool, keepHook bool) {
+	var anchors []*messaging.BlockAnchor
+	sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop bool, keepHook bool) {
 		for _, msg := range messages {
-			seq, ok := msg.(*messaging.SequencedMessage)
-			if !ok {
-				continue
+			if anchor, ok := msg.(*messaging.BlockAnchor); ok {
+				anchors = append(anchors, anchor)
+				drop = true
 			}
-			txn, ok := seq.Message.(*messaging.UserTransaction)
-			if !ok {
-				continue
-			}
-			if txn.Transaction.Body.Type() != TransactionTypeBlockValidatorAnchor {
-				continue
-			}
-			anchors = append(anchors, &messaging.Envelope{Messages: messages})
-			return true, len(anchors) < valCount
 		}
-		return false, true
+		return drop, len(anchors) < valCount
 	})
 
-	sim.StepUntil(func(*Harness) bool { return len(anchors) >= valCount })
+	sim.StepUntil(True(func(*Harness) bool { return len(anchors) >= valCount }))
 
-	txid := anchors[0].Messages[0].ID()
+	txid := anchors[0].Anchor.(*messaging.SequencedMessage).Message.ID()
 	for _, anchor := range anchors[1:] {
-		require.True(t, messaging.EqualMessage(anchors[0].Messages[0], anchor.Messages[0]))
+		require.True(t, messaging.EqualMessage(anchors[0].Anchor, anchor.Anchor))
 	}
 
 	// Verify the anchor was captured
@@ -86,15 +78,15 @@ func TestAnchorThreshold(t *testing.T) {
 	})
 
 	// Submit one signature and verify it is pending
-	sim.SubmitSuccessfully(anchors[0])
+	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepUntil(Txn(txid).IsPending())
 
 	// Re-submit the first signature and verify it is still pending
-	sim.SubmitSuccessfully(anchors[0])
+	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[0]}})
 	sim.StepN(50)
-	require.True(t, sim.QueryTransaction(txid, nil).Status.Pending())
+	require.True(t, sim.QueryTransaction(txid, nil).Status == errors.Pending)
 
 	// Submit a second signature and verify it is delivered
-	sim.SubmitSuccessfully(anchors[1])
+	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[1]}})
 	sim.StepUntil(Txn(txid).Succeeds())
 }

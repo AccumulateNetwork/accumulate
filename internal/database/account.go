@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,8 +7,10 @@
 package database
 
 import (
+	"bytes"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -16,6 +18,17 @@ import (
 
 func (b *Batch) Account(u *url.URL) *Account {
 	return b.getAccount(u.StripExtras())
+}
+
+func (b *Batch) AccountTransaction(id *url.TxID) *AccountTransaction {
+	return b.Account(id.Account()).Transaction(id.Hash())
+}
+
+// Hash retrieves or calculates the state hash of the account.
+func (a *Account) Hash() ([32]byte, error) {
+	// TODO Retrieve from the BPT
+	h, err := a.parent.observer.DidChangeAccount(a.parent, a)
+	return *(*[32]byte)(h.MerkleHash()), err
 }
 
 func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) error) (T, error) {
@@ -49,7 +62,7 @@ func (a *Account) Commit() error {
 		return nil
 	}
 
-	if fieldIsDirty(a.main) {
+	if record.FieldIsDirty(a.main) {
 		acc, err := a.Main().Get()
 		switch {
 		case err == nil:
@@ -81,6 +94,19 @@ func (a *Account) Commit() error {
 		}
 	}
 
+	// Ensure chains are added to the Chains index
+	var chains []*protocol.ChainMetadata
+	for _, c := range a.dirtyChains() {
+		chains = append(chains, &protocol.ChainMetadata{
+			Name: c.name,
+			Type: c.typ,
+		})
+	}
+	err := a.Chains().Add(chains...)
+	if err != nil {
+		return errors.UnknownError.WithFormat("update chains index: %w", err)
+	}
+
 	// Ensure the synthetic anchors index is up to date
 	for k, set := range a.syntheticForAnchor {
 		if !set.IsDirty() {
@@ -94,7 +120,7 @@ func (a *Account) Commit() error {
 	}
 
 	// If anything has changed, update the BPT entry
-	err := a.putBpt()
+	err = a.putBpt()
 	if err != nil {
 		return errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
 	}
@@ -160,4 +186,8 @@ func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
 
 func (r *Account) GetSyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
 	return r.SyntheticForAnchor(anchor).Get()
+}
+
+func compareAnchorSignatures(a, b protocol.KeySignature) int {
+	return bytes.Compare(a.GetPublicKey(), b.GetPublicKey())
 }

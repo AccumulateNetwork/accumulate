@@ -1,22 +1,25 @@
 MessageType:
-  UserTransaction:
+  Transaction:
     value: 1
-    description: is a transaction from a user
-  UserSignature:
+    description: is a transaction
+  Signature:
     value: 2
-    description: is a key signature from a user
+    description: is a signature
   Synthetic:
     value: 3
     description: is a message produced by the protocol, requiring proof
-  ValidatorSignature:
+  BlockAnchor:
     value: 4
-    description: is a key signature from a validator
+    description: is a block anchor signed by validator
   Sequenced:
     value: 5
     description: is a message that is part of a sequence
-
-  # Possible additions for executor v2
-
-  # AuthoritySignature:
-  #   value: 6
-  #   description: is a signature from an authority who's signing requirements have been met
+  SignatureRequest:
+    value: 6
+    description: is a request for additional signatures
+  CreditPayment:
+    value: 7
+    description: is a payment of credits towards a transaction's fee
+  BlockSummary:
+    value: 8
+    description: is a summary of a block

@@ -14,11 +14,15 @@
   - name: parent
     type: Batch
     pointer: true
+  - name: observer
+    type: Observer
   - name: kvstore
     type: storage.KeyValueTxn
-  - name: bptEntries
-    type: map[storage.Key][32]byte
   attributes:
+  - name: BPT
+    type: other
+    dataType: bpt.BPT
+    constructor: newBPT
 
   - name: Account
     type: entity
@@ -59,6 +63,44 @@
       dataType: url
       pointer: true
       emptyIfMissing: true
+
+    - name: Transaction
+      type: entity
+      parameters:
+      - name: Hash
+        type: hash
+      attributes:
+      - name: Payments
+        description: records the hashes of credit payment messages
+        type: state
+        dataType: hash
+        collection: set
+      - name: Votes
+        description: lists authorities that have voted on this transaction
+        type: state
+        dataType: VoteEntry
+        collection: set
+        pointer: true
+        comparator: compareVoteEntries
+      - name: Signatures
+        description: records the active set of signatures
+        type: state
+        dataType: SignatureSetEntry
+        collection: set
+        pointer: true
+        comparator: compareSignatureSetEntries
+      - name: AnchorSignatures
+        description: records validators' anchor transaction signatures
+        type: state
+        dataType: protocol.KeySignature
+        union: true
+        collection: set
+        comparator: compareAnchorSignatures
+      - name: History
+        type: index
+        description: records the signature chain index of entries for the transaction
+        dataType: uint
+        collection: set
 
     # Chains
     - name: MainChain
@@ -154,13 +196,18 @@
       union: true
       private: true
     - name: Cause
-      type: state
+      type: index
       dataType: txid
       pointer: true
       collection: set
     - name: Produced
-      type: state
+      type: index
       dataType: txid
+      pointer: true
+      collection: set
+    - name: Signers
+      type: index
+      dataType: url
       pointer: true
       collection: set
 
@@ -173,7 +220,7 @@
     attributes:
     - name: Main
       type: state
-      dataType: SigOrTxn # TODO split apart
+      dataType: SigOrTxn
       pointer: true
     - name: Status
       type: state

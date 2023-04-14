@@ -50,9 +50,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(UnknownAccount), nil
 	case AccountTypeUnknownSigner:
 		return new(UnknownSigner), nil
-	default:
-		return nil, fmt.Errorf("unknown account %v", typ)
 	}
+	return nil, fmt.Errorf("unknown account %v", typ)
 }
 
 // EqualAccount is used to compare the values of the union
@@ -151,9 +150,8 @@ func EqualAccount(a, b Account) bool {
 		}
 		b, ok := b.(*UnknownSigner)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyAccount copies a Account.
@@ -206,6 +204,9 @@ func UnmarshalAccountFrom(rd io.Reader) (Account, error) {
 	// Read the type code
 	var typ AccountType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -256,9 +257,8 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 		return new(AccumulateDataEntry), nil
 	case DataEntryTypeFactom:
 		return new(FactomDataEntryWrapper), nil
-	default:
-		return nil, fmt.Errorf("unknown data entry %v", typ)
 	}
+	return nil, fmt.Errorf("unknown data entry %v", typ)
 }
 
 // EqualDataEntry is used to compare the values of the union
@@ -279,9 +279,8 @@ func EqualDataEntry(a, b DataEntry) bool {
 		}
 		b, ok := b.(*FactomDataEntryWrapper)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyDataEntry copies a DataEntry.
@@ -308,6 +307,9 @@ func UnmarshalDataEntryFrom(rd io.Reader) (DataEntry, error) {
 	// Read the type code
 	var typ DataEntryType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -362,6 +364,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(AddCredits), nil
 	case TransactionTypeBlockValidatorAnchor:
 		return new(BlockValidatorAnchor), nil
+	case TransactionTypeBurnCredits:
+		return new(BurnCredits), nil
 	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
@@ -384,8 +388,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeLockAccount:
 		return new(LockAccount), nil
-	case TransactionTypePlaceholder:
-		return new(PlaceholderTransaction), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -406,6 +408,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SystemGenesis), nil
 	case TransactionTypeSystemWriteData:
 		return new(SystemWriteData), nil
+	case TransactionTypeTransferCredits:
+		return new(TransferCredits), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
@@ -416,9 +420,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(WriteData), nil
 	case TransactionTypeWriteDataTo:
 		return new(WriteDataTo), nil
-	default:
-		return nil, fmt.Errorf("unknown transaction %v", typ)
 	}
+	return nil, fmt.Errorf("unknown transaction %v", typ)
 }
 
 // EqualTransactionBody is used to compare the values of the union
@@ -450,6 +453,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 			return b == nil
 		}
 		b, ok := b.(*BlockValidatorAnchor)
+		return ok && a.Equal(b)
+	case *BurnCredits:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BurnCredits)
 		return ok && a.Equal(b)
 	case *BurnTokens:
 		if a == nil {
@@ -517,12 +526,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*LockAccount)
 		return ok && a.Equal(b)
-	case *PlaceholderTransaction:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*PlaceholderTransaction)
-		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		if a == nil {
 			return b == nil
@@ -583,6 +586,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*SystemWriteData)
 		return ok && a.Equal(b)
+	case *TransferCredits:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*TransferCredits)
+		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
 		if a == nil {
 			return b == nil
@@ -613,9 +622,8 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*WriteDataTo)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyTransactionBody copies a TransactionBody.
@@ -628,6 +636,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *AddCredits:
 		return v.Copy()
 	case *BlockValidatorAnchor:
+		return v.Copy()
+	case *BurnCredits:
 		return v.Copy()
 	case *BurnTokens:
 		return v.Copy()
@@ -651,8 +661,6 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 		return v.Copy()
 	case *LockAccount:
 		return v.Copy()
-	case *PlaceholderTransaction:
-		return v.Copy()
 	case *RemoteTransaction:
 		return v.Copy()
 	case *SendTokens:
@@ -672,6 +680,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *SystemGenesis:
 		return v.Copy()
 	case *SystemWriteData:
+		return v.Copy()
+	case *TransferCredits:
 		return v.Copy()
 	case *UpdateAccountAuth:
 		return v.Copy()
@@ -700,6 +710,9 @@ func UnmarshalTransactionBodyFrom(rd io.Reader) (TransactionBody, error) {
 	// Read the type code
 	var typ TransactionType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -754,9 +767,8 @@ func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation
 		return new(EnableAccountAuthOperation), nil
 	case AccountAuthOperationTypeRemoveAuthority:
 		return new(RemoveAccountAuthorityOperation), nil
-	default:
-		return nil, fmt.Errorf("unknown account auth operation %v", typ)
 	}
+	return nil, fmt.Errorf("unknown account auth operation %v", typ)
 }
 
 // EqualAccountAuthOperation is used to compare the values of the union
@@ -789,9 +801,8 @@ func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 		}
 		b, ok := b.(*RemoveAccountAuthorityOperation)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyAccountAuthOperation copies a AccountAuthOperation.
@@ -822,6 +833,9 @@ func UnmarshalAccountAuthOperationFrom(rd io.Reader) (AccountAuthOperation, erro
 	// Read the type code
 	var typ AccountAuthOperationType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -878,9 +892,8 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 		return new(UpdateAllowedKeyPageOperation), nil
 	case KeyPageOperationTypeUpdate:
 		return new(UpdateKeyOperation), nil
-	default:
-		return nil, fmt.Errorf("unknown key page operation %v", typ)
 	}
+	return nil, fmt.Errorf("unknown key page operation %v", typ)
 }
 
 // EqualKeyPageOperation is used to compare the values of the union
@@ -919,9 +932,8 @@ func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 		}
 		b, ok := b.(*UpdateKeyOperation)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyKeyPageOperation copies a KeyPageOperation.
@@ -954,6 +966,9 @@ func UnmarshalKeyPageOperationFrom(rd io.Reader) (KeyPageOperation, error) {
 	// Read the type code
 	var typ KeyPageOperationType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -1000,6 +1015,8 @@ func UnmarshalKeyPageOperationJSON(data []byte) (KeyPageOperation, error) {
 // NewSignature creates a new Signature for the specified SignatureType.
 func NewSignature(typ SignatureType) (Signature, error) {
 	switch typ {
+	case SignatureTypeAuthority:
+		return new(AuthoritySignature), nil
 	case SignatureTypeBTCLegacy:
 		return new(BTCLegacySignature), nil
 	case SignatureTypeBTC:
@@ -1024,9 +1041,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(RemoteSignature), nil
 	case SignatureTypeSet:
 		return new(SignatureSet), nil
-	default:
-		return nil, fmt.Errorf("unknown signature %v", typ)
 	}
+	return nil, fmt.Errorf("unknown signature %v", typ)
 }
 
 // EqualSignature is used to compare the values of the union
@@ -1035,6 +1051,12 @@ func EqualSignature(a, b Signature) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *AuthoritySignature:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*AuthoritySignature)
+		return ok && a.Equal(b)
 	case *BTCLegacySignature:
 		if a == nil {
 			return b == nil
@@ -1107,14 +1129,15 @@ func EqualSignature(a, b Signature) bool {
 		}
 		b, ok := b.(*SignatureSet)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopySignature copies a Signature.
 func CopySignature(v Signature) Signature {
 	switch v := v.(type) {
+	case *AuthoritySignature:
+		return v.Copy()
 	case *BTCLegacySignature:
 		return v.Copy()
 	case *BTCSignature:
@@ -1156,6 +1179,9 @@ func UnmarshalSignatureFrom(rd io.Reader) (Signature, error) {
 	// Read the type code
 	var typ SignatureType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 

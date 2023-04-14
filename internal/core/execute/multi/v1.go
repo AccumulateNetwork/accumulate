@@ -9,11 +9,11 @@ package execute
 import (
 	"time"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -32,21 +32,65 @@ func (x *ExecutorV1) StoreBlockTimers(ds *logging.DataSet) {
 	(*block.Executor)(x).StoreBlockTimers(ds)
 }
 
-func (x *ExecutorV1) LoadStateRoot(batch *database.Batch) ([]byte, error) {
-	return (*block.Executor)(x).LoadStateRoot(batch)
+func (x *ExecutorV1) LastBlock() (*execute.BlockParams, [32]byte, error) {
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+
+	c, err := batch.Account(x.Describe.Ledger()).RootChain().Index().Get()
+	if err != nil {
+		return nil, [32]byte{}, errors.FatalError.WithFormat("load root index chain: %w", err)
+	}
+	if c.Height() == 0 {
+		return nil, [32]byte{}, errors.NotFound
+	}
+
+	entry := new(protocol.IndexEntry)
+	err = c.EntryAs(c.Height()-1, entry)
+	if err != nil {
+		return nil, [32]byte{}, errors.FatalError.WithFormat("load root index chain entry 0: %w", err)
+	}
+
+	b := new(BlockParams)
+	b.Index = entry.BlockIndex
+	b.Time = *entry.BlockTime
+
+	h, err := batch.BPT().GetRootHash()
+	return b, h, err
 }
 
-func (x *ExecutorV1) RestoreSnapshot(batch database.Beginner, snapshot ioutil2.SectionReader) error {
-	return (*block.Executor)(x).RestoreSnapshot(batch, snapshot)
-}
+func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
+	batch := x.Database.Begin(true)
+	defer batch.Discard()
+	err = (*block.Executor)(x).RestoreSnapshot(batch, snapshot)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
-func (x *ExecutorV1) InitChainValidators(initVal []abcitypes.ValidatorUpdate) (additional [][]byte, err error) {
-	return (*block.Executor)(x).InitChainValidators(initVal)
+	err = batch.Commit()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return (*block.Executor)(x).InitChainValidators(validators)
 }
 
 // Validate converts the message to a delivery and validates it. Validate
 // returns an error if the message is not a [message.LegacyMessage].
-func (x *ExecutorV1) Validate(batch *database.Batch, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (x *ExecutorV1) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
+	// Only use the shared batch when the check type is CheckTxType_New,
+	//   we want to avoid changes to variables version increments to and stick and therefore be done multiple times
+	var batch *database.Batch
+	if recheck {
+		batch = x.Database.Begin(false)
+		defer batch.Discard()
+	} else {
+		// For cases where we haven't started/ended a block yet
+		if x.CheckTxBatch == nil {
+			x.CheckTxBatch = x.Database.Begin(false)
+		}
+		batch = x.CheckTxBatch
+	}
+
 	deliveries, err := chain.DeliveriesFromMessages(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -55,7 +99,12 @@ func (x *ExecutorV1) Validate(batch *database.Batch, messages []messaging.Messag
 	st := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
 		st[i] = new(protocol.TransactionStatus)
-		st[i].Result, err = (*block.Executor)(x).ValidateEnvelope(batch, delivery)
+
+		if isHalted((*block.Executor)(x), delivery) {
+			err = errors.NotAllowed.WithFormat("user messages are not being accepted: an upgrade is in progress")
+		} else {
+			st[i].Result, err = (*block.Executor)(x).ValidateEnvelope(batch, delivery)
+		}
 
 		if err != nil {
 			st[i].Set(err)
@@ -71,12 +120,17 @@ func (x *ExecutorV1) Validate(batch *database.Batch, messages []messaging.Messag
 
 // Begin constructs a [BlockV1] and calls [block.Executor.BeginBlock].
 func (x *ExecutorV1) Begin(params execute.BlockParams) (execute.Block, error) {
+	err := x.EventBus.Publish(execute.WillBeginBlock{BlockParams: params})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	b := new(BlockV1)
 	b.Executor = (*block.Executor)(x)
 	b.Block = new(block.Block)
 	b.Block.Batch = x.Database.Begin(true)
 	b.Block.BlockMeta = params
-	err := b.Executor.BeginBlock(b.Block)
+	err = b.Executor.BeginBlock(b.Block)
 	if err != nil {
 		b.Block.Batch.Discard()
 	}
@@ -91,6 +145,16 @@ type BlockV1 struct {
 
 func (b *BlockV1) Params() execute.BlockParams { return b.Block.BlockMeta }
 
+func isHalted(x *block.Executor, delviery *chain.Delivery) bool {
+	if !delviery.Transaction.Body.Type().IsUser() {
+		return false
+	}
+	if !x.ActiveGlobals().ExecutorVersion.HaltV1() {
+		return false
+	}
+	return delviery.Transaction.Body.Type() != protocol.TransactionTypeActivateProtocolVersion
+}
+
 // Process converts the message to a delivery and processes it. Process returns
 // an error if the message is not a [message.LegacyMessage].
 func (b *BlockV1) Process(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
@@ -101,7 +165,11 @@ func (b *BlockV1) Process(messages []messaging.Message) ([]*protocol.Transaction
 
 	st := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
-		st[i], err = b.Executor.ExecuteEnvelope(b.Block, delivery)
+		if isHalted(b.Executor, delivery) {
+			err = errors.NotAllowed.WithFormat("user messages are not being accepted: an upgrade is in progress")
+		} else {
+			st[i], err = b.Executor.ExecuteEnvelope(b.Block, delivery)
+		}
 		if st[i] == nil {
 			st[i] = new(protocol.TransactionStatus)
 		}
@@ -121,28 +189,54 @@ func (b *BlockV1) Process(messages []messaging.Message) ([]*protocol.Transaction
 // Close ends the block and returns the block state.
 func (b *BlockV1) Close() (execute.BlockState, error) {
 	err := b.Executor.EndBlock(b.Block)
-	return (*BlockStateV1)(b.Block), err
+	return (*BlockStateV1)(b), err
 }
 
 // BlockStateV1 translates [execute.BlockState] calls for a v1 executor block.
-type BlockStateV1 block.Block
+type BlockStateV1 BlockV1
 
-func (b *BlockStateV1) Params() execute.BlockParams { return b.BlockMeta }
+func (b *BlockStateV1) Params() execute.BlockParams { return b.Block.BlockMeta }
 
 func (s *BlockStateV1) IsEmpty() bool {
-	return s.State.Empty()
+	return s.Block.State.Empty()
 }
 
 func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {
-	return s.State.MakeMajorBlock,
-		s.State.MakeMajorBlockTime,
-		s.State.MakeMajorBlock > 0
+	return s.Block.State.MakeMajorBlock,
+		s.Block.State.MakeMajorBlockTime,
+		s.Block.State.MakeMajorBlock > 0
 }
 
 func (s *BlockStateV1) Commit() error {
-	return s.Batch.Commit()
+	if s.IsEmpty() {
+		s.Discard()
+		return nil
+	}
+
+	err := s.Executor.EventBus.Publish(execute.WillCommitBlock{
+		Block: s,
+	})
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	err = s.Block.Batch.Commit()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Start a new checkTx batch
+	if s.Executor.CheckTxBatch != nil {
+		s.Executor.CheckTxBatch.Discard()
+	}
+	s.Executor.CheckTxBatch = s.Executor.Database.Begin(false)
+	return nil
 }
 
 func (s *BlockStateV1) Discard() {
-	s.Batch.Discard()
+	s.Block.Batch.Discard()
+}
+
+func (s *BlockStateV1) WalkChanges(fn record.WalkFunc) error {
+	return s.Block.Batch.WalkChanges(fn)
 }

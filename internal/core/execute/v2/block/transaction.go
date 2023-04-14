@@ -65,24 +65,8 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordPendingTransaction(&x.Describe, batch, delivery)
 	}
 
-	if delivery.Transaction.Body.Type().IsSynthetic() {
-		// Verify that the synthetic transaction has all the right signatures
-		err = processSyntheticTransaction(batch, delivery.Transaction, status)
-		if err != nil {
-			return x.recordFailedTransaction(batch, delivery, err)
-		}
-	}
-
 	// Set up the state manager
-	var st *chain.StateManager
-	if x.isGenesis {
-		st = chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
-	} else {
-		st, err = chain.LoadStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
-		if err != nil {
-			return x.recordFailedTransaction(batch, delivery, err)
-		}
-	}
+	st := chain.NewStateManager(&x.Describe, &x.globals.Active, x, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	defer st.Discard()
 
 	// Execute the transaction
@@ -123,19 +107,23 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Del
 	typ := delivery.Transaction.Body.Type()
 	switch {
 	case typ.IsUser():
-		ready, err = x.userTransactionIsReady(batch, delivery, status, principal)
+		ready, err = x.userTransactionIsReady(batch, delivery, principal)
 	case typ.IsSynthetic():
-		ready, err = x.synthTransactionIsReady(batch, delivery, status, principal)
+		ready, err = x.synthTransactionIsReady(batch, delivery, principal)
 	case typ.IsSystem():
-		ready, err = x.systemTransactionIsReady(batch, delivery, status, principal)
+		ready, err = x.systemTransactionIsReady(batch, delivery, principal)
 	default:
 		return false, errors.InternalError.WithFormat("unknown transaction type %v", typ)
 	}
 	return ready, errors.UnknownError.Wrap(err)
 }
 
-func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
-	if status.Initiator == nil {
+func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
+	isInit, _, err := x.TransactionIsInitiated(batch, delivery.Transaction)
+	if err != nil {
+		return false, errors.UnknownError.Wrap(err)
+	}
+	if !isInit {
 		return false, nil
 	}
 
@@ -152,29 +140,10 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 		return true, nil
 	}
 
-	// UpdateKey transactions are always M=1 and always require a signature from
-	// the initiator
-	if delivery.Transaction.Body.Type() == protocol.TransactionTypeUpdateKey {
-		if status.Initiator == nil {
-			return false, fmt.Errorf("missing initiator")
-		}
-
-		initSigs, err := batch.Transaction(delivery.Transaction.GetHash()).ReadSignatures(status.Initiator)
-		if err != nil {
-			return false, fmt.Errorf("load initiator signatures: %w", err)
-		}
-
-		if initSigs.Count() == 0 {
-			return false, fmt.Errorf("missing initiator signature")
-		}
-
-		return true, nil
-	}
-
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](x, delivery.Transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction, status)
+		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -195,6 +164,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	}
 
 	// For each authority
+	var authorized bool
 	authRequired := delivery.Transaction.Body.Type().RequireAuthorization()
 	for _, entry := range auth.Authorities {
 		// Do not check signers for disabled authorities
@@ -203,23 +173,54 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 		}
 
 		// Check if any signer has reached its threshold
-		ok, err := x.AuthorityIsSatisfied(batch, delivery.Transaction, status, entry.Url)
+		ok, err := x.AuthorityIsSatisfied(batch, delivery.Transaction, entry.Url)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
 		if !ok {
 			return false, nil
 		}
+		authorized = true
+	}
+	if authorized {
+		return true, nil
 	}
 
 	// If every authority is disabled, at least one signature is required
-	return len(status.Signers) > 0, nil
+	voters, err := batch.Account(delivery.Transaction.Header.Principal).
+		Transaction(delivery.Transaction.ID().Hash()).
+		Votes().Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load voters: %w", err)
+	}
+
+	return len(voters) > 0, nil
 }
 
-func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error) {
-	// Check if any signer has reached its threshold
-	for _, signer := range status.FindSigners(authUrl) {
-		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer)
+func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
+	_, err := batch.
+		Account(transaction.Header.Principal).
+		Transaction(transaction.ID().Hash()).
+		Votes().Find(&database.VoteEntry{Authority: authUrl})
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errors.NotFound):
+		return false, nil
+	default:
+		return false, errors.UnknownError.With("load vote: %w", err)
+	}
+}
+
+func (x *Executor) AuthorityIsReady(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
+	var authority protocol.Authority
+	err := batch.Account(authUrl).Main().GetAs(&authority)
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load authority %v: %w", authUrl, err)
+	}
+
+	for _, signer := range authority.GetSigners() {
+		ok, err := x.SignerIsSatisfied(batch, transaction, signer)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -231,65 +232,44 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	return false, nil
 }
 
-func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error) {
-	// Load the signature set
-	signatures, err := batch.Transaction(transaction.GetHash()).ReadSignaturesForSigner(signer)
+func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, signerUrl *url.URL) (bool, error) {
+	// Load the signer
+	var signer protocol.Signer
+	err := batch.Account(signerUrl).Main().GetAs(&signer)
 	if err != nil {
-		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
+		return false, errors.UnknownError.WithFormat("load signer %v: %w", signerUrl, err)
 	}
 
-	// Check if the signature set includes a completed set
-	for _, e := range signatures.Entries() {
-		if e.Type == protocol.SignatureTypeSet {
+	// Load the active signature set
+	entries, err := batch.
+		Account(signerUrl).
+		Transaction(transaction.ID().Hash()).
+		Signatures().
+		Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load %v signatures: %w", signerUrl, err)
+	}
+
+	// Add up the number of signatures received for each delegation path. If the
+	// count for any path reaches the threshold, the signer is satisfied.
+	pathSigCount := map[[32]byte]uint64{}
+	for _, entry := range entries {
+		h := entry.PathHash()
+		pathSigCount[h]++
+		if pathSigCount[h] >= signer.GetSignatureThreshold() {
 			return true, nil
 		}
-	}
-
-	// Check if the threshold has been reached
-	if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
-		return true, nil
 	}
 
 	return false, nil
 }
 
-func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
 	// Do not check the principal until the transaction is ready (see below). Do
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
 
-	// Find the sequence
-	seq, err := getSequence(batch, delivery.Transaction.ID())
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load sequence info: %w", err)
-	}
-
-	// Load the ledger
-	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
-	}
-
-	// If the sequence number is old, mark it already delivered
-	partitionLedger := ledger.Partition(seq.Source)
-	if seq.Number <= partitionLedger.Delivered {
-		return false, errors.Delivered.WithFormat("synthetic transaction has been delivered")
-	}
-
-	// If the transaction is out of sequence, mark it pending
-	if partitionLedger.Delivered+1 != seq.Number {
-		x.logger.Info("Out of sequence synthetic transaction",
-			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-			"seq-got", seq.Number,
-			"seq-want", partitionLedger.Delivered+1,
-			"source", seq.Source,
-			"destination", seq.Destination,
-			"type", delivery.Transaction.Body.Type(),
-			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-		)
-		return false, nil
-	}
+	// Sequence checking code has been moved to the SequencedMessage executor
 
 	if principal != nil {
 		return true, nil
@@ -306,7 +286,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	return true, nil
 }
 
-func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
 	// Do not check the principal until the transaction is ready (see below). Do
 	// not delegate "is ready?" to the transaction executor - anchors _must_ be
 	// sequenced.
@@ -320,42 +300,9 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 		// Anchors must be sequenced
 	}
 
-	// Find the sequence
-	seq, err := getSequence(batch, delivery.Transaction.ID())
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load sequence info: %w", err)
-	}
+	// Anchor signature checking code has been moved to the BlockAnchor executor
 
-	// Have we received enough signatures?
-	partition, ok := protocol.ParsePartitionUrl(seq.Source)
-	if !ok {
-		return false, errors.BadRequest.WithFormat("source %v is not a partition", seq.Source)
-	}
-	if uint64(len(status.AnchorSigners)) < x.globals.Active.ValidatorThreshold(partition) {
-		return false, nil
-	}
-
-	// Load the ledger
-	var ledger *protocol.AnchorLedger
-	err = batch.Account(x.Describe.AnchorPool()).GetStateAs(&ledger)
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load anchor ledger: %w", err)
-	}
-
-	// If the transaction is out of sequence, mark it pending
-	partLedger := ledger.Anchor(delivery.Sequence.Source)
-	if partLedger.Delivered+1 != seq.Number {
-		x.logger.Info("Out of sequence anchor transaction",
-			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-			"seq-got", seq.Number,
-			"seq-want", partLedger.Delivered+1,
-			"source", seq.Source,
-			"destination", seq.Destination,
-			"type", delivery.Transaction.Body.Type(),
-			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-		)
-		return false, nil
-	}
+	// Sequence checking code has been moved to the SequencedMessage executor
 
 	if principal != nil {
 		return true, nil
@@ -376,7 +323,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	// Store the transaction state (without signatures)
 	//
 	// TODO This should not always be a UserTransaction
-	err := batch.Message(delivery.Transaction.ID().Hash()).Main().Put(&messaging.UserTransaction{Transaction: delivery.Transaction})
+	err := batch.Message(delivery.Transaction.ID().Hash()).Main().Put(&messaging.TransactionMessage{Transaction: delivery.Transaction})
 	if err != nil {
 		return nil, fmt.Errorf("store transaction: %w", err)
 	}
@@ -393,59 +340,6 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	err = db.PutStatus(status)
 	if err != nil {
 		return nil, fmt.Errorf("store transaction status: %w", err)
-	}
-
-	// If the transaction is synthetic, update the synthetic ledger
-	if delivery.Transaction.Body.Type().IsUser() {
-		return status, nil
-	}
-	switch delivery.Transaction.Body.Type() {
-	case protocol.TransactionTypeSystemGenesis, protocol.TransactionTypeSystemWriteData:
-		return status, nil
-	}
-
-	// Update the ledger
-	var ledger protocol.Account
-	var partLedger *protocol.PartitionSyntheticLedger
-	if delivery.Transaction.Body.Type().IsSystem() {
-		var anchorLedger *protocol.AnchorLedger
-		err = batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
-		}
-		ledger = anchorLedger
-		partLedger = anchorLedger.Anchor(delivery.Sequence.Source)
-	} else {
-		var synthLedger *protocol.SyntheticLedger
-		err = batch.Account(x.Describe.Synthetic()).GetStateAs(&synthLedger)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
-		}
-		ledger = synthLedger
-		partLedger = synthLedger.Partition(delivery.Sequence.Source)
-	}
-
-	// This should never happen, but if it does Add will panic
-	if status.Pending() && delivery.Sequence.Number <= partLedger.Delivered {
-		msg := "synthetic transactions"
-		if delivery.Transaction.Body.Type().IsSystem() {
-			msg = "anchors"
-		}
-		return nil, errors.FatalError.WithFormat("%s executed out of order: delivered %d, executed %d", msg, partLedger.Delivered, delivery.Sequence.Number)
-	}
-
-	// The ledger's Delivered number needs to be updated if the transaction
-	// succeeds or fails
-	if partLedger.Add(!status.Pending(), delivery.Sequence.Number, delivery.Transaction.ID()) {
-		err = batch.Account(ledger.GetUrl()).PutState(ledger)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store synthetic transaction ledger: %w", err)
-		}
-	}
-
-	nextHash, ok := partLedger.Get(delivery.Sequence.Number + 1)
-	if ok {
-		state.ProcessTransaction(nextHash)
 	}
 
 	return status, nil
@@ -517,10 +411,13 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 }
 
 func selectTargetChain(account *database.Account, body protocol.TransactionBody) *database.Chain2 {
-	if writeData, ok := body.(*protocol.WriteData); ok {
-		if writeData.Scratch {
+	switch body := body.(type) {
+	case *protocol.WriteData:
+		if body.Scratch {
 			return account.ScratchChain()
 		}
+	case *protocol.TransferCredits:
+		return account.ScratchChain()
 	}
 	return account.MainChain()
 }
@@ -560,7 +457,11 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Issue a refund to the initial signer
-	if status.Initiator == nil || !delivery.Transaction.Body.Type().IsUser() {
+	isInit, initiator, err := x.TransactionIsInitiated(batch, delivery.Transaction)
+	if err != nil {
+		return nil, nil, errors.UnknownError.Wrap(err)
+	}
+	if !isInit || !delivery.Transaction.Body.Type().IsUser() {
 		return status, state, nil
 	}
 
@@ -575,6 +476,6 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 
 	refund := new(protocol.SyntheticDepositCredits)
 	refund.Amount = (paid - protocol.FeeFailedMaximum).AsUInt64()
-	state.DidProduceTxn(status.Initiator, refund)
+	state.DidProduceTxn(initiator.Payer, refund)
 	return status, state, nil
 }

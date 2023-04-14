@@ -9,6 +9,7 @@ package main
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -26,6 +27,8 @@ import (
 )
 
 func TestRepairIndices(t *testing.T) {
+	acctesting.EnableDebugFeatures()
+
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
@@ -44,12 +47,12 @@ func TestRepairIndices(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
 
 	// Execute
-	tx1 := sim.BuildAndSubmitSuccessfully(
+	tx1 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("foo")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
-	tx2 := sim.BuildAndSubmitSuccessfully(
+	tx2 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("bar")).Scratch().
 			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey))
@@ -58,7 +61,7 @@ func TestRepairIndices(t *testing.T) {
 		Txn(tx1.TxID).Succeeds(),
 		Txn(tx2.TxID).Succeeds())
 
-	tx3 := sim.BuildAndSubmitSuccessfully(
+	tx3 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("baz")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(3).PrivateKey(aliceKey))
@@ -70,9 +73,9 @@ func TestRepairIndices(t *testing.T) {
 	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
 		data := indexing.Data(batch, alice.JoinPath("data"))
 		require.Equal(t, 3, int(MustGet0(t, data.Count)))
-		require.Equal(t, tx1.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 0))
-		require.Equal(t, tx2.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 1))
-		require.Equal(t, tx3.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 2))
+		assert.Equal(t, tx1.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 0))
+		assert.Equal(t, tx2.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 1))
+		assert.Equal(t, tx3.Result.(*WriteDataResult).EntryHash[:], MustGet1(t, data.Entry, 2))
 	})
 
 	// Save to and restore from snapshot

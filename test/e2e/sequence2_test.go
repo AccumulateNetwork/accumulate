@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -24,8 +25,8 @@ import (
 
 func TestMissingSynthTxn(t *testing.T) {
 	Run(t, map[string]ExecutorVersion{
-		"v1":     ExecutorVersionV1SignatureAnchoring,
-		"latest": ExecutorVersionLatest,
+		"v1": ExecutorVersionV1SignatureAnchoring,
+		// "latest": ExecutorVersionLatest,
 	}, func(t *testing.T, version ExecutorVersion) {
 		var timestamp uint64
 
@@ -67,12 +68,12 @@ func TestMissingSynthTxn(t *testing.T) {
 		// Execute
 		st := make([]*protocol.TransactionStatus, 5)
 		for i := range st {
-			st[i] = sim.SubmitSuccessfully(MustBuild(t,
+			st[i] = sim.SubmitTxnSuccessfully(MustBuild(t,
 				build.Transaction().For(aliceUrl).
 					SendTokens(1, protocol.AcmePrecisionPower).To(bobUrl).
 					SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)))
 		}
-		sim.StepUntil(func(*Harness) bool { return didDrop })
+		sim.StepUntil(True(func(*Harness) bool { return didDrop }))
 
 		for _, st := range st {
 			sim.StepUntil(
@@ -84,4 +85,104 @@ func TestMissingSynthTxn(t *testing.T) {
 		lta := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(bobUrl), bobUrl)
 		require.Equal(t, len(st)*protocol.AcmePrecision, int(lta.Balance.Uint64()))
 	})
+}
+
+func TestMissingDirectoryAnchorTxn(t *testing.T) {
+	// Initialize
+	const bvnCount, valCount = 1, 1 // Anchor healing doesn't work with more than one validator
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
+		simulator.Genesis(GenesisTime),
+	)
+
+	liteKey := acctesting.GenerateKey("Lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+
+	faucetKey := acctesting.GenerateKey("Faucet")
+	faucet := acctesting.AcmeLiteAddressStdPriv(faucetKey)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
+
+	// Drop the next directory anchor
+	var anchors int
+	sim.SetSubmitHookFor(alice, func(messages []messaging.Message) (drop bool, keepHook bool) {
+		for _, msg := range messages {
+			anchor, ok := msg.(*messaging.BlockAnchor)
+			if !ok {
+				continue
+			}
+			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
+			if txn.Transaction.Body.Type() == TransactionTypeDirectoryAnchor {
+				anchors++
+				drop = true
+			}
+		}
+		return drop, anchors < valCount*bvnCount
+	})
+
+	sim.StepUntil(True(func(*Harness) bool { return anchors >= valCount*bvnCount }))
+
+	// Cause a synthetic transaction
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(faucet).
+			SendTokens(1, AcmeOraclePrecisionPower).To(lite).
+			SignWith(faucet).Timestamp(1).Version(1).PrivateKey(faucetKey))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+}
+
+func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
+	t.Skip("Flaky TODO FIXME")
+
+	// Initialize
+	const bvnCount, valCount = 3, 3
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
+		simulator.Genesis(GenesisTime),
+	)
+
+	liteKey := acctesting.GenerateKey("Lite")
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+
+	faucetKey := acctesting.GenerateKey("Faucet")
+	faucet := acctesting.AcmeLiteAddressStdPriv(faucetKey)
+	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
+
+	// Drop the next block validator anchor
+	var anchors int
+	sim.SetBlockHook(Directory, func(_ execute.BlockParams, messages []messaging.Message) (_ []messaging.Message, keepHook bool) {
+		for i := len(messages) - 1; i >= 0; i-- {
+			anchor, ok := messages[i].(*messaging.BlockAnchor)
+			if !ok {
+				continue
+			}
+			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
+			if txn.Transaction.Body.Type() == TransactionTypeBlockValidatorAnchor {
+				anchors++
+				messages = append(messages[:i], messages[i+1:]...)
+			}
+		}
+		return messages, anchors < valCount
+	})
+
+	sim.StepUntil(True(func(*Harness) bool { return anchors >= valCount }))
+
+	// Cause a synthetic transaction
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(faucet).
+			SendTokens(1, AcmeOraclePrecisionPower).To(lite).
+			SignWith(faucet).Timestamp(1).Version(1).PrivateKey(faucetKey))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
 }

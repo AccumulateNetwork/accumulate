@@ -29,12 +29,16 @@ type simService Simulator
 // Services returns the simulator's API v3 implementation.
 func (s *Simulator) Services() *simService { return (*simService)(s) }
 
+func (s *simService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return nil, errors.NotAllowed.With("not implemented")
+}
+
 // Private returns the service, because it implements [private.Sequencer]
 // directly.
 func (s *simService) Private() private.Sequencer { return s }
 
-// NodeStatus finds the specified node and returns its NodeStatus.
-func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
+// ConsensusStatus finds the specified node and returns its ConsensusStatus.
+func (s *simService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	if opts.NodeID == "" {
 		return nil, errors.BadRequest.WithFormat("node ID is missing")
 	}
@@ -48,7 +52,7 @@ func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions)
 			continue
 		}
 		if id.MatchesPrivateKey(sk) {
-			return n.service.NodeStatus(ctx, opts)
+			return n.service.ConsensusStatus(ctx, opts)
 		}
 	}
 	return nil, errors.NotFound.WithFormat("node %s not found", id)
@@ -104,7 +108,7 @@ func (s *simService) Validate(ctx context.Context, envelope *messaging.Envelope,
 
 // Sequence routes the source to a partition and calls Sequence on the first
 // node of that partition, returning the result.
-func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	part, err := s.router.RouteAccount(src)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -138,14 +142,18 @@ func newExecService(x *ExecEntry, logger log.Logger) *partService {
 	return s
 }
 
+func (s *partService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return nil, errors.NotAllowed.With("not implemented")
+}
+
 // Private returns the service, because it implements [private.Sequencer]
 // directly.
 func (s *partService) Private() private.Sequencer { return s.private }
 
-// NodeStatus returns an incomplete node status. Some of the missing
+// ConsensusStatus returns an incomplete node status. Some of the missing
 // functionality can be implemented if there is need.
-func (s *partService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
-	return &api.NodeStatus{
+func (s *partService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return &api.ConsensusStatus{
 		Ok: true,
 		LastBlock: &api.LastBlock{
 			Height: int64(s.x.BlockIndex),
@@ -162,10 +170,10 @@ func (s *partService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions
 // NetworkStatus returns the active globals.
 func (s *partService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return &api.NetworkStatus{
-		Oracle:  s.x.Executor.ActiveGlobals_TESTONLY().Oracle,
-		Network: s.x.Executor.ActiveGlobals_TESTONLY().Network,
-		Globals: s.x.Executor.ActiveGlobals_TESTONLY().Globals,
-		Routing: s.x.Executor.ActiveGlobals_TESTONLY().Routing,
+		Oracle:  s.x.Executor.ActiveGlobals().Oracle,
+		Network: s.x.Executor.ActiveGlobals().Network,
+		Globals: s.x.Executor.ActiveGlobals().Globals,
+		Routing: s.x.Executor.ActiveGlobals().Routing,
 	}, nil
 }
 

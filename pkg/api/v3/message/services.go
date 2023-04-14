@@ -82,17 +82,46 @@ type NodeService struct {
 }
 
 func (s NodeService) methods() serviceMethodMap {
-	typ, fn := makeServiceMethod(s.nodeStatus)
-	return serviceMethodMap{typ: fn}
+	typ1, fn1 := makeServiceMethod(s.nodeInfo)
+	typ2, fn2 := makeServiceMethod(s.findService)
+	return serviceMethodMap{typ1: fn1, typ2: fn2}
 }
 
-func (s NodeService) nodeStatus(c *call[*NodeStatusRequest]) {
-	res, err := s.NodeService.NodeStatus(c.context, c.params.NodeStatusOptions)
+func (s NodeService) nodeInfo(c *call[*NodeInfoRequest]) {
+	res, err := s.NodeService.NodeInfo(c.context, c.params.NodeInfoOptions)
 	if err != nil {
 		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
 		return
 	}
-	c.Write(&NodeStatusResponse{Value: res})
+	c.Write(&NodeInfoResponse{Value: res})
+}
+
+func (s NodeService) findService(c *call[*FindServiceRequest]) {
+	res, err := s.NodeService.FindService(c.context, c.params.FindServiceOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&FindServiceResponse{Value: res})
+}
+
+// ConsensusService forwards [NodeStatusRequest]s to a [api.ConsensusService].
+type ConsensusService struct {
+	api.ConsensusService
+}
+
+func (s ConsensusService) methods() serviceMethodMap {
+	typ, fn := makeServiceMethod(s.consensusStatus)
+	return serviceMethodMap{typ: fn}
+}
+
+func (s ConsensusService) consensusStatus(c *call[*ConsensusStatusRequest]) {
+	res, err := s.ConsensusService.ConsensusStatus(c.context, c.params.ConsensusStatusOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&ConsensusStatusResponse{Value: res})
 }
 
 // NetworkService forwards [NetworkStatusRequest]s to a [api.NetworkService].

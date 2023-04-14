@@ -69,47 +69,91 @@ func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, trans
 
 // TransactionIsReady returns true if the transaction is writing to a lite data
 // account.
-func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, false, errors.UnknownError.Wrap(err)
 	}
 
-	// Writing to a lite data account only requires one signature
-	if lite {
-		return len(status.Signers) > 0, false, nil
+	// Fallback to general authorization if not lite
+	if !lite {
+		return false, true, nil
 	}
 
-	// Fallback to general authorization
-	return false, true, nil
+	// Writing to a lite data account only requires one signature
+	votes, err := batch.Account(transaction.Header.Principal).
+		Transaction(transaction.ID().Hash()).
+		Votes().
+		Get()
+	if err != nil {
+		return false, false, errors.UnknownError.WithFormat("load voters: %w", err)
+	}
+	return len(votes) > 0, false, nil
 }
 
-func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (WriteData{}).Validate(st, tx)
+func (x WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := new(protocol.WriteDataResult)
+	result.EntryHash = *(*[32]byte)(body.Entry.Hash())
+	result.AccountID = tx.Transaction.Header.Principal.AccountID()
+	result.AccountUrl = tx.Transaction.Header.Principal
+	return result, nil
 }
 
-func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (WriteData) check(st *StateManager, tx *Delivery) (*protocol.WriteData, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteData)
 	if !ok {
 		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
-	err := validateDataEntry(st, body.Entry)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	if body.Entry == nil {
+		return nil, errors.BadRequest.WithFormat("entry is nil")
 	}
 
 	//check will return error if there is too much data or no data for the entry
-	_, err = protocol.CheckDataEntrySize(body.Entry)
+	_, err := protocol.CheckDataEntrySize(body.Entry)
 	if err != nil {
 		return nil, err
 	}
 
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
+	isLite := err == nil
 	if err == nil {
 		if body.WriteToState {
 			return nil, errors.BadRequest.WithFormat("cannot write data to the state of a lite data account")
 		}
+		return body, nil
+	}
+
+	if body.WriteToState {
+		if isLite {
+			return nil, errors.BadRequest.WithFormat("cannot write data to the state of a lite data account")
+		}
+		if body.Scratch {
+			return nil, errors.BadRequest.WithFormat("writing scratch data to the account state is not permitted")
+		}
+	}
+
+	return body, nil
+}
+
+func (x WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	err = validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
+	if err == nil {
 		return executeWriteLiteDataAccount(st, body.Entry)
 	}
 
@@ -128,10 +172,6 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	}
 
 	if writeToState {
-		if scratch {
-			return nil, errors.BadRequest.WithFormat("writing scratch data to the account state is not permitted")
-		}
-
 		account.Entry = entry
 		err := st.Update(account)
 		if err != nil {

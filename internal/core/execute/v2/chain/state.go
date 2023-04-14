@@ -7,12 +7,9 @@
 package chain
 
 import (
-	"fmt"
-
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -22,50 +19,33 @@ import (
 type StateManager struct {
 	stateCache
 
-	Origin    protocol.Account
-	OriginUrl *url.URL
-}
-
-func LoadStateManager(net *config.Describe, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
-	if !transaction.Body.Type().IsUser() {
-		// Don't check the signer
-		return NewStateManager(net, globals, batch, principal, transaction, logger), nil
-	}
-
-	var signer protocol.Signer
-	err := batch.Account(status.Initiator).GetStateAs(&signer)
-	switch {
-	case err == nil:
-		// Found it
-		return NewStateManager(net, globals, batch, principal, transaction, logger), nil
-
-	case !errors.Is(err, storage.ErrNotFound):
-		// Unknown error
-		return nil, fmt.Errorf("load signer: %w", err)
-
-	case transaction.Header.Principal.LocalTo(status.Initiator):
-		// If the signer is local, it must exist
-		return nil, fmt.Errorf("load signer: %w", err)
-	}
-
-	_, ok := status.GetSigner(status.Initiator)
-	if !ok {
-		// This should never happen
-		return nil, fmt.Errorf("transaction signer set does not include the initiator")
-	}
-
-	return NewStateManager(net, globals, batch, principal, transaction, logger), nil
+	AuthDelegate AuthDelegate
+	Origin       protocol.Account
+	OriginUrl    *url.URL
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(net *config.Describe, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(net *config.Describe, globals *core.GlobalValues, authDelegate AuthDelegate, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
+	m.AuthDelegate = authDelegate
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
 	m.stateCache = *newStateCache(net, globals, transaction.Body.Type(), txid, batch)
+	m.logger.L = logger
+	return m
+}
+
+// NewStatelessManager creates a new state manager and does *not* hold a
+// reference to any state such as the transaction's principal or the current
+// network variables.
+func NewStatelessManager(net *config.Describe, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+	txid := *(*[32]byte)(transaction.GetHash())
+	m := new(StateManager)
+	m.OriginUrl = transaction.Header.Principal
+	m.stateCache = *newStatelessCache(net, transaction.Body.Type(), txid)
 	m.logger.L = logger
 	return m
 }

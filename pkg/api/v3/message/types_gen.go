@@ -33,6 +33,18 @@ type Addressed struct {
 	extraData []byte
 }
 
+type ConsensusStatusRequest struct {
+	fieldsSet []bool
+	ConsensusStatusOptions
+	extraData []byte
+}
+
+type ConsensusStatusResponse struct {
+	fieldsSet []bool
+	Value     *api.ConsensusStatus `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type ErrorResponse struct {
 	fieldsSet []bool
 	Error     *errors2.Error `json:"error,omitempty" form:"error" query:"error" validate:"required"`
@@ -55,6 +67,18 @@ type FaucetRequest struct {
 type FaucetResponse struct {
 	fieldsSet []bool
 	Value     *api.Submission `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type FindServiceRequest struct {
+	fieldsSet []bool
+	FindServiceOptions
+	extraData []byte
+}
+
+type FindServiceResponse struct {
+	fieldsSet []bool
+	Value     []*api.FindServiceResult `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -82,15 +106,15 @@ type NetworkStatusResponse struct {
 	extraData []byte
 }
 
-type NodeStatusRequest struct {
+type NodeInfoRequest struct {
 	fieldsSet []bool
-	NodeStatusOptions
+	NodeInfoOptions
 	extraData []byte
 }
 
-type NodeStatusResponse struct {
+type NodeInfoResponse struct {
 	fieldsSet []bool
-	Value     *api.NodeStatus `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     *api.NodeInfo `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -104,7 +128,7 @@ type PrivateSequenceRequest struct {
 
 type PrivateSequenceResponse struct {
 	fieldsSet []bool
-	Value     *api.TransactionRecord `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     *api.MessageRecord[messaging.Message] `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -160,6 +184,10 @@ type ValidateResponse struct {
 
 func (*Addressed) Type() Type { return TypeAddressed }
 
+func (*ConsensusStatusRequest) Type() Type { return TypeConsensusStatusRequest }
+
+func (*ConsensusStatusResponse) Type() Type { return TypeConsensusStatusResponse }
+
 func (*ErrorResponse) Type() Type { return TypeErrorResponse }
 
 func (*EventMessage) Type() Type { return TypeEvent }
@@ -167,6 +195,10 @@ func (*EventMessage) Type() Type { return TypeEvent }
 func (*FaucetRequest) Type() Type { return TypeFaucetRequest }
 
 func (*FaucetResponse) Type() Type { return TypeFaucetResponse }
+
+func (*FindServiceRequest) Type() Type { return TypeFindServiceRequest }
+
+func (*FindServiceResponse) Type() Type { return TypeFindServiceResponse }
 
 func (*MetricsRequest) Type() Type { return TypeMetricsRequest }
 
@@ -176,9 +208,9 @@ func (*NetworkStatusRequest) Type() Type { return TypeNetworkStatusRequest }
 
 func (*NetworkStatusResponse) Type() Type { return TypeNetworkStatusResponse }
 
-func (*NodeStatusRequest) Type() Type { return TypeNodeStatusRequest }
+func (*NodeInfoRequest) Type() Type { return TypeNodeInfoRequest }
 
-func (*NodeStatusResponse) Type() Type { return TypeNodeStatusResponse }
+func (*NodeInfoResponse) Type() Type { return TypeNodeInfoResponse }
 
 func (*PrivateSequenceRequest) Type() Type { return TypePrivateSequenceRequest }
 
@@ -214,6 +246,28 @@ func (v *Addressed) Copy() *Addressed {
 }
 
 func (v *Addressed) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ConsensusStatusRequest) Copy() *ConsensusStatusRequest {
+	u := new(ConsensusStatusRequest)
+
+	u.ConsensusStatusOptions = *v.ConsensusStatusOptions.Copy()
+
+	return u
+}
+
+func (v *ConsensusStatusRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ConsensusStatusResponse) Copy() *ConsensusStatusResponse {
+	u := new(ConsensusStatusResponse)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+
+	return u
+}
+
+func (v *ConsensusStatusResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ErrorResponse) Copy() *ErrorResponse {
 	u := new(ErrorResponse)
@@ -267,6 +321,31 @@ func (v *FaucetResponse) Copy() *FaucetResponse {
 
 func (v *FaucetResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *FindServiceRequest) Copy() *FindServiceRequest {
+	u := new(FindServiceRequest)
+
+	u.FindServiceOptions = *v.FindServiceOptions.Copy()
+
+	return u
+}
+
+func (v *FindServiceRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FindServiceResponse) Copy() *FindServiceResponse {
+	u := new(FindServiceResponse)
+
+	u.Value = make([]*api.FindServiceResult, len(v.Value))
+	for i, v := range v.Value {
+		if v != nil {
+			u.Value[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *FindServiceResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
 
@@ -311,18 +390,18 @@ func (v *NetworkStatusResponse) Copy() *NetworkStatusResponse {
 
 func (v *NetworkStatusResponse) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *NodeStatusRequest) Copy() *NodeStatusRequest {
-	u := new(NodeStatusRequest)
+func (v *NodeInfoRequest) Copy() *NodeInfoRequest {
+	u := new(NodeInfoRequest)
 
-	u.NodeStatusOptions = *v.NodeStatusOptions.Copy()
+	u.NodeInfoOptions = *v.NodeInfoOptions.Copy()
 
 	return u
 }
 
-func (v *NodeStatusRequest) CopyAsInterface() interface{} { return v.Copy() }
+func (v *NodeInfoRequest) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *NodeStatusResponse) Copy() *NodeStatusResponse {
-	u := new(NodeStatusResponse)
+func (v *NodeInfoResponse) Copy() *NodeInfoResponse {
+	u := new(NodeInfoResponse)
 
 	if v.Value != nil {
 		u.Value = (v.Value).Copy()
@@ -331,7 +410,7 @@ func (v *NodeStatusResponse) Copy() *NodeStatusResponse {
 	return u
 }
 
-func (v *NodeStatusResponse) CopyAsInterface() interface{} { return v.Copy() }
+func (v *NodeInfoResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PrivateSequenceRequest) Copy() *PrivateSequenceRequest {
 	u := new(PrivateSequenceRequest)
@@ -473,6 +552,27 @@ func (v *Addressed) Equal(u *Addressed) bool {
 	return true
 }
 
+func (v *ConsensusStatusRequest) Equal(u *ConsensusStatusRequest) bool {
+	if !v.ConsensusStatusOptions.Equal(&u.ConsensusStatusOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ConsensusStatusResponse) Equal(u *ConsensusStatusResponse) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
 func (v *ErrorResponse) Equal(u *ErrorResponse) bool {
 	switch {
 	case v.Error == u.Error:
@@ -528,6 +628,27 @@ func (v *FaucetResponse) Equal(u *FaucetResponse) bool {
 	return true
 }
 
+func (v *FindServiceRequest) Equal(u *FindServiceRequest) bool {
+	if !v.FindServiceOptions.Equal(&u.FindServiceOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *FindServiceResponse) Equal(u *FindServiceResponse) bool {
+	if len(v.Value) != len(u.Value) {
+		return false
+	}
+	for i := range v.Value {
+		if !((v.Value[i]).Equal(u.Value[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	if !v.MetricsOptions.Equal(&u.MetricsOptions) {
 		return false
@@ -570,15 +691,15 @@ func (v *NetworkStatusResponse) Equal(u *NetworkStatusResponse) bool {
 	return true
 }
 
-func (v *NodeStatusRequest) Equal(u *NodeStatusRequest) bool {
-	if !v.NodeStatusOptions.Equal(&u.NodeStatusOptions) {
+func (v *NodeInfoRequest) Equal(u *NodeInfoRequest) bool {
+	if !v.NodeInfoOptions.Equal(&u.NodeInfoOptions) {
 		return false
 	}
 
 	return true
 }
 
-func (v *NodeStatusResponse) Equal(u *NodeStatusResponse) bool {
+func (v *NodeInfoResponse) Equal(u *NodeInfoResponse) bool {
 	switch {
 	case v.Value == u.Value:
 		// equal
@@ -730,6 +851,10 @@ var fieldNames_Addressed = []string{
 }
 
 func (v *Addressed) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -776,12 +901,108 @@ func (v *Addressed) IsValid() error {
 	}
 }
 
+var fieldNames_ConsensusStatusRequest = []string{
+	1: "Type",
+	2: "ConsensusStatusOptions",
+}
+
+func (v *ConsensusStatusRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.ConsensusStatusOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_ConsensusStatusRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ConsensusStatusRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.ConsensusStatusOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ConsensusStatusResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *ConsensusStatusResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ConsensusStatusResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ConsensusStatusResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_ErrorResponse = []string{
 	1: "Type",
 	2: "Error",
 }
 
 func (v *ErrorResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -826,6 +1047,10 @@ var fieldNames_EventMessage = []string{
 }
 
 func (v *EventMessage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -873,6 +1098,10 @@ var fieldNames_FaucetRequest = []string{
 }
 
 func (v *FaucetRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -921,6 +1150,10 @@ var fieldNames_FaucetResponse = []string{
 }
 
 func (v *FaucetResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -959,12 +1192,110 @@ func (v *FaucetResponse) IsValid() error {
 	}
 }
 
+var fieldNames_FindServiceRequest = []string{
+	1: "Type",
+	2: "FindServiceOptions",
+}
+
+func (v *FindServiceRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.FindServiceOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_FindServiceRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FindServiceRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.FindServiceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FindServiceResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *FindServiceResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		for _, v := range v.Value {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_FindServiceResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FindServiceResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_MetricsRequest = []string{
 	1: "Type",
 	2: "MetricsOptions",
 }
 
 func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1005,6 +1336,10 @@ var fieldNames_MetricsResponse = []string{
 }
 
 func (v *MetricsResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1049,6 +1384,10 @@ var fieldNames_NetworkStatusRequest = []string{
 }
 
 func (v *NetworkStatusRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1089,6 +1428,10 @@ var fieldNames_NetworkStatusResponse = []string{
 }
 
 func (v *NetworkStatusResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1127,19 +1470,23 @@ func (v *NetworkStatusResponse) IsValid() error {
 	}
 }
 
-var fieldNames_NodeStatusRequest = []string{
+var fieldNames_NodeInfoRequest = []string{
 	1: "Type",
-	2: "NodeStatusOptions",
+	2: "NodeInfoOptions",
 }
 
-func (v *NodeStatusRequest) MarshalBinary() ([]byte, error) {
+func (v *NodeInfoRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, v.NodeStatusOptions.MarshalBinary)
+	writer.WriteValue(2, v.NodeInfoOptions.MarshalBinary)
 
-	_, _, err := writer.Reset(fieldNames_NodeStatusRequest)
+	_, _, err := writer.Reset(fieldNames_NodeInfoRequest)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -1147,13 +1494,13 @@ func (v *NodeStatusRequest) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *NodeStatusRequest) IsValid() error {
+func (v *NodeInfoRequest) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if err := v.NodeStatusOptions.IsValid(); err != nil {
+	if err := v.NodeInfoOptions.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
 
@@ -1167,12 +1514,16 @@ func (v *NodeStatusRequest) IsValid() error {
 	}
 }
 
-var fieldNames_NodeStatusResponse = []string{
+var fieldNames_NodeInfoResponse = []string{
 	1: "Type",
 	2: "Value",
 }
 
-func (v *NodeStatusResponse) MarshalBinary() ([]byte, error) {
+func (v *NodeInfoResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1181,7 +1532,7 @@ func (v *NodeStatusResponse) MarshalBinary() ([]byte, error) {
 		writer.WriteValue(2, v.Value.MarshalBinary)
 	}
 
-	_, _, err := writer.Reset(fieldNames_NodeStatusResponse)
+	_, _, err := writer.Reset(fieldNames_NodeInfoResponse)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -1189,7 +1540,7 @@ func (v *NodeStatusResponse) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *NodeStatusResponse) IsValid() error {
+func (v *NodeInfoResponse) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -1219,6 +1570,10 @@ var fieldNames_PrivateSequenceRequest = []string{
 }
 
 func (v *PrivateSequenceRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1279,6 +1634,10 @@ var fieldNames_PrivateSequenceResponse = []string{
 }
 
 func (v *PrivateSequenceResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1324,6 +1683,10 @@ var fieldNames_QueryRequest = []string{
 }
 
 func (v *QueryRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1371,6 +1734,10 @@ var fieldNames_RecordResponse = []string{
 }
 
 func (v *RecordResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1416,6 +1783,10 @@ var fieldNames_SubmitRequest = []string{
 }
 
 func (v *SubmitRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1464,6 +1835,10 @@ var fieldNames_SubmitResponse = []string{
 }
 
 func (v *SubmitResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1510,6 +1885,10 @@ var fieldNames_SubscribeRequest = []string{
 }
 
 func (v *SubscribeRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1549,6 +1928,10 @@ var fieldNames_SubscribeResponse = []string{
 }
 
 func (v *SubscribeResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1586,6 +1969,10 @@ var fieldNames_ValidateRequest = []string{
 }
 
 func (v *ValidateRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1634,6 +2021,10 @@ var fieldNames_ValidateResponse = []string{
 }
 
 func (v *ValidateResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1709,6 +2100,74 @@ func (v *Addressed) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	})
 
 	seen, err := reader.Reset(fieldNames_Addressed)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ConsensusStatusRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ConsensusStatusRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ConsensusStatusRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.ConsensusStatusOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_ConsensusStatusRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ConsensusStatusResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ConsensusStatusResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ConsensusStatusResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.ConsensusStatus); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ConsensusStatusResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1870,6 +2329,78 @@ func (v *FaucetResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *FindServiceRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FindServiceRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *FindServiceRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.FindServiceOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_FindServiceRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *FindServiceResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FindServiceResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *FindServiceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(api.FindServiceResult); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Value = append(v.Value, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_FindServiceResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2006,11 +2537,11 @@ func (v *NetworkStatusResponse) UnmarshalFieldsFrom(reader *encoding.Reader) err
 	return nil
 }
 
-func (v *NodeStatusRequest) UnmarshalBinary(data []byte) error {
+func (v *NodeInfoRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *NodeStatusRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *NodeInfoRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	var vType Type
@@ -2024,10 +2555,10 @@ func (v *NodeStatusRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	return v.UnmarshalFieldsFrom(reader)
 }
 
-func (v *NodeStatusRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	reader.ReadValue(2, v.NodeStatusOptions.UnmarshalBinaryFrom)
+func (v *NodeInfoRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.NodeInfoOptions.UnmarshalBinaryFrom)
 
-	seen, err := reader.Reset(fieldNames_NodeStatusRequest)
+	seen, err := reader.Reset(fieldNames_NodeInfoRequest)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -2039,11 +2570,11 @@ func (v *NodeStatusRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func (v *NodeStatusResponse) UnmarshalBinary(data []byte) error {
+func (v *NodeInfoResponse) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *NodeStatusResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *NodeInfoResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	var vType Type
@@ -2057,12 +2588,12 @@ func (v *NodeStatusResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	return v.UnmarshalFieldsFrom(reader)
 }
 
-func (v *NodeStatusResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(api.NodeStatus); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+func (v *NodeInfoResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(api.NodeInfo); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Value = x
 	}
 
-	seen, err := reader.Reset(fieldNames_NodeStatusResponse)
+	seen, err := reader.Reset(fieldNames_NodeInfoResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -2134,7 +2665,7 @@ func (v *PrivateSequenceResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *PrivateSequenceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(api.TransactionRecord); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+	if x := new(api.MessageRecord[messaging.Message]); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Value = x
 	}
 
@@ -2462,6 +2993,36 @@ func (v *Addressed) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ConsensusStatusRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type   `json:"type"`
+		NodeID    string `json:"nodeID,omitempty"`
+		Partition string `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.ConsensusStatusOptions.NodeID) == 0) {
+
+		u.NodeID = v.ConsensusStatusOptions.NodeID
+	}
+	if !(len(v.ConsensusStatusOptions.Partition) == 0) {
+
+		u.Partition = v.ConsensusStatusOptions.Partition
+	}
+	return json.Marshal(&u)
+}
+
+func (v *ConsensusStatusResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  Type                 `json:"type"`
+		Value *api.ConsensusStatus `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	return json.Marshal(&u)
+}
+
 func (v *ErrorResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  Type           `json:"type"`
@@ -2490,10 +3051,15 @@ func (v *FaucetRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    Type     `json:"type"`
 		Account *url.URL `json:"account,omitempty"`
+		Token   *url.URL `json:"token,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Account == nil) {
 		u.Account = v.Account
+	}
+	if !(v.FaucetOptions.Token == nil) {
+
+		u.Token = v.FaucetOptions.Token
 	}
 	return json.Marshal(&u)
 }
@@ -2505,6 +3071,36 @@ func (v *FaucetResponse) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	return json.Marshal(&u)
+}
+
+func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    Type                `json:"type"`
+		Network string              `json:"network,omitempty"`
+		Service *api.ServiceAddress `json:"service,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.FindServiceOptions.Network) == 0) {
+
+		u.Network = v.FindServiceOptions.Network
+	}
+	if !(v.FindServiceOptions.Service == nil) {
+
+		u.Service = v.FindServiceOptions.Service
+	}
+	return json.Marshal(&u)
+}
+
+func (v *FindServiceResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  Type                                      `json:"type"`
+		Value encoding.JsonList[*api.FindServiceResult] `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Value) == 0) {
 		u.Value = v.Value
 	}
 	return json.Marshal(&u)
@@ -2565,28 +3161,23 @@ func (v *NetworkStatusResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *NodeStatusRequest) MarshalJSON() ([]byte, error) {
+func (v *NodeInfoRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      Type   `json:"type"`
-		NodeID    string `json:"nodeID,omitempty"`
-		Partition string `json:"partition,omitempty"`
+		Type   Type                                    `json:"type"`
+		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if !(len(v.NodeStatusOptions.NodeID) == 0) {
+	if !(v.NodeInfoOptions.PeerID == ("")) {
 
-		u.NodeID = v.NodeStatusOptions.NodeID
-	}
-	if !(len(v.NodeStatusOptions.Partition) == 0) {
-
-		u.Partition = v.NodeStatusOptions.Partition
+		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeInfoOptions.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	}
 	return json.Marshal(&u)
 }
 
-func (v *NodeStatusResponse) MarshalJSON() ([]byte, error) {
+func (v *NodeInfoResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type            `json:"type"`
-		Value *api.NodeStatus `json:"value,omitempty"`
+		Type  Type          `json:"type"`
+		Value *api.NodeInfo `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -2617,8 +3208,8 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 
 func (v *PrivateSequenceResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  Type                   `json:"type"`
-		Value *api.TransactionRecord `json:"value,omitempty"`
+		Type  Type                                  `json:"type"`
+		Value *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Value == nil) {
@@ -2770,6 +3361,43 @@ func (v *Addressed) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type   `json:"type"`
+		NodeID    string `json:"nodeID,omitempty"`
+		Partition string `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NodeID = v.ConsensusStatusOptions.NodeID
+	u.Partition = v.ConsensusStatusOptions.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.ConsensusStatusOptions.NodeID = u.NodeID
+	v.ConsensusStatusOptions.Partition = u.Partition
+	return nil
+}
+
+func (v *ConsensusStatusResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  Type                 `json:"type"`
+		Value *api.ConsensusStatus `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	return nil
+}
+
 func (v *ErrorResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  Type           `json:"type"`
@@ -2800,9 +3428,11 @@ func (v *EventMessage) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Value = make([]api.Event, len(u.Value.Value))
-	for i, x := range u.Value.Value {
-		v.Value[i] = x
+	if u.Value != nil {
+		v.Value = make([]api.Event, len(u.Value.Value))
+		for i, x := range u.Value.Value {
+			v.Value[i] = x
+		}
 	}
 	return nil
 }
@@ -2811,9 +3441,11 @@ func (v *FaucetRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type    Type     `json:"type"`
 		Account *url.URL `json:"account,omitempty"`
+		Token   *url.URL `json:"token,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Account = v.Account
+	u.Token = v.FaucetOptions.Token
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2821,6 +3453,7 @@ func (v *FaucetRequest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Account = u.Account
+	v.FaucetOptions.Token = u.Token
 	return nil
 }
 
@@ -2828,6 +3461,43 @@ func (v *FaucetResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  Type            `json:"type"`
 		Value *api.Submission `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = v.Value
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = u.Value
+	return nil
+}
+
+func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    Type                `json:"type"`
+		Network string              `json:"network,omitempty"`
+		Service *api.ServiceAddress `json:"service,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Network = v.FindServiceOptions.Network
+	u.Service = v.FindServiceOptions.Service
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.FindServiceOptions.Network = u.Network
+	v.FindServiceOptions.Service = u.Service
+	return nil
+}
+
+func (v *FindServiceResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  Type                                      `json:"type"`
+		Value encoding.JsonList[*api.FindServiceResult] `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
@@ -2912,30 +3582,30 @@ func (v *NetworkStatusResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *NodeStatusRequest) UnmarshalJSON(data []byte) error {
+func (v *NodeInfoRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      Type   `json:"type"`
-		NodeID    string `json:"nodeID,omitempty"`
-		Partition string `json:"partition,omitempty"`
+		Type   Type                                    `json:"type"`
+		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.NodeID = v.NodeStatusOptions.NodeID
-	u.Partition = v.NodeStatusOptions.Partition
+	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.NodeInfoOptions.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.NodeStatusOptions.NodeID = u.NodeID
-	v.NodeStatusOptions.Partition = u.Partition
+	if u.PeerID != nil {
+		v.NodeInfoOptions.PeerID = u.PeerID.Value
+	}
+
 	return nil
 }
 
-func (v *NodeStatusResponse) UnmarshalJSON(data []byte) error {
+func (v *NodeInfoResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type            `json:"type"`
-		Value *api.NodeStatus `json:"value,omitempty"`
+		Type  Type          `json:"type"`
+		Value *api.NodeInfo `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
@@ -2974,8 +3644,8 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 
 func (v *PrivateSequenceResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  Type                   `json:"type"`
-		Value *api.TransactionRecord `json:"value,omitempty"`
+		Type  Type                                  `json:"type"`
+		Value *api.MessageRecord[messaging.Message] `json:"value,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value

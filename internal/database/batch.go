@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -29,22 +30,36 @@ type Updater interface {
 type Beginner interface {
 	Updater
 	Begin(bool) *Batch
+	SetObserver(Observer)
 }
 
 var _ Beginner = (*Database)(nil)
 var _ Beginner = (*Batch)(nil)
 
+// SetObserver sets the database observer.
+func (b *Batch) SetObserver(observer Observer) {
+	if observer == nil {
+		observer = unsetObserver{}
+	}
+	b.observer = observer
+}
+
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
 	id := atomic.AddInt64(&d.nextBatchId, 1)
 
+	b := NewBatch(fmt.Sprint(id), d.store.Begin(writable), writable, d.logger)
+	b.observer = d.observer
+	return b
+}
+
+func NewBatch(id string, store storage.KeyValueTxn, writable bool, logger log.Logger) *Batch {
 	b := new(Batch)
-	b.id = fmt.Sprint(id)
+	b.id = id
 	b.writable = writable
-	b.logger.L = d.logger
-	b.kvstore = d.store.Begin(writable)
-	b.store = record.KvStore{Store: b.kvstore}
-	b.bptEntries = map[storage.Key][32]byte{}
+	b.logger.Set(logger)
+	b.kvstore = store
+	b.store = record.KvStore{Store: store}
 	return b
 }
 
@@ -57,12 +72,12 @@ func (b *Batch) Begin(writable bool) *Batch {
 
 	c := new(Batch)
 	c.id = fmt.Sprintf("%s.%d", b.id, b.nextChildId)
+	c.observer = b.observer
 	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
 	c.store = b
 	c.kvstore = b.kvstore.Begin(c.writable)
-	c.bptEntries = map[storage.Key][32]byte{}
 	return c
 }
 
@@ -125,18 +140,10 @@ func (b *Batch) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if b.parent != nil {
-		for k, v := range b.bptEntries {
-			b.parent.bptEntries[k] = v
-		}
-		if db, ok := b.kvstore.(*storage.DebugBatch); ok {
-			db.PretendWrite()
-		}
-	} else {
-		err := b.commitBpt()
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
+	// Committing may have changed the BPT, so commit it
+	record.FieldCommit(&err, b.bpt)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	return b.kvstore.Commit()
@@ -145,9 +152,6 @@ func (b *Batch) Commit() error {
 // Discard discards pending writes. Attempting to use the Batch after calling
 // Discard will result in a panic.
 func (b *Batch) Discard() {
-	if !b.done && b.writable {
-		b.logger.Debug("Discarding a writable batch")
-	}
 	b.done = true
 	b.kvstore.Discard()
 }
@@ -155,6 +159,10 @@ func (b *Batch) Discard() {
 // Transaction returns an Transaction for the given hash.
 func (b *Batch) Transaction(id []byte) *Transaction {
 	return b.getTransaction(*(*[32]byte)(id))
+}
+
+func (b *Batch) Transaction2(id [32]byte) *Transaction {
+	return b.getTransaction(id)
 }
 
 func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
@@ -215,6 +223,11 @@ func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 
 	err = v.LoadValue(value, true)
 	return errors.UnknownError.Wrap(err)
+}
+
+func zero[T any]() T {
+	var z T
+	return z
 }
 
 // resolveValue resolves the value for the given key.

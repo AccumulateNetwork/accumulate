@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -67,7 +67,7 @@ func sequence(_ *cobra.Command, args []string) {
 
 	// Check produced vs received
 	for i, a := range desc.Values.Network.Partitions {
-		for _, b := range desc.Values.Network.Partitions[i+1:] {
+		for _, b := range desc.Values.Network.Partitions[i:] {
 			checkSequence2(a, b, bad, "anchors",
 				anchors[a.ID].Anchor(protocol.PartitionUrl(b.ID)),
 				anchors[b.ID].Anchor(protocol.PartitionUrl(a.ID)),
@@ -96,6 +96,9 @@ func checkSequence2(a, b *protocol.PartitionInfo, bad map[Dir]bool, kind string,
 	if ab.Produced > ba.Received {
 		color.Red("🗴 %s → %s has %d unreceived %s\n", a.ID, b.ID, ab.Produced-ba.Received, kind)
 		bad[Dir{From: a.ID, To: b.ID}] = true
+	}
+	if a == b {
+		return
 	}
 	if ba.Produced > ab.Received {
 		color.Red("🗴 %s → %s has %d unreceived %s\n", b.ID, a.ID, ba.Produced-ab.Received, kind)

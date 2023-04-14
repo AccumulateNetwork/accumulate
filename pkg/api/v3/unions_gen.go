@@ -15,6 +15,7 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 )
 
 // NewRecord creates a new Record for the specified RecordType.
@@ -32,21 +33,20 @@ func NewRecord(typ RecordType) (Record, error) {
 		return new(KeyRecord), nil
 	case RecordTypeMajorBlock:
 		return new(MajorBlockRecord), nil
+	case RecordTypeMessage:
+		return new(MessageRecord[messaging.Message]), nil
 	case RecordTypeMinorBlock:
 		return new(MinorBlockRecord), nil
 	case RecordTypeRange:
 		return new(RecordRange[Record]), nil
-	case RecordTypeSignature:
-		return new(SignatureRecord), nil
-	case RecordTypeTransaction:
-		return new(TransactionRecord), nil
+	case RecordTypeSignatureSet:
+		return new(SignatureSetRecord), nil
 	case RecordTypeTxID:
 		return new(TxIDRecord), nil
 	case RecordTypeUrl:
 		return new(UrlRecord), nil
-	default:
-		return nil, fmt.Errorf("unknown record %v", typ)
 	}
+	return nil, fmt.Errorf("unknown record %v", typ)
 }
 
 // EqualRecord is used to compare the values of the union
@@ -91,6 +91,12 @@ func EqualRecord(a, b Record) bool {
 		}
 		b, ok := b.(*MajorBlockRecord)
 		return ok && a.Equal(b)
+	case *MessageRecord[messaging.Message]:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MessageRecord[messaging.Message])
+		return ok && a.Equal(b)
 	case *MinorBlockRecord:
 		if a == nil {
 			return b == nil
@@ -103,17 +109,11 @@ func EqualRecord(a, b Record) bool {
 		}
 		b, ok := b.(*RecordRange[Record])
 		return ok && a.Equal(b)
-	case *SignatureRecord:
+	case *SignatureSetRecord:
 		if a == nil {
 			return b == nil
 		}
-		b, ok := b.(*SignatureRecord)
-		return ok && a.Equal(b)
-	case *TransactionRecord:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*TransactionRecord)
+		b, ok := b.(*SignatureSetRecord)
 		return ok && a.Equal(b)
 	case *TxIDRecord:
 		if a == nil {
@@ -127,9 +127,8 @@ func EqualRecord(a, b Record) bool {
 		}
 		b, ok := b.(*UrlRecord)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyRecord copies a Record.
@@ -147,9 +146,7 @@ func CopyRecord(v Record) Record {
 		return v.Copy()
 	case *MinorBlockRecord:
 		return v.Copy()
-	case *SignatureRecord:
-		return v.Copy()
-	case *TransactionRecord:
+	case *SignatureSetRecord:
 		return v.Copy()
 	case *TxIDRecord:
 		return v.Copy()
@@ -172,6 +169,9 @@ func UnmarshalRecordFrom(rd io.Reader) (Record, error) {
 	// Read the type code
 	var typ RecordType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -240,9 +240,8 @@ func NewQuery(typ QueryType) (Query, error) {
 		return new(PublicKeyHashSearchQuery), nil
 	case QueryTypePublicKeySearch:
 		return new(PublicKeySearchQuery), nil
-	default:
-		return nil, fmt.Errorf("unknown query %v", typ)
 	}
+	return nil, fmt.Errorf("unknown query %v", typ)
 }
 
 // EqualQuery is used to compare the values of the union
@@ -317,9 +316,8 @@ func EqualQuery(a, b Query) bool {
 		}
 		b, ok := b.(*PublicKeySearchQuery)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyQuery copies a Query.
@@ -364,6 +362,9 @@ func UnmarshalQueryFrom(rd io.Reader) (Query, error) {
 	// Read the type code
 	var typ QueryType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
@@ -416,9 +417,8 @@ func NewEvent(typ EventType) (Event, error) {
 		return new(ErrorEvent), nil
 	case EventTypeGlobals:
 		return new(GlobalsEvent), nil
-	default:
-		return nil, fmt.Errorf("unknown event %v", typ)
 	}
+	return nil, fmt.Errorf("unknown event %v", typ)
 }
 
 // EqualEvent is used to compare the values of the union
@@ -445,9 +445,8 @@ func EqualEvent(a, b Event) bool {
 		}
 		b, ok := b.(*GlobalsEvent)
 		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyEvent copies a Event.
@@ -476,6 +475,9 @@ func UnmarshalEventFrom(rd io.Reader) (Event, error) {
 	// Read the type code
 	var typ EventType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 

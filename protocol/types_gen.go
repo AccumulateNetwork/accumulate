@@ -135,6 +135,23 @@ type AuthorityEntry struct {
 	extraData []byte
 }
 
+// AuthoritySignature is a signature produced by an authority.
+type AuthoritySignature struct {
+	fieldsSet []bool
+	// Origin is the signer that produced this signature.
+	Origin *url.URL `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	// Authority is the authority that produced this signature.
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	// Vote is the authority's vote.
+	Vote VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	// TxID is the ID of the transaction this was produced for.
+	TxID *url.TxID `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	// Cause is the ID of the signature that produced this.
+	Cause     *url.TxID  `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	Delegator []*url.URL `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
+	extraData []byte
+}
+
 type BTCLegacySignature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -181,6 +198,12 @@ type BlockValidatorAnchor struct {
 	PartitionAnchor
 	// AcmeBurnt is the amount of acme tokens burnt in the transaction.
 	AcmeBurnt big.Int `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	extraData []byte
+}
+
+type BurnCredits struct {
+	fieldsSet []bool
+	Amount    uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	extraData []byte
 }
 
@@ -263,6 +286,13 @@ type CreateTokenAccount struct {
 	Authorities []*url.URL        `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	Proof       *TokenIssuerProof `json:"proof,omitempty" form:"proof" query:"proof"`
 	extraData   []byte
+}
+
+type CreditRecipient struct {
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Amount    uint64   `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type DataAccount struct {
@@ -602,12 +632,6 @@ type PartitionSyntheticLedger struct {
 	extraData []byte
 }
 
-// PlaceholderTransaction is a placeholder for some observable change in V2 logic.
-type PlaceholderTransaction struct {
-	fieldsSet []bool
-	extraData []byte
-}
-
 type RCD1Signature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -893,6 +917,12 @@ type TransactionStatus struct {
 	extraData     []byte
 }
 
+type TransferCredits struct {
+	fieldsSet []bool
+	To        []*CreditRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	extraData []byte
+}
+
 type TxIdSet struct {
 	fieldsSet []bool
 	Entries   []*url.TxID `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
@@ -1004,6 +1034,8 @@ func (*AddKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTyp
 
 func (*AnchorLedger) Type() AccountType { return AccountTypeAnchorLedger }
 
+func (*AuthoritySignature) Type() SignatureType { return SignatureTypeAuthority }
+
 func (*BTCLegacySignature) Type() SignatureType { return SignatureTypeBTCLegacy }
 
 func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
@@ -1011,6 +1043,8 @@ func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
 func (*BlockLedger) Type() AccountType { return AccountTypeBlockLedger }
 
 func (*BlockValidatorAnchor) Type() TransactionType { return TransactionTypeBlockValidatorAnchor }
+
+func (*BurnCredits) Type() TransactionType { return TransactionTypeBurnCredits }
 
 func (*BurnTokens) Type() TransactionType { return TransactionTypeBurnTokens }
 
@@ -1070,8 +1104,6 @@ func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
 
 func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
 
-func (*PlaceholderTransaction) Type() TransactionType { return TransactionTypePlaceholder }
-
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
 func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
@@ -1119,6 +1151,8 @@ func (*SystemWriteData) Type() TransactionType { return TransactionTypeSystemWri
 func (*TokenAccount) Type() AccountType { return AccountTypeTokenAccount }
 
 func (*TokenIssuer) Type() AccountType { return AccountTypeTokenIssuer }
+
+func (*TransferCredits) Type() TransactionType { return TransactionTypeTransferCredits }
 
 func (*UnknownAccount) Type() AccountType { return AccountTypeUnknown }
 
@@ -1333,6 +1367,34 @@ func (v *AuthorityEntry) Copy() *AuthorityEntry {
 
 func (v *AuthorityEntry) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *AuthoritySignature) Copy() *AuthoritySignature {
+	u := new(AuthoritySignature)
+
+	if v.Origin != nil {
+		u.Origin = v.Origin
+	}
+	if v.Authority != nil {
+		u.Authority = v.Authority
+	}
+	u.Vote = v.Vote
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+	if v.Cause != nil {
+		u.Cause = v.Cause
+	}
+	u.Delegator = make([]*url.URL, len(v.Delegator))
+	for i, v := range v.Delegator {
+		if v != nil {
+			u.Delegator[i] = v
+		}
+	}
+
+	return u
+}
+
+func (v *AuthoritySignature) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *BTCLegacySignature) Copy() *BTCLegacySignature {
 	u := new(BTCLegacySignature)
 
@@ -1413,6 +1475,16 @@ func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 }
 
 func (v *BlockValidatorAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BurnCredits) Copy() *BurnCredits {
+	u := new(BurnCredits)
+
+	u.Amount = v.Amount
+
+	return u
+}
+
+func (v *BurnCredits) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BurnTokens) Copy() *BurnTokens {
 	u := new(BurnTokens)
@@ -1577,6 +1649,19 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 }
 
 func (v *CreateTokenAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreditRecipient) Copy() *CreditRecipient {
+	u := new(CreditRecipient)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.Amount = v.Amount
+
+	return u
+}
+
+func (v *CreditRecipient) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *DataAccount) Copy() *DataAccount {
 	u := new(DataAccount)
@@ -2101,14 +2186,6 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 
 func (v *PartitionSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *PlaceholderTransaction) Copy() *PlaceholderTransaction {
-	u := new(PlaceholderTransaction)
-
-	return u
-}
-
-func (v *PlaceholderTransaction) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *RCD1Signature) Copy() *RCD1Signature {
 	u := new(RCD1Signature)
 
@@ -2615,6 +2692,21 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 
 func (v *TransactionStatus) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *TransferCredits) Copy() *TransferCredits {
+	u := new(TransferCredits)
+
+	u.To = make([]*CreditRecipient, len(v.To))
+	for i, v := range v.To {
+		if v != nil {
+			u.To[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *TransferCredits) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *TxIdSet) Copy() *TxIdSet {
 	u := new(TxIdSet)
 
@@ -3025,6 +3117,54 @@ func (v *AuthorityEntry) Equal(u *AuthorityEntry) bool {
 	return true
 }
 
+func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
+	switch {
+	case v.Origin == u.Origin:
+		// equal
+	case v.Origin == nil || u.Origin == nil:
+		return false
+	case !((v.Origin).Equal(u.Origin)):
+		return false
+	}
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	switch {
+	case v.Cause == u.Cause:
+		// equal
+	case v.Cause == nil || u.Cause == nil:
+		return false
+	case !((v.Cause).Equal(u.Cause)):
+		return false
+	}
+	if len(v.Delegator) != len(u.Delegator) {
+		return false
+	}
+	for i := range v.Delegator {
+		if !((v.Delegator[i]).Equal(u.Delegator[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *BTCLegacySignature) Equal(u *BTCLegacySignature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
@@ -3138,6 +3278,14 @@ func (v *BlockValidatorAnchor) Equal(u *BlockValidatorAnchor) bool {
 		return false
 	}
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BurnCredits) Equal(u *BurnCredits) bool {
+	if !(v.Amount == u.Amount) {
 		return false
 	}
 
@@ -3343,6 +3491,22 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 	case v.Proof == nil || u.Proof == nil:
 		return false
 	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+
+	return true
+}
+
+func (v *CreditRecipient) Equal(u *CreditRecipient) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Amount == u.Amount) {
 		return false
 	}
 
@@ -4047,11 +4211,6 @@ func (v *PartitionSyntheticLedger) Equal(u *PartitionSyntheticLedger) bool {
 	return true
 }
 
-func (v *PlaceholderTransaction) Equal(u *PlaceholderTransaction) bool {
-
-	return true
-}
-
 func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
@@ -4720,6 +4879,19 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	return true
 }
 
+func (v *TransferCredits) Equal(u *TransferCredits) bool {
+	if len(v.To) != len(u.To) {
+		return false
+	}
+	for i := range v.To {
+		if !((v.To[i]).Equal(u.To[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *TxIdSet) Equal(u *TxIdSet) bool {
 	if len(v.Entries) != len(u.Entries) {
 		return false
@@ -4922,6 +5094,10 @@ var fieldNames_ADI = []string{
 }
 
 func (v *ADI) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -4969,6 +5145,10 @@ var fieldNames_AccountAuth = []string{
 }
 
 func (v *AccountAuth) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5011,6 +5191,10 @@ var fieldNames_AccumulateDataEntry = []string{
 }
 
 func (v *AccumulateDataEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5057,6 +5241,10 @@ var fieldNames_AcmeFaucet = []string{
 }
 
 func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5100,6 +5288,10 @@ var fieldNames_AcmeOracle = []string{
 }
 
 func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5140,6 +5332,10 @@ var fieldNames_ActivateProtocolVersion = []string{
 }
 
 func (v *ActivateProtocolVersion) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5179,6 +5375,10 @@ var fieldNames_AddAccountAuthorityOperation = []string{
 }
 
 func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5225,6 +5425,10 @@ var fieldNames_AddCredits = []string{
 }
 
 func (v *AddCredits) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5282,6 +5486,10 @@ var fieldNames_AddCreditsResult = []string{
 }
 
 func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5342,6 +5550,10 @@ var fieldNames_AddKeyOperation = []string{
 }
 
 func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5391,6 +5603,10 @@ var fieldNames_AnchorLedger = []string{
 }
 
 func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5483,6 +5699,10 @@ var fieldNames_AnchorMetadata = []string{
 }
 
 func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5559,6 +5779,10 @@ var fieldNames_AnnotatedReceipt = []string{
 }
 
 func (v *AnnotatedReceipt) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5607,6 +5831,10 @@ var fieldNames_AuthorityEntry = []string{
 }
 
 func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5649,6 +5877,96 @@ func (v *AuthorityEntry) IsValid() error {
 	}
 }
 
+var fieldNames_AuthoritySignature = []string{
+	1: "Type",
+	2: "Origin",
+	3: "Authority",
+	4: "Vote",
+	5: "TxID",
+	6: "Cause",
+	7: "Delegator",
+}
+
+func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Origin == nil) {
+		writer.WriteUrl(2, v.Origin)
+	}
+	if !(v.Authority == nil) {
+		writer.WriteUrl(3, v.Authority)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(4, v.Vote)
+	}
+	if !(v.TxID == nil) {
+		writer.WriteTxid(5, v.TxID)
+	}
+	if !(v.Cause == nil) {
+		writer.WriteTxid(6, v.Cause)
+	}
+	if !(len(v.Delegator) == 0) {
+		for _, v := range v.Delegator {
+			writer.WriteUrl(7, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_AuthoritySignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *AuthoritySignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Origin is missing")
+	} else if v.Origin == nil {
+		errs = append(errs, "field Origin is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Cause is missing")
+	} else if v.Cause == nil {
+		errs = append(errs, "field Cause is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Delegator is missing")
+	} else if len(v.Delegator) == 0 {
+		errs = append(errs, "field Delegator is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_BTCLegacySignature = []string{
 	1: "Type",
 	2: "PublicKey",
@@ -5661,6 +5979,10 @@ var fieldNames_BTCLegacySignature = []string{
 }
 
 func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5744,6 +6066,10 @@ var fieldNames_BTCSignature = []string{
 }
 
 func (v *BTCSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5822,6 +6148,10 @@ var fieldNames_BlockEntry = []string{
 }
 
 func (v *BlockEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5877,6 +6207,10 @@ var fieldNames_BlockLedger = []string{
 }
 
 func (v *BlockLedger) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5948,6 +6282,10 @@ var fieldNames_BlockValidatorAnchor = []string{
 }
 
 func (v *BlockValidatorAnchor) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -5990,12 +6328,64 @@ func (v *BlockValidatorAnchor) IsValid() error {
 	}
 }
 
+var fieldNames_BurnCredits = []string{
+	1: "Type",
+	2: "Amount",
+}
+
+func (v *BurnCredits) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Amount == 0) {
+		writer.WriteUint(2, v.Amount)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BurnCredits)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BurnCredits) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Amount is missing")
+	} else if v.Amount == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_BurnTokens = []string{
 	1: "Type",
 	2: "Amount",
 }
 
 func (v *BurnTokens) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6040,6 +6430,10 @@ var fieldNames_ChainMetadata = []string{
 }
 
 func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6088,6 +6482,10 @@ var fieldNames_ChainParams = []string{
 }
 
 func (v *ChainParams) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6137,6 +6535,10 @@ var fieldNames_CreateDataAccount = []string{
 }
 
 func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6189,6 +6591,10 @@ var fieldNames_CreateIdentity = []string{
 }
 
 func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6246,6 +6652,10 @@ var fieldNames_CreateKeyBook = []string{
 }
 
 func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6303,6 +6713,10 @@ var fieldNames_CreateKeyPage = []string{
 }
 
 func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6348,6 +6762,10 @@ var fieldNames_CreateLiteTokenAccount = []string{
 }
 
 func (v *CreateLiteTokenAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6389,6 +6807,10 @@ var fieldNames_CreateToken = []string{
 }
 
 func (v *CreateToken) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6463,6 +6885,10 @@ var fieldNames_CreateTokenAccount = []string{
 }
 
 func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6517,6 +6943,58 @@ func (v *CreateTokenAccount) IsValid() error {
 	}
 }
 
+var fieldNames_CreditRecipient = []string{
+	1: "Url",
+	2: "Amount",
+}
+
+func (v *CreditRecipient) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	if !(v.Amount == 0) {
+		writer.WriteUint(2, v.Amount)
+	}
+
+	_, _, err := writer.Reset(fieldNames_CreditRecipient)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *CreditRecipient) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Amount is missing")
+	} else if v.Amount == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_DataAccount = []string{
 	1: "Type",
 	2: "Url",
@@ -6525,6 +7003,10 @@ var fieldNames_DataAccount = []string{
 }
 
 func (v *DataAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6577,6 +7059,10 @@ var fieldNames_DelegatedSignature = []string{
 }
 
 func (v *DelegatedSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6633,6 +7119,10 @@ var fieldNames_DirectoryAnchor = []string{
 }
 
 func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6709,6 +7199,10 @@ var fieldNames_DisableAccountAuthOperation = []string{
 }
 
 func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6759,6 +7253,10 @@ var fieldNames_ED25519Signature = []string{
 }
 
 func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6842,6 +7340,10 @@ var fieldNames_ETHSignature = []string{
 }
 
 func (v *ETHSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6918,6 +7420,10 @@ var fieldNames_EmptyResult = []string{
 }
 
 func (v *EmptyResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6954,6 +7460,10 @@ var fieldNames_EnableAccountAuthOperation = []string{
 }
 
 func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -6998,6 +7508,10 @@ var fieldNames_FactomDataEntryWrapper = []string{
 }
 
 func (v *FactomDataEntryWrapper) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7037,6 +7551,10 @@ var fieldNames_FeeSchedule = []string{
 }
 
 func (v *FeeSchedule) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7082,6 +7600,10 @@ var fieldNames_IndexEntry = []string{
 }
 
 func (v *IndexEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7155,6 +7677,10 @@ var fieldNames_InternalSignature = []string{
 }
 
 func (v *InternalSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7209,6 +7735,10 @@ var fieldNames_IssueTokens = []string{
 }
 
 func (v *IssueTokens) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7274,6 +7804,10 @@ var fieldNames_KeyBook = []string{
 }
 
 func (v *KeyBook) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7346,6 +7880,10 @@ var fieldNames_KeyPage = []string{
 }
 
 func (v *KeyPage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7452,6 +7990,10 @@ var fieldNames_KeySpec = []string{
 }
 
 func (v *KeySpec) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7508,6 +8050,10 @@ var fieldNames_KeySpecParams = []string{
 }
 
 func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7557,6 +8103,10 @@ var fieldNames_LegacyED25519Signature = []string{
 }
 
 func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7639,6 +8189,10 @@ var fieldNames_LiteDataAccount = []string{
 }
 
 func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7685,6 +8239,10 @@ var fieldNames_LiteIdentity = []string{
 }
 
 func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7748,6 +8306,10 @@ var fieldNames_LiteTokenAccount = []string{
 }
 
 func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7816,6 +8378,10 @@ var fieldNames_LockAccount = []string{
 }
 
 func (v *LockAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7860,6 +8426,10 @@ var fieldNames_MetricsRequest = []string{
 }
 
 func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7908,6 +8478,10 @@ var fieldNames_NetworkAccountUpdate = []string{
 }
 
 func (v *NetworkAccountUpdate) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -7958,6 +8532,10 @@ var fieldNames_NetworkDefinition = []string{
 }
 
 func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8030,6 +8608,10 @@ var fieldNames_NetworkGlobals = []string{
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8113,6 +8695,10 @@ var fieldNames_NetworkLimits = []string{
 }
 
 func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8186,6 +8772,10 @@ var fieldNames_Object = []string{
 }
 
 func (v *Object) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8248,6 +8838,10 @@ var fieldNames_PartitionAnchor = []string{
 }
 
 func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8328,6 +8922,10 @@ var fieldNames_PartitionAnchorReceipt = []string{
 }
 
 func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8376,6 +8974,10 @@ var fieldNames_PartitionInfo = []string{
 }
 
 func (v *PartitionInfo) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8427,6 +9029,10 @@ var fieldNames_PartitionSignature = []string{
 }
 
 func (v *PartitionSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8493,6 +9099,10 @@ var fieldNames_PartitionSyntheticLedger = []string{
 }
 
 func (v *PartitionSyntheticLedger) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8561,41 +9171,6 @@ func (v *PartitionSyntheticLedger) IsValid() error {
 	}
 }
 
-var fieldNames_PlaceholderTransaction = []string{
-	1: "Type",
-}
-
-func (v *PlaceholderTransaction) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-
-	_, _, err := writer.Reset(fieldNames_PlaceholderTransaction)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *PlaceholderTransaction) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Type is missing")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_RCD1Signature = []string{
 	1: "Type",
 	2: "PublicKey",
@@ -8608,6 +9183,10 @@ var fieldNames_RCD1Signature = []string{
 }
 
 func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8685,6 +9264,10 @@ var fieldNames_Rational = []string{
 }
 
 func (v *Rational) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8735,6 +9318,10 @@ var fieldNames_ReceiptSignature = []string{
 }
 
 func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8792,6 +9379,10 @@ var fieldNames_RemoteSignature = []string{
 }
 
 func (v *RemoteSignature) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8854,6 +9445,10 @@ var fieldNames_RemoteTransaction = []string{
 }
 
 func (v *RemoteTransaction) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8893,6 +9488,10 @@ var fieldNames_RemoveAccountAuthorityOperation = []string{
 }
 
 func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8937,6 +9536,10 @@ var fieldNames_RemoveKeyOperation = []string{
 }
 
 func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -8982,6 +9585,10 @@ var fieldNames_Route = []string{
 }
 
 func (v *Route) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9038,6 +9645,10 @@ var fieldNames_RouteOverride = []string{
 }
 
 func (v *RouteOverride) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9086,6 +9697,10 @@ var fieldNames_RoutingTable = []string{
 }
 
 func (v *RoutingTable) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9140,6 +9755,10 @@ var fieldNames_SendTokens = []string{
 }
 
 func (v *SendTokens) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9192,6 +9811,10 @@ var fieldNames_SetThresholdKeyPageOperation = []string{
 }
 
 func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9240,6 +9863,10 @@ var fieldNames_SignatureSet = []string{
 }
 
 func (v *SignatureSet) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9310,6 +9937,10 @@ var fieldNames_SyntheticBurnTokens = []string{
 }
 
 func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9367,6 +9998,10 @@ var fieldNames_SyntheticCreateIdentity = []string{
 }
 
 func (v *SyntheticCreateIdentity) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9420,6 +10055,10 @@ var fieldNames_SyntheticDepositCredits = []string{
 }
 
 func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9488,6 +10127,10 @@ var fieldNames_SyntheticDepositTokens = []string{
 }
 
 func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9561,6 +10204,10 @@ var fieldNames_SyntheticForwardTransaction = []string{
 }
 
 func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9611,6 +10258,10 @@ var fieldNames_SyntheticLedger = []string{
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9666,6 +10317,10 @@ var fieldNames_SyntheticOrigin = []string{
 }
 
 func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9723,6 +10378,10 @@ var fieldNames_SyntheticWriteData = []string{
 }
 
 func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9770,6 +10429,10 @@ var fieldNames_SystemGenesis = []string{
 }
 
 func (v *SystemGenesis) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9812,6 +10475,10 @@ var fieldNames_SystemLedger = []string{
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9902,6 +10569,10 @@ var fieldNames_SystemWriteData = []string{
 }
 
 func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -9952,6 +10623,10 @@ var fieldNames_TokenAccount = []string{
 }
 
 func (v *TokenAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10022,6 +10697,10 @@ var fieldNames_TokenIssuer = []string{
 }
 
 func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10105,6 +10784,10 @@ var fieldNames_TokenIssuerProof = []string{
 }
 
 func (v *TokenIssuerProof) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10153,6 +10836,10 @@ var fieldNames_TokenRecipient = []string{
 }
 
 func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10201,6 +10888,10 @@ var fieldNames_Transaction = []string{
 }
 
 func (v *Transaction) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10251,6 +10942,10 @@ var fieldNames_TransactionHeader = []string{
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10304,6 +10999,10 @@ var fieldNames_TransactionResultSet = []string{
 }
 
 func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10357,6 +11056,10 @@ var fieldNames_TransactionStatus = []string{
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10491,11 +11194,65 @@ func (v *TransactionStatus) IsValid() error {
 	}
 }
 
+var fieldNames_TransferCredits = []string{
+	1: "Type",
+	2: "To",
+}
+
+func (v *TransferCredits) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.To) == 0) {
+		for _, v := range v.To {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_TransferCredits)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *TransferCredits) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field To is missing")
+	} else if len(v.To) == 0 {
+		errs = append(errs, "field To is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_TxIdSet = []string{
 	1: "Entries",
 }
 
 func (v *TxIdSet) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10538,6 +11295,10 @@ var fieldNames_UnknownAccount = []string{
 }
 
 func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10583,6 +11344,10 @@ var fieldNames_UnknownSigner = []string{
 }
 
 func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10635,6 +11400,10 @@ var fieldNames_UpdateAccountAuth = []string{
 }
 
 func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10682,6 +11451,10 @@ var fieldNames_UpdateAllowedKeyPageOperation = []string{
 }
 
 func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10728,6 +11501,10 @@ var fieldNames_UpdateKey = []string{
 }
 
 func (v *UpdateKey) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10773,6 +11550,10 @@ var fieldNames_UpdateKeyOperation = []string{
 }
 
 func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10825,6 +11606,10 @@ var fieldNames_UpdateKeyPage = []string{
 }
 
 func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10873,6 +11658,10 @@ var fieldNames_ValidatorInfo = []string{
 }
 
 func (v *ValidatorInfo) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10939,6 +11728,10 @@ var fieldNames_ValidatorPartitionInfo = []string{
 }
 
 func (v *ValidatorPartitionInfo) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -10985,6 +11778,10 @@ var fieldNames_WriteData = []string{
 }
 
 func (v *WriteData) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -11037,6 +11834,10 @@ var fieldNames_WriteDataResult = []string{
 }
 
 func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -11098,6 +11899,10 @@ var fieldNames_WriteDataTo = []string{
 }
 
 func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -11637,6 +12442,60 @@ func (v *AuthorityEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *AuthoritySignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AuthoritySignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Origin = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Authority = x
+	}
+	if x := new(VoteType); reader.ReadEnum(4, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadTxid(5); ok {
+		v.TxID = x
+	}
+	if x, ok := reader.ReadTxid(6); ok {
+		v.Cause = x
+	}
+	for {
+		if x, ok := reader.ReadUrl(7); ok {
+			v.Delegator = append(v.Delegator, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_AuthoritySignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BTCLegacySignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11845,6 +12704,41 @@ func (v *BlockValidatorAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) erro
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockValidatorAnchor)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BurnCredits) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BurnCredits) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BurnCredits) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.Amount = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BurnCredits)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -12240,6 +13134,32 @@ func (v *CreateTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateTokenAccount)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *CreditRecipient) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *CreditRecipient) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Amount = x
+	}
+
+	seen, err := reader.Reset(fieldNames_CreditRecipient)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -13507,38 +14427,6 @@ func (v *PartitionSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_PartitionSyntheticLedger)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *PlaceholderTransaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *PlaceholderTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-
-	return v.UnmarshalFieldsFrom(reader)
-}
-
-func (v *PlaceholderTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-
-	seen, err := reader.Reset(fieldNames_PlaceholderTransaction)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -14818,6 +15706,45 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *TransferCredits) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TransferCredits) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *TransferCredits) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(CreditRecipient); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.To = append(v.To, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_TransferCredits)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *TxIdSet) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -15513,6 +16440,38 @@ func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      SignatureType               `json:"type"`
+		Origin    *url.URL                    `json:"origin,omitempty"`
+		Authority *url.URL                    `json:"authority,omitempty"`
+		Vote      VoteType                    `json:"vote,omitempty"`
+		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Cause     *url.TxID                   `json:"cause,omitempty"`
+		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Origin == nil) {
+		u.Origin = v.Origin
+	}
+	if !(v.Authority == nil) {
+		u.Authority = v.Authority
+	}
+	if !(v.Vote == 0) {
+		u.Vote = v.Vote
+	}
+	if !(v.TxID == nil) {
+		u.TxID = v.TxID
+	}
+	if !(v.Cause == nil) {
+		u.Cause = v.Cause
+	}
+	if !(len(v.Delegator) == 0) {
+		u.Delegator = v.Delegator
+	}
+	return json.Marshal(&u)
+}
+
 func (v *BTCLegacySignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -15647,6 +16606,18 @@ func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
 	}
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *BurnCredits) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Amount uint64          `json:"amount,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Amount == 0) {
+		u.Amount = v.Amount
 	}
 	return json.Marshal(&u)
 }
@@ -16472,14 +17443,6 @@ func (v *PartitionSyntheticLedger) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *PlaceholderTransaction) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type TransactionType `json:"type"`
-	}{}
-	u.Type = v.Type()
-	return json.Marshal(&u)
-}
-
 func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -17032,8 +17995,6 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 	if !(EqualTransactionBody(v.Body, nil)) {
 		u.Body = &encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionBodyJSON}
 	}
-	if !(len(v.hash) == 0) {
-	}
 	return json.Marshal(&u)
 }
 
@@ -17146,6 +18107,18 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		for i, x := range v.AnchorSigners {
 			u.AnchorSigners[i] = encoding.BytesToJSON(x)
 		}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *TransferCredits) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type TransactionType                     `json:"type"`
+		To   encoding.JsonList[*CreditRecipient] `json:"to,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.To) == 0) {
+		u.To = v.To
 	}
 	return json.Marshal(&u)
 }
@@ -17581,6 +18554,38 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      SignatureType               `json:"type"`
+		Origin    *url.URL                    `json:"origin,omitempty"`
+		Authority *url.URL                    `json:"authority,omitempty"`
+		Vote      VoteType                    `json:"vote,omitempty"`
+		TxID      *url.TxID                   `json:"txID,omitempty"`
+		Cause     *url.TxID                   `json:"cause,omitempty"`
+		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Origin = v.Origin
+	u.Authority = v.Authority
+	u.Vote = v.Vote
+	u.TxID = v.TxID
+	u.Cause = v.Cause
+	u.Delegator = v.Delegator
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Origin = u.Origin
+	v.Authority = u.Authority
+	v.Vote = u.Vote
+	v.TxID = u.TxID
+	v.Cause = u.Cause
+	v.Delegator = u.Delegator
+	return nil
+}
+
 func (v *BTCLegacySignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -17745,6 +18750,23 @@ func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 	} else {
 		v.AcmeBurnt = *x
 	}
+	return nil
+}
+
+func (v *BurnCredits) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Amount uint64          `json:"amount,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Amount = v.Amount
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Amount = u.Amount
 	return nil
 }
 
@@ -18786,20 +19808,6 @@ func (v *PartitionSyntheticLedger) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *PlaceholderTransaction) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type TransactionType `json:"type"`
-	}{}
-	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	return nil
-}
-
 func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -19052,9 +20060,11 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TransactionHash = x
 	}
-	v.Signatures = make([]Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
+	if u.Signatures != nil {
+		v.Signatures = make([]Signature, len(u.Signatures.Value))
+		for i, x := range u.Signatures.Value {
+			v.Signatures[i] = x
+		}
 	}
 	v.Authority = u.Authority
 	return nil
@@ -19119,9 +20129,11 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
-	v.Accounts = make([]Account, len(u.Accounts.Value))
-	for i, x := range u.Accounts.Value {
-		v.Accounts[i] = x
+	if u.Accounts != nil {
+		v.Accounts = make([]Account, len(u.Accounts.Value))
+		for i, x := range u.Accounts.Value {
+			v.Accounts[i] = x
+		}
 	}
 	return nil
 }
@@ -19560,9 +20572,11 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 
 	v.Received = u.Received
 	v.Initiator = u.Initiator
-	v.Signers = make([]Signer, len(u.Signers.Value))
-	for i, x := range u.Signers.Value {
-		v.Signers[i] = x
+	if u.Signers != nil {
+		v.Signers = make([]Signer, len(u.Signers.Value))
+		for i, x := range u.Signers.Value {
+			v.Signers[i] = x
+		}
 	}
 	v.SourceNetwork = u.SourceNetwork
 	v.DestinationNetwork = u.DestinationNetwork
@@ -19577,6 +20591,23 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 			v.AnchorSigners[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *TransferCredits) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type TransactionType                     `json:"type"`
+		To   encoding.JsonList[*CreditRecipient] `json:"to,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.To = v.To
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.To = u.To
 	return nil
 }
 
@@ -19642,9 +20673,11 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Operations = make([]AccountAuthOperation, len(u.Operations.Value))
-	for i, x := range u.Operations.Value {
-		v.Operations[i] = x
+	if u.Operations != nil {
+		v.Operations = make([]AccountAuthOperation, len(u.Operations.Value))
+		for i, x := range u.Operations.Value {
+			v.Operations[i] = x
+		}
 	}
 	return nil
 }
@@ -19723,9 +20756,11 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Operation = make([]KeyPageOperation, len(u.Operation.Value))
-	for i, x := range u.Operation.Value {
-		v.Operation[i] = x
+	if u.Operation != nil {
+		v.Operation = make([]KeyPageOperation, len(u.Operation.Value))
+		for i, x := range u.Operation.Value {
+			v.Operation[i] = x
+		}
 	}
 	return nil
 }

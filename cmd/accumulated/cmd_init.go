@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -37,7 +36,6 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	etcd "go.etcd.io/etcd/client/v3"
 )
 
 var cmdInit = &cobra.Command{
@@ -60,10 +58,10 @@ var flagInit struct {
 	NoEmptyBlocks    bool
 	Reset            bool
 	LogLevels        string
-	Etcd             []string
 	EnableTimingLogs bool
 	FactomAddresses  string
 	Snapshots        []string
+	FaucetSeed       string
 }
 
 var flagInitNode struct {
@@ -119,10 +117,10 @@ func initInitFlags() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
-	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	cmdInit.PersistentFlags().StringVar(&flagInit.FactomAddresses, "factom-addresses", "", "A text file containing Factoid addresses to import")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Snapshots, "snapshot", nil, "A snapshot of accounts to import")
+	cmdInit.PersistentFlags().StringVar(&flagInit.FaucetSeed, "faucet-seed", "", "If specified, generates a faucet account using the given seed and includes it in genesis")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.ResetFlags()
@@ -627,13 +625,6 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		config.LogLevel = flagInit.LogLevels
 	}
 
-	if len(flagInit.Etcd) > 0 {
-		config.Accumulate.Storage.Type = cfg.EtcdStorage
-		config.Accumulate.Storage.Etcd = new(etcd.Config)
-		config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
-		config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
-	}
-
 	if flagInit.Reset {
 		networkReset()
 	}
@@ -667,12 +658,14 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 	return "", nil
 }
 
-func netDir(networkType cfg.NetworkType) string {
+func netDir(networkType protocol.PartitionType) string {
 	switch networkType {
-	case cfg.Directory:
+	case protocol.PartitionTypeDirectory:
 		return "dnn"
-	case cfg.BlockValidator:
+	case protocol.PartitionTypeBlockValidator:
 		return "bvnn"
+	case protocol.PartitionTypeBlockSummary:
+		return "bsnn"
 	}
 	fatalf("Unsupported network type %v", networkType)
 	return ""

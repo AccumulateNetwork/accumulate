@@ -10,85 +10,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-// NormalizeEnvelope normalizes the envelope into one or more deliveries.
-func NormalizeEnvelope(envelope *messaging.Envelope) ([]*Delivery, error) {
-	messages, err := envelope.Normalize()
-	if err != nil {
-		return nil, err
-	}
-	return DeliveriesFromMessages(messages)
-}
-
-// DeliveriesFromMessages converts a set of messages into a set of deliveries.
-func DeliveriesFromMessages(messages []messaging.Message) ([]*Delivery, error) {
-	var deliveries []*Delivery
-	txnIndex := map[[32]byte]int{}
-
-	var process func(msg messaging.Message) error
-	process = func(msg messaging.Message) error {
-		switch msg := msg.(type) {
-		case *messaging.SequencedMessage:
-			hash := msg.Message.Hash()
-			if i, ok := txnIndex[hash]; ok {
-				deliveries[i].Sequence = msg
-			} else {
-				txnIndex[hash] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Sequence: msg})
-			}
-			return process(msg.Message)
-
-		case *messaging.UserTransaction:
-			hash := *(*[32]byte)(msg.Transaction.GetHash())
-			if i, ok := txnIndex[hash]; ok {
-				deliveries[i].Transaction = msg.Transaction
-			} else {
-				txnIndex[hash] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Transaction: msg.Transaction})
-			}
-
-		case *messaging.UserSignature:
-			if i, ok := txnIndex[msg.TxID.Hash()]; ok {
-				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
-			} else {
-				txnIndex[msg.TxID.Hash()] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
-			}
-
-		case *messaging.ValidatorSignature:
-			if i, ok := txnIndex[msg.Signature.GetTransactionHash()]; ok {
-				deliveries[i].Signatures = append(deliveries[i].Signatures, msg.Signature)
-			} else {
-				txnIndex[msg.Signature.GetTransactionHash()] = len(deliveries)
-				deliveries = append(deliveries, &Delivery{Signatures: []protocol.Signature{msg.Signature}})
-			}
-
-		case interface{ Unwrap() messaging.Message }:
-			return process(msg.Unwrap())
-
-		default:
-			return errors.BadRequest.WithFormat("unsupported message type %v", msg.Type())
-		}
-		return nil
-	}
-
-	for _, msg := range messages {
-		err := process(msg)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	for _, delivery := range deliveries {
-		if len(delivery.Signatures) == 0 {
-			return nil, errors.BadRequest.WithFormat("transaction %x has no signatures", delivery.Transaction.GetHash()[:4])
-		}
-	}
-	return deliveries, nil
-}
 
 type Delivery struct {
 	Internal  bool
@@ -97,9 +20,6 @@ type Delivery struct {
 	Signatures  []protocol.Signature
 	Transaction *protocol.Transaction
 	State       ProcessTransactionState
-
-	// For synthetic transactions
-	Sequence *messaging.SequencedMessage
 }
 
 func (d *Delivery) WasProducedInternally() bool {
@@ -156,31 +76,4 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	}
 
 	return status, nil
-}
-
-// CLONE of the same function from block - TODO remove once chain and block
-// packages are merged
-func getSequence(batch *database.Batch, id *url.TxID) (*messaging.SequencedMessage, error) {
-	causes, err := batch.Message(id.Hash()).Cause().Get()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load causes: %w", err)
-	}
-
-	for _, id := range causes {
-		msg, err := batch.Message(id.Hash()).Main().Get()
-		switch {
-		case err == nil:
-			// Ok
-		case errors.Is(err, errors.NotFound):
-			continue
-		default:
-			return nil, errors.UnknownError.WithFormat("load message: %w", err)
-		}
-
-		if seq, ok := msg.(*messaging.SequencedMessage); ok {
-			return seq, nil
-		}
-	}
-
-	return nil, errors.NotFound.WithFormat("no cause of %v is a sequenced message", id)
 }

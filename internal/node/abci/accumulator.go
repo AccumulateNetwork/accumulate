@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sort"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,9 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -55,8 +52,6 @@ type Accumulator struct {
 	timer          time.Time
 	didPanic       bool
 	lastSnapshot   uint64
-	checkTxBatch   *database.Batch
-	checkTxMutex   *sync.Mutex
 	pendingUpdates abci.ValidatorUpdates
 	startTime      time.Time
 	ready          bool
@@ -69,7 +64,6 @@ type AccumulatorOptions struct {
 	Tracer   trace.Tracer
 	Executor execute.Executor
 	EventBus *events.Bus
-	DB       *database.Database
 	Logger   log.Logger
 	Address  crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 }
@@ -79,7 +73,6 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
 		logger:             opts.Logger.With("module", "accumulate", "partition", opts.Accumulate.PartitionId),
-		checkTxMutex:       &sync.Mutex{},
 	}
 
 	if app.Tracer == nil {
@@ -146,8 +139,13 @@ func (app *Accumulator) recover(code *uint32) {
 // willChangeGlobals populates the validator update list, which is passed to
 // Tendermint to update the validator set.
 func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
+	// Don't do anything when the globals are first loaded
+	if e.Old == nil {
+		return nil
+	}
+
 	// Compare the old and new partition definitions
-	updates, err := e.Old.DiffValidators(e.New, app.Accumulate.PartitionId)
+	updates, err := core.DiffValidators(e.Old, e.New, app.Accumulate.PartitionId)
 	if err != nil {
 		return err
 	}
@@ -212,31 +210,26 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 		app.logger.Error("Failed to marshal ABCI info", "error", err)
 	}
 
-	batch := app.DB.Begin(false)
-	defer batch.Discard()
+	res := abci.ResponseInfo{
+		Data:       string(data),
+		Version:    version.ABCIVersion,
+		AppVersion: Version,
+	}
 
-	var height int64
-	var ledger *protocol.SystemLedger
-	err = batch.Account(app.Accumulate.Describe.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
+	block, hash, err := app.Executor.LastBlock()
 	switch {
 	case err == nil:
-		height = int64(ledger.Index)
 		app.ready = true
-	case errors.Is(err, storage.ErrNotFound):
-		// InitChain has not been called yet
-		height = 0
-	default:
-		height = -1
-		app.logger.Error("Failed to load system ledger", "error", err)
-	}
+		res.LastBlockHeight = int64(block.Index)
+		res.LastBlockAppHash = hash[:]
 
-	return abci.ResponseInfo{
-		Data:             string(data),
-		Version:          version.ABCIVersion,
-		AppVersion:       Version,
-		LastBlockHeight:  height,
-		LastBlockAppHash: batch.BptRoot(),
+	case errors.Is(err, errors.NotFound):
+		// Ok
+
+	default:
+		panic(fmt.Errorf("failed to load last block info: %w", err))
 	}
+	return res
 }
 
 // Query implements github.com/tendermint/tendermint/abci/types.Application.
@@ -256,20 +249,30 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	// Check if initialization is required
-	var root []byte
-	err := app.DB.View(func(batch *database.Batch) (err error) {
-		root, err = app.Executor.LoadStateRoot(batch)
-		return err
-	})
-	if err != nil {
-		panic(fmt.Errorf("failed to load state hash: %v", err))
-	}
-	if root != nil {
+	_, root, err := app.Executor.LastBlock()
+	switch {
+	case err == nil:
 		app.ready = true
-		return abci.ResponseInitChain{AppHash: root}
+		return abci.ResponseInitChain{AppHash: root[:]}
+	case errors.Is(err, errors.NotFound):
+		// Ok
+	default:
+		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 
 	app.logger.Info("Initializing")
+
+	var initVal []*execute.ValidatorUpdate
+	for _, v := range req.Validators {
+		if v.PubKey.GetEd25519() == nil {
+			panic("unsupported validator key type")
+		}
+		initVal = append(initVal, &execute.ValidatorUpdate{
+			Type:      protocol.SignatureTypeED25519,
+			PublicKey: v.PubKey.GetEd25519(),
+			Power:     v.Power,
+		})
+	}
 
 	// Initialize the chain
 	var snapshot []byte
@@ -277,13 +280,14 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
-	err = app.Executor.RestoreSnapshot(app.DB, ioutil2.NewBuffer(snapshot))
+	additional, err := app.Executor.Restore(ioutil2.NewBuffer(snapshot), initVal)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
 
 	// Notify the world of the committed block
 	err = app.EventBus.Publish(events.DidCommitBlock{
+		Init:  true,
 		Index: protocol.GenesisBlock,
 		Time:  req.Time,
 	})
@@ -291,31 +295,22 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to publish block notification: %v", err))
 	}
 
-	// Compare initial validators with genesis
-	additional, err := app.Executor.InitChainValidators(req.Validators)
-	if err != nil {
-		panic(err)
-	}
-
 	var updates []abci.ValidatorUpdate
 	for _, key := range additional {
 		updates = append(updates, abci.ValidatorUpdate{
-			PubKey: protocrypto.PublicKey{Sum: &protocrypto.PublicKey_Ed25519{Ed25519: key}},
+			PubKey: protocrypto.PublicKey{Sum: &protocrypto.PublicKey_Ed25519{Ed25519: key.PublicKey}},
 			Power:  1,
 		})
 	}
 
 	// Get the app state hash
-	err = app.DB.View(func(batch *database.Batch) (err error) {
-		root, err = app.Executor.LoadStateRoot(batch)
-		return err
-	})
+	_, root, err = app.Executor.LastBlock()
 	if err != nil {
 		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 
 	app.ready = true
-	return abci.ResponseInitChain{AppHash: root, Validators: updates}
+	return abci.ResponseInitChain{AppHash: root[:], Validators: updates}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
@@ -382,26 +377,8 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 	}
 
-	// Only use the shared batch when the check type is CheckTxType_New,
-	//   we want to avoid changes to variables version increments to and stick and therefore be done multiple times
-	var batch *database.Batch
-	switch req.Type {
-	case abci.CheckTxType_New:
-		// TODO I don't think we need a mutex because I think Tendermint
-		// guarantees that ABCI calls are non-concurrent
-		app.checkTxMutex.Lock()
-		defer app.checkTxMutex.Unlock()
-		if app.checkTxBatch == nil { // For cases where we haven't started/ended a block yet
-			app.checkTxBatch = app.DB.Begin(false)
-		}
-		batch = app.checkTxBatch
-	case abci.CheckTxType_Recheck:
-		batch = app.DB.Begin(false)
-		defer batch.Discard()
-	}
-
 	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-		return app.Executor.Validate(batch, messages)
+		return app.Executor.Validate(messages, req.Type == abci.CheckTxType_Recheck)
 	}, req.Tx)
 	if err != nil {
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
@@ -421,9 +398,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	seq := map[[32]byte]uint64{}
 	for _, msg := range messages {
 		switch msg := msg.(type) {
-		case *messaging.UserTransaction:
+		case *messaging.TransactionMessage:
 			txns[*(*[32]byte)(msg.Transaction.GetHash())] = msg.Transaction.Body.Type()
-		case *messaging.UserSignature:
+		case *messaging.SignatureMessage:
 			sig, ok := msg.Signature.(*protocol.PartitionSignature)
 			if !ok {
 				continue
@@ -571,12 +548,14 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		app.blockState.Discard()
 
 		// Get the old root
-		batch := app.DB.Begin(false)
-		defer batch.Discard()
+		_, root, err := app.Executor.LastBlock()
+		if err != nil {
+			panic(err)
+		}
 
 		duration := time.Since(app.timer)
 		app.logger.Debug("Committed empty block", "duration", duration.String())
-		return abci.ResponseCommit{Data: batch.BptRoot()}
+		return abci.ResponseCommit{Data: root[:]}
 	}
 
 	// Commit the batch
@@ -604,20 +583,14 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	publishEventTime := time.Since(tick).Seconds()
 
-	// Replace start a new checkTx batch
-	app.checkTxMutex.Lock()
-	defer app.checkTxMutex.Unlock()
-
-	if app.checkTxBatch != nil {
-		app.checkTxBatch.Discard()
-	}
-	app.checkTxBatch = app.DB.Begin(false)
-
 	// Notify the executor that we committed
 	var resp abci.ResponseCommit
-	batch := app.DB.Begin(false)
-	defer batch.Discard()
-	resp.Data = batch.BptRoot()
+	_, hash, err := app.Executor.LastBlock()
+	if err != nil {
+		app.fatal(err)
+		return abci.ResponseCommit{}
+	}
+	resp.Data = hash[:]
 
 	// Keep this disabled until we have real snapshot support through Tendermint
 	if false {
@@ -664,6 +637,6 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	go app.Accumulate.AnalysisLog.Flush()
 	duration := time.Since(app.timer)
-	app.logger.Debug("Committed", "minor", app.block.Params().Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", major, "duration", duration, "count", app.txct)
+	app.logger.Debug("Committed", "minor", app.block.Params().Index, "hash", logging.AsHex(hash).Slice(0, 4), "major", major, "duration", duration, "count", app.txct)
 	return resp
 }

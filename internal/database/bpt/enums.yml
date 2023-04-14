@@ -1,0 +1,13 @@
+nodeType:
+  Empty:
+    description: is an empty node
+    value: 1
+  Branch:
+    description: is a branch node
+    value: 2
+  Leaf:
+    description: is a leaf node
+    value: 3
+  Boundary:
+    description: is the boundary between blocks
+    value: 4

@@ -55,7 +55,7 @@ func (c clientConn) Write(msg *Message) error {
 }
 
 // NewClient returns a new WebSocket API client for the given server.
-func NewClient(server string, logger log.Logger) (*Client, error) {
+func NewClient(server, network string, logger log.Logger) (*Client, error) {
 	// Dial the websocket server
 	conn, _, err := websocket.DefaultDialer.Dial(server, nil)
 	if err != nil {
@@ -63,7 +63,7 @@ func NewClient(server string, logger log.Logger) (*Client, error) {
 	}
 
 	// Create a new client
-	c := newClient(clientConn{conn}, logger)
+	c := newClient(network, clientConn{conn}, logger)
 
 	// Close the websocket once the client is done
 	go func() { <-c.Done(); conn.Close() }()
@@ -72,12 +72,14 @@ func NewClient(server string, logger log.Logger) (*Client, error) {
 }
 
 // newClient is separate from [NewClient] purely to facilitate testing.
-func newClient(s message.StreamOf[*Message], logger log.Logger) *Client {
+func newClient(network string, s message.StreamOf[*Message], logger log.Logger) *Client {
 	c := new(Client)
 	c.logger.Set(logger)
-	c.inner.Dialer = (*clientDialer)(c)
-	c.inner.Router = clientRouter{}
-	c.inner.DisableFanout = true
+	c.inner.Transport = &message.RoutedTransport{
+		Network: network,
+		Dialer:  (*clientDialer)(c),
+		Router:  clientRouter{},
+	}
 	c.conn = s
 	c.context, c.cancel = context.WithCancel(context.Background())
 	c.outgoing = make(chan *Message)
@@ -159,9 +161,19 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// NodeStatus implements [api.NodeService.NodeStatus].
-func (c *Client) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
-	return c.inner.NodeStatus(ctx, opts)
+// NodeInfo implements [api.NodeService.NodeInfo].
+func (c *Client) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
+	return c.inner.NodeInfo(ctx, opts)
+}
+
+// FindService implements [api.NodeService.FindService].
+func (c *Client) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
+	return c.inner.FindService(ctx, opts)
+}
+
+// ConsensusStatus implements [api.ConsensusService.ConsensusStatus].
+func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return c.inner.ConsensusStatus(ctx, opts)
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].

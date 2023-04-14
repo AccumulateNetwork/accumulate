@@ -19,11 +19,12 @@ type AddCredits struct{}
 
 func (AddCredits) Type() protocol.TransactionType { return protocol.TransactionTypeAddCredits }
 
-func (AddCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (AddCredits{}).Validate(st, tx)
+func (x AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (AddCredits) check(st *StateManager, tx *Delivery) (*protocol.AddCredits, error) {
 	body, ok := tx.Transaction.Body.(*protocol.AddCredits)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AddCredits), tx.Transaction.Body)
@@ -41,6 +42,15 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	// need to make sure oracle is set
 	if body.Oracle == 0 {
 		return nil, fmt.Errorf("cannot purchase credits, transaction oracle must be greater than zero")
+	}
+
+	return body, nil
+}
+
+func (x AddCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	// need to make sure internal oracle is set.
@@ -87,10 +97,9 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	}
 
 	if !account.DebitTokens(&body.Amount) {
-		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
-		// return nil, fmt.Errorf("insufficient balance: have %v, want %v",
-		// 	protocol.FormatBigAmount(account.TokenBalance(), protocol.AcmePrecisionPower),
-		// 	protocol.FormatBigAmount(&body.Amount, protocol.AcmePrecisionPower))
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v",
+			protocol.FormatBigAmount(account.TokenBalance(), protocol.AcmePrecisionPower),
+			protocol.FormatBigAmount(&body.Amount, protocol.AcmePrecisionPower))
 	}
 
 	// Convert a lite token account recipient into a lite identity. Do not check
@@ -109,7 +118,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	st.Submit(recipient, sdc)
 
 	var ledgerState *protocol.SystemLedger
-	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
+	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return nil, err
 	}

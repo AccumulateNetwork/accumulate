@@ -1,5 +1,5 @@
 Addressed:
-  union: { type: message }
+  union: { type: message, registry: true }
   fields:
     - name: Message
       type: Message
@@ -9,10 +9,22 @@ Addressed:
       type: p2p.Multiaddr
       marshal-as: union
 
-NodeStatusRequest:
+NodeInfoRequest:
   union: { type: message }
   fields:
-    - type: NodeStatusOptions
+    - type: NodeInfoOptions
+      marshal-as: reference
+
+FindServiceRequest:
+  union: { type: message }
+  fields:
+    - type: FindServiceOptions
+      marshal-as: reference
+
+ConsensusStatusRequest:
+  union: { type: message }
+  fields:
+    - type: ConsensusStatusOptions
       marshal-as: reference
 
 NetworkStatusRequest:
@@ -81,11 +93,28 @@ ErrorResponse:
       marshal-as: reference
       pointer: true
 
-NodeStatusResponse:
+NodeInfoResponse:
   union: { type: message }
   fields:
     - name: Value
-      type: api.NodeStatus
+      type: api.NodeInfo
+      marshal-as: reference
+      pointer: true
+
+FindServiceResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.FindServiceResult
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+ConsensusStatusResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.ConsensusStatus
       marshal-as: reference
       pointer: true
 

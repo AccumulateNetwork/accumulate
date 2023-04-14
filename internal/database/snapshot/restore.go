@@ -132,7 +132,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 			pos[c.Name] = 0
 		}
 
-		const batchSize = chainBatchSize << 8 // Each mark point has 256 entries
+		const batchSize = chainBatchSize / 256 // Each mark point has 256 entries
 		for len(pos) > 0 {
 			record := v.batch.Account(acct.Url)
 			for _, c := range acct.Chains {

@@ -29,20 +29,21 @@ func (CreateKeyBook) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
-func (CreateKeyBook) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (CreateKeyBook) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateKeyBook)
 	if !ok {
 		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction)
 }
 
-func (CreateKeyBook) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (CreateKeyBook{}).Validate(st, tx)
+func (x CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (CreateKeyBook) check(st *StateManager, tx *Delivery) (*protocol.CreateKeyBook, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyBook)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), tx.Transaction.Body)
@@ -58,18 +59,28 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		}
 	}
 
-	err := checkCreateAdiAccount(st, body.Url)
+	err := originIsParent(tx, body.Url)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	err = requireKeyHash(body.PublicKeyHash)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return body, nil
+}
+
+func (x CreateKeyBook) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
 	if err != nil {
 		return nil, err
 	}
 
-	switch len(body.PublicKeyHash) {
-	case 0:
-		return nil, errors.BadRequest.WithFormat("public key hash is missing")
-	case 32:
-		// Ok
-	default:
-		return nil, errors.BadRequest.WithFormat("public key hash length is invalid")
+	err = checkCreateAdiAccount(st, body.Url)
+	if err != nil {
+		return nil, err
 	}
 
 	book := new(protocol.KeyBook)

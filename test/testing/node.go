@@ -9,6 +9,7 @@ package testing
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,11 +38,30 @@ func NewTestLogger(t testing.TB) log.Logger {
 		return logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
 
-	w, err := logging.NewConsoleWriter("plain")
+	var w io.Writer = &zerolog.ConsoleWriter{
+		Out:        os.Stderr,
+		TimeFormat: time.RFC3339,
+		// PartsExclude: []string{"time"},
+		FormatLevel: func(i interface{}) string {
+			if ll, ok := i.(string); ok {
+				return strings.ToUpper(ll)
+			}
+			return "????"
+		},
+	}
+
+	level, w, err := logging.ParseLogLevel(DefaultLogLevels, w)
 	require.NoError(t, err)
-	level, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
-	require.NoError(t, err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+
+	// w = logging.FilterWriter{
+	// 	Out: w,
+	// 	Predicate: func(level zerolog.Level, event map[string]interface{}) bool {
+	// 		n, ok := event["node"].(float64)
+	// 		return ok && n == 0
+	// 	},
+	// }
+
+	logger, err := logging.NewTendermintLogger(zerolog.New(w), level, false)
 	require.NoError(t, err)
 	return logger
 }
@@ -60,7 +80,7 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("fake-tendermint", "info").
 	String()
 
-func DefaultConfig(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config {
+func DefaultConfig(networkName string, net protocol.PartitionType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(networkName, net, node, netId) //
 	cfg.Mempool.MaxBatchBytes = 1048576                  //
 	cfg.Mempool.CacheSize = 1048576                      //
@@ -71,7 +91,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Accumulate.Network.Partitions = []config.Partition{
 		{
 			Id:   "local",
-			Type: config.BlockValidator,
+			Type: protocol.PartitionTypeBlockValidator,
 		},
 	}
 
@@ -87,11 +107,17 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		ValidatorCount: numValidators,
 		FollowerCount:  numFollowers,
 		BasePort:       30000,
-		GenerateKeys: func() (privVal, dnn, bvnn []byte) {
-			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
+		GenerateKeys: func() (privVal, dnn, bvnn, bsnn []byte) {
+			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
 		},
 		HostName: func(bvnNum, nodeNum int) (host string, listen string) {
-			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), fmt.Sprintf("BVN%d", bvnNum+1), nodeNum))
+			var id string
+			if bvnNum < 0 {
+				id = "BSN"
+			} else {
+				id = fmt.Sprintf("BVN%d", bvnNum+1)
+			}
+			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), id, nodeNum))
 			return getIP(hash).String(), ""
 		},
 	})

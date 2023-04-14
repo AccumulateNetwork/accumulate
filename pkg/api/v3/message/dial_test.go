@@ -50,9 +50,9 @@ func TestBatchDialer(t *testing.T) {
 	// Construct the batch dialer to test and a client
 	batchCtx, batchDone := context.WithCancel(context.Background())
 	dialer = BatchDialer(batchCtx, dialer)
-	addr, err := multiaddr.NewComponent(api.N_ACC, "query:foo")
+	addr, err := multiaddr.NewComponent(api.N_ACC_SVC, "query:foo")
 	require.NoError(t, err)
-	client := &Client{Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
+	client := &Client{&RoutedTransport{Network: "foo", Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}}
 
 	// Execute
 	_, err = client.Query(context.Background(), protocol.DnUrl(), nil)

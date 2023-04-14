@@ -20,21 +20,29 @@ import (
 {{ $lud := .LongUnionDiscriminator }}
 {{- range .Unions}}{{if not (eq .Type "result")}}
 
-// New{{elideInterface .}} creates a new {{.Interface}} for the specified {{.Enumeration}}.
-func New{{elideInterface .}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
+{{- if .Registry}}
+var {{lcName .Name}}Registry = new(encoding.UnionRegistry[{{.Enumeration}}, {{.Interface}}])
+{{- end}}
+
+// {{unionMethod . "New"}} creates a new {{.Interface}} for the specified {{.Enumeration}}.
+func {{unionMethod . "New"}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 	switch typ {
 	{{- range .Members}}
 	case {{.UnionType}}{{.UnionValue}}:
 		return new({{.FullName false true}}), nil
 	{{- end}}
-	default:
-		return nil, fmt.Errorf("unknown {{natural .Type}} %v", typ)
 	}
+	{{- if .Registry}}
+	if v, ok := {{lcName .Name}}Registry.New(typ); ok {
+		return v, nil
+	}
+	{{- end}}
+	return nil, fmt.Errorf("unknown {{natural .Type}} %v", typ)
 }
 
 {{if (index .Members 0).IsComparable}}
-// Equal{{elideInterface .}} is used to compare the values of the union
-func Equal{{elideInterface .}}(a, b {{.Interface}}) bool {
+// {{unionMethod . "Equal"}} is used to compare the values of the union
+func {{unionMethod . "Equal"}}(a, b {{.Interface}}) bool {
 	if a == b {
 		return true
 	}
@@ -47,13 +55,16 @@ func Equal{{elideInterface .}}(a, b {{.Interface}}) bool {
 		b, ok := b.(*{{.Type.FullName false true}})
 		return ok && a.Equal(b)
 	{{- end}}
-	default:
-		return false
 	}
+	{{- if .Registry}}
+	return {{lcName .Name}}Registry.Equal(a, b)
+	{{- else}}
+	return false
+	{{- end}}
 }
 
-// Copy{{elideInterface .}} copies a {{.Interface}}.
-func Copy{{elideInterface .}}(v {{.Interface}}) {{.Interface}} {
+// {{unionMethod . "Copy"}} copies a {{.Interface}}.
+func {{unionMethod . "Copy"}}(v {{.Interface}}) {{.Interface}} {
 	switch v := v.(type){
 	{{- range .Members}}
 	{{- if not .Params}}
@@ -68,23 +79,26 @@ func Copy{{elideInterface .}}(v {{.Interface}}) {{.Interface}} {
 {{end}}
 
 {{if (index .Members 0).IsBinary}}
-// Unmarshal{{elideInterface .}} unmarshals a {{.Interface}}.
-func Unmarshal{{elideInterface .}}(data []byte) ({{.Interface}}, error) {
-	return Unmarshal{{elideInterface .}}From(bytes.NewReader(data))
+// {{unionMethod . "Unmarshal"}} unmarshals a {{.Interface}}.
+func {{unionMethod . "Unmarshal"}}(data []byte) ({{.Interface}}, error) {
+	return {{unionMethod . "Unmarshal"}}From(bytes.NewReader(data))
 }
 
-// Unmarshal{{elideInterface .}}From unmarshals a {{.Interface}}.
-func Unmarshal{{elideInterface .}}From(rd io.Reader) ({{.Interface}}, error) {
+// {{unionMethod . "Unmarshal"}}From unmarshals a {{.Interface}}.
+func {{unionMethod . "Unmarshal"}}From(rd io.Reader) ({{.Interface}}, error) {
 	reader := encoding.NewReader(rd)
 
 	// Read the type code
 	var typ {{.Enumeration}}
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 
 	// Create a new {{natural .Interface}}
-	v, err := New{{elideInterface .}}({{.Enumeration}}(typ))
+	v, err := {{unionMethod . "New"}}({{.Enumeration}}(typ))
 	if err != nil {
 		return nil, err
 	}
@@ -99,8 +113,8 @@ func Unmarshal{{elideInterface .}}From(rd io.Reader) ({{.Interface}}, error) {
 }
 {{end}}
 
-// Unmarshal{{elideInterface .}}Json unmarshals a {{.Interface}}.
-func Unmarshal{{elideInterface .}}JSON(data []byte) ({{.Interface}}, error) {
+// {{unionMethod . "Unmarshal"}}Json unmarshals a {{.Interface}}.
+func {{unionMethod . "Unmarshal"}}JSON(data []byte) ({{.Interface}}, error) {
 	var typ *struct{ {{if $lud}}{{.Enumeration}}{{else}}Type{{end}} {{.Enumeration}} }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
@@ -111,7 +125,7 @@ func Unmarshal{{elideInterface .}}JSON(data []byte) ({{.Interface}}, error) {
 		return nil, nil
 	}
 
-	acnt, err := New{{elideInterface .}}(typ.{{if $lud}}{{.Enumeration}}{{else}}Type{{end}})
+	acnt, err := {{unionMethod . "New"}}(typ.{{if $lud}}{{.Enumeration}}{{else}}Type{{end}})
 	if err != nil {
 		return nil, err
 	}

@@ -202,6 +202,21 @@ AddCredits:
       type: uvarint
       optional: true
 
+BurnCredits:
+  union: { type: transaction }
+  fields:
+    - name: Amount
+      type: uint
+
+TransferCredits:
+  union: { type: transaction }
+  fields:
+    - name: To
+      repeatable: true
+      type: CreditRecipient
+      marshal-as: reference
+      pointer: true
+
 UpdateKeyPage:
   union: { type: transaction }
   fields:
@@ -230,11 +245,6 @@ UpdateKey:
   fields:
     - name: NewKeyHash
       type: bytes
-
-PlaceholderTransaction:
-  union: { type: transaction }
-  description: is a placeholder for some observable change in V2 logic
-  fields:
 
 ActivateProtocolVersion:
   union: { type: transaction }

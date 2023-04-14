@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -44,29 +44,14 @@ func (s EventService) Subscribe(c *call[*SubscribeRequest]) {
 
 func (c *Client) Subscribe(ctx context.Context, opts SubscribeOptions) (<-chan api.Event, error) {
 	req := &SubscribeRequest{SubscribeOptions: opts}
-	addr, err := c.Router.Route(req)
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("route request: %w", err)
-	}
-
 	var errRes *ErrorResponse
-	s, err := c.dial(ctx, addr, nil, func(s Stream) error {
-		err := s.Write(req)
-		if err != nil {
-			return errors.PeerMisbehaved.WithFormat("write request: %w", err)
-		}
-
-		res, err := s.Read()
-		if err != nil {
-			return errors.PeerMisbehaved.WithFormat("read request: %w", err)
-		}
-
+	s, err := c.Transport.OpenStream(ctx, req, func(res, _ Message) error {
 		switch res := res.(type) {
 		case *ErrorResponse:
 			errRes = res
 			return nil
 		case *SubscribeResponse:
-			// Nothing to do
+			// Success
 			return nil
 		default:
 			return errors.Conflict.WithFormat("invalid response type %T", res)

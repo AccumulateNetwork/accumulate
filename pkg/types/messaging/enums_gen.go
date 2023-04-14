@@ -14,20 +14,29 @@ import (
 	"strings"
 )
 
-// MessageTypeUserTransaction is a transaction from a user.
-const MessageTypeUserTransaction MessageType = 1
+// MessageTypeTransaction is a transaction.
+const MessageTypeTransaction MessageType = 1
 
-// MessageTypeUserSignature is a key signature from a user.
-const MessageTypeUserSignature MessageType = 2
+// MessageTypeSignature is a signature.
+const MessageTypeSignature MessageType = 2
 
 // MessageTypeSynthetic is a message produced by the protocol, requiring proof.
 const MessageTypeSynthetic MessageType = 3
 
-// MessageTypeValidatorSignature is a key signature from a validator.
-const MessageTypeValidatorSignature MessageType = 4
+// MessageTypeBlockAnchor is a block anchor signed by validator.
+const MessageTypeBlockAnchor MessageType = 4
 
 // MessageTypeSequenced is a message that is part of a sequence.
 const MessageTypeSequenced MessageType = 5
+
+// MessageTypeSignatureRequest is a request for additional signatures.
+const MessageTypeSignatureRequest MessageType = 6
+
+// MessageTypeCreditPayment is a payment of credits towards a transaction's fee.
+const MessageTypeCreditPayment MessageType = 7
+
+// MessageTypeBlockSummary is a summary of a block.
+const MessageTypeBlockSummary MessageType = 8
 
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
@@ -36,48 +45,57 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeUserTransaction, MessageTypeUserSignature, MessageTypeSynthetic, MessageTypeValidatorSignature, MessageTypeSequenced:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Message Type.
 func (v MessageType) String() string {
 	switch v {
-	case MessageTypeUserTransaction:
-		return "userTransaction"
-	case MessageTypeUserSignature:
-		return "userSignature"
+	case MessageTypeTransaction:
+		return "transaction"
+	case MessageTypeSignature:
+		return "signature"
 	case MessageTypeSynthetic:
 		return "synthetic"
-	case MessageTypeValidatorSignature:
-		return "validatorSignature"
+	case MessageTypeBlockAnchor:
+		return "blockAnchor"
 	case MessageTypeSequenced:
 		return "sequenced"
-	default:
-		return fmt.Sprintf("MessageType:%d", v)
+	case MessageTypeSignatureRequest:
+		return "signatureRequest"
+	case MessageTypeCreditPayment:
+		return "creditPayment"
+	case MessageTypeBlockSummary:
+		return "blockSummary"
 	}
+	return fmt.Sprintf("MessageType:%d", v)
 }
 
 // MessageTypeByName returns the named Message Type.
 func MessageTypeByName(name string) (MessageType, bool) {
 	switch strings.ToLower(name) {
-	case "usertransaction":
-		return MessageTypeUserTransaction, true
-	case "usersignature":
-		return MessageTypeUserSignature, true
+	case "transaction":
+		return MessageTypeTransaction, true
+	case "signature":
+		return MessageTypeSignature, true
 	case "synthetic":
 		return MessageTypeSynthetic, true
-	case "validatorsignature":
-		return MessageTypeValidatorSignature, true
+	case "blockanchor":
+		return MessageTypeBlockAnchor, true
 	case "sequenced":
 		return MessageTypeSequenced, true
-	default:
-		return 0, false
+	case "signaturerequest":
+		return MessageTypeSignatureRequest, true
+	case "creditpayment":
+		return MessageTypeCreditPayment, true
+	case "blocksummary":
+		return MessageTypeBlockSummary, true
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Message Type to JSON as a string.

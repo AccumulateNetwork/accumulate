@@ -1,0 +1,13 @@
+serviceRegisteredEvent:
+  union: { type: event, private: true }
+  fields:
+    - name: PeerID
+      type: p2p.PeerID
+      marshal-as: union
+      zero-value: '""'
+    - name: Network
+      type: string
+    - name: Address
+      type: api.ServiceAddress
+      marshal-as: reference
+      pointer: true

@@ -82,11 +82,6 @@ func newValue[T any](logger log.Logger, store Store, key Key, name string, allow
 	return v
 }
 
-// Key returns the I'th component of the value's key.
-func (v *value[T]) Key(i int) interface{} {
-	return v.key[i]
-}
-
 // Get loads the value, unmarshalling it if necessary. If IsDirty returns true,
 // Get is guaranteed to succeed.
 func (v *value[T]) Get() (u T, err error) {
@@ -213,6 +208,19 @@ func (v *value[T]) Resolve(key Key) (Record, Key, error) {
 	return nil, nil, errors.InternalError.With("bad key for value")
 }
 
+type walkValue[T any] struct{ *value[T] }
+
+func (v walkValue[T]) Key() Key {
+	return v.key
+}
+
+func (v *value[T]) WalkChanges(fn WalkFunc) error {
+	if v.IsDirty() {
+		return fn(walkValue[T]{v})
+	}
+	return nil
+}
+
 // GetValue loads the value.
 func (v *value[T]) GetValue() (encoding.BinaryValue, int, error) {
 	_, err := v.Get()
@@ -230,10 +238,10 @@ func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if put && version <= v.version {
-		// TODO Is it safe to make this an error?
+	// Warn if a value is modified incorrectly - except for the BPT since it
+	// doesn't follow the rules
+	if put && version <= v.version && !isBptValue(v.key) {
 		v.logger.Error("Conflicting values written from concurrent batches", "key", v.key)
-		// return errors.Format(errors.StatusConflict, "conflicting values written to %v from concurrent batches", v.key)
 	}
 	v.version = version
 
@@ -252,14 +260,27 @@ func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 	return nil
 }
 
+func isBptValue(key Key) bool {
+	if len(key) < 2 {
+		return false
+	}
+	s, ok := key[len(key)-2].(string)
+	return ok && s == "BPT"
+}
+
 // LoadBytes unmarshals the value from bytes.
-func (v *value[T]) LoadBytes(data []byte) error {
+func (v *value[T]) LoadBytes(data []byte, put bool) error {
 	err := v.value.UnmarshalBinary(data)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	v.status = valueClean
+	if put {
+		v.version++
+		v.status = valueDirty
+	} else {
+		v.status = valueClean
+	}
 	return nil
 }
 

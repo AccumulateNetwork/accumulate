@@ -17,19 +17,12 @@ type CreateKeyPage struct{}
 
 func (CreateKeyPage) Type() protocol.TransactionType { return protocol.TransactionTypeCreateKeyPage }
 
-func (CreateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (CreateKeyPage{}).Validate(st, tx)
+func (x CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	_, err := x.check(st, tx)
+	return nil, err
 }
 
-func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	var book *protocol.KeyBook
-	switch origin := st.Origin.(type) {
-	case *protocol.KeyBook:
-		book = origin
-	default:
-		return nil, fmt.Errorf("invalid principal: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.Type())
-	}
-
+func (CreateKeyPage) check(st *StateManager, tx *Delivery) (*protocol.CreateKeyPage, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyPage), tx.Transaction.Body)
@@ -42,17 +35,31 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	//check for duplicate entries
 	uniqueKeys := make(map[string]bool, len(body.Keys))
 	for _, key := range body.Keys {
-		switch len(key.KeyHash) {
-		case 0:
-			continue
-		case 32:
-			if uniqueKeys[string(key.KeyHash)] {
-				return nil, fmt.Errorf("duplicate keys: signing keys of a keypage must be unique")
-			}
-			uniqueKeys[string(key.KeyHash)] = true
-		default:
-			return nil, errors.BadRequest.WithFormat("public key hash length is invalid")
+		err := requireKeyHash(key.KeyHash)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
 		}
+
+		if uniqueKeys[string(key.KeyHash)] {
+			return nil, fmt.Errorf("duplicate keys: signing keys of a keypage must be unique")
+		}
+		uniqueKeys[string(key.KeyHash)] = true
+	}
+
+	return body, nil
+}
+
+func (x CreateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	body, err := x.check(st, tx)
+	if err != nil {
+		return nil, err
+	}
+	var book *protocol.KeyBook
+	switch origin := st.Origin.(type) {
+	case *protocol.KeyBook:
+		book = origin
+	default:
+		return nil, fmt.Errorf("invalid principal: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.Type())
 	}
 
 	page := new(protocol.KeyPage)
@@ -74,7 +81,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		page.AddKeySpec(ss)
 	}
 
-	err := st.Update(book)
+	err = st.Update(book)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update %v: %w", book.Url, err)
 	}

@@ -8,14 +8,16 @@ package routing
 
 import (
 	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // MessageRouter routes messages using a Router.
 type MessageRouter struct {
-	Router
+	Router Router
 }
 
 // Route routes a message.
@@ -29,25 +31,47 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	service := new(api.ServiceAddress)
 	var err error
 	switch msg := msg.(type) {
+	case *message.NodeInfoRequest:
+		// If no peer ID is specified, return /acc-svc/node so the request is
+		// sent to this node
+		service.Type = api.ServiceTypeNode
+		if msg.PeerID == "" {
+			return service.Multiaddr(), nil
+		}
+
+		// Send the request to /p2p/{id}/acc-svc/{service}:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.PeerID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := service.Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
+	case *message.FindServiceRequest:
+		service.Type = api.ServiceTypeNode
+
 	case *message.NetworkStatusRequest:
 		service.Type = api.ServiceTypeNetwork
 
 		// Route to the requested partition
 		if msg.Partition == "" {
-			return nil, errors.BadRequest.WithFormat("partition is missing")
+			service.Argument = protocol.Directory
+		} else {
+			service.Argument = msg.Partition
 		}
-		service.Partition = msg.Partition
 
-	case *message.NodeStatusRequest:
-		service.Type = api.ServiceTypeNode
-		service.Partition = msg.Partition
+	case *message.ConsensusStatusRequest:
+		service.Type = api.ServiceTypeConsensus
 
 		// Route to the requested node and partition
 		if msg.NodeID == "" {
-			return nil, errors.BadRequest.WithFormat("node ID is missing")
+			return nil, errors.BadRequest.With("node ID is missing")
 		}
 		if msg.Partition == "" {
-			return nil, errors.BadRequest.WithFormat("partition is missing")
+			service.Argument = protocol.Directory
+		} else {
+			service.Argument = msg.Partition
 		}
 
 		// Return /p2p/{id}/acc/{service}:{partition}
@@ -55,10 +79,7 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
 		}
-		c2, err := multiaddr.NewComponent(api.N_ACC, service.String())
-		if err != nil {
-			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
-		}
+		c2 := service.Multiaddr()
 
 		return c1.Encapsulate(c2), nil
 
@@ -67,52 +88,88 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		// Route to the requested partition
 		if msg.Partition == "" {
-			return nil, errors.BadRequest.WithFormat("partition is missing")
+			service.Argument = protocol.Directory
+		} else {
+			service.Argument = msg.Partition
 		}
-		service.Partition = msg.Partition
 
 	case *message.QueryRequest:
 		service.Type = api.ServiceTypeQuery
 
 		// Route based on the scope
 		if msg.Scope == nil {
-			return nil, errors.BadRequest.WithFormat("scope is missing")
+			return nil, errors.BadRequest.With("scope is missing")
 		}
-		service.Partition, err = r.Router.RouteAccount(msg.Scope)
+		if r.Router == nil {
+			return nil, errors.NotReady.With("cannot route: router not setup")
+		}
+		service.Argument, err = r.Router.RouteAccount(msg.Scope)
 
 	case *message.SubmitRequest:
 		service.Type = api.ServiceTypeSubmit
 
 		// Route the envelope
 		if msg.Envelope == nil {
-			return nil, errors.BadRequest.WithFormat("envelope is missing")
+			return nil, errors.BadRequest.With("envelope is missing")
 		}
-		service.Partition, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
+		if r.Router == nil {
+			return nil, errors.NotReady.With("cannot route: router not setup")
+		}
+		service.Argument, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
 
 	case *message.ValidateRequest:
 		service.Type = api.ServiceTypeValidate
 
 		// Route the envelope
 		if msg.Envelope == nil {
-			return nil, errors.BadRequest.WithFormat("envelope is missing")
+			return nil, errors.BadRequest.With("envelope is missing")
 		}
-		service.Partition, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
+		if r.Router == nil {
+			return nil, errors.NotReady.With("cannot route: router not setup")
+		}
+		service.Argument, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
 
 	case *message.SubscribeRequest:
 		service.Type = api.ServiceTypeEvent
 
 		// Route to the requested partition
-		if msg.Partition == "" && msg.Account == nil {
-			return nil, errors.BadRequest.WithFormat("partition or account is required")
-		}
-		if msg.Partition != "" {
-			service.Partition = msg.Partition
-		} else {
-			service.Partition, err = r.RouteAccount(msg.Account)
+		switch {
+		case msg.Partition != "":
+			service.Argument = msg.Partition
+		case msg.Account != nil:
+			if r.Router == nil {
+				return nil, errors.NotReady.With("cannot route: router not setup")
+			}
+			service.Argument, err = r.Router.RouteAccount(msg.Account)
+		default:
+			service.Argument = protocol.Directory
 		}
 
 	case *message.FaucetRequest:
-		service.Type = api.ServiceTypeFaucet
+		if msg.Account == nil {
+			return nil, errors.BadRequest.With("account is missing")
+		}
+
+		token := msg.Token
+		if token == nil {
+			_, t, _ := protocol.ParseLiteTokenAddress(msg.Account)
+			if t != nil {
+				token = t
+			} else {
+				return nil, errors.BadRequest.WithFormat("%v is not a lite token address and the request does not specify a token type", t)
+			}
+		}
+
+		service = api.ServiceTypeFaucet.AddressForUrl(token)
+
+	case *message.PrivateSequenceRequest:
+		service.Type = private.ServiceTypeSequencer
+
+		var ok bool
+		service.Argument, ok = protocol.ParsePartitionUrl(msg.Source)
+		if !ok {
+			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Source)
+		}
 
 	default:
 		return nil, errors.BadRequest.WithFormat("%v is not routable", msg.Type())
@@ -121,13 +178,6 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		return nil, errors.BadRequest.WithFormat("cannot route request: %w", err)
 	}
 
-	_ = "/acc/query:apollo"
-	_ = "/acc/node:apollo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
-
-	// Return /acc/{service}:{partition}
-	ma, err := multiaddr.NewComponent(api.N_ACC, service.String())
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
-	}
-	return ma, nil
+	// Return /acc-svc/{service}:{partition}
+	return service.Multiaddr(), nil
 }

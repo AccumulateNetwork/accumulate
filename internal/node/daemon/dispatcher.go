@@ -10,7 +10,6 @@ import (
 	"context"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/mempool"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -25,6 +24,7 @@ import (
 
 // dispatcher implements [block.Dispatcher].
 type dispatcher struct {
+	network  string
 	router   routing.Router
 	dialer   message.Dialer
 	messages []message.Message
@@ -33,8 +33,9 @@ type dispatcher struct {
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // newDispatcher creates a new dispatcher.
-func newDispatcher(router routing.Router, dialer message.Dialer) *dispatcher {
+func newDispatcher(network string, router routing.Router, dialer message.Dialer) *dispatcher {
 	d := new(dispatcher)
+	d.network = network
 	d.router = router
 	d.dialer = dialer
 	return d
@@ -49,8 +50,8 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 		return err
 	}
 
-	// Construct the multiaddr, /acc/submit:{partition}
-	addr, err := multiaddr.NewComponent(api.N_ACC, (&api.ServiceAddress{Type: api.ServiceTypeSubmit, Partition: partition}).String())
+	// Construct the multiaddr, /acc/{network}/acc-svc/submit:{partition}
+	addr, err := api.ServiceTypeSubmit.AddressFor(partition).MultiaddrFor(d.network)
 	if err != nil {
 		return err
 	}
@@ -127,11 +128,11 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 		// Create a client using a batch dialer, but DO NOT set the router - all
 		// the messages are already addressed
-		client := new(message.Client)
-		client.Dialer = message.BatchDialer(ctx, d.dialer)
+		tr := new(message.RoutedTransport)
+		tr.Dialer = message.BatchDialer(ctx, d.dialer)
 
 		// Submit all messages over a single stream
-		err := client.RoundTrip(ctx, messages, func(res, req message.Message) error {
+		err := tr.RoundTrip(ctx, messages, func(res, req message.Message) error {
 			_ = req // Ignore unused warning
 
 			switch res := res.(type) {
@@ -160,26 +161,4 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 	// Let the caller wait for errors
 	return errs
-}
-
-// dialer is a wrapper around the p2p node's dialer to account for the order of
-// initialization.
-type dialer struct {
-	ready  chan struct{}
-	dialer message.MultiDialer
-}
-
-var _ message.MultiDialer = (*dialer)(nil)
-
-func (d *dialer) d() message.MultiDialer {
-	<-d.ready // wait until ready
-	return d.dialer
-}
-
-func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	return d.d().Dial(ctx, addr)
-}
-
-func (d *dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, stream message.Stream, err error) bool {
-	return d.d().BadDial(ctx, addr, stream, err)
 }

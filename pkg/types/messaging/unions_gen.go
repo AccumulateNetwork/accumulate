@@ -20,19 +20,24 @@ import (
 // NewMessage creates a new Message for the specified MessageType.
 func NewMessage(typ MessageType) (Message, error) {
 	switch typ {
+	case MessageTypeBlockAnchor:
+		return new(BlockAnchor), nil
+	case MessageTypeBlockSummary:
+		return new(BlockSummary), nil
+	case MessageTypeCreditPayment:
+		return new(CreditPayment), nil
 	case MessageTypeSequenced:
 		return new(SequencedMessage), nil
+	case MessageTypeSignature:
+		return new(SignatureMessage), nil
+	case MessageTypeSignatureRequest:
+		return new(SignatureRequest), nil
 	case MessageTypeSynthetic:
 		return new(SyntheticMessage), nil
-	case MessageTypeUserSignature:
-		return new(UserSignature), nil
-	case MessageTypeUserTransaction:
-		return new(UserTransaction), nil
-	case MessageTypeValidatorSignature:
-		return new(ValidatorSignature), nil
-	default:
-		return nil, fmt.Errorf("unknown message %v", typ)
+	case MessageTypeTransaction:
+		return new(TransactionMessage), nil
 	}
+	return nil, fmt.Errorf("unknown message %v", typ)
 }
 
 // EqualMessage is used to compare the values of the union
@@ -41,11 +46,41 @@ func EqualMessage(a, b Message) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *BlockAnchor:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BlockAnchor)
+		return ok && a.Equal(b)
+	case *BlockSummary:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BlockSummary)
+		return ok && a.Equal(b)
+	case *CreditPayment:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*CreditPayment)
+		return ok && a.Equal(b)
 	case *SequencedMessage:
 		if a == nil {
 			return b == nil
 		}
 		b, ok := b.(*SequencedMessage)
+		return ok && a.Equal(b)
+	case *SignatureMessage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SignatureMessage)
+		return ok && a.Equal(b)
+	case *SignatureRequest:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SignatureRequest)
 		return ok && a.Equal(b)
 	case *SyntheticMessage:
 		if a == nil {
@@ -53,41 +88,34 @@ func EqualMessage(a, b Message) bool {
 		}
 		b, ok := b.(*SyntheticMessage)
 		return ok && a.Equal(b)
-	case *UserSignature:
+	case *TransactionMessage:
 		if a == nil {
 			return b == nil
 		}
-		b, ok := b.(*UserSignature)
+		b, ok := b.(*TransactionMessage)
 		return ok && a.Equal(b)
-	case *UserTransaction:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*UserTransaction)
-		return ok && a.Equal(b)
-	case *ValidatorSignature:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*ValidatorSignature)
-		return ok && a.Equal(b)
-	default:
-		return false
 	}
+	return false
 }
 
 // CopyMessage copies a Message.
 func CopyMessage(v Message) Message {
 	switch v := v.(type) {
+	case *BlockAnchor:
+		return v.Copy()
+	case *BlockSummary:
+		return v.Copy()
+	case *CreditPayment:
+		return v.Copy()
 	case *SequencedMessage:
+		return v.Copy()
+	case *SignatureMessage:
+		return v.Copy()
+	case *SignatureRequest:
 		return v.Copy()
 	case *SyntheticMessage:
 		return v.Copy()
-	case *UserSignature:
-		return v.Copy()
-	case *UserTransaction:
-		return v.Copy()
-	case *ValidatorSignature:
+	case *TransactionMessage:
 		return v.Copy()
 	default:
 		return v.CopyAsInterface().(Message)
@@ -106,6 +134,9 @@ func UnmarshalMessageFrom(rd io.Reader) (Message, error) {
 	// Read the type code
 	var typ MessageType
 	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("field Type: missing")
 	}
 

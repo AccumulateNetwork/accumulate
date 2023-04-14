@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,6 +21,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -28,6 +29,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -36,10 +38,10 @@ import (
 
 const nodeDirPerm = 0755
 
-type MakeConfigFunc func(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config
+type MakeConfigFunc func(networkName string, net protocol.PartitionType, node config.NodeType, netId string) *config.Config
 
-func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config.Config {
-	var allConfigs [][][2]*config.Config
+func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.Config {
+	var allConfigs [][][]*config.Config
 
 	if mkcfg == nil {
 		mkcfg = config.Default
@@ -48,8 +50,15 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 	netConfig := config.Network{Id: network.Id, Partitions: make([]config.Partition, 1)}
 	dnConfig := config.Partition{
 		Id:       protocol.Directory,
-		Type:     config.Directory,
+		Type:     protocol.PartitionTypeDirectory,
 		BasePort: int64(network.Bvns[0].Nodes[0].BasePort), // TODO This is not great
+	}
+	bsnConfig := config.Partition{
+		Type:     protocol.PartitionTypeBlockSummary,
+		BasePort: int64(network.Bvns[0].Nodes[0].BasePort) + int64(config.PortOffsetBlockSummary), // TODO This is not great
+	}
+	if network.Bsn != nil {
+		bsnConfig.Id = network.Bsn.Id
 	}
 
 	// If the node addresses are loopback or private IPs, disable strict address book
@@ -58,15 +67,15 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 
 	var i int
 	for _, bvn := range network.Bvns {
-		var bvnConfigs [][2]*config.Config
+		var bvnConfigs [][]*config.Config
 		bvnConfig := config.Partition{
 			Id:       bvn.Id,
-			Type:     config.BlockValidator,
+			Type:     protocol.PartitionTypeBlockValidator,
 			BasePort: int64(bvn.Nodes[0].BasePort) + int64(config.PortOffsetBlockValidator), // TODO This is not great
 		}
 		for j, node := range bvn.Nodes {
 			i++
-			dnn := mkcfg(network.Id, config.Directory, node.DnnType, protocol.Directory)
+			dnn := mkcfg(network.Id, protocol.PartitionTypeDirectory, node.DnnType, protocol.Directory)
 			dnn.Moniker = fmt.Sprintf("Directory.%d", i)
 			ConfigureNodePorts(node, dnn, protocol.PartitionTypeDirectory)
 			dnConfig.Nodes = append(dnConfig.Nodes, config.Node{
@@ -74,7 +83,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 				Type:    node.DnnType,
 			})
 
-			bvnn := mkcfg(network.Id, config.BlockValidator, node.BvnnType, bvn.Id)
+			bvnn := mkcfg(network.Id, protocol.PartitionTypeBlockValidator, node.BvnnType, bvn.Id)
 			bvnn.Moniker = fmt.Sprintf("%s.%d", bvn.Id, j+1)
 			ConfigureNodePorts(node, bvnn, protocol.PartitionTypeBlockValidator)
 			bvnConfig.Nodes = append(bvnConfig.Nodes, config.Node{
@@ -87,6 +96,11 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			}
 			if bvnn.P2P.ExternalAddress == "" {
 				bvnn.P2P.ExternalAddress = node.Peer().TendermintP2P().BlockValidator().String()
+			}
+
+			if network.Bsn != nil {
+				dnn.Accumulate.SummaryNetwork = network.Bsn.Id
+				bvnn.Accumulate.SummaryNetwork = network.Bsn.Id
 			}
 
 			// No duplicate IPs
@@ -109,12 +123,49 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			dnn.Accumulate.P2P.BootstrapPeers = p2pPeers
 			bvnn.Accumulate.P2P.BootstrapPeers = p2pPeers
 
-			bvnConfigs = append(bvnConfigs, [2]*config.Config{dnn, bvnn})
+			bvnConfigs = append(bvnConfigs, []*config.Config{dnn, bvnn})
 		}
 		allConfigs = append(allConfigs, bvnConfigs)
 		netConfig.Partitions = append(netConfig.Partitions, bvnConfig)
 	}
 	netConfig.Partitions[0] = dnConfig
+
+	if network.Bsn != nil {
+		var bsnConfigs [][]*config.Config
+		for i, node := range network.Bsn.Nodes {
+			bsnn := mkcfg(network.Id, protocol.PartitionTypeBlockSummary, node.BsnnType, network.Bsn.Id)
+			bsnn.Moniker = fmt.Sprintf("%s.%d", network.Bsn.Id, i+1)
+			ConfigureNodePorts(node, bsnn, protocol.PartitionTypeBlockSummary)
+			bsnConfig.Nodes = append(bsnConfig.Nodes, config.Node{
+				Address: node.Advertize().Scheme("http").TendermintP2P().BlockSummary().String(),
+				Type:    node.BsnnType,
+			})
+
+			if bsnn.P2P.ExternalAddress == "" {
+				bsnn.P2P.ExternalAddress = node.Peer().TendermintP2P().BlockSummary().String()
+			}
+
+			// No duplicate IPs
+			bsnn.P2P.AllowDuplicateIP = false
+
+			// Initial peers (should be bootstrap peers but that setting isn't
+			// present in 0.37)
+			bsnn.P2P.PersistentPeers = strings.Join(network.Bsn.Peers(node).BlockSummary().TendermintP2P().WithKey().String(), ",")
+
+			// Set whether unroutable addresses are allowed
+			bsnn.P2P.AddrBookStrict = strict
+
+			p2pPeers := network.Peers(node).AccumulateP2P().WithKey().
+				Do(AddressBuilder.Directory, AddressBuilder.BlockValidator).
+				Do(func(b AddressBuilder) AddressBuilder { return b.Scheme("tcp") }, func(b AddressBuilder) AddressBuilder { return b.Scheme("udp") }).
+				Multiaddr()
+			bsnn.Accumulate.P2P.BootstrapPeers = p2pPeers
+
+			bsnConfigs = append(bsnConfigs, []*config.Config{bsnn})
+		}
+		allConfigs = append(allConfigs, bsnConfigs)
+		netConfig.Partitions = append(netConfig.Partitions, bsnConfig)
+	}
 
 	for _, configs := range allConfigs {
 		for _, configs := range configs {
@@ -192,6 +243,25 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 	}
 
+	var bsnTmValidators []tmtypes.GenesisValidator
+	if network.Bsn != nil {
+		for j, node := range network.Bsn.Nodes {
+			key := tmed25519.PrivKey(node.PrivValKey)
+			operators = append(operators, key.PubKey().Bytes())
+
+			netinfo.AddValidator(key.PubKey().Bytes(), network.Bsn.Id, node.BsnnType == config.Validator)
+
+			if node.BsnnType == config.Validator {
+				bsnTmValidators = append(bsnTmValidators, tmtypes.GenesisValidator{
+					Name:    fmt.Sprintf("%s.%d", network.Bsn.Id, j+1),
+					Address: key.PubKey().Address(),
+					PubKey:  key.PubKey(),
+					Power:   1,
+				})
+			}
+		}
+	}
+
 	docs[protocol.Directory] = &tmtypes.GenesisDoc{
 		ChainID:         protocol.Directory,
 		GenesisTime:     time,
@@ -202,13 +272,32 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 
 	globals.Network = netinfo
 
-	for id := range docs {
-		netType := config.BlockValidator
-		if id == protocol.Directory {
-			netType = config.Directory
+	ids := []string{protocol.Directory}
+	for _, bvn := range network.Bvns {
+		ids = append(ids, bvn.Id)
+	}
+
+	bsnSnapBuf := new(ioutil2.Buffer)
+	var bsnSnap *snapshot.Writer
+	var err error
+	if network.Bsn != nil {
+		header := new(snapshot.Header)
+		header.Height = 1
+		header.Timestamp = time
+		header.PartitionSnapshotIDs = ids
+		bsnSnap, err = snapshot.Create(bsnSnapBuf, header)
+		if err != nil {
+			return nil, err
 		}
-		snapshot := new(ioutil2.Buffer)
-		root, err := genesis.Init(snapshot, genesis.InitOpts{
+	}
+
+	for _, id := range ids {
+		netType := protocol.PartitionTypeBlockValidator
+		if strings.EqualFold(id, protocol.Directory) {
+			netType = protocol.PartitionTypeDirectory
+		}
+		snapBuf := new(ioutil2.Buffer)
+		root, err := genesis.Init(snapBuf, genesis.InitOpts{
 			PartitionId:     id,
 			NetworkType:     netType,
 			GenesisTime:     time,
@@ -222,10 +311,42 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			return nil, err
 		}
 
+		// Write the snapshot to the BSN snapshot
+		if network.Bsn != nil {
+			w, err := bsnSnap.Open(snapshot.SectionTypeSnapshot)
+			if err != nil {
+				return nil, err
+			}
+			_, err = bytes.NewBuffer(snapBuf.Bytes()).WriteTo(w)
+			if err != nil {
+				return nil, err
+			}
+			err = w.Close()
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		docs[id].AppHash = root
-		docs[id].AppState, err = json.Marshal(snapshot.Bytes())
+		docs[id].AppState, err = json.Marshal(snapBuf.Bytes())
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	if network.Bsn != nil {
+		b, err := json.Marshal(bsnSnapBuf.Bytes())
+		if err != nil {
+			return nil, err
+		}
+		docs[network.Bsn.Id] = &tmtypes.GenesisDoc{
+			ChainID:         network.Bsn.Id,
+			GenesisTime:     time,
+			InitialHeight:   1,
+			Validators:      bsnTmValidators,
+			ConsensusParams: tmtypes.DefaultConsensusParams(),
+			AppHash:         make(tmbytes.HexBytes, 32),
+			AppState:        b,
 		}
 	}
 

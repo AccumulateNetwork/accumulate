@@ -30,9 +30,8 @@ func (v *StreamStatus) SetEnumValue(id uint64) bool {
 	case StreamStatusOpen, StreamStatusClosed:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Stream Status.
@@ -42,9 +41,8 @@ func (v StreamStatus) String() string {
 		return "open"
 	case StreamStatusClosed:
 		return "closed"
-	default:
-		return fmt.Sprintf("StreamStatus:%d", v)
 	}
+	return fmt.Sprintf("StreamStatus:%d", v)
 }
 
 // StreamStatusByName returns the named Stream Status.
@@ -54,9 +52,8 @@ func StreamStatusByName(name string) (StreamStatus, bool) {
 		return StreamStatusOpen, true
 	case "closed":
 		return StreamStatusClosed, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Stream Status to JSON as a string.

@@ -113,14 +113,21 @@ func (c *Chain2) Resolve(key record.Key) (record.Record, record.Key, error) {
 	return c.inner.Resolve(key)
 }
 
+func (c *Chain2) WalkChanges(fn record.WalkFunc) error {
+	var err error
+	record.FieldWalkChanges(&err, c.inner, fn)
+	record.FieldWalkChanges(&err, c.index, fn)
+	return err
+}
+
 func (c *Chain2) IsDirty() bool {
-	return fieldIsDirty(c.index) || fieldIsDirty(c.inner)
+	return record.FieldIsDirty(c.index) || record.FieldIsDirty(c.inner)
 }
 
 func (c *Chain2) Commit() error {
 	var err error
-	commitField(&err, c.index)
-	commitField(&err, c.inner)
+	record.FieldCommit(&err, c.index)
+	record.FieldCommit(&err, c.inner)
 	return err
 }
 
@@ -171,7 +178,7 @@ func (c *Chain2) Index() *Chain2 {
 	if c.Type() == merkle.ChainTypeIndex {
 		panic("cannot index an index chain")
 	}
-	return getOrCreateField(&c.index, func() *Chain2 {
+	return record.FieldGetOrCreate(&c.index, func() *Chain2 {
 		key := c.key.Append("Index")
 		label := c.labelfmt + " index"
 		m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)

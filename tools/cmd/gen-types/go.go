@@ -39,27 +39,23 @@ const (
 	Union     = typegen.MarshalAsUnion
 )
 
-//go:embed go.go.tmpl
+//go:embed types.go.tmpl
 var goSrc string
 
 //go:embed union.go.tmpl
 var goUnionSrc string
 
+//go:embed types.machine.go.tmpl
+var goMachineSrc string
+
 func init() {
 	Templates.Register(goSrc, "go", goFuncs, "Go")
 	Templates.Register(goUnionSrc, "go-union", goFuncs)
+	Templates.Register(goMachineSrc, "go-alt", goFuncs)
 }
 
 var goFuncs = template.FuncMap{
-	"elideInterface": func(u *UnionSpec) string {
-		if !flags.ElidePackageType {
-			return u.Interface()
-		}
-		if !strings.EqualFold(u.Name, u.Package) {
-			return u.Interface()
-		}
-		return ""
-	},
+	"unionMethod": GoTmplUnionMethod,
 	"isPkg": func(s string) bool {
 		return s == PackagePath
 	},
@@ -79,6 +75,9 @@ var goFuncs = template.FuncMap{
 
 	"resolveType": func(field *Field, forNew bool) string {
 		return GoResolveType(field, forNew, false)
+	},
+	"resolveElemType": func(field *Field, forNew bool) string {
+		return GoResolveType(field, forNew, true)
 	},
 
 	"jsonType": func(field *Field) string {
@@ -140,6 +139,18 @@ var goFuncs = template.FuncMap{
 		}
 		return fmt.Sprintf(` validate:"%s"`, strings.Join(flags, ","))
 	},
+
+	"accessor": goFieldAccessor,
+}
+
+func GoTmplUnionMethod(u *UnionSpec, method string) string {
+	if u.Private {
+		method = typegen.LowerFirstWord(method)
+	}
+	if flags.ElidePackageType && strings.EqualFold(u.Name, u.Package) {
+		return method
+	}
+	return method + u.interfaceName(true)
 }
 
 func GoGetField(field *Field) string {
@@ -152,6 +163,37 @@ func GoGetField(field *Field) string {
 func GoFieldError(op, name string, args ...string) string {
 	args = append(args, "err")
 	return fmt.Sprintf("fmt.Errorf(\"error %s %s: %%w\", %s)", op, name, strings.Join(args, ","))
+}
+
+func goFieldAccessor(field *Field) (string, error) {
+	var ptr1 string
+	if field.Pointer {
+		ptr1 = "Ptr"
+	}
+
+	var typ string
+	switch {
+	case field.Repeatable:
+		typ = "encoding.SliceIndex[*" + field.Type.Name + "]"
+	case field.Virtual:
+		typ = field.Type.GoType()
+	default:
+		typ = "*" + field.ParentType.Name
+	}
+
+	switch field.Type.Code {
+	case Hash, Int, Uint, Float, Bool, Time, Bytes, String, Duration, BigInt, Url, TxID:
+		return fmt.Sprintf("encoding.%s%sField[%s]", typegen.TitleCase(field.Type.Code.String()), ptr1, typ), nil
+	}
+
+	switch field.MarshalAs {
+	case Reference:
+		return fmt.Sprintf("encoding.Struct%sField[%s, *%s, %[3]s]", ptr1, typ, GoResolveType(field, true, true)), nil
+	case Enum:
+		return fmt.Sprintf("encoding.Enum%sField[%s, *%s, %[3]s]", ptr1, typ, GoResolveType(field, true, true)), nil
+	}
+
+	return "nil", nil
 }
 
 func goUnionMethod(field *Field, name string) string {
@@ -176,34 +218,35 @@ func goUnionMethod(field *Field, name string) string {
 	return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
 }
 
-func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
-	switch field.Type.Code {
+func goBinaryMethod(field *Field) (methodName string, cast, wantPtr bool) {
+	cast = field.MarshalAsType != typegen.TypeCodeUnknown
+	switch code := field.EffectiveMarshalType(); code {
 	case Bool, String, Duration, Time, Bytes, Uint, Int, Float:
-		return typegen.TitleCase(field.Type.String()), false
+		return typegen.TitleCase(code.String()), cast, false
 	case Url, TxID, Hash:
-		return typegen.TitleCase(field.Type.String()), true
+		return typegen.TitleCase(code.String()), cast, true
 	case RawJson:
-		return "Bytes", false
+		return "Bytes", cast, false
 	case BigInt:
-		return "BigInt", true
+		return "BigInt", cast, true
 	}
 
 	switch field.MarshalAs {
 	case Reference:
-		return "Value", true
+		return "Value", cast, true
 	case Value, Union:
-		return "Value", false
+		return "Value", cast, false
 	case Enum:
-		return "Enum", false
+		return "Enum", cast, false
 	}
 
-	return "", false
+	return "", cast, false
 }
 
 func goJsonMethod(field *Field) (methodName string, wantPtr bool) {
-	switch field.Type.Code {
+	switch code := field.EffectiveMarshalType(); code {
 	case Bytes, Duration, Any:
-		return field.Type.Title(), false
+		return code.Title(), false
 	case Hash:
 		return "Chain", false
 	case BigInt:
@@ -225,7 +268,7 @@ func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
 }
 
 func goJsonTypeSingle(field *Field, pointer string) string {
-	switch field.Type.Code {
+	switch field.EffectiveMarshalType() {
 	case Bytes:
 		return "*string"
 	case BigInt:
@@ -274,7 +317,7 @@ func GoIsZero(field *Field, varName string) (string, error) {
 		return fmt.Sprintf("%s == (%v)", varName, field.ZeroValue), nil
 	}
 
-	switch field.Type.Code {
+	switch field.EffectiveMarshalType() {
 	case Bytes, RawJson, String:
 		return fmt.Sprintf("len(%s) == 0", varName), nil
 	case Any:
@@ -309,7 +352,7 @@ func GoJsonZeroValue(field *Field) (string, error) {
 		return "nil", nil
 	}
 
-	switch field.Type.Code {
+	switch field.EffectiveMarshalType() {
 	case Bytes, BigInt, Duration, Any, RawJson:
 		return "nil", nil
 	case Bool:
@@ -335,7 +378,7 @@ func GoJsonZeroValue(field *Field) (string, error) {
 func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, error) {
 	var expr string
 	var wantPtr bool
-	switch field.Type.Code {
+	switch field.EffectiveMarshalType() {
 	case Bool, String, Hash, Uint, Int, Float, Duration, Any:
 		expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
 	case Bytes, RawJson:
@@ -411,7 +454,7 @@ func GoCopy(field *Field, dstName, srcName string) (string, error) {
 }
 
 func goCopy(field *Field, dstName, srcName string) (string, error) {
-	switch field.Type.Code {
+	switch field.EffectiveMarshalType() {
 	case Bool, String, Duration, Time, Uint, Float, Int, Hash:
 		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
 
@@ -479,7 +522,7 @@ func goCopyPointer(field *Field, expr, dstName, srcName string) string {
 }
 
 func GoBinaryMarshalValue(field *Field, writerName, varName string) (string, error) {
-	method, wantPtr := goBinaryMethod(field)
+	method, cast, wantPtr := goBinaryMethod(field)
 	if method == "" {
 		return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false, false))
 	}
@@ -498,15 +541,20 @@ func GoBinaryMarshalValue(field *Field, writerName, varName string) (string, err
 		suffix = ".MarshalBinary"
 	}
 
-	if !field.Repeatable {
-		return fmt.Sprintf("\t%s.Write%s(%d, %s%s%s)", writerName, method, field.Number, ptrPrefix, varName, suffix), nil
+	var castPrefix, castSuffix string
+	if cast {
+		castPrefix, castSuffix = "("+field.MarshalAsType.GoType()+")(", ")"
 	}
 
-	return fmt.Sprintf("\tfor _, v := range %s { %s.Write%s(%d, %sv%s) }", varName, writerName, method, field.Number, ptrPrefix, suffix), nil
+	if !field.Repeatable {
+		return fmt.Sprintf("\t%s.Write%s(%d, %s%s%s%s%s)", writerName, method, field.Number, castPrefix, ptrPrefix, varName, suffix, castSuffix), nil
+	}
+
+	return fmt.Sprintf("\tfor _, v := range %s { %s.Write%s(%d, %s%sv%s%s) }", varName, writerName, method, field.Number, castPrefix, ptrPrefix, suffix, castSuffix), nil
 }
 
 func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, error) {
-	method, wantPtr := goBinaryMethod(field)
+	method, cast, wantPtr := goBinaryMethod(field)
 	if method == "" {
 		return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false, false))
 	}
@@ -524,11 +572,16 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 		ptrPrefix = "&"
 	}
 
+	var castPrefix, castSuffix string
+	if cast {
+		castPrefix, castSuffix = "("+GoResolveType(field, false, true)+")(", ")"
+	}
+
 	var set string
 	if field.Repeatable {
-		set = fmt.Sprintf("%s = append(%[1]s, %sx)", varName, ptrPrefix)
+		set = fmt.Sprintf("%s = append(%[1]s, %s%sx%s)", varName, castPrefix, ptrPrefix, castSuffix)
 	} else {
-		set = fmt.Sprintf("%s = %sx", varName, ptrPrefix)
+		set = fmt.Sprintf("%s = %s%sx%s", varName, castPrefix, ptrPrefix, castSuffix)
 	}
 
 	var expr string
@@ -607,9 +660,11 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 			return fmt.Sprintf("\tif %s != nil { %s = %[1]s.Value }\n", srcName, tgtName), nil
 		}
 		return fmt.Sprintf(
-			"	%s = make(%s, len(%s.Value));\n"+
-				"	for i, x := range %[3]s.Value {\n"+
-				"		%[1]s[i] = x\n"+
+			"	if %[3]s != nil {\n"+
+				"		%[1]s = make(%s, len(%s.Value));\n"+
+				"		for i, x := range %[3]s.Value {\n"+
+				"			%[1]s[i] = x\n"+
+				"		}\n"+
 				"	}",
 			tgtName, GoResolveType(field, false, false), srcName), nil
 	}

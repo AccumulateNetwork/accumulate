@@ -9,11 +9,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"sync"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) interface{} {
@@ -26,7 +27,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 	// Query directly
 	if req.TxIdUrl != nil {
 		return jrpcFormatResponse(waitFor(func() (*TransactionQueryResponse, error) {
-			return queryTx(m.NetV3, ctx, req.TxIdUrl, req.Prove, req.IgnorePending, true)
+			return queryTx(m.Querier, ctx, req.TxIdUrl, req.Prove, req.IgnorePending, true)
 		}, req.Wait, m.TxMaxWaitTime))
 	}
 
@@ -42,7 +43,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 
 	q := &api.MessageHashSearchQuery{Hash: hash}
 	return jrpcFormatResponse(waitFor(func() (*TransactionQueryResponse, error) {
-		r, err := rangeOf[*api.TxIDRecord](m.NetV3.Query(ctx, protocol.UnknownUrl(), q))
+		r, err := rangeOf[*api.TxIDRecord](m.Querier.Query(ctx, protocol.UnknownUrl(), q))
 		if err != nil {
 			return nil, err
 		}
@@ -53,8 +54,9 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		errg, ctx := errgroup.WithContext(ctx)
-		ch := make(chan *TransactionQueryResponse)
+		var response atomic.Pointer[TransactionQueryResponse]
+		var errp atomic.Pointer[error]
+		wg := new(sync.WaitGroup)
 		seen := map[[32]byte]bool{}
 		for _, r := range r.Records {
 			txid := r.Value
@@ -62,30 +64,30 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 				continue
 			}
 			seen[txid.Hash()] = true
-			errg.Go(func() error {
-				r, err := queryTx(m.NetV3, ctx, txid, req.Prove, req.IgnorePending, true)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				r, err := queryTx(m.Querier, ctx, txid, req.Prove, req.IgnorePending, true)
 				switch {
 				case err == nil:
-					ch <- r
-					return nil
+					if req.IncludeRemote || !r.Status.Remote() {
+						response.CompareAndSwap(nil, r)
+					}
 				case errors.Is(err, errors.NotFound):
-					return nil
+
 				default:
-					return err
+					errp.CompareAndSwap(nil, &err)
 				}
-			})
+			}()
+		}
+		wg.Wait()
+
+		if errp := errp.Load(); errp != nil {
+			return nil, *errp
 		}
 
-		for r := range ch {
-			if !req.IncludeRemote && r.Status.Remote() {
-				continue
-			}
+		if r := response.Load(); r != nil {
 			return r, nil
-		}
-
-		err = errg.Wait()
-		if err != nil {
-			return nil, err
 		}
 
 		return nil, errors.NotFound.WithFormat("transaction %X not found", hash[:8])

@@ -45,9 +45,8 @@ func (v *NodeType) SetEnumValue(id uint64) bool {
 	case NodeTypeValidator, NodeTypeFollower:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Node Type.
@@ -57,9 +56,8 @@ func (v NodeType) String() string {
 		return "validator"
 	case NodeTypeFollower:
 		return "follower"
-	default:
-		return fmt.Sprintf("NodeType:%d", v)
 	}
+	return fmt.Sprintf("NodeType:%d", v)
 }
 
 // NodeTypeByName returns the named Node Type.
@@ -69,9 +67,8 @@ func NodeTypeByName(name string) (NodeType, bool) {
 		return NodeTypeValidator, true
 	case "follower":
 		return NodeTypeFollower, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Node Type to JSON as a string.
@@ -105,9 +102,8 @@ func (v *PortOffset) SetEnumValue(id uint64) bool {
 	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetAccumulateP2P, PortOffsetPrometheus, PortOffsetAccumulateApi:
 		*v = u
 		return true
-	default:
-		return false
 	}
+	return false
 }
 
 // String returns the name of the Port Offset.
@@ -123,9 +119,8 @@ func (v PortOffset) String() string {
 		return "prometheus"
 	case PortOffsetAccumulateApi:
 		return "accumulateApi"
-	default:
-		return fmt.Sprintf("PortOffset:%d", v)
 	}
+	return fmt.Sprintf("PortOffset:%d", v)
 }
 
 // PortOffsetByName returns the named Port Offset.
@@ -141,9 +136,8 @@ func PortOffsetByName(name string) (PortOffset, bool) {
 		return PortOffsetPrometheus, true
 	case "accumulateapi":
 		return PortOffsetAccumulateApi, true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
 // MarshalJSON marshals the Port Offset to JSON as a string.

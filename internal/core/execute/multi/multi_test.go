@@ -7,11 +7,13 @@
 package execute_test
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -24,19 +26,23 @@ func init() {
 }
 
 func TestVersionSwitch(t *testing.T) {
+	var timestamp uint64
+
 	// Initialize
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
-		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.SimpleNetwork(t.Name(), 3, 1), // TODO Change to 3 after fixing anchor healing
 		simulator.GenesisWith(GenesisTime, g),
 	)
 
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e15)})
 
 	// Version is unset
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
@@ -45,31 +51,77 @@ func TestVersionSwitch(t *testing.T) {
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
 
 	// Attempting to use V2 logic fails
-	st := sim.Submit(MustBuild(t,
-		build.Transaction().For(DnUrl()).
-			Body(&PlaceholderTransaction{}).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+	st := sim.SubmitTxn(MustBuild(t,
+		build.Transaction().For(alice).
+			BurnCredits(1).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
-	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "unsupported transaction type: placeholder")
+	require.EqualError(t, st.AsError(), "unsupported transaction type: burnCredits")
 
-	// Execute
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	// Create a pending transaction
+	p := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice).
+			CreateDataAccount(alice, "data").WithAuthority("bob.acme", "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(p.TxID).IsPending())
+
+	// Update to v1-halt
+	sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV1Halt).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
+	sim.StepN(2)
+
+	// Verify the DN has updated and the BVNs have _not_ updated
+	require.Equal(t, ExecutorVersionV1Halt, GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, protocol.ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, protocol.ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, protocol.ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
+
+	// Before the update makes it to the BVNs,  do something that produces a
+	// synthetic transaction
+	st = sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			AddCredits().WithOracle(InitialAcmeOracle).Spend(10).To(alice, "book", "1").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	// Wait until all partitions are updated
+	sim.StepUntil(True(func(h *Harness) bool {
+		return GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion.HaltV1() &&
+			GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion.HaltV1() &&
+			GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion.HaltV1() &&
+			GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion.HaltV1()
+	}))
+
+	// Verify that the synthetic transaction has not been processed
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
 
-	// Give it a few blocks for everything to settle
-	sim.StepN(10)
+	r := sim.QueryTransaction(st.TxID, nil)
+	require.Len(t, r.Produced.Records, 1)
+	r = sim.QueryTransaction(r.Produced.Records[0].Value, nil)
+	require.False(t, r.Status.Delivered())
+
+	// The synthetic transaction should still succeed
+	sim.StepUntil(
+		Txn(st.TxID).Produced().Succeeds())
+
+	// Attempting a user transaction fails
+	st = sim.SubmitTxn(MustBuild(t,
+		build.Transaction().For(alice).
+			AddCredits().WithOracle(InitialAcmeOracle).Spend(10).To(alice, "book", "1").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+
+	require.EqualError(t, st.AsError(), "user messages are not being accepted: an upgrade is in progress")
 
 	// Execute
-	st = sim.SubmitSuccessfully(MustBuild(t,
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV2).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -83,11 +135,19 @@ func TestVersionSwitch(t *testing.T) {
 	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
 
 	// Attempting to use V2 logic succeeds
-	st = sim.SubmitSuccessfully(MustBuild(t,
-		build.Transaction().For(alice).
-			Body(&PlaceholderTransaction{}).
-			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(alice, "book", "1").
+			BurnCredits(1).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
+
+	// Sign the pending transaction again
+	p = sim.BuildAndSubmitTxnSuccessfully(
+		build.SignatureForTxID(p.TxID).Load(sim.Query()).
+			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(p.TxID).IsPending())
 }

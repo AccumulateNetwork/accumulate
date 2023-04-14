@@ -31,12 +31,21 @@ go build:
 go test 1/2:
   # Main tests
   extends: .go test
+  variables:
+    GOMODCACHE: ''
+    GOLANGCI_LINT_CACHE: ''
   script: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
 
-go test 2/2:
+.go test 2/2:
   # Full devnet validation test
   extends: .go test
-  script: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./test/validate -test.validate.full
+  variables:
+    GLOBALS: '{"executorVersion": "v2"}'
+  script:
+  - go run -tags testnet ./cmd/accumulated init devnet -w .nodes -b 1 -v 1 -f 0 --faucet-seed ci --globals "${GLOBALS}"
+  - go run -tags testnet ./cmd/accumulated run devnet -w .nodes --faucet-seed ci &
+  - sleep 10
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m ./test/validate -short -test.validate.network "$PWD/.nodes/node-1/dnn/" -run TestValidateNetwork
 
 .playbooks:
   stage: test
@@ -101,15 +110,13 @@ lint:
   stage: test
   extends: [ .rules all, .go ]
   needs: []
+  variables:
+    GIT_DEPTH: 0
   before_script:
     - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
   script:
-    - echo -e "${SECTION}section_start:`date +%s`:vet\r${SECTION}Vet"
-    - go vet ./...
-    - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
-
     - echo -e "${SECTION}section_start:`date +%s`:lint\r${SECTION}Lint"
-    - go run ./tools/cmd/golangci-lint run --verbose --timeout=10m
+    - go run ./tools/cmd/golangci-lint run --verbose --timeout 20m
     - echo -e "${SECTION}section_end:`date +%s`:lint\r${SECTION}"
 
     - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"

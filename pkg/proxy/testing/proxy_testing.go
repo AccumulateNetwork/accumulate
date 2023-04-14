@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -74,8 +74,8 @@ func LaunchAccuProxyDevNet(t *testing.T) (*client.Client, *url.URL, *url.URL) {
 // make up a fake default network configuration list
 var Nodes = []config.Node{{Address: "127.0.0.1", Type: config.NodeTypeValidator}}
 var Partitions = []config.Partition{
-	{Id: "Directory", Type: config.NetworkTypeDirectory, BasePort: 30000, Nodes: Nodes},
-	{Id: "BVN0", Type: config.NetworkTypeBlockValidator, BasePort: 40000, Nodes: Nodes},
+	{Id: "Directory", Type: protocol.PartitionTypeDirectory, BasePort: 30000, Nodes: Nodes},
+	{Id: "BVN0", Type: protocol.PartitionTypeBlockValidator, BasePort: 40000, Nodes: Nodes},
 }
 var Network = config.Network{Id: "AccuProxyTest", Partitions: Partitions}
 
@@ -233,7 +233,11 @@ func LaunchFakeProxy(t *testing.T) (*proxy.Client, *client.Client, *url.URL, *ur
 		}
 		jsonrpc2.DebugMethodFunc = true
 		handler := jsonrpc2.HTTPRequestHandler(methods, stdlog.New(os.Stdout, "", 0))
-		require.NoError(t, http.ListenAndServe(":18888", handler)) //nolint:gosec
+		s := new(http.Server)
+		s.Handler = handler
+		s.ReadHeaderTimeout = time.Minute
+		s.Addr = ":18888"
+		require.NoError(t, s.ListenAndServe()) //nolint:gosec
 	}()
 
 	proxyClient, err := proxy.New(Endpoint)

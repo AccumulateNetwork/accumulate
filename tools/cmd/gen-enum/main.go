@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
@@ -24,6 +25,7 @@ var flags struct {
 	Out         string
 	ShortNames  bool
 	FilePerType bool
+	Registry    []string
 }
 
 func main() {
@@ -39,6 +41,7 @@ func main() {
 	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
+	cmd.Flags().StringSliceVar(&flags.Registry, "registry", nil, "Types that should query a registry")
 	flags.files.SetFlags(cmd.Flags(), "enums")
 
 	_ = cmd.Execute()
@@ -81,6 +84,15 @@ func run(_ *cobra.Command, args []string) {
 	check(err)
 	ttypes := convert(types, flags.Package, flags.SubPackage)
 	ttypes.Year = modified.Year()
+
+	registry := map[string]string{}
+	for _, s := range flags.Registry {
+		parts := strings.SplitN(s, ":", 2)
+		registry[parts[0]] = parts[1]
+	}
+	for _, typ := range ttypes.Types {
+		typ.Registry = registry[typ.Name]
+	}
 
 	if !flags.FilePerType {
 		w := new(bytes.Buffer)

@@ -11,7 +11,7 @@ source ${SCRIPT_DIR}/validate-commons.sh
 section "Setup"
 if which go > /dev/null && ! which accumulate > /dev/null ; then
     echo "Installing CLI"
-    go install gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate
+    go install gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate@v0.3.4
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
 init-wallet
@@ -19,8 +19,8 @@ echo
 
 section "Generate a Lite Token Account"
 accumulate account list 2>&1 | grep -q ACME || accumulate account generate
-LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
-LITE_ID=$(cut -d/ -f-3 <<< "$LITE_ACME")
+LITE_ID=$(accumulate account list -j | jq -re .[0].labels.lite)
+LITE_ACME="$LITE_ID/ACME"
 TXS=()
 for i in {1..1}
 do
@@ -83,7 +83,6 @@ accumulate page get ${TEST}/book/2 1> /dev/null || die "Cannot find page ${TEST}
 accumulate page get ${TEST}/book/3 1> /dev/null || die "Cannot find page ${TEST}/book/3"
 success
 
-
 section "Add credits to the ADI's key page 2"
 wait-for cli-tx credits ${LITE_ACME} ${TEST}/book/2 1000
 BALANCE=$(accumulate -j page get ${TEST}/book/2 | jq -r .data.creditBalance)
@@ -95,9 +94,6 @@ wait-for cli-tx page lock ${TEST}/book/2 test-2-0 && die "Key page 2 locked itse
 section "Lock key page 2 using page 1"
 wait-for cli-tx page lock ${TEST}/book/2 test-1-0
 success
-
-
-
 
 section "Attempting to update key page 3 using page 2 fails"
 cli-tx page key add ${TEST}/book/3 test-2-0  test-3-1 && die "Executed disallowed operation" || success
@@ -113,7 +109,7 @@ success
 section "Add credits to the ADI's key page 2"
 wait-for cli-tx credits ${LITE_ACME} ${TEST}/book/2 100
 BALANCE=$(accumulate -j page get ${TEST}/book/2 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 100 ] && success || die "${TEST}/book/2 should have 100 credits but has ${BALANCE}"
+[ "$BALANCE" -ge 10000 ] && success || die "${TEST}/book/2 should have 100 credits but has ${BALANCE}"
 
 section "Add a key to page 2 using a key from page 3"
 wait-for cli-tx page key add ${TEST}/book/2 test-2-0 test-2-1

@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -37,6 +38,11 @@ func (h *Harness) Query() api.Querier2 {
 	return api.Querier2{Querier: h.services}
 }
 
+// Network returns the Harness's service as an api.NetworkService.
+func (h *Harness) Network() api.NetworkService {
+	return h.services
+}
+
 // QueryAccount queries the Harness's service, passing the given arguments.
 // QueryAccount fails if Query returns an error. See api.Querier2.QueryAccount.
 func (h *Harness) QueryAccount(scope *url.URL, query *api.DefaultQuery) *api.AccountRecord {
@@ -59,9 +65,19 @@ func (h *Harness) QueryAccountAs(scope *url.URL, query *api.DefaultQuery, target
 // QuerySignature queries the Harness's service, passing the given arguments.
 // QuerySignature fails if Query returns an error. See
 // api.Querier2.QuerySignature.
-func (h *Harness) QuerySignature(txid *url.TxID, query *api.DefaultQuery) *api.SignatureRecord {
+func (h *Harness) QuerySignature(txid *url.TxID, query *api.DefaultQuery) *api.MessageRecord[*messaging.SignatureMessage] {
 	h.TB.Helper()
 	r, err := h.Query().QuerySignature(context.Background(), txid, query)
+	require.NoError(h.TB, err)
+	return r
+}
+
+// QueryMessage queries the Harness's service, passing the given arguments.
+// QueryMessage fails if Query returns an error. See
+// api.Querier2.QueryMessage.
+func (h *Harness) QueryMessage(txid *url.TxID, query *api.DefaultQuery) *api.MessageRecord[messaging.Message] {
+	h.TB.Helper()
+	r, err := h.Query().QueryMessage(context.Background(), txid, query)
 	require.NoError(h.TB, err)
 	return r
 }
@@ -69,7 +85,7 @@ func (h *Harness) QuerySignature(txid *url.TxID, query *api.DefaultQuery) *api.S
 // QueryTransaction queries the Harness's service, passing the given arguments.
 // QueryTransaction fails if Query returns an error. See
 // api.Querier2.QueryTransaction.
-func (h *Harness) QueryTransaction(txid *url.TxID, query *api.DefaultQuery) *api.TransactionRecord {
+func (h *Harness) QueryTransaction(txid *url.TxID, query *api.DefaultQuery) *api.MessageRecord[*messaging.TransactionMessage] {
 	h.TB.Helper()
 	r, err := h.Query().QueryTransaction(context.Background(), txid, query)
 	require.NoError(h.TB, err)
@@ -125,62 +141,62 @@ func (h *Harness) QueryChainEntries(scope *url.URL, query *api.ChainQuery) *api.
 	return r
 }
 
-// QueryTxnChainEntry queries the Harness's service, passing the given
-// arguments. QueryTxnChainEntry fails if Query returns an error. See
-// api.Querier2.QueryTxnChainEntry.
-func (h *Harness) QueryTxnChainEntry(scope *url.URL, query *api.ChainQuery) *api.ChainEntryRecord[*api.TransactionRecord] {
+// QueryMainChainEntry queries the Harness's service, passing the given
+// arguments. QueryMainChainEntry fails if Query returns an error. See
+// api.Querier2.QueryMainChainEntry.
+func (h *Harness) QueryMainChainEntry(scope *url.URL, query *api.ChainQuery) *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]] {
 	h.TB.Helper()
-	r, err := h.Query().QueryTxnChainEntry(context.Background(), scope, query)
+	r, err := h.Query().QueryMainChainEntry(context.Background(), scope, query)
 	require.NoError(h.TB, err)
 	return r
 }
 
-// QueryTxnChainEntries queries the Harness's service, passing the given
-// arguments. QueryTxnChainEntries fails if Query returns an error. See
-// api.Querier2.QueryTxnChainEntries.
-func (h *Harness) QueryTxnChainEntries(scope *url.URL, query *api.ChainQuery) *api.RecordRange[*api.ChainEntryRecord[*api.TransactionRecord]] {
+// QueryMainChainEntries queries the Harness's service, passing the given
+// arguments. QueryMainChainEntries fails if Query returns an error. See
+// api.Querier2.QueryMainChainEntries.
+func (h *Harness) QueryMainChainEntries(scope *url.URL, query *api.ChainQuery) *api.RecordRange[*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]] {
 	h.TB.Helper()
-	r, err := h.Query().QueryTxnChainEntries(context.Background(), scope, query)
+	r, err := h.Query().QueryMainChainEntries(context.Background(), scope, query)
 	require.NoError(h.TB, err)
 	return r
 }
 
-// QuerySigChainEntry queries the Harness's service, passing the given
-// arguments. QuerySigChainEntry fails if Query returns an error. See
-// api.Querier2.QuerySigChainEntry.
-func (h *Harness) QuerySigChainEntry(scope *url.URL, query *api.ChainQuery) *api.ChainEntryRecord[*api.SignatureRecord] {
+// QuerySignatureChainEntry queries the Harness's service, passing the given
+// arguments. QuerySignatureChainEntry fails if Query returns an error. See
+// api.Querier2.QuerySignatureChainEntry.
+func (h *Harness) QuerySignatureChainEntry(scope *url.URL, query *api.ChainQuery) *api.ChainEntryRecord[*api.MessageRecord[messaging.Message]] {
 	h.TB.Helper()
-	r, err := h.Query().QuerySigChainEntry(context.Background(), scope, query)
+	r, err := h.Query().QuerySignatureChainEntry(context.Background(), scope, query)
 	require.NoError(h.TB, err)
 	return r
 }
 
-// QuerySigChainEntries queries the Harness's service, passing the given
-// arguments. QuerySigChainEntries fails if Query returns an error. See
-// api.Querier2.QuerySigChainEntries.
-func (h *Harness) QuerySigChainEntries(scope *url.URL, query *api.ChainQuery) *api.RecordRange[*api.ChainEntryRecord[*api.SignatureRecord]] {
+// QuerySignatureChainEntries queries the Harness's service, passing the given
+// arguments. QuerySignatureChainEntries fails if Query returns an error. See
+// api.Querier2.QuerySignatureChainEntries.
+func (h *Harness) QuerySignatureChainEntries(scope *url.URL, query *api.ChainQuery) *api.RecordRange[*api.ChainEntryRecord[*api.MessageRecord[messaging.Message]]] {
 	h.TB.Helper()
-	r, err := h.Query().QuerySigChainEntries(context.Background(), scope, query)
+	r, err := h.Query().QuerySignatureChainEntries(context.Background(), scope, query)
 	require.NoError(h.TB, err)
 	return r
 }
 
-// QueryIdxChainEntry queries the Harness's service, passing the given
-// arguments. QueryIdxChainEntry fails if Query returns an error. See
-// api.Querier2.QueryIdxChainEntry.
-func (h *Harness) QueryIdxChainEntry(scope *url.URL, query *api.ChainQuery) *api.ChainEntryRecord[*api.IndexEntryRecord] {
+// QueryIndexChainEntry queries the Harness's service, passing the given
+// arguments. QueryIndexChainEntry fails if Query returns an error. See
+// api.Querier2.QueryIndexChainEntry.
+func (h *Harness) QueryIndexChainEntry(scope *url.URL, query *api.ChainQuery) *api.ChainEntryRecord[*api.IndexEntryRecord] {
 	h.TB.Helper()
-	r, err := h.Query().QueryIdxChainEntry(context.Background(), scope, query)
+	r, err := h.Query().QueryIndexChainEntry(context.Background(), scope, query)
 	require.NoError(h.TB, err)
 	return r
 }
 
-// QueryIdxChainEntries queries the Harness's service, passing the given
-// arguments. QueryIdxChainEntries fails if Query returns an error. See
-// api.Querier2.QueryIdxChainEntries.
-func (h *Harness) QueryIdxChainEntries(scope *url.URL, query *api.ChainQuery) *api.RecordRange[*api.ChainEntryRecord[*api.IndexEntryRecord]] {
+// QueryIndexChainEntries queries the Harness's service, passing the given
+// arguments. QueryIndexChainEntries fails if Query returns an error. See
+// api.Querier2.QueryIndexChainEntries.
+func (h *Harness) QueryIndexChainEntries(scope *url.URL, query *api.ChainQuery) *api.RecordRange[*api.ChainEntryRecord[*api.IndexEntryRecord]] {
 	h.TB.Helper()
-	r, err := h.Query().QueryIdxChainEntries(context.Background(), scope, query)
+	r, err := h.Query().QueryIndexChainEntries(context.Background(), scope, query)
 	require.NoError(h.TB, err)
 	return r
 }
@@ -188,7 +204,7 @@ func (h *Harness) QueryIdxChainEntries(scope *url.URL, query *api.ChainQuery) *a
 // QueryDataEntry queries the Harness's service, passing the given arguments.
 // QueryDataEntry fails if Query returns an error. See
 // api.Querier2.QueryDataEntry.
-func (h *Harness) QueryDataEntry(scope *url.URL, query *api.DataQuery) *api.ChainEntryRecord[*api.TransactionRecord] {
+func (h *Harness) QueryDataEntry(scope *url.URL, query *api.DataQuery) *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]] {
 	h.TB.Helper()
 	r, err := h.Query().QueryDataEntry(context.Background(), scope, query)
 	require.NoError(h.TB, err)
@@ -198,7 +214,7 @@ func (h *Harness) QueryDataEntry(scope *url.URL, query *api.DataQuery) *api.Chai
 // QueryDataEntries queries the Harness's service, passing the given arguments.
 // QueryDataEntries fails if Query returns an error. See
 // api.Querier2.QueryDataEntries.
-func (h *Harness) QueryDataEntries(scope *url.URL, query *api.DataQuery) *api.RecordRange[*api.ChainEntryRecord[*api.TransactionRecord]] {
+func (h *Harness) QueryDataEntries(scope *url.URL, query *api.DataQuery) *api.RecordRange[*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]] {
 	h.TB.Helper()
 	r, err := h.Query().QueryDataEntries(context.Background(), scope, query)
 	require.NoError(h.TB, err)
@@ -237,7 +253,7 @@ func (h *Harness) QueryPendingIds(scope *url.URL, query *api.PendingQuery) *api.
 
 // QueryPending queries the Harness's service, passing the given arguments.
 // QueryPending fails if Query returns an error. See api.Querier2.QueryPending.
-func (h *Harness) QueryPending(scope *url.URL, query *api.PendingQuery) *api.RecordRange[*api.TransactionRecord] {
+func (h *Harness) QueryPending(scope *url.URL, query *api.PendingQuery) *api.RecordRange[*api.MessageRecord[*messaging.TransactionMessage]] {
 	h.TB.Helper()
 	r, err := h.Query().QueryPending(context.Background(), scope, query)
 	require.NoError(h.TB, err)
@@ -327,9 +343,9 @@ func (h *Harness) SearchForDelegate(scope *url.URL, search *api.DelegateSearchQu
 // SearchForTransactionHash queries the Harness's service, passing the given
 // arguments. SearchForTransactionHash fails if Query returns an error. See
 // api.Querier2.SearchForTransactionHash.
-func (h *Harness) SearchForTransactionHash(scope *url.URL, search *api.MessageHashSearchQuery) *api.RecordRange[*api.TxIDRecord] {
+func (h *Harness) SearchForMessage(ctx context.Context, hash [32]byte) *api.RecordRange[*api.TxIDRecord] {
 	h.TB.Helper()
-	r, err := h.Query().SearchForTransactionHash(context.Background(), scope, search)
+	r, err := h.Query().SearchForMessage(context.Background(), hash)
 	require.NoError(h.TB, err)
 	return r
 }

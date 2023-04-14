@@ -26,18 +26,25 @@ type TxFetchMode uint64
 type BlockFilterMode uint64
 
 type V3 interface {
-	api.NodeService
+	api.ConsensusService
 	api.NetworkService
 	api.MetricsService
 	api.Querier
 	api.Submitter
 	api.Validator
+	api.Faucet
 	Private() private.Sequencer
 }
 
 type Options struct {
-	Logger         log.Logger
-	Describe       *config.Describe
-	TxMaxWaitTime  time.Duration
-	NetV3, LocalV3 V3
+	Logger        log.Logger
+	Describe      *config.Describe
+	TxMaxWaitTime time.Duration
+	LocalV3       V3
+	Querier       api.Querier
+	Submitter     api.Submitter
+	Network       api.NetworkService
+	Faucet        api.Faucet
+	Validator     api.Validator
+	Sequencer     private.Sequencer
 }

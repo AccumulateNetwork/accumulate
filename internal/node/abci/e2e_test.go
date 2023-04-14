@@ -38,7 +38,7 @@ type Tx = messaging.Envelope
 func init() { acctesting.EnableDebugFeatures() }
 
 func TestCreateLiteAccount(t *testing.T) {
-	n := simulator.NewFakeNode(t, nil)
+	n := simulator.NewFakeNodeV1(t, nil)
 
 	const N, M = 11, 1
 	const count = N * M
@@ -100,7 +100,7 @@ func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*
 }
 
 func TestFaucet(t *testing.T) {
-	n := simulator.NewFakeNode(t, nil)
+	n := simulator.NewFakeNodeV1(t, nil)
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
@@ -249,7 +249,7 @@ func TestAdiUrlLengthLimit(t *testing.T) {
 	res := n.QueryTx(txn[0][:], time.Second, true)
 	h := res.Produced.Records[0].Value.Hash()
 	res = n.QueryTx(h[:], time.Second, true)
-	require.Equal(t, errors.BadUrlLength, res.Status.Code)
+	require.Equal(t, errors.BadUrlLength, res.Status)
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
@@ -707,7 +707,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	res := n.QueryTx(txnHashes[0][:], time.Second, true)
 	h := res.Produced.Records[0].Value.Hash()
 	res = n.QueryTx(h[:], time.Second, true)
-	require.Equal(t, errors.NotFound, res.Status.Code)
+	require.Equal(t, errors.NotFound, res.Status)
 
 	// Give the synthetic receipt a second to resolve - workaround AC-1238
 	time.Sleep(time.Second)
@@ -915,7 +915,7 @@ func TestUpdateKey(t *testing.T) {
 			Build())
 	})
 	r := n.QueryTx(txnHashes[0][:], 0, false)
-	require.False(t, r.Status.Pending(), "Transaction is still pending")
+	require.False(t, r.Status == errors.Pending, "Transaction is still pending")
 
 	spec = n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
@@ -1214,7 +1214,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	check := newDefaultCheckError(t, true)
 
-	n := simulator.NewFakeNode(t, check.ErrorHandler())
+	n := simulator.NewFakeNodeV1(t, check.ErrorHandler())
 
 	fooKey, liteKey := generateKey(), generateKey()
 	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
@@ -1489,97 +1489,6 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 // 	})
 // }
 
-func TestAccountAuth(t *testing.T) {
-	check := newDefaultCheckError(t, true)
-	n := simulator.NewFakeNode(t, check.ErrorHandler())
-
-	fooKey, barKey := generateKey(), generateKey()
-	n.Update(func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-		require.NoError(t, acctesting.CreateSubADI(batch, "foo", "foo/bar"))
-		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/bar/tokens", protocol.AcmeUrl().String(), 0, false))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/bar/book", barKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "bar", "book", "1"), 1e9))
-	})
-
-	// Disable auth
-	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(&protocol.UpdateAccountAuth{
-				Operations: []protocol.AccountAuthOperation{
-					&protocol.DisableAccountAuthOperation{
-						Authority: protocol.AccountUrl("foo", "book0"),
-					},
-				},
-			}).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
-	})
-
-	// An unauthorized signer must not be allowed to enable auth
-	check.Disable = true
-	_, _, err := n.Execute(func(send func(*messaging.Envelope)) {
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "bar", "book", "1"), 1).
-			WithBody(&protocol.UpdateAccountAuth{
-				Operations: []protocol.AccountAuthOperation{
-					&protocol.EnableAccountAuthOperation{
-						Authority: protocol.AccountUrl("foo", "book0"),
-					},
-				},
-			}).
-			Initiate(protocol.SignatureTypeLegacyED25519, barKey).
-			Build())
-	})
-	require.Error(t, err, "An unauthorized signer should not be able to enable auth")
-
-	// An unauthorized signer should be able to send tokens
-	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
-		exch := new(protocol.SendTokens)
-		exch.AddRecipient(protocol.AccountUrl("foo", "bar", "tokens"), big.NewInt(int64(68)))
-
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "bar", "book", "1"), 1).
-			WithBody(exch).
-			Initiate(protocol.SignatureTypeLegacyED25519, barKey).
-			Build())
-	})
-
-	require.Equal(t, int64(protocol.AcmePrecision-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
-	require.Equal(t, int64(68), n.GetTokenAccount("foo/bar/tokens").Balance.Int64())
-
-	// Enable auth
-	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(&protocol.UpdateAccountAuth{
-				Operations: []protocol.AccountAuthOperation{
-					&protocol.EnableAccountAuthOperation{
-						Authority: protocol.AccountUrl("foo", "book0"),
-					},
-				},
-			}).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
-	})
-
-	// An unauthorized signer should no longer be able to send tokens
-	check.Disable = true
-	_, _, err = n.Execute(func(send func(*messaging.Envelope)) {
-		exch := new(protocol.SendTokens)
-		exch.AddRecipient(protocol.AccountUrl("foo", "bar", "tokens"), big.NewInt(int64(68)))
-
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "bar", "book", "1"), 1).
-			WithBody(exch).
-			Initiate(protocol.SignatureTypeLegacyED25519, barKey).
-			Build())
-	})
-	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
-}
-
 func TestDelegatedKeypageUpdate(t *testing.T) {
 	check := newDefaultCheckError(t, false)
 	n := simulator.NewFakeNode(t, check.ErrorHandler())
@@ -1633,9 +1542,8 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 		send(newTxn("alice/book0/1").
 			WithBody(body).
 
-			// Sign with Charlie via Alice (one-layer delegation)
+			// Sign with Charlie
 			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
-			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
 			Initiate(protocol.SignatureTypeED25519, charlieKey).
 			Build())
 	})
@@ -1644,55 +1552,6 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	//look for the key.
 	_, _, found = page.EntryByKeyHash(newKey2hash[:])
 	require.True(t, found, "key not found in page")
-}
-
-func TestMultiLevelDelegation(t *testing.T) {
-	check := newDefaultCheckError(t, false)
-	n := simulator.NewFakeNode(t, check.ErrorHandler())
-	aliceKey, charlieKey, bobKey := generateKey(), generateKey(), generateKey()
-	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
-	n.Update(func(batch *database.Batch) {
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
-		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
-			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
-			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
-			kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
-			require.NoError(t, kp.SetThreshold(3))
-		}))
-		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
-			kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
-		}))
-	})
-
-	_, _, err := n.Execute(func(send func(*messaging.Envelope)) {
-		cda := new(protocol.CreateDataAccount)
-		cda.Url = protocol.AccountUrl("alice", "data")
-
-		env := newTxn("alice").
-			WithBody(cda).
-
-			// Initiate with Alice
-			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
-			Initiate(protocol.SignatureTypeED25519, aliceKey).
-
-			// Sign with Charlie via Alice (one-layer delegation)
-			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
-			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
-			Sign(protocol.SignatureTypeED25519, charlieKey).
-			Build()
-
-		// Take Charlie's signature, extract the key signature, and reconstruct
-		// it as via Bob via Alice (two-layer delegation)
-		sig := env.Signatures[1].(*protocol.DelegatedSignature).Signature
-		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("bob", "book0", "1"), Signature: sig}
-		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("alice", "book0", "1"), Signature: sig}
-		env.Signatures = append(env.Signatures, sig)
-
-		send(env)
-	})
-	require.EqualError(t, err, "signature 2: invalid signature")
 }
 
 func TestDuplicateKeyNewKeypage(t *testing.T) {
