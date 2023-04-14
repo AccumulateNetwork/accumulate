@@ -37,6 +37,10 @@ func (v *Message) Copy() *Message {
 	if v.Message != nil {
 		u.Message = message.Copy(v.Message)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }

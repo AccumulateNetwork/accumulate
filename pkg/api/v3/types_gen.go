@@ -476,6 +476,10 @@ func (v *AccountRecord) Copy() *AccountRecord {
 	if v.Receipt != nil {
 		u.Receipt = (v.Receipt).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -487,6 +491,10 @@ func (v *AnchorSearchQuery) Copy() *AnchorSearchQuery {
 
 	u.Anchor = encoding.BytesCopy(v.Anchor)
 	u.IncludeReceipt = v.IncludeReceipt
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -505,6 +513,10 @@ func (v *BlockEvent) Copy() *BlockEvent {
 		if v != nil {
 			u.Entries[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -533,6 +545,10 @@ func (v *BlockQuery) Copy() *BlockQuery {
 		u.EntryRange = (v.EntryRange).Copy()
 	}
 	u.OmitEmpty = v.OmitEmpty
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -558,6 +574,10 @@ func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 	u.State = make([][]byte, len(v.State))
 	for i, v := range v.State {
 		u.State[i] = encoding.BytesCopy(v)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -600,6 +620,10 @@ func (v *ChainQuery) Copy() *ChainQuery {
 		u.Range = (v.Range).Copy()
 	}
 	u.IncludeReceipt = v.IncludeReceipt
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -616,6 +640,10 @@ func (v *ChainRecord) Copy() *ChainRecord {
 	for i, v := range v.State {
 		u.State[i] = encoding.BytesCopy(v)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -628,6 +656,10 @@ func (v *ConsensusPeerInfo) Copy() *ConsensusPeerInfo {
 	u.NodeID = v.NodeID
 	u.Host = v.Host
 	u.Port = v.Port
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -653,6 +685,10 @@ func (v *ConsensusStatus) Copy() *ConsensusStatus {
 			u.Peers[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -664,6 +700,10 @@ func (v *ConsensusStatusOptions) Copy() *ConsensusStatusOptions {
 
 	u.NodeID = v.NodeID
 	u.Partition = v.Partition
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -681,6 +721,10 @@ func (v *DataQuery) Copy() *DataQuery {
 	if v.Range != nil {
 		u.Range = (v.Range).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -691,6 +735,10 @@ func (v *DefaultQuery) Copy() *DefaultQuery {
 	u := new(DefaultQuery)
 
 	u.IncludeReceipt = v.IncludeReceipt
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -702,6 +750,10 @@ func (v *DelegateSearchQuery) Copy() *DelegateSearchQuery {
 
 	if v.Delegate != nil {
 		u.Delegate = v.Delegate
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -715,6 +767,10 @@ func (v *DirectoryQuery) Copy() *DirectoryQuery {
 	if v.Range != nil {
 		u.Range = (v.Range).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -727,6 +783,10 @@ func (v *ErrorEvent) Copy() *ErrorEvent {
 	if v.Err != nil {
 		u.Err = (v.Err).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -738,6 +798,10 @@ func (v *FaucetOptions) Copy() *FaucetOptions {
 
 	if v.Token != nil {
 		u.Token = v.Token
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -752,6 +816,10 @@ func (v *FindServiceOptions) Copy() *FindServiceOptions {
 	if v.Service != nil {
 		u.Service = (v.Service).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -763,6 +831,10 @@ func (v *FindServiceResult) Copy() *FindServiceResult {
 
 	if v.PeerID != "" {
 		u.PeerID = p2p.CopyPeerID(v.PeerID)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -779,6 +851,10 @@ func (v *GlobalsEvent) Copy() *GlobalsEvent {
 	if v.New != nil {
 		u.New = (v.New).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -790,6 +866,10 @@ func (v *IndexEntryRecord) Copy() *IndexEntryRecord {
 
 	if v.Value != nil {
 		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -811,6 +891,10 @@ func (v *KeyRecord) Copy() *KeyRecord {
 	if v.Entry != nil {
 		u.Entry = (v.Entry).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -825,6 +909,10 @@ func (v *LastBlock) Copy() *LastBlock {
 	u.ChainRoot = v.ChainRoot
 	u.StateRoot = v.StateRoot
 	u.DirectoryAnchorHeight = v.DirectoryAnchorHeight
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -839,6 +927,10 @@ func (v *MajorBlockRecord) Copy() *MajorBlockRecord {
 	if v.MinorBlocks != nil {
 		u.MinorBlocks = (v.MinorBlocks).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -849,6 +941,10 @@ func (v *MessageHashSearchQuery) Copy() *MessageHashSearchQuery {
 	u := new(MessageHashSearchQuery)
 
 	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -888,6 +984,10 @@ func (v *MessageRecord[T]) Copy() *MessageRecord[T] {
 	if v.SourceReceipt != nil {
 		u.SourceReceipt = (v.SourceReceipt).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -924,6 +1024,10 @@ func (v *Metrics) Copy() *Metrics {
 	u := new(Metrics)
 
 	u.TPS = v.TPS
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -935,6 +1039,10 @@ func (v *MetricsOptions) Copy() *MetricsOptions {
 
 	u.Partition = v.Partition
 	u.Span = v.Span
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -958,6 +1066,10 @@ func (v *MinorBlockRecord) Copy() *MinorBlockRecord {
 	if v.Anchored != nil {
 		u.Anchored = (v.Anchored).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -980,6 +1092,10 @@ func (v *NetworkStatus) Copy() *NetworkStatus {
 		u.Routing = (v.Routing).Copy()
 	}
 	u.ExecutorVersion = v.ExecutorVersion
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -990,6 +1106,10 @@ func (v *NetworkStatusOptions) Copy() *NetworkStatusOptions {
 	u := new(NetworkStatusOptions)
 
 	u.Partition = v.Partition
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1009,6 +1129,10 @@ func (v *NodeInfo) Copy() *NodeInfo {
 			u.Services[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1020,6 +1144,10 @@ func (v *NodeInfoOptions) Copy() *NodeInfoOptions {
 
 	if v.PeerID != "" {
 		u.PeerID = p2p.CopyPeerID(v.PeerID)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1033,6 +1161,10 @@ func (v *PendingQuery) Copy() *PendingQuery {
 	if v.Range != nil {
 		u.Range = (v.Range).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1043,6 +1175,10 @@ func (v *PublicKeyHashSearchQuery) Copy() *PublicKeyHashSearchQuery {
 	u := new(PublicKeyHashSearchQuery)
 
 	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1054,6 +1190,10 @@ func (v *PublicKeySearchQuery) Copy() *PublicKeySearchQuery {
 
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Type = v.Type
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1073,6 +1213,10 @@ func (v *RangeOptions) Copy() *RangeOptions {
 		*u.Expand = *v.Expand
 	}
 	u.FromEnd = v.FromEnd
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1086,6 +1230,10 @@ func (v *Receipt) Copy() *Receipt {
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1103,6 +1251,10 @@ func (v *RecordRange[T]) Copy() *RecordRange[T] {
 	}
 	u.Start = v.Start
 	u.Total = v.Total
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1139,6 +1291,10 @@ func (v *SignatureSetRecord) Copy() *SignatureSetRecord {
 	if v.Signatures != nil {
 		u.Signatures = (v.Signatures).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1153,6 +1309,10 @@ func (v *Submission) Copy() *Submission {
 	}
 	u.Success = v.Success
 	u.Message = v.Message
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1170,6 +1330,10 @@ func (v *SubmitOptions) Copy() *SubmitOptions {
 		u.Wait = new(bool)
 		*u.Wait = *v.Wait
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1183,6 +1347,10 @@ func (v *SubscribeOptions) Copy() *SubscribeOptions {
 	if v.Account != nil {
 		u.Account = v.Account
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1194,6 +1362,10 @@ func (v *TxIDRecord) Copy() *TxIDRecord {
 
 	if v.Value != nil {
 		u.Value = v.Value
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -1207,6 +1379,10 @@ func (v *UrlRecord) Copy() *UrlRecord {
 	if v.Value != nil {
 		u.Value = v.Value
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -1219,6 +1395,10 @@ func (v *ValidateOptions) Copy() *ValidateOptions {
 	if v.Full != nil {
 		u.Full = new(bool)
 		*u.Full = *v.Full
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u

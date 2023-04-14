@@ -255,6 +255,8 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 	switch typ {
 	case DataEntryTypeAccumulate:
 		return new(AccumulateDataEntry), nil
+	case DataEntryTypeDoubleHash:
+		return new(DoubleHashDataEntry), nil
 	case DataEntryTypeFactom:
 		return new(FactomDataEntryWrapper), nil
 	}
@@ -273,6 +275,12 @@ func EqualDataEntry(a, b DataEntry) bool {
 		}
 		b, ok := b.(*AccumulateDataEntry)
 		return ok && a.Equal(b)
+	case *DoubleHashDataEntry:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*DoubleHashDataEntry)
+		return ok && a.Equal(b)
 	case *FactomDataEntryWrapper:
 		if a == nil {
 			return b == nil
@@ -287,6 +295,8 @@ func EqualDataEntry(a, b DataEntry) bool {
 func CopyDataEntry(v DataEntry) DataEntry {
 	switch v := v.(type) {
 	case *AccumulateDataEntry:
+		return v.Copy()
+	case *DoubleHashDataEntry:
 		return v.Copy()
 	case *FactomDataEntryWrapper:
 		return v.Copy()
