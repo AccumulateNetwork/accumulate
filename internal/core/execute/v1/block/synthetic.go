@@ -114,14 +114,14 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Add padding if the body is 64 bytes
 	if m.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
 		if b, err := body.MarshalBinary(); err != nil {
-			return nil, errors.Format(errors.StatusBadRequest, "pad synthetic transaction (1): %w", err)
+			return nil, errors.BadRequest.WithFormat("pad synthetic transaction (1): %w", err)
 		} else if len(b) == 64 {
 			// Add a zero
 			b = append(b, 0)
 
 			body, err = protocol.UnmarshalTransactionBody(b)
 			if err != nil {
-				return nil, errors.Format(errors.StatusBadRequest, "pad synthetic transaction (2): %w", err)
+				return nil, errors.BadRequest.WithFormat("pad synthetic transaction (2): %w", err)
 			}
 		}
 	}
