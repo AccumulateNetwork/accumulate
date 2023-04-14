@@ -135,7 +135,7 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 	if proof.Receipt == nil {
 		return errors.BadRequest.WithFormat("invalid proof: missing receipt")
 	}
-	if !proof.Receipt.Validate() {
+	if !proof.Receipt.Validate(nil) {
 		return errors.BadRequest.WithFormat("proof is invalid")
 	}
 
