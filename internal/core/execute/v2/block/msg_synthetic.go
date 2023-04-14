@@ -148,14 +148,6 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Add the signature to the signature chain
-	err = batch.Account(syn.Message.ID().Account()).
-		Transaction(*(*[32]byte)(syn.Signature.Hash())).
-		RecordHistory(ctx.message)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("record history: %w", err)
-	}
-
 	// Record the message and its status
 	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
 	if err != nil {
