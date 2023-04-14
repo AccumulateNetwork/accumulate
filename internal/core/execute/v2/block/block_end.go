@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -358,52 +359,8 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			Number:      resp.Sequence.Number,
 		}
 
-		// Don't include signatures if the transaction is synthetic
-		if !anchor {
-			messages := []messaging.Message{
-				&messaging.SyntheticMessage{
-					Message: seq,
-					Proof: &protocol.AnnotatedReceipt{
-						Receipt: resp.SourceReceipt,
-						Anchor: &protocol.AnchorMetadata{
-							Account: protocol.DnUrl(),
-						},
-					},
-				},
-			}
-			err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: messages})
-			if err != nil {
-				x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url, "type", resp.Message.Type())
-			}
-			continue
-		}
-
-		anchor := &messaging.BlockAnchor{Anchor: seq}
-
-		var bad bool
-		for _, set := range resp.Signatures.Records {
-			if set.Signatures == nil {
-				x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
-				continue
-			}
-
-			for _, r := range set.Signatures.Records {
-				msg, ok := r.Message.(*messaging.SignatureMessage)
-				if !ok {
-					continue
-				}
-				keySig, ok := msg.Signature.(protocol.KeySignature)
-				if !ok {
-					x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", msg.Signature), "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "hash", logging.AsHex(msg.Signature.Hash()), "signature", msg.Signature)
-					bad = true
-					continue
-				}
-				anchor.Signature = keySig
-			}
-
-		}
-
-		if anchor.Signature == nil {
+		keySig, bad := x.getKeySignature(resp, partition, seq, anchor)
+		if keySig == nil {
 			x.logger.Error("Invalid anchor transaction", "error", "missing key signature", "hash", logging.AsHex(resp.Message.Hash()).Slice(0, 4))
 			bad = true
 		}
@@ -411,12 +368,54 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			continue
 		}
 
-		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{anchor}})
+		var msg messaging.Message
+		if anchor {
+			msg = &messaging.BlockAnchor{
+				Anchor:    seq,
+				Signature: keySig,
+			}
+		} else {
+			msg = &messaging.SyntheticMessage{
+				Message:   seq,
+				Signature: keySig,
+				Proof: &protocol.AnnotatedReceipt{
+					Receipt: resp.SourceReceipt,
+					Anchor: &protocol.AnchorMetadata{
+						Account: protocol.DnUrl(),
+					},
+				},
+			}
+		}
+
+		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{Messages: []messaging.Message{msg}})
 		if err != nil {
 			x.logger.Error("Failed to dispatch transaction", "error", err, "from", partition.Url)
 			continue
 		}
 	}
+}
+
+func (x *Executor) getKeySignature(r *api.MessageRecord[messaging.Message], partition *protocol.PartitionSyntheticLedger, seq *messaging.SequencedMessage, anchor bool) (_ protocol.KeySignature, bad bool) {
+	for _, set := range r.Signatures.Records {
+		if set.Signatures == nil {
+			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seq.Number, "is-anchor", anchor)
+			continue
+		}
+
+		for _, r := range set.Signatures.Records {
+			msg, ok := r.Message.(*messaging.SignatureMessage)
+			if !ok {
+				continue
+			}
+			sig, ok := msg.Signature.(protocol.KeySignature)
+			if !ok {
+				x.logger.Error("Invalid signature in response to query-synth", "errors", errors.Conflict.WithFormat("expected key signature, got %T", msg.Signature), "from", partition.Url, "seq-num", seq.Number, "is-anchor", anchor, "hash", logging.AsHex(msg.Signature.Hash()), "signature", msg.Signature)
+				return nil, true
+			}
+			return sig, false
+		}
+	}
+	return nil, false
 }
 
 // updateMajorIndexChains updates major index chains.
