@@ -55,7 +55,7 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	if syn.Proof.Anchor == nil || syn.Proof.Anchor.Account == nil {
 		return nil, errors.BadRequest.With("missing proof metadata")
 	}
-	if !syn.Proof.Receipt.Validate() {
+	if !syn.Proof.Receipt.Validate(nil) {
 		return nil, errors.BadRequest.With("proof is invalid")
 	}
 

@@ -9,6 +9,8 @@ package database
 import (
 	"bytes"
 	"fmt"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 // ReceiptList
@@ -24,7 +26,7 @@ import (
 // Validate
 // Take a receipt and validate that the element hash progresses to the
 // Merkle Dag Root hash (MDRoot) in the receipt
-func (r *ReceiptList) Validate() bool {
+func (r *ReceiptList) Validate(opts *merkle.ValidateOptions) bool {
 	// Make sure the ReceiptList isn't empty.  Avoids pointer and nil exceptions
 	if r.MerkleState == nil ||
 		r.Receipt == nil ||
@@ -53,7 +55,7 @@ func (r *ReceiptList) Validate() bool {
 		return false
 	}
 
-	if !r.Receipt.Validate() { //             The Receipt must be valid
+	if !r.Receipt.Validate(opts) { //             The Receipt must be valid
 		return false
 	}
 
@@ -61,7 +63,7 @@ func (r *ReceiptList) Validate() bool {
 		if !bytes.Equal(anchor, r.ContinuedReceipt.Start) { //  Make sure it properly anchors this
 			return false //                                     ReceiptList
 		}
-		if !r.ContinuedReceipt.Validate() { //                  If it does, it still has to be valid
+		if !r.ContinuedReceipt.Validate(opts) { //                  If it does, it still has to be valid
 			return false //
 		} //
 	}

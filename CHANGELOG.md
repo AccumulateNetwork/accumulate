@@ -7,6 +7,13 @@
 - For certain types, zero-valued fields will be omitted from JSON output instead of being returned as null or zero.
   - `sendTokens.hash`, `signature.transactionHash`, `tokenIssuer.issued`, `dataAccount.entry`
 
+## 1.0.4
+
+- Replace Accumulate data entries with double hash data entries and reject
+  transactions with bodies that are exactly 64 bytes to resolve a potential
+  weakness in the security of communications between network partitions (#3283,
+  !810)
+
 ## 1.0.3
 
 - Allow the latest protocol version to be reactivated (#3228, !754)

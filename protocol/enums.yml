@@ -6,10 +6,10 @@ ExecutorVersion:
     value: 2
     label: v1-signatureAnchoring
     description: introduces anchoring of signature chains into the root chain
-  V1ActivationFix:
+  V1DoubleHashEntries:
     value: 3
-    label: v1-activationFix
-    description: fixes a problem that prevented v1-signatureAnchoring from being activated correctly
+    label: v1-doubleHashEntries
+    description: fixes a problem that prevented v1-signatureAnchoring from being activated correctly and enables double-hashed data entries
   V1Halt:
     value: 4
     label: v1-halt
@@ -35,6 +35,8 @@ DataEntryType:
     value: 1
   Accumulate:
     value: 2
+  DoubleHash:
+    value: 3
 
 ObjectType:
   Unknown:
