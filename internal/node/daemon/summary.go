@@ -84,11 +84,3 @@ func (r summaryRouter) RouteAccount(*url.URL) (string, error) {
 func (r summaryRouter) Route(env ...*messaging.Envelope) (string, error) {
 	return string(r), nil
 }
-
-func (r summaryRouter) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
-	return errors.NotAllowed
-}
-
-func (r summaryRouter) Submit(ctx context.Context, partition string, tx *messaging.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
-	return nil, errors.NotAllowed
-}
