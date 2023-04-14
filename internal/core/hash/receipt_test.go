@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -57,7 +57,7 @@ func TestHasher_Receipt(t *testing.T) {
 			r := hasher.Receipt(i, j)
 			// fmt.Println(r.String())
 			require.Equal(t, hasher[i], r.Start)
-			assert.Truef(t, r.Validate(), "Receipt fails for %d to %d", i, j)
+			assert.Truef(t, r.Validate(nil), "Receipt fails for %d to %d", i, j)
 			fmt.Printf("Build receipt from %d to %d\n", i, j)
 		}
 	}

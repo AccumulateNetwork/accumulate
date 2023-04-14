@@ -110,6 +110,7 @@ type StateTreeUpdate struct {
 type SyntheticMessage struct {
 	fieldsSet []bool
 	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Signature protocol.KeySignature      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	extraData []byte
 }
@@ -145,6 +146,10 @@ func (v *BlockAnchor) Copy() *BlockAnchor {
 	if v.Anchor != nil {
 		u.Anchor = CopyMessage(v.Anchor)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -170,6 +175,10 @@ func (v *BlockSummary) Copy() *BlockSummary {
 			u.StateTreeUpdates[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -189,6 +198,10 @@ func (v *CreditPayment) Copy() *CreditPayment {
 	}
 	if v.Cause != nil {
 		u.Cause = v.Cause
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -218,6 +231,10 @@ func (v *Envelope) Copy() *Envelope {
 			u.Messages[i] = CopyMessage(v)
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -229,6 +246,10 @@ func (v *RecordUpdate) Copy() *RecordUpdate {
 
 	u.Key = *(&v.Key).Copy()
 	u.Value = encoding.BytesCopy(v.Value)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -248,6 +269,10 @@ func (v *SequencedMessage) Copy() *SequencedMessage {
 		u.Destination = v.Destination
 	}
 	u.Number = v.Number
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -262,6 +287,10 @@ func (v *SignatureMessage) Copy() *SignatureMessage {
 	}
 	if v.TxID != nil {
 		u.TxID = v.TxID
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -281,6 +310,10 @@ func (v *SignatureRequest) Copy() *SignatureRequest {
 	if v.Cause != nil {
 		u.Cause = v.Cause
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -292,6 +325,10 @@ func (v *StateTreeUpdate) Copy() *StateTreeUpdate {
 
 	u.Key = *(&v.Key).Copy()
 	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -304,8 +341,15 @@ func (v *SyntheticMessage) Copy() *SyntheticMessage {
 	if v.Message != nil {
 		u.Message = CopyMessage(v.Message)
 	}
+	if v.Signature != nil {
+		u.Signature = protocol.CopyKeySignature(v.Signature)
+	}
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -318,6 +362,10 @@ func (v *TransactionMessage) Copy() *TransactionMessage {
 
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -532,6 +580,9 @@ func (v *StateTreeUpdate) Equal(u *StateTreeUpdate) bool {
 
 func (v *SyntheticMessage) Equal(u *SyntheticMessage) bool {
 	if !(EqualMessage(v.Message, u.Message)) {
+		return false
+	}
+	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
 		return false
 	}
 	switch {
@@ -1148,7 +1199,8 @@ func (v *StateTreeUpdate) IsValid() error {
 var fieldNames_SyntheticMessage = []string{
 	1: "Type",
 	2: "Message",
-	3: "Proof",
+	3: "Signature",
+	4: "Proof",
 }
 
 func (v *SyntheticMessage) MarshalBinary() ([]byte, error) {
@@ -1163,8 +1215,11 @@ func (v *SyntheticMessage) MarshalBinary() ([]byte, error) {
 	if !(EqualMessage(v.Message, nil)) {
 		writer.WriteValue(2, v.Message.MarshalBinary)
 	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		writer.WriteValue(3, v.Signature.MarshalBinary)
+	}
 	if !(v.Proof == nil) {
-		writer.WriteValue(3, v.Proof.MarshalBinary)
+		writer.WriteValue(4, v.Proof.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticMessage)
@@ -1187,6 +1242,11 @@ func (v *SyntheticMessage) IsValid() error {
 		errs = append(errs, "field Message is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Signature is missing")
+	} else if protocol.EqualKeySignature(v.Signature, nil) {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Proof is missing")
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
@@ -1664,7 +1724,14 @@ func (v *SyntheticMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		}
 		return err
 	})
-	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := protocol.UnmarshalKeySignatureFrom(r)
+		if err == nil {
+			v.Signature = x
+		}
+		return err
+	})
+	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
 
@@ -1903,13 +1970,17 @@ func (v *StateTreeUpdate) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    MessageType                          `json:"type"`
-		Message *encoding.JsonUnmarshalWith[Message] `json:"message,omitempty"`
-		Proof   *protocol.AnnotatedReceipt           `json:"proof,omitempty"`
+		Type      MessageType                                        `json:"type"`
+		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(EqualMessage(v.Message, nil)) {
 		u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
+	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	}
 	if !(v.Proof == nil) {
 		u.Proof = v.Proof
@@ -2170,12 +2241,14 @@ func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    MessageType                          `json:"type"`
-		Message *encoding.JsonUnmarshalWith[Message] `json:"message,omitempty"`
-		Proof   *protocol.AnnotatedReceipt           `json:"proof,omitempty"`
+		Type      MessageType                                        `json:"type"`
+		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	u.Proof = v.Proof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -2185,6 +2258,10 @@ func (v *SyntheticMessage) UnmarshalJSON(data []byte) error {
 	}
 	if u.Message != nil {
 		v.Message = u.Message.Value
+	}
+
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
 	}
 
 	v.Proof = u.Proof

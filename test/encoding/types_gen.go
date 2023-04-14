@@ -44,6 +44,10 @@ func (v *Signature) Copy() *Signature {
 	if v.Signature != nil {
 		u.Signature = protocol.CopySignature(v.Signature)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -58,6 +62,10 @@ func (v *sigSection) Copy() *sigSection {
 		if v != nil {
 			u.Signatures[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u

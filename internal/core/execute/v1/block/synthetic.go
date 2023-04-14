@@ -111,6 +111,21 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
+	// Add padding if the body is 64 bytes
+	if m.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
+		if b, err := body.MarshalBinary(); err != nil {
+			return nil, errors.BadRequest.WithFormat("pad synthetic transaction (1): %w", err)
+		} else if len(b) == 64 {
+			// Add a zero
+			b = append(b, 0)
+
+			body, err = protocol.UnmarshalTransactionBody(b)
+			if err != nil {
+				return nil, errors.BadRequest.WithFormat("pad synthetic transaction (2): %w", err)
+			}
+		}
+	}
+
 	var ledger *protocol.SyntheticLedger
 	record := batch.Account(m.Describe.Synthetic())
 	err := record.GetStateAs(&ledger)
@@ -130,6 +145,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dest
 	txn.Body = body
+
 	initSig, err := new(signing.Builder).
 		SetUrl(m.Describe.NodeUrl()).
 		SetVersion(destLedger.Produced).
