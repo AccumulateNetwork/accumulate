@@ -251,7 +251,7 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 	}
 }
 
-func (s *Simulator) Router() routing.Router { return s.router }
+func (s *Simulator) Router() *Router { return s.router }
 
 func (s *Simulator) EventBus(partition string) *events.Bus {
 	return s.partitions[partition].nodes[0].eventBus
