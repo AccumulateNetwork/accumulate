@@ -32,11 +32,3 @@ func (NullRouter) Route(...*messaging.Envelope) (string, error) {
 func (NullRouter) Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
 	return nil, errors.NotFound
 }
-
-func (NullRouter) Submit(ctx context.Context, partition string, tx *messaging.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
-	return new(routing.ResponseSubmit), nil
-}
-
-func (NullRouter) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
-	return errors.NotFound
-}
