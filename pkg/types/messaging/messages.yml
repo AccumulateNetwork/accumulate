@@ -65,6 +65,9 @@ SyntheticMessage:
     - name: Message
       type: Message
       marshal-as: union
+    - name: Signature
+      type: protocol.KeySignature
+      marshal-as: union
     - name: Proof
       type: protocol.AnnotatedReceipt
       marshal-as: reference
