@@ -45,8 +45,11 @@ func (t *Transaction) GetHash2() ([]byte, bool) {
 	}
 	headerHash := sha256.Sum256(header)
 
+	// Hash the body
 	bodyHash, is64 := t.getBodyHash()
-	t.is64bytes = is64
+
+	// Is the header or body 64 bytes?
+	t.is64bytes = is64 || len(header) == 64
 
 	// Calculate the hash
 	sha := sha256.New()
