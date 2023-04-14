@@ -187,6 +187,6 @@ func (r *Account) GetSyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
 	return r.SyntheticForAnchor(anchor).Get()
 }
 
-func compareAnchorSignatures(a, b protocol.KeySignature) int {
+func compareSignatureByKey(a, b protocol.KeySignature) int {
 	return bytes.Compare(a.GetPublicKey(), b.GetPublicKey())
 }

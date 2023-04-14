@@ -149,6 +149,10 @@ func (v *Account) Copy() *Account {
 			u.Chains[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -170,6 +174,10 @@ func (v *Chain) Copy() *Chain {
 			u.MarkPoints[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -187,6 +195,10 @@ func (v *Header) Copy() *Header {
 	u.PartitionSnapshotIDs = make([]string, len(v.PartitionSnapshotIDs))
 	for i, v := range v.PartitionSnapshotIDs {
 		u.PartitionSnapshotIDs[i] = v
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -208,6 +220,10 @@ func (v *OldChain) Copy() *OldChain {
 	for i, v := range v.Entries {
 		u.Entries[i] = encoding.BytesCopy(v)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -222,6 +238,10 @@ func (v *Signature) Copy() *Signature {
 	}
 	if v.Signature != nil {
 		u.Signature = protocol.CopySignature(v.Signature)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -244,6 +264,10 @@ func (v *Transaction) Copy() *Transaction {
 			u.SignatureSets[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -261,6 +285,10 @@ func (v *TxnSigSet) Copy() *TxnSigSet {
 	for i, v := range v.Entries {
 		u.Entries[i] = *(&v).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -276,6 +304,10 @@ func (v *sigSection) Copy() *sigSection {
 			u.Signatures[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -290,6 +322,10 @@ func (v *txnSection) Copy() *txnSection {
 		if v != nil {
 			u.Transactions[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
