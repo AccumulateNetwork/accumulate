@@ -146,6 +146,10 @@ func (v *AccountRecord) Copy() *AccountRecord {
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -162,6 +166,10 @@ func (v *ChainState) Copy() *ChainState {
 	for i, v := range v.Roots {
 		u.Roots[i] = encoding.BytesCopy(v)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -172,6 +180,10 @@ func (v *NetworkMetrics) Copy() *NetworkMetrics {
 	u := new(NetworkMetrics)
 
 	u.TPS = v.TPS
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -182,6 +194,10 @@ func (v *NodeMetrics) Copy() *NodeMetrics {
 	u := new(NodeMetrics)
 
 	u.TPS = v.TPS
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -192,6 +208,10 @@ func (v *NodeStatus) Copy() *NodeStatus {
 	u := new(NodeStatus)
 
 	u.Ok = v.Ok
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -205,6 +225,10 @@ func (v *NodeVersion) Copy() *NodeVersion {
 	u.Commit = v.Commit
 	u.VersionIsKnown = v.VersionIsKnown
 	u.IsTestNet = v.IsTestNet
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -217,6 +241,10 @@ func (v *QuerySetOptions) Copy() *QuerySetOptions {
 	u.Expand = v.Expand
 	u.Start = v.Start
 	u.Count = v.Count
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -230,6 +258,10 @@ func (v *QueryStateOptions) Copy() *QueryStateOptions {
 	u.Expand = v.Expand
 	u.Wait = v.Wait
 	u.Delivered = v.Delivered
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -249,6 +281,10 @@ func (v *Receipt) Copy() *Receipt {
 	if v.Error != nil {
 		u.Error = (v.Error).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -259,6 +295,10 @@ func (v *SearchOptions) Copy() *SearchOptions {
 	u := new(SearchOptions)
 
 	u.Kind = v.Kind
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -282,6 +322,10 @@ func (v *Submission) Copy() *Submission {
 			u.Status[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -292,6 +336,10 @@ func (v *SubmitOptions) Copy() *SubmitOptions {
 	u := new(SubmitOptions)
 
 	u.Mode = v.Mode
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }

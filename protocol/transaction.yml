@@ -41,6 +41,9 @@ Transaction:
     - name: hash
       type: bytes
       marshal-as: none
+    - name: is64bytes
+      type: bool
+      marshal-as: none
 
 TransactionStatus:
   fields:
