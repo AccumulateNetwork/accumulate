@@ -22,14 +22,19 @@ func (t *Transaction) ID() *url.TxID {
 
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
 func (t *Transaction) GetHash() []byte {
+	h, _ := t.GetHash2()
+	return h
+}
+
+func (t *Transaction) GetHash2() ([]byte, bool) {
 	// Already computed?
 	if t.hash != nil {
-		return t.hash
+		return t.hash, t.is64bytes
 	}
 
 	if r, ok := t.Body.(*RemoteTransaction); ok {
 		t.hash = r.Hash[:]
-		return r.Hash[:]
+		return r.Hash[:], false
 	}
 
 	// Marshal the header
@@ -40,18 +45,21 @@ func (t *Transaction) GetHash() []byte {
 	}
 	headerHash := sha256.Sum256(header)
 
+	bodyHash, is64 := t.getBodyHash()
+	t.is64bytes = is64
+
 	// Calculate the hash
 	sha := sha256.New()
 	sha.Write(headerHash[:])
-	sha.Write(t.getBodyHash())
+	sha.Write(bodyHash)
 	t.hash = sha.Sum(nil)
-	return t.hash
+	return t.hash, is64
 }
 
-func (t *Transaction) getBodyHash() []byte {
+func (t *Transaction) getBodyHash() ([]byte, bool) {
 	hasher, ok := t.Body.(interface{ GetHash() []byte })
 	if ok {
-		return hasher.GetHash()
+		return hasher.GetHash(), false
 	}
 
 	data, err := t.Body.MarshalBinary()
@@ -62,7 +70,7 @@ func (t *Transaction) getBodyHash() []byte {
 	}
 
 	hash := sha256.Sum256(data)
-	return hash[:]
+	return hash[:], len(data) == 64
 }
 
 func hashWriteData(withoutEntry TransactionBody, entry DataEntry) []byte {

@@ -39,6 +39,10 @@ func (v *EntryMetadata) Copy() *EntryMetadata {
 	u.EBlockKeyMR = v.EBlockKeyMR
 	u.EBlockSequenceNumber = v.EBlockSequenceNumber
 	u.EntryIndex = v.EntryIndex
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }

@@ -323,6 +323,10 @@ func (v *ChainState) Copy() *ChainState {
 	for i, v := range v.Roots {
 		u.Roots[i] = encoding.BytesCopy(v)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -343,6 +347,10 @@ func (v *DirectoryQueryResult) Copy() *DirectoryQueryResult {
 		}
 	}
 	u.Total = v.Total
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -361,6 +369,10 @@ func (v *GeneralReceipt) Copy() *GeneralReceipt {
 	u.MajorBlock = v.MajorBlock
 	u.Proof = *(&v.Proof).Copy()
 	u.Error = v.Error
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -371,6 +383,10 @@ func (v *RequestByChainId) Copy() *RequestByChainId {
 	u := new(RequestByChainId)
 
 	u.ChainId = v.ChainId
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -381,6 +397,10 @@ func (v *RequestByTxId) Copy() *RequestByTxId {
 	u := new(RequestByTxId)
 
 	u.TxId = v.TxId
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -394,6 +414,10 @@ func (v *RequestByUrl) Copy() *RequestByUrl {
 		u.Url = v.Url
 	}
 	u.Scratch = v.Scratch
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -407,6 +431,10 @@ func (v *RequestDataEntry) Copy() *RequestDataEntry {
 		u.Url = v.Url
 	}
 	u.EntryHash = v.EntryHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -422,6 +450,10 @@ func (v *RequestDataEntrySet) Copy() *RequestDataEntrySet {
 	u.Start = v.Start
 	u.Count = v.Count
 	u.ExpandChains = v.ExpandChains
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -437,6 +469,10 @@ func (v *RequestDirectory) Copy() *RequestDirectory {
 	u.Start = v.Start
 	u.Limit = v.Limit
 	u.ExpandChains = v.ExpandChains
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -450,6 +486,10 @@ func (v *RequestKeyPageIndex) Copy() *RequestKeyPageIndex {
 		u.Url = v.Url
 	}
 	u.Key = encoding.BytesCopy(v.Key)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -464,6 +504,10 @@ func (v *RequestMajorBlocks) Copy() *RequestMajorBlocks {
 	}
 	u.Start = v.Start
 	u.Limit = v.Limit
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -480,6 +524,10 @@ func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
 	u.Limit = v.Limit
 	u.TxFetchMode = v.TxFetchMode
 	u.BlockFilterMode = v.BlockFilterMode
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -497,6 +545,10 @@ func (v *RequestSynth) Copy() *RequestSynth {
 	}
 	u.SequenceNumber = v.SequenceNumber
 	u.Anchor = v.Anchor
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -512,6 +564,10 @@ func (v *RequestTxHistory) Copy() *RequestTxHistory {
 	u.Start = v.Start
 	u.Limit = v.Limit
 	u.Scratch = v.Scratch
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -530,6 +586,10 @@ func (v *ResponseAccount) Copy() *ResponseAccount {
 	}
 	if v.Receipt != nil {
 		u.Receipt = (v.Receipt).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -570,6 +630,10 @@ func (v *ResponseByTxId) Copy() *ResponseByTxId {
 	for i, v := range v.Signers {
 		u.Signers[i] = *(&v).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -589,6 +653,10 @@ func (v *ResponseChainEntry) Copy() *ResponseChainEntry {
 	if v.Receipt != nil {
 		u.Receipt = (v.Receipt).Copy()
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -605,6 +673,10 @@ func (v *ResponseChainRange) Copy() *ResponseChainRange {
 	u.Entries = make([][]byte, len(v.Entries))
 	for i, v := range v.Entries {
 		u.Entries[i] = encoding.BytesCopy(v)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -625,6 +697,10 @@ func (v *ResponseDataEntry) Copy() *ResponseDataEntry {
 	if v.CauseTxId != nil {
 		u.CauseTxId = v.CauseTxId
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -639,6 +715,10 @@ func (v *ResponseDataEntrySet) Copy() *ResponseDataEntrySet {
 		u.DataEntries[i] = *(&v).Copy()
 	}
 	u.Total = v.Total
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -655,6 +735,10 @@ func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
 		u.Signer = v.Signer
 	}
 	u.Index = v.Index
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -670,6 +754,10 @@ func (v *ResponseMajorBlocks) Copy() *ResponseMajorBlocks {
 		if v != nil {
 			u.Entries[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -691,6 +779,10 @@ func (v *ResponseMajorEntry) Copy() *ResponseMajorEntry {
 			u.MinorBlocks[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -706,6 +798,10 @@ func (v *ResponseMinorBlocks) Copy() *ResponseMinorBlocks {
 		if v != nil {
 			u.Entries[i] = (v).Copy()
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -732,6 +828,10 @@ func (v *ResponseMinorEntry) Copy() *ResponseMinorEntry {
 			u.Transactions[i] = (v).Copy()
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -746,6 +846,10 @@ func (v *ResponsePending) Copy() *ResponsePending {
 		if v != nil {
 			u.Transactions[i] = v
 		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -762,6 +866,10 @@ func (v *ResponseTxHistory) Copy() *ResponseTxHistory {
 	u.Transactions = make([]ResponseByTxId, len(v.Transactions))
 	for i, v := range v.Transactions {
 		u.Transactions[i] = *(&v).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
 	}
 
 	return u
@@ -781,6 +889,10 @@ func (v *SignatureSet) Copy() *SignatureSet {
 			u.Signatures[i] = (v).CopyAsInterface().(protocol.Signature)
 		}
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -795,6 +907,10 @@ func (v *TxReceipt) Copy() *TxReceipt {
 		u.Account = v.Account
 	}
 	u.Chain = v.Chain
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -803,6 +919,11 @@ func (v *TxReceipt) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UnknownRequest) Copy() *UnknownRequest {
 	u := new(UnknownRequest)
+
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
