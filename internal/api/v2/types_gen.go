@@ -365,6 +365,10 @@ func (v *ChainState) Copy() *ChainState {
 	for i, v := range v.Roots {
 		u.Roots[i] = encoding.BytesCopy(v)
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -378,6 +382,10 @@ func (v *DataEntryQuery) Copy() *DataEntryQuery {
 		u.Url = v.Url
 	}
 	u.EntryHash = v.EntryHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -397,6 +405,10 @@ func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
 	if v.CauseTxId != nil {
 		u.CauseTxId = v.CauseTxId
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -415,6 +427,10 @@ func (v *GeneralReceipt) Copy() *GeneralReceipt {
 	u.MajorBlock = v.MajorBlock
 	u.Proof = *(&v.Proof).Copy()
 	u.Error = v.Error
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -434,6 +450,10 @@ func (v *ResponseDataEntry) Copy() *ResponseDataEntry {
 	if v.CauseTxId != nil {
 		u.CauseTxId = v.CauseTxId
 	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -448,6 +468,10 @@ func (v *ResponseDataEntrySet) Copy() *ResponseDataEntrySet {
 		u.DataEntries[i] = *(&v).Copy()
 	}
 	u.Total = v.Total
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -464,6 +488,10 @@ func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
 		u.Signer = v.Signer
 	}
 	u.Index = v.Index
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
@@ -478,6 +506,10 @@ func (v *TxReceipt) Copy() *TxReceipt {
 		u.Account = v.Account
 	}
 	u.Chain = v.Chain
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
 
 	return u
 }
