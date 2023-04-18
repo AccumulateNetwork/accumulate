@@ -74,7 +74,7 @@ type AddCredits struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
-	Oracle    uint64   `json:"oracle,omitempty" form:"oracle" query:"oracle"`
+	Oracle    uint64   `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
 	extraData []byte
 }
 
@@ -5952,6 +5952,11 @@ func (v *AddCredits) IsValid() error {
 		errs = append(errs, "field Amount is missing")
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Oracle is missing")
+	} else if v.Oracle == 0 {
+		errs = append(errs, "field Oracle is not set")
 	}
 
 	switch len(errs) {
