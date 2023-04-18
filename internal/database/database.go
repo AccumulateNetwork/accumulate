@@ -8,13 +8,14 @@ package database
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -23,14 +24,14 @@ const markPower = 8
 
 // Database is an Accumulate database.
 type Database struct {
-	store       storage.KeyValueStore
+	store       keyvalue.Beginner
 	logger      log.Logger
 	nextBatchId int64
 	observer    Observer
 }
 
 // New creates a new database using the given key-value store.
-func New(store storage.KeyValueStore, logger log.Logger) *Database {
+func New(store keyvalue.Beginner, logger log.Logger) *Database {
 	d := new(Database)
 	d.store = store
 	d.observer = unsetObserver{}
@@ -43,12 +44,7 @@ func New(store storage.KeyValueStore, logger log.Logger) *Database {
 }
 
 func OpenInMemory(logger log.Logger) *Database {
-	var storeLogger log.Logger
-	if logger != nil {
-		storeLogger = logger.With("module", "storage")
-	}
-
-	store := memory.New(storeLogger)
+	store := memory.New(nil)
 	return New(store, logger)
 }
 
@@ -81,7 +77,7 @@ func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 
 // Store returns the underlying key-value store. Store may return an error in
 // the future.
-func (d *Database) Store() (storage.KeyValueStore, error) {
+func (d *Database) Store() (keyvalue.Beginner, error) {
 	return d.store, nil
 }
 
@@ -95,12 +91,10 @@ func (d *Database) SetObserver(observer Observer) {
 
 // Close closes the database and the key-value store.
 func (d *Database) Close() error {
-	return d.store.Close()
-}
-
-// Import imports values from another database.
-func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) error {
-	return b.kvstore.PutAll(db.Export())
+	if c, ok := d.store.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 func (b *Batch) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, error) {

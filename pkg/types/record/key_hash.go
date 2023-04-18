@@ -1,10 +1,10 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package storage
+package record
 
 import (
 	"crypto/sha256"
@@ -14,19 +14,17 @@ import (
 	"sync"
 )
 
-const (
-	KeyLength = 32 // Total bytes used for keys
-)
+const KeyHashLength = 32
 
 const debugPrintKeys = false
 
-var debugKeyMap = map[Key]string{}
+var debugKeyMap = map[KeyHash]string{}
 var debugKeyMu = new(sync.RWMutex)
 
-type Key [KeyLength]byte
+type KeyHash [KeyHashLength]byte
 
 // String hex encodes the key. If debugging is enabled, String looks up the original composite key.
-func (k Key) String() string {
+func (k KeyHash) String() string {
 	if len(k) == 0 {
 		return "(empty)"
 	}
@@ -45,22 +43,22 @@ func (k Key) String() string {
 }
 
 // MarshalJSON is implemented for JSON-based logging
-func (k Key) MarshalJSON() ([]byte, error) {
+func (k KeyHash) MarshalJSON() ([]byte, error) {
 	return json.Marshal(k.String())
 }
 
-func (k Key) Append(key ...interface{}) Key {
+func (k KeyHash) Append(key ...interface{}) KeyHash {
 	// If k is the zero value, don't stringify it
 	var s string
-	if debugKeys && k != (Key{}) {
+	if debugKeys && k != (KeyHash{}) {
 		s = k.String()
 	}
 
 	for _, key := range key {
 		bytes, printv := convert(key)
-		b := make([]byte, KeyLength+len(bytes))
+		b := make([]byte, KeyHashLength+len(bytes))
 		copy(b, k[:])
-		copy(b[KeyLength:], bytes)
+		copy(b[KeyHashLength:], bytes)
 		k = sha256.Sum256(b)
 
 		if debugKeys {
@@ -92,7 +90,7 @@ func (k Key) Append(key ...interface{}) Key {
 }
 
 func convert(key interface{}) (bytes []byte, printVal bool) {
-	bytes = AsBytes(key)
+	bytes = keyBytes(key)
 
 	switch key.(type) {
 	case nil, []byte, [32]byte, *[32]byte, interface{ Bytes() []byte }:
@@ -102,20 +100,7 @@ func convert(key interface{}) (bytes []byte, printVal bool) {
 	}
 }
 
-func MakeKey(keys ...interface{}) Key {
-	if len(keys) == 0 {
-		return Key{}
-	}
-
-	// If the first value is a Key, append to that
-	k, ok := keys[0].(Key)
-	if ok {
-		return k.Append(keys[1:]...)
-	}
-	return (Key{}).Append(keys...)
-}
-
-func AsBytes(v interface{}) []byte {
+func keyBytes(v interface{}) []byte {
 	switch v := v.(type) {
 	case nil:
 		return []byte{}
