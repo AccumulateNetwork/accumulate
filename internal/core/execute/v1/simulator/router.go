@@ -23,6 +23,16 @@ type router struct {
 	Router routing.Router
 }
 
+// ResponseSubmit is the response from a call to Submit.
+type ResponseSubmit struct {
+	Code         uint32
+	Data         []byte
+	Log          string
+	Info         string
+	Codespace    string
+	MempoolError string
+}
+
 func (r router) RouteAccount(account *url.URL) (string, error) {
 	if partition, ok := r.routingOverrides[account.IdentityAccountID32()]; ok {
 		return partition, nil
@@ -38,12 +48,12 @@ func (r router) RequestAPIv2(ctx context.Context, partitionId, method string, pa
 	return r.Partition(partitionId).API.RequestAPIv2(ctx, method, params, result)
 }
 
-func (r router) Submit(ctx context.Context, partition string, envelope *messaging.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (r router) Submit(ctx context.Context, partition string, envelope *messaging.Envelope, pretend, async bool) (*ResponseSubmit, error) {
 	x := r.Partition(partition)
 	deliveries := x.Submit(pretend, envelope)
 
 	if !pretend && async {
-		return new(routing.ResponseSubmit), nil
+		return new(ResponseSubmit), nil
 	}
 
 	var messages []messaging.Message
@@ -72,7 +82,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *messagin
 		)
 	}
 
-	resp := new(routing.ResponseSubmit)
+	resp := new(ResponseSubmit)
 	resp.Data, err = (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
 	require.NoError(r, err)
 

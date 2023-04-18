@@ -87,7 +87,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	// Create the router
 	var err error
-	b.router, err = routing.NewStaticRouter(gg.Routing, nil, b.Logger)
+	b.router, err = routing.NewStaticRouter(gg.Routing, b.Logger)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -310,7 +310,11 @@ func (b *bootstrap) createVoteScratchChain() error {
 	if err != nil {
 		return errors.InternalError.WithFormat("marshal last commit info: %w", err)
 	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	if b.GenesisGlobals.ExecutorVersion.DoubleHashEntriesEnabled() {
+		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
+	} else {
+		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	}
 	wd.Scratch = true
 
 	da := new(protocol.DataAccount)

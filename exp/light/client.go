@@ -116,7 +116,7 @@ func (c *Client) router(batch *DB) (routing.Router, error) {
 		return nil, errors.UnknownError.WithFormat("load globals: %w", err)
 	}
 
-	router, err := routing.NewStaticRouter(g.Routing, nil, nil)
+	router, err := routing.NewStaticRouter(g.Routing, nil)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("construct router: %w", err)
 	}

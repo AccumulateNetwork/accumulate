@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -78,7 +78,7 @@ func accountId(_ *cobra.Command, args []string) {
 	if err == nil {
 		table := new(protocol.RoutingTable)
 		check(table.UnmarshalBinary(account.Entry.GetData()[0]))
-		router, err := routing.NewStaticRouter(table, nil, nil)
+		router, err := routing.NewStaticRouter(table, nil)
 		check(err)
 
 		partition, err := router.RouteAccount(u)
