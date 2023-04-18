@@ -200,7 +200,6 @@ AddCredits:
       type: bigint
     - name: Oracle
       type: uvarint
-      optional: true
 
 BurnCredits:
   union: { type: transaction }
