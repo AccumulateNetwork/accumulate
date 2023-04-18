@@ -10,15 +10,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 )
 
 func BenchmarkInsert(b *testing.B) {
-	store := memory.New(nil).Begin(true)
+	store := memory.New(nil).Begin(nil, true)
 	model := new(ChangeSet)
-	model.store = record.KvStore{Store: store}
+	model.store = keyvalue.RecordStore{Store: store}
 	bpt := model.BPT()
 
 	var rh common.RandHash
@@ -32,9 +32,9 @@ func BenchmarkInsert(b *testing.B) {
 }
 
 func BenchmarkInsertSubbatch(b *testing.B) {
-	store := memory.New(nil).Begin(true)
+	store := memory.New(nil).Begin(nil, true)
 	model := new(ChangeSet)
-	model.store = record.KvStore{Store: store}
+	model.store = keyvalue.RecordStore{Store: store}
 	bpt := model.BPT()
 
 	var rh common.RandHash

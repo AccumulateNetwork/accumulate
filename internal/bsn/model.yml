@@ -4,7 +4,7 @@
   customCommit: true
   fields:
   - name: kvstore
-    type: storage.KeyValueTxn
+    type: keyvalue.ChangeSet
   - name: parent
     type: ChangeSet
     pointer: true
