@@ -77,7 +77,7 @@ func TestOutOfSequenceSynth(t *testing.T) {
 	// Verify
 	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteTokenAccount
-		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
+		require.NoError(t, batch.Account(bobUrl).Main().GetAs(&account))
 		require.Equal(t, uint64(len(txns)), account.Balance.Uint64())
 		return nil
 	})

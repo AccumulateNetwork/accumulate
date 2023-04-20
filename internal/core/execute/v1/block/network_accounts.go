@@ -126,7 +126,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	// Write the update to the ledger
 	var ledger *protocol.SystemLedger
 	record := batch.Account(x.Describe.Ledger())
-	err := record.GetStateAs(&ledger)
+	err := record.Main().GetAs(&ledger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load ledger: %w", err)
 	}
@@ -136,7 +136,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	update.Body = delivery.Transaction.Body
 	ledger.PendingUpdates = append(ledger.PendingUpdates, update)
 
-	err = record.PutState(ledger)
+	err = record.Main().Put(ledger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store ledger: %w", err)
 	}

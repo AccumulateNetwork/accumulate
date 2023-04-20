@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -69,7 +70,7 @@ func (c *stateCache) LoadUrl(account *url.URL) (protocol.Account, error) {
 		return state, nil
 	}
 
-	state, err := c.batch.Account(account).GetState()
+	state, err := c.batch.Account(account).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load %v: %w", account, err)
 	}
@@ -100,7 +101,8 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 
 // LoadTxn loads and unmarshals a saved transaction
 func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
-	env, err := c.batch.Transaction(txid[:]).GetState()
+	var env *messaging.TransactionMessage
+	err := c.batch.Message(txid).Main().GetAs(&env)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +150,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		if len(account.GetUrl().String()) > protocol.AccountUrlMaxLength {
 			return errors.BadUrlLength.Wrap(fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
 		}
-		_, err = rec.GetState()
+		_, err = rec.Main().Get()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
 			return errors.UnknownError.WithFormat("failed to check for an existing record: %v", err)
@@ -170,7 +172,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		}
 
 		// Update/Create the state
-		err = rec.PutState(account)
+		err = rec.Main().Put(account)
 		if err != nil {
 			return errors.UnknownError.WithFormat("failed to update state of %q: %w", account.GetUrl(), err)
 		}

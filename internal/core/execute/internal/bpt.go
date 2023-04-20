@@ -90,8 +90,8 @@ func (a *observedAccount) hashPending() (hash.Hasher, error) {
 		v1 := a.batch.Transaction2(txid.Hash())
 		isV1 := loadState(&err, true, v1.Main().Get) != nil
 		if isV1 {
-			hashState(&err, &hasher, false, v1.GetState)
-			hashState(&err, &hasher, false, v1.GetStatus)
+			hashState(&err, &hasher, false, v1.Main().Get)
+			hashState(&err, &hasher, false, v1.Status().Get)
 		}
 
 		// V2 BPT logic for pending transactions

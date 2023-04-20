@@ -111,7 +111,7 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 
 	// Signer is satisfied?
 	record := batch.Transaction(transaction.GetHash())
-	status, err := record.GetStatus()
+	status, err := record.Status().Get()
 	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("load transaction status: %w", err)
 	}

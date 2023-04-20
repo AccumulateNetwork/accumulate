@@ -268,7 +268,7 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 	}
 
 	var page *protocol.KeyPage
-	err := batch.Account(transaction.Header.Principal).GetStateAs(&page)
+	err := batch.Account(transaction.Header.Principal).Main().GetAs(&page)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load principal: %w", err)
 	}

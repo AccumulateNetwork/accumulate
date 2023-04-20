@@ -34,12 +34,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(m.Describe.Synthetic()).GetStateAs(&synthLedger)
+	err := block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	var anchorLedger *protocol.AnchorLedger
-	err = block.Batch.Account(m.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	err = block.Batch.Account(m.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
