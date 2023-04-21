@@ -65,7 +65,6 @@ func (t *Transaction) calcHash() {
 	sha.Write(headerHash[:])
 	sha.Write(bodyHash)
 	t.hash = sha.Sum(nil)
-	return
 }
 
 func (t *Transaction) getBodyHash() ([]byte, bool) {
