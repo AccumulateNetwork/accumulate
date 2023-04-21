@@ -25,8 +25,9 @@ func init() {
 	acctesting.EnableDebugFeatures()
 }
 
-// TestQuerySendTokens 
 func TestQuerySendTokens(t *testing.T) {
+	// Tests https://gitlab.com/accumulatenetwork/accumulate/-/issues/3290
+
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
