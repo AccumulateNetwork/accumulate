@@ -125,9 +125,7 @@ func Test64ByteBody(t *testing.T) {
 	require.NoError(t, err)
 	txn = new(Transaction)
 	require.NoError(t, txn.UnmarshalBinary(b))
-
-	_, is64 := txn.GetHash2()
-	require.True(t, is64)
+	require.True(t, txn.BodyIs64Bytes())
 
 	// Initialize
 	g := new(core.GlobalValues)
@@ -186,9 +184,7 @@ func Test65ByteBody(t *testing.T) {
 	b, err = txn.Body.MarshalBinary()
 	require.NoError(t, err)
 	require.Len(t, b, 65) // Sanity check
-
-	_, is64 := txn.GetHash2()
-	require.False(t, is64)
+	require.False(t, txn.BodyIs64Bytes())
 	txn = txn.Copy() // Reset the cached hash
 
 	// Initialize
