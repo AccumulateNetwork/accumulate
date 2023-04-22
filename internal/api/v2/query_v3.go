@@ -394,8 +394,9 @@ func transactionV3[T messaging.Message](r *api.MessageRecord[T], txn *messaging.
 
 	switch payload := txn.Transaction.Body.(type) {
 	case *protocol.SendTokens:
-		if len(res.Produced) > 0 && len(r.Produced.Records) != len(payload.To) {
-			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(r.Produced.Records))
+		produced := map[[32]byte]*url.TxID{}
+		for _, id := range res.Produced {
+			produced[id.Account().AccountID32()] = id
 		}
 
 		res.Origin = txn.Transaction.Header.Principal
@@ -405,8 +406,8 @@ func transactionV3[T messaging.Message](r *api.MessageRecord[T], txn *messaging.
 		for i, to := range payload.To {
 			data.To[i].Url = to.Url
 			data.To[i].Amount = to.Amount
-			if len(res.Produced) > 0 {
-				h := r.Produced.Records[i].Value.Hash()
+			if id, ok := produced[to.Url.AccountID32()]; ok {
+				h := id.Hash()
 				data.To[i].Txid = h[:]
 			}
 		}
