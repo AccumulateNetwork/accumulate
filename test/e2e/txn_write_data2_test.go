@@ -140,9 +140,10 @@ func Test64ByteBody(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens")})
 
-	st := sim.SubmitTxn(MustBuild(t,
-		build.SignatureForTransaction(txn).
-			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+	bld := build.SignatureForTransaction(txn).
+		Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)
+	bld.Ignore64Byte = true
+	st := sim.SubmitTxn(MustBuild(t, bld))
 	require.EqualError(t, st.AsError(), "cannot process transaction: body is 64 bytes long")
 }
 
