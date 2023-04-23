@@ -112,7 +112,7 @@ func adjust64(prod *ProducedMessage) error {
 	// Copy to reset the cached hash if there is one
 	txn = txn.Copy()
 
-	// Pad the body and/or header with a zero
+	// Pad the header and/or body
 	if len(body) == 64 {
 		body = append(body, 0)
 		txn.Transaction.Body, err = protocol.UnmarshalTransactionBody(body)
