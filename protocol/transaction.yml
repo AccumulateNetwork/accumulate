@@ -25,7 +25,10 @@ Transaction:
     - name: hash
       type: bytes
       marshal-as: none
-    - name: is64bytes
+    - name: header64bytes
+      type: bool
+      marshal-as: none
+    - name: body64bytes
       type: bool
       marshal-as: none
 
