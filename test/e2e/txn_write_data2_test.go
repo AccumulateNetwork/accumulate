@@ -125,9 +125,7 @@ func Test64ByteBody(t *testing.T) {
 	require.NoError(t, err)
 	txn = new(Transaction)
 	require.NoError(t, txn.UnmarshalBinary(b))
-
-	_, is64 := txn.GetHash2()
-	require.True(t, is64)
+	require.True(t, txn.BodyIs64Bytes())
 
 	// Initialize
 	g := new(core.GlobalValues)
@@ -142,9 +140,10 @@ func Test64ByteBody(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens")})
 
-	st := sim.SubmitTxn(MustBuild(t,
-		build.SignatureForTransaction(txn).
-			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+	bld := build.SignatureForTransaction(txn).
+		Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)
+	bld.Ignore64Byte = true
+	st := sim.SubmitTxn(MustBuild(t, bld))
 	require.EqualError(t, st.AsError(), "cannot process transaction: body is 64 bytes long")
 }
 
@@ -186,9 +185,7 @@ func Test65ByteBody(t *testing.T) {
 	b, err = txn.Body.MarshalBinary()
 	require.NoError(t, err)
 	require.Len(t, b, 65) // Sanity check
-
-	_, is64 := txn.GetHash2()
-	require.False(t, is64)
+	require.False(t, txn.BodyIs64Bytes())
 	txn = txn.Copy() // Reset the cached hash
 
 	// Initialize

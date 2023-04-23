@@ -874,12 +874,13 @@ type TokenRecipient struct {
 }
 
 type Transaction struct {
-	fieldsSet []bool
-	Header    TransactionHeader `json:"header,omitempty" form:"header" query:"header" validate:"required"`
-	Body      TransactionBody   `json:"body,omitempty" form:"body" query:"body" validate:"required"`
-	hash      []byte
-	is64bytes bool
-	extraData []byte
+	fieldsSet     []bool
+	Header        TransactionHeader `json:"header,omitempty" form:"header" query:"header" validate:"required"`
+	Body          TransactionBody   `json:"body,omitempty" form:"body" query:"body" validate:"required"`
+	hash          []byte
+	header64bytes bool
+	body64bytes   bool
+	extraData     []byte
 }
 
 type TransactionHeader struct {
@@ -18587,7 +18588,9 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.hash) == 0) {
 	}
-	if !(!v.is64bytes) {
+	if !(!v.header64bytes) {
+	}
+	if !(!v.body64bytes) {
 	}
 	return json.Marshal(&u)
 }
