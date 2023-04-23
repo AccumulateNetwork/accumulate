@@ -14,9 +14,9 @@ import (
 	"encoding/hex"
 	"strconv"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -35,7 +35,7 @@ type Batch struct {
 	parent      *Batch
 	observer    Observer
 
-	bpt         *bpt.BPT
+	bpt         bpt.BPT
 	account     map[accountKey]*Account
 	message     map[messageKey]*Message
 	transaction map[transactionKey]*Transaction
@@ -76,8 +76,8 @@ func keyForSystemData(partition string) systemDataKey {
 	return systemDataKey{partition}
 }
 
-func (c *Batch) BPT() *bpt.BPT {
-	return values.GetOrCreate(&c.bpt, func() *bpt.BPT {
+func (c *Batch) BPT() bpt.BPT {
+	return values.GetOrCreate(&c.bpt, func() bpt.BPT {
 		return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt", "bpt")
 	})
 }

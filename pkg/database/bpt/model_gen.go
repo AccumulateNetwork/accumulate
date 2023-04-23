@@ -17,7 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-type BPT struct {
+type bpt struct {
 	logger  logging.OptionalLogger
 	store   record.Store
 	key     *record.Key
@@ -28,9 +28,9 @@ type BPT struct {
 	root  *rootRecord
 }
 
-func (c *BPT) Key() *record.Key { return c.key }
+func (c *bpt) Key() *record.Key { return c.key }
 
-func (c *BPT) baseIsDirty() bool {
+func (c *bpt) baseIsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -45,7 +45,7 @@ func (c *BPT) baseIsDirty() bool {
 	return false
 }
 
-func (c *BPT) baseWalk(opts record.WalkOptions, fn record.WalkFunc) error {
+func (c *bpt) baseWalk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -59,7 +59,7 @@ func (c *BPT) baseWalk(opts record.WalkOptions, fn record.WalkFunc) error {
 	return err
 }
 
-func (c *BPT) baseCommit() error {
+func (c *bpt) baseCommit() error {
 	if c == nil {
 		return nil
 	}

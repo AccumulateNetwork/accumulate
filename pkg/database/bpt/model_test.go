@@ -38,7 +38,7 @@ func must(err error) {
 var testRoot = func() [32]byte {
 	// Manually construct a tree
 	root := new(branch)
-	root.bpt = New(nil, nil, nilStore{}, nil, "")
+	root.bpt = New(nil, nil, nilStore{}, nil, "").(*bpt)
 	root.Key, _ = nodeKeyAt(0, [32]byte{})
 	for _, e := range testEntries {
 		_, err := root.merge(&leaf{Key: e[0], Hash: e[1]}, true)
@@ -147,7 +147,7 @@ func TestRange(t *testing.T) {
 	require.NoError(t, model.Commit())
 
 	// Make sure there are enough entries to create multiple blocks
-	s, err := model.BPT().getState().Get()
+	s, err := model.BPT().(*bpt).getState().Get()
 	require.NoError(t, err)
 	fmt.Printf("Max height is %d\n", s.MaxHeight)
 	require.Greater(t, s.MaxHeight, s.Power)
@@ -177,13 +177,8 @@ func TestTreelessCommit(t *testing.T) {
 	require.NotEmpty(t, b1.pending)
 }
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *BPT {
-	b := new(BPT)
-	b.logger.Set(logger)
-	b.store = store
-	b.key = key
-	b.label = label
-	return b
+func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *bpt {
+	return New(parent, logger, store, key, label).(*bpt)
 }
 
 func (c *ChangeSet) Begin() *ChangeSet {

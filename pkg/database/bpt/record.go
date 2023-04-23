@@ -23,19 +23,19 @@ func errShim() error {
 }
 
 // IsDirty returns true if the BPT has pending updates.
-func (b *BPT) IsDirty() bool {
+func (b *bpt) IsDirty() bool {
 	return len(b.pending) > 0 || b.baseIsDirty()
 }
 
 // WalkChanges implements [record.Record].
-func (b *BPT) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
+func (b *bpt) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	// Walking the BPT is not supported
 	return nil
 }
 
 // commitUpdatesDirect directly pushes pending updates into the previous batch,
 // as long as the previous layer _is_ a batch and there are no other changes.
-func (b *BPT) commitUpdatesDirect() (bool, error) {
+func (b *bpt) commitUpdatesDirect() (bool, error) {
 	// We can't push the updates directly if any state has been updated
 	if b.baseIsDirty() {
 		return false, nil
@@ -57,7 +57,7 @@ func (b *BPT) commitUpdatesDirect() (bool, error) {
 	}
 
 	// Is the record a BPT?
-	c, ok := r.(*BPT)
+	c, ok := r.(*bpt)
 	if !ok {
 		return false, nil
 	}
@@ -79,7 +79,7 @@ func (b *BPT) commitUpdatesDirect() (bool, error) {
 }
 
 // Commit commits the BPT.
-func (b *BPT) Commit() error {
+func (b *bpt) Commit() error {
 	// If we're not dirty there's nothing to do
 	if !b.IsDirty() {
 		return nil

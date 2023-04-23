@@ -20,7 +20,7 @@ import (
 // bit  -- index to the bit
 // node -- the node in the BPT where we have reached in our search so far
 // key  -- The key in the BPT we are looking for
-func (b *BPT) collectReceipt(BIdx, bit byte, n *branch, key [32]byte, r *merkle.Receipt) (hash []byte) {
+func (b *bpt) collectReceipt(BIdx, bit byte, n *branch, key [32]byte, r *merkle.Receipt) (hash []byte) {
 	// Load the node and hope it doesn't fail
 	_ = n.load()
 
@@ -78,7 +78,7 @@ func (b *BPT) collectReceipt(BIdx, bit byte, n *branch, key [32]byte, r *merkle.
 
 // GetReceipt
 // Returns the receipt for the current state for the given chainID
-func (b *BPT) GetReceipt(key [32]byte) (*merkle.Receipt, error) { //          The location of a value is determined by the chainID (a key)
+func (b *bpt) GetReceipt(key [32]byte) (*merkle.Receipt, error) { //          The location of a value is determined by the chainID (a key)
 	err := b.executePending()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)

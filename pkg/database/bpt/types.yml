@@ -1,5 +1,6 @@
 parameters:
   non-binary: true
+  non-json: true
   fields:
     - name: RootHash
       type: hash
@@ -15,6 +16,7 @@ parameters:
 
 emptyNode:
   non-binary: true
+  non-json: true
   union: { type: node, private: true }
   fields:
     - name: parent
@@ -24,10 +26,11 @@ emptyNode:
 
 branch:
   non-binary: true
+  non-json: true
   union: { type: node, private: true }
   fields:
     - name: bpt
-      type: BPT
+      type: bpt
       pointer: true
       marshal-as: none
     - name: parent
@@ -56,6 +59,7 @@ branch:
 
 leaf:
   non-binary: true
+  non-json: true
   union: { type: node, private: true }
   fields:
     - name: Key

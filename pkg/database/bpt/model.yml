@@ -1,4 +1,4 @@
-- name: BPT
+- name: bpt
   type: entity
   omitResolve: true
   customCommit: true

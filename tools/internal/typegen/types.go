@@ -220,6 +220,8 @@ type Type struct {
 	Union Union
 	// NonBinary specifies whether the type is binary marshallable.
 	NonBinary bool `yaml:"non-binary"`
+	// NonJSON specifies whether the type is JSON marshallable.
+	NonJSON bool `yaml:"non-json"`
 	// Incomparable specifies whether two values of the type can be checked for equality.
 	Incomparable    bool `yaml:"incomparable"`
 	NoCopy          bool `yaml:"no-copy"`

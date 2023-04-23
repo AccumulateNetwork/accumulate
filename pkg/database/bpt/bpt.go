@@ -8,14 +8,35 @@ package bpt
 
 import (
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
+type BPT interface {
+	database.Record
+
+	// Get returns the value of an entry.
+	Get(key [32]byte) ([32]byte, error)
+
+	// Insert inserts a new entry or updates an existing entry.
+	Insert(key, hash [32]byte) error
+
+	// ForEach calls the callback for each BPT entry.
+	ForEach(fn func(key record.KeyHash, hash [32]byte) error) error
+
+	// GetRootHash returns the root hash of the BPT.
+	GetRootHash() ([32]byte, error)
+
+	// GetReceipt returns the receipt for an entry.
+	GetReceipt(key [32]byte) (*merkle.Receipt, error)
+}
+
 // New returns a new BPT.
-func New(parent record.Record, logger log.Logger, store record.Store, key *record.Key, label string) *BPT {
-	b := new(BPT)
+func New(parent database.Record, logger log.Logger, store database.Store, key *database.Key, label string) BPT {
+	b := new(bpt)
 	b.logger.Set(logger)
 	b.store = store
 	b.key = key
@@ -24,7 +45,7 @@ func New(parent record.Record, logger log.Logger, store record.Store, key *recor
 }
 
 // executePending pushes pending updates into the tree.
-func (b *BPT) executePending() error {
+func (b *bpt) executePending() error {
 	// Push the updates
 	for k, v := range b.pending {
 		_, err := b.getRoot().merge(&leaf{Key: k, Hash: v}, true)
@@ -42,7 +63,7 @@ func (b *BPT) executePending() error {
 
 // GetRootHash returns the root hash of the BPT, loading nodes, executing
 // pending updates, and recalculating hashes if necessary.
-func (b *BPT) GetRootHash() ([32]byte, error) {
+func (b *bpt) GetRootHash() ([32]byte, error) {
 	// Execute pending updates
 	err := b.executePending()
 	if err != nil {
@@ -61,7 +82,7 @@ func (b *BPT) GetRootHash() ([32]byte, error) {
 }
 
 // getState returns the Parameters value wrapped as a [paramsRecord].
-func (b *BPT) getState() values.Value[*parameters] {
+func (b *bpt) getState() values.Value[*parameters] {
 	return values.GetOrCreate(&b.state, func() values.Value[*parameters] {
 		v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), b.label+" "+"state", false, values.Struct[parameters]())
 		return paramsRecord{v}
@@ -143,7 +164,7 @@ func parseNodeKey(nodeKey [32]byte) (height uint64, key [32]byte, ok bool) { //n
 }
 
 // getRoot returns the root branch node, creating it if necessary.
-func (b *BPT) getRoot() *branch {
+func (b *bpt) getRoot() *branch {
 	return values.GetOrCreate(&b.root, func() *rootRecord {
 		e := new(branch)
 		e.bpt = b
@@ -155,7 +176,7 @@ func (b *BPT) getRoot() *branch {
 
 // Insert updates or inserts a hash for the given key. Insert may defer the
 // actual update.
-func (b *BPT) Insert(key, hash [32]byte) error {
+func (b *bpt) Insert(key, hash [32]byte) error {
 	if b.pending == nil {
 		b.pending = map[[32]byte][32]byte{}
 	}
@@ -164,7 +185,7 @@ func (b *BPT) Insert(key, hash [32]byte) error {
 }
 
 // Get retrieves the latest hash associated with the given key.
-func (b *BPT) Get(key [32]byte) ([32]byte, error) {
+func (b *bpt) Get(key [32]byte) ([32]byte, error) {
 	if v, ok := b.pending[key]; ok {
 		return v, nil
 	}
@@ -219,8 +240,8 @@ again:
 	goto again
 }
 
-// Resolve implements [record.Record].
-func (b *BPT) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+// Resolve implements [database.Record].
+func (b *bpt) Resolve(key *database.Key) (database.Record, *database.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for bpt")
 	}

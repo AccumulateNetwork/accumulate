@@ -21,7 +21,7 @@ import (
 // count -- the number of hashes to collect
 // key  -- The key in the BPT which determines were in the BPT the hash goes
 // hash -- The current value of the key, as tracked by the BPT
-func (b *BPT) walkRange(found *bool, n *branch, count int, key [32]byte, values []*leaf) []*leaf {
+func (b *bpt) walkRange(found *bool, n *branch, count int, key [32]byte, values []*leaf) []*leaf {
 	// Function to process the entry (which is both left and right, but the same logic)
 	do := func(entry node) {
 		switch e := entry.(type) { //
@@ -71,7 +71,7 @@ func (b *BPT) walkRange(found *bool, n *branch, count int, key [32]byte, values 
 
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
-func (b *BPT) getRange(startKey [32]byte, count int) (values []*leaf, lastKey [32]byte) {
+func (b *bpt) getRange(startKey [32]byte, count int) (values []*leaf, lastKey [32]byte) {
 	_ = b.executePending() // Hope there are no errors
 
 	if count == 0 { // If they didn't ask for anything, there is nothing to do.

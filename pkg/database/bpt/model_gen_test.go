@@ -21,13 +21,13 @@ type ChangeSet struct {
 	logger logging.OptionalLogger
 	store  record.Store
 
-	bpt *BPT
+	bpt BPT
 }
 
 func (c *ChangeSet) Key() *record.Key { return nil }
 
-func (c *ChangeSet) BPT() *BPT {
-	return values.GetOrCreate(&c.bpt, func() *BPT {
+func (c *ChangeSet) BPT() BPT {
+	return values.GetOrCreate(&c.bpt, func() BPT {
 		return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt", "bpt")
 	})
 }
