@@ -35,6 +35,12 @@ var tsFuncs = template.FuncMap{
 }
 
 func TsEncodeAnnotation(field *Field) string {
+	if field.Type.Name == "ServiceType" {
+		print("")
+	}
+	if field.MarshalAsType != typegen.TypeCodeUnknown {
+		return field.MarshalAsType.String()
+	}
 	if field.MarshalAs != typegen.MarshalAsBasic {
 		return field.MarshalAs.String()
 	}
@@ -57,7 +63,7 @@ func TsNeedsCtor(typ *Type) bool {
 }
 
 func TsResolveType(field *Field) string {
-	typ := field.Type.TypescriptType()
+	typ := field.Type.TypescriptType(false)
 	if field.Repeatable {
 		typ = typ + "[]"
 	}
@@ -65,12 +71,20 @@ func TsResolveType(field *Field) string {
 }
 
 func TsInputType(field *Field) string {
-	typ := field.Type.TypescriptInputType()
+	var typ string
 	switch field.MarshalAs {
 	case Reference, Value, Union:
-		typ = field.Type.Name + " | " + field.Type.Name + ".Args"
+		var args string
+		if p := field.TypeParam(); p == nil {
+			args = field.Type.TypescriptType(true)
+		} else {
+			args = p.Type + "Args /* TODO " + p.Type + "Args is too broad */"
+		}
+		typ = field.Type.TypescriptType(false) + " | " + args
 	case Enum:
-		typ = field.Type.Name + ".Args"
+		typ = field.Type.TypescriptType(true)
+	default:
+		typ = field.Type.TypescriptInputType(false)
 	}
 	if field.Repeatable {
 		typ = "(" + typ + ")[]"
@@ -81,7 +95,7 @@ func TsInputType(field *Field) string {
 func TsObjectify(field *Field, varName string) string {
 	// This is a hack
 	if field.Type.Name == "AllowedTransactions" {
-		return fmt.Sprintf("%s.map(v => v.toString())", varName)
+		return fmt.Sprintf("%s.map(v => TransactionType.getName(v))", varName)
 	}
 
 	switch field.Type.Code {
@@ -95,7 +109,7 @@ func TsObjectify(field *Field, varName string) string {
 	case Reference, Union, Value:
 		return fmt.Sprintf("%s.asObject()", varName)
 	case Enum:
-		return fmt.Sprintf("%s.toString()", varName)
+		return fmt.Sprintf("%s.getName(%s)", field.Type.Name, varName)
 	}
 
 	return varName
@@ -111,18 +125,27 @@ func TsUnobjectify(field *Field, varName string) string {
 
 func tsUnobjectify2(field *Field, varName string) string {
 	switch field.Type.Code {
-	case BigInt, Url, TxID, Time:
-		return fmt.Sprintf("%s instanceof %s ? %[1]s : new %[2]s(%[1]s)", varName, field.Type.TypescriptType())
+	case BigInt, Time:
+		return fmt.Sprintf("%s instanceof %s ? %[1]s : new %[2]s(%[1]s)", varName, field.Type.TypescriptType(false))
+	case Url, TxID:
+		return fmt.Sprintf("%s.parse(%s)", field.Type.TypescriptType(false), varName)
 	case Bytes, Hash:
 		return fmt.Sprintf("%s instanceof Uint8Array ? %[1]s : Buffer.from(%[1]s, 'hex')", varName)
 	}
 
 	switch field.MarshalAs {
 	case Reference, Value:
-		return fmt.Sprintf("%s instanceof %s ? %[1]s : new %[2]s(%[1]s)", varName, field.Type.Name)
-	case Enum, Union:
+		return fmt.Sprintf("%s instanceof %s ? %[1]s : new %[2]s(%[1]s)", varName, field.Type.TypescriptType(false))
+	case Enum:
 		return fmt.Sprintf("%s.fromObject(%s)", field.Type.Name, varName)
+	default:
+		return varName
+	case Union:
 	}
 
-	return varName
+	p := field.TypeParam()
+	if p == nil {
+		return fmt.Sprintf("%s.fromObject(%s)", field.Type.Name, varName)
+	}
+	return fmt.Sprintf("<%s>%s.fromObject(%s)", p.Name, p.Type, varName)
 }

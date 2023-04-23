@@ -6,10 +6,10 @@
 
 package typegen
 
-func (f FieldType) TypescriptType() string {
-	switch f.Code {
-	case TypeCodeUnknown:
-		return f.Name
+import "strings"
+
+func (t TypeCode) TypescriptType() string {
+	switch t {
 	case TypeCodeBytes:
 		return "Uint8Array"
 	case TypeCodeRawJson:
@@ -33,24 +33,22 @@ func (f FieldType) TypescriptType() string {
 	case TypeCodeBool:
 		return "boolean"
 	default:
-		return f.Code.String()
+		return t.String()
 	}
 }
 
-func (f FieldType) TypescriptInputType() string {
-	switch f.Code {
-	case TypeCodeUnknown:
-		return f.Name
+func (t TypeCode) TypescriptInputType() string {
+	switch t {
 	case TypeCodeBytes:
 		return "Uint8Array | string"
 	case TypeCodeRawJson:
 		return "unknown"
 	case TypeCodeUrl:
-		return "URL | string"
+		return "URLArgs"
 	case TypeCodeTxid:
-		return "TxID | string"
+		return "TxIDArgs"
 	case TypeCodeBigInt:
-		return "BN | string"
+		return "BN | string | number"
 	case TypeCodeUint:
 		return "number"
 	case TypeCodeInt:
@@ -64,6 +62,56 @@ func (f FieldType) TypescriptInputType() string {
 	case TypeCodeBool:
 		return "boolean"
 	default:
-		return f.Code.String()
+		return t.String()
 	}
+}
+
+func (f FieldType) TypescriptType(args bool) string {
+	if f.Code != TypeCodeUnknown {
+		return f.Code.TypescriptType()
+	}
+	var suffix string
+	if args {
+		suffix = "Args"
+	}
+	if len(f.Parameters) == 0 {
+		return f.Name + suffix
+	}
+	var params []string
+	for _, p := range f.Parameters {
+		params = append(params, p.Type.TypescriptType(false))
+	}
+	return f.Name + suffix + "<" + strings.Join(params, ", ") + ">"
+}
+
+func (f FieldType) TypescriptInputType(args bool) string {
+	if f.Code != TypeCodeUnknown {
+		return f.Code.TypescriptInputType()
+	}
+	return f.TypescriptType(args)
+}
+
+func (t *Type) TypescriptFullName(args, withType, paramName, paramType bool) string {
+	var suffix string
+	if args {
+		suffix = "Args"
+		if withType {
+			suffix += "WithType"
+		}
+	}
+	if len(t.Params) == 0 {
+		return t.Name + suffix
+	}
+	var params []string
+	for _, p := range t.Params {
+		switch {
+		case paramName && paramType && p.Type != "any":
+			params = append(params, p.Name+" extends "+p.Type+" = "+p.Type)
+		case paramName:
+			params = append(params, p.Name)
+		case paramType:
+			params = append(params, p.Type)
+		}
+	}
+	return t.Name + suffix + "<" + strings.Join(params, ", ") + ">"
 }
