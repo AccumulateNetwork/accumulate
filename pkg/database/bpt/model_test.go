@@ -178,12 +178,7 @@ func TestTreelessCommit(t *testing.T) {
 }
 
 func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *BPT {
-	b := new(BPT)
-	b.logger.Set(logger)
-	b.store = store
-	b.key = key
-	b.label = label
-	return b
+	return New(parent, logger, store, key, label)
 }
 
 func (c *ChangeSet) Begin() *ChangeSet {

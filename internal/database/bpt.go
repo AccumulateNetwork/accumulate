@@ -11,9 +11,9 @@ import (
 	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
@@ -35,7 +35,7 @@ func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) e
 }
 
 func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte, error)) error {
-	err := b.BPT().SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
+	err := bpt.SaveSnapshotV1(b.BPT(), file, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
 		u, err := b.getAccountUrl(record.NewKey(key))
 		if err != nil {

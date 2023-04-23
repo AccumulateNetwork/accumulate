@@ -14,9 +14,9 @@ import (
 	"encoding/hex"
 	"strconv"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
