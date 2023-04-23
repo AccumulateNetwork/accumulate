@@ -25,7 +25,7 @@ import (
 )
 
 func GetHash(i int) Hash {
-	return Sha256([]byte(fmt.Sprint(i)))
+	return doSha([]byte(fmt.Sprint(i)))
 }
 
 func TestReceipt(t *testing.T) {
@@ -93,9 +93,9 @@ func PrintReceipt(r *merkle.Receipt) string {
 		r := "L"
 		if v.Right {
 			r = "R"
-			working = Sha256(append(working[:], v.Hash[:]...))
+			working = doSha(append(working[:], v.Hash[:]...))
 		} else {
-			working = Sha256(append(v.Hash[:], working[:]...))
+			working = doSha(append(v.Hash[:], working[:]...))
 		}
 		b.WriteString(fmt.Sprintf(" %10d Apply %s %x working: %x \n", i, r, v.Hash, working))
 	}
@@ -252,7 +252,7 @@ func TestReceipt_Combine(t *testing.T) {
 		require.NoError(t, m1.AddHash(rh.NextList(), false))
 		head, err := m1.Head().Get()
 		require.NoError(t, err)
-		root1 := head.GetMDRoot()
+		root1 := head.Anchor()
 		require.NoError(t, m2.AddHash(root1, false))
 	}
 	for i := int64(0); i < testCnt; i++ {
@@ -261,14 +261,14 @@ func TestReceipt_Combine(t *testing.T) {
 			anchor, _ := m1.Get(j)
 			r, _ := GetReceipt(m1, element, anchor)
 			state, _ := m1.GetAnyState(j)
-			mdRoot := state.GetMDRoot()
+			mdRoot := state.Anchor()
 
 			require.Truef(t, bytes.Equal(r.Anchor, mdRoot), "m1 MDRoot not right %d %d", i, j)
 			element, _ = m2.Get(i)
 			anchor, _ = m2.Get(j)
 			r, _ = GetReceipt(m2, element, anchor)
 			state, _ = m2.GetAnyState(j)
-			mdRoot = state.GetMDRoot()
+			mdRoot = state.Anchor()
 			require.Truef(t, bytes.Equal(r.Anchor, mdRoot), "m2 MDRoot not right %d %d", i, j)
 		}
 	}
