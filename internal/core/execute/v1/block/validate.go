@@ -45,11 +45,8 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Reject the transaction if the body is exactly 64 bytes long
-	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
-		_, is64 := delivery.Transaction.GetHash2()
-		if is64 {
-			return nil, errors.BadRequest.WithFormat("cannot process transaction: body is 64 bytes long")
-		}
+	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() && delivery.Transaction.BodyIs64Bytes() {
+		return nil, errors.BadRequest.WithFormat("cannot process transaction: body is 64 bytes long")
 	}
 
 	// Load the transaction
