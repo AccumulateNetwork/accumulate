@@ -353,6 +353,10 @@ func normalizeBlockEntries(batch *database.Batch, ledger *protocol.BlockLedger) 
 		case errors.Is(err, errors.NotFound):
 			start = e.Index
 
+		case errors.Is(err, errors.InvalidRecord):
+			// Skip invalid records
+			continue
+
 		default:
 			return nil, errors.UnknownError.WithFormat("find %v %s index chain entry for block %d: %w", e.Account, e.Chain, ledger.Index, err)
 		}

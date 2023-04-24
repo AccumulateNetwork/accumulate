@@ -89,6 +89,9 @@ const NoPeer Status = 506
 // PeerMisbehaved means a peer behaved incorrectly.
 const PeerMisbehaved Status = 507
 
+// InvalidRecord means the database has one or more invalid records.
+const InvalidRecord Status = 508
+
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
 
@@ -96,7 +99,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved:
+	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved, InvalidRecord:
 		*v = u
 		return true
 	}
@@ -156,6 +159,8 @@ func (v Status) String() string {
 		return "noPeer"
 	case PeerMisbehaved:
 		return "peerMisbehaved"
+	case InvalidRecord:
+		return "invalidRecord"
 	}
 	return fmt.Sprintf("Status:%d", v)
 }
@@ -213,6 +218,8 @@ func StatusByName(name string) (Status, bool) {
 		return NoPeer, true
 	case "peermisbehaved":
 		return PeerMisbehaved, true
+	case "invalidrecord":
+		return InvalidRecord, true
 	}
 	return 0, false
 }
