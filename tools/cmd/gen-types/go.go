@@ -554,9 +554,6 @@ func GoBinaryMarshalValue(field *Field, writerName, varName string) (string, err
 }
 
 func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, error) {
-	if field.ParentType.Name == "SignatureSetRecord" && field.Name == "Signatures" {
-		print("")
-	}
 	method, cast, wantPtr := goBinaryMethod(field)
 	if method == "" {
 		return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false, false))
