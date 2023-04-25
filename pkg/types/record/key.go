@@ -123,7 +123,7 @@ func (k *Key) Equal(l *Key) bool {
 		return false
 	}
 	if k == nil || l == nil {
-		return k == nil && l == nil
+		return k.Len() == 0 && l.Len() == 0
 	}
 	for i := range k.values {
 		if !keyPartsEqual(k.values[i], l.values[i]) {

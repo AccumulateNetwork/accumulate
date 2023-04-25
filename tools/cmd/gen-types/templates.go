@@ -33,7 +33,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 
 	for i, pkg := range ttypes.GoInclude {
 		if strings.HasPrefix(pkg, "./") {
-			ttypes.GoInclude[i] = "gitlab.com/accumulatenetwork/accumulate" + pkg[1:]
+			ttypes.GoInclude[i] = moduleInfo.Path + pkg[1:]
 		}
 	}
 
