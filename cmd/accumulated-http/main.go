@@ -114,21 +114,23 @@ func run(_ *cobra.Command, args []string) {
 	Check(node.WaitForService(ctx, svcAddr))
 
 	fmt.Println("Fetching routing information")
+	router := new(routing.MessageRouter)
 	client := &message.Client{
 		Transport: &message.RoutedTransport{
 			Network: args[0],
 			Dialer:  node.DialNetwork(),
+			Router:  router,
 		},
 	}
 	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	Check(err)
-	router, err := routing.NewStaticRouter(ns.Routing, logger)
+	router.Router, err = routing.NewStaticRouter(ns.Routing, logger)
 	Check(err)
 
 	api, err := nodehttp.NewHandler(nodehttp.Options{
 		Logger:  logger,
 		Node:    node,
-		Router:  router,
+		Router:  router.Router,
 		MaxWait: 10 * time.Second,
 		Network: &config.Describe{
 			Network: config.Network{
