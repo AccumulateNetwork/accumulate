@@ -18,14 +18,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key record.Key, name, label string) *bpt.BPT {
+func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *bpt.BPT {
 	return bpt.New(parent, logger, store, key, label)
 }
 
 func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
 	return b.BPT().ForEach(func(key storage.Key, hash [32]byte) error {
 		// Create an Account object
-		u, err := b.getAccountUrl(record.Key{key})
+		u, err := b.getAccountUrl(record.NewKey(key))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -37,7 +37,7 @@ func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) e
 func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte, error)) error {
 	err := b.BPT().SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
-		u, err := b.getAccountUrl(record.Key{key})
+		u, err := b.getAccountUrl(record.NewKey(key))
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
