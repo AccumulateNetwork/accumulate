@@ -148,6 +148,7 @@ RecordUpdate:
     - name: Key
       type: record.Key
       marshal-as: reference
+      pointer: true
     - name: Value
       type: bytes
 
@@ -156,5 +157,6 @@ StateTreeUpdate:
     - name: Key
       type: record.Key
       marshal-as: reference
+      pointer: true
     - name: Hash
       type: hash

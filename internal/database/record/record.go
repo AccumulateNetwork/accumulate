@@ -14,10 +14,12 @@ import (
 
 type Key = record.Key
 
+func NewKey(v ...any) *Key { return record.NewKey(v...) }
+
 // A Record is a component of a data model.
 type Record interface {
 	// Resolve resolves the record or a child record.
-	Resolve(key Key) (Record, Key, error)
+	Resolve(key *Key) (Record, *Key, error)
 	// IsDirty returns true if the record has been modified.
 	IsDirty() bool
 	// Commit writes any modifications to the store.
@@ -32,7 +34,7 @@ type WalkFunc func(TerminalRecord) error
 type TerminalRecord interface {
 	Record
 	ValueReader
-	Key() Key
+	Key() *Key
 }
 
 // Value records a value.
@@ -70,22 +72,22 @@ type Counted[T any] interface {
 }
 
 // NewValue returns a new value using the given encodable value.
-func NewValue[T any](logger log.Logger, store Store, key Key, name string, allowMissing bool, ev encodableValue[T]) Value[T] {
+func NewValue[T any](logger log.Logger, store Store, key *Key, name string, allowMissing bool, ev encodableValue[T]) Value[T] {
 	return newValue(logger, store, key, name, allowMissing, ev)
 }
 
 // NewList returns a new list using the given encoder and comparison.
-func NewList[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T]) List[T] {
+func NewList[T any](logger log.Logger, store Store, key *Key, namefmt string, encoder encodableValue[T]) List[T] {
 	return newList(logger, store, key, namefmt, encoder)
 }
 
 // NewSet returns a new set using the given encoder and comparison.
-func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) Set[T] {
+func NewSet[T any](logger log.Logger, store Store, key *Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) Set[T] {
 	return newSet(logger, store, key, namefmt, encoder, cmp)
 }
 
 // NewCounted returns a new counted using the given encodable value type.
-func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) Counted[T] {
+func NewCounted[T any](logger log.Logger, store Store, key *Key, namefmt string, new func() encodableValue[T]) Counted[T] {
 	return newCounted(logger, store, key, namefmt, new)
 }
 
@@ -107,9 +109,9 @@ type ValueWriter interface {
 type Store interface {
 	// GetValue loads the value from the underlying store and writes it. Byte
 	// stores call LoadBytes(data) and value stores call LoadValue(v, false).
-	GetValue(key Key, value ValueWriter) error
+	GetValue(key *Key, value ValueWriter) error
 	// PutValue gets the value from the reader and stores it. A byte store
 	// marshals the value and stores the bytes. A value store finds the
 	// appropriate value and calls LoadValue(v, true).
-	PutValue(key Key, value ValueReader) error
+	PutValue(key *Key, value ValueReader) error
 }

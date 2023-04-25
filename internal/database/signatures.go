@@ -78,7 +78,7 @@ func (c *AccountTransaction) RecordHistory(msg messaging.Message) error {
 
 	// Add the signer to the transaction's signer list
 	signerUrl := c.parent.Url()
-	hash := c.key[3].([32]byte)
+	hash := c.key.Get(3).([32]byte)
 	err = c.parent.parent.Message(hash).Signers().Add(signerUrl)
 	return errors.UnknownError.Wrap(err)
 }

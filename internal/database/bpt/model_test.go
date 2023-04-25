@@ -159,7 +159,7 @@ func TestRange(t *testing.T) {
 	require.ElementsMatch(t, expect, actual)
 }
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key record.Key, name, label string) *BPT {
+func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *BPT {
 	b := new(BPT)
 	b.logger.Set(logger)
 	b.store = store
@@ -176,7 +176,7 @@ func (c *ChangeSet) Begin() *ChangeSet {
 }
 
 // GetValue implements record.Store.
-func (c *ChangeSet) GetValue(key record.Key, value record.ValueWriter) error {
+func (c *ChangeSet) GetValue(key *record.Key, value record.ValueWriter) error {
 	v, err := resolveValue[record.ValueReader](c, key)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -187,7 +187,7 @@ func (c *ChangeSet) GetValue(key record.Key, value record.ValueWriter) error {
 }
 
 // PutValue implements record.Store.
-func (c *ChangeSet) PutValue(key record.Key, value record.ValueReader) error {
+func (c *ChangeSet) PutValue(key *record.Key, value record.ValueReader) error {
 	v, err := resolveValue[record.ValueWriter](c, key)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -203,10 +203,10 @@ func zero[T any]() T {
 }
 
 // resolveValue resolves the value for the given key.
-func resolveValue[T any](c *ChangeSet, key record.Key) (T, error) {
+func resolveValue[T any](c *ChangeSet, key *record.Key) (T, error) {
 	var r record.Record = c
 	var err error
-	for len(key) > 0 {
+	for key.Len() > 0 {
 		r, key, err = r.Resolve(key)
 		if err != nil {
 			return zero[T](), errors.UnknownError.Wrap(err)
