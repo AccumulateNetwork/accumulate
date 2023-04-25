@@ -19,7 +19,7 @@ type KvStore struct {
 var _ Store = KvStore{}
 
 // GetValue loads the raw value and calls value.LoadBytes.
-func (s KvStore) GetValue(key Key, value ValueWriter) error {
+func (s KvStore) GetValue(key *Key, value ValueWriter) error {
 	b, err := s.Store.Get(key.Hash())
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -39,7 +39,7 @@ func (s KvStore) GetValue(key Key, value ValueWriter) error {
 }
 
 // PutValue marshals the value and stores it.
-func (s KvStore) PutValue(key Key, value ValueReader) error {
+func (s KvStore) PutValue(key *Key, value ValueReader) error {
 	// TODO Detect conflicting writes at this level, when multiple batches are
 	// created from the same database
 	v, _, err := value.GetValue()
