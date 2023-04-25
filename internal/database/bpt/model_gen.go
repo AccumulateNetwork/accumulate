@@ -18,7 +18,7 @@ import (
 type BPT struct {
 	logger  logging.OptionalLogger
 	store   record.Store
-	key     record.Key
+	key     *record.Key
 	label   string
 	pending map[[32]byte][32]byte
 

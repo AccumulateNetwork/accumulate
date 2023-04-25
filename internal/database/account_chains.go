@@ -20,13 +20,13 @@ import (
 // Chain2 is a wrapper for Chain.
 type Chain2 struct {
 	account  *Account
-	key      record.Key
+	key      *record.Key
 	inner    *MerkleManager
 	index    *Chain2
 	labelfmt string
 }
 
-func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Key, namefmt, labelfmt string) *Chain2 {
+func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.Key, namefmt, labelfmt string) *Chain2 {
 	var account *Account
 	switch parent := parent.(type) {
 	case *Account:
@@ -38,7 +38,7 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Ke
 	}
 
 	var typ merkle.ChainType
-	switch key[2].(string) {
+	switch key.Get(2).(string) {
 	case "MainChain",
 		"SignatureChain",
 		"ScratchChain",
@@ -106,9 +106,9 @@ func (c *Chain2) Url() *url.URL {
 	return c.Account().WithFragment("chain/" + c.Name())
 }
 
-func (c *Chain2) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) > 0 && key[0] == "Index" {
-		return c.Index(), key[1:], nil
+func (c *Chain2) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() > 0 && key.Get(0) == "Index" {
+		return c.Index(), key.SliceI(1), nil
 	}
 	return c.inner.Resolve(key)
 }
@@ -133,10 +133,7 @@ func (c *Chain2) Commit() error {
 
 // Key returns the Ith key of the chain record.
 func (c *Chain2) Key(i int) interface{} {
-	if i >= len(c.key) {
-		return nil
-	}
-	return c.key[i]
+	return c.key.Get(i)
 }
 
 func (c *Chain2) Head() record.Value[*MerkleState] {

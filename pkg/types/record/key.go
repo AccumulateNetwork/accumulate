@@ -22,25 +22,65 @@ import (
 )
 
 // A Key is the key for a record.
-type Key []interface{}
+type Key struct {
+	values []any
+}
+
+func NewKey(v ...any) *Key {
+	return &Key{v}
+}
+
+func (k *Key) Len() int {
+	if k == nil {
+		return 0
+	}
+	return len(k.values)
+}
+
+func (k *Key) Get(i int) any {
+	if i < 0 || i >= k.Len() {
+		return nil
+	}
+	return k.values[i]
+}
+
+func (k *Key) SliceI(i int) *Key {
+	return &Key{k.values[i:]}
+}
+
+func (k *Key) SliceJ(j int) *Key {
+	return &Key{k.values[:j]}
+}
 
 // Append creates a child key of this key.
-func (k Key) Append(v ...interface{}) Key {
-	l := make(Key, len(k)+len(v))
-	n := copy(l, k)
+func (k *Key) Append(v ...any) *Key {
+	if len(v) == 0 {
+		return k
+	}
+	if k.Len() == 0 {
+		return &Key{v}
+	}
+	l := make([]any, len(k.values)+len(v))
+	n := copy(l, k.values)
 	copy(l[n:], v)
-	return l
+	return &Key{l}
 }
 
 // Hash converts the record key to a storage key.
-func (k Key) Hash() storage.Key {
-	return storage.MakeKey(k...)
+func (k *Key) Hash() storage.Key {
+	if k == nil {
+		return storage.MakeKey()
+	}
+	return storage.MakeKey(k.values...)
 }
 
 // String returns a human-readable string for the key.
-func (k Key) String() string {
-	s := make([]string, len(k))
-	for i, v := range k {
+func (k *Key) String() string {
+	if k.Len() == 0 {
+		return "()"
+	}
+	s := make([]string, len(k.values))
+	for i, v := range k.values {
 		switch v := v.(type) {
 		case []byte:
 			s[i] = hex.EncodeToString(v)
@@ -53,26 +93,40 @@ func (k Key) String() string {
 	return strings.Join(s, ".")
 }
 
+func (k *Key) Stringf(format string) string {
+	var args []any
+	if k != nil {
+		args = k.values
+	}
+	return fmt.Sprintf(format, args...)
+}
+
 // Copy returns a copy of the key.
-func (k Key) Copy() *Key {
-	l := make(Key, len(k))
-	copy(l, k)
-	return &l
+func (k *Key) Copy() *Key {
+	if k == nil {
+		return nil
+	}
+	l := make([]any, len(k.values))
+	copy(l, k.values)
+	return &Key{l}
 }
 
 // CopyAsInterface implements [encoding.BinaryValue].
-func (k Key) CopyAsInterface() any {
+func (k *Key) CopyAsInterface() any {
 	return k.Copy()
 }
 
 // Equal checks if the two keys are equal.
-func (k Key) Equal(l *Key) bool {
+func (k *Key) Equal(l *Key) bool {
 	// Must have a pointer receiver to work well with marshalling
-	if len(k) != len(*l) {
+	if k.Len() != l.Len() {
 		return false
 	}
-	for i := range k {
-		if !keyPartsEqual(k[i], (*l)[i]) {
+	if k == nil || l == nil {
+		return k.Len() == 0 && l.Len() == 0
+	}
+	for i := range k.values {
+		if !keyPartsEqual(k.values[i], l.values[i]) {
 			return false
 		}
 	}
@@ -84,13 +138,16 @@ func (k *Key) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// Write the length
-	_, _ = buf.Write(encoding.MarshalUint(uint64(len(*k))))
+	_, _ = buf.Write(encoding.MarshalUint(uint64(k.Len())))
+	if k.Len() == 0 {
+		return buf.Bytes(), nil
+	}
 
 	// Write each field using the encoding writer, but prefix values with their
 	// type code instead of with a field number. This is an abuse but 🤷 it
 	// works.
 	w := encoding.NewWriter(buf)
-	for _, v := range *k {
+	for _, v := range k.values {
 		p, err := asKeyPart(v)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
@@ -126,14 +183,14 @@ func (k *Key) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	// Allocate a key
-	*k = make(Key, n)
+	k.values = make([]any, n)
 
 	// For each field, read the type code then read its value. The encoding
 	// reader expects values to be prefixed with field numbers, and has certain
 	// requirements for those field numbers, so this approach requires a certain
 	// amount of hackiness. This is an abuse but 🤷 it works.
 	r := encoding.NewReader(br)
-	for i := range *k {
+	for i := range k.values {
 		// Read the type code
 		v, err := binary.ReadUvarint(br)
 		if err != nil {
@@ -150,7 +207,7 @@ func (k *Key) UnmarshalBinaryFrom(rd io.Reader) error {
 		p.ReadBinary(r)
 
 		// Put the value in the key
-		(*k)[i] = p.Value()
+		k.values[i] = p.Value()
 	}
 
 	// Finish up
@@ -167,9 +224,13 @@ func (k *Key) UnmarshalBinaryFrom(rd io.Reader) error {
 // type code and the value is the value. For example:
 //
 //	[{"string": "Account"}, {"url": "foo.acme"}, {"string": "MainChain"}, {"string": "Element"}, {"int": 1}]
-func (k Key) MarshalJSON() ([]byte, error) {
-	parts := make([]map[string]any, len(k))
-	for i, v := range k {
+func (k *Key) MarshalJSON() ([]byte, error) {
+	if k.Len() == 0 {
+		return []byte("[]"), nil
+	}
+
+	parts := make([]map[string]any, len(k.values))
+	for i, v := range k.values {
 		// Convert the value to a key part
 		p, err := asKeyPart(v)
 		if err != nil {
@@ -192,7 +253,7 @@ func (k *Key) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	*k = make(Key, len(parts))
+	k.values = make([]any, len(parts))
 	for i, p := range parts {
 		// Parts must be { [type]: value }
 		if len(p) != 1 {
@@ -224,7 +285,7 @@ func (k *Key) UnmarshalJSON(b []byte) error {
 		}
 
 		// Put the value in the key
-		(*k)[i] = kp.Value()
+		k.values[i] = kp.Value()
 	}
 	return nil
 }

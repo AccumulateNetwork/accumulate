@@ -58,7 +58,7 @@ const (
 type value[T any] struct {
 	logger       logging.OptionalLogger
 	store        Store
-	key          Key
+	key          *Key
 	name         string
 	status       valueStatus
 	value        encodableValue[T]
@@ -70,7 +70,7 @@ var _ ValueReader = (*value[*wrappedValue[uint64]])(nil)
 var _ ValueWriter = (*value[*wrappedValue[uint64]])(nil)
 
 // NewValue returns a new value using the given encodable value.
-func newValue[T any](logger log.Logger, store Store, key Key, name string, allowMissing bool, ev encodableValue[T]) *value[T] {
+func newValue[T any](logger log.Logger, store Store, key *Key, name string, allowMissing bool, ev encodableValue[T]) *value[T] {
 	v := &value[T]{}
 	v.logger.L = logger
 	v.store = store
@@ -201,8 +201,8 @@ func (v *value[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (v *value[T]) Resolve(key Key) (Record, Key, error) {
-	if len(key) == 0 {
+func (v *value[T]) Resolve(key *Key) (Record, *Key, error) {
+	if key.Len() == 0 {
 		return v, nil, nil
 	}
 	return nil, nil, errors.InternalError.With("bad key for value")
@@ -210,7 +210,7 @@ func (v *value[T]) Resolve(key Key) (Record, Key, error) {
 
 type walkValue[T any] struct{ *value[T] }
 
-func (v walkValue[T]) Key() Key {
+func (v walkValue[T]) Key() *Key {
 	return v.key
 }
 
@@ -260,11 +260,11 @@ func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 	return nil
 }
 
-func isBptValue(key Key) bool {
-	if len(key) < 2 {
+func isBptValue(key *Key) bool {
+	if key.Len() < 2 {
 		return false
 	}
-	s, ok := key[len(key)-2].(string)
+	s, ok := key.Get(key.Len() - 2).(string)
 	return ok && s == "BPT"
 }
 

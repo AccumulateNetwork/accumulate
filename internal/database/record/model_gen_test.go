@@ -45,7 +45,7 @@ func (c *changeSet) Entity(name string) Entity {
 		v := new(entity)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Entity", name)
+		v.key = (*record.Key)(nil).Append("Entity", name)
 		v.parent = c
 		v.label = "entity" + " " + name
 		return v
@@ -54,28 +54,28 @@ func (c *changeSet) Entity(name string) Entity {
 
 func (c *changeSet) ChangeLog() record.Counted[string] {
 	return record.FieldGetOrCreate(&c.changeLog, func() record.Counted[string] {
-		return record.NewCounted(c.logger.L, c.store, record.Key{}.Append("ChangeLog"), "change log", record.WrappedFactory(record.StringWrapper))
+		return record.NewCounted(c.logger.L, c.store, (*record.Key)(nil).Append("ChangeLog"), "change log", record.WrappedFactory(record.StringWrapper))
 	})
 }
 
-func (c *changeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *changeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Entity":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
-		name, okName := key[1].(string)
+		name, okName := key.Get(1).(string)
 		if !okName {
 			return nil, nil, errors.InternalError.With("bad key for change set")
 		}
 		v := c.Entity(name)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "ChangeLog":
-		return c.ChangeLog(), key[1:], nil
+		return c.ChangeLog(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
@@ -136,7 +136,7 @@ type Entity interface {
 type entity struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *changeSet
 
@@ -170,20 +170,20 @@ func (c *entity) CountableUnion() record.Counted[protocol.Account] {
 	})
 }
 
-func (c *entity) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *entity) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for entity")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Union":
-		return c.Union(), key[1:], nil
+		return c.Union(), key.SliceI(1), nil
 	case "Set":
-		return c.Set(), key[1:], nil
+		return c.Set(), key.SliceI(1), nil
 	case "CountableRefType":
-		return c.CountableRefType(), key[1:], nil
+		return c.CountableRefType(), key.SliceI(1), nil
 	case "CountableUnion":
-		return c.CountableUnion(), key[1:], nil
+		return c.CountableUnion(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for entity")
 	}
@@ -240,7 +240,7 @@ func (c *entity) baseCommit() error {
 type TemplateTest struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 
 	wrapped     record.Value[string]
@@ -308,30 +308,30 @@ func (c *TemplateTest) UnionList() record.Counted[UnionType] {
 	})
 }
 
-func (c *TemplateTest) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *TemplateTest) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for template test")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Wrapped":
-		return c.Wrapped(), key[1:], nil
+		return c.Wrapped(), key.SliceI(1), nil
 	case "StructPtr":
-		return c.StructPtr(), key[1:], nil
+		return c.StructPtr(), key.SliceI(1), nil
 	case "Union":
-		return c.Union(), key[1:], nil
+		return c.Union(), key.SliceI(1), nil
 	case "WrappedSet":
-		return c.WrappedSet(), key[1:], nil
+		return c.WrappedSet(), key.SliceI(1), nil
 	case "StructSet":
-		return c.StructSet(), key[1:], nil
+		return c.StructSet(), key.SliceI(1), nil
 	case "UnionSet":
-		return c.UnionSet(), key[1:], nil
+		return c.UnionSet(), key.SliceI(1), nil
 	case "WrappedList":
-		return c.WrappedList(), key[1:], nil
+		return c.WrappedList(), key.SliceI(1), nil
 	case "StructList":
-		return c.StructList(), key[1:], nil
+		return c.StructList(), key.SliceI(1), nil
 	case "UnionList":
-		return c.UnionList(), key[1:], nil
+		return c.UnionList(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for template test")
 	}

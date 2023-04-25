@@ -40,7 +40,7 @@ c.label + " " +
 
 {{  define "key"}}
 {{- if .GetParent.Root -}}
-record.Key{}
+(*record.Key)(nil)
 {{- else -}}
 c.key
 {{- end -}}
@@ -109,7 +109,7 @@ type {{fullName .}} struct {
 	logger logging.OptionalLogger
 	store record.Store
 	{{- if not .Root}}
-	key record.Key
+	key *record.Key
 	label string
 	{{- if .GetParent}}
 	parent *{{fullName .GetParent}}
@@ -171,28 +171,28 @@ func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 {{end}}
 
 {{if not .OmitResolve}}
-func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	{{- range .Attributes}}
 	case "{{.Name}}":
 		{{- if parameterized .}}
-		if len(key) < {{add 1 (parameterCount .)}} {
+		if key.Len() < {{add 1 (parameterCount .)}} {
 			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
 		}
 		{{- range $index, $param := .GetParameters}}
-		{{lower .Name}}, ok{{.Name}} := key[{{add 1 $index}}].({{parameterType $param}})
+		{{lower .Name}}, ok{{.Name}} := key.Get({{add 1 $index}}).({{parameterType $param}})
 		{{- end}}
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
 			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
 		}
 		v := c.{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}},{{end}})
-		return v, key[{{add 1 (parameterCount .)}}:], nil
+		return v, key.SliceI({{add 1 (parameterCount .)}}), nil
 		{{- else}}
-		return c.{{template "accessor" .}}(), key[1:], nil
+		return c.{{template "accessor" .}}(), key.SliceI(1), nil
 		{{- end}}
 	{{- end}}
 	default:

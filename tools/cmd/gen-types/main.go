@@ -74,9 +74,9 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-var moduleInfo = func() struct{ Dir string } {
+var moduleInfo = func() struct{ Dir, Path string } {
 	buf := new(bytes.Buffer)
-	cmd := exec.Command("go", "list", "-m", "-f={{.Dir}}")
+	cmd := exec.Command("go", "list", "-m", "-f={{.Dir}}\u2028{{.Path}}")
 	cmd.Stdout = buf
 	check(cmd.Run())
 
@@ -84,10 +84,11 @@ var moduleInfo = func() struct{ Dir string } {
 	checkf(err, "get working directory")
 
 	for _, s := range strings.Split(buf.String(), "\n") {
-		r, err := filepath.Rel(s, cwd)
+		parts := strings.Split(s, "\u2028")
+		r, err := filepath.Rel(parts[0], cwd)
 		checkf(err, "check module path")
 		if !strings.HasPrefix(r, ".") {
-			return struct{ Dir string }{s}
+			return struct{ Dir, Path string }{parts[0], parts[1]}
 		}
 	}
 
