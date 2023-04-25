@@ -84,7 +84,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 // DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes an
 // account from the database.
 func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
-	a := record.Key{"Account", url, "Main"}
+	a := record.NewKey("Account", url, "Main")
 	return b.kvstore.Put(a.Hash(), nil)
 }
 
@@ -165,7 +165,7 @@ func (b *Batch) Transaction2(id [32]byte) *Transaction {
 	return b.getTransaction(id)
 }
 
-func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
+func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
 	v, err := record.NewValue(
 		b.logger.L,
 		b.store,
@@ -188,7 +188,7 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 //
 // Deprecated: Use Account.
 func (b *Batch) AccountByID(id []byte) (*Account, error) {
-	u, err := b.getAccountUrl(record.Key{"Account", id})
+	u, err := b.getAccountUrl(record.NewKey("Account", id))
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -196,7 +196,7 @@ func (b *Batch) AccountByID(id []byte) (*Account, error) {
 }
 
 // GetValue implements record.Store.
-func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
+func (b *Batch) GetValue(key *record.Key, value record.ValueWriter) error {
 	if b.done {
 		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
 	}
@@ -211,7 +211,7 @@ func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 }
 
 // PutValue implements record.Store.
-func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
+func (b *Batch) PutValue(key *record.Key, value record.ValueReader) error {
 	if b.done {
 		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
 	}
@@ -231,10 +231,10 @@ func zero[T any]() T {
 }
 
 // resolveValue resolves the value for the given key.
-func resolveValue[T any](c *Batch, key record.Key) (T, error) {
+func resolveValue[T any](c *Batch, key *record.Key) (T, error) {
 	var r record.Record = c
 	var err error
-	for len(key) > 0 {
+	for key.Len() > 0 {
 		r, key, err = r.Resolve(key)
 		if err != nil {
 			return zero[T](), errors.UnknownError.Wrap(err)
