@@ -77,7 +77,7 @@ func keyForSystemData(partition string) systemDataKey {
 
 func (c *Batch) BPT() *bpt.BPT {
 	return record.FieldGetOrCreate(&c.bpt, func() *bpt.BPT {
-		return newBPT(c, c.logger.L, c.store, record.Key{}.Append("BPT"), "bpt", "bpt")
+		return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt", "bpt")
 	})
 }
 
@@ -86,7 +86,7 @@ func (c *Batch) getAccount(url *url.URL) *Account {
 		v := new(Account)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Account", url)
+		v.key = (*record.Key)(nil).Append("Account", url)
 		v.parent = c
 		v.label = "account" + " " + url.RawString()
 		return v
@@ -98,7 +98,7 @@ func (c *Batch) Message(hash [32]byte) *Message {
 		v := new(Message)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Message", hash)
+		v.key = (*record.Key)(nil).Append("Message", hash)
 		v.parent = c
 		v.label = "message" + " " + hex.EncodeToString(hash[:])
 		return v
@@ -110,7 +110,7 @@ func (c *Batch) getTransaction(hash [32]byte) *Transaction {
 		v := new(Transaction)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Transaction", hash)
+		v.key = (*record.Key)(nil).Append("Transaction", hash)
 		v.parent = c
 		v.label = "transaction" + " " + hex.EncodeToString(hash[:])
 		return v
@@ -122,61 +122,61 @@ func (c *Batch) SystemData(partition string) *SystemData {
 		v := new(SystemData)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("SystemData", partition)
+		v.key = (*record.Key)(nil).Append("SystemData", partition)
 		v.parent = c
 		v.label = "system data" + " " + partition
 		return v
 	})
 }
 
-func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *Batch) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for batch")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "BPT":
-		return c.BPT(), key[1:], nil
+		return c.BPT(), key.SliceI(1), nil
 	case "Account":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for batch")
 		}
-		url, okUrl := key[1].(*url.URL)
+		url, okUrl := key.Get(1).(*url.URL)
 		if !okUrl {
 			return nil, nil, errors.InternalError.With("bad key for batch")
 		}
 		v := c.getAccount(url)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Message":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for batch")
 		}
-		hash, okHash := key[1].([32]byte)
+		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
 			return nil, nil, errors.InternalError.With("bad key for batch")
 		}
 		v := c.Message(hash)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Transaction":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for batch")
 		}
-		hash, okHash := key[1].([32]byte)
+		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
 			return nil, nil, errors.InternalError.With("bad key for batch")
 		}
 		v := c.getTransaction(hash)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "SystemData":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for batch")
 		}
-		partition, okPartition := key[1].(string)
+		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for batch")
 		}
 		v := c.SystemData(partition)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for batch")
 	}
@@ -276,7 +276,7 @@ func (c *Batch) baseCommit() error {
 type Account struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *Batch
 
@@ -451,78 +451,78 @@ func (c *Account) Data() *AccountData {
 	})
 }
 
-func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for account")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Url":
-		return c.getUrl(), key[1:], nil
+		return c.getUrl(), key.SliceI(1), nil
 	case "Main":
-		return c.Main(), key[1:], nil
+		return c.Main(), key.SliceI(1), nil
 	case "Pending":
-		return c.Pending(), key[1:], nil
+		return c.Pending(), key.SliceI(1), nil
 	case "SyntheticForAnchor":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
-		anchor, okAnchor := key[1].([32]byte)
+		anchor, okAnchor := key.Get(1).([32]byte)
 		if !okAnchor {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
 		v := c.SyntheticForAnchor(anchor)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Directory":
-		return c.Directory(), key[1:], nil
+		return c.Directory(), key.SliceI(1), nil
 	case "Transaction":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
-		hash, okHash := key[1].([32]byte)
+		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
 		v := c.Transaction(hash)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "MainChain":
-		return c.MainChain(), key[1:], nil
+		return c.MainChain(), key.SliceI(1), nil
 	case "ScratchChain":
-		return c.ScratchChain(), key[1:], nil
+		return c.ScratchChain(), key.SliceI(1), nil
 	case "SignatureChain":
-		return c.SignatureChain(), key[1:], nil
+		return c.SignatureChain(), key.SliceI(1), nil
 	case "RootChain":
-		return c.RootChain(), key[1:], nil
+		return c.RootChain(), key.SliceI(1), nil
 	case "AnchorSequenceChain":
-		return c.AnchorSequenceChain(), key[1:], nil
+		return c.AnchorSequenceChain(), key.SliceI(1), nil
 	case "MajorBlockChain":
-		return c.MajorBlockChain(), key[1:], nil
+		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
-		partition, okPartition := key[1].(string)
+		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
 		v := c.getSyntheticSequenceChain(partition)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "AnchorChain":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
-		partition, okPartition := key[1].(string)
+		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account")
 		}
 		v := c.getAnchorChain(partition)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Chains":
-		return c.Chains(), key[1:], nil
+		return c.Chains(), key.SliceI(1), nil
 	case "SyntheticAnchors":
-		return c.SyntheticAnchors(), key[1:], nil
+		return c.SyntheticAnchors(), key.SliceI(1), nil
 	case "Data":
-		return c.Data(), key[1:], nil
+		return c.Data(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for account")
 	}
@@ -689,7 +689,7 @@ func (c *Account) baseCommit() error {
 type AccountTransaction struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *Account
 
@@ -730,22 +730,22 @@ func (c *AccountTransaction) History() record.Set[uint64] {
 	})
 }
 
-func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *AccountTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for transaction")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Payments":
-		return c.Payments(), key[1:], nil
+		return c.Payments(), key.SliceI(1), nil
 	case "Votes":
-		return c.Votes(), key[1:], nil
+		return c.Votes(), key.SliceI(1), nil
 	case "Signatures":
-		return c.Signatures(), key[1:], nil
+		return c.Signatures(), key.SliceI(1), nil
 	case "ValidatorSignatures":
-		return c.ValidatorSignatures(), key[1:], nil
+		return c.ValidatorSignatures(), key.SliceI(1), nil
 	case "History":
-		return c.History(), key[1:], nil
+		return c.History(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for transaction")
 	}
@@ -806,7 +806,7 @@ func (c *AccountTransaction) Commit() error {
 type AccountAnchorChain struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *Account
 
@@ -826,16 +826,16 @@ func (c *AccountAnchorChain) BPT() *Chain2 {
 	})
 }
 
-func (c *AccountAnchorChain) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *AccountAnchorChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for anchor chain")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Root":
-		return c.Root(), key[1:], nil
+		return c.Root(), key.SliceI(1), nil
 	case "BPT":
-		return c.BPT(), key[1:], nil
+		return c.BPT(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for anchor chain")
 	}
@@ -895,7 +895,7 @@ func (c *AccountAnchorChain) Commit() error {
 type AccountData struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *Account
 
@@ -923,24 +923,24 @@ func (c *AccountData) Transaction(entryHash [32]byte) record.Value[[32]byte] {
 	})
 }
 
-func (c *AccountData) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *AccountData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for data")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Entry":
-		return c.Entry(), key[1:], nil
+		return c.Entry(), key.SliceI(1), nil
 	case "Transaction":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for data")
 		}
-		entryHash, okEntryHash := key[1].([32]byte)
+		entryHash, okEntryHash := key.Get(1).([32]byte)
 		if !okEntryHash {
 			return nil, nil, errors.InternalError.With("bad key for data")
 		}
 		v := c.Transaction(entryHash)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for data")
 	}
@@ -989,7 +989,7 @@ func (c *AccountData) Commit() error {
 type Message struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *Batch
 
@@ -1023,20 +1023,20 @@ func (c *Message) Signers() record.Set[*url.URL] {
 	})
 }
 
-func (c *Message) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *Message) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for message")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Main":
-		return c.getMain(), key[1:], nil
+		return c.getMain(), key.SliceI(1), nil
 	case "Cause":
-		return c.Cause(), key[1:], nil
+		return c.Cause(), key.SliceI(1), nil
 	case "Produced":
-		return c.Produced(), key[1:], nil
+		return c.Produced(), key.SliceI(1), nil
 	case "Signers":
-		return c.Signers(), key[1:], nil
+		return c.Signers(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for message")
 	}
@@ -1090,7 +1090,7 @@ func (c *Message) Commit() error {
 type Transaction struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *Batch
 
@@ -1139,30 +1139,30 @@ func (c *Transaction) Chains() record.Set[*TransactionChainEntry] {
 	})
 }
 
-func (c *Transaction) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *Transaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for transaction")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Main":
-		return c.Main(), key[1:], nil
+		return c.Main(), key.SliceI(1), nil
 	case "Status":
-		return c.Status(), key[1:], nil
+		return c.Status(), key.SliceI(1), nil
 	case "Produced":
-		return c.Produced(), key[1:], nil
+		return c.Produced(), key.SliceI(1), nil
 	case "Signatures":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for transaction")
 		}
-		signer, okSigner := key[1].(*url.URL)
+		signer, okSigner := key.Get(1).(*url.URL)
 		if !okSigner {
 			return nil, nil, errors.InternalError.With("bad key for transaction")
 		}
 		v := c.getSignatures(signer)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Chains":
-		return c.Chains(), key[1:], nil
+		return c.Chains(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for transaction")
 	}
@@ -1229,7 +1229,7 @@ func (c *Transaction) Commit() error {
 type SystemData struct {
 	logger logging.OptionalLogger
 	store  record.Store
-	key    record.Key
+	key    *record.Key
 	label  string
 	parent *Batch
 
@@ -1250,22 +1250,22 @@ func (c *SystemData) SyntheticIndexIndex(block uint64) record.Value[uint64] {
 	})
 }
 
-func (c *SystemData) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for system data")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "SyntheticIndexIndex":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for system data")
 		}
-		block, okBlock := key[1].(uint64)
+		block, okBlock := key.Get(1).(uint64)
 		if !okBlock {
 			return nil, nil, errors.InternalError.With("bad key for system data")
 		}
 		v := c.SyntheticIndexIndex(block)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for system data")
 	}
@@ -1310,7 +1310,7 @@ func (c *SystemData) Commit() error {
 type MerkleManager struct {
 	logger    logging.OptionalLogger
 	store     record.Store
-	key       record.Key
+	key       *record.Key
 	label     string
 	typ       merkle.ChainType
 	name      string
@@ -1372,44 +1372,44 @@ func (c *MerkleManager) Element(index uint64) record.Value[[]byte] {
 	})
 }
 
-func (c *MerkleManager) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *MerkleManager) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for merkle manager")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "Head":
-		return c.Head(), key[1:], nil
+		return c.Head(), key.SliceI(1), nil
 	case "States":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for merkle manager")
 		}
-		index, okIndex := key[1].(uint64)
+		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
 			return nil, nil, errors.InternalError.With("bad key for merkle manager")
 		}
 		v := c.States(index)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "ElementIndex":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for merkle manager")
 		}
-		hash, okHash := key[1].([]byte)
+		hash, okHash := key.Get(1).([]byte)
 		if !okHash {
 			return nil, nil, errors.InternalError.With("bad key for merkle manager")
 		}
 		v := c.ElementIndex(hash)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	case "Element":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for merkle manager")
 		}
-		index, okIndex := key[1].(uint64)
+		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
 			return nil, nil, errors.InternalError.With("bad key for merkle manager")
 		}
 		v := c.Element(index)
-		return v, key[2:], nil
+		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for merkle manager")
 	}
