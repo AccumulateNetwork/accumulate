@@ -25,18 +25,18 @@ type ChangeSet struct {
 
 func (c *ChangeSet) BPT() *BPT {
 	return record.FieldGetOrCreate(&c.bpt, func() *BPT {
-		return newBPT(c, c.logger.L, c.store, record.Key{}.Append("BPT"), "bpt", "bpt")
+		return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt", "bpt")
 	})
 }
 
-func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *ChangeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	case "BPT":
-		return c.BPT(), key[1:], nil
+		return c.BPT(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
