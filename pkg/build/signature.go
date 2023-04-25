@@ -103,9 +103,8 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 		return b
 	}
 
-	// Fix exactly 64 byte transactions
-	b.adjust64()
-	if !b.ok() {
+	// Adjust the body length
+	if !b.adjustBody() {
 		return b
 	}
 
@@ -114,6 +113,7 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 
 	var signature protocol.Signature
 	var err error
+	b.signer.Ignore64Byte = b.Ignore64Byte
 	switch {
 	case b.message != nil:
 		h := b.message.Hash()
@@ -133,46 +133,31 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 	return b
 }
 
-func (b *SignatureBuilder) adjust64() {
+func (b *SignatureBuilder) adjustBody() bool {
 	if b.Ignore64Byte || b.transaction == nil {
-		return
+		return b.ok()
 	}
 
-	// Are the body or header exactly 64 bytes?
-	header, err := b.transaction.Header.MarshalBinary()
-	if err != nil {
-		b.errorf(errors.EncodingError, "marshal header: %w", err)
-		return
-	}
+	// Is the body exactly 64 bytes?
 	body, err := b.transaction.Body.MarshalBinary()
 	if err != nil {
 		b.errorf(errors.EncodingError, "marshal body: %w", err)
-		return
+		return b.ok()
 	}
-	if len(header) != 64 && len(body) != 64 {
-		return
+	if len(body) != 64 {
+		return b.ok()
 	}
 
 	// Copy to reset the cached hash if there is one
 	b.transaction = b.transaction.Copy()
 
-	// Pad the header and/or body
-	if len(body) == 64 {
-		body = append(body, 0)
-		b.transaction.Body, err = protocol.UnmarshalTransactionBody(body)
-		if err != nil {
-			b.errorf(errors.EncodingError, "unmarshal body: %w", err)
-			return
-		}
+	// Pad
+	body = append(body, 0)
+	b.transaction.Body, err = protocol.UnmarshalTransactionBody(body)
+	if err != nil {
+		b.errorf(errors.EncodingError, "unmarshal body: %w", err)
+		return b.ok()
 	}
 
-	if len(header) == 64 {
-		header = append(header, 0)
-		b.transaction.Header = protocol.TransactionHeader{}
-		err = b.transaction.Header.UnmarshalBinary(header)
-		if err != nil {
-			b.errorf(errors.EncodingError, "unmarshal header: %w", err)
-			return
-		}
-	}
+	return b.ok()
 }
