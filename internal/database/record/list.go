@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,7 +15,7 @@ type list[T any] struct {
 	value[[]T]
 }
 
-func newList[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T]) *list[T] {
+func newList[T any](logger log.Logger, store Store, key *Key, namefmt string, encoder encodableValue[T]) *list[T] {
 	s := &list[T]{}
 	s.value = *newValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
 	return s

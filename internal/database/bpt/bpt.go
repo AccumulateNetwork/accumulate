@@ -13,7 +13,7 @@ import (
 )
 
 // New returns a new BPT.
-func New(parent record.Record, logger log.Logger, store record.Store, key record.Key, label string) *BPT {
+func New(parent record.Record, logger log.Logger, store record.Store, key *record.Key, label string) *BPT {
 	b := new(BPT)
 	b.logger.Set(logger)
 	b.store = store
@@ -219,8 +219,8 @@ again:
 }
 
 // Resolve implements [record.Record].
-func (b *BPT) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (b *BPT) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for bpt")
 	}
 
@@ -230,11 +230,11 @@ func (b *BPT) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return nil, nil, errors.UnknownError.Wrap(err)
 	}
 
-	if key[0] == "Root" {
-		return b.getState(), key[1:], nil
+	if key.Get(0) == "Root" {
+		return b.getState(), key.SliceI(1), nil
 	}
 
-	nodeKey, ok := key[0].([32]byte)
+	nodeKey, ok := key.Get(0).([32]byte)
 	if !ok {
 		return nil, nil, errors.InternalError.With("bad key for bpt")
 	}
@@ -249,5 +249,5 @@ func (b *BPT) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return nil, nil, errors.UnknownError.WithFormat("load node: %w", err)
 	}
 
-	return nodeRecord{e}, key[1:], nil
+	return nodeRecord{e}, key.SliceI(1), nil
 }

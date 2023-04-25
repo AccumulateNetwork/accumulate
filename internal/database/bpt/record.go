@@ -47,7 +47,7 @@ func (b *BPT) commitUpdatesDirect() (bool, error) {
 	}
 
 	var err error
-	for key := b.key; len(key) > 0; {
+	for key := b.key; key.Len() > 0; {
 		r, key, err = r.Resolve(key)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
@@ -127,8 +127,8 @@ func (e nodeRecord) IsDirty() bool { return e.value.IsDirty() }
 func (e nodeRecord) Commit() error { panic(errShim()) }
 
 // Resolve implements [record.Record].
-func (e nodeRecord) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) > 0 {
+func (e nodeRecord) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() > 0 {
 		return nil, nil, errors.InternalError.With("bad key for bpt entry")
 	}
 	return e, nil, nil
@@ -294,7 +294,7 @@ func (e *rootRecord) Commit() error {
 }
 
 // Resolve implements [record.Commit].
-func (e *rootRecord) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (e *rootRecord) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	return nodeRecord{e.branch}.Resolve(key)
 }
 
