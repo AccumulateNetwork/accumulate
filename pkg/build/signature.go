@@ -21,6 +21,10 @@ type SignatureBuilder struct {
 	message     messaging.Message
 	signatures  []protocol.Signature
 	signer      signing.Builder
+
+	// Ignore64Byte (when set) stops the signature builder from automatically
+	// correcting a transaction header or body that marshals to 64 bytes.
+	Ignore64Byte bool
 }
 
 func (b SignatureBuilder) Type(typ protocol.SignatureType) SignatureBuilder {
@@ -99,6 +103,12 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 		return b
 	}
 
+	// Fix exactly 64 byte transactions
+	b.adjust64()
+	if !b.ok() {
+		return b
+	}
+
 	// Always use a simple hash
 	b.signer.InitMode = signing.InitWithSimpleHash
 
@@ -119,5 +129,50 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 	} else {
 		b.signatures = append(b.signatures, signature)
 	}
+
 	return b
+}
+
+func (b *SignatureBuilder) adjust64() {
+	if b.Ignore64Byte || b.transaction == nil {
+		return
+	}
+
+	// Are the body or header exactly 64 bytes?
+	header, err := b.transaction.Header.MarshalBinary()
+	if err != nil {
+		b.errorf(errors.EncodingError, "marshal header: %w", err)
+		return
+	}
+	body, err := b.transaction.Body.MarshalBinary()
+	if err != nil {
+		b.errorf(errors.EncodingError, "marshal body: %w", err)
+		return
+	}
+	if len(header) != 64 && len(body) != 64 {
+		return
+	}
+
+	// Copy to reset the cached hash if there is one
+	b.transaction = b.transaction.Copy()
+
+	// Pad the header and/or body
+	if len(body) == 64 {
+		body = append(body, 0)
+		b.transaction.Body, err = protocol.UnmarshalTransactionBody(body)
+		if err != nil {
+			b.errorf(errors.EncodingError, "unmarshal body: %w", err)
+			return
+		}
+	}
+
+	if len(header) == 64 {
+		header = append(header, 0)
+		b.transaction.Header = protocol.TransactionHeader{}
+		err = b.transaction.Header.UnmarshalBinary(header)
+		if err != nil {
+			b.errorf(errors.EncodingError, "unmarshal header: %w", err)
+			return
+		}
+	}
 }
