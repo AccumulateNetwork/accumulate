@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -30,6 +31,10 @@ type Builder struct {
 	Signer     Signer
 	Version    uint64
 	Timestamp  Timestamp
+
+	// Ignore64Byte (when set) stops the signature builder from automatically
+	// correcting a transaction header or body that marshals to 64 bytes.
+	Ignore64Byte bool
 }
 
 func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
@@ -316,6 +321,12 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 		txn.Header.Initiator = *(*[32]byte)(init.MerkleHash())
 	}
 
+	// Adjust the header length
+	txn, err = s.adjustHeader(txn)
+	if err != nil {
+		return nil, err
+	}
+
 	return sig, s.sign(sig, nil, txn.GetHash())
 }
 
@@ -341,4 +352,29 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, dest *url.URL) (*
 
 	initSig.TransactionHash = *(*[32]byte)(txn.GetHash())
 	return initSig, nil
+}
+
+func (b *Builder) adjustHeader(txn *protocol.Transaction) (*protocol.Transaction, error) {
+	if b.Ignore64Byte {
+		return txn, nil
+	}
+
+	// Is the header exactly 64 bytes?
+	header, err := txn.Header.MarshalBinary()
+	if err != nil {
+		return nil, errors.EncodingError.WithFormat("marshal header: %w", err)
+	}
+	if len(header) != 64 {
+		return txn, nil
+	}
+
+	header = append(header, 0)
+	txn.Header = protocol.TransactionHeader{}
+	err = txn.Header.UnmarshalBinary(header)
+	if err != nil {
+		return nil, errors.EncodingError.WithFormat("unmarshal header: %w", err)
+	}
+
+	// Copy to reset the cached hash if there is one
+	return txn.Copy(), nil
 }
