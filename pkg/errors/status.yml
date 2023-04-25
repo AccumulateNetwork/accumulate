@@ -83,3 +83,6 @@ Status:
   PeerMisbehaved:
     value: 507
     description: means a peer behaved incorrectly
+  InvalidRecord:
+    value: 508
+    description: means the database has one or more invalid records
