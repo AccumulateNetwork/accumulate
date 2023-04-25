@@ -71,7 +71,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	require.NoError(t, snapshot.Restore(db, buf, nil))
 
 	// Verify the account chain
-	key := record.Key{"Account", foo, "MainChain"}
+	key := record.NewKey("Account", foo, "MainChain")
 	storetx := store.Begin(false)
 	defer storetx.Discard()
 	c := database.NewChain(nil, record.KvStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
@@ -125,7 +125,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 		require.NoError(t, snapshot.Restore(db, buf, nil))
 
 		// Verify the account chain
-		key := record.Key{"Account", foo, "MainChain"}
+		key := record.NewKey("Account", foo, "MainChain")
 		storetx := store.Begin(false)
 		defer storetx.Discard()
 		c := database.NewChain(nil, record.KvStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")

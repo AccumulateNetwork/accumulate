@@ -130,7 +130,7 @@ func (c *Client) OpenDB(writable bool) *DB {
 	batch := database.NewBatch("", kvb, writable, nil)
 	batch.SetObserver(testing.NullObserver{}) // Ignore the BPT
 	index := new(indexDB)
-	index.key = record.Key{"Light", "Index"}
+	index.key = record.NewKey("Light", "Index")
 	index.label = "light index"
 	index.store = record.KvStore{Store: kvb}
 	return &DB{batch, index}

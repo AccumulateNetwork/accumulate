@@ -150,11 +150,11 @@ func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
 
 	seen := map[[32]byte]bool{}
 	for _, r := range s.RecordUpdates {
-		if len(r.Key) < 2 {
+		if r.Key.Len() < 2 {
 			continue
 		}
-		typ, ok1 := r.Key[0].(string)
-		url, ok2 := r.Key[1].(*url.URL)
+		typ, ok1 := r.Key.Get(0).(string)
+		url, ok2 := r.Key.Get(1).(*url.URL)
 		if !ok1 || !ok2 || typ != "Account" {
 			continue
 		}
@@ -167,7 +167,7 @@ func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
 		if err != nil {
 			return errors.InternalError.WithFormat("get %v hash: %w", url, err)
 		}
-		s.StateTreeUpdates = append(s.StateTreeUpdates, &messaging.StateTreeUpdate{Key: r.Key[:2], Hash: hash})
+		s.StateTreeUpdates = append(s.StateTreeUpdates, &messaging.StateTreeUpdate{Key: r.Key.SliceJ(2), Hash: hash})
 	}
 
 	s.Sort()

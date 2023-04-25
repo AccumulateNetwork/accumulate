@@ -68,8 +68,8 @@ type Envelope struct {
 
 type RecordUpdate struct {
 	fieldsSet []bool
-	Key       record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Value     []byte     `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Value     []byte      `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -102,8 +102,8 @@ type SignatureRequest struct {
 
 type StateTreeUpdate struct {
 	fieldsSet []bool
-	Key       record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Hash      [32]byte   `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Hash      [32]byte    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
 	extraData []byte
 }
 
@@ -244,7 +244,9 @@ func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
 func (v *RecordUpdate) Copy() *RecordUpdate {
 	u := new(RecordUpdate)
 
-	u.Key = *(&v.Key).Copy()
+	if v.Key != nil {
+		u.Key = (v.Key).Copy()
+	}
 	u.Value = encoding.BytesCopy(v.Value)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -323,7 +325,9 @@ func (v *SignatureRequest) CopyAsInterface() interface{} { return v.Copy() }
 func (v *StateTreeUpdate) Copy() *StateTreeUpdate {
 	u := new(StateTreeUpdate)
 
-	u.Key = *(&v.Key).Copy()
+	if v.Key != nil {
+		u.Key = (v.Key).Copy()
+	}
 	u.Hash = v.Hash
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -485,7 +489,12 @@ func (v *Envelope) Equal(u *Envelope) bool {
 }
 
 func (v *RecordUpdate) Equal(u *RecordUpdate) bool {
-	if !((&v.Key).Equal(&u.Key)) {
+	switch {
+	case v.Key == u.Key:
+		// equal
+	case v.Key == nil || u.Key == nil:
+		return false
+	case !((v.Key).Equal(u.Key)):
 		return false
 	}
 	if !(bytes.Equal(v.Value, u.Value)) {
@@ -568,7 +577,12 @@ func (v *SignatureRequest) Equal(u *SignatureRequest) bool {
 }
 
 func (v *StateTreeUpdate) Equal(u *StateTreeUpdate) bool {
-	if !((&v.Key).Equal(&u.Key)) {
+	switch {
+	case v.Key == u.Key:
+		// equal
+	case v.Key == nil || u.Key == nil:
+		return false
+	case !((v.Key).Equal(u.Key)):
 		return false
 	}
 	if !(v.Hash == u.Hash) {
@@ -922,7 +936,7 @@ func (v *RecordUpdate) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !((v.Key).Equal(new(record.Key))) {
+	if !(v.Key == nil) {
 		writer.WriteValue(1, v.Key.MarshalBinary)
 	}
 	if !(len(v.Value) == 0) {
@@ -942,7 +956,7 @@ func (v *RecordUpdate) IsValid() error {
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Key is missing")
-	} else if (v.Key).Equal(new(record.Key)) {
+	} else if v.Key == nil {
 		errs = append(errs, "field Key is not set")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
@@ -1157,7 +1171,7 @@ func (v *StateTreeUpdate) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !((v.Key).Equal(new(record.Key))) {
+	if !(v.Key == nil) {
 		writer.WriteValue(1, v.Key.MarshalBinary)
 	}
 	if !(v.Hash == ([32]byte{})) {
@@ -1177,7 +1191,7 @@ func (v *StateTreeUpdate) IsValid() error {
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Key is missing")
-	} else if (v.Key).Equal(new(record.Key)) {
+	} else if v.Key == nil {
 		errs = append(errs, "field Key is not set")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
@@ -1523,7 +1537,7 @@ func (v *RecordUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x := new(record.Key); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
-		v.Key = *x
+		v.Key = x
 	}
 	if x, ok := reader.ReadBytes(2); ok {
 		v.Value = x
@@ -1680,7 +1694,7 @@ func (v *StateTreeUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x := new(record.Key); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
-		v.Key = *x
+		v.Key = x
 	}
 	if x, ok := reader.ReadHash(2); ok {
 		v.Hash = *x
@@ -1882,10 +1896,10 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 
 func (v *RecordUpdate) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Key   record.Key `json:"key,omitempty"`
-		Value *string    `json:"value,omitempty"`
+		Key   *record.Key `json:"key,omitempty"`
+		Value *string     `json:"value,omitempty"`
 	}{}
-	if !((v.Key).Equal(new(record.Key))) {
+	if !(v.Key == nil) {
 		u.Key = v.Key
 	}
 	if !(len(v.Value) == 0) {
@@ -1956,10 +1970,10 @@ func (v *SignatureRequest) MarshalJSON() ([]byte, error) {
 
 func (v *StateTreeUpdate) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Key  record.Key `json:"key,omitempty"`
-		Hash string     `json:"hash,omitempty"`
+		Key  *record.Key `json:"key,omitempty"`
+		Hash string      `json:"hash,omitempty"`
 	}{}
-	if !((v.Key).Equal(new(record.Key))) {
+	if !(v.Key == nil) {
 		u.Key = v.Key
 	}
 	if !(v.Hash == ([32]byte{})) {
@@ -2128,8 +2142,8 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 
 func (v *RecordUpdate) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Key   record.Key `json:"key,omitempty"`
-		Value *string    `json:"value,omitempty"`
+		Key   *record.Key `json:"key,omitempty"`
+		Value *string     `json:"value,omitempty"`
 	}{}
 	u.Key = v.Key
 	u.Value = encoding.BytesToJSON(v.Value)
@@ -2222,8 +2236,8 @@ func (v *SignatureRequest) UnmarshalJSON(data []byte) error {
 
 func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Key  record.Key `json:"key,omitempty"`
-		Hash string     `json:"hash,omitempty"`
+		Key  *record.Key `json:"key,omitempty"`
+		Hash string      `json:"hash,omitempty"`
 	}{}
 	u.Key = v.Key
 	u.Hash = encoding.ChainToJSON(v.Hash)
