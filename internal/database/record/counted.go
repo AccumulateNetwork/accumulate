@@ -19,7 +19,7 @@ type counted[T any] struct {
 	values []*value[T]
 }
 
-func newCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) *counted[T] {
+func newCounted[T any](logger log.Logger, store Store, key *Key, namefmt string, new func() encodableValue[T]) *counted[T] {
 	c := &counted[T]{}
 	c.count = newValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
 	c.new = new
@@ -184,16 +184,16 @@ func (c *counted[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (c *counted[T]) Resolve(key Key) (Record, Key, error) {
-	if len(key) == 0 {
+func (c *counted[T]) Resolve(key *Key) (Record, *Key, error) {
+	if key.Len() == 0 {
 		return c.count, nil, nil
 	}
 
-	if len(key) > 1 {
+	if key.Len() > 1 {
 		return nil, nil, errors.InternalError.With("bad key for counted")
 	}
 
-	i, ok := key[0].(int)
+	i, ok := key.Get(0).(int)
 	if !ok {
 		return nil, nil, errors.InternalError.With("bad key for value")
 	}

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -25,7 +25,7 @@ type set[T any] struct {
 }
 
 // NewSet returns a new set using the given encoder and comparison.
-func newSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
+func newSet[T any](logger log.Logger, store Store, key *Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
 	s := &set[T]{}
 	s.value = *newValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
 	s.compare = cmp
