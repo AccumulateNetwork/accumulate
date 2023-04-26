@@ -98,9 +98,6 @@ func (s *simService) queryFanout(ctx context.Context, scope *url.URL, query api.
 
 	records := new(api.RecordRange[api.Record])
 	for _, p := range s.partitions {
-		if p.ID == "BVN1" {
-			print("")
-		}
 		r, err := (*nodeService)(p.nodes[0]).Query(ctx, scope, query)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
