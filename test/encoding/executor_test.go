@@ -125,10 +125,7 @@ func (v *snapVisitor) VisitAccount(a *snapshot.Account, i int) error {
 
 	b, err := snapshot.CollectAccount(v.batch.Account(a.Url), true)
 	require.NoError(v, err)
-	if !assert.Equalf(v, a.Copy(), b.Copy(), "Account %v", a.Url) {
-		a.Equal(b)
-		print("")
-	}
+	assert.Equalf(v, a.Copy(), b.Copy(), "Account %v", a.Url)
 
 	return nil
 }

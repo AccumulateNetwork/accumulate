@@ -19,11 +19,11 @@ AccountRecord:
       type: protocol.Account
       marshal-as: union
     - name: Directory
-      type: RecordRange[*UrlRecord]
+      type: { name: RecordRange, parameters: [{ type: UrlRecord, pointer: true }] }
       marshal-as: reference
       pointer: true
     - name: Pending
-      type: RecordRange[*TxIDRecord]
+      type: { name: RecordRange, parameters: [{ type: TxIDRecord, pointer: true }] }
       marshal-as: reference
       pointer: true
     - name: Receipt
@@ -115,17 +115,17 @@ MessageRecord[T messaging.Message]:
       description: is the block when the transaction was first received
       type: uint
     - name: Produced
-      type: RecordRange[*TxIDRecord]
+      type: { name: RecordRange, parameters: [{ type: TxIDRecord, pointer: true }] }
       marshal-as: reference
       pointer: true
     - name: Cause
-      type: RecordRange[*TxIDRecord]
+      type: { name: RecordRange, parameters: [{ type: TxIDRecord, pointer: true }] }
       marshal-as: reference
       pointer: true
 
     # For transactions
     - name: Signatures
-      type: RecordRange[*SignatureSetRecord]
+      type: { name: RecordRange, parameters: [{ type: SignatureSetRecord, pointer: true }] }
       marshal-as: reference
       pointer: true
 
@@ -153,7 +153,14 @@ SignatureSetRecord:
       type: protocol.Account
       marshal-as: union
     - name: Signatures
-      type: RecordRange[*MessageRecord[messaging.Message]]
+      type:
+        name: RecordRange
+        parameters:
+        - type:
+            name: MessageRecord
+            parameters:
+            - type: messaging.Message
+          pointer: true
       marshal-as: reference
       pointer: true
 
@@ -169,11 +176,18 @@ MinorBlockRecord:
       type: url
       pointer: true
     - name: Entries
-      type: RecordRange[*ChainEntryRecord[Record]]
+      type:
+        name: RecordRange
+        parameters:
+        - type:
+            name: ChainEntryRecord
+            parameters:
+            - type: Record
+          pointer: true
       marshal-as: reference
       pointer: true
     - name: Anchored
-      type: RecordRange[*MinorBlockRecord]
+      type: { name: RecordRange, parameters: [{ type: MinorBlockRecord, pointer: true }] }
       marshal-as: reference
       pointer: true
 
@@ -185,7 +199,7 @@ MajorBlockRecord:
     - name: Time
       type: time
     - name: MinorBlocks
-      type: RecordRange[*MinorBlockRecord]
+      type: { name: RecordRange, parameters: [{ type: MinorBlockRecord, pointer: true }] }
       marshal-as: reference
       pointer: true
 

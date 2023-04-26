@@ -39,9 +39,6 @@ func BenchmarkInsertSubbatch(b *testing.B) {
 
 	var rh common.RandHash
 	for i := 0; i < b.N; i++ {
-		if i > 0 {
-			print("")
-		}
 		sub := model.Begin()
 		err := sub.BPT().Insert(rh.NextA(), rh.NextA())
 		if err != nil {
