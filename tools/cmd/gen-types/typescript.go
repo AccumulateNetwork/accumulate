@@ -122,8 +122,10 @@ func TsUnobjectify(field *Field, varName string) string {
 
 func tsUnobjectify2(field *Field, varName string) string {
 	switch field.Type.Code {
-	case BigInt, Time:
+	case Time:
 		return fmt.Sprintf("%s instanceof %s ? %[1]s : new %[2]s(%[1]s)", varName, field.Type.TypescriptType(false))
+	case BigInt:
+		return fmt.Sprintf("typeof %s === 'bigint' ? %[1]s : BigInt(%[1]s)", varName)
 	case Url, TxID:
 		return fmt.Sprintf("%s.parse(%s)", field.Type.TypescriptType(false), varName)
 	case Bytes, Hash:

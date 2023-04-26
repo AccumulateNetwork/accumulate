@@ -19,7 +19,7 @@ func (t TypeCode) TypescriptType() string {
 	case TypeCodeTxid:
 		return "TxID"
 	case TypeCodeBigInt:
-		return "BN"
+		return "bigint"
 	case TypeCodeUint:
 		return "number"
 	case TypeCodeInt:
@@ -48,7 +48,7 @@ func (t TypeCode) TypescriptInputType() string {
 	case TypeCodeTxid:
 		return "TxIDArgs"
 	case TypeCodeBigInt:
-		return "BN | string | number"
+		return "bigint | string | number"
 	case TypeCodeUint:
 		return "number"
 	case TypeCodeInt:
