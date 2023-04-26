@@ -6,6 +6,8 @@
 
 package typegen
 
+import "strings"
+
 func (t TypeCode) GoType() string {
 	switch t {
 	case TypeCodeBytes:
@@ -38,8 +40,19 @@ func (t TypeCode) GoType() string {
 }
 
 func (f FieldType) GoType() string {
-	if f.Code == TypeCodeUnknown {
+	if f.Code != TypeCodeUnknown {
+		return f.Code.GoType()
+	}
+	if len(f.Parameters) == 0 {
 		return f.Name
 	}
-	return f.Code.GoType()
+	var params []string
+	for _, p := range f.Parameters {
+		s := p.Type.GoType()
+		if p.Pointer {
+			s = "*" + s
+		}
+		params = append(params, s)
+	}
+	return f.Name + "[" + strings.Join(params, ", ") + "]"
 }
