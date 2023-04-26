@@ -35,9 +35,6 @@ var tsFuncs = template.FuncMap{
 }
 
 func TsEncodeAnnotation(field *Field) string {
-	if field.Type.Name == "ServiceType" {
-		print("")
-	}
 	if field.MarshalAsType != typegen.TypeCodeUnknown {
 		return field.MarshalAsType.String()
 	}
