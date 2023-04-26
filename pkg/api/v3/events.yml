@@ -18,7 +18,7 @@ BlockEvent:
     - name: Major
       type: uint
     - name: Entries
-      type: ChainEntryRecord[Record]
+      type: { name: ChainEntryRecord, parameters: [{ type: Record }] }
       marshal-as: reference
       pointer: true
       repeatable: true

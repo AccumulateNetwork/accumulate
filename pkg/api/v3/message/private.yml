@@ -14,6 +14,6 @@ PrivateSequenceResponse:
   union: { type: message }
   fields:
     - name: Value
-      type: api.MessageRecord[messaging.Message]
+      type: { name: api.MessageRecord, parameters: [{ type: messaging.Message }] }
       marshal-as: reference
       pointer: true
