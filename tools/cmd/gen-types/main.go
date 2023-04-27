@@ -84,10 +84,14 @@ var moduleInfo = func() struct{ Dir, Path string } {
 	checkf(err, "get working directory")
 
 	for _, s := range strings.Split(buf.String(), "\n") {
+		s = strings.TrimSpace(s)
+		if len(s) == 0 {
+			continue
+		}
 		parts := strings.Split(s, "\u2028")
 		r, err := filepath.Rel(parts[0], cwd)
 		checkf(err, "check module path")
-		if !strings.HasPrefix(r, ".") {
+		if r == "." || !strings.HasPrefix(r, ".") {
 			return struct{ Dir, Path string }{parts[0], parts[1]}
 		}
 	}
