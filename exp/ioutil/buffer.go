@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package ioutil2
+package ioutil
 
 import (
 	"io"
