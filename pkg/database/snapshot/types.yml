@@ -1,0 +1,13 @@
+Header:
+  fields:
+  - name: Version
+    description: is the snapshot format version
+    type: uint
+  - name: RootHash
+    description: is the snapshot's root hash
+    type: hash
+  - name: SystemLedger
+    description: is the partition's system ledger
+    type: protocol.Ledger
+    marshal-as: reference
+    pointer: true

@@ -14,6 +14,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+type SectionReader = ioutil2.SectionReader
+
 type Reader struct {
 	file   ioutil2.SectionReader
 	offset int64

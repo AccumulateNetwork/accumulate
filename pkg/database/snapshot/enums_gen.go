@@ -17,17 +17,17 @@ import (
 // SectionTypeHeader .
 const SectionTypeHeader SectionType = 1
 
-// SectionTypeAccounts .
-const SectionTypeAccounts SectionType = 2
+// SectionTypeAccountsV1 .
+const SectionTypeAccountsV1 SectionType = 2
 
-// SectionTypeTransactions .
-const SectionTypeTransactions SectionType = 3
+// SectionTypeTransactionsV1 .
+const SectionTypeTransactionsV1 SectionType = 3
 
-// SectionTypeSignatures .
-const SectionTypeSignatures SectionType = 4
+// SectionTypeSignaturesV1 .
+const SectionTypeSignaturesV1 SectionType = 4
 
-// SectionTypeGzTransactions .
-const SectionTypeGzTransactions SectionType = 5
+// SectionTypeGzTransactionsV1 .
+const SectionTypeGzTransactionsV1 SectionType = 5
 
 // SectionTypeSnapshot .
 const SectionTypeSnapshot SectionType = 6
@@ -39,7 +39,7 @@ func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SectionType) SetEnumValue(id uint64) bool {
 	u := SectionType(id)
 	switch u {
-	case SectionTypeHeader, SectionTypeAccounts, SectionTypeTransactions, SectionTypeSignatures, SectionTypeGzTransactions, SectionTypeSnapshot:
+	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot:
 		*v = u
 		return true
 	}
@@ -51,14 +51,14 @@ func (v SectionType) String() string {
 	switch v {
 	case SectionTypeHeader:
 		return "header"
-	case SectionTypeAccounts:
-		return "accounts"
-	case SectionTypeTransactions:
-		return "transactions"
-	case SectionTypeSignatures:
-		return "signatures"
-	case SectionTypeGzTransactions:
-		return "gzTransactions"
+	case SectionTypeAccountsV1:
+		return "accountsV1"
+	case SectionTypeTransactionsV1:
+		return "transactionsV1"
+	case SectionTypeSignaturesV1:
+		return "signaturesV1"
+	case SectionTypeGzTransactionsV1:
+		return "gzTransactionsV1"
 	case SectionTypeSnapshot:
 		return "snapshot"
 	}
@@ -70,14 +70,14 @@ func SectionTypeByName(name string) (SectionType, bool) {
 	switch strings.ToLower(name) {
 	case "header":
 		return SectionTypeHeader, true
-	case "accounts":
-		return SectionTypeAccounts, true
-	case "transactions":
-		return SectionTypeTransactions, true
-	case "signatures":
-		return SectionTypeSignatures, true
-	case "gztransactions":
-		return SectionTypeGzTransactions, true
+	case "accountsv1":
+		return SectionTypeAccountsV1, true
+	case "transactionsv1":
+		return SectionTypeTransactionsV1, true
+	case "signaturesv1":
+		return SectionTypeSignaturesV1, true
+	case "gztransactionsv1":
+		return SectionTypeGzTransactionsV1, true
 	case "snapshot":
 		return SectionTypeSnapshot, true
 	}
