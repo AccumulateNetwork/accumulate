@@ -11,10 +11,11 @@ export enum {{.Name}} {
   {{- end}}
 }
 
-export namespace {{.Name}} {
-  export type Args = {{.Name}} | string;
+export type {{.Name}}Args = {{.Name}} | string;
 
-  export function fromObject(obj: Args): {{.Name}} {
+/** @ignore */
+export namespace {{.Name}} {
+  export function fromObject(obj: {{.Name}}Args): {{.Name}} {
     if (typeof obj === 'number') return obj
     return byName(obj)
   }
@@ -33,6 +34,19 @@ export namespace {{.Name}} {
       {{- end}}
       default:
         throw new Error(`Unknown {{.Name}} '${name}'`);
+    }
+  }
+
+  export function getName(v: {{.Name}}) {
+    switch (v) {
+      {{- $typ := .Name}}
+      {{- range .Values}}
+      {{- $typ := (print $typ "." .Name)}}
+      case {{$typ}}:
+        return "{{lowerCamel .Name}}"
+      {{- end}}
+      default:
+        throw new Error(`Unknown {{.Name}} ${v}`);
     }
   }
 }
