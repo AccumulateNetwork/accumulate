@@ -68,19 +68,3 @@ func (b *BPT) walkRange(found *bool, n *branch, count int, key [32]byte, values 
 
 	return values //                      return the values found so far
 }
-
-// Insert
-// Starts the search of the BPT for the location of the key in the BPT
-func (b *BPT) getRange(startKey [32]byte, count int) (values []*leaf, lastKey [32]byte) {
-	_ = b.executePending() // Hope there are no errors
-
-	if count == 0 { // If they didn't ask for anything, there is nothing to do.
-		return
-	}
-	var found bool                                                     // We use found as flag as a solid state that we found our start
-	values = b.walkRange(&found, b.getRoot(), count, startKey, values) // Look for the starting point, and collect a "count" number of entries
-	if len(values) > 0 {                                               // If we got something, go ahead and return the last element
-		lastKey = values[len(values)-1].Key //                             The lastKey can be easily used to ask for another contiguous range
-	}
-	return values, lastKey
-} //

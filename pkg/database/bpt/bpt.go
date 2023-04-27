@@ -13,6 +13,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+type Iterator interface {
+	Next() ([]KeyValuePair, bool)
+	Err() error
+}
+
+type KeyValuePair struct {
+	Key, Value [32]byte
+}
+
 // New returns a new BPT.
 func New(parent database.Record, logger log.Logger, store database.Store, key *database.Key, label string) *BPT {
 	b := new(BPT)

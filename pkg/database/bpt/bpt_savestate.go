@@ -14,41 +14,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-const window = uint64(1000) //                               Process this many BPT entries at a time
-const nLen = 32 + 32 + 8    //                               Each node is a key (32), hash (32), offset(8)
-
-// FirstPossibleBptKey is the first possible BPT key.
-var FirstPossibleBptKey = [32]byte{
-	255, 255, 255, 255, 255, 255, 255, 255,
-	255, 255, 255, 255, 255, 255, 255, 255,
-	255, 255, 255, 255, 255, 255, 255, 255,
-	255, 255, 255, 255, 255, 255, 255, 255,
-}
-
-func (b *BPT) ForEach(fn func(key record.KeyHash, hash [32]byte) error) error {
-	place := FirstPossibleBptKey
-	NodeCnt := uint64(0) //                                 Recalculate number of nodes
-	for {                //
-		bptVals, next := b.getRange(place, int(window)) //  Read a thousand values from the BPT
-		NodeCnt += uint64(len(bptVals))
-		if len(bptVals) == 0 { //                           If there are none left, we break out
-			break
-		}
-		place = next //                                     We will get the next 1000 after the last 1000
-
-		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
-			err := fn(v.Key, v.Hash) //                     Get that next value
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
+const window = 1000      //                               Process this many BPT entries at a time
+const nLen = 32 + 32 + 8 //                               Each node is a key (32), hash (32), offset(8)
 
 // SaveSnapshotV1
 // Saves a snapshot of the state of the BVN/DVN.
@@ -92,23 +61,22 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 		return e2
 	}
 
-	place := FirstPossibleBptKey
-	vOffset := uint64(0) //                                 Offset from the beginning of value section
-	NodeCnt := uint64(0) //                                 Recalculate number of nodes
+	it := b.Iterate(window)
+	vOffset := uint64(0) //           Offset from the beginning of value section
+	NodeCnt := uint64(0) //           Recalculate number of nodes
 	for {                //
-		bptVals, next := b.getRange(place, int(window)) //  Read a thousand values from the BPT
-		NodeCnt += uint64(len(bptVals))
-		if len(bptVals) == 0 { //                           If there are none left, we break out
+		bptVals, ok := it.Next() // Read a thousand values from the BPT (intentionally mask the other variable)
+		if !ok {
 			break
 		}
-		place = next //                                     We will get the next 1000 after the last 1000
+		NodeCnt += uint64(len(bptVals))
 
 		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
 			_, e1 := file.Write(v.Key[:])                         // Write the key out
-			_, e2 := file.Write(v.Hash[:])                        // Write the hash out
+			_, e2 := file.Write(v.Value[:])                       // Write the hash out
 			_, e3 := file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
 
-			value, e4 := loadState(v.Key, v.Hash)                // Get that next value
+			value, e4 := loadState(v.Key, v.Value)               // Get that next value
 			vLen := uint64(len(value))                           // get the value's length as uint64
 			_, e5 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
 			_, e6 := values.Write(value)                         // write out the value
@@ -138,6 +106,8 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 	_, e4 := file.Seek(0, io.SeekEnd)                    // Go to the end of file
 	_, e5 := io.Copy(file, values)                       // Copy values to file
 	switch {                                             // Not likely to fail, but report if it does
+	case it.Err() != nil:
+		return it.Err()
 	case e1 != nil:
 		return e1
 	case e2 != nil:
@@ -184,7 +154,7 @@ func ReadSnapshotV1(file ioutil2.SectionReader, storeState func(key storage.Key,
 
 	fOff := 8 + numNodes*(nLen) //                    File offset to values in snapshot
 	fileIndex := int64(8)       //                    Used to track progress through the file
-	toRead := window            //                    Assume a window's worth to read
+	toRead := uint64(window)    //                    Assume a window's worth to read
 	for toRead > 0 {
 
 		if numNodes < toRead { //                             If not a window's worth of nodes left
