@@ -9,11 +9,13 @@ package snapshot
 import (
 	"io"
 
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 )
 
-type ReaderSection = snapshot.ReaderSection
+type ReaderSection = ioutil.Segment[SectionType, *SectionType]
 type SectionType = snapshot.SectionType
 
 const (
@@ -26,17 +28,18 @@ const (
 )
 
 type Reader struct {
-	snapshot.Reader
+	ioutil.SegmentedReader[SectionType, *SectionType]
 }
 
 type Writer struct {
-	snapshot.Writer
+	Logger logging.OptionalLogger
+	ioutil.SegmentedWriter[SectionType, *SectionType]
 }
 
 func NewReader(file ioutil2.SectionReader) *Reader {
-	return &Reader{*snapshot.NewReader(file)}
+	return &Reader{*ioutil.NewSegmentedReader[SectionType](file)}
 }
 
 func NewWriter(w io.WriteSeeker) *Writer {
-	return &Writer{*snapshot.NewWriter(w)}
+	return &Writer{SegmentedWriter: *ioutil.NewSegmentedWriter[SectionType](w)}
 }
