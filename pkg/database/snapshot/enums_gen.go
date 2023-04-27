@@ -14,22 +14,22 @@ import (
 	"strings"
 )
 
-// SectionTypeHeader .
+// SectionTypeHeader is the snapshot's header.
 const SectionTypeHeader SectionType = 1
 
-// SectionTypeAccountsV1 .
+// SectionTypeAccountsV1 contains accounts (v1).
 const SectionTypeAccountsV1 SectionType = 2
 
-// SectionTypeTransactionsV1 .
+// SectionTypeTransactionsV1 contains transactions (v1).
 const SectionTypeTransactionsV1 SectionType = 3
 
-// SectionTypeSignaturesV1 .
+// SectionTypeSignaturesV1 contains signatures (v1).
 const SectionTypeSignaturesV1 SectionType = 4
 
-// SectionTypeGzTransactionsV1 .
+// SectionTypeGzTransactionsV1 contains gzipped transactions (v1).
 const SectionTypeGzTransactionsV1 SectionType = 5
 
-// SectionTypeSnapshot .
+// SectionTypeSnapshot contains another snapshot.
 const SectionTypeSnapshot SectionType = 6
 
 // GetEnumValue returns the value of the Section Type

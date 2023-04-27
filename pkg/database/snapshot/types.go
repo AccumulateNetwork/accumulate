@@ -7,7 +7,7 @@
 package snapshot
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package snapshot enums.yml
-//-go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package snapshot types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package snapshot types.yml
 
 // SectionType is the type of a snapshot section.
 type SectionType uint64

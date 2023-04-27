@@ -1,3 +1,9 @@
+versionHeader:
+  fields:
+  - name: Version
+    description: is the snapshot format version
+    type: uint
+
 Header:
   fields:
   - name: Version
@@ -8,6 +14,6 @@ Header:
     type: hash
   - name: SystemLedger
     description: is the partition's system ledger
-    type: protocol.Ledger
+    type: protocol.SystemLedger
     marshal-as: reference
     pointer: true
