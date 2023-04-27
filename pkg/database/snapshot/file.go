@@ -7,7 +7,6 @@
 package snapshot
 
 import (
-	"encoding/binary"
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -15,16 +14,6 @@ import (
 )
 
 const Version2 = 2
-
-type Reader struct {
-	rd     *ioutil.SegmentedReader[SectionType, *SectionType]
-	header *Header
-}
-
-type Writer struct {
-	wr          *ioutil.SegmentedWriter[SectionType, *SectionType]
-	wroteHeader bool
-}
 
 // Open opens a snapshot file for reading.
 func Open(file ioutil.SectionReader) (*Reader, error) {
@@ -60,9 +49,21 @@ func Open(file ioutil.SectionReader) (*Reader, error) {
 }
 
 // Create opens a snapshot file for writing.
-func Create(file io.WriteSeeker, header *Header) (*Writer, error) {
+func Create(file io.WriteSeeker) (*Writer, error) {
 	wr := ioutil.NewSegmentedWriter[SectionType](file)
 	return &Writer{wr: wr}, nil
+}
+
+type Reader struct {
+	rd     *ioutil.SegmentedReader[SectionType, *SectionType]
+	header *Header
+}
+
+type Writer struct {
+	wr          *ioutil.SegmentedWriter[SectionType, *SectionType]
+	wroteHeader bool
+	sections    int
+	index       []recordKeyAndOffset
 }
 
 func (w *Writer) WriteHeader(header *Header) error {
@@ -73,7 +74,7 @@ func (w *Writer) WriteHeader(header *Header) error {
 	}
 
 	header.Version = Version2
-	_, err = header.writeTo(sw)
+	_, err = writeValue(sw, header)
 	if err != nil {
 		return errors.UnknownError.WithFormat("write header section: %w", err)
 	}
@@ -88,24 +89,16 @@ func (w *Writer) open(typ SectionType) (*ioutil.SegmentWriter[SectionType, *Sect
 	if typ != SectionTypeHeader && !w.wroteHeader {
 		return nil, errors.NotReady.WithFormat("header has not been written")
 	}
+	w.sections++
 	w.wroteHeader = true
 	return w.wr.Open(typ)
 }
 
 func (h *Header) readFrom(rd io.Reader) (int64, error) {
-	// Get the length of the header
-	var v [8]byte
-	n, err := io.ReadFull(rd, v[:])
-	if err != nil {
-		return int64(n), errors.EncodingError.WithFormat("read length: %w", err)
-	}
-	l := binary.BigEndian.Uint64(v[:])
-
 	// Read the header bytes
-	b := make([]byte, l)
-	m, err := io.ReadFull(rd, b)
+	b, n, err := readRecord(rd)
 	if err != nil {
-		return int64(n + m), errors.EncodingError.WithFormat("read data: %w", err)
+		return n, errors.UnknownError.Wrap(err)
 	}
 
 	// Version check
@@ -113,38 +106,14 @@ func (h *Header) readFrom(rd io.Reader) (int64, error) {
 	err = vh.UnmarshalBinary(b)
 	if vh.Version != Version2 {
 		h.Version = vh.Version
-		return int64(n + m), nil
+		return n, nil
 	}
 
 	// Unmarshal the header
 	err = h.UnmarshalBinary(b)
 	if err != nil {
-		return int64(n + m), errors.EncodingError.WithFormat("unmarshal: %w", err)
+		return n, errors.EncodingError.WithFormat("unmarshal: %w", err)
 	}
 
-	return int64(n + m), nil
-}
-
-func (h *Header) writeTo(wr io.Writer) (int64, error) {
-	// Marshal the header
-	b, err := h.MarshalBinary()
-	if err != nil {
-		return 0, errors.EncodingError.WithFormat("marshal: %w", err)
-	}
-
-	// Write the length
-	var v [8]byte
-	binary.BigEndian.PutUint64(v[:], uint64(len(b)))
-	n, err := wr.Write(v[:])
-	if err != nil {
-		return int64(n), errors.EncodingError.WithFormat("write length: %w", err)
-	}
-
-	// Write the header bytes
-	m, err := wr.Write(b)
-	if err != nil {
-		return int64(n + m), errors.EncodingError.WithFormat("write data: %w", err)
-	}
-
-	return int64(n + m), nil
+	return n, nil
 }

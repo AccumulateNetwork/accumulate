@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -31,6 +32,13 @@ type Header struct {
 	// SystemLedger is the partition's system ledger.
 	SystemLedger *protocol.SystemLedger `json:"systemLedger,omitempty" form:"systemLedger" query:"systemLedger" validate:"required"`
 	extraData    []byte
+}
+
+type recordEntry struct {
+	fieldsSet []bool
+	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Value     []byte      `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
 }
 
 type versionHeader struct {
@@ -57,6 +65,23 @@ func (v *Header) Copy() *Header {
 }
 
 func (v *Header) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *recordEntry) Copy() *recordEntry {
+	u := new(recordEntry)
+
+	if v.Key != nil {
+		u.Key = (v.Key).Copy()
+	}
+	u.Value = encoding.BytesCopy(v.Value)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *recordEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *versionHeader) Copy() *versionHeader {
 	u := new(versionHeader)
@@ -85,6 +110,22 @@ func (v *Header) Equal(u *Header) bool {
 	case v.SystemLedger == nil || u.SystemLedger == nil:
 		return false
 	case !((v.SystemLedger).Equal(u.SystemLedger)):
+		return false
+	}
+
+	return true
+}
+
+func (v *recordEntry) Equal(u *recordEntry) bool {
+	switch {
+	case v.Key == u.Key:
+		// equal
+	case v.Key == nil || u.Key == nil:
+		return false
+	case !((v.Key).Equal(u.Key)):
+		return false
+	}
+	if !(bytes.Equal(v.Value, u.Value)) {
 		return false
 	}
 
@@ -148,6 +189,58 @@ func (v *Header) IsValid() error {
 		errs = append(errs, "field SystemLedger is missing")
 	} else if v.SystemLedger == nil {
 		errs = append(errs, "field SystemLedger is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_recordEntry = []string{
+	1: "Key",
+	2: "Value",
+}
+
+func (v *recordEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Key == nil) {
+		writer.WriteValue(1, v.Key.MarshalBinary)
+	}
+	if !(len(v.Value) == 0) {
+		writer.WriteBytes(2, v.Value)
+	}
+
+	_, _, err := writer.Reset(fieldNames_recordEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *recordEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Key is missing")
+	} else if v.Key == nil {
+		errs = append(errs, "field Key is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -232,6 +325,32 @@ func (v *Header) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *recordEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *recordEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(record.Key); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Key = x
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_recordEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *versionHeader) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -273,6 +392,20 @@ func (v *Header) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *recordEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Key   *record.Key `json:"key,omitempty"`
+		Value *string     `json:"value,omitempty"`
+	}{}
+	if !(v.Key == nil) {
+		u.Key = v.Key
+	}
+	if !(len(v.Value) == 0) {
+		u.Value = encoding.BytesToJSON(v.Value)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *Header) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Version      uint64                 `json:"version,omitempty"`
@@ -292,5 +425,24 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 		v.RootHash = x
 	}
 	v.SystemLedger = u.SystemLedger
+	return nil
+}
+
+func (v *recordEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Key   *record.Key `json:"key,omitempty"`
+		Value *string     `json:"value,omitempty"`
+	}{}
+	u.Key = v.Key
+	u.Value = encoding.BytesToJSON(v.Value)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Key = u.Key
+	if x, err := encoding.BytesFromJSON(u.Value); err != nil {
+		return fmt.Errorf("error decoding Value: %w", err)
+	} else {
+		v.Value = x
+	}
 	return nil
 }

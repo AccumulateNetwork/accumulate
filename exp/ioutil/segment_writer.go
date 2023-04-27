@@ -125,8 +125,11 @@ type SegmentWriter[V enumGet, U enumSet[V]] struct {
 	typ     V
 	offset  int64
 	file    *SegmentedWriter[V, U]
-	segment io.WriteSeeker
+	segment *SectionWriter
 }
+
+// Type returns the segment's type.
+func (s *SegmentWriter[V, U]) Type() V { return s.typ }
 
 // Write writes bytes.
 func (w *SegmentWriter[V, U]) Write(p []byte) (n int, err error) {

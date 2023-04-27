@@ -32,6 +32,12 @@ const SectionTypeGzTransactionsV1 SectionType = 5
 // SectionTypeSnapshot contains another snapshot.
 const SectionTypeSnapshot SectionType = 6
 
+// SectionTypeRecords contains records stored as (key, record) pairs.
+const SectionTypeRecords SectionType = 7
+
+// SectionTypeRecordIndex indexes record keys, including the offset and section number.
+const SectionTypeRecordIndex SectionType = 8
+
 // GetEnumValue returns the value of the Section Type
 func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -39,7 +45,7 @@ func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SectionType) SetEnumValue(id uint64) bool {
 	u := SectionType(id)
 	switch u {
-	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot:
+	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot, SectionTypeRecords, SectionTypeRecordIndex:
 		*v = u
 		return true
 	}
@@ -61,6 +67,10 @@ func (v SectionType) String() string {
 		return "gzTransactionsV1"
 	case SectionTypeSnapshot:
 		return "snapshot"
+	case SectionTypeRecords:
+		return "records"
+	case SectionTypeRecordIndex:
+		return "recordIndex"
 	}
 	return fmt.Sprintf("SectionType:%d", v)
 }
@@ -80,6 +90,10 @@ func SectionTypeByName(name string) (SectionType, bool) {
 		return SectionTypeGzTransactionsV1, true
 	case "snapshot":
 		return SectionTypeSnapshot, true
+	case "records":
+		return SectionTypeRecords, true
+	case "recordindex":
+		return SectionTypeRecordIndex, true
 	}
 	return 0, false
 }

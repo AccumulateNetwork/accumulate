@@ -17,3 +17,9 @@ SectionType:
   Snapshot:
     description: contains another snapshot
     value: 6
+  Records:
+    description: contains records stored as (key, record) pairs
+    value: 7
+  RecordIndex:
+    description: indexes record keys, including the offset and section number
+    value: 8

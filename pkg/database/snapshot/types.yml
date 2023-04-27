@@ -17,3 +17,12 @@ Header:
     type: protocol.SystemLedger
     marshal-as: reference
     pointer: true
+
+recordEntry:
+  fields:
+  - name: Key
+    type: record.Key
+    marshal-as: reference
+    pointer: true
+  - name: Value
+    type: bytes
