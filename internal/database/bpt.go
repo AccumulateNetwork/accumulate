@@ -23,7 +23,7 @@ func newBPT(parent record.Record, logger log.Logger, store record.Store, key *re
 }
 
 func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
-	return b.BPT().ForEach(func(key storage.Key, hash [32]byte) error {
+	return bpt.ForEach(b.BPT(), func(key storage.Key, hash [32]byte) error {
 		// Create an Account object
 		u, err := b.getAccountUrl(record.NewKey(key))
 		if err != nil {

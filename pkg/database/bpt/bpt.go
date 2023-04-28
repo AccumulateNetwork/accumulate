@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 type BPT interface {
@@ -24,14 +23,23 @@ type BPT interface {
 	// Insert inserts a new entry or updates an existing entry.
 	Insert(key, hash [32]byte) error
 
-	// ForEach calls the callback for each BPT entry.
-	ForEach(fn func(key record.KeyHash, hash [32]byte) error) error
+	// Iterate returns an iterator that iterates over the BPT.
+	Iterate(window int) Iterator
 
 	// GetRootHash returns the root hash of the BPT.
 	GetRootHash() ([32]byte, error)
 
 	// GetReceipt returns the receipt for an entry.
 	GetReceipt(key [32]byte) (*merkle.Receipt, error)
+}
+
+type Iterator interface {
+	Next() ([]KeyValuePair, bool)
+	Err() error
+}
+
+type KeyValuePair struct {
+	Key, Value [32]byte
 }
 
 // New returns a new BPT.

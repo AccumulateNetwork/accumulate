@@ -71,7 +71,7 @@ func (b *bpt) walkRange(found *bool, n *branch, count int, key [32]byte, values 
 
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
-func (b *bpt) getRange(startKey [32]byte, count int) (values []*leaf, lastKey [32]byte) {
+func (b *bpt) xgetRange(startKey [32]byte, count int) (values []*leaf, lastKey [32]byte) {
 	_ = b.executePending() // Hope there are no errors
 
 	if count == 0 { // If they didn't ask for anything, there is nothing to do.
