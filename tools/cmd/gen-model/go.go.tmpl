@@ -145,30 +145,34 @@ func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType
 {{if not .OmitAccessor}}
 func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}} {
 	{{- if parameterized .}}
-	return values.GetOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}),
-	{{- else}}
-	return values.GetOrCreate(&c.{{lower .Name}},
-	{{- end -}}
-
-	func() {{recordType . true}} {
-		{{- if .Type.IsEntity}}
-		v := new({{fullName .}})
-		v.logger = c.logger
-		v.store = c.{{valueStore .}}
-		v.key = {{template "key" .}}
-		v.parent = c
-		v.label = {{template "valueLabel" .}}
-		return v
-		{{- else if .Type.IsChain}}
-		return database.NewChain(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
-		{{- else if .Type.IsOther}}
-		return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
-		{{- else if .IsCounted}}
-		{{- template "newCounted" .}}
-		{{- else}}
-		{{- template "newValue" .}}
-		{{- end}}
+	return values.GetOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}), func() {{recordType . true}} {
+		return c.new{{.Name}}({{range .GetParameters}}{{lower .Name}},{{end}})
 	})
+	{{- else}}
+	return values.GetOrCreate(&c.{{lower .Name}}, c.new{{.Name}})
+	{{- end -}}
+}
+{{end}}
+
+{{if not .OmitConstructor}}
+func (c *{{fullName $c}}) new{{.Name}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . true}} {
+	{{- if .Type.IsEntity}}
+	v := new({{fullName .}})
+	v.logger = c.logger
+	v.store = c.{{valueStore .}}
+	v.key = {{template "key" .}}
+	v.parent = c
+	v.label = {{template "valueLabel" .}}
+	return v
+	{{- else if .Type.IsChain}}
+	return database.NewChain(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+	{{- else if .Type.IsOther}}
+	return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+	{{- else if .IsCounted}}
+	{{- template "newCounted" .}}
+	{{- else}}
+	{{- template "newValue" .}}
+	{{- end}}
 }
 {{end}}
 {{end}}

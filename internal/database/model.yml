@@ -46,7 +46,7 @@
       emptyIfMissing: true
       pointer: true
       collection: set
-    - name: SyntheticForAnchor
+    - name: SyntheticForAnchor # Not used by exec v2
       type: state
       parameters:
       - name: Anchor
@@ -62,7 +62,7 @@
       pointer: true
       emptyIfMissing: true
 
-    - name: Transaction
+    - name: Transaction # Indexed by pending (more or less)
       type: entity
       parameters:
       - name: Hash
@@ -131,7 +131,7 @@
       dataType: Chain2
       hasChains: true
       pointer: true
-    - name: SyntheticSequenceChain
+    - name: SyntheticSequenceChain # Indexed by network definition
       type: other
       dataType: Chain2
       hasChains: true
@@ -140,7 +140,7 @@
       parameters:
       - name: Partition
         type: string
-    - name: AnchorChain
+    - name: AnchorChain # Indexed by network definition
       type: entity
       private: true
       parameters:

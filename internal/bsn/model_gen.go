@@ -63,33 +63,43 @@ func keyForPartition(id string) partitionKey {
 }
 
 func (c *ChangeSet) LastBlock() values.Value[*LastBlock] {
-	return values.GetOrCreate(&c.lastBlock, func() values.Value[*LastBlock] {
-		return values.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), "last block", false, values.Struct[LastBlock]())
-	})
+	return values.GetOrCreate(&c.lastBlock, c.newLastBlock)
+}
+
+func (c *ChangeSet) newLastBlock() values.Value[*LastBlock] {
+	return values.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), "last block", false, values.Struct[LastBlock]())
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 	return values.GetOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
-		v := new(Summary)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = (*record.Key)(nil).Append("Summary", hash)
-		v.parent = c
-		v.label = "summary" + " " + hex.EncodeToString(hash[:])
-		return v
+		return c.newSummary(hash)
 	})
+}
+
+func (c *ChangeSet) newSummary(hash [32]byte) *Summary {
+	v := new(Summary)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = (*record.Key)(nil).Append("Summary", hash)
+	v.parent = c
+	v.label = "summary" + " " + hex.EncodeToString(hash[:])
+	return v
 }
 
 func (c *ChangeSet) Pending(partition string) *Pending {
 	return values.GetOrCreateMap(&c.pending, keyForPending(partition), func() *Pending {
-		v := new(Pending)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = (*record.Key)(nil).Append("Pending", partition)
-		v.parent = c
-		v.label = "pending" + " " + partition
-		return v
+		return c.newPending(partition)
 	})
+}
+
+func (c *ChangeSet) newPending(partition string) *Pending {
+	v := new(Pending)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = (*record.Key)(nil).Append("Pending", partition)
+	v.parent = c
+	v.label = "pending" + " " + partition
+	return v
 }
 
 func (c *ChangeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -218,15 +228,19 @@ type Summary struct {
 func (c *Summary) Key() *record.Key { return c.key }
 
 func (c *Summary) Main() values.Value[*messaging.BlockSummary] {
-	return values.GetOrCreate(&c.main, func() values.Value[*messaging.BlockSummary] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Struct[messaging.BlockSummary]())
-	})
+	return values.GetOrCreate(&c.main, c.newMain)
+}
+
+func (c *Summary) newMain() values.Value[*messaging.BlockSummary] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Struct[messaging.BlockSummary]())
 }
 
 func (c *Summary) Signatures() values.Set[protocol.KeySignature] {
-	return values.GetOrCreate(&c.signatures, func() values.Set[protocol.KeySignature] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", values.Union(protocol.UnmarshalKeySignature), compareSignatures)
-	})
+	return values.GetOrCreate(&c.signatures, c.newSignatures)
+}
+
+func (c *Summary) newSignatures() values.Set[protocol.KeySignature] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", values.Union(protocol.UnmarshalKeySignature), compareSignatures)
 }
 
 func (c *Summary) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -307,8 +321,12 @@ func keyForPendingOnBlock(index uint64) pendingOnBlockKey {
 
 func (c *Pending) OnBlock(index uint64) values.Value[[32]byte] {
 	return values.GetOrCreateMap(&c.onBlock, keyForPendingOnBlock(index), func() values.Value[[32]byte] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", index), c.label+" "+"on block"+" "+strconv.FormatUint(index, 10), false, values.Wrapped(values.HashWrapper))
+		return c.newOnBlock(index)
 	})
+}
+
+func (c *Pending) newOnBlock(index uint64) values.Value[[32]byte] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", index), c.label+" "+"on block"+" "+strconv.FormatUint(index, 10), false, values.Wrapped(values.HashWrapper))
 }
 
 func (c *Pending) Resolve(key *record.Key) (record.Record, *record.Key, error) {

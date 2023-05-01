@@ -53,14 +53,8 @@ func (it *AccountIterator) Next() (*Account, bool) {
 		return nil, false
 	}
 
-	// This avoids populating the account map but it's kind of gross
-	a := new(Account)
-	a.logger = it.batch.logger
-	a.store = it.batch.store
-	a.key = (*record.Key)(nil).Append("Account", u)
-	a.parent = it.batch
-	a.label = "account" + " " + u.RawString()
-	return a, true
+	// Create a new account record but don't add it to the map
+	return it.batch.newAccount(u), true
 }
 
 func (it *AccountIterator) Err() error {

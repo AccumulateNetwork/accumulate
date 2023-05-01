@@ -67,38 +67,50 @@ func keyForIndexDBTransaction(hash [32]byte) indexDBTransactionKey {
 
 func (c *indexDB) Account(url *url.URL) IndexDBAccount {
 	return values.GetOrCreateMap(&c.account, keyForIndexDBAccount(url), func() *indexDBAccount {
-		v := new(indexDBAccount)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Account", url)
-		v.parent = c
-		v.label = c.label + " " + "account" + " " + url.RawString()
-		return v
+		return c.newAccount(url)
 	})
+}
+
+func (c *indexDB) newAccount(url *url.URL) *indexDBAccount {
+	v := new(indexDBAccount)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Account", url)
+	v.parent = c
+	v.label = c.label + " " + "account" + " " + url.RawString()
+	return v
 }
 
 func (c *indexDB) Partition(url *url.URL) IndexDBPartition {
 	return values.GetOrCreateMap(&c.partition, keyForIndexDBPartition(url), func() *indexDBPartition {
-		v := new(indexDBPartition)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Partition", url)
-		v.parent = c
-		v.label = c.label + " " + "partition" + " " + url.RawString()
-		return v
+		return c.newPartition(url)
 	})
+}
+
+func (c *indexDB) newPartition(url *url.URL) *indexDBPartition {
+	v := new(indexDBPartition)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Partition", url)
+	v.parent = c
+	v.label = c.label + " " + "partition" + " " + url.RawString()
+	return v
 }
 
 func (c *indexDB) Transaction(hash [32]byte) IndexDBTransaction {
 	return values.GetOrCreateMap(&c.transaction, keyForIndexDBTransaction(hash), func() *indexDBTransaction {
-		v := new(indexDBTransaction)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Transaction", hash)
-		v.parent = c
-		v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(hash[:])
-		return v
+		return c.newTransaction(hash)
 	})
+}
+
+func (c *indexDB) newTransaction(hash [32]byte) *indexDBTransaction {
+	v := new(indexDBTransaction)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Transaction", hash)
+	v.parent = c
+	v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(hash[:])
+	return v
 }
 
 func (c *indexDB) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -236,27 +248,35 @@ func keyForIndexDBAccountChain(name string) indexDBAccountChainKey {
 }
 
 func (c *indexDBAccount) DidIndexTransactionExecution() values.Set[[32]byte] {
-	return values.GetOrCreate(&c.didIndexTransactionExecution, func() values.Set[[32]byte] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), c.label+" "+"did index transaction execution", values.Wrapped(values.HashWrapper), values.CompareHash)
-	})
+	return values.GetOrCreate(&c.didIndexTransactionExecution, c.newDidIndexTransactionExecution)
+}
+
+func (c *indexDBAccount) newDidIndexTransactionExecution() values.Set[[32]byte] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), c.label+" "+"did index transaction execution", values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
 func (c *indexDBAccount) DidLoadTransaction() values.Set[[32]byte] {
-	return values.GetOrCreate(&c.didLoadTransaction, func() values.Set[[32]byte] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), c.label+" "+"did load transaction", values.Wrapped(values.HashWrapper), values.CompareHash)
-	})
+	return values.GetOrCreate(&c.didLoadTransaction, c.newDidLoadTransaction)
+}
+
+func (c *indexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), c.label+" "+"did load transaction", values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
 func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
 	return values.GetOrCreateMap(&c.chain, keyForIndexDBAccountChain(name), func() *indexDBAccountChain {
-		v := new(indexDBAccountChain)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Chain", name)
-		v.parent = c
-		v.label = c.label + " " + "chain" + " " + name
-		return v
+		return c.newChain(name)
 	})
+}
+
+func (c *indexDBAccount) newChain(name string) *indexDBAccountChain {
+	v := new(indexDBAccountChain)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Chain", name)
+	v.parent = c
+	v.label = c.label + " " + "chain" + " " + name
+	return v
 }
 
 func (c *indexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -354,9 +374,11 @@ type indexDBAccountChain struct {
 func (c *indexDBAccountChain) Key() *record.Key { return c.key }
 
 func (c *indexDBAccountChain) Index() values.List[*protocol.IndexEntry] {
-	return values.GetOrCreate(&c.index, func() values.List[*protocol.IndexEntry] {
-		return values.NewList(c.logger.L, c.store, c.key.Append("Index"), c.label+" "+"index", values.Struct[protocol.IndexEntry]())
-	})
+	return values.GetOrCreate(&c.index, c.newIndex)
+}
+
+func (c *indexDBAccountChain) newIndex() values.List[*protocol.IndexEntry] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("Index"), c.label+" "+"index", values.Struct[protocol.IndexEntry]())
 }
 
 func (c *indexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -428,9 +450,11 @@ type indexDBPartition struct {
 func (c *indexDBPartition) Key() *record.Key { return c.key }
 
 func (c *indexDBPartition) Anchors() values.List[*AnchorMetadata] {
-	return values.GetOrCreate(&c.anchors, func() values.List[*AnchorMetadata] {
-		return values.NewList(c.logger.L, c.store, c.key.Append("Anchors"), c.label+" "+"anchors", values.Struct[AnchorMetadata]())
-	})
+	return values.GetOrCreate(&c.anchors, c.newAnchors)
+}
+
+func (c *indexDBPartition) newAnchors() values.List[*AnchorMetadata] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("Anchors"), c.label+" "+"anchors", values.Struct[AnchorMetadata]())
 }
 
 func (c *indexDBPartition) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -500,9 +524,11 @@ type indexDBTransaction struct {
 func (c *indexDBTransaction) Key() *record.Key { return c.key }
 
 func (c *indexDBTransaction) Executed() values.Value[*EventMetadata] {
-	return values.GetOrCreate(&c.executed, func() values.Value[*EventMetadata] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("Executed"), c.label+" "+"executed", false, values.Struct[EventMetadata]())
-	})
+	return values.GetOrCreate(&c.executed, c.newExecuted)
+}
+
+func (c *indexDBTransaction) newExecuted() values.Value[*EventMetadata] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Executed"), c.label+" "+"executed", false, values.Struct[EventMetadata]())
 }
 
 func (c *indexDBTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {

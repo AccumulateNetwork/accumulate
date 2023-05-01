@@ -10,6 +10,8 @@ EntityRecord:
       type: string
     - name: OmitAccessor
       type: bool
+    - name: OmitConstructor
+      type: bool
     - name: Private
       type: bool
     - name: Name
@@ -63,6 +65,8 @@ ChainRecord:
       type: string
     - name: OmitAccessor
       type: bool
+    - name: OmitConstructor
+      type: bool
     - name: Private
       type: bool
     - name: Name
@@ -86,6 +90,8 @@ StateRecord:
     - name: Description
       type: string
     - name: OmitAccessor
+      type: bool
+    - name: OmitConstructor
       type: bool
     - name: Private
       type: bool
@@ -123,6 +129,8 @@ IndexRecord:
       type: string
     - name: OmitAccessor
       type: bool
+    - name: OmitConstructor
+      type: bool
     - name: Private
       type: bool
     - name: Name
@@ -158,6 +166,8 @@ OtherRecord:
     - name: Description
       type: string
     - name: OmitAccessor
+      type: bool
+    - name: OmitConstructor
       type: bool
     - name: Private
       type: bool
