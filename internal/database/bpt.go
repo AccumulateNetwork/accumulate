@@ -22,6 +22,61 @@ func newBPT(parent record.Record, logger log.Logger, store record.Store, key *re
 	return bpt.New(parent, logger, store, key, label)
 }
 
+type AccountIterator struct {
+	batch   *Batch
+	it      bpt.Iterator
+	entries []bpt.KeyValuePair
+	pos     int
+	err     error
+}
+
+func (it *AccountIterator) Next() (*Account, bool) {
+	if it.err != nil {
+		return nil, false
+	}
+
+	if it.pos >= len(it.entries) {
+		var ok bool
+		it.pos = 0
+		it.entries, ok = it.it.Next()
+		if !ok || len(it.entries) == 0 {
+			return nil, false
+		}
+	}
+
+	v := it.entries[it.pos]
+	it.pos++
+
+	u, err := it.batch.getAccountUrl(record.NewKey(storage.Key(v.Key)))
+	if err != nil {
+		it.err = errors.UnknownError.WithFormat("resolve key hash: %w", err)
+		return nil, false
+	}
+
+	// This avoids populating the account map but it's kind of gross
+	a := new(Account)
+	a.logger = it.batch.logger
+	a.store = it.batch.store
+	a.key = (*record.Key)(nil).Append("Account", u)
+	a.parent = it.batch
+	a.label = "account" + " " + u.RawString()
+	return a, true
+}
+
+func (it *AccountIterator) Err() error {
+	if it.err != nil {
+		return it.err
+	}
+	return it.it.Err()
+}
+
+func (b *Batch) IterateAccounts() *AccountIterator {
+	return &AccountIterator{
+		batch: b,
+		it:    b.BPT().Iterate(1000),
+	}
+}
+
 func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
 	return bpt.ForEach(b.BPT(), func(key storage.Key, hash [32]byte) error {
 		// Create an Account object

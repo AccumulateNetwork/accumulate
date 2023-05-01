@@ -73,52 +73,13 @@ func BenchmarkCollect(b *testing.B) {
 
 				err = db.Collect(f, protocol.DnUrl(), nil)
 				require.NoError(b, err)
-			}
 
-			runtime.ReadMemStats(&ms)
-			if ms.Alloc > peak {
-				peak = ms.Alloc
+				runtime.ReadMemStats(&ms)
+				if ms.Alloc > peak {
+					peak = ms.Alloc
+				}
 			}
 		})
 		fmt.Printf("Peak allocated by %d is %d\n", N*M, peak)
 	}
 }
-
-// func BenchmarkCollectAndIndex(b *testing.B) {
-// 	const M = 1000
-// 	for _, N := range []int{1, 10, 100} {
-// 		var peak uint64
-// 		b.Run(fmt.Sprint(N*M), func(b *testing.B) {
-// 			dir := b.TempDir()
-// 			logger := acctesting.NewTestLogger(b)
-// 			db, err := database.OpenBadger(filepath.Join(dir, "test.db"), logger)
-// 			require.NoError(b, err)
-// 			defer db.Close()
-// 			db.SetObserver(acctesting.NullObserver{})
-
-// 			// Set up a bunch of accounts
-// 			fillDB(b, db, N, M)
-
-// 			// Collect
-// 			for i := 0; i < b.N; i++ {
-// 				f, err := os.Create(filepath.Join(dir, fmt.Sprintf("test.%d.snap", i)))
-// 				require.NoError(b, err)
-// 				defer f.Close()
-
-// 				w, err := snapshot.Create(f)
-// 				require.NoError(b, err)
-
-// 				w.WriteHeader(new(snapshot.Header))
-// 				require.NoError(b, err)
-
-// 				collect(b, db, w, &peak)
-// 				require.NoError(b, w.WriteIndex())
-// 			}
-
-// 			var ms runtime.MemStats
-// 			runtime.ReadMemStats(&ms)
-// 			fmt.Println(ms.HeapAlloc)
-// 		})
-// 	}
-
-// }

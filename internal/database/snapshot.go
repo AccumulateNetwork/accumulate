@@ -11,7 +11,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -21,70 +20,24 @@ type CollectOptions struct {
 }
 
 func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
-	// Walk records, recording their key, value, and offset. Build a list of
-	// (key hash, offset) pairs, sort it, and store that as the index.
-
 	if opts == nil {
 		opts = new(CollectOptions)
 	}
 
-	rootBatch := db.Begin(false)
-	defer rootBatch.Discard()
-
-	var ledger *protocol.SystemLedger
-	err := rootBatch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load system ledger: %w", err)
-	}
-
-	rootHash, err := rootBatch.BPT().GetRootHash()
-	if err != nil {
-		return errors.UnknownError.WithFormat("get root hash: %w", err)
-	}
-
+	// Start the snapshot
 	w, err := snapshot.Create(file)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open snapshot: %w", err)
 	}
 
-	err = w.WriteHeader(&snapshot.Header{
-		RootHash:     rootHash,
-		SystemLedger: ledger,
-	})
+	// Write the header
+	err = db.writeSnapshotHeader(w, partition, opts)
 	if err != nil {
-		return errors.UnknownError.WithFormat("write header: %w", err)
+		return errors.UnknownError.Wrap(err)
 	}
 
-	records, err := w.Open()
-	if err != nil {
-		return errors.UnknownError.WithFormat("open record section: %w", err)
-	}
-
-	it := rootBatch.BPT().Iterate(1000)
-	for {
-		entries, ok := it.Next()
-		if !ok {
-			break
-		}
-
-		batch := db.Begin(false)
-		defer batch.Discard()
-		for _, v := range entries {
-			u, err := batch.getAccountUrl(record.NewKey(record.KeyHash(v.Key)))
-			if err != nil {
-				return errors.UnknownError.WithFormat("resolve key hash: %w", err)
-			}
-			err = records.Collect(batch.Account(u))
-			if err != nil {
-				return errors.UnknownError.WithFormat("collect %v: %w", u, err)
-			}
-		}
-	}
-	if it.Err() != nil {
-		return errors.UnknownError.Wrap(it.Err())
-	}
-
-	err = records.Close()
+	// Collect accounts
+	err = db.collectAccounts(w, opts)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -95,4 +48,63 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	}
 
 	return nil
+}
+
+func (db *Database) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, opts *CollectOptions) error {
+	// Load the ledger
+	batch := db.Begin(false)
+	defer batch.Discard()
+
+	var ledger *protocol.SystemLedger
+	err := batch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load system ledger: %w", err)
+	}
+
+	// Load the BPT root hash
+	rootHash, err := batch.BPT().GetRootHash()
+	if err != nil {
+		return errors.UnknownError.WithFormat("get root hash: %w", err)
+	}
+
+	// Write the header
+	err = w.WriteHeader(&snapshot.Header{
+		RootHash:     rootHash,
+		SystemLedger: ledger,
+	})
+	if err != nil {
+		return errors.UnknownError.WithFormat("write header: %w", err)
+	}
+
+	return nil
+}
+
+func (db *Database) collectAccounts(w *snapshot.Writer, opts *CollectOptions) error {
+	// Open a records section
+	records, err := w.Open()
+	if err != nil {
+		return errors.UnknownError.WithFormat("open record section: %w", err)
+	}
+
+	// Iterate over the BPT and collect accounts
+	batch := db.Begin(false)
+	defer batch.Discard()
+	it := batch.IterateAccounts()
+	for {
+		account, ok := it.Next()
+		if !ok {
+			break
+		}
+
+		err = records.Collect(account)
+		if err != nil {
+			return errors.UnknownError.WithFormat("collect %v: %w", account.Url(), err)
+		}
+	}
+	if it.Err() != nil {
+		return errors.UnknownError.Wrap(it.Err())
+	}
+
+	err = records.Close()
+	return errors.UnknownError.Wrap(err)
 }
