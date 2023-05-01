@@ -151,9 +151,9 @@ func (k {{lower .FullName}}Key) ForMap() {{lower .FullName}}MapKey {
 {{if not .OmitAccessor}}
 func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}} {
 	{{- if parameterized .}}
-	return values.GetOrCreateMap(&c.{{lower .Name}}, {{lower .FullName}}Key{ {{range .GetParameters}}{{lower .Name}},{{end}} }, (*{{fullName $c}}).new{{.Name}}, c)
+	return values.GetOrCreateMap(c, &c.{{lower .Name}}, {{lower .FullName}}Key{ {{range .GetParameters}}{{lower .Name}},{{end}} }, (*{{fullName $c}}).new{{.Name}})
 	{{- else}}
-	return values.GetOrCreate(&c.{{lower .Name}}, (*{{fullName $c}}).new{{.Name}}, c)
+	return values.GetOrCreate(c, &c.{{lower .Name}}, (*{{fullName $c}}).new{{.Name}})
 	{{- end -}}
 }
 {{end}}

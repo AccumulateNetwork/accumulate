@@ -10,19 +10,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 )
 
-func GetOrCreate[T any, R any](ptr *T, create func(R) T, a0 R) T {
-	var z T
+func GetOrCreate[Container any, Record any](c Container, ptr *Record, create func(Container) Record) Record {
+	var z Record
 	if any(*ptr) != any(z) {
 		return *ptr
 	}
 
-	*ptr = create(a0)
+	*ptr = create(c)
 	return *ptr
 }
 
-func GetOrCreateMap[T any, K interface{ ForMap() KM }, KM comparable, A0 any](ptr *map[KM]T, key K, create func(A0, K) T, a0 A0) T {
+func GetOrCreateMap[Container any, Record any, Key interface{ ForMap() MapKey }, MapKey comparable](c Container, ptr *map[MapKey]Record, key Key, create func(Container, Key) Record) Record {
 	if *ptr == nil {
-		*ptr = map[KM]T{}
+		*ptr = map[MapKey]Record{}
 	}
 
 	mk := key.ForMap()
@@ -30,7 +30,7 @@ func GetOrCreateMap[T any, K interface{ ForMap() KM }, KM comparable, A0 any](pt
 		return v
 	}
 
-	v := create(a0, key)
+	v := create(c, key)
 	(*ptr)[mk] = v
 	return v
 }

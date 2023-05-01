@@ -174,7 +174,7 @@ func (c *Chain2) Index() *Chain2 {
 	if c.Type() == merkle.ChainTypeIndex {
 		panic("cannot index an index chain")
 	}
-	return values.GetOrCreate(&c.index, (*Chain2).newIndex, c)
+	return values.GetOrCreate(c, &c.index, (*Chain2).newIndex)
 }
 
 func (c *Chain2) newIndex() *Chain2 {

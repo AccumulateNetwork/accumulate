@@ -75,7 +75,7 @@ func (k partitionKey) ForMap() partitionMapKey {
 }
 
 func (c *ChangeSet) LastBlock() values.Value[*LastBlock] {
-	return values.GetOrCreate(&c.lastBlock, (*ChangeSet).newLastBlock, c)
+	return values.GetOrCreate(c, &c.lastBlock, (*ChangeSet).newLastBlock)
 }
 
 func (c *ChangeSet) newLastBlock() values.Value[*LastBlock] {
@@ -83,7 +83,7 @@ func (c *ChangeSet) newLastBlock() values.Value[*LastBlock] {
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
-	return values.GetOrCreateMap(&c.summary, summaryKey{hash}, (*ChangeSet).newSummary, c)
+	return values.GetOrCreateMap(c, &c.summary, summaryKey{hash}, (*ChangeSet).newSummary)
 }
 
 func (c *ChangeSet) newSummary(k summaryKey) *Summary {
@@ -97,7 +97,7 @@ func (c *ChangeSet) newSummary(k summaryKey) *Summary {
 }
 
 func (c *ChangeSet) Pending(partition string) *Pending {
-	return values.GetOrCreateMap(&c.pending, pendingKey{partition}, (*ChangeSet).newPending, c)
+	return values.GetOrCreateMap(c, &c.pending, pendingKey{partition}, (*ChangeSet).newPending)
 }
 
 func (c *ChangeSet) newPending(k pendingKey) *Pending {
@@ -236,7 +236,7 @@ type Summary struct {
 func (c *Summary) Key() *record.Key { return c.key }
 
 func (c *Summary) Main() values.Value[*messaging.BlockSummary] {
-	return values.GetOrCreate(&c.main, (*Summary).newMain, c)
+	return values.GetOrCreate(c, &c.main, (*Summary).newMain)
 }
 
 func (c *Summary) newMain() values.Value[*messaging.BlockSummary] {
@@ -244,7 +244,7 @@ func (c *Summary) newMain() values.Value[*messaging.BlockSummary] {
 }
 
 func (c *Summary) Signatures() values.Set[protocol.KeySignature] {
-	return values.GetOrCreate(&c.signatures, (*Summary).newSignatures, c)
+	return values.GetOrCreate(c, &c.signatures, (*Summary).newSignatures)
 }
 
 func (c *Summary) newSignatures() values.Set[protocol.KeySignature] {
@@ -332,7 +332,7 @@ func (k pendingOnBlockKey) ForMap() pendingOnBlockMapKey {
 }
 
 func (c *Pending) OnBlock(index uint64) values.Value[[32]byte] {
-	return values.GetOrCreateMap(&c.onBlock, pendingOnBlockKey{index}, (*Pending).newOnBlock, c)
+	return values.GetOrCreateMap(c, &c.onBlock, pendingOnBlockKey{index}, (*Pending).newOnBlock)
 }
 
 func (c *Pending) newOnBlock(k pendingOnBlockKey) values.Value[[32]byte] {

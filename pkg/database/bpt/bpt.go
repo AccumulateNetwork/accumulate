@@ -170,7 +170,7 @@ func parseNodeKey(nodeKey [32]byte) (height uint64, key [32]byte, ok bool) { //n
 
 // getRoot returns the root branch node, creating it if necessary.
 func (b *bpt) getRoot() *branch {
-	return values.GetOrCreate(&b.root, (*bpt).newRoot, b).branch
+	return values.GetOrCreate(b, &b.root, (*bpt).newRoot).branch
 }
 
 func (b *bpt) newRoot() *rootRecord {
