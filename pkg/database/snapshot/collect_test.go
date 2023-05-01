@@ -8,12 +8,17 @@ package snapshot_test
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -50,6 +55,17 @@ func TestCollect(t *testing.T) {
 
 	err = sim.S.Collect("BVN0", f, nil)
 	require.NoError(t, err)
+
+	// Try to read an account out of the snapshot
+	_, err = f.Seek(0, io.SeekEnd)
+	require.NoError(t, err)
+	ss, err := snapshot.Open(f)
+	require.NoError(t, err)
+
+	batch := database.NewBatch(t.Name(), fakeChangeSet{ss}, false, nil)
+	account, err := batch.Account(protocol.PartitionUrl("BVN0")).Main().Get()
+	require.NoError(t, err)
+	require.IsType(t, (*protocol.SystemLedger)(nil), account)
 }
 
 // func BenchmarkCollect(b *testing.B) {
@@ -88,3 +104,9 @@ func TestCollect(t *testing.T) {
 // 		fmt.Printf("Peak allocated by %d is %d\n", N*M, peak)
 // 	}
 // }
+
+type fakeChangeSet struct{ keyvalue.Store }
+
+func (fakeChangeSet) Begin(*record.Key, bool) keyvalue.ChangeSet { panic("shim") }
+func (fakeChangeSet) Commit() error                              { panic("shim") }
+func (fakeChangeSet) Discard()                                   {}

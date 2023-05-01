@@ -15,37 +15,50 @@ import (
 
 const Version2 = 2
 
-// Open opens a snapshot file for reading.
-func Open(file ioutil.SectionReader) (*Reader, error) {
+type rawReader = ioutil.SegmentedReader[SectionType, *SectionType]
+type rawWriter = ioutil.SegmentedWriter[SectionType, *SectionType]
+type sectionReader = ioutil.Segment[SectionType, *SectionType]
+type sectionWriter = ioutil.SegmentWriter[SectionType, *SectionType]
+
+// Read opens a snapshot file for reading.
+func Read(file ioutil.SectionReader) (*Reader, error) {
+	r, _, header, err := open(file)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return &Reader{r, header}, nil
+}
+
+func open(file ioutil.SectionReader) (*rawReader, *sectionReader, *Header, error) {
 	// Get the first section - it must be a header
 	r := ioutil.NewSegmentedReader[SectionType](file)
 	s, err := r.Next()
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return nil, nil, nil, errors.UnknownError.Wrap(err)
 	}
 	if s.Type() != SectionTypeHeader {
-		return nil, errors.BadRequest.WithFormat("bad first section: expected %v, got %v", SectionTypeHeader, s.Type())
+		return nil, nil, nil, errors.BadRequest.WithFormat("bad first section: expected %v, got %v", SectionTypeHeader, s.Type())
 	}
 
 	// Open it
 	sr, err := s.Open()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("open header section: %w", err)
+		return nil, nil, nil, errors.UnknownError.WithFormat("open header section: %w", err)
 	}
 
 	// Unmarshal the header
 	header := new(Header)
 	_, err = header.readFrom(sr)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("read header: %w", err)
+		return nil, nil, nil, errors.UnknownError.WithFormat("read header: %w", err)
 	}
 
 	// Return an error if the version is wrong
 	if header.Version != Version2 {
-		return nil, errors.EncodingError.WithFormat("wrong version: want %d, got %d", Version2, header.Version)
+		return nil, nil, nil, errors.EncodingError.WithFormat("wrong version: want %d, got %d", Version2, header.Version)
 	}
 
-	return &Reader{r, header}, nil
+	return r, s, header, nil
 }
 
 // Create opens a snapshot file for writing.
@@ -55,15 +68,15 @@ func Create(file io.WriteSeeker) (*Writer, error) {
 }
 
 type Reader struct {
-	rd     *ioutil.SegmentedReader[SectionType, *SectionType]
+	rd     *rawReader
 	header *Header
 }
 
 type Writer struct {
-	wr          *ioutil.SegmentedWriter[SectionType, *SectionType]
+	wr          *rawWriter
 	wroteHeader bool
 	sections    int
-	index       []recordKeyAndOffset
+	index       []recordIndexEntry
 }
 
 func (w *Writer) WriteHeader(header *Header) error {
@@ -85,7 +98,7 @@ func (w *Writer) WriteHeader(header *Header) error {
 	return nil
 }
 
-func (w *Writer) open(typ SectionType) (*ioutil.SegmentWriter[SectionType, *SectionType], error) {
+func (w *Writer) open(typ SectionType) (*sectionWriter, error) {
 	if typ != SectionTypeHeader && !w.wroteHeader {
 		return nil, errors.NotReady.WithFormat("header has not been written")
 	}

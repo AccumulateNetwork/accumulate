@@ -12,16 +12,16 @@ import (
 	"io"
 	"sort"
 
-	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-type recordKeyAndOffset struct {
+type recordIndexEntry struct {
 	Key     record.KeyHash
 	Section int
 	Offset  uint64
+	Size    uint64
 }
 
 func (w *Writer) Open() (*Collector, error) {
@@ -36,6 +36,12 @@ func (w *Writer) Open() (*Collector, error) {
 	}
 	return c, nil
 }
+
+// Section - 2 bytes
+// Size    - 6 bytes
+// Offset  - 8 bytes
+// Hash    - 32 bytes
+const indexEntrySize = 2 + 6 + 8 + 32
 
 func (w *Writer) WriteIndex() error {
 	wr, err := w.open(SectionTypeRecordIndex)
@@ -53,18 +59,16 @@ func (w *Writer) WriteIndex() error {
 	})
 
 	for _, x := range index {
-		// Combine section and offset
-		if x.Offset&0xFFFF0000_00000000 != 0 {
-			return errors.NotAllowed.WithFormat("offset is too large")
+		// Combine section and size
+		if x.Size&0xFFFF0000_00000000 != 0 {
+			return errors.NotAllowed.WithFormat("size is too large")
 		}
-		v := x.Offset | (uint64(x.Section) << 6 * 8)
+		v := x.Size | (uint64(x.Section) << (6 * 8))
 
-		// Section    - 2 bytes
-		// Offset     - 6 bytes
-		// Hash       - 32 bytes
-		var b [40]byte
+		var b [indexEntrySize]byte
 		binary.BigEndian.PutUint64(b[:8], v)
-		*(*[32]byte)(b[8:]) = x.Key
+		binary.BigEndian.PutUint64(b[8:16], x.Offset)
+		*(*[32]byte)(b[16:]) = x.Key
 
 		_, err = wr.Write(b[:])
 		if err != nil {
@@ -78,7 +82,7 @@ func (w *Writer) WriteIndex() error {
 
 type Collector struct {
 	snapshot *Writer
-	wr       *ioutil.SegmentWriter[SectionType, *SectionType]
+	wr       *sectionWriter
 	number   int
 }
 
@@ -119,8 +123,8 @@ func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error 
 		if offset < 0 {
 			return false, errors.InternalError.WithFormat("offset is negative")
 		}
-		if offset >= 1<<(6*8) {
-			return false, errors.NotAllowed.WithFormat("offset is too large")
+		if len(b) >= 1<<(6*8) {
+			return false, errors.NotAllowed.WithFormat("record is too large")
 		}
 
 		// Write the record
@@ -129,10 +133,11 @@ func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error 
 			return false, errors.InternalError.WithFormat("write record: %w", err)
 		}
 
-		c.snapshot.index = append(c.snapshot.index, recordKeyAndOffset{
+		c.snapshot.index = append(c.snapshot.index, recordIndexEntry{
 			Key:     v.Key().Hash(),
 			Section: c.number,
 			Offset:  uint64(offset),
+			Size:    uint64(len(b)),
 		})
 		return false, nil
 	})
