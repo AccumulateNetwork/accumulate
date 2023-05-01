@@ -16,12 +16,12 @@ import (
 
 func (c *ChangeSet) Partition(id string) *database.Batch {
 	id = strings.ToLower(id)
-	if b, ok := c.partition[partitionKey{id}]; ok {
+	if b, ok := c.partition[partitionMapKey{id}]; ok {
 		return b
 	}
 
 	if c.partition == nil {
-		c.partition = map[partitionKey]*database.Batch{}
+		c.partition = map[partitionMapKey]*database.Batch{}
 	}
 
 	var b *database.Batch
@@ -33,6 +33,6 @@ func (c *ChangeSet) Partition(id string) *database.Batch {
 		b = c.parent.Partition(id).Begin(true)
 	}
 
-	c.partition[partitionKey{id}] = b
+	c.partition[partitionMapKey{id}] = b
 	return b
 }

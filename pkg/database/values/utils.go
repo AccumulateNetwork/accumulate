@@ -20,31 +20,18 @@ func GetOrCreate[T any, R any](ptr *T, create func(R) T, a0 R) T {
 	return *ptr
 }
 
-func GetOrCreateMap[T any, K comparable, A0 any](ptr *map[K]T, key K, create func(A0) T, a0 A0) T {
+func GetOrCreateMap[T any, K interface{ ForMap() KM }, KM comparable, A0 any](ptr *map[KM]T, key K, create func(A0, K) T, a0 A0) T {
 	if *ptr == nil {
-		*ptr = map[K]T{}
+		*ptr = map[KM]T{}
 	}
 
-	if v, ok := (*ptr)[key]; ok {
+	mk := key.ForMap()
+	if v, ok := (*ptr)[mk]; ok {
 		return v
 	}
 
-	v := create(a0)
-	(*ptr)[key] = v
-	return v
-}
-
-func GetOrCreateMap1[T any, K comparable, A0, A1 any](ptr *map[K]T, key K, create func(A0, A1) T, a0 A0, a1 A1) T {
-	if *ptr == nil {
-		*ptr = map[K]T{}
-	}
-
-	if v, ok := (*ptr)[key]; ok {
-		return v
-	}
-
-	v := create(a0, a1)
-	(*ptr)[key] = v
+	v := create(a0, key)
+	(*ptr)[mk] = v
 	return v
 }
 

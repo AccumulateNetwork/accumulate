@@ -29,7 +29,7 @@ type changeSet struct {
 	logger logging.OptionalLogger
 	store  record.Store
 
-	entity    map[entityKey]*entity
+	entity    map[entityMapKey]*entity
 	changeLog values.Counted[string]
 }
 
@@ -39,21 +39,25 @@ type entityKey struct {
 	Name string
 }
 
-func keyForEntity(name string) entityKey {
-	return entityKey{name}
+type entityMapKey struct {
+	Name string
+}
+
+func (k entityKey) ForMap() entityMapKey {
+	return entityMapKey{k.Name}
 }
 
 func (c *changeSet) Entity(name string) Entity {
-	return values.GetOrCreateMap1(&c.entity, keyForEntity(name), (*changeSet).newEntity, c, name)
+	return values.GetOrCreateMap(&c.entity, entityKey{name}, (*changeSet).newEntity, c)
 }
 
-func (c *changeSet) newEntity(name string) *entity {
+func (c *changeSet) newEntity(k entityKey) *entity {
 	v := new(entity)
 	v.logger = c.logger
 	v.store = c.store
-	v.key = (*record.Key)(nil).Append("Entity", name)
+	v.key = (*record.Key)(nil).Append("Entity", k.Name)
 	v.parent = c
-	v.label = "entity" + " " + name
+	v.label = "entity" + " " + k.Name
 	return v
 }
 

@@ -54,7 +54,7 @@ func (it *AccountIterator) Next() (*Account, bool) {
 	}
 
 	// Create a new account record but don't add it to the map
-	return it.batch.newAccount(u), true
+	return it.batch.newAccount(accountKey{u}), true
 }
 
 func (it *AccountIterator) Err() error {

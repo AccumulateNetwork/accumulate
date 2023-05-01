@@ -31,9 +31,9 @@ type ChangeSet struct {
 	parent  *ChangeSet
 
 	lastBlock values.Value[*LastBlock]
-	summary   map[summaryKey]*Summary
-	pending   map[pendingKey]*Pending
-	partition map[partitionKey]*database.Batch
+	summary   map[summaryMapKey]*Summary
+	pending   map[pendingMapKey]*Pending
+	partition map[partitionMapKey]*database.Batch
 }
 
 func (c *ChangeSet) Key() *record.Key { return nil }
@@ -42,24 +42,36 @@ type summaryKey struct {
 	Hash [32]byte
 }
 
-func keyForSummary(hash [32]byte) summaryKey {
-	return summaryKey{hash}
+type summaryMapKey struct {
+	Hash [32]byte
+}
+
+func (k summaryKey) ForMap() summaryMapKey {
+	return summaryMapKey{k.Hash}
 }
 
 type pendingKey struct {
 	Partition string
 }
 
-func keyForPending(partition string) pendingKey {
-	return pendingKey{partition}
+type pendingMapKey struct {
+	Partition string
+}
+
+func (k pendingKey) ForMap() pendingMapKey {
+	return pendingMapKey{k.Partition}
 }
 
 type partitionKey struct {
 	ID string
 }
 
-func keyForPartition(id string) partitionKey {
-	return partitionKey{id}
+type partitionMapKey struct {
+	ID string
+}
+
+func (k partitionKey) ForMap() partitionMapKey {
+	return partitionMapKey{k.ID}
 }
 
 func (c *ChangeSet) LastBlock() values.Value[*LastBlock] {
@@ -71,30 +83,30 @@ func (c *ChangeSet) newLastBlock() values.Value[*LastBlock] {
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
-	return values.GetOrCreateMap1(&c.summary, keyForSummary(hash), (*ChangeSet).newSummary, c, hash)
+	return values.GetOrCreateMap(&c.summary, summaryKey{hash}, (*ChangeSet).newSummary, c)
 }
 
-func (c *ChangeSet) newSummary(hash [32]byte) *Summary {
+func (c *ChangeSet) newSummary(k summaryKey) *Summary {
 	v := new(Summary)
 	v.logger = c.logger
 	v.store = c.store
-	v.key = (*record.Key)(nil).Append("Summary", hash)
+	v.key = (*record.Key)(nil).Append("Summary", k.Hash)
 	v.parent = c
-	v.label = "summary" + " " + hex.EncodeToString(hash[:])
+	v.label = "summary" + " " + hex.EncodeToString(k.Hash[:])
 	return v
 }
 
 func (c *ChangeSet) Pending(partition string) *Pending {
-	return values.GetOrCreateMap1(&c.pending, keyForPending(partition), (*ChangeSet).newPending, c, partition)
+	return values.GetOrCreateMap(&c.pending, pendingKey{partition}, (*ChangeSet).newPending, c)
 }
 
-func (c *ChangeSet) newPending(partition string) *Pending {
+func (c *ChangeSet) newPending(k pendingKey) *Pending {
 	v := new(Pending)
 	v.logger = c.logger
 	v.store = c.store
-	v.key = (*record.Key)(nil).Append("Pending", partition)
+	v.key = (*record.Key)(nil).Append("Pending", k.Partition)
 	v.parent = c
-	v.label = "pending" + " " + partition
+	v.label = "pending" + " " + k.Partition
 	return v
 }
 
@@ -302,7 +314,7 @@ type Pending struct {
 	label  string
 	parent *ChangeSet
 
-	onBlock map[pendingOnBlockKey]values.Value[[32]byte]
+	onBlock map[pendingOnBlockMapKey]values.Value[[32]byte]
 }
 
 func (c *Pending) Key() *record.Key { return c.key }
@@ -311,16 +323,20 @@ type pendingOnBlockKey struct {
 	Index uint64
 }
 
-func keyForPendingOnBlock(index uint64) pendingOnBlockKey {
-	return pendingOnBlockKey{index}
+type pendingOnBlockMapKey struct {
+	Index uint64
+}
+
+func (k pendingOnBlockKey) ForMap() pendingOnBlockMapKey {
+	return pendingOnBlockMapKey{k.Index}
 }
 
 func (c *Pending) OnBlock(index uint64) values.Value[[32]byte] {
-	return values.GetOrCreateMap1(&c.onBlock, keyForPendingOnBlock(index), (*Pending).newOnBlock, c, index)
+	return values.GetOrCreateMap(&c.onBlock, pendingOnBlockKey{index}, (*Pending).newOnBlock, c)
 }
 
-func (c *Pending) newOnBlock(index uint64) values.Value[[32]byte] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", index), c.label+" "+"on block"+" "+strconv.FormatUint(index, 10), false, values.Wrapped(values.HashWrapper))
+func (c *Pending) newOnBlock(k pendingOnBlockKey) values.Value[[32]byte] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", k.Index), c.label+" "+"on block"+" "+strconv.FormatUint(k.Index, 10), false, values.Wrapped(values.HashWrapper))
 }
 
 func (c *Pending) Resolve(key *record.Key) (record.Record, *record.Key, error) {

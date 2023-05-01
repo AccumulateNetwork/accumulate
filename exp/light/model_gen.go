@@ -34,76 +34,88 @@ type indexDB struct {
 	key    *record.Key
 	label  string
 
-	account     map[indexDBAccountKey]*indexDBAccount
-	partition   map[indexDBPartitionKey]*indexDBPartition
-	transaction map[indexDBTransactionKey]*indexDBTransaction
+	account     map[indexDBAccountMapKey]*indexDBAccount
+	partition   map[indexDBPartitionMapKey]*indexDBPartition
+	transaction map[indexDBTransactionMapKey]*indexDBTransaction
 }
 
 func (c *indexDB) Key() *record.Key { return c.key }
 
 type indexDBAccountKey struct {
+	Url *url.URL
+}
+
+type indexDBAccountMapKey struct {
 	Url [32]byte
 }
 
-func keyForIndexDBAccount(url *url.URL) indexDBAccountKey {
-	return indexDBAccountKey{values.MapKeyUrl(url)}
+func (k indexDBAccountKey) ForMap() indexDBAccountMapKey {
+	return indexDBAccountMapKey{values.MapKeyUrl(k.Url)}
 }
 
 type indexDBPartitionKey struct {
+	Url *url.URL
+}
+
+type indexDBPartitionMapKey struct {
 	Url [32]byte
 }
 
-func keyForIndexDBPartition(url *url.URL) indexDBPartitionKey {
-	return indexDBPartitionKey{values.MapKeyUrl(url)}
+func (k indexDBPartitionKey) ForMap() indexDBPartitionMapKey {
+	return indexDBPartitionMapKey{values.MapKeyUrl(k.Url)}
 }
 
 type indexDBTransactionKey struct {
 	Hash [32]byte
 }
 
-func keyForIndexDBTransaction(hash [32]byte) indexDBTransactionKey {
-	return indexDBTransactionKey{hash}
+type indexDBTransactionMapKey struct {
+	Hash [32]byte
+}
+
+func (k indexDBTransactionKey) ForMap() indexDBTransactionMapKey {
+	return indexDBTransactionMapKey{k.Hash}
 }
 
 func (c *indexDB) Account(url *url.URL) IndexDBAccount {
-	return values.GetOrCreateMap1(&c.account, keyForIndexDBAccount(url), (*indexDB).newAccount, c, url)
+	return values.GetOrCreateMap(&c.account, indexDBAccountKey{url}, (*indexDB).newAccount, c)
 }
 
-func (c *indexDB) newAccount(url *url.URL) *indexDBAccount {
+func (c *indexDB) newAccount(k indexDBAccountKey) *indexDBAccount {
 	v := new(indexDBAccount)
 	v.logger = c.logger
 	v.store = c.store
-	v.key = c.key.Append("Account", url)
+	v.key = c.key.Append("Account", k.Url)
 	v.parent = c
-	v.label = c.label + " " + "account" + " " + url.RawString()
+	v.label = c.label + " " + "account" + " " + k.Url.RawString()
 	return v
 }
 
 func (c *indexDB) Partition(url *url.URL) IndexDBPartition {
-	return values.GetOrCreateMap1(&c.partition, keyForIndexDBPartition(url), (*indexDB).newPartition, c, url)
+	return values.GetOrCreateMap(&c.partition, indexDBPartitionKey{url}, (*indexDB).newPartition, c)
 }
 
-func (c *indexDB) newPartition(url *url.URL) *indexDBPartition {
+func (c *indexDB) newPartition(k indexDBPartitionKey) *indexDBPartition {
 	v := new(indexDBPartition)
 	v.logger = c.logger
 	v.store = c.store
-	v.key = c.key.Append("Partition", url)
+	v.key = c.key.Append("Partition", k.Url)
 	v.parent = c
-	v.label = c.label + " " + "partition" + " " + url.RawString()
+	v.label = c.label + " " + "partition" + " " + k.Url.RawString()
 	return v
 }
 
 func (c *indexDB) Transaction(hash [32]byte) IndexDBTransaction {
-	return values.GetOrCreateMap1(&c.transaction, keyForIndexDBTransaction(hash), (*indexDB).newTransaction, c, hash)
+	return values.GetOrCreateMap(&c.transaction, indexDBTransactionKey{hash}, (*indexDB).newTransaction, c)
 }
 
-func (c *indexDB) newTransaction(hash [32]byte) *indexDBTransaction {
+func (c *indexDB) newTransaction(k indexDBTransactionKey) *indexDBTransaction {
 	v := new(indexDBTransaction)
 	v.logger = c.logger
 	v.store = c.store
-	v.key = c.key.Append("Transaction", hash)
+	v.key = c.key.Append("Transaction", k.Hash)
 	v.parent = c
-	v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(hash[:])
+	v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(k.Hash[:])
 	return v
 }
 
@@ -228,7 +240,7 @@ type indexDBAccount struct {
 
 	didIndexTransactionExecution values.Set[[32]byte]
 	didLoadTransaction           values.Set[[32]byte]
-	chain                        map[indexDBAccountChainKey]*indexDBAccountChain
+	chain                        map[indexDBAccountChainMapKey]*indexDBAccountChain
 }
 
 func (c *indexDBAccount) Key() *record.Key { return c.key }
@@ -237,8 +249,12 @@ type indexDBAccountChainKey struct {
 	Name string
 }
 
-func keyForIndexDBAccountChain(name string) indexDBAccountChainKey {
-	return indexDBAccountChainKey{name}
+type indexDBAccountChainMapKey struct {
+	Name string
+}
+
+func (k indexDBAccountChainKey) ForMap() indexDBAccountChainMapKey {
+	return indexDBAccountChainMapKey{k.Name}
 }
 
 func (c *indexDBAccount) DidIndexTransactionExecution() values.Set[[32]byte] {
@@ -258,16 +274,16 @@ func (c *indexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
 }
 
 func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
-	return values.GetOrCreateMap1(&c.chain, keyForIndexDBAccountChain(name), (*indexDBAccount).newChain, c, name)
+	return values.GetOrCreateMap(&c.chain, indexDBAccountChainKey{name}, (*indexDBAccount).newChain, c)
 }
 
-func (c *indexDBAccount) newChain(name string) *indexDBAccountChain {
+func (c *indexDBAccount) newChain(k indexDBAccountChainKey) *indexDBAccountChain {
 	v := new(indexDBAccountChain)
 	v.logger = c.logger
 	v.store = c.store
-	v.key = c.key.Append("Chain", name)
+	v.key = c.key.Append("Chain", k.Name)
 	v.parent = c
-	v.label = c.label + " " + "chain" + " " + name
+	v.label = c.label + " " + "chain" + " " + k.Name
 	return v
 }
 

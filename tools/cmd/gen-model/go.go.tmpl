@@ -35,7 +35,7 @@ c.label + " " +
 {{- end -}}
 "{{natural .Name}}"
 {{- if parameterized . -}}
-{{range .GetParameters}} + " " + {{keyToString . (lower .Name)}}{{end}}
+{{range .GetParameters}} + " " + {{keyToString . (print "k." .Name)}}{{end}}
 {{- end}}
 {{- end}}
 
@@ -50,7 +50,7 @@ c.key
 
 {{  define "keyArgs"}}
 {{- if parameterized . -}}
-"{{.Name}}", {{range .GetParameters}}{{lower .Name}}, {{end}}
+"{{.Name}}", {{range .GetParameters}}k.{{.Name}}, {{end}}
 {{- else -}}
 "{{.Name}}"
 {{- end}}
@@ -129,14 +129,20 @@ func (c *{{fullName $c}}) Key() *record.Key { return {{if .Root}}nil{{else}}c.ke
 {{range .Attributes}}
 {{if parameterized .}}
 type {{lower .FullName}}Key struct {
-	{{- range $index, $param := .GetParameters}}
-	{{.Name}} {{keyType $param}}
+	{{- range .GetParameters}}
+	{{.Name}} {{parameterType .}}
+	{{- end}}
+}
+
+type {{lower .FullName}}MapKey struct {
+	{{- range .GetParameters}}
+	{{.Name}} {{keyType .}}
 	{{- end}}
 }
 
 {{$a := .}}
-func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}}, {{end}}) {{lower $a.FullName}}Key {
-	return {{lower $a.FullName}}Key{ {{range .GetParameters}}{{asKey . (lower .Name)}}, {{end}} }
+func (k {{lower .FullName}}Key) ForMap() {{lower .FullName}}MapKey {
+	return {{lower $a.FullName}}MapKey{ {{range .GetParameters}}{{asKey . (print "k." .Name)}}, {{end}} }
 }
 {{end}}
 {{end}}
@@ -145,7 +151,7 @@ func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType
 {{if not .OmitAccessor}}
 func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}} {
 	{{- if parameterized .}}
-	return values.GetOrCreateMap{{len .GetParameters}}(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}), (*{{fullName $c}}).new{{.Name}}, c, {{range .GetParameters}}{{lower .Name}},{{end}})
+	return values.GetOrCreateMap(&c.{{lower .Name}}, {{lower .FullName}}Key{ {{range .GetParameters}}{{lower .Name}},{{end}} }, (*{{fullName $c}}).new{{.Name}}, c)
 	{{- else}}
 	return values.GetOrCreate(&c.{{lower .Name}}, (*{{fullName $c}}).new{{.Name}}, c)
 	{{- end -}}
@@ -153,7 +159,7 @@ func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 {{end}}
 
 {{if not .OmitConstructor}}
-func (c *{{fullName $c}}) new{{.Name}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . true}} {
+func (c *{{fullName $c}}) new{{.Name}}({{if parameterized .}}k {{lower .FullName}}Key{{end}}) {{recordType . true}} {
 	{{- if .Type.IsEntity}}
 	v := new({{fullName .}})
 	v.logger = c.logger
