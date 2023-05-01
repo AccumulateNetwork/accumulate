@@ -281,7 +281,7 @@ func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptio
 		values.Walk(&err, v, opts, fn)
 	}
 	{{- else}}
-	values.WalkField(&err, c.{{lower .Name}}, c.{{template "accessor" .}}, opts, fn)
+	values.WalkField(&err, c.{{lower .Name}}, c.new{{.Name}}, opts, fn)
 	{{- end}}
 	{{- if .Type.IsIndex}}
 	}

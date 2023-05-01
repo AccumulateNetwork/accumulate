@@ -248,7 +248,7 @@ func (c *Batch) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.bpt, c.BPT, opts, fn)
+	values.WalkField(&err, c.bpt, c.newBPT, opts, fn)
 	for _, v := range c.account {
 		values.Walk(&err, v, opts, fn)
 	}
@@ -678,22 +678,22 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.url, c.getUrl, opts, fn)
-	values.WalkField(&err, c.main, c.Main, opts, fn)
-	values.WalkField(&err, c.pending, c.Pending, opts, fn)
+	values.WalkField(&err, c.url, c.newUrl, opts, fn)
+	values.WalkField(&err, c.main, c.newMain, opts, fn)
+	values.WalkField(&err, c.pending, c.newPending, opts, fn)
 	for _, v := range c.syntheticForAnchor {
 		values.Walk(&err, v, opts, fn)
 	}
-	values.WalkField(&err, c.directory, c.Directory, opts, fn)
+	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
 	for _, v := range c.transaction {
 		values.Walk(&err, v, opts, fn)
 	}
-	values.WalkField(&err, c.mainChain, c.MainChain, opts, fn)
-	values.WalkField(&err, c.scratchChain, c.ScratchChain, opts, fn)
-	values.WalkField(&err, c.signatureChain, c.SignatureChain, opts, fn)
-	values.WalkField(&err, c.rootChain, c.RootChain, opts, fn)
-	values.WalkField(&err, c.anchorSequenceChain, c.AnchorSequenceChain, opts, fn)
-	values.WalkField(&err, c.majorBlockChain, c.MajorBlockChain, opts, fn)
+	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
+	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
+	values.WalkField(&err, c.signatureChain, c.newSignatureChain, opts, fn)
+	values.WalkField(&err, c.rootChain, c.newRootChain, opts, fn)
+	values.WalkField(&err, c.anchorSequenceChain, c.newAnchorSequenceChain, opts, fn)
+	values.WalkField(&err, c.majorBlockChain, c.newMajorBlockChain, opts, fn)
 	for _, v := range c.syntheticSequenceChain {
 		values.Walk(&err, v, opts, fn)
 	}
@@ -701,12 +701,12 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 		values.Walk(&err, v, opts, fn)
 	}
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.chains, c.Chains, opts, fn)
+		values.WalkField(&err, c.chains, c.newChains, opts, fn)
 	}
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.syntheticAnchors, c.SyntheticAnchors, opts, fn)
+		values.WalkField(&err, c.syntheticAnchors, c.newSyntheticAnchors, opts, fn)
 	}
-	values.WalkField(&err, c.data, c.Data, opts, fn)
+	values.WalkField(&err, c.data, c.newData, opts, fn)
 	return err
 }
 
@@ -855,12 +855,12 @@ func (c *AccountTransaction) Walk(opts record.WalkOptions, fn record.WalkFunc) e
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.payments, c.Payments, opts, fn)
-	values.WalkField(&err, c.votes, c.Votes, opts, fn)
-	values.WalkField(&err, c.signatures, c.Signatures, opts, fn)
-	values.WalkField(&err, c.validatorSignatures, c.ValidatorSignatures, opts, fn)
+	values.WalkField(&err, c.payments, c.newPayments, opts, fn)
+	values.WalkField(&err, c.votes, c.newVotes, opts, fn)
+	values.WalkField(&err, c.signatures, c.newSignatures, opts, fn)
+	values.WalkField(&err, c.validatorSignatures, c.newValidatorSignatures, opts, fn)
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.history, c.History, opts, fn)
+		values.WalkField(&err, c.history, c.newHistory, opts, fn)
 	}
 	return err
 }
@@ -961,8 +961,8 @@ func (c *AccountAnchorChain) Walk(opts record.WalkOptions, fn record.WalkFunc) e
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.root, c.Root, opts, fn)
-	values.WalkField(&err, c.bpt, c.BPT, opts, fn)
+	values.WalkField(&err, c.root, c.newRoot, opts, fn)
+	values.WalkField(&err, c.bpt, c.newBPT, opts, fn)
 	return err
 }
 
@@ -1065,7 +1065,7 @@ func (c *AccountData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 		return errors.UnknownError.Wrap(err)
 	}
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.entry, c.Entry, opts, fn)
+		values.WalkField(&err, c.entry, c.newEntry, opts, fn)
 	}
 	if !opts.IgnoreIndices {
 		for _, v := range c.transaction {
@@ -1185,15 +1185,15 @@ func (c *Message) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.main, c.getMain, opts, fn)
+	values.WalkField(&err, c.main, c.newMain, opts, fn)
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.cause, c.Cause, opts, fn)
+		values.WalkField(&err, c.cause, c.newCause, opts, fn)
 	}
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.produced, c.Produced, opts, fn)
+		values.WalkField(&err, c.produced, c.newProduced, opts, fn)
 	}
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.signers, c.Signers, opts, fn)
+		values.WalkField(&err, c.signers, c.newSigners, opts, fn)
 	}
 	return err
 }
@@ -1340,14 +1340,14 @@ func (c *Transaction) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.main, c.Main, opts, fn)
-	values.WalkField(&err, c.status, c.Status, opts, fn)
-	values.WalkField(&err, c.produced, c.Produced, opts, fn)
+	values.WalkField(&err, c.main, c.newMain, opts, fn)
+	values.WalkField(&err, c.status, c.newStatus, opts, fn)
+	values.WalkField(&err, c.produced, c.newProduced, opts, fn)
 	for _, v := range c.signatures {
 		values.Walk(&err, v, opts, fn)
 	}
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.chains, c.Chains, opts, fn)
+		values.WalkField(&err, c.chains, c.newChains, opts, fn)
 	}
 	return err
 }
@@ -1616,7 +1616,7 @@ func (c *MerkleManager) Walk(opts record.WalkOptions, fn record.WalkFunc) error 
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.head, c.Head, opts, fn)
+	values.WalkField(&err, c.head, c.newHead, opts, fn)
 	for _, v := range c.states {
 		values.Walk(&err, v, opts, fn)
 	}

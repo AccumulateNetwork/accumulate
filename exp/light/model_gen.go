@@ -325,8 +325,8 @@ func (c *indexDBAccount) Walk(opts record.WalkOptions, fn record.WalkFunc) error
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.didIndexTransactionExecution, c.DidIndexTransactionExecution, opts, fn)
-	values.WalkField(&err, c.didLoadTransaction, c.DidLoadTransaction, opts, fn)
+	values.WalkField(&err, c.didIndexTransactionExecution, c.newDidIndexTransactionExecution, opts, fn)
+	values.WalkField(&err, c.didLoadTransaction, c.newDidLoadTransaction, opts, fn)
 	for _, v := range c.chain {
 		values.Walk(&err, v, opts, fn)
 	}
@@ -408,7 +408,7 @@ func (c *indexDBAccountChain) Walk(opts record.WalkOptions, fn record.WalkFunc) 
 		return errors.UnknownError.Wrap(err)
 	}
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.index, c.Index, opts, fn)
+		values.WalkField(&err, c.index, c.newIndex, opts, fn)
 	}
 	return err
 }
@@ -483,7 +483,7 @@ func (c *indexDBPartition) Walk(opts record.WalkOptions, fn record.WalkFunc) err
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.anchors, c.Anchors, opts, fn)
+	values.WalkField(&err, c.anchors, c.newAnchors, opts, fn)
 	return err
 }
 
@@ -558,7 +558,7 @@ func (c *indexDBTransaction) Walk(opts record.WalkOptions, fn record.WalkFunc) e
 		return errors.UnknownError.Wrap(err)
 	}
 	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.executed, c.Executed, opts, fn)
+		values.WalkField(&err, c.executed, c.newExecuted, opts, fn)
 	}
 	return err
 }

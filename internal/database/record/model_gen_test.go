@@ -117,7 +117,7 @@ func (c *changeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	for _, v := range c.entity {
 		values.Walk(&err, v, opts, fn)
 	}
-	values.WalkField(&err, c.changeLog, c.ChangeLog, opts, fn)
+	values.WalkField(&err, c.changeLog, c.newChangeLog, opts, fn)
 	return err
 }
 
@@ -239,10 +239,10 @@ func (c *entity) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.union, c.Union, opts, fn)
-	values.WalkField(&err, c.set, c.Set, opts, fn)
-	values.WalkField(&err, c.countableRefType, c.CountableRefType, opts, fn)
-	values.WalkField(&err, c.countableUnion, c.CountableUnion, opts, fn)
+	values.WalkField(&err, c.union, c.newUnion, opts, fn)
+	values.WalkField(&err, c.set, c.newSet, opts, fn)
+	values.WalkField(&err, c.countableRefType, c.newCountableRefType, opts, fn)
+	values.WalkField(&err, c.countableUnion, c.newCountableUnion, opts, fn)
 	return err
 }
 
@@ -425,15 +425,15 @@ func (c *TemplateTest) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.wrapped, c.Wrapped, opts, fn)
-	values.WalkField(&err, c.structPtr, c.StructPtr, opts, fn)
-	values.WalkField(&err, c.union, c.Union, opts, fn)
-	values.WalkField(&err, c.wrappedSet, c.WrappedSet, opts, fn)
-	values.WalkField(&err, c.structSet, c.StructSet, opts, fn)
-	values.WalkField(&err, c.unionSet, c.UnionSet, opts, fn)
-	values.WalkField(&err, c.wrappedList, c.WrappedList, opts, fn)
-	values.WalkField(&err, c.structList, c.StructList, opts, fn)
-	values.WalkField(&err, c.unionList, c.UnionList, opts, fn)
+	values.WalkField(&err, c.wrapped, c.newWrapped, opts, fn)
+	values.WalkField(&err, c.structPtr, c.newStructPtr, opts, fn)
+	values.WalkField(&err, c.union, c.newUnion, opts, fn)
+	values.WalkField(&err, c.wrappedSet, c.newWrappedSet, opts, fn)
+	values.WalkField(&err, c.structSet, c.newStructSet, opts, fn)
+	values.WalkField(&err, c.unionSet, c.newUnionSet, opts, fn)
+	values.WalkField(&err, c.wrappedList, c.newWrappedList, opts, fn)
+	values.WalkField(&err, c.structList, c.newStructList, opts, fn)
+	values.WalkField(&err, c.unionList, c.newUnionList, opts, fn)
 	return err
 }
 

@@ -177,7 +177,7 @@ func (c *ChangeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.lastBlock, c.LastBlock, opts, fn)
+	values.WalkField(&err, c.lastBlock, c.newLastBlock, opts, fn)
 	for _, v := range c.summary {
 		values.Walk(&err, v, opts, fn)
 	}
@@ -278,8 +278,8 @@ func (c *Summary) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.WalkField(&err, c.main, c.Main, opts, fn)
-	values.WalkField(&err, c.signatures, c.Signatures, opts, fn)
+	values.WalkField(&err, c.main, c.newMain, opts, fn)
+	values.WalkField(&err, c.signatures, c.newSignatures, opts, fn)
 	return err
 }
 
