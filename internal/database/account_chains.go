@@ -174,12 +174,14 @@ func (c *Chain2) Index() *Chain2 {
 	if c.Type() == merkle.ChainTypeIndex {
 		panic("cannot index an index chain")
 	}
-	return values.GetOrCreate(&c.index, func() *Chain2 {
-		key := c.key.Append("Index")
-		label := c.labelfmt + " index"
-		m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
-		return &Chain2{c.account, key, m, nil, label}
-	})
+	return values.GetOrCreate(&c.index, (*Chain2).newIndex, c)
+}
+
+func (c *Chain2) newIndex() *Chain2 {
+	key := c.key.Append("Index")
+	label := c.labelfmt + " index"
+	m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
+	return &Chain2{c.account, key, m, nil, label}
 }
 
 // ChainByName returns account Chain2 for the named chain, or a not found error if

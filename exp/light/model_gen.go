@@ -66,7 +66,7 @@ func keyForIndexDBTransaction(hash [32]byte) indexDBTransactionKey {
 }
 
 func (c *indexDB) Account(url *url.URL) IndexDBAccount {
-	return values.GetOrCreateMap1(&c.account, keyForIndexDBAccount(url), c.newAccount, url)
+	return values.GetOrCreateMap1(&c.account, keyForIndexDBAccount(url), (*indexDB).newAccount, c, url)
 }
 
 func (c *indexDB) newAccount(url *url.URL) *indexDBAccount {
@@ -80,7 +80,7 @@ func (c *indexDB) newAccount(url *url.URL) *indexDBAccount {
 }
 
 func (c *indexDB) Partition(url *url.URL) IndexDBPartition {
-	return values.GetOrCreateMap1(&c.partition, keyForIndexDBPartition(url), c.newPartition, url)
+	return values.GetOrCreateMap1(&c.partition, keyForIndexDBPartition(url), (*indexDB).newPartition, c, url)
 }
 
 func (c *indexDB) newPartition(url *url.URL) *indexDBPartition {
@@ -94,7 +94,7 @@ func (c *indexDB) newPartition(url *url.URL) *indexDBPartition {
 }
 
 func (c *indexDB) Transaction(hash [32]byte) IndexDBTransaction {
-	return values.GetOrCreateMap1(&c.transaction, keyForIndexDBTransaction(hash), c.newTransaction, hash)
+	return values.GetOrCreateMap1(&c.transaction, keyForIndexDBTransaction(hash), (*indexDB).newTransaction, c, hash)
 }
 
 func (c *indexDB) newTransaction(hash [32]byte) *indexDBTransaction {
@@ -242,7 +242,7 @@ func keyForIndexDBAccountChain(name string) indexDBAccountChainKey {
 }
 
 func (c *indexDBAccount) DidIndexTransactionExecution() values.Set[[32]byte] {
-	return values.GetOrCreate(&c.didIndexTransactionExecution, c.newDidIndexTransactionExecution)
+	return values.GetOrCreate(&c.didIndexTransactionExecution, (*indexDBAccount).newDidIndexTransactionExecution, c)
 }
 
 func (c *indexDBAccount) newDidIndexTransactionExecution() values.Set[[32]byte] {
@@ -250,7 +250,7 @@ func (c *indexDBAccount) newDidIndexTransactionExecution() values.Set[[32]byte] 
 }
 
 func (c *indexDBAccount) DidLoadTransaction() values.Set[[32]byte] {
-	return values.GetOrCreate(&c.didLoadTransaction, c.newDidLoadTransaction)
+	return values.GetOrCreate(&c.didLoadTransaction, (*indexDBAccount).newDidLoadTransaction, c)
 }
 
 func (c *indexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
@@ -258,7 +258,7 @@ func (c *indexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
 }
 
 func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
-	return values.GetOrCreateMap1(&c.chain, keyForIndexDBAccountChain(name), c.newChain, name)
+	return values.GetOrCreateMap1(&c.chain, keyForIndexDBAccountChain(name), (*indexDBAccount).newChain, c, name)
 }
 
 func (c *indexDBAccount) newChain(name string) *indexDBAccountChain {
@@ -366,7 +366,7 @@ type indexDBAccountChain struct {
 func (c *indexDBAccountChain) Key() *record.Key { return c.key }
 
 func (c *indexDBAccountChain) Index() values.List[*protocol.IndexEntry] {
-	return values.GetOrCreate(&c.index, c.newIndex)
+	return values.GetOrCreate(&c.index, (*indexDBAccountChain).newIndex, c)
 }
 
 func (c *indexDBAccountChain) newIndex() values.List[*protocol.IndexEntry] {
@@ -442,7 +442,7 @@ type indexDBPartition struct {
 func (c *indexDBPartition) Key() *record.Key { return c.key }
 
 func (c *indexDBPartition) Anchors() values.List[*AnchorMetadata] {
-	return values.GetOrCreate(&c.anchors, c.newAnchors)
+	return values.GetOrCreate(&c.anchors, (*indexDBPartition).newAnchors, c)
 }
 
 func (c *indexDBPartition) newAnchors() values.List[*AnchorMetadata] {
@@ -516,7 +516,7 @@ type indexDBTransaction struct {
 func (c *indexDBTransaction) Key() *record.Key { return c.key }
 
 func (c *indexDBTransaction) Executed() values.Value[*EventMetadata] {
-	return values.GetOrCreate(&c.executed, c.newExecuted)
+	return values.GetOrCreate(&c.executed, (*indexDBTransaction).newExecuted, c)
 }
 
 func (c *indexDBTransaction) newExecuted() values.Value[*EventMetadata] {

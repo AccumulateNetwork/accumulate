@@ -29,6 +29,10 @@ type bpt struct {
 
 func (c *bpt) Key() *record.Key { return c.key }
 
+func (c *bpt) getState() values.Value[*parameters] {
+	return values.GetOrCreate(&c.state, (*bpt).newState, c)
+}
+
 func (c *bpt) baseIsDirty() bool {
 	if c == nil {
 		return false

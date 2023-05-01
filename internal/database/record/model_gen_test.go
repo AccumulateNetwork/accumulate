@@ -44,7 +44,7 @@ func keyForEntity(name string) entityKey {
 }
 
 func (c *changeSet) Entity(name string) Entity {
-	return values.GetOrCreateMap1(&c.entity, keyForEntity(name), c.newEntity, name)
+	return values.GetOrCreateMap1(&c.entity, keyForEntity(name), (*changeSet).newEntity, c, name)
 }
 
 func (c *changeSet) newEntity(name string) *entity {
@@ -58,7 +58,7 @@ func (c *changeSet) newEntity(name string) *entity {
 }
 
 func (c *changeSet) ChangeLog() values.Counted[string] {
-	return values.GetOrCreate(&c.changeLog, c.newChangeLog)
+	return values.GetOrCreate(&c.changeLog, (*changeSet).newChangeLog, c)
 }
 
 func (c *changeSet) newChangeLog() values.Counted[string] {
@@ -159,7 +159,7 @@ type entity struct {
 func (c *entity) Key() *record.Key { return c.key }
 
 func (c *entity) Union() values.Value[protocol.Account] {
-	return values.GetOrCreate(&c.union, c.newUnion)
+	return values.GetOrCreate(&c.union, (*entity).newUnion, c)
 }
 
 func (c *entity) newUnion() values.Value[protocol.Account] {
@@ -167,7 +167,7 @@ func (c *entity) newUnion() values.Value[protocol.Account] {
 }
 
 func (c *entity) Set() values.Set[*url.TxID] {
-	return values.GetOrCreate(&c.set, c.newSet)
+	return values.GetOrCreate(&c.set, (*entity).newSet, c)
 }
 
 func (c *entity) newSet() values.Set[*url.TxID] {
@@ -175,7 +175,7 @@ func (c *entity) newSet() values.Set[*url.TxID] {
 }
 
 func (c *entity) CountableRefType() values.Counted[*protocol.Transaction] {
-	return values.GetOrCreate(&c.countableRefType, c.newCountableRefType)
+	return values.GetOrCreate(&c.countableRefType, (*entity).newCountableRefType, c)
 }
 
 func (c *entity) newCountableRefType() values.Counted[*protocol.Transaction] {
@@ -183,7 +183,7 @@ func (c *entity) newCountableRefType() values.Counted[*protocol.Transaction] {
 }
 
 func (c *entity) CountableUnion() values.Counted[protocol.Account] {
-	return values.GetOrCreate(&c.countableUnion, c.newCountableUnion)
+	return values.GetOrCreate(&c.countableUnion, (*entity).newCountableUnion, c)
 }
 
 func (c *entity) newCountableUnion() values.Counted[protocol.Account] {
@@ -280,7 +280,7 @@ type TemplateTest struct {
 func (c *TemplateTest) Key() *record.Key { return c.key }
 
 func (c *TemplateTest) Wrapped() values.Value[string] {
-	return values.GetOrCreate(&c.wrapped, c.newWrapped)
+	return values.GetOrCreate(&c.wrapped, (*TemplateTest).newWrapped, c)
 }
 
 func (c *TemplateTest) newWrapped() values.Value[string] {
@@ -288,7 +288,7 @@ func (c *TemplateTest) newWrapped() values.Value[string] {
 }
 
 func (c *TemplateTest) StructPtr() values.Value[*StructType] {
-	return values.GetOrCreate(&c.structPtr, c.newStructPtr)
+	return values.GetOrCreate(&c.structPtr, (*TemplateTest).newStructPtr, c)
 }
 
 func (c *TemplateTest) newStructPtr() values.Value[*StructType] {
@@ -296,7 +296,7 @@ func (c *TemplateTest) newStructPtr() values.Value[*StructType] {
 }
 
 func (c *TemplateTest) Union() values.Value[UnionType] {
-	return values.GetOrCreate(&c.union, c.newUnion)
+	return values.GetOrCreate(&c.union, (*TemplateTest).newUnion, c)
 }
 
 func (c *TemplateTest) newUnion() values.Value[UnionType] {
@@ -304,7 +304,7 @@ func (c *TemplateTest) newUnion() values.Value[UnionType] {
 }
 
 func (c *TemplateTest) WrappedSet() values.Set[*url.URL] {
-	return values.GetOrCreate(&c.wrappedSet, c.newWrappedSet)
+	return values.GetOrCreate(&c.wrappedSet, (*TemplateTest).newWrappedSet, c)
 }
 
 func (c *TemplateTest) newWrappedSet() values.Set[*url.URL] {
@@ -312,7 +312,7 @@ func (c *TemplateTest) newWrappedSet() values.Set[*url.URL] {
 }
 
 func (c *TemplateTest) StructSet() values.Set[*StructType] {
-	return values.GetOrCreate(&c.structSet, c.newStructSet)
+	return values.GetOrCreate(&c.structSet, (*TemplateTest).newStructSet, c)
 }
 
 func (c *TemplateTest) newStructSet() values.Set[*StructType] {
@@ -320,7 +320,7 @@ func (c *TemplateTest) newStructSet() values.Set[*StructType] {
 }
 
 func (c *TemplateTest) UnionSet() values.Set[UnionType] {
-	return values.GetOrCreate(&c.unionSet, c.newUnionSet)
+	return values.GetOrCreate(&c.unionSet, (*TemplateTest).newUnionSet, c)
 }
 
 func (c *TemplateTest) newUnionSet() values.Set[UnionType] {
@@ -328,7 +328,7 @@ func (c *TemplateTest) newUnionSet() values.Set[UnionType] {
 }
 
 func (c *TemplateTest) WrappedList() values.Counted[string] {
-	return values.GetOrCreate(&c.wrappedList, c.newWrappedList)
+	return values.GetOrCreate(&c.wrappedList, (*TemplateTest).newWrappedList, c)
 }
 
 func (c *TemplateTest) newWrappedList() values.Counted[string] {
@@ -336,7 +336,7 @@ func (c *TemplateTest) newWrappedList() values.Counted[string] {
 }
 
 func (c *TemplateTest) StructList() values.Counted[*StructType] {
-	return values.GetOrCreate(&c.structList, c.newStructList)
+	return values.GetOrCreate(&c.structList, (*TemplateTest).newStructList, c)
 }
 
 func (c *TemplateTest) newStructList() values.Counted[*StructType] {
@@ -344,7 +344,7 @@ func (c *TemplateTest) newStructList() values.Counted[*StructType] {
 }
 
 func (c *TemplateTest) UnionList() values.Counted[UnionType] {
-	return values.GetOrCreate(&c.unionList, c.newUnionList)
+	return values.GetOrCreate(&c.unionList, (*TemplateTest).newUnionList, c)
 }
 
 func (c *TemplateTest) newUnionList() values.Counted[UnionType] {

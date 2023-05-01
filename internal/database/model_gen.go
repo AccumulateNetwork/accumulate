@@ -77,7 +77,7 @@ func keyForSystemData(partition string) systemDataKey {
 }
 
 func (c *Batch) BPT() bpt.BPT {
-	return values.GetOrCreate(&c.bpt, c.newBPT)
+	return values.GetOrCreate(&c.bpt, (*Batch).newBPT, c)
 }
 
 func (c *Batch) newBPT() bpt.BPT {
@@ -85,7 +85,7 @@ func (c *Batch) newBPT() bpt.BPT {
 }
 
 func (c *Batch) getAccount(url *url.URL) *Account {
-	return values.GetOrCreateMap1(&c.account, keyForAccount(url), c.newAccount, url)
+	return values.GetOrCreateMap1(&c.account, keyForAccount(url), (*Batch).newAccount, c, url)
 }
 
 func (c *Batch) newAccount(url *url.URL) *Account {
@@ -99,7 +99,7 @@ func (c *Batch) newAccount(url *url.URL) *Account {
 }
 
 func (c *Batch) Message(hash [32]byte) *Message {
-	return values.GetOrCreateMap1(&c.message, keyForMessage(hash), c.newMessage, hash)
+	return values.GetOrCreateMap1(&c.message, keyForMessage(hash), (*Batch).newMessage, c, hash)
 }
 
 func (c *Batch) newMessage(hash [32]byte) *Message {
@@ -113,7 +113,7 @@ func (c *Batch) newMessage(hash [32]byte) *Message {
 }
 
 func (c *Batch) getTransaction(hash [32]byte) *Transaction {
-	return values.GetOrCreateMap1(&c.transaction, keyForTransaction(hash), c.newTransaction, hash)
+	return values.GetOrCreateMap1(&c.transaction, keyForTransaction(hash), (*Batch).newTransaction, c, hash)
 }
 
 func (c *Batch) newTransaction(hash [32]byte) *Transaction {
@@ -127,7 +127,7 @@ func (c *Batch) newTransaction(hash [32]byte) *Transaction {
 }
 
 func (c *Batch) SystemData(partition string) *SystemData {
-	return values.GetOrCreateMap1(&c.systemData, keyForSystemData(partition), c.newSystemData, partition)
+	return values.GetOrCreateMap1(&c.systemData, keyForSystemData(partition), (*Batch).newSystemData, c, partition)
 }
 
 func (c *Batch) newSystemData(partition string) *SystemData {
@@ -348,7 +348,7 @@ func keyForAccountAnchorChain(partition string) accountAnchorChainKey {
 }
 
 func (c *Account) getUrl() values.Value[*url.URL] {
-	return values.GetOrCreate(&c.url, c.newUrl)
+	return values.GetOrCreate(&c.url, (*Account).newUrl, c)
 }
 
 func (c *Account) newUrl() values.Value[*url.URL] {
@@ -356,7 +356,7 @@ func (c *Account) newUrl() values.Value[*url.URL] {
 }
 
 func (c *Account) Main() values.Value[protocol.Account] {
-	return values.GetOrCreate(&c.main, c.newMain)
+	return values.GetOrCreate(&c.main, (*Account).newMain, c)
 }
 
 func (c *Account) newMain() values.Value[protocol.Account] {
@@ -364,7 +364,7 @@ func (c *Account) newMain() values.Value[protocol.Account] {
 }
 
 func (c *Account) Pending() values.Set[*url.TxID] {
-	return values.GetOrCreate(&c.pending, c.newPending)
+	return values.GetOrCreate(&c.pending, (*Account).newPending, c)
 }
 
 func (c *Account) newPending() values.Set[*url.TxID] {
@@ -372,7 +372,7 @@ func (c *Account) newPending() values.Set[*url.TxID] {
 }
 
 func (c *Account) SyntheticForAnchor(anchor [32]byte) values.Set[*url.TxID] {
-	return values.GetOrCreateMap1(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), c.newSyntheticForAnchor, anchor)
+	return values.GetOrCreateMap1(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), (*Account).newSyntheticForAnchor, c, anchor)
 }
 
 func (c *Account) newSyntheticForAnchor(anchor [32]byte) values.Set[*url.TxID] {
@@ -380,7 +380,7 @@ func (c *Account) newSyntheticForAnchor(anchor [32]byte) values.Set[*url.TxID] {
 }
 
 func (c *Account) Directory() values.Set[*url.URL] {
-	return values.GetOrCreate(&c.directory, c.newDirectory)
+	return values.GetOrCreate(&c.directory, (*Account).newDirectory, c)
 }
 
 func (c *Account) newDirectory() values.Set[*url.URL] {
@@ -388,7 +388,7 @@ func (c *Account) newDirectory() values.Set[*url.URL] {
 }
 
 func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
-	return values.GetOrCreateMap1(&c.transaction, keyForAccountTransaction(hash), c.newTransaction, hash)
+	return values.GetOrCreateMap1(&c.transaction, keyForAccountTransaction(hash), (*Account).newTransaction, c, hash)
 }
 
 func (c *Account) newTransaction(hash [32]byte) *AccountTransaction {
@@ -402,7 +402,7 @@ func (c *Account) newTransaction(hash [32]byte) *AccountTransaction {
 }
 
 func (c *Account) MainChain() *Chain2 {
-	return values.GetOrCreate(&c.mainChain, c.newMainChain)
+	return values.GetOrCreate(&c.mainChain, (*Account).newMainChain, c)
 }
 
 func (c *Account) newMainChain() *Chain2 {
@@ -410,7 +410,7 @@ func (c *Account) newMainChain() *Chain2 {
 }
 
 func (c *Account) ScratchChain() *Chain2 {
-	return values.GetOrCreate(&c.scratchChain, c.newScratchChain)
+	return values.GetOrCreate(&c.scratchChain, (*Account).newScratchChain, c)
 }
 
 func (c *Account) newScratchChain() *Chain2 {
@@ -418,7 +418,7 @@ func (c *Account) newScratchChain() *Chain2 {
 }
 
 func (c *Account) SignatureChain() *Chain2 {
-	return values.GetOrCreate(&c.signatureChain, c.newSignatureChain)
+	return values.GetOrCreate(&c.signatureChain, (*Account).newSignatureChain, c)
 }
 
 func (c *Account) newSignatureChain() *Chain2 {
@@ -426,7 +426,7 @@ func (c *Account) newSignatureChain() *Chain2 {
 }
 
 func (c *Account) RootChain() *Chain2 {
-	return values.GetOrCreate(&c.rootChain, c.newRootChain)
+	return values.GetOrCreate(&c.rootChain, (*Account).newRootChain, c)
 }
 
 func (c *Account) newRootChain() *Chain2 {
@@ -434,7 +434,7 @@ func (c *Account) newRootChain() *Chain2 {
 }
 
 func (c *Account) AnchorSequenceChain() *Chain2 {
-	return values.GetOrCreate(&c.anchorSequenceChain, c.newAnchorSequenceChain)
+	return values.GetOrCreate(&c.anchorSequenceChain, (*Account).newAnchorSequenceChain, c)
 }
 
 func (c *Account) newAnchorSequenceChain() *Chain2 {
@@ -442,7 +442,7 @@ func (c *Account) newAnchorSequenceChain() *Chain2 {
 }
 
 func (c *Account) MajorBlockChain() *Chain2 {
-	return values.GetOrCreate(&c.majorBlockChain, c.newMajorBlockChain)
+	return values.GetOrCreate(&c.majorBlockChain, (*Account).newMajorBlockChain, c)
 }
 
 func (c *Account) newMajorBlockChain() *Chain2 {
@@ -450,7 +450,7 @@ func (c *Account) newMajorBlockChain() *Chain2 {
 }
 
 func (c *Account) getSyntheticSequenceChain(partition string) *Chain2 {
-	return values.GetOrCreateMap1(&c.syntheticSequenceChain, keyForAccountSyntheticSequenceChain(partition), c.newSyntheticSequenceChain, partition)
+	return values.GetOrCreateMap1(&c.syntheticSequenceChain, keyForAccountSyntheticSequenceChain(partition), (*Account).newSyntheticSequenceChain, c, partition)
 }
 
 func (c *Account) newSyntheticSequenceChain(partition string) *Chain2 {
@@ -458,7 +458,7 @@ func (c *Account) newSyntheticSequenceChain(partition string) *Chain2 {
 }
 
 func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
-	return values.GetOrCreateMap1(&c.anchorChain, keyForAccountAnchorChain(partition), c.newAnchorChain, partition)
+	return values.GetOrCreateMap1(&c.anchorChain, keyForAccountAnchorChain(partition), (*Account).newAnchorChain, c, partition)
 }
 
 func (c *Account) newAnchorChain(partition string) *AccountAnchorChain {
@@ -472,7 +472,7 @@ func (c *Account) newAnchorChain(partition string) *AccountAnchorChain {
 }
 
 func (c *Account) Chains() values.Set[*protocol.ChainMetadata] {
-	return values.GetOrCreate(&c.chains, c.newChains)
+	return values.GetOrCreate(&c.chains, (*Account).newChains, c)
 }
 
 func (c *Account) newChains() values.Set[*protocol.ChainMetadata] {
@@ -480,7 +480,7 @@ func (c *Account) newChains() values.Set[*protocol.ChainMetadata] {
 }
 
 func (c *Account) SyntheticAnchors() values.Set[[32]byte] {
-	return values.GetOrCreate(&c.syntheticAnchors, c.newSyntheticAnchors)
+	return values.GetOrCreate(&c.syntheticAnchors, (*Account).newSyntheticAnchors, c)
 }
 
 func (c *Account) newSyntheticAnchors() values.Set[[32]byte] {
@@ -488,7 +488,7 @@ func (c *Account) newSyntheticAnchors() values.Set[[32]byte] {
 }
 
 func (c *Account) Data() *AccountData {
-	return values.GetOrCreate(&c.data, c.newData)
+	return values.GetOrCreate(&c.data, (*Account).newData, c)
 }
 
 func (c *Account) newData() *AccountData {
@@ -762,7 +762,7 @@ type AccountTransaction struct {
 func (c *AccountTransaction) Key() *record.Key { return c.key }
 
 func (c *AccountTransaction) Payments() values.Set[[32]byte] {
-	return values.GetOrCreate(&c.payments, c.newPayments)
+	return values.GetOrCreate(&c.payments, (*AccountTransaction).newPayments, c)
 }
 
 func (c *AccountTransaction) newPayments() values.Set[[32]byte] {
@@ -770,7 +770,7 @@ func (c *AccountTransaction) newPayments() values.Set[[32]byte] {
 }
 
 func (c *AccountTransaction) Votes() values.Set[*VoteEntry] {
-	return values.GetOrCreate(&c.votes, c.newVotes)
+	return values.GetOrCreate(&c.votes, (*AccountTransaction).newVotes, c)
 }
 
 func (c *AccountTransaction) newVotes() values.Set[*VoteEntry] {
@@ -778,7 +778,7 @@ func (c *AccountTransaction) newVotes() values.Set[*VoteEntry] {
 }
 
 func (c *AccountTransaction) Signatures() values.Set[*SignatureSetEntry] {
-	return values.GetOrCreate(&c.signatures, c.newSignatures)
+	return values.GetOrCreate(&c.signatures, (*AccountTransaction).newSignatures, c)
 }
 
 func (c *AccountTransaction) newSignatures() values.Set[*SignatureSetEntry] {
@@ -786,7 +786,7 @@ func (c *AccountTransaction) newSignatures() values.Set[*SignatureSetEntry] {
 }
 
 func (c *AccountTransaction) ValidatorSignatures() values.Set[protocol.KeySignature] {
-	return values.GetOrCreate(&c.validatorSignatures, c.newValidatorSignatures)
+	return values.GetOrCreate(&c.validatorSignatures, (*AccountTransaction).newValidatorSignatures, c)
 }
 
 func (c *AccountTransaction) newValidatorSignatures() values.Set[protocol.KeySignature] {
@@ -794,7 +794,7 @@ func (c *AccountTransaction) newValidatorSignatures() values.Set[protocol.KeySig
 }
 
 func (c *AccountTransaction) History() values.Set[uint64] {
-	return values.GetOrCreate(&c.history, c.newHistory)
+	return values.GetOrCreate(&c.history, (*AccountTransaction).newHistory, c)
 }
 
 func (c *AccountTransaction) newHistory() values.Set[uint64] {
@@ -894,7 +894,7 @@ type AccountAnchorChain struct {
 func (c *AccountAnchorChain) Key() *record.Key { return c.key }
 
 func (c *AccountAnchorChain) Root() *Chain2 {
-	return values.GetOrCreate(&c.root, c.newRoot)
+	return values.GetOrCreate(&c.root, (*AccountAnchorChain).newRoot, c)
 }
 
 func (c *AccountAnchorChain) newRoot() *Chain2 {
@@ -902,7 +902,7 @@ func (c *AccountAnchorChain) newRoot() *Chain2 {
 }
 
 func (c *AccountAnchorChain) BPT() *Chain2 {
-	return values.GetOrCreate(&c.bpt, c.newBPT)
+	return values.GetOrCreate(&c.bpt, (*AccountAnchorChain).newBPT, c)
 }
 
 func (c *AccountAnchorChain) newBPT() *Chain2 {
@@ -1000,7 +1000,7 @@ func keyForAccountDataTransaction(entryHash [32]byte) accountDataTransactionKey 
 }
 
 func (c *AccountData) Entry() values.Counted[[32]byte] {
-	return values.GetOrCreate(&c.entry, c.newEntry)
+	return values.GetOrCreate(&c.entry, (*AccountData).newEntry, c)
 }
 
 func (c *AccountData) newEntry() values.Counted[[32]byte] {
@@ -1008,7 +1008,7 @@ func (c *AccountData) newEntry() values.Counted[[32]byte] {
 }
 
 func (c *AccountData) Transaction(entryHash [32]byte) values.Value[[32]byte] {
-	return values.GetOrCreateMap1(&c.transaction, keyForAccountDataTransaction(entryHash), c.newTransaction, entryHash)
+	return values.GetOrCreateMap1(&c.transaction, keyForAccountDataTransaction(entryHash), (*AccountData).newTransaction, c, entryHash)
 }
 
 func (c *AccountData) newTransaction(entryHash [32]byte) values.Value[[32]byte] {
@@ -1105,7 +1105,7 @@ type Message struct {
 func (c *Message) Key() *record.Key { return c.key }
 
 func (c *Message) getMain() values.Value[messaging.Message] {
-	return values.GetOrCreate(&c.main, c.newMain)
+	return values.GetOrCreate(&c.main, (*Message).newMain, c)
 }
 
 func (c *Message) newMain() values.Value[messaging.Message] {
@@ -1113,7 +1113,7 @@ func (c *Message) newMain() values.Value[messaging.Message] {
 }
 
 func (c *Message) Cause() values.Set[*url.TxID] {
-	return values.GetOrCreate(&c.cause, c.newCause)
+	return values.GetOrCreate(&c.cause, (*Message).newCause, c)
 }
 
 func (c *Message) newCause() values.Set[*url.TxID] {
@@ -1121,7 +1121,7 @@ func (c *Message) newCause() values.Set[*url.TxID] {
 }
 
 func (c *Message) Produced() values.Set[*url.TxID] {
-	return values.GetOrCreate(&c.produced, c.newProduced)
+	return values.GetOrCreate(&c.produced, (*Message).newProduced, c)
 }
 
 func (c *Message) newProduced() values.Set[*url.TxID] {
@@ -1129,7 +1129,7 @@ func (c *Message) newProduced() values.Set[*url.TxID] {
 }
 
 func (c *Message) Signers() values.Set[*url.URL] {
-	return values.GetOrCreate(&c.signers, c.newSigners)
+	return values.GetOrCreate(&c.signers, (*Message).newSigners, c)
 }
 
 func (c *Message) newSigners() values.Set[*url.URL] {
@@ -1237,7 +1237,7 @@ func keyForTransactionSignatures(signer *url.URL) transactionSignaturesKey {
 }
 
 func (c *Transaction) Main() values.Value[*SigOrTxn] {
-	return values.GetOrCreate(&c.main, c.newMain)
+	return values.GetOrCreate(&c.main, (*Transaction).newMain, c)
 }
 
 func (c *Transaction) newMain() values.Value[*SigOrTxn] {
@@ -1245,7 +1245,7 @@ func (c *Transaction) newMain() values.Value[*SigOrTxn] {
 }
 
 func (c *Transaction) Status() values.Value[*protocol.TransactionStatus] {
-	return values.GetOrCreate(&c.status, c.newStatus)
+	return values.GetOrCreate(&c.status, (*Transaction).newStatus, c)
 }
 
 func (c *Transaction) newStatus() values.Value[*protocol.TransactionStatus] {
@@ -1253,7 +1253,7 @@ func (c *Transaction) newStatus() values.Value[*protocol.TransactionStatus] {
 }
 
 func (c *Transaction) Produced() values.Set[*url.TxID] {
-	return values.GetOrCreate(&c.produced, c.newProduced)
+	return values.GetOrCreate(&c.produced, (*Transaction).newProduced, c)
 }
 
 func (c *Transaction) newProduced() values.Set[*url.TxID] {
@@ -1261,7 +1261,7 @@ func (c *Transaction) newProduced() values.Set[*url.TxID] {
 }
 
 func (c *Transaction) getSignatures(signer *url.URL) values.Value[*sigSetData] {
-	return values.GetOrCreateMap1(&c.signatures, keyForTransactionSignatures(signer), c.newSignatures, signer)
+	return values.GetOrCreateMap1(&c.signatures, keyForTransactionSignatures(signer), (*Transaction).newSignatures, c, signer)
 }
 
 func (c *Transaction) newSignatures(signer *url.URL) values.Value[*sigSetData] {
@@ -1269,7 +1269,7 @@ func (c *Transaction) newSignatures(signer *url.URL) values.Value[*sigSetData] {
 }
 
 func (c *Transaction) Chains() values.Set[*TransactionChainEntry] {
-	return values.GetOrCreate(&c.chains, c.newChains)
+	return values.GetOrCreate(&c.chains, (*Transaction).newChains, c)
 }
 
 func (c *Transaction) newChains() values.Set[*TransactionChainEntry] {
@@ -1390,7 +1390,7 @@ func keyForSystemDataSyntheticIndexIndex(block uint64) systemDataSyntheticIndexI
 }
 
 func (c *SystemData) SyntheticIndexIndex(block uint64) values.Value[uint64] {
-	return values.GetOrCreateMap1(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), c.newSyntheticIndexIndex, block)
+	return values.GetOrCreateMap1(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), (*SystemData).newSyntheticIndexIndex, c, block)
 }
 
 func (c *SystemData) newSyntheticIndexIndex(block uint64) values.Value[uint64] {
@@ -1506,7 +1506,7 @@ func keyForMerkleManagerElement(index uint64) merkleManagerElementKey {
 }
 
 func (c *MerkleManager) Head() values.Value[*MerkleState] {
-	return values.GetOrCreate(&c.head, c.newHead)
+	return values.GetOrCreate(&c.head, (*MerkleManager).newHead, c)
 }
 
 func (c *MerkleManager) newHead() values.Value[*MerkleState] {
@@ -1514,7 +1514,7 @@ func (c *MerkleManager) newHead() values.Value[*MerkleState] {
 }
 
 func (c *MerkleManager) States(index uint64) values.Value[*MerkleState] {
-	return values.GetOrCreateMap1(&c.states, keyForMerkleManagerStates(index), c.newStates, index)
+	return values.GetOrCreateMap1(&c.states, keyForMerkleManagerStates(index), (*MerkleManager).newStates, c, index)
 }
 
 func (c *MerkleManager) newStates(index uint64) values.Value[*MerkleState] {
@@ -1522,7 +1522,7 @@ func (c *MerkleManager) newStates(index uint64) values.Value[*MerkleState] {
 }
 
 func (c *MerkleManager) ElementIndex(hash []byte) values.Value[uint64] {
-	return values.GetOrCreateMap1(&c.elementIndex, keyForMerkleManagerElementIndex(hash), c.newElementIndex, hash)
+	return values.GetOrCreateMap1(&c.elementIndex, keyForMerkleManagerElementIndex(hash), (*MerkleManager).newElementIndex, c, hash)
 }
 
 func (c *MerkleManager) newElementIndex(hash []byte) values.Value[uint64] {
@@ -1530,7 +1530,7 @@ func (c *MerkleManager) newElementIndex(hash []byte) values.Value[uint64] {
 }
 
 func (c *MerkleManager) Element(index uint64) values.Value[[]byte] {
-	return values.GetOrCreateMap1(&c.element, keyForMerkleManagerElement(index), c.newElement, index)
+	return values.GetOrCreateMap1(&c.element, keyForMerkleManagerElement(index), (*MerkleManager).newElement, c, index)
 }
 
 func (c *MerkleManager) newElement(index uint64) values.Value[[]byte] {

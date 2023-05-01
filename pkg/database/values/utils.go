@@ -10,17 +10,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 )
 
-func GetOrCreate[T any](ptr *T, create func() T) T {
+func GetOrCreate[T any, A0 any](ptr *T, create func(A0) T, a0 A0) T {
 	var z T
 	if any(*ptr) != any(z) {
 		return *ptr
 	}
 
-	*ptr = create()
+	*ptr = create(a0)
 	return *ptr
 }
 
-func GetOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
+func GetOrCreateMap[T any, K comparable, A0 any](ptr *map[K]T, key K, create func(A0) T, a0 A0) T {
 	if *ptr == nil {
 		*ptr = map[K]T{}
 	}
@@ -29,12 +29,12 @@ func GetOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T
 		return v
 	}
 
-	v := create()
+	v := create(a0)
 	(*ptr)[key] = v
 	return v
 }
 
-func GetOrCreateMap1[T any, K comparable, A1 any](ptr *map[K]T, key K, create func(A1) T, a1 A1) T {
+func GetOrCreateMap1[T any, K comparable, A0, A1 any](ptr *map[K]T, key K, create func(A0, A1) T, a0 A0, a1 A1) T {
 	if *ptr == nil {
 		*ptr = map[K]T{}
 	}
@@ -43,12 +43,12 @@ func GetOrCreateMap1[T any, K comparable, A1 any](ptr *map[K]T, key K, create fu
 		return v
 	}
 
-	v := create(a1)
+	v := create(a0, a1)
 	(*ptr)[key] = v
 	return v
 }
 
-func GetOrCreateMap2[T any, K comparable, A1, A2 any](ptr *map[K]T, key K, create func(A1, A2) T, a1 A1, a2 A2) T {
+func GetOrCreateMap2[T any, K comparable, A0, A1, A2 any](ptr *map[K]T, key K, create func(A0, A1, A2) T, a0 A0, a1 A1, a2 A2) T {
 	if *ptr == nil {
 		*ptr = map[K]T{}
 	}
@@ -57,12 +57,12 @@ func GetOrCreateMap2[T any, K comparable, A1, A2 any](ptr *map[K]T, key K, creat
 		return v
 	}
 
-	v := create(a1, a2)
+	v := create(a0, a1, a2)
 	(*ptr)[key] = v
 	return v
 }
 
-func GetOrCreateMap3[T any, K comparable, A1, A2, A3 any](ptr *map[K]T, key K, create func(A1, A2, A3) T, a1 A1, a2 A2, a3 A3) T {
+func GetOrCreateMap3[T any, K comparable, A0, A1, A2, A3 any](ptr *map[K]T, key K, create func(A0, A1, A2, A3) T, a0 A0, a1 A1, a2 A2, a3 A3) T {
 	if *ptr == nil {
 		*ptr = map[K]T{}
 	}
@@ -71,7 +71,7 @@ func GetOrCreateMap3[T any, K comparable, A1, A2, A3 any](ptr *map[K]T, key K, c
 		return v
 	}
 
-	v := create(a1, a2, a3)
+	v := create(a0, a1, a2, a3)
 	(*ptr)[key] = v
 	return v
 }

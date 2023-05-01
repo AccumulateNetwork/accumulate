@@ -10,7 +10,6 @@
   attributes:
   - name: State
     private: true
-    omitAccessor: true
     omitConstructor: true
     type: state
     key: Root

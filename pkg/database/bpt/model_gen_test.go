@@ -27,7 +27,7 @@ type ChangeSet struct {
 func (c *ChangeSet) Key() *record.Key { return nil }
 
 func (c *ChangeSet) BPT() BPT {
-	return values.GetOrCreate(&c.bpt, c.newBPT)
+	return values.GetOrCreate(&c.bpt, (*ChangeSet).newBPT, c)
 }
 
 func (c *ChangeSet) newBPT() BPT {
