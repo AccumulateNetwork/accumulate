@@ -10,7 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 )
 
-func GetOrCreate[T any, A0 any](ptr *T, create func(A0) T, a0 A0) T {
+func GetOrCreate[T any, R any](ptr *T, create func(R) T, a0 R) T {
 	var z T
 	if any(*ptr) != any(z) {
 		return *ptr
@@ -48,34 +48,6 @@ func GetOrCreateMap1[T any, K comparable, A0, A1 any](ptr *map[K]T, key K, creat
 	return v
 }
 
-func GetOrCreateMap2[T any, K comparable, A0, A1, A2 any](ptr *map[K]T, key K, create func(A0, A1, A2) T, a0 A0, a1 A1, a2 A2) T {
-	if *ptr == nil {
-		*ptr = map[K]T{}
-	}
-
-	if v, ok := (*ptr)[key]; ok {
-		return v
-	}
-
-	v := create(a0, a1, a2)
-	(*ptr)[key] = v
-	return v
-}
-
-func GetOrCreateMap3[T any, K comparable, A0, A1, A2, A3 any](ptr *map[K]T, key K, create func(A0, A1, A2, A3) T, a0 A0, a1 A1, a2 A2, a3 A3) T {
-	if *ptr == nil {
-		*ptr = map[K]T{}
-	}
-
-	if v, ok := (*ptr)[key]; ok {
-		return v
-	}
-
-	v := create(a0, a1, a2, a3)
-	(*ptr)[key] = v
-	return v
-}
-
 func Commit[T database.Record](lastErr *error, v T) {
 	var z T
 	if *lastErr != nil || any(v) == any(z) {
@@ -102,14 +74,44 @@ func Walk[T database.Record](lastErr *error, v T, opts database.WalkOptions, fn 
 	*lastErr = v.Walk(opts, fn)
 }
 
-func WalkField[T database.Record](lastErr *error, v T, get func() T, opts database.WalkOptions, fn database.WalkFunc) {
-	// If the caller wants all records,
+func WalkField[T database.Record](lastErr *error, v T, make func() T, opts database.WalkOptions, fn database.WalkFunc) {
 	var z T
 	if !opts.Modified && any(v) == any(z) {
-		v = get()
+		// If the caller wants all records and the record is nil, create a new
+		// record
+		v = make()
 	}
 
 	Walk(lastErr, v, opts, fn)
+}
+
+func WalkMap[T database.Record, K comparable](lastErr *error, m map[K]T, make func(K) T, keys func() []K, opts database.WalkOptions, fn database.WalkFunc) {
+	// If the caller only wants modified records, walking the map is sufficient
+	if opts.Modified {
+		for _, v := range m {
+			Walk(lastErr, v, opts, fn)
+		}
+		return
+	}
+
+	// If the parent record does not provide a way to list keys, don't walk
+	// anything. Otherwise the behavior of "walk all records" would depend on
+	// which records had been previously loaded, which would be rather
+	// unintuitive.
+	if keys == nil {
+		return
+	}
+
+	for _, k := range keys() {
+		// Check for an existing record
+		v, ok := m[k]
+		if !ok {
+			// Create a new record
+			v = make(k)
+		}
+
+		Walk(lastErr, v, opts, fn)
+	}
 }
 
 func WalkComposite[T database.Record](v T, opts database.WalkOptions, fn database.WalkFunc) (skip bool, err error) {
