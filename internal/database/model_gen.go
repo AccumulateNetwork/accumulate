@@ -85,9 +85,7 @@ func (c *Batch) newBPT() bpt.BPT {
 }
 
 func (c *Batch) getAccount(url *url.URL) *Account {
-	return values.GetOrCreateMap(&c.account, keyForAccount(url), func() *Account {
-		return c.newAccount(url)
-	})
+	return values.GetOrCreateMap1(&c.account, keyForAccount(url), c.newAccount, url)
 }
 
 func (c *Batch) newAccount(url *url.URL) *Account {
@@ -101,9 +99,7 @@ func (c *Batch) newAccount(url *url.URL) *Account {
 }
 
 func (c *Batch) Message(hash [32]byte) *Message {
-	return values.GetOrCreateMap(&c.message, keyForMessage(hash), func() *Message {
-		return c.newMessage(hash)
-	})
+	return values.GetOrCreateMap1(&c.message, keyForMessage(hash), c.newMessage, hash)
 }
 
 func (c *Batch) newMessage(hash [32]byte) *Message {
@@ -117,9 +113,7 @@ func (c *Batch) newMessage(hash [32]byte) *Message {
 }
 
 func (c *Batch) getTransaction(hash [32]byte) *Transaction {
-	return values.GetOrCreateMap(&c.transaction, keyForTransaction(hash), func() *Transaction {
-		return c.newTransaction(hash)
-	})
+	return values.GetOrCreateMap1(&c.transaction, keyForTransaction(hash), c.newTransaction, hash)
 }
 
 func (c *Batch) newTransaction(hash [32]byte) *Transaction {
@@ -133,9 +127,7 @@ func (c *Batch) newTransaction(hash [32]byte) *Transaction {
 }
 
 func (c *Batch) SystemData(partition string) *SystemData {
-	return values.GetOrCreateMap(&c.systemData, keyForSystemData(partition), func() *SystemData {
-		return c.newSystemData(partition)
-	})
+	return values.GetOrCreateMap1(&c.systemData, keyForSystemData(partition), c.newSystemData, partition)
 }
 
 func (c *Batch) newSystemData(partition string) *SystemData {
@@ -380,9 +372,7 @@ func (c *Account) newPending() values.Set[*url.TxID] {
 }
 
 func (c *Account) SyntheticForAnchor(anchor [32]byte) values.Set[*url.TxID] {
-	return values.GetOrCreateMap(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), func() values.Set[*url.TxID] {
-		return c.newSyntheticForAnchor(anchor)
-	})
+	return values.GetOrCreateMap1(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), c.newSyntheticForAnchor, anchor)
 }
 
 func (c *Account) newSyntheticForAnchor(anchor [32]byte) values.Set[*url.TxID] {
@@ -398,9 +388,7 @@ func (c *Account) newDirectory() values.Set[*url.URL] {
 }
 
 func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
-	return values.GetOrCreateMap(&c.transaction, keyForAccountTransaction(hash), func() *AccountTransaction {
-		return c.newTransaction(hash)
-	})
+	return values.GetOrCreateMap1(&c.transaction, keyForAccountTransaction(hash), c.newTransaction, hash)
 }
 
 func (c *Account) newTransaction(hash [32]byte) *AccountTransaction {
@@ -462,9 +450,7 @@ func (c *Account) newMajorBlockChain() *Chain2 {
 }
 
 func (c *Account) getSyntheticSequenceChain(partition string) *Chain2 {
-	return values.GetOrCreateMap(&c.syntheticSequenceChain, keyForAccountSyntheticSequenceChain(partition), func() *Chain2 {
-		return c.newSyntheticSequenceChain(partition)
-	})
+	return values.GetOrCreateMap1(&c.syntheticSequenceChain, keyForAccountSyntheticSequenceChain(partition), c.newSyntheticSequenceChain, partition)
 }
 
 func (c *Account) newSyntheticSequenceChain(partition string) *Chain2 {
@@ -472,9 +458,7 @@ func (c *Account) newSyntheticSequenceChain(partition string) *Chain2 {
 }
 
 func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
-	return values.GetOrCreateMap(&c.anchorChain, keyForAccountAnchorChain(partition), func() *AccountAnchorChain {
-		return c.newAnchorChain(partition)
-	})
+	return values.GetOrCreateMap1(&c.anchorChain, keyForAccountAnchorChain(partition), c.newAnchorChain, partition)
 }
 
 func (c *Account) newAnchorChain(partition string) *AccountAnchorChain {
@@ -1024,9 +1008,7 @@ func (c *AccountData) newEntry() values.Counted[[32]byte] {
 }
 
 func (c *AccountData) Transaction(entryHash [32]byte) values.Value[[32]byte] {
-	return values.GetOrCreateMap(&c.transaction, keyForAccountDataTransaction(entryHash), func() values.Value[[32]byte] {
-		return c.newTransaction(entryHash)
-	})
+	return values.GetOrCreateMap1(&c.transaction, keyForAccountDataTransaction(entryHash), c.newTransaction, entryHash)
 }
 
 func (c *AccountData) newTransaction(entryHash [32]byte) values.Value[[32]byte] {
@@ -1279,9 +1261,7 @@ func (c *Transaction) newProduced() values.Set[*url.TxID] {
 }
 
 func (c *Transaction) getSignatures(signer *url.URL) values.Value[*sigSetData] {
-	return values.GetOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() values.Value[*sigSetData] {
-		return c.newSignatures(signer)
-	})
+	return values.GetOrCreateMap1(&c.signatures, keyForTransactionSignatures(signer), c.newSignatures, signer)
 }
 
 func (c *Transaction) newSignatures(signer *url.URL) values.Value[*sigSetData] {
@@ -1410,9 +1390,7 @@ func keyForSystemDataSyntheticIndexIndex(block uint64) systemDataSyntheticIndexI
 }
 
 func (c *SystemData) SyntheticIndexIndex(block uint64) values.Value[uint64] {
-	return values.GetOrCreateMap(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), func() values.Value[uint64] {
-		return c.newSyntheticIndexIndex(block)
-	})
+	return values.GetOrCreateMap1(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), c.newSyntheticIndexIndex, block)
 }
 
 func (c *SystemData) newSyntheticIndexIndex(block uint64) values.Value[uint64] {
@@ -1536,9 +1514,7 @@ func (c *MerkleManager) newHead() values.Value[*MerkleState] {
 }
 
 func (c *MerkleManager) States(index uint64) values.Value[*MerkleState] {
-	return values.GetOrCreateMap(&c.states, keyForMerkleManagerStates(index), func() values.Value[*MerkleState] {
-		return c.newStates(index)
-	})
+	return values.GetOrCreateMap1(&c.states, keyForMerkleManagerStates(index), c.newStates, index)
 }
 
 func (c *MerkleManager) newStates(index uint64) values.Value[*MerkleState] {
@@ -1546,9 +1522,7 @@ func (c *MerkleManager) newStates(index uint64) values.Value[*MerkleState] {
 }
 
 func (c *MerkleManager) ElementIndex(hash []byte) values.Value[uint64] {
-	return values.GetOrCreateMap(&c.elementIndex, keyForMerkleManagerElementIndex(hash), func() values.Value[uint64] {
-		return c.newElementIndex(hash)
-	})
+	return values.GetOrCreateMap1(&c.elementIndex, keyForMerkleManagerElementIndex(hash), c.newElementIndex, hash)
 }
 
 func (c *MerkleManager) newElementIndex(hash []byte) values.Value[uint64] {
@@ -1556,9 +1530,7 @@ func (c *MerkleManager) newElementIndex(hash []byte) values.Value[uint64] {
 }
 
 func (c *MerkleManager) Element(index uint64) values.Value[[]byte] {
-	return values.GetOrCreateMap(&c.element, keyForMerkleManagerElement(index), func() values.Value[[]byte] {
-		return c.newElement(index)
-	})
+	return values.GetOrCreateMap1(&c.element, keyForMerkleManagerElement(index), c.newElement, index)
 }
 
 func (c *MerkleManager) newElement(index uint64) values.Value[[]byte] {

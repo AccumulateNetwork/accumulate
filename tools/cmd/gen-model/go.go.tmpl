@@ -145,9 +145,7 @@ func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType
 {{if not .OmitAccessor}}
 func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}} {
 	{{- if parameterized .}}
-	return values.GetOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}), func() {{recordType . true}} {
-		return c.new{{.Name}}({{range .GetParameters}}{{lower .Name}},{{end}})
-	})
+	return values.GetOrCreateMap{{len .GetParameters}}(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}), c.new{{.Name}}, {{range .GetParameters}}{{lower .Name}},{{end}})
 	{{- else}}
 	return values.GetOrCreate(&c.{{lower .Name}}, c.new{{.Name}})
 	{{- end -}}

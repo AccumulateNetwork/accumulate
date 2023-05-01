@@ -44,9 +44,7 @@ func keyForEntity(name string) entityKey {
 }
 
 func (c *changeSet) Entity(name string) Entity {
-	return values.GetOrCreateMap(&c.entity, keyForEntity(name), func() *entity {
-		return c.newEntity(name)
-	})
+	return values.GetOrCreateMap1(&c.entity, keyForEntity(name), c.newEntity, name)
 }
 
 func (c *changeSet) newEntity(name string) *entity {

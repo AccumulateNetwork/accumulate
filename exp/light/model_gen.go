@@ -66,9 +66,7 @@ func keyForIndexDBTransaction(hash [32]byte) indexDBTransactionKey {
 }
 
 func (c *indexDB) Account(url *url.URL) IndexDBAccount {
-	return values.GetOrCreateMap(&c.account, keyForIndexDBAccount(url), func() *indexDBAccount {
-		return c.newAccount(url)
-	})
+	return values.GetOrCreateMap1(&c.account, keyForIndexDBAccount(url), c.newAccount, url)
 }
 
 func (c *indexDB) newAccount(url *url.URL) *indexDBAccount {
@@ -82,9 +80,7 @@ func (c *indexDB) newAccount(url *url.URL) *indexDBAccount {
 }
 
 func (c *indexDB) Partition(url *url.URL) IndexDBPartition {
-	return values.GetOrCreateMap(&c.partition, keyForIndexDBPartition(url), func() *indexDBPartition {
-		return c.newPartition(url)
-	})
+	return values.GetOrCreateMap1(&c.partition, keyForIndexDBPartition(url), c.newPartition, url)
 }
 
 func (c *indexDB) newPartition(url *url.URL) *indexDBPartition {
@@ -98,9 +94,7 @@ func (c *indexDB) newPartition(url *url.URL) *indexDBPartition {
 }
 
 func (c *indexDB) Transaction(hash [32]byte) IndexDBTransaction {
-	return values.GetOrCreateMap(&c.transaction, keyForIndexDBTransaction(hash), func() *indexDBTransaction {
-		return c.newTransaction(hash)
-	})
+	return values.GetOrCreateMap1(&c.transaction, keyForIndexDBTransaction(hash), c.newTransaction, hash)
 }
 
 func (c *indexDB) newTransaction(hash [32]byte) *indexDBTransaction {
@@ -264,9 +258,7 @@ func (c *indexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
 }
 
 func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
-	return values.GetOrCreateMap(&c.chain, keyForIndexDBAccountChain(name), func() *indexDBAccountChain {
-		return c.newChain(name)
-	})
+	return values.GetOrCreateMap1(&c.chain, keyForIndexDBAccountChain(name), c.newChain, name)
 }
 
 func (c *indexDBAccount) newChain(name string) *indexDBAccountChain {

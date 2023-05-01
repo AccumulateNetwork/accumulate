@@ -34,6 +34,48 @@ func GetOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T
 	return v
 }
 
+func GetOrCreateMap1[T any, K comparable, A1 any](ptr *map[K]T, key K, create func(A1) T, a1 A1) T {
+	if *ptr == nil {
+		*ptr = map[K]T{}
+	}
+
+	if v, ok := (*ptr)[key]; ok {
+		return v
+	}
+
+	v := create(a1)
+	(*ptr)[key] = v
+	return v
+}
+
+func GetOrCreateMap2[T any, K comparable, A1, A2 any](ptr *map[K]T, key K, create func(A1, A2) T, a1 A1, a2 A2) T {
+	if *ptr == nil {
+		*ptr = map[K]T{}
+	}
+
+	if v, ok := (*ptr)[key]; ok {
+		return v
+	}
+
+	v := create(a1, a2)
+	(*ptr)[key] = v
+	return v
+}
+
+func GetOrCreateMap3[T any, K comparable, A1, A2, A3 any](ptr *map[K]T, key K, create func(A1, A2, A3) T, a1 A1, a2 A2, a3 A3) T {
+	if *ptr == nil {
+		*ptr = map[K]T{}
+	}
+
+	if v, ok := (*ptr)[key]; ok {
+		return v
+	}
+
+	v := create(a1, a2, a3)
+	(*ptr)[key] = v
+	return v
+}
+
 func Commit[T database.Record](lastErr *error, v T) {
 	var z T
 	if *lastErr != nil || any(v) == any(z) {

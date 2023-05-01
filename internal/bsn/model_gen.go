@@ -71,9 +71,7 @@ func (c *ChangeSet) newLastBlock() values.Value[*LastBlock] {
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
-	return values.GetOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
-		return c.newSummary(hash)
-	})
+	return values.GetOrCreateMap1(&c.summary, keyForSummary(hash), c.newSummary, hash)
 }
 
 func (c *ChangeSet) newSummary(hash [32]byte) *Summary {
@@ -87,9 +85,7 @@ func (c *ChangeSet) newSummary(hash [32]byte) *Summary {
 }
 
 func (c *ChangeSet) Pending(partition string) *Pending {
-	return values.GetOrCreateMap(&c.pending, keyForPending(partition), func() *Pending {
-		return c.newPending(partition)
-	})
+	return values.GetOrCreateMap1(&c.pending, keyForPending(partition), c.newPending, partition)
 }
 
 func (c *ChangeSet) newPending(partition string) *Pending {
@@ -320,9 +316,7 @@ func keyForPendingOnBlock(index uint64) pendingOnBlockKey {
 }
 
 func (c *Pending) OnBlock(index uint64) values.Value[[32]byte] {
-	return values.GetOrCreateMap(&c.onBlock, keyForPendingOnBlock(index), func() values.Value[[32]byte] {
-		return c.newOnBlock(index)
-	})
+	return values.GetOrCreateMap1(&c.onBlock, keyForPendingOnBlock(index), c.newOnBlock, index)
 }
 
 func (c *Pending) newOnBlock(index uint64) values.Value[[32]byte] {
