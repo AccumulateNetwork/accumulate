@@ -283,9 +283,7 @@ func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptio
 	if (!opts.IgnoreIndices) {
 	{{- end}}
 	{{- if parameterized .}}
-	for _, v := range c.{{lower .Name}} {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.{{lower .Name}}, c.new{{.Name}}, {{if .Index}}c.{{.Index}}{{else}}nil{{end}}, opts, fn)
 	{{- else}}
 	values.WalkField(&err, c.{{lower .Name}}, c.new{{.Name}}, opts, fn)
 	{{- end}}

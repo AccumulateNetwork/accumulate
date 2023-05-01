@@ -8,7 +8,12 @@ package values
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
+
+type keyType[T any] interface {
+	ForMap() T
+}
 
 func GetOrCreate[Container any, Record any](c Container, ptr *Record, create func(Container) Record) Record {
 	var z Record
@@ -20,7 +25,7 @@ func GetOrCreate[Container any, Record any](c Container, ptr *Record, create fun
 	return *ptr
 }
 
-func GetOrCreateMap[Container any, Record any, Key interface{ ForMap() MapKey }, MapKey comparable](c Container, ptr *map[MapKey]Record, key Key, create func(Container, Key) Record) Record {
+func GetOrCreateMap[Container any, Record any, Key keyType[MapKey], MapKey comparable](c Container, ptr *map[MapKey]Record, key Key, create func(Container, Key) Record) Record {
 	if *ptr == nil {
 		*ptr = map[MapKey]Record{}
 	}
@@ -72,7 +77,7 @@ func WalkField[T database.Record](lastErr *error, v T, make func() T, opts datab
 	Walk(lastErr, v, opts, fn)
 }
 
-func WalkMap[T database.Record, K comparable](lastErr *error, m map[K]T, make func(K) T, keys func() []K, opts database.WalkOptions, fn database.WalkFunc) {
+func WalkMap[Record database.Record, Key keyType[MapKey], MapKey comparable](lastErr *error, m map[MapKey]Record, make func(Key) Record, getKeys func() ([]Key, error), opts database.WalkOptions, fn database.WalkFunc) {
 	// If the caller only wants modified records, walking the map is sufficient
 	if opts.Modified {
 		for _, v := range m {
@@ -85,15 +90,21 @@ func WalkMap[T database.Record, K comparable](lastErr *error, m map[K]T, make fu
 	// anything. Otherwise the behavior of "walk all records" would depend on
 	// which records had been previously loaded, which would be rather
 	// unintuitive.
-	if keys == nil {
+	if getKeys == nil {
 		return
 	}
 
-	for _, k := range keys() {
-		// Check for an existing record
-		v, ok := m[k]
+	// Load the keys
+	keys, err := getKeys()
+	if err != nil {
+		*lastErr = errors.UnknownError.Wrap(err)
+		return
+	}
+
+	// Walk the key set using the existing record or creating a new one
+	for _, k := range keys {
+		v, ok := m[k.ForMap()]
 		if !ok {
-			// Create a new record
 			v = make(k)
 		}
 

@@ -265,18 +265,10 @@ func (c *Batch) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 		return errors.UnknownError.Wrap(err)
 	}
 	values.WalkField(&err, c.bpt, c.newBPT, opts, fn)
-	for _, v := range c.account {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.message {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.transaction {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.systemData {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.account, c.newAccount, nil, opts, fn)
+	values.WalkMap(&err, c.message, c.newMessage, nil, opts, fn)
+	values.WalkMap(&err, c.transaction, c.newTransaction, nil, opts, fn)
+	values.WalkMap(&err, c.systemData, c.newSystemData, nil, opts, fn)
 	return err
 }
 
@@ -713,25 +705,17 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.url, c.newUrl, opts, fn)
 	values.WalkField(&err, c.main, c.newMain, opts, fn)
 	values.WalkField(&err, c.pending, c.newPending, opts, fn)
-	for _, v := range c.syntheticForAnchor {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.syntheticForAnchor, c.newSyntheticForAnchor, nil, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
-	for _, v := range c.transaction {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.transaction, c.newTransaction, c.getTransactionKeys, opts, fn)
 	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
 	values.WalkField(&err, c.signatureChain, c.newSignatureChain, opts, fn)
 	values.WalkField(&err, c.rootChain, c.newRootChain, opts, fn)
 	values.WalkField(&err, c.anchorSequenceChain, c.newAnchorSequenceChain, opts, fn)
 	values.WalkField(&err, c.majorBlockChain, c.newMajorBlockChain, opts, fn)
-	for _, v := range c.syntheticSequenceChain {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.anchorChain {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.syntheticSequenceChain, c.newSyntheticSequenceChain, c.getSyntheticSequenceKeys, opts, fn)
+	values.WalkMap(&err, c.anchorChain, c.newAnchorChain, c.getAnchorKeys, opts, fn)
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.chains, c.newChains, opts, fn)
 	}
@@ -1104,9 +1088,7 @@ func (c *AccountData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 		values.WalkField(&err, c.entry, c.newEntry, opts, fn)
 	}
 	if !opts.IgnoreIndices {
-		for _, v := range c.transaction {
-			values.Walk(&err, v, opts, fn)
-		}
+		values.WalkMap(&err, c.transaction, c.newTransaction, nil, opts, fn)
 	}
 	return err
 }
@@ -1383,9 +1365,7 @@ func (c *Transaction) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.main, c.newMain, opts, fn)
 	values.WalkField(&err, c.status, c.newStatus, opts, fn)
 	values.WalkField(&err, c.produced, c.newProduced, opts, fn)
-	for _, v := range c.signatures {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.signatures, c.newSignatures, nil, opts, fn)
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.chains, c.newChains, opts, fn)
 	}
@@ -1486,9 +1466,7 @@ func (c *SystemData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 		return errors.UnknownError.Wrap(err)
 	}
 	if !opts.IgnoreIndices {
-		for _, v := range c.syntheticIndexIndex {
-			values.Walk(&err, v, opts, fn)
-		}
+		values.WalkMap(&err, c.syntheticIndexIndex, c.newSyntheticIndexIndex, nil, opts, fn)
 	}
 	return err
 }
@@ -1673,18 +1651,12 @@ func (c *MerkleManager) Walk(opts record.WalkOptions, fn record.WalkFunc) error 
 		return errors.UnknownError.Wrap(err)
 	}
 	values.WalkField(&err, c.head, c.newHead, opts, fn)
-	for _, v := range c.states {
-		values.Walk(&err, v, opts, fn)
+	values.WalkMap(&err, c.states, c.newStates, nil, opts, fn)
+	if !opts.IgnoreIndices {
+		values.WalkMap(&err, c.elementIndex, c.newElementIndex, nil, opts, fn)
 	}
 	if !opts.IgnoreIndices {
-		for _, v := range c.elementIndex {
-			values.Walk(&err, v, opts, fn)
-		}
-	}
-	if !opts.IgnoreIndices {
-		for _, v := range c.element {
-			values.Walk(&err, v, opts, fn)
-		}
+		values.WalkMap(&err, c.element, c.newElement, nil, opts, fn)
 	}
 	return err
 }

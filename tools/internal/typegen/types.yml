@@ -1,21 +1,35 @@
+RecordBase:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Name
+      type: string
+    - name: Description
+      type: string
+    - name: Parent
+      type: EntityRecord
+      pointer: true
+    - name: Private
+      type: bool
+    - name: OmitAccessor
+      type: bool
+    - name: OmitConstructor
+      type: bool
+    - name: Parameters
+      type: Field
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+    - name: Index
+      type: string
+
 EntityRecord:
   non-binary: true
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: OmitConstructor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
+    - type: RecordBase
+      marshal-as: reference
     - name: Fields
       type: Field
       pointer: true
@@ -29,11 +43,6 @@ EntityRecord:
       type: bool
     - name: CustomWalk
       type: bool
-    - name: Parameters
-      type: Field
-      pointer: true
-      marshal-as: reference
-      repeatable: true
     - name: OmitCommit
       type: bool
     - name: OmitResolve
@@ -58,24 +67,8 @@ ChainRecord:
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: OmitConstructor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
-    - name: Parameters
-      type: Field
-      pointer: true
+    - type: RecordBase
       marshal-as: reference
-      repeatable: true
     - name: ChainType
       type: string
 
@@ -84,24 +77,8 @@ StateRecord:
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: OmitConstructor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
-    - name: Parameters
-      type: Field
-      pointer: true
+    - type: RecordBase
       marshal-as: reference
-      repeatable: true
     - name: DataType
       type: FieldType
       marshal-as: reference
@@ -122,24 +99,8 @@ IndexRecord:
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: OmitConstructor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
-    - name: Parameters
-      type: Field
-      pointer: true
+    - type: RecordBase
       marshal-as: reference
-      repeatable: true
     - name: DataType
       type: FieldType
       marshal-as: reference
@@ -160,26 +121,10 @@ OtherRecord:
   incomparable: true
   union: { type: record }
   fields:
-    - name: Parent
-      type: EntityRecord
-      pointer: true
-    - name: Description
-      type: string
-    - name: OmitAccessor
-      type: bool
-    - name: OmitConstructor
-      type: bool
-    - name: Private
-      type: bool
-    - name: Name
-      type: string
+    - type: RecordBase
+      marshal-as: reference
     - name: DataType
       type: string
-    - name: Parameters
-      type: Field
-      pointer: true
-      marshal-as: reference
-      repeatable: true
     - name: Pointer
       type: bool
     - name: HasChains

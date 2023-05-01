@@ -239,17 +239,15 @@ func (a *Account) chainByName(name string) *Chain2 {
 		return a.MajorBlockChain()
 	}
 
-	i := strings.IndexRune(name, '(')
-	j := strings.IndexRune(name, ')')
-	if i < 0 || j < 0 {
+	first, arg, rest, ok := splitChainName(name)
+	if !ok {
 		return nil
 	}
 
-	arg := name[i+1 : j]
-	switch name[:i] {
+	switch first {
 	case "anchor":
 		a := a.AnchorChain(arg)
-		switch name[j+1:] {
+		switch rest {
 		case "-root":
 			return a.Root()
 		case "-bpt":
@@ -263,10 +261,56 @@ func (a *Account) chainByName(name string) *Chain2 {
 	return nil
 }
 
+func splitChainName(name string) (first, arg, rest string, ok bool) {
+	i := strings.IndexRune(name, '(')
+	j := strings.IndexRune(name, ')')
+	if i < 0 || j < 0 {
+		return "", "", "", false
+	}
+
+	return name[:i], name[i+1 : j], name[j+1:], true
+}
+
 func (c *Account) SyntheticSequenceChain(partition string) *Chain2 {
 	return c.getSyntheticSequenceChain(strings.ToLower(partition))
 }
 
 func (c *Account) AnchorChain(partition string) *AccountAnchorChain {
 	return c.getAnchorChain(strings.ToLower(partition))
+}
+
+func (c *Account) getSyntheticSequenceKeys() ([]accountSyntheticSequenceChainKey, error) {
+	chains, err := c.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	keys := make([]accountSyntheticSequenceChainKey, 0, len(chains))
+	seen := map[string]bool{}
+	for _, c := range chains {
+		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
+		if !ok || first != "anchor" || seen[arg] {
+			continue
+		}
+		seen[arg] = true
+		keys = append(keys, accountSyntheticSequenceChainKey{arg})
+	}
+	return keys, nil
+}
+
+func (c *Account) getAnchorKeys() ([]accountAnchorChainKey, error) {
+	chains, err := c.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	keys := make([]accountAnchorChainKey, 0, len(chains))
+	for _, c := range chains {
+		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
+		if !ok || first != "synthetic-sequence" {
+			continue
+		}
+		keys = append(keys, accountAnchorChainKey{arg})
+	}
+	return keys, nil
 }

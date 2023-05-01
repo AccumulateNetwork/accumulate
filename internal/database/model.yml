@@ -26,7 +26,7 @@
     type: entity
     customCommit: true
     private: true
-    parameters:
+    parameters: # Indexed by the BPT
     - name: Url
       type: url
       pointer: true
@@ -46,9 +46,9 @@
       emptyIfMissing: true
       pointer: true
       collection: set
-    - name: SyntheticForAnchor # Not used by exec v2
+    - name: SyntheticForAnchor
       type: state
-      parameters:
+      parameters: # Not indexed (not used by exec v2)
       - name: Anchor
         type: hash
       dataType: txid
@@ -62,9 +62,10 @@
       pointer: true
       emptyIfMissing: true
 
-    - name: Transaction # Indexed by pending (more or less)
+    - name: Transaction
       type: entity
-      parameters:
+      index: getTransactionKeys
+      parameters: # Indexed by pending (more or less)
       - name: Hash
         type: hash
       attributes:
@@ -131,19 +132,21 @@
       dataType: Chain2
       hasChains: true
       pointer: true
-    - name: SyntheticSequenceChain # Indexed by network definition
+    - name: SyntheticSequenceChain
       type: other
       dataType: Chain2
       hasChains: true
       pointer: true
       private: true
-      parameters:
+      index: getSyntheticSequenceKeys
+      parameters: # Indexed by chains
       - name: Partition
         type: string
-    - name: AnchorChain # Indexed by network definition
+    - name: AnchorChain
       type: entity
       private: true
-      parameters:
+      index: getAnchorKeys
+      parameters: # Indexed by chains
       - name: Partition
         type: string
       attributes:
@@ -177,14 +180,14 @@
         dataType: hash
       - name: Transaction
         type: index
-        parameters:
+        parameters: # Not indexed
         - name: EntryHash
           type: hash
         dataType: hash
 
   - name: Message
     type: entity
-    parameters:
+    parameters: # Not indexed
     - name: Hash
       type: hash
     attributes:
@@ -212,7 +215,7 @@
   - name: Transaction
     type: entity
     private: true
-    parameters:
+    parameters: # Not indexed
     - name: Hash
       type: hash
     attributes:
@@ -236,7 +239,7 @@
       pointer: true
       private: true
       emptyIfMissing: true
-      parameters:
+      parameters: # Not indexed (not used by exec v2)
       - name: Signer
         type: url
         pointer: true
@@ -252,7 +255,7 @@
   # System Indices
   - name: SystemData
     type: entity
-    parameters:
+    parameters: # Not indexed
     - name: Partition
       type: string
     attributes:
@@ -260,7 +263,7 @@
       # Indexes from a block index to a synthetic index chain index
       type: index
       dataType: uint
-      parameters:
+      parameters: # Not indexed
       - name: Block
         type: uint
 
@@ -287,18 +290,18 @@
     type: state
     dataType: MerkleState
     pointer: true
-    parameters:
+    parameters: # Not indexed directly
     - name: Index
       type: uint
   - name: ElementIndex
     type: index
     dataType: uint
-    parameters:
+    parameters: # Not indexed directly
     - name: Hash
       type: bytes
   - name: Element
     type: index
     dataType: bytes
-    parameters:
+    parameters: # Not indexed directly
     - name: Index
       type: uint
