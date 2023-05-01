@@ -656,6 +656,12 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	for _, v := range c.anchorChain {
 		values.Walk(&err, v, opts, fn)
 	}
+	if !opts.IgnoreIndices {
+		values.Walk(&err, c.chains, opts, fn)
+	}
+	if !opts.IgnoreIndices {
+		values.Walk(&err, c.syntheticAnchors, opts, fn)
+	}
 	values.Walk(&err, c.data, opts, fn)
 	return err
 }
@@ -799,6 +805,9 @@ func (c *AccountTransaction) Walk(opts record.WalkOptions, fn record.WalkFunc) e
 	values.Walk(&err, c.votes, opts, fn)
 	values.Walk(&err, c.signatures, opts, fn)
 	values.Walk(&err, c.validatorSignatures, opts, fn)
+	if !opts.IgnoreIndices {
+		values.Walk(&err, c.history, opts, fn)
+	}
 	return err
 }
 
@@ -993,6 +1002,14 @@ func (c *AccountData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
+	if !opts.IgnoreIndices {
+		values.Walk(&err, c.entry, opts, fn)
+	}
+	if !opts.IgnoreIndices {
+		for _, v := range c.transaction {
+			values.Walk(&err, v, opts, fn)
+		}
+	}
 	return err
 }
 
@@ -1099,6 +1116,15 @@ func (c *Message) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 		return errors.UnknownError.Wrap(err)
 	}
 	values.Walk(&err, c.main, opts, fn)
+	if !opts.IgnoreIndices {
+		values.Walk(&err, c.cause, opts, fn)
+	}
+	if !opts.IgnoreIndices {
+		values.Walk(&err, c.produced, opts, fn)
+	}
+	if !opts.IgnoreIndices {
+		values.Walk(&err, c.signers, opts, fn)
+	}
 	return err
 }
 
@@ -1240,6 +1266,9 @@ func (c *Transaction) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	for _, v := range c.signatures {
 		values.Walk(&err, v, opts, fn)
 	}
+	if !opts.IgnoreIndices {
+		values.Walk(&err, c.chains, opts, fn)
+	}
 	return err
 }
 
@@ -1329,6 +1358,11 @@ func (c *SystemData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	skip, err := values.WalkComposite(c, opts, fn)
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
+	}
+	if !opts.IgnoreIndices {
+		for _, v := range c.syntheticIndexIndex {
+			values.Walk(&err, v, opts, fn)
+		}
 	}
 	return err
 }
@@ -1495,6 +1529,16 @@ func (c *MerkleManager) Walk(opts record.WalkOptions, fn record.WalkFunc) error 
 	values.Walk(&err, c.head, opts, fn)
 	for _, v := range c.states {
 		values.Walk(&err, v, opts, fn)
+	}
+	if !opts.IgnoreIndices {
+		for _, v := range c.elementIndex {
+			values.Walk(&err, v, opts, fn)
+		}
+	}
+	if !opts.IgnoreIndices {
+		for _, v := range c.element {
+			values.Walk(&err, v, opts, fn)
+		}
 	}
 	return err
 }

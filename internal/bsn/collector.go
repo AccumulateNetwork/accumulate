@@ -109,8 +109,9 @@ func (c *Collector) willCommitBlock(e execute.WillCommitBlock) error {
 	}
 
 	err := e.Block.ChangeSet().Walk(record.WalkOptions{
-		Modified: true,
-		Values:   true,
+		Modified:      true,
+		Values:        true,
+		IgnoreIndices: true,
 	}, func(r record.Record) (bool, error) {
 		rv, ok := r.(record.TerminalRecord)
 		if !ok {

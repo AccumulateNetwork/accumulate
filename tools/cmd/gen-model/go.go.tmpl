@@ -270,7 +270,9 @@ func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptio
 	}
 
 	{{- range .Attributes}}
-	{{- if not .Type.IsIndex}}
+	{{- if .Type.IsIndex}}
+	if (!opts.IgnoreIndices) {
+	{{- end}}
 	{{- if parameterized .}}
 	for _, v := range c.{{lower .Name}} {
 		values.Walk(&err, v, opts, fn)
@@ -278,6 +280,8 @@ func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptio
 	{{- else}}
 	values.Walk(&err, c.{{lower .Name}}, opts, fn)
 	{{- end}}
+	{{- if .Type.IsIndex}}
+	}
 	{{- end}}
 	{{- end}}
 	return err

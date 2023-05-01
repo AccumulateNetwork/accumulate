@@ -86,10 +86,9 @@ func (c *Collector) Close() error {
 	return c.wr.Close()
 }
 
-func (c *Collector) Collect(r database.Record) error {
-	return r.Walk(database.WalkOptions{
-		Values: true,
-	}, func(r database.Record) (skip bool, err error) {
+func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error {
+	opts.Values = true
+	return r.Walk(opts, func(r database.Record) (skip bool, err error) {
 		// Load the value
 		v, ok := r.(database.Value)
 		if !ok {

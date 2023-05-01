@@ -9,6 +9,7 @@ package database
 import (
 	"io"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -96,7 +97,9 @@ func (db *Database) collectAccounts(w *snapshot.Writer, opts *CollectOptions) er
 			break
 		}
 
-		err = records.Collect(account)
+		err = records.Collect(account, database.WalkOptions{
+			IgnoreIndices: true,
+		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect %v: %w", account.Url(), err)
 		}
