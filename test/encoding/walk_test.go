@@ -96,8 +96,8 @@ func TestWalkAndReplay(t *testing.T) {
 			block := new(Block)
 			block.Index = state.Params().Index
 			_ = state.ChangeSet().Walk(record.WalkOptions{
-				Values:  true,
-				Changes: true,
+				Values:   true,
+				Modified: true,
 			}, func(r record.Record) (bool, error) {
 				v, _, err := r.(record.TerminalRecord).GetValue()
 				require.NoError(t, err)

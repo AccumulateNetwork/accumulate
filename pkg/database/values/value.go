@@ -211,7 +211,7 @@ func (v *value[T]) Resolve(key *database.Key) (database.Record, *database.Key, e
 }
 
 func (v *value[T]) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
-	if opts.Changes && !v.IsDirty() {
+	if opts.Modified && !v.IsDirty() {
 		return nil
 	}
 	_, err := fn(v)

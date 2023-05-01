@@ -53,9 +53,11 @@ type WalkOptions struct {
 	// composite records.
 	Values bool
 
-	// Changes indicates the callback should only be called for records that
-	// have changed.
-	Changes bool
+	// Modified skips records that have not been modified.
+	Modified bool
+
+	// IgnoreIndices skips index records.
+	IgnoreIndices bool
 }
 
 // A Value is a terminal record value.

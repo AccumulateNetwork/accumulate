@@ -53,7 +53,7 @@ func Walk[T database.Record](lastErr *error, v T, opts database.WalkOptions, fn 
 	if *lastErr != nil || any(v) == any(z) {
 		return
 	}
-	if opts.Changes && !v.IsDirty() {
+	if opts.Modified && !v.IsDirty() {
 		return
 	}
 
@@ -66,7 +66,7 @@ func WalkComposite[T database.Record](v T, opts database.WalkOptions, fn databas
 		return true, nil
 	}
 
-	if opts.Changes && !v.IsDirty() {
+	if opts.Modified && !v.IsDirty() {
 		return true, nil
 	}
 
