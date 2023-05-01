@@ -87,9 +87,16 @@ func (v *value[T]) Key() *database.Key { return v.key }
 // Get loads the value, unmarshalling it if necessary. If IsDirty returns true,
 // Get is guaranteed to succeed.
 func (v *value[T]) Get() (u T, err error) {
+	return v.get(false)
+}
+
+func (v *value[T]) get(checkExists bool) (u T, err error) {
 	// Do we already have the value?
 	switch v.status {
 	case valueNotFound:
+		if checkExists {
+			return zero[T](), nil
+		}
 		return zero[T](), errors.NotFound.WithFormat("%s not found", v.name)
 
 	case valueClean, valueDirty:
@@ -130,7 +137,7 @@ func (v *value[T]) Get() (u T, err error) {
 		// Unknown error
 		return zero[T](), errors.UnknownError.Wrap(err)
 
-	case v.allowMissing:
+	case v.allowMissing && !checkExists:
 		// Initialize to an empty value
 		v.value.setNew()
 		v.status = valueClean
@@ -139,6 +146,9 @@ func (v *value[T]) Get() (u T, err error) {
 	default:
 		// Not found
 		v.status = valueNotFound
+		if checkExists {
+			return zero[T](), nil
+		}
 		return zero[T](), errors.NotFound.WithFormat("%s not found", v.name)
 	}
 }
@@ -214,7 +224,20 @@ func (v *value[T]) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	if opts.Modified && !v.IsDirty() {
 		return nil
 	}
-	_, err := fn(v)
+
+	// Check if the record exists
+	_, err := v.get(true)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// If the record is not found, skip it
+	if v.status == valueNotFound {
+		return nil
+	}
+
+	// Walk the record
+	_, err = fn(v)
 	return err
 }
 

@@ -259,6 +259,7 @@ func (c *{{fullName .}}) dirtyChains() []*MerkleManager {
 }
 {{end}}
 
+{{if not .OmitWalk}}
 func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
@@ -278,7 +279,7 @@ func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptio
 		values.Walk(&err, v, opts, fn)
 	}
 	{{- else}}
-	values.Walk(&err, c.{{lower .Name}}, opts, fn)
+	values.WalkField(&err, c.{{lower .Name}}, c.{{template "accessor" .}}, opts, fn)
 	{{- end}}
 	{{- if .Type.IsIndex}}
 	}
@@ -286,6 +287,7 @@ func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptio
 	{{- end}}
 	return err
 }
+{{end}}
 
 func (c *{{fullName .}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	if c == nil {

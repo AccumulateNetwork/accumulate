@@ -60,6 +60,16 @@ func Walk[T database.Record](lastErr *error, v T, opts database.WalkOptions, fn 
 	*lastErr = v.Walk(opts, fn)
 }
 
+func WalkField[T database.Record](lastErr *error, v T, get func() T, opts database.WalkOptions, fn database.WalkFunc) {
+	// If the caller wants all records,
+	var z T
+	if !opts.Modified && any(v) == any(z) {
+		v = get()
+	}
+
+	Walk(lastErr, v, opts, fn)
+}
+
 func WalkComposite[T database.Record](v T, opts database.WalkOptions, fn database.WalkFunc) (skip bool, err error) {
 	var z T
 	if any(v) == any(z) {

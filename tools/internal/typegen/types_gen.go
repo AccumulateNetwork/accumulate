@@ -42,6 +42,7 @@ type EntityRecord struct {
 	OmitCommit    bool          `json:"omitCommit,omitempty" form:"omitCommit" query:"omitCommit" validate:"required"`
 	OmitResolve   bool          `json:"omitResolve,omitempty" form:"omitResolve" query:"omitResolve" validate:"required"`
 	OmitIsDirty   bool          `json:"omitIsDirty,omitempty" form:"omitIsDirty" query:"omitIsDirty" validate:"required"`
+	OmitWalk      bool          `json:"omitWalk,omitempty" form:"omitWalk" query:"omitWalk" validate:"required"`
 	ValueStore    string        `json:"valueStore,omitempty" form:"valueStore" query:"valueStore" validate:"required"`
 	Root          bool          `json:"root,omitempty" form:"root" query:"root" validate:"required"`
 	Interface     bool          `json:"interface,omitempty" form:"interface" query:"interface" validate:"required"`
@@ -154,6 +155,7 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 		OmitCommit    bool                                    `json:"omitCommit,omitempty"`
 		OmitResolve   bool                                    `json:"omitResolve,omitempty"`
 		OmitIsDirty   bool                                    `json:"omitIsDirty,omitempty"`
+		OmitWalk      bool                                    `json:"omitWalk,omitempty"`
 		ValueStore    string                                  `json:"valueStore,omitempty"`
 		Root          bool                                    `json:"root,omitempty"`
 		Interface     bool                                    `json:"interface,omitempty"`
@@ -201,6 +203,9 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.OmitIsDirty) {
 		u.OmitIsDirty = v.OmitIsDirty
+	}
+	if !(!v.OmitWalk) {
+		u.OmitWalk = v.OmitWalk
 	}
 	if !(len(v.ValueStore) == 0) {
 		u.ValueStore = v.ValueStore
@@ -429,6 +434,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 		OmitCommit    bool                                    `json:"omitCommit,omitempty"`
 		OmitResolve   bool                                    `json:"omitResolve,omitempty"`
 		OmitIsDirty   bool                                    `json:"omitIsDirty,omitempty"`
+		OmitWalk      bool                                    `json:"omitWalk,omitempty"`
 		ValueStore    string                                  `json:"valueStore,omitempty"`
 		Root          bool                                    `json:"root,omitempty"`
 		Interface     bool                                    `json:"interface,omitempty"`
@@ -449,6 +455,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u.OmitCommit = v.OmitCommit
 	u.OmitResolve = v.OmitResolve
 	u.OmitIsDirty = v.OmitIsDirty
+	u.OmitWalk = v.OmitWalk
 	u.ValueStore = v.ValueStore
 	u.Root = v.Root
 	u.Interface = v.Interface
@@ -473,6 +480,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	v.OmitCommit = u.OmitCommit
 	v.OmitResolve = u.OmitResolve
 	v.OmitIsDirty = u.OmitIsDirty
+	v.OmitWalk = u.OmitWalk
 	v.ValueStore = u.ValueStore
 	v.Root = u.Root
 	v.Interface = u.Interface

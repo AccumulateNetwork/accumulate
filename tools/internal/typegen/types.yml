@@ -38,6 +38,8 @@ EntityRecord:
       type: bool
     - name: OmitIsDirty
       type: bool
+    - name: OmitWalk
+      type: bool
     - name: ValueStore # Use a custom store for values
       type: string
     - name: Root

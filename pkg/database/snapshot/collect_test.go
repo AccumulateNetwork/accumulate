@@ -47,6 +47,25 @@ func fillDB(t testing.TB, db *database.Database, N, M int) {
 	runtime.GC()
 }
 
+func TestCollect(t *testing.T) {
+	dir := t.TempDir()
+	logger := acctesting.NewTestLogger(t)
+	db, err := database.OpenBadger(filepath.Join(dir, "test.db"), logger)
+	require.NoError(t, err)
+	defer db.Close()
+	db.SetObserver(acctesting.NullObserver{})
+
+	// Set up a bunch of accounts
+	fillDB(t, db, 1, 10)
+
+	f, err := os.Create(filepath.Join(dir, "test.snap"))
+	require.NoError(t, err)
+	defer f.Close()
+
+	err = db.Collect(f, protocol.DnUrl(), nil)
+	require.NoError(t, err)
+}
+
 func BenchmarkCollect(b *testing.B) {
 	// N := []int{1, 5, 25}
 	N := []int{5}

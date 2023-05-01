@@ -113,7 +113,7 @@ func (c *changeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	for _, v := range c.entity {
 		values.Walk(&err, v, opts, fn)
 	}
-	values.Walk(&err, c.changeLog, opts, fn)
+	values.WalkField(&err, c.changeLog, c.ChangeLog, opts, fn)
 	return err
 }
 
@@ -227,10 +227,10 @@ func (c *entity) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.union, opts, fn)
-	values.Walk(&err, c.set, opts, fn)
-	values.Walk(&err, c.countableRefType, opts, fn)
-	values.Walk(&err, c.countableUnion, opts, fn)
+	values.WalkField(&err, c.union, c.Union, opts, fn)
+	values.WalkField(&err, c.set, c.Set, opts, fn)
+	values.WalkField(&err, c.countableRefType, c.CountableRefType, opts, fn)
+	values.WalkField(&err, c.countableUnion, c.CountableUnion, opts, fn)
 	return err
 }
 
@@ -395,15 +395,15 @@ func (c *TemplateTest) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.wrapped, opts, fn)
-	values.Walk(&err, c.structPtr, opts, fn)
-	values.Walk(&err, c.union, opts, fn)
-	values.Walk(&err, c.wrappedSet, opts, fn)
-	values.Walk(&err, c.structSet, opts, fn)
-	values.Walk(&err, c.unionSet, opts, fn)
-	values.Walk(&err, c.wrappedList, opts, fn)
-	values.Walk(&err, c.structList, opts, fn)
-	values.Walk(&err, c.unionList, opts, fn)
+	values.WalkField(&err, c.wrapped, c.Wrapped, opts, fn)
+	values.WalkField(&err, c.structPtr, c.StructPtr, opts, fn)
+	values.WalkField(&err, c.union, c.Union, opts, fn)
+	values.WalkField(&err, c.wrappedSet, c.WrappedSet, opts, fn)
+	values.WalkField(&err, c.structSet, c.StructSet, opts, fn)
+	values.WalkField(&err, c.unionSet, c.UnionSet, opts, fn)
+	values.WalkField(&err, c.wrappedList, c.WrappedList, opts, fn)
+	values.WalkField(&err, c.structList, c.StructList, opts, fn)
+	values.WalkField(&err, c.unionList, c.UnionList, opts, fn)
 	return err
 }
 

@@ -66,7 +66,7 @@ func (c *ChangeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.bpt, opts, fn)
+	values.WalkField(&err, c.bpt, c.BPT, opts, fn)
 	return err
 }
 
