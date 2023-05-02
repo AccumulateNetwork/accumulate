@@ -64,8 +64,8 @@
 
     - name: Transaction
       type: entity
-      index: getTransactionKeys
-      parameters: # Indexed by pending (more or less)
+      index: getTransactionKeys # Indexed by pending (more or less)
+      parameters:
       - name: Hash
         type: hash
       attributes:
@@ -187,7 +187,7 @@
 
   - name: Message
     type: entity
-    parameters: # Not indexed
+    parameters: # Not indexed directory
     - name: Hash
       type: hash
     attributes:

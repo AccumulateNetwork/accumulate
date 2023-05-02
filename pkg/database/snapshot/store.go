@@ -72,6 +72,8 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 		return nil, errors.UnknownError.WithFormat("open index: %w", err)
 	}
 
+	// This is good enough for a proof of concept but it could be a lot more
+	// optimized
 	target := key.Hash()
 	i := sort.Search(s.count, func(i int) bool {
 		if err != nil {
