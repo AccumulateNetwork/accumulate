@@ -15,46 +15,60 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
-	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
-	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-func fillDB(t testing.TB, sim *Sim, N, M int) {
-	for i := 0; i < N; i++ {
-		accounts := make([]protocol.Account, M)
-		for j := 0; j < M; j++ {
-			u := protocol.AccountUrl(fmt.Sprint(i*M + j))
-			accounts[j] = &protocol.UnknownAccount{Url: u}
-		}
-		MakeAccount(t, sim.Database("BVN0"), accounts...)
-	}
-
-	runtime.GC()
-}
-
 func TestCollect(t *testing.T) {
+	// dir := t.TempDir()
+	// sim := NewSim(t,
+	// 	simulator.BadgerDatabaseFromDirectory(dir, func(err error) { require.NoError(t, err) }),
+	// 	simulator.SimpleNetwork(t.Name(), 1, 1),
+	// 	simulator.Genesis(GenesisTime),
+	// )
+
+	// // Set up a bunch of accounts
+	// fillDB(t, sim, 1, 10)
+
+	// f, err := os.Create(filepath.Join(dir, "test.snap"))
+	// require.NoError(t, err)
+	// defer f.Close()
+
+	// err = sim.S.Collect("BVN0", f, nil)
+	// require.NoError(t, err)
+
+	// // Try to read an account out of the snapshot
+	// _, err = f.Seek(0, io.SeekEnd)
+	// require.NoError(t, err)
+	// ss, err := snapshot.Open(f)
+	// require.NoError(t, err)
+
+	// batch := coredb.NewBatch(t.Name(), fakeChangeSet{ss}, false, nil)
+	// account, err := batch.Account(protocol.PartitionUrl("BVN0")).Main().Get()
+	// require.NoError(t, err)
+	// require.IsType(t, (*protocol.SystemLedger)(nil), account)
+
+	// Setup
 	dir := t.TempDir()
-	sim := NewSim(t,
-		simulator.BadgerDatabaseFromDirectory(dir, func(err error) { require.NoError(t, err) }),
-		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
-	)
+	logger := acctesting.NewTestLogger(t)
+	db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logger)
+	require.NoError(t, err)
+	defer db.Close()
+	db.SetObserver(acctesting.NullObserver{})
+	fillDB(t, db, 1, 10)
 
-	// Set up a bunch of accounts
-	fillDB(t, sim, 1, 10)
-
+	// Collect a snapshot
 	f, err := os.Create(filepath.Join(dir, "test.snap"))
 	require.NoError(t, err)
 	defer f.Close()
-
-	err = sim.S.Collect("BVN0", f, nil)
-	require.NoError(t, err)
+	collect(t, db, f, protocol.DnUrl())
 
 	// Try to read an account out of the snapshot
 	_, err = f.Seek(0, io.SeekEnd)
@@ -62,48 +76,125 @@ func TestCollect(t *testing.T) {
 	ss, err := snapshot.Open(f)
 	require.NoError(t, err)
 
-	batch := database.NewBatch(t.Name(), fakeChangeSet{ss}, false, nil)
-	account, err := batch.Account(protocol.PartitionUrl("BVN0")).Main().Get()
+	batch := coredb.NewBatch(t.Name(), fakeChangeSet{ss}, false, nil)
+	account, err := batch.Account(protocol.DnUrl().JoinPath(protocol.Ledger)).Main().Get()
 	require.NoError(t, err)
 	require.IsType(t, (*protocol.SystemLedger)(nil), account)
 }
 
-// func BenchmarkCollect(b *testing.B) {
-// 	N := []int{1, 5, 25}
-// 	// N := []int{5}
-// 	const M = 1000
-// 	for _, N := range N {
-// 		dir := b.TempDir()
-// 		logger := acctesting.NewTestLogger(b)
-// 		db, err := database.OpenBadger(filepath.Join(dir, "test.db"), logger)
-// 		require.NoError(b, err)
-// 		defer db.Close()
-// 		db.SetObserver(acctesting.NullObserver{})
+func BenchmarkCollect(b *testing.B) {
+	N := []int{1, 5, 25}
+	const M = 1000
+	for _, N := range N {
+		dir := b.TempDir()
+		logger := acctesting.NewTestLogger(b)
+		db, err := coredb.OpenBadger(filepath.Join(dir, "test.db"), logger)
+		require.NoError(b, err)
+		defer db.Close()
+		db.SetObserver(acctesting.NullObserver{})
 
-// 		// Set up a bunch of accounts
-// 		fillDB(b, db, N, M)
+		// Set up a bunch of accounts
+		fillDB(b, db, N, M)
 
-// 		var peak uint64
-// 		var ms runtime.MemStats
-// 		b.Run(fmt.Sprint(N*M), func(b *testing.B) {
-// 			// Collect
-// 			for i := 0; i < b.N; i++ {
-// 				f, err := os.Create(filepath.Join(dir, fmt.Sprintf("test.%d.snap", i)))
-// 				require.NoError(b, err)
-// 				defer f.Close()
+		var peak uint64
+		var ms runtime.MemStats
+		b.Run(fmt.Sprint(N*M), func(b *testing.B) {
+			// Collect
+			for i := 0; i < b.N; i++ {
+				f, err := os.Create(filepath.Join(dir, fmt.Sprintf("test.%d.snap", i)))
+				require.NoError(b, err)
+				defer f.Close()
 
-// 				err = db.Collect(f, protocol.DnUrl(), nil)
-// 				require.NoError(b, err)
+				err = db.Collect(f, protocol.DnUrl(), nil)
+				require.NoError(b, err)
 
-// 				runtime.ReadMemStats(&ms)
-// 				if ms.Alloc > peak {
-// 					peak = ms.Alloc
-// 				}
-// 			}
-// 		})
-// 		fmt.Printf("Peak allocated by %d is %d\n", N*M, peak)
-// 	}
-// }
+				runtime.ReadMemStats(&ms)
+				if ms.Alloc > peak {
+					peak = ms.Alloc
+				}
+			}
+		})
+		runtime.GC()
+		fmt.Printf("Peak allocated by %d is %d\n", N*M, peak)
+	}
+}
+
+func fillDB(t testing.TB, db *coredb.Database, N, M int) {
+	var rh common.RandHash
+	for i := 0; i < N; i++ {
+		batch := db.Begin(true)
+		defer batch.Discard()
+
+		if i == 0 {
+			ledger := &protocol.SystemLedger{Url: protocol.DnUrl().JoinPath(protocol.Ledger)}
+			err := batch.Account(ledger.GetUrl()).Main().Put(ledger)
+			require.NoError(t, err)
+		}
+
+		for j := 0; j < M; j++ {
+			u := protocol.AccountUrl(fmt.Sprint(i*M + j))
+			err := batch.Account(u).Main().Put(&protocol.UnknownAccount{Url: u})
+			require.NoError(t, err)
+
+			for z := 0; z < 20; z++ {
+				require.NoError(t, batch.Account(u).MainChain().Inner().AddHash(rh.Next(), false))
+			}
+		}
+		require.NoError(t, batch.Commit())
+	}
+
+	runtime.GC()
+}
+
+func collect(t testing.TB, db *coredb.Database, file io.WriteSeeker, partition *url.URL) {
+	// Start the snapshot
+	w, err := snapshot.Create(file)
+	require.NoError(t, err)
+	// Load the ledger
+	batch := db.Begin(false)
+	defer batch.Discard()
+
+	var ledger *protocol.SystemLedger
+	err = batch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	require.NoError(t, err)
+
+	// Load the BPT root hash
+	rootHash, err := batch.BPT().GetRootHash()
+	require.NoError(t, err)
+
+	// Write the header
+	err = w.WriteHeader(&snapshot.Header{
+		RootHash:     rootHash,
+		SystemLedger: ledger,
+	})
+	require.NoError(t, err)
+
+	// Open a records section
+	records, err := w.Open()
+	require.NoError(t, err)
+
+	// Iterate over the BPT and collect accounts
+	it := batch.IterateAccounts()
+	for {
+		account, ok := it.Next()
+		if !ok {
+			break
+		}
+
+		// Collect the account's records
+		err = records.Collect(account, database.WalkOptions{
+			IgnoreIndices: true,
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, it.Err())
+
+	err = records.Close()
+	require.NoError(t, err)
+
+	err = w.WriteIndex()
+	require.NoError(t, err)
+}
 
 type fakeChangeSet struct{ keyvalue.Store }
 
