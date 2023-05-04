@@ -109,16 +109,18 @@ func (b *branch) walkRange(found *bool, key [32]byte, values []KeyValuePair, pos
 	}
 
 	if *found || key[BIdx]&bit > 0 {
-		walkNode(b.Left, found, key, values, pos)
+		err = walkNode(b.Left, found, key, values, pos)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
 
 	if *pos >= len(values) {
 		return nil
 	}
 
-	walkNode(b.Right, found, key, values, pos)
-
-	return nil
+	err = walkNode(b.Right, found, key, values, pos)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (b *bpt) getRange(startKey [32]byte, values []KeyValuePair) (lastKey [32]byte, _ []KeyValuePair, err error) {

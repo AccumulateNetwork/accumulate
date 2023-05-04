@@ -118,9 +118,7 @@ func (c *changeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	for _, v := range c.entity {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.entity, c.newEntity, nil, opts, fn)
 	values.WalkField(&err, c.changeLog, c.newChangeLog, opts, fn)
 	return err
 }

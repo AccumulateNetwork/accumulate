@@ -193,15 +193,9 @@ func (c *indexDB) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	for _, v := range c.account {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.partition {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.transaction {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.account, c.newAccount, nil, opts, fn)
+	values.WalkMap(&err, c.partition, c.newPartition, nil, opts, fn)
+	values.WalkMap(&err, c.transaction, c.newTransaction, nil, opts, fn)
 	return err
 }
 
@@ -343,9 +337,7 @@ func (c *indexDBAccount) Walk(opts record.WalkOptions, fn record.WalkFunc) error
 	}
 	values.WalkField(&err, c.didIndexTransactionExecution, c.newDidIndexTransactionExecution, opts, fn)
 	values.WalkField(&err, c.didLoadTransaction, c.newDidLoadTransaction, opts, fn)
-	for _, v := range c.chain {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.chain, c.newChain, nil, opts, fn)
 	return err
 }
 

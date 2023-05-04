@@ -80,7 +80,7 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("read index entry: %w", err)
 	}
-	if bytes.Compare(x.Key[:], target[:]) != 0 {
+	if x.Key != target {
 		return nil, errors.NotFound.WithFormat("%v not found", key)
 	}
 
@@ -125,9 +125,4 @@ func (s *Store) open(i int) (ioutil.SectionReader, error) {
 	}
 	s.readers[i] = rd
 	return rd, nil
-}
-
-func readEntry(rd ioutil.SectionReader, i int, b *[indexEntrySize]byte) error {
-	_, err := rd.ReadAt(b[:], int64(i*len(b)))
-	return err
 }

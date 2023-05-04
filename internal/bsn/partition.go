@@ -24,15 +24,18 @@ func (c *ChangeSet) Partition(id string) *database.Batch {
 		c.partition = map[partitionMapKey]*database.Batch{}
 	}
 
-	var b *database.Batch
-	if c.parent == nil {
-		s := c.kvstore.Begin(record.NewKey(id+"·"), true)
-		b = database.NewBatch(id, s, true, c.logger)
-		b.SetObserver(execute.NewDatabaseObserver())
-	} else {
-		b = c.parent.Partition(id).Begin(true)
+	b := c.newPartition(partitionKey{id})
+	c.partition[partitionMapKey{id}] = b
+	return b
+}
+
+func (c *ChangeSet) newPartition(key partitionKey) *database.Batch {
+	if c.parent != nil {
+		return c.parent.Partition(key.ID).Begin(true)
 	}
 
-	c.partition[partitionMapKey{id}] = b
+	s := c.kvstore.Begin(record.NewKey(key.ID+"·"), true)
+	b := database.NewBatch(key.ID, s, true, c.logger)
+	b.SetObserver(execute.NewDatabaseObserver())
 	return b
 }

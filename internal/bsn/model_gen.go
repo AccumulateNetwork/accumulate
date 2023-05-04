@@ -190,15 +190,9 @@ func (c *ChangeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 		return errors.UnknownError.Wrap(err)
 	}
 	values.WalkField(&err, c.lastBlock, c.newLastBlock, opts, fn)
-	for _, v := range c.summary {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.pending {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.partition {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.summary, c.newSummary, nil, opts, fn)
+	values.WalkMap(&err, c.pending, c.newPending, nil, opts, fn)
+	values.WalkMap(&err, c.partition, c.newPartition, nil, opts, fn)
 	return err
 }
 
@@ -383,9 +377,7 @@ func (c *Pending) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	for _, v := range c.onBlock {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.onBlock, c.newOnBlock, nil, opts, fn)
 	return err
 }
 

@@ -8,9 +8,7 @@ package snapshot
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
-	"math"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -86,11 +84,6 @@ func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error 
 			return false, errors.EncodingError.WithFormat("marshal record value: %w", err)
 		}
 
-		b, err = (&RecordEntry{Key: v.Key(), Value: b}).MarshalBinary()
-		if err != nil {
-			return false, errors.EncodingError.WithFormat("marshal record value: %w", err)
-		}
-
 		// Get the current offset
 		offset, err := c.wr.Seek(0, io.SeekCurrent)
 		if err != nil {
@@ -104,14 +97,7 @@ func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error 
 		}
 
 		// Write the record and its size
-		if len(b) > math.MaxUint32 {
-			return false, errors.NotAllowed.WithFormat("record is too large")
-		}
-		_, err = c.wr.Write(binary.BigEndian.AppendUint32(nil, uint32(len(b))))
-		if err != nil {
-			return false, errors.InternalError.WithFormat("write record length: %w", err)
-		}
-		_, err = c.wr.Write(b)
+		_, err = writeValue(c.wr, &RecordEntry{Key: v.Key(), Value: b})
 		if err != nil {
 			return false, errors.InternalError.WithFormat("write record: %w", err)
 		}

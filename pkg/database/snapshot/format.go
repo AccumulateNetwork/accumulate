@@ -8,17 +8,14 @@ package snapshot
 
 import (
 	"bufio"
-	"encoding/binary"
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 const Version2 = 2
 
-type rawReader = ioutil.SegmentedReader[SectionType, *SectionType]
 type rawWriter = ioutil.SegmentedWriter[SectionType, *SectionType]
 type sectionReader = ioutil.Segment[SectionType, *SectionType]
 type sectionWriter = ioutil.SegmentWriter[SectionType, *SectionType]
@@ -134,29 +131,9 @@ func (r *RecordReader) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (r *RecordReader) Read() (*RecordEntry, error) {
-	// Read the length
-	var x [4]byte
-	_, err := io.ReadFull(r.rd, x[:])
-	if err != nil {
-		return nil, err
-	}
-
-	// Read the record
-	n := binary.BigEndian.Uint32(x[:])
-	b := make([]byte, n)
-	_, err = io.ReadFull(r.rd, b)
-	if err != nil {
-		return nil, err
-	}
-
-	// Parse the record
 	v := new(RecordEntry)
-	err = v.UnmarshalBinary(b)
-	if err != nil {
-		return nil, errors.EncodingError.Wrap(err)
-	}
-
-	return v, nil
+	_, err := readValue(r.rd, v)
+	return v, err
 }
 
 type Writer struct {
@@ -192,68 +169,4 @@ func (w *Writer) OpenRaw(typ SectionType) (*sectionWriter, error) {
 	w.sections++
 	w.wroteHeader = true
 	return w.wr.Open(typ)
-}
-
-func (h *Header) readFrom(rd io.Reader) (int64, error) {
-	// Read the header bytes
-	b, n, err := readRecord(rd)
-	if err != nil {
-		return n, errors.UnknownError.Wrap(err)
-	}
-
-	// Version check
-	vh := new(versionHeader)
-	err = vh.UnmarshalBinary(b)
-	if vh.Version != Version2 {
-		h.Version = vh.Version
-		return n, nil
-	}
-
-	// Unmarshal the header
-	err = h.UnmarshalBinary(b)
-	if err != nil {
-		return n, errors.EncodingError.WithFormat("unmarshal: %w", err)
-	}
-
-	return n, nil
-}
-
-type RecordIndexEntry struct {
-	Key     record.KeyHash
-	Section int
-	Offset  uint64
-}
-
-// Section - 2 bytes
-// Offset  - 6 bytes
-// Hash    - 32 bytes
-const indexEntrySize = 2 + 6 + 32
-
-func (r *RecordIndexEntry) writeTo(wr io.Writer) error {
-	// Combine section and offset
-	if r.Offset&0xFFFF0000_00000000 != 0 {
-		return errors.EncodingError.WithFormat("offset is too large")
-	}
-	v := r.Offset | (uint64(r.Section) << (6 * 8))
-
-	var b [indexEntrySize]byte
-	binary.BigEndian.PutUint64(b[:8], v)
-	*(*[32]byte)(b[8:]) = r.Key
-
-	_, err := wr.Write(b[:])
-	return errors.UnknownError.Wrap(err)
-}
-
-func (r *RecordIndexEntry) readAt(rd io.ReaderAt, n int) error {
-	var b [40]byte
-	_, err := rd.ReadAt(b[:], int64(n)*indexEntrySize)
-	if err != nil {
-		return errors.EncodingError.Wrap(err)
-	}
-
-	v := binary.BigEndian.Uint64(b[:])
-	r.Section = int(v >> (6 * 8))
-	r.Offset = v & ((1 << (6 * 8)) - 1)
-	r.Key = *(*[32]byte)(b[8:])
-	return nil
 }
