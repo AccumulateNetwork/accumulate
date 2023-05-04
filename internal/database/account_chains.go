@@ -120,7 +120,9 @@ func (c *Chain2) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 func (c *Chain2) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	var err error
 	values.Walk(&err, c.inner, opts, fn)
-	values.Walk(&err, c.index, opts, fn)
+	if c.inner.typ != merkle.ChainTypeIndex {
+		values.WalkField(&err, c.index, c.newIndex, opts, fn)
+	}
 	return err
 }
 
@@ -171,13 +173,13 @@ func (c *Chain2) Get() (*Chain, error) {
 // Index returns the index chain of this chain. Index will panic if called on an
 // index chain.
 func (c *Chain2) Index() *Chain2 {
-	if c.Type() == merkle.ChainTypeIndex {
-		panic("cannot index an index chain")
-	}
 	return values.GetOrCreate(c, &c.index, (*Chain2).newIndex)
 }
 
 func (c *Chain2) newIndex() *Chain2 {
+	if c.Type() == merkle.ChainTypeIndex {
+		panic("cannot index an index chain")
+	}
 	key := c.key.Append("Index")
 	label := c.labelfmt + " index"
 	m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
@@ -289,7 +291,7 @@ func (c *Account) getSyntheticSequenceKeys() ([]accountSyntheticSequenceChainKey
 	seen := map[string]bool{}
 	for _, c := range chains {
 		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
-		if !ok || first != "anchor" || seen[arg] {
+		if !ok || first != "synthetic-sequence" || seen[arg] {
 			continue
 		}
 		seen[arg] = true
@@ -307,7 +309,7 @@ func (c *Account) getAnchorKeys() ([]accountAnchorChainKey, error) {
 	keys := make([]accountAnchorChainKey, 0, len(chains))
 	for _, c := range chains {
 		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
-		if !ok || first != "synthetic-sequence" {
+		if !ok || first != "anchor" {
 			continue
 		}
 		keys = append(keys, accountAnchorChainKey{arg})

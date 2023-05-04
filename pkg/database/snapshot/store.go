@@ -8,7 +8,6 @@ package snapshot
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 	"sort"
 
@@ -27,25 +26,14 @@ type Store struct {
 
 var _ keyvalue.Store = (*Store)(nil)
 
-func Open(file ioutil.SectionReader) (*Store, error) {
-	rd, header, _, err := open(file)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
+func (r *Reader) AsStore() (*Store, error) {
 	s := new(Store)
-	s.sections = append(s.sections, header)
+	s.sections = r.Sections
 
 	var found bool
-	for {
-		section, err := rd.Next()
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-		s.sections = append(s.sections, section)
-
+	for i, section := range s.sections {
 		if section.Type() == SectionTypeRecordIndex {
-			s.index, found = len(s.sections)-1, true
+			s.index, found = i, true
 			break
 		}
 	}
@@ -67,10 +55,11 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 	if s.count == 0 {
 		return nil, errors.NotFound.WithFormat("%v not found", key)
 	}
-	index, err := s.open(s.index)
+	rd, err := s.open(s.index)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open index: %w", err)
 	}
+	index := &IndexReader{rd, s.count}
 
 	// This is good enough for a proof of concept but it could be a lot more
 	// optimized
@@ -79,47 +68,36 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 		if err != nil {
 			return false
 		}
-		var b [indexEntrySize]byte
-		err = readEntry(index, i, &b)
-		return err == nil && bytes.Compare(b[16:], target[:]) >= 0
+		var x *RecordIndexEntry
+		x, err = index.Read(i)
+		return err == nil && bytes.Compare(x.Key[:], target[:]) >= 0
 	})
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("read index entry: %w", err)
 	}
 
-	var b [indexEntrySize]byte
-	err = readEntry(index, i, &b)
+	x, err := index.Read(i)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("read index entry: %w", err)
 	}
-	if bytes.Compare(b[16:], target[:]) != 0 {
+	if bytes.Compare(x.Key[:], target[:]) != 0 {
 		return nil, errors.NotFound.WithFormat("%v not found", key)
 	}
 
-	// Decode the record index, open the section, and seek to the record
-	x := binary.BigEndian.Uint64(b[:8])
-	section := int(x >> (6 * 8))
-	size := x & ((1 << (6 * 8)) - 1)
-	offset := binary.BigEndian.Uint64(b[8:16])
-	rd, err := s.open(section)
+	// Read the record from the given section and offset
+	rd, err = s.open(x.Section)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open index: %w", err)
 	}
-	_, err = rd.Seek(int64(offset), io.SeekStart)
+
+	_, err = rd.Seek(int64(x.Offset), io.SeekStart)
 	if err != nil {
 		return nil, errors.BadRequest.WithFormat("seek to record: %w", err)
 	}
 
-	v := make([]byte, size)
-	_, err = io.ReadFull(rd, v)
+	entry, err := (&RecordReader{rd}).Read()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	entry := new(recordEntry)
-	err = entry.UnmarshalBinary(v)
-	if err != nil {
-		return nil, errors.EncodingError.Wrap(err)
 	}
 
 	return entry.Value, nil

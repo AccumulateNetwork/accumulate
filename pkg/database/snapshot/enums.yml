@@ -23,3 +23,6 @@ SectionType:
   RecordIndex:
     description: indexes record keys, including the offset and section number
     value: 8
+  BPT:
+    description: contains the BPT
+    value: 9

@@ -27,34 +27,6 @@ import (
 )
 
 func TestCollect(t *testing.T) {
-	// dir := t.TempDir()
-	// sim := NewSim(t,
-	// 	simulator.BadgerDatabaseFromDirectory(dir, func(err error) { require.NoError(t, err) }),
-	// 	simulator.SimpleNetwork(t.Name(), 1, 1),
-	// 	simulator.Genesis(GenesisTime),
-	// )
-
-	// // Set up a bunch of accounts
-	// fillDB(t, sim, 1, 10)
-
-	// f, err := os.Create(filepath.Join(dir, "test.snap"))
-	// require.NoError(t, err)
-	// defer f.Close()
-
-	// err = sim.S.Collect("BVN0", f, nil)
-	// require.NoError(t, err)
-
-	// // Try to read an account out of the snapshot
-	// _, err = f.Seek(0, io.SeekEnd)
-	// require.NoError(t, err)
-	// ss, err := snapshot.Open(f)
-	// require.NoError(t, err)
-
-	// batch := coredb.NewBatch(t.Name(), fakeChangeSet{ss}, false, nil)
-	// account, err := batch.Account(protocol.PartitionUrl("BVN0")).Main().Get()
-	// require.NoError(t, err)
-	// require.IsType(t, (*protocol.SystemLedger)(nil), account)
-
 	// Setup
 	dir := t.TempDir()
 	logger := acctesting.NewTestLogger(t)
@@ -73,7 +45,9 @@ func TestCollect(t *testing.T) {
 	// Try to read an account out of the snapshot
 	_, err = f.Seek(0, io.SeekEnd)
 	require.NoError(t, err)
-	ss, err := snapshot.Open(f)
+	rd, err := snapshot.Open(f)
+	require.NoError(t, err)
+	ss, err := rd.AsStore()
 	require.NoError(t, err)
 
 	batch := coredb.NewBatch(t.Name(), fakeChangeSet{ss}, false, nil)
@@ -170,7 +144,7 @@ func collect(t testing.TB, db *coredb.Database, file io.WriteSeeker, partition *
 	require.NoError(t, err)
 
 	// Open a records section
-	records, err := w.Open()
+	records, err := w.OpenRecords()
 	require.NoError(t, err)
 
 	// Iterate over the BPT and collect accounts

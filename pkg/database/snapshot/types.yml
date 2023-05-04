@@ -18,7 +18,7 @@ Header:
     marshal-as: reference
     pointer: true
 
-recordEntry:
+RecordEntry:
   fields:
   - name: Key
     type: record.Key

@@ -10,41 +10,28 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"math"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-type recordIndexEntry struct {
-	Key     record.KeyHash
-	Section int
-	Offset  uint64
-	Size    uint64
-}
-
-func (w *Writer) Open() (*Collector, error) {
+func (w *Writer) OpenRecords() (*Collector, error) {
 	c := new(Collector)
 	c.snapshot = w
 	c.number = w.sections
 
 	var err error
-	c.wr, err = w.open(SectionTypeRecords)
+	c.wr, err = w.OpenRaw(SectionTypeRecords)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open records section: %w", err)
 	}
 	return c, nil
 }
 
-// Section - 2 bytes
-// Size    - 6 bytes
-// Offset  - 8 bytes
-// Hash    - 32 bytes
-const indexEntrySize = 2 + 6 + 8 + 32
-
 func (w *Writer) WriteIndex() error {
-	wr, err := w.open(SectionTypeRecordIndex)
+	wr, err := w.OpenRaw(SectionTypeRecordIndex)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open record index section: %w", err)
 	}
@@ -59,18 +46,7 @@ func (w *Writer) WriteIndex() error {
 	})
 
 	for _, x := range index {
-		// Combine section and size
-		if x.Size&0xFFFF0000_00000000 != 0 {
-			return errors.NotAllowed.WithFormat("size is too large")
-		}
-		v := x.Size | (uint64(x.Section) << (6 * 8))
-
-		var b [indexEntrySize]byte
-		binary.BigEndian.PutUint64(b[:8], v)
-		binary.BigEndian.PutUint64(b[8:16], x.Offset)
-		*(*[32]byte)(b[16:]) = x.Key
-
-		_, err = wr.Write(b[:])
+		err = x.writeTo(wr)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -110,7 +86,7 @@ func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error 
 			return false, errors.EncodingError.WithFormat("marshal record value: %w", err)
 		}
 
-		b, err = (&recordEntry{Key: v.Key(), Value: b}).MarshalBinary()
+		b, err = (&RecordEntry{Key: v.Key(), Value: b}).MarshalBinary()
 		if err != nil {
 			return false, errors.EncodingError.WithFormat("marshal record value: %w", err)
 		}
@@ -123,21 +99,27 @@ func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error 
 		if offset < 0 {
 			return false, errors.InternalError.WithFormat("offset is negative")
 		}
-		if len(b) >= 1<<(6*8) {
-			return false, errors.NotAllowed.WithFormat("record is too large")
+		if offset >= 1<<(6*8) {
+			return false, errors.NotAllowed.WithFormat("offset is too large")
 		}
 
-		// Write the record
+		// Write the record and its size
+		if len(b) > math.MaxUint32 {
+			return false, errors.NotAllowed.WithFormat("record is too large")
+		}
+		_, err = c.wr.Write(binary.BigEndian.AppendUint32(nil, uint32(len(b))))
+		if err != nil {
+			return false, errors.InternalError.WithFormat("write record length: %w", err)
+		}
 		_, err = c.wr.Write(b)
 		if err != nil {
 			return false, errors.InternalError.WithFormat("write record: %w", err)
 		}
 
-		c.snapshot.index = append(c.snapshot.index, recordIndexEntry{
+		c.snapshot.index = append(c.snapshot.index, RecordIndexEntry{
 			Key:     v.Key().Hash(),
 			Section: c.number,
 			Offset:  uint64(offset),
-			Size:    uint64(len(b)),
 		})
 		return false, nil
 	})

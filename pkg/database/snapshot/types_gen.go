@@ -34,7 +34,7 @@ type Header struct {
 	extraData    []byte
 }
 
-type recordEntry struct {
+type RecordEntry struct {
 	fieldsSet []bool
 	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
 	Value     []byte      `json:"value,omitempty" form:"value" query:"value" validate:"required"`
@@ -66,8 +66,8 @@ func (v *Header) Copy() *Header {
 
 func (v *Header) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *recordEntry) Copy() *recordEntry {
-	u := new(recordEntry)
+func (v *RecordEntry) Copy() *RecordEntry {
+	u := new(RecordEntry)
 
 	if v.Key != nil {
 		u.Key = (v.Key).Copy()
@@ -81,7 +81,7 @@ func (v *recordEntry) Copy() *recordEntry {
 	return u
 }
 
-func (v *recordEntry) CopyAsInterface() interface{} { return v.Copy() }
+func (v *RecordEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *versionHeader) Copy() *versionHeader {
 	u := new(versionHeader)
@@ -116,7 +116,7 @@ func (v *Header) Equal(u *Header) bool {
 	return true
 }
 
-func (v *recordEntry) Equal(u *recordEntry) bool {
+func (v *RecordEntry) Equal(u *RecordEntry) bool {
 	switch {
 	case v.Key == u.Key:
 		// equal
@@ -201,12 +201,12 @@ func (v *Header) IsValid() error {
 	}
 }
 
-var fieldNames_recordEntry = []string{
+var fieldNames_RecordEntry = []string{
 	1: "Key",
 	2: "Value",
 }
 
-func (v *recordEntry) MarshalBinary() ([]byte, error) {
+func (v *RecordEntry) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
 	}
@@ -221,7 +221,7 @@ func (v *recordEntry) MarshalBinary() ([]byte, error) {
 		writer.WriteBytes(2, v.Value)
 	}
 
-	_, _, err := writer.Reset(fieldNames_recordEntry)
+	_, _, err := writer.Reset(fieldNames_RecordEntry)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -229,7 +229,7 @@ func (v *recordEntry) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *recordEntry) IsValid() error {
+func (v *RecordEntry) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
@@ -325,11 +325,11 @@ func (v *Header) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *recordEntry) UnmarshalBinary(data []byte) error {
+func (v *RecordEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *recordEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *RecordEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x := new(record.Key); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
@@ -339,7 +339,7 @@ func (v *recordEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Value = x
 	}
 
-	seen, err := reader.Reset(fieldNames_recordEntry)
+	seen, err := reader.Reset(fieldNames_RecordEntry)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -392,7 +392,7 @@ func (v *Header) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *recordEntry) MarshalJSON() ([]byte, error) {
+func (v *RecordEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Key   *record.Key `json:"key,omitempty"`
 		Value *string     `json:"value,omitempty"`
@@ -428,7 +428,7 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *recordEntry) UnmarshalJSON(data []byte) error {
+func (v *RecordEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Key   *record.Key `json:"key,omitempty"`
 		Value *string     `json:"value,omitempty"`
