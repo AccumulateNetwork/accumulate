@@ -27,7 +27,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -131,15 +130,11 @@ func run(_ *cobra.Command, args []string) {
 	Check(err)
 
 	api, err := nodehttp.NewHandler(nodehttp.Options{
-		Logger:  logger,
-		Node:    node,
-		Router:  router.Router,
-		MaxWait: 10 * time.Second,
-		Network: &config.Describe{
-			Network: config.Network{
-				Id: args[0],
-			},
-		},
+		Logger:    logger,
+		Node:      node,
+		Router:    router.Router,
+		MaxWait:   10 * time.Second,
+		NetworkId: args[0],
 	})
 	Check(err)
 
