@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/multiformats/go-multiaddr"
+	"github.com/rs/cors"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
@@ -47,13 +48,14 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Key        string
-	LogLevel   string
-	HttpListen []multiaddr.Multiaddr
-	P2pListen  []multiaddr.Multiaddr
-	Peers      []multiaddr.Multiaddr
-	Timeout    time.Duration
-	ConnLimit  int
+	Key         string
+	LogLevel    string
+	HttpListen  []multiaddr.Multiaddr
+	P2pListen   []multiaddr.Multiaddr
+	Peers       []multiaddr.Multiaddr
+	Timeout     time.Duration
+	ConnLimit   int
+	CorsOrigins []string
 }{}
 
 func init() {
@@ -64,6 +66,7 @@ func init() {
 	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
 	cmd.Flags().DurationVar(&flag.Timeout, "read-header-timeout", 10*time.Second, "ReadHeaderTimeout to prevent slow loris attacks")
 	cmd.Flags().IntVar(&flag.ConnLimit, "connection-limit", 500, "Limit the number of concurrent connections (set to zero to disable)")
+	cmd.Flags().StringSliceVar(&flag.CorsOrigins, "cors-origin", nil, "Allowed CORS origins")
 
 	_ = cmd.MarkFlagRequired("peer")
 }
@@ -140,7 +143,10 @@ func run(_ *cobra.Command, args []string) {
 	})
 	Check(err)
 
-	server := &http.Server{Handler: api, ReadHeaderTimeout: flag.Timeout}
+	c := cors.New(cors.Options{
+		AllowedOrigins: flag.CorsOrigins,
+	})
+	server := &http.Server{Handler: c.Handler(api), ReadHeaderTimeout: flag.Timeout}
 
 	wg := new(sync.WaitGroup)
 	wg.Add(len(flag.HttpListen))
