@@ -24,6 +24,7 @@ import (
 	"github.com/rs/cors"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
+	"github.com/tendermint/tendermint/libs/log"
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -33,6 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func main() {
@@ -55,6 +57,7 @@ var flag = struct {
 	Timeout     time.Duration
 	ConnLimit   int
 	CorsOrigins []string
+	LetsEncrypt []string
 }{}
 
 func init() {
@@ -66,6 +69,7 @@ func init() {
 	cmd.Flags().DurationVar(&flag.Timeout, "read-header-timeout", 10*time.Second, "ReadHeaderTimeout to prevent slow loris attacks")
 	cmd.Flags().IntVar(&flag.ConnLimit, "connection-limit", 500, "Limit the number of concurrent connections (set to zero to disable)")
 	cmd.Flags().StringSliceVar(&flag.CorsOrigins, "cors-origin", nil, "Allowed CORS origins")
+	cmd.Flags().StringSliceVar(&flag.LetsEncrypt, "lets-encrypt", nil, "Enable HTTPS on 443 and use Let's Encrypt to retrieve a certificate. Use of this feature implies acceptance of the LetsEncrypt Terms of Service.")
 
 	_ = cmd.MarkFlagRequired("peer")
 }
@@ -81,7 +85,7 @@ func run(_ *cobra.Command, args []string) {
 		cancel()
 	}()
 
-	if len(flag.HttpListen) == 0 {
+	if len(flag.HttpListen) == 0 && len(flag.LetsEncrypt) == 0 {
 		// Default listen address
 		a, err := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/8080")
 		Check(err)
@@ -144,7 +148,6 @@ func run(_ *cobra.Command, args []string) {
 	server := &http.Server{Handler: c.Handler(api), ReadHeaderTimeout: flag.Timeout}
 
 	wg := new(sync.WaitGroup)
-	wg.Add(len(flag.HttpListen))
 	for _, l := range flag.HttpListen {
 		var proto, addr, port string
 		multiaddr.ForEach(l, func(c multiaddr.Component) bool {
@@ -171,21 +174,14 @@ func run(_ *cobra.Command, args []string) {
 
 		l, err := net.Listen(proto, addr)
 		Check(err)
-		fmt.Printf("Listening on %v\n", l.Addr())
 
-		if flag.ConnLimit > 0 {
-			pool := make(chan struct{}, flag.ConnLimit)
-			for i := 0; i < flag.ConnLimit; i++ {
-				pool <- struct{}{}
-			}
-			l = &accumulated.RateLimitedListener{Listener: l, Pool: pool}
-		}
+		serve(server, l, wg, logger)
+	}
 
-		go func() {
-			defer wg.Done()
-			err := server.Serve(l)
-			logger.Info("Server stopped", "err", err, "address", "")
-		}()
+	fmt.Println(flag.LetsEncrypt)
+	if len(flag.LetsEncrypt) > 0 {
+		l := autocert.NewListener(flag.LetsEncrypt...)
+		serve(server, l, wg, logger)
 	}
 
 	go func() { wg.Wait(); cancel() }()
@@ -210,4 +206,23 @@ func loadOrGenerateKey() ed25519.PrivateKey {
 	_, sk, err := ed25519.GenerateKey(rand.Reader)
 	Checkf(err, "generate key")
 	return sk
+}
+
+func serve(server *http.Server, l net.Listener, wg *sync.WaitGroup, logger log.Logger) {
+	wg.Add(1)
+	fmt.Printf("Listening on %v\n", l.Addr())
+
+	if flag.ConnLimit > 0 {
+		pool := make(chan struct{}, flag.ConnLimit)
+		for i := 0; i < flag.ConnLimit; i++ {
+			pool <- struct{}{}
+		}
+		l = &accumulated.RateLimitedListener{Listener: l, Pool: pool}
+	}
+
+	go func() {
+		defer wg.Done()
+		err := server.Serve(l)
+		logger.Info("Server stopped", "err", err, "address", "")
+	}()
 }
