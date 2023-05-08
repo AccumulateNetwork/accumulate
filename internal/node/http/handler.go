@@ -34,9 +34,10 @@ type Handler struct {
 
 // Options are the options for a [Handler].
 type Options struct {
-	Logger log.Logger
-	Node   *p2p.Node
-	Router routing.Router
+	Logger    log.Logger
+	Node      *p2p.Node
+	Router    routing.Router
+	NetworkId string
 
 	// For API v2
 	Network *config.Describe
@@ -48,9 +49,17 @@ func NewHandler(opts Options) (*Handler, error) {
 	h := new(Handler)
 	h.logger.Set(opts.Logger)
 
+	network := opts.NetworkId
+	if network == "" {
+		if opts.Network == nil {
+			return nil, errors.BadRequest.WithFormat("Network or NetworkId must be specified")
+		}
+		network = opts.Network.Network.Id
+	}
+
 	// Message clients
 	client := &message.Client{Transport: &message.RoutedTransport{
-		Network: opts.Network.Network.Id,
+		Network: network,
 		Router:  routing.MessageRouter{Router: opts.Router},
 		Dialer:  opts.Node.DialNetwork(),
 	}}

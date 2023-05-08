@@ -18,6 +18,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -125,16 +126,12 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 }
 
 func (m *JrpcMethods) Version(ctx context.Context, _ json.RawMessage) interface{} {
-	node, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
-	if err != nil {
-		return accumulateError(err)
-	}
 	res := new(ChainQueryResponse)
 	res.Type = "version"
 	res.Data = VersionResponse{
-		Version:        node.Version,
-		Commit:         node.Commit,
-		VersionIsKnown: node.Commit != "",
+		Version:        accumulate.Version,
+		Commit:         accumulate.Commit,
+		VersionIsKnown: accumulate.Commit != "",
 	}
 	return res
 }

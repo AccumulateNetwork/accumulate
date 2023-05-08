@@ -15,5 +15,5 @@ FLAGS = $(BUILDFLAGS) -tags $(TAGS) -ldflags $(LDFLAGS)
 build:
 	go build -trimpath $(FLAGS) ./cmd/accumulated
 
-install:
-	go install -trimpath $(FLAGS) ./cmd/accumulated
+http:
+	go build -trimpath $(FLAGS) ./cmd/accumulated-http

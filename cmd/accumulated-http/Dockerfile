@@ -5,7 +5,7 @@ WORKDIR /root
 COPY . .
 ENV CGO_ENABLED 0
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
-RUN go build ./cmd/accumulated-http
+RUN make http
 
 FROM alpine:3
 
