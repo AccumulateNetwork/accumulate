@@ -35,6 +35,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/exp/slog"
 )
 
 func main() {
@@ -58,11 +59,13 @@ var flag = struct {
 	ConnLimit   int
 	CorsOrigins []string
 	LetsEncrypt []string
+	TlsCert     string
+	TlsKey      string
 }{}
 
 func init() {
 	cmd.Flags().StringVar(&flag.Key, "key", "", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
-	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.HttpListen), "http-listen", "l", "HTTP listening address(es) (default /ip4/0.0.0.0/tcp/8080)")
+	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.HttpListen), "http-listen", "l", "HTTP listening address(es) (default /ip4/0.0.0.0/tcp/8080/http)")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.P2pListen), "p2p-listen", "P2P listening address(es)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
@@ -70,6 +73,8 @@ func init() {
 	cmd.Flags().IntVar(&flag.ConnLimit, "connection-limit", 500, "Limit the number of concurrent connections (set to zero to disable)")
 	cmd.Flags().StringSliceVar(&flag.CorsOrigins, "cors-origin", nil, "Allowed CORS origins")
 	cmd.Flags().StringSliceVar(&flag.LetsEncrypt, "lets-encrypt", nil, "Enable HTTPS on 443 and use Let's Encrypt to retrieve a certificate. Use of this feature implies acceptance of the LetsEncrypt Terms of Service.")
+	cmd.Flags().StringVar(&flag.TlsCert, "tls-cert", "", "Certificate used for HTTPS")
+	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
 
 	_ = cmd.MarkFlagRequired("peer")
 }
@@ -87,7 +92,7 @@ func run(_ *cobra.Command, args []string) {
 
 	if len(flag.HttpListen) == 0 && len(flag.LetsEncrypt) == 0 {
 		// Default listen address
-		a, err := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/8080")
+		a, err := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/8080/http")
 		Check(err)
 		flag.HttpListen = append(flag.HttpListen, a)
 	}
@@ -145,11 +150,15 @@ func run(_ *cobra.Command, args []string) {
 	c := cors.New(cors.Options{
 		AllowedOrigins: flag.CorsOrigins,
 	})
-	server := &http.Server{Handler: c.Handler(api), ReadHeaderTimeout: flag.Timeout}
+	server := &http.Server{
+		Handler:           c.Handler(api),
+		ReadHeaderTimeout: flag.Timeout,
+	}
 
 	wg := new(sync.WaitGroup)
 	for _, l := range flag.HttpListen {
 		var proto, addr, port string
+		var secure bool
 		multiaddr.ForEach(l, func(c multiaddr.Component) bool {
 			switch c.Protocol().Code {
 			case multiaddr.P_IP4,
@@ -162,6 +171,10 @@ func run(_ *cobra.Command, args []string) {
 				multiaddr.P_UDP:
 				proto = c.Protocol().Name
 				port = c.Value()
+			case multiaddr.P_HTTP:
+				// Ok
+			case multiaddr.P_HTTPS:
+				secure = true
 			default:
 				Fatalf("invalid listen address: %v", l)
 			}
@@ -174,14 +187,11 @@ func run(_ *cobra.Command, args []string) {
 
 		l, err := net.Listen(proto, addr)
 		Check(err)
-
-		serve(server, l, wg, logger)
+		serve(server, l, secure, wg, logger)
 	}
 
-	fmt.Println(flag.LetsEncrypt)
 	if len(flag.LetsEncrypt) > 0 {
-		l := autocert.NewListener(flag.LetsEncrypt...)
-		serve(server, l, wg, logger)
+		serve(server, autocert.NewListener(flag.LetsEncrypt...), false, wg, logger)
 	}
 
 	go func() { wg.Wait(); cancel() }()
@@ -208,9 +218,17 @@ func loadOrGenerateKey() ed25519.PrivateKey {
 	return sk
 }
 
-func serve(server *http.Server, l net.Listener, wg *sync.WaitGroup, logger log.Logger) {
+func serve(server *http.Server, l net.Listener, secure bool, wg *sync.WaitGroup, logger log.Logger) {
+	if secure && (flag.TlsCert == "" || flag.TlsKey == "") {
+		Fatalf("--tls-cert and --tls-key are required to listen on %v", l)
+	}
+
 	wg.Add(1)
-	fmt.Printf("Listening on %v\n", l.Addr())
+	scheme := "http"
+	if secure {
+		scheme = "https"
+	}
+	fmt.Printf("Listening on %v (%v)\n", l.Addr(), scheme)
 
 	if flag.ConnLimit > 0 {
 		pool := make(chan struct{}, flag.ConnLimit)
@@ -222,7 +240,12 @@ func serve(server *http.Server, l net.Listener, wg *sync.WaitGroup, logger log.L
 
 	go func() {
 		defer wg.Done()
-		err := server.Serve(l)
-		logger.Info("Server stopped", "err", err, "address", "")
+		var err error
+		if secure {
+			err = server.ServeTLS(l, flag.TlsCert, flag.TlsKey)
+		} else {
+			err = server.Serve(l)
+		}
+		slog.Error("Server stopped", err, "address", l.Addr())
 	}()
 }
