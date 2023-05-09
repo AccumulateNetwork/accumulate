@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package record
+package values
 
 //lint:file-ignore U1000 false positive
 
@@ -15,6 +15,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -25,7 +26,7 @@ type set[T any] struct {
 }
 
 // NewSet returns a new set using the given encoder and comparison.
-func newSet[T any](logger log.Logger, store Store, key *Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
+func newSet[T any](logger log.Logger, store database.Store, key *database.Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
 	s := &set[T]{}
 	s.value = *newValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
 	s.compare = cmp

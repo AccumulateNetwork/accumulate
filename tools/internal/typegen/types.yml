@@ -25,7 +25,7 @@ EntityRecord:
       type: bool
     - name: CustomIsDirty
       type: bool
-    - name: CustomWalkChanges
+    - name: CustomWalk
       type: bool
     - name: Parameters
       type: Field

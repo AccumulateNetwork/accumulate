@@ -95,13 +95,16 @@ func TestWalkAndReplay(t *testing.T) {
 		sim.S.SetCommitHook(p.ID, func(p *protocol.PartitionInfo, state execute.BlockState) {
 			block := new(Block)
 			block.Index = state.Params().Index
-			_ = state.WalkChanges(func(r record.TerminalRecord) error {
-				v, _, err := r.GetValue()
+			_ = state.ChangeSet().Walk(record.WalkOptions{
+				Values:  true,
+				Changes: true,
+			}, func(r record.Record) (bool, error) {
+				v, _, err := r.(record.TerminalRecord).GetValue()
 				require.NoError(t, err)
 				b, err := v.MarshalBinary()
 				require.NoError(t, err)
 				block.Changes = append(block.Changes, &Value{r.Key(), b})
-				return nil
+				return false, nil
 			})
 			blocks[p.ID] = append(blocks[p.ID], block)
 		})
