@@ -108,17 +108,24 @@ func (c *Collector) willCommitBlock(e execute.WillCommitBlock) error {
 		return errors.InternalError.With("no previous block")
 	}
 
-	err := e.Block.WalkChanges(func(r record.TerminalRecord) error {
-		v, _, err := r.GetValue()
+	err := e.Block.ChangeSet().Walk(record.WalkOptions{
+		Changes: true,
+		Values:  true,
+	}, func(r record.Record) (bool, error) {
+		rv, ok := r.(record.TerminalRecord)
+		if !ok {
+			return false, nil
+		}
+		v, _, err := rv.GetValue()
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return false, errors.UnknownError.Wrap(err)
 		}
 		b, err := v.MarshalBinary()
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return false, errors.UnknownError.Wrap(err)
 		}
 		s.RecordUpdates = append(s.RecordUpdates, &messaging.RecordUpdate{Key: r.Key(), Value: b})
-		return nil
+		return false, nil
 	})
 	return errors.UnknownError.Wrap(err)
 }

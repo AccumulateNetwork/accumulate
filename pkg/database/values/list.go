@@ -4,10 +4,11 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package record
+package values
 
 import (
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -15,7 +16,7 @@ type list[T any] struct {
 	value[[]T]
 }
 
-func newList[T any](logger log.Logger, store Store, key *Key, namefmt string, encoder encodableValue[T]) *list[T] {
+func newList[T any](logger log.Logger, store database.Store, key *database.Key, namefmt string, encoder encodableValue[T]) *list[T] {
 	s := &list[T]{}
 	s.value = *newValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
 	return s
