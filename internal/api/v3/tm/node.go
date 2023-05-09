@@ -81,22 +81,24 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, _ api.ConsensusS
 
 	// Load values from the database
 	res.LastBlock = new(api.LastBlock)
-	err := s.db.View(func(batch *database.Batch) error {
-		c, err := batch.Account(s.partition.Ledger()).RootChain().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load root chain: %w", err)
-		}
-		res.LastBlock.ChainRoot = *(*[32]byte)(c.Anchor())
+	if s.db != nil {
+		err := s.db.View(func(batch *database.Batch) error {
+			c, err := batch.Account(s.partition.Ledger()).RootChain().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load root chain: %w", err)
+			}
+			res.LastBlock.ChainRoot = *(*[32]byte)(c.Anchor())
 
-		c, err = batch.Account(s.partition.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
+			c, err = batch.Account(s.partition.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load root anchor chain for the DN: %w", err)
+			}
+			res.LastBlock.DirectoryAnchorHeight = uint64(c.Height())
+			return nil
+		})
 		if err != nil {
-			return errors.UnknownError.WithFormat("load root anchor chain for the DN: %w", err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
-		res.LastBlock.DirectoryAnchorHeight = uint64(c.Height())
-		return nil
-	})
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Get the latest block info from Tendermint
