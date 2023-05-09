@@ -11,6 +11,7 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -27,7 +28,7 @@ func (b *BPT) IsDirty() bool {
 }
 
 // WalkChanges implements [record.Record].
-func (b *BPT) WalkChanges(fn record.WalkFunc) error {
+func (b *BPT) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	// Walking the BPT is not supported
 	return nil
 }
@@ -41,12 +42,13 @@ func (b *BPT) commitUpdatesDirect() (bool, error) {
 	}
 
 	// Is the store a record?
-	r, ok := b.store.(record.Record)
+	rs, ok := b.store.(interface{ Unwrap() database.Record })
 	if !ok {
 		return false, nil
 	}
 
 	var err error
+	r := rs.Unwrap()
 	for key := b.key; key.Len() > 0; {
 		r, key, err = r.Resolve(key)
 		if err != nil {
@@ -117,8 +119,9 @@ func (b *BPT) Commit() error {
 type nodeRecord struct{ value node }
 
 // Assert [nodeRecord] is a value reader and writer.
-var _ record.ValueReader = nodeRecord{}
-var _ record.ValueWriter = nodeRecord{}
+var _ database.Value = nodeRecord{}
+
+func (e nodeRecord) Key() *database.Key { panic(errShim()) }
 
 // IsDirty implements [record.Record].
 func (e nodeRecord) IsDirty() bool { return e.value.IsDirty() }
@@ -134,8 +137,8 @@ func (e nodeRecord) Resolve(key *record.Key) (record.Record, *record.Key, error)
 	return e, nil, nil
 }
 
-// WalkChanges implements [record.Record].
-func (e nodeRecord) WalkChanges(fn record.WalkFunc) error {
+// Walk implements [record.Record].
+func (e nodeRecord) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	// Walking the BPT is not supported
 	return nil
 }
@@ -251,6 +254,10 @@ func (e nodeValue) MarshalBinary() (data []byte, err error) {
 // rootRecord is a wrapper for the root node that implements [record.Record].
 type rootRecord struct{ *branch }
 
+var _ database.Record = (*rootRecord)(nil)
+
+func (e *rootRecord) Key() *database.Key { return e.bpt.key.Append(e.Key) }
+
 // Commit implements [record.Commit].
 func (e *rootRecord) Commit() error {
 	// Load the BPT's parameters
@@ -299,6 +306,6 @@ func (e *rootRecord) Resolve(key *record.Key) (record.Record, *record.Key, error
 }
 
 // WalkChanges implements [record.Commit].
-func (e *rootRecord) WalkChanges(fn record.WalkFunc) error {
-	return nodeRecord{e.branch}.WalkChanges(fn)
+func (e *rootRecord) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
+	return nodeRecord{e.branch}.Walk(opts, fn)
 }

@@ -8,7 +8,7 @@ package indexing
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -16,7 +16,7 @@ import (
 )
 
 type DirectoryIndexer struct {
-	record.Set[*url.URL]
+	values.Set[*url.URL]
 }
 
 func Directory(batch *database.Batch, account *url.URL) *DirectoryIndexer {

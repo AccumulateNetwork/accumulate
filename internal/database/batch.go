@@ -13,6 +13,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -76,7 +77,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
-	c.store = b
+	c.store = values.RecordStore{Record: b}
 	c.kvstore = b.kvstore.Begin(c.writable)
 	return c
 }
@@ -141,7 +142,7 @@ func (b *Batch) Commit() error {
 	}
 
 	// Committing may have changed the BPT, so commit it
-	record.FieldCommit(&err, b.bpt)
+	values.Commit(&err, b.bpt)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -166,14 +167,14 @@ func (b *Batch) Transaction2(id [32]byte) *Transaction {
 }
 
 func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
-	v, err := record.NewValue(
+	v, err := values.NewValue(
 		b.logger.L,
 		b.store,
 		// This must match the key used for the account's Url state
 		key.Append("Url"),
 		fmt.Sprintf("account %v URL", key),
 		false,
-		record.Wrapped(record.UrlWrapper),
+		values.Wrapped(values.UrlWrapper),
 	).Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -193,64 +194,6 @@ func (b *Batch) AccountByID(id []byte) (*Account, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	return b.Account(u), nil
-}
-
-// GetValue implements record.Store.
-func (b *Batch) GetValue(key *record.Key, value record.ValueWriter) error {
-	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
-	}
-
-	v, err := resolveValue[record.ValueReader](b, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	err = value.LoadValue(v, false)
-	return errors.UnknownError.Wrap(err)
-}
-
-// PutValue implements record.Store.
-func (b *Batch) PutValue(key *record.Key, value record.ValueReader) error {
-	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
-	}
-
-	v, err := resolveValue[record.ValueWriter](b, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	err = v.LoadValue(value, true)
-	return errors.UnknownError.Wrap(err)
-}
-
-func zero[T any]() T {
-	var z T
-	return z
-}
-
-// resolveValue resolves the value for the given key.
-func resolveValue[T any](c *Batch, key *record.Key) (T, error) {
-	var r record.Record = c
-	var err error
-	for key.Len() > 0 {
-		r, key, err = r.Resolve(key)
-		if err != nil {
-			return zero[T](), errors.UnknownError.Wrap(err)
-		}
-	}
-
-	if s, _, err := r.Resolve(nil); err == nil {
-		r = s
-	}
-
-	v, ok := r.(T)
-	if !ok {
-		return zero[T](), errors.InternalError.WithFormat("bad key: %T is not value", r)
-	}
-
-	return v, nil
 }
 
 // UpdatedAccounts returns every account updated in this database batch.
