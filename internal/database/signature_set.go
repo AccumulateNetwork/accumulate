@@ -10,8 +10,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -19,7 +19,7 @@ type SignatureSet struct {
 	txn      *Transaction
 	signer   protocol.Signer2
 	writable bool
-	value    record.Value[*sigSetData]
+	value    values.Value[*sigSetData]
 	entries  *sigSetData
 	other    []*SignatureSetEntry
 }
