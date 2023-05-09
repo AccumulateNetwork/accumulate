@@ -9,6 +9,7 @@ package bpt
 import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -60,9 +61,9 @@ func (b *BPT) GetRootHash() ([32]byte, error) {
 }
 
 // getState returns the Parameters value wrapped as a [paramsRecord].
-func (b *BPT) getState() record.Value[*parameters] {
-	return record.FieldGetOrCreate(&b.state, func() record.Value[*parameters] {
-		v := record.NewValue(b.logger.L, b.store, b.key.Append("Root"), b.label+" "+"state", false, record.Struct[parameters]())
+func (b *BPT) getState() values.Value[*parameters] {
+	return values.GetOrCreate(&b.state, func() values.Value[*parameters] {
+		v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), b.label+" "+"state", false, values.Struct[parameters]())
 		return paramsRecord{v}
 	})
 }
@@ -70,7 +71,7 @@ func (b *BPT) getState() record.Value[*parameters] {
 // paramsRecord is a wrapper around Value that sets the power to 8 if the
 // parameters have not been configured.
 type paramsRecord struct {
-	record.Value[*parameters]
+	values.Value[*parameters]
 }
 
 // Get loads the parameters, initializing them to the default values if they
@@ -143,7 +144,7 @@ func parseNodeKey(nodeKey [32]byte) (height uint64, key [32]byte, ok bool) { //n
 
 // getRoot returns the root branch node, creating it if necessary.
 func (b *BPT) getRoot() *branch {
-	return record.FieldGetOrCreate(&b.root, func() *rootRecord {
+	return values.GetOrCreate(&b.root, func() *rootRecord {
 		e := new(branch)
 		e.bpt = b
 		e.Height = 0

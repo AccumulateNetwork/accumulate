@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -167,7 +168,7 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 
 	// Execute all the record updates
 	for _, v := range msg.RecordUpdates {
-		w, err := resolveValue[record.ValueWriter](part, v.Key)
+		w, err := values.Resolve[record.ValueWriter](part, v.Key)
 		if err != nil {
 			return errors.UnknownError.WithFormat("store record update: %w", err)
 		}

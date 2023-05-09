@@ -11,8 +11,10 @@ package bpt
 //lint:file-ignore S1008,U1000 generated code
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type BPT struct {
@@ -22,33 +24,38 @@ type BPT struct {
 	label   string
 	pending map[[32]byte][32]byte
 
-	state record.Value[*parameters]
+	state values.Value[*parameters]
 	root  *rootRecord
 }
+
+func (c *BPT) Key() *record.Key { return c.key }
 
 func (c *BPT) baseIsDirty() bool {
 	if c == nil {
 		return false
 	}
 
-	if record.FieldIsDirty(c.state) {
+	if values.IsDirty(c.state) {
 		return true
 	}
-	if record.FieldIsDirty(c.root) {
+	if values.IsDirty(c.root) {
 		return true
 	}
 
 	return false
 }
 
-func (c *BPT) baseWalkChanges(fn record.WalkFunc) error {
+func (c *BPT) baseWalk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
 
-	var err error
-	record.FieldWalkChanges(&err, c.state, fn)
-	record.FieldWalkChanges(&err, c.root, fn)
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	values.Walk(&err, c.state, opts, fn)
+	values.Walk(&err, c.root, opts, fn)
 	return err
 }
 
@@ -58,8 +65,8 @@ func (c *BPT) baseCommit() error {
 	}
 
 	var err error
-	record.FieldCommit(&err, c.state)
-	record.FieldCommit(&err, c.root)
+	values.Commit(&err, c.state)
+	values.Commit(&err, c.root)
 
 	return err
 }
