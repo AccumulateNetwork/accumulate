@@ -29,7 +29,7 @@ type changeSet struct {
 	logger logging.OptionalLogger
 	store  record.Store
 
-	entity    map[entityKey]*entity
+	entity    map[entityMapKey]*entity
 	changeLog values.Counted[string]
 }
 
@@ -39,26 +39,34 @@ type entityKey struct {
 	Name string
 }
 
-func keyForEntity(name string) entityKey {
-	return entityKey{name}
+type entityMapKey struct {
+	Name string
+}
+
+func (k entityKey) ForMap() entityMapKey {
+	return entityMapKey{k.Name}
 }
 
 func (c *changeSet) Entity(name string) Entity {
-	return values.GetOrCreateMap(&c.entity, keyForEntity(name), func() *entity {
-		v := new(entity)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = (*record.Key)(nil).Append("Entity", name)
-		v.parent = c
-		v.label = "entity" + " " + name
-		return v
-	})
+	return values.GetOrCreateMap(c, &c.entity, entityKey{name}, (*changeSet).newEntity)
+}
+
+func (c *changeSet) newEntity(k entityKey) *entity {
+	v := new(entity)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = (*record.Key)(nil).Append("Entity", k.Name)
+	v.parent = c
+	v.label = "entity" + " " + k.Name
+	return v
 }
 
 func (c *changeSet) ChangeLog() values.Counted[string] {
-	return values.GetOrCreate(&c.changeLog, func() values.Counted[string] {
-		return values.NewCounted(c.logger.L, c.store, (*record.Key)(nil).Append("ChangeLog"), "change log", values.WrappedFactory(values.StringWrapper))
-	})
+	return values.GetOrCreate(c, &c.changeLog, (*changeSet).newChangeLog)
+}
+
+func (c *changeSet) newChangeLog() values.Counted[string] {
+	return values.NewCounted(c.logger.L, c.store, (*record.Key)(nil).Append("ChangeLog"), "change log", values.WrappedFactory(values.StringWrapper))
 }
 
 func (c *changeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -110,10 +118,8 @@ func (c *changeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	for _, v := range c.entity {
-		values.Walk(&err, v, opts, fn)
-	}
-	values.Walk(&err, c.changeLog, opts, fn)
+	values.WalkMap(&err, c.entity, c.newEntity, nil, opts, fn)
+	values.WalkField(&err, c.changeLog, c.newChangeLog, opts, fn)
 	return err
 }
 
@@ -155,27 +161,35 @@ type entity struct {
 func (c *entity) Key() *record.Key { return c.key }
 
 func (c *entity) Union() values.Value[protocol.Account] {
-	return values.GetOrCreate(&c.union, func() values.Value[protocol.Account] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, values.Union(protocol.UnmarshalAccount))
-	})
+	return values.GetOrCreate(c, &c.union, (*entity).newUnion)
+}
+
+func (c *entity) newUnion() values.Value[protocol.Account] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, values.Union(protocol.UnmarshalAccount))
 }
 
 func (c *entity) Set() values.Set[*url.TxID] {
-	return values.GetOrCreate(&c.set, func() values.Set[*url.TxID] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("Set"), c.label+" "+"set", values.Wrapped(values.TxidWrapper), values.CompareTxid)
-	})
+	return values.GetOrCreate(c, &c.set, (*entity).newSet)
+}
+
+func (c *entity) newSet() values.Set[*url.TxID] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Set"), c.label+" "+"set", values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *entity) CountableRefType() values.Counted[*protocol.Transaction] {
-	return values.GetOrCreate(&c.countableRefType, func() values.Counted[*protocol.Transaction] {
-		return values.NewCounted(c.logger.L, c.store, c.key.Append("CountableRefType"), c.label+" "+"countable ref type", values.Struct[protocol.Transaction])
-	})
+	return values.GetOrCreate(c, &c.countableRefType, (*entity).newCountableRefType)
+}
+
+func (c *entity) newCountableRefType() values.Counted[*protocol.Transaction] {
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("CountableRefType"), c.label+" "+"countable ref type", values.Struct[protocol.Transaction])
 }
 
 func (c *entity) CountableUnion() values.Counted[protocol.Account] {
-	return values.GetOrCreate(&c.countableUnion, func() values.Counted[protocol.Account] {
-		return values.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), c.label+" "+"countable union", values.UnionFactory(protocol.UnmarshalAccount))
-	})
+	return values.GetOrCreate(c, &c.countableUnion, (*entity).newCountableUnion)
+}
+
+func (c *entity) newCountableUnion() values.Counted[protocol.Account] {
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), c.label+" "+"countable union", values.UnionFactory(protocol.UnmarshalAccount))
 }
 
 func (c *entity) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -227,10 +241,10 @@ func (c *entity) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.union, opts, fn)
-	values.Walk(&err, c.set, opts, fn)
-	values.Walk(&err, c.countableRefType, opts, fn)
-	values.Walk(&err, c.countableUnion, opts, fn)
+	values.WalkField(&err, c.union, c.newUnion, opts, fn)
+	values.WalkField(&err, c.set, c.newSet, opts, fn)
+	values.WalkField(&err, c.countableRefType, c.newCountableRefType, opts, fn)
+	values.WalkField(&err, c.countableUnion, c.newCountableUnion, opts, fn)
 	return err
 }
 
@@ -268,57 +282,75 @@ type TemplateTest struct {
 func (c *TemplateTest) Key() *record.Key { return c.key }
 
 func (c *TemplateTest) Wrapped() values.Value[string] {
-	return values.GetOrCreate(&c.wrapped, func() values.Value[string] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), c.label+" "+"wrapped", false, values.Wrapped(values.StringWrapper))
-	})
+	return values.GetOrCreate(c, &c.wrapped, (*TemplateTest).newWrapped)
+}
+
+func (c *TemplateTest) newWrapped() values.Value[string] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), c.label+" "+"wrapped", false, values.Wrapped(values.StringWrapper))
 }
 
 func (c *TemplateTest) StructPtr() values.Value[*StructType] {
-	return values.GetOrCreate(&c.structPtr, func() values.Value[*StructType] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), c.label+" "+"struct ptr", false, values.Struct[StructType]())
-	})
+	return values.GetOrCreate(c, &c.structPtr, (*TemplateTest).newStructPtr)
+}
+
+func (c *TemplateTest) newStructPtr() values.Value[*StructType] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), c.label+" "+"struct ptr", false, values.Struct[StructType]())
 }
 
 func (c *TemplateTest) Union() values.Value[UnionType] {
-	return values.GetOrCreate(&c.union, func() values.Value[UnionType] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, values.Union(UnmarshalUnionType))
-	})
+	return values.GetOrCreate(c, &c.union, (*TemplateTest).newUnion)
+}
+
+func (c *TemplateTest) newUnion() values.Value[UnionType] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, values.Union(UnmarshalUnionType))
 }
 
 func (c *TemplateTest) WrappedSet() values.Set[*url.URL] {
-	return values.GetOrCreate(&c.wrappedSet, func() values.Set[*url.URL] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("WrappedSet"), c.label+" "+"wrapped set", values.Wrapped(values.UrlWrapper), values.CompareUrl)
-	})
+	return values.GetOrCreate(c, &c.wrappedSet, (*TemplateTest).newWrappedSet)
+}
+
+func (c *TemplateTest) newWrappedSet() values.Set[*url.URL] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("WrappedSet"), c.label+" "+"wrapped set", values.Wrapped(values.UrlWrapper), values.CompareUrl)
 }
 
 func (c *TemplateTest) StructSet() values.Set[*StructType] {
-	return values.GetOrCreate(&c.structSet, func() values.Set[*StructType] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("StructSet"), c.label+" "+"struct set", values.Struct[StructType](), func(u, v *StructType) int { return u.Compare(v) })
-	})
+	return values.GetOrCreate(c, &c.structSet, (*TemplateTest).newStructSet)
+}
+
+func (c *TemplateTest) newStructSet() values.Set[*StructType] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("StructSet"), c.label+" "+"struct set", values.Struct[StructType](), func(u, v *StructType) int { return u.Compare(v) })
 }
 
 func (c *TemplateTest) UnionSet() values.Set[UnionType] {
-	return values.GetOrCreate(&c.unionSet, func() values.Set[UnionType] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), c.label+" "+"union set", values.Union(UnmarshalUnionType), func(u, v UnionType) int { return u.Compare(v) })
-	})
+	return values.GetOrCreate(c, &c.unionSet, (*TemplateTest).newUnionSet)
+}
+
+func (c *TemplateTest) newUnionSet() values.Set[UnionType] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), c.label+" "+"union set", values.Union(UnmarshalUnionType), func(u, v UnionType) int { return u.Compare(v) })
 }
 
 func (c *TemplateTest) WrappedList() values.Counted[string] {
-	return values.GetOrCreate(&c.wrappedList, func() values.Counted[string] {
-		return values.NewCounted(c.logger.L, c.store, c.key.Append("WrappedList"), c.label+" "+"wrapped list", values.WrappedFactory(values.StringWrapper))
-	})
+	return values.GetOrCreate(c, &c.wrappedList, (*TemplateTest).newWrappedList)
+}
+
+func (c *TemplateTest) newWrappedList() values.Counted[string] {
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("WrappedList"), c.label+" "+"wrapped list", values.WrappedFactory(values.StringWrapper))
 }
 
 func (c *TemplateTest) StructList() values.Counted[*StructType] {
-	return values.GetOrCreate(&c.structList, func() values.Counted[*StructType] {
-		return values.NewCounted(c.logger.L, c.store, c.key.Append("StructList"), c.label+" "+"struct list", values.Struct[StructType])
-	})
+	return values.GetOrCreate(c, &c.structList, (*TemplateTest).newStructList)
+}
+
+func (c *TemplateTest) newStructList() values.Counted[*StructType] {
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("StructList"), c.label+" "+"struct list", values.Struct[StructType])
 }
 
 func (c *TemplateTest) UnionList() values.Counted[UnionType] {
-	return values.GetOrCreate(&c.unionList, func() values.Counted[UnionType] {
-		return values.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), c.label+" "+"union list", values.UnionFactory(UnmarshalUnionType))
-	})
+	return values.GetOrCreate(c, &c.unionList, (*TemplateTest).newUnionList)
+}
+
+func (c *TemplateTest) newUnionList() values.Counted[UnionType] {
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), c.label+" "+"union list", values.UnionFactory(UnmarshalUnionType))
 }
 
 func (c *TemplateTest) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -395,15 +427,15 @@ func (c *TemplateTest) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.wrapped, opts, fn)
-	values.Walk(&err, c.structPtr, opts, fn)
-	values.Walk(&err, c.union, opts, fn)
-	values.Walk(&err, c.wrappedSet, opts, fn)
-	values.Walk(&err, c.structSet, opts, fn)
-	values.Walk(&err, c.unionSet, opts, fn)
-	values.Walk(&err, c.wrappedList, opts, fn)
-	values.Walk(&err, c.structList, opts, fn)
-	values.Walk(&err, c.unionList, opts, fn)
+	values.WalkField(&err, c.wrapped, c.newWrapped, opts, fn)
+	values.WalkField(&err, c.structPtr, c.newStructPtr, opts, fn)
+	values.WalkField(&err, c.union, c.newUnion, opts, fn)
+	values.WalkField(&err, c.wrappedSet, c.newWrappedSet, opts, fn)
+	values.WalkField(&err, c.structSet, c.newStructSet, opts, fn)
+	values.WalkField(&err, c.unionSet, c.newUnionSet, opts, fn)
+	values.WalkField(&err, c.wrappedList, c.newWrappedList, opts, fn)
+	values.WalkField(&err, c.structList, c.newStructList, opts, fn)
+	values.WalkField(&err, c.unionList, c.newUnionList, opts, fn)
 	return err
 }
 

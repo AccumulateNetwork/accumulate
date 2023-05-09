@@ -211,11 +211,51 @@ func (v *value[T]) Resolve(key *database.Key) (database.Record, *database.Key, e
 }
 
 func (v *value[T]) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
-	if opts.Changes && !v.IsDirty() {
+	if opts.Modified && !v.IsDirty() {
 		return nil
 	}
-	_, err := fn(v)
-	return err
+
+	// Avoid extra work if the record has been loaded
+	if v.status == valueNotFound {
+		return nil
+	}
+	switch v.status {
+	case valueNotFound:
+		// Record does not exist
+		return nil
+
+	case valueDirty:
+		// Record has been modified - walk it
+		_, err := fn(v)
+		return err
+
+	case valueClean:
+		// Record has been loaded
+		if v.allowMissing {
+			// If a missing value is allowed, valueClean can't be trusted
+			break
+		}
+
+		// Walk it
+		_, err := fn(v)
+		return err
+	}
+
+	// Check if the record exists
+	err := v.store.GetValue(v.key, v)
+	switch {
+	case err == nil:
+		// Record exists - walk it
+		_, err := fn(v)
+		return err
+
+	case errors.Is(err, errors.NotFound):
+		// Record does not exist
+		return nil
+
+	default:
+		return errors.UnknownError.Wrap(err)
+	}
 }
 
 // GetValue loads the value.
