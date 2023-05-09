@@ -15,9 +15,10 @@ import (
 	"strconv"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -29,11 +30,13 @@ type ChangeSet struct {
 	kvstore storage.KeyValueTxn
 	parent  *ChangeSet
 
-	lastBlock record.Value[*LastBlock]
+	lastBlock values.Value[*LastBlock]
 	summary   map[summaryKey]*Summary
 	pending   map[pendingKey]*Pending
 	partition map[partitionKey]*database.Batch
 }
+
+func (c *ChangeSet) Key() *record.Key { return nil }
 
 type summaryKey struct {
 	Hash [32]byte
@@ -59,14 +62,14 @@ func keyForPartition(id string) partitionKey {
 	return partitionKey{id}
 }
 
-func (c *ChangeSet) LastBlock() record.Value[*LastBlock] {
-	return record.FieldGetOrCreate(&c.lastBlock, func() record.Value[*LastBlock] {
-		return record.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), "last block", false, record.Struct[LastBlock]())
+func (c *ChangeSet) LastBlock() values.Value[*LastBlock] {
+	return values.GetOrCreate(&c.lastBlock, func() values.Value[*LastBlock] {
+		return values.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), "last block", false, values.Struct[LastBlock]())
 	})
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
-	return record.FieldGetOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
+	return values.GetOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
 		v := new(Summary)
 		v.logger = c.logger
 		v.store = c.store
@@ -78,7 +81,7 @@ func (c *ChangeSet) Summary(hash [32]byte) *Summary {
 }
 
 func (c *ChangeSet) Pending(partition string) *Pending {
-	return record.FieldGetOrCreateMap(&c.pending, keyForPending(partition), func() *Pending {
+	return values.GetOrCreateMap(&c.pending, keyForPending(partition), func() *Pending {
 		v := new(Pending)
 		v.logger = c.logger
 		v.store = c.store
@@ -137,7 +140,7 @@ func (c *ChangeSet) IsDirty() bool {
 		return false
 	}
 
-	if record.FieldIsDirty(c.lastBlock) {
+	if values.IsDirty(c.lastBlock) {
 		return true
 	}
 	for _, v := range c.summary {
@@ -159,21 +162,24 @@ func (c *ChangeSet) IsDirty() bool {
 	return false
 }
 
-func (c *ChangeSet) WalkChanges(fn record.WalkFunc) error {
+func (c *ChangeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
 
-	var err error
-	record.FieldWalkChanges(&err, c.lastBlock, fn)
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	values.Walk(&err, c.lastBlock, opts, fn)
 	for _, v := range c.summary {
-		record.FieldWalkChanges(&err, v, fn)
+		values.Walk(&err, v, opts, fn)
 	}
 	for _, v := range c.pending {
-		record.FieldWalkChanges(&err, v, fn)
+		values.Walk(&err, v, opts, fn)
 	}
 	for _, v := range c.partition {
-		record.FieldWalkChanges(&err, v, fn)
+		values.Walk(&err, v, opts, fn)
 	}
 	return err
 }
@@ -184,15 +190,15 @@ func (c *ChangeSet) baseCommit() error {
 	}
 
 	var err error
-	record.FieldCommit(&err, c.lastBlock)
+	values.Commit(&err, c.lastBlock)
 	for _, v := range c.summary {
-		record.FieldCommit(&err, v)
+		values.Commit(&err, v)
 	}
 	for _, v := range c.pending {
-		record.FieldCommit(&err, v)
+		values.Commit(&err, v)
 	}
 	for _, v := range c.partition {
-		record.FieldCommit(&err, v)
+		values.Commit(&err, v)
 	}
 
 	return err
@@ -205,19 +211,21 @@ type Summary struct {
 	label  string
 	parent *ChangeSet
 
-	main       record.Value[*messaging.BlockSummary]
-	signatures record.Set[protocol.KeySignature]
+	main       values.Value[*messaging.BlockSummary]
+	signatures values.Set[protocol.KeySignature]
 }
 
-func (c *Summary) Main() record.Value[*messaging.BlockSummary] {
-	return record.FieldGetOrCreate(&c.main, func() record.Value[*messaging.BlockSummary] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Struct[messaging.BlockSummary]())
+func (c *Summary) Key() *record.Key { return c.key }
+
+func (c *Summary) Main() values.Value[*messaging.BlockSummary] {
+	return values.GetOrCreate(&c.main, func() values.Value[*messaging.BlockSummary] {
+		return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Struct[messaging.BlockSummary]())
 	})
 }
 
-func (c *Summary) Signatures() record.Set[protocol.KeySignature] {
-	return record.FieldGetOrCreate(&c.signatures, func() record.Set[protocol.KeySignature] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", record.Union(protocol.UnmarshalKeySignature), compareSignatures)
+func (c *Summary) Signatures() values.Set[protocol.KeySignature] {
+	return values.GetOrCreate(&c.signatures, func() values.Set[protocol.KeySignature] {
+		return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", values.Union(protocol.UnmarshalKeySignature), compareSignatures)
 	})
 }
 
@@ -241,24 +249,27 @@ func (c *Summary) IsDirty() bool {
 		return false
 	}
 
-	if record.FieldIsDirty(c.main) {
+	if values.IsDirty(c.main) {
 		return true
 	}
-	if record.FieldIsDirty(c.signatures) {
+	if values.IsDirty(c.signatures) {
 		return true
 	}
 
 	return false
 }
 
-func (c *Summary) WalkChanges(fn record.WalkFunc) error {
+func (c *Summary) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
 
-	var err error
-	record.FieldWalkChanges(&err, c.main, fn)
-	record.FieldWalkChanges(&err, c.signatures, fn)
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	values.Walk(&err, c.main, opts, fn)
+	values.Walk(&err, c.signatures, opts, fn)
 	return err
 }
 
@@ -268,8 +279,8 @@ func (c *Summary) Commit() error {
 	}
 
 	var err error
-	record.FieldCommit(&err, c.main)
-	record.FieldCommit(&err, c.signatures)
+	values.Commit(&err, c.main)
+	values.Commit(&err, c.signatures)
 
 	return err
 }
@@ -281,8 +292,10 @@ type Pending struct {
 	label  string
 	parent *ChangeSet
 
-	onBlock map[pendingOnBlockKey]record.Value[[32]byte]
+	onBlock map[pendingOnBlockKey]values.Value[[32]byte]
 }
+
+func (c *Pending) Key() *record.Key { return c.key }
 
 type pendingOnBlockKey struct {
 	Index uint64
@@ -292,9 +305,9 @@ func keyForPendingOnBlock(index uint64) pendingOnBlockKey {
 	return pendingOnBlockKey{index}
 }
 
-func (c *Pending) OnBlock(index uint64) record.Value[[32]byte] {
-	return record.FieldGetOrCreateMap(&c.onBlock, keyForPendingOnBlock(index), func() record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", index), c.label+" "+"on block"+" "+strconv.FormatUint(index, 10), false, record.Wrapped(record.HashWrapper))
+func (c *Pending) OnBlock(index uint64) values.Value[[32]byte] {
+	return values.GetOrCreateMap(&c.onBlock, keyForPendingOnBlock(index), func() values.Value[[32]byte] {
+		return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", index), c.label+" "+"on block"+" "+strconv.FormatUint(index, 10), false, values.Wrapped(values.HashWrapper))
 	})
 }
 
@@ -333,14 +346,17 @@ func (c *Pending) IsDirty() bool {
 	return false
 }
 
-func (c *Pending) WalkChanges(fn record.WalkFunc) error {
+func (c *Pending) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
 
-	var err error
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 	for _, v := range c.onBlock {
-		record.FieldWalkChanges(&err, v, fn)
+		values.Walk(&err, v, opts, fn)
 	}
 	return err
 }
@@ -352,7 +368,7 @@ func (c *Pending) Commit() error {
 
 	var err error
 	for _, v := range c.onBlock {
-		record.FieldCommit(&err, v)
+		values.Commit(&err, v)
 	}
 
 	return err

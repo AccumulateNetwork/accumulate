@@ -8,7 +8,6 @@ package bpt
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 )
 
 var testEntries = [][2][32]byte{
@@ -159,6 +159,20 @@ func TestRange(t *testing.T) {
 	require.ElementsMatch(t, expect, actual)
 }
 
+// TestTreelessCommit verifies that a BPT that has not yet loaded any nodes is
+// committed without constructing a tree.
+func TestTreelessCommit(t *testing.T) {
+	kvs := memory.New(nil)
+	b1 := newBPT(nil, nil, record.KvStore{Store: kvs.Begin(true)}, nil, "BPT", "BPT")
+	require.Empty(t, b1.pending)
+
+	rs := testTreelessCommitRecordStore{t, b1}
+	b2 := newBPT(nil, nil, rs, nil, "BPT", "BPT")
+	require.NoError(t, b2.Insert([32]byte{1}, [32]byte{2}))
+	require.NoError(t, b2.Commit())
+	require.NotEmpty(t, b1.pending)
+}
+
 func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *BPT {
 	b := new(BPT)
 	b.logger.Set(logger)
@@ -171,56 +185,25 @@ func newBPT(parent record.Record, logger log.Logger, store record.Store, key *re
 func (c *ChangeSet) Begin() *ChangeSet {
 	d := new(ChangeSet)
 	d.logger = c.logger
-	d.store = c
+	d.store = values.RecordStore{Record: c}
 	return d
 }
 
-// GetValue implements record.Store.
-func (c *ChangeSet) GetValue(key *record.Key, value record.ValueWriter) error {
-	v, err := resolveValue[record.ValueReader](c, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	err = value.LoadValue(v, false)
-	return errors.UnknownError.Wrap(err)
+type testTreelessCommitRecordStore struct {
+	t      testing.TB
+	record record.Record
 }
 
-// PutValue implements record.Store.
-func (c *ChangeSet) PutValue(key *record.Key, value record.ValueReader) error {
-	v, err := resolveValue[record.ValueWriter](c, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+func (s testTreelessCommitRecordStore) Unwrap() record.Record { return s.record }
 
-	err = v.LoadValue(value, true)
-	return errors.UnknownError.Wrap(err)
+func (s testTreelessCommitRecordStore) GetValue(key *database.Key, value database.Value) error {
+	s.t.Helper()
+	s.t.Fatalf("Unexpected call to GetValue")
+	panic("not reached")
 }
 
-func zero[T any]() T {
-	var z T
-	return z
-}
-
-// resolveValue resolves the value for the given key.
-func resolveValue[T any](c *ChangeSet, key *record.Key) (T, error) {
-	var r record.Record = c
-	var err error
-	for key.Len() > 0 {
-		r, key, err = r.Resolve(key)
-		if err != nil {
-			return zero[T](), errors.UnknownError.Wrap(err)
-		}
-	}
-
-	if s, _, err := r.Resolve(nil); err == nil {
-		r = s
-	}
-
-	v, ok := r.(T)
-	if !ok {
-		return zero[T](), errors.InternalError.WithFormat("bad key: %T is not a %v", r, reflect.TypeOf(new(T)).Elem())
-	}
-
-	return v, nil
+func (s testTreelessCommitRecordStore) PutValue(key *database.Key, value database.Value) error {
+	s.t.Helper()
+	s.t.Fatalf("Unexpected call to PutValue")
+	panic("not reached")
 }
