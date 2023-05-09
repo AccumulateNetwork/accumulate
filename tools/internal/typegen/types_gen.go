@@ -28,24 +28,24 @@ type ChainRecord struct {
 }
 
 type EntityRecord struct {
-	Parent            *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
-	Description       string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
-	OmitAccessor      bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
-	Private           bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
-	Name              string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Fields            []*Field      `json:"fields,omitempty" form:"fields" query:"fields" validate:"required"`
-	CustomCommit      bool          `json:"customCommit,omitempty" form:"customCommit" query:"customCommit" validate:"required"`
-	CustomResolve     bool          `json:"customResolve,omitempty" form:"customResolve" query:"customResolve" validate:"required"`
-	CustomIsDirty     bool          `json:"customIsDirty,omitempty" form:"customIsDirty" query:"customIsDirty" validate:"required"`
-	CustomWalkChanges bool          `json:"customWalkChanges,omitempty" form:"customWalkChanges" query:"customWalkChanges" validate:"required"`
-	Parameters        []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
-	OmitCommit        bool          `json:"omitCommit,omitempty" form:"omitCommit" query:"omitCommit" validate:"required"`
-	OmitResolve       bool          `json:"omitResolve,omitempty" form:"omitResolve" query:"omitResolve" validate:"required"`
-	OmitIsDirty       bool          `json:"omitIsDirty,omitempty" form:"omitIsDirty" query:"omitIsDirty" validate:"required"`
-	ValueStore        string        `json:"valueStore,omitempty" form:"valueStore" query:"valueStore" validate:"required"`
-	Root              bool          `json:"root,omitempty" form:"root" query:"root" validate:"required"`
-	Interface         bool          `json:"interface,omitempty" form:"interface" query:"interface" validate:"required"`
-	Attributes        []Record      `json:"attributes,omitempty" form:"attributes" query:"attributes" validate:"required"`
+	Parent        *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	Description   string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
+	OmitAccessor  bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
+	Private       bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
+	Name          string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Fields        []*Field      `json:"fields,omitempty" form:"fields" query:"fields" validate:"required"`
+	CustomCommit  bool          `json:"customCommit,omitempty" form:"customCommit" query:"customCommit" validate:"required"`
+	CustomResolve bool          `json:"customResolve,omitempty" form:"customResolve" query:"customResolve" validate:"required"`
+	CustomIsDirty bool          `json:"customIsDirty,omitempty" form:"customIsDirty" query:"customIsDirty" validate:"required"`
+	CustomWalk    bool          `json:"customWalk,omitempty" form:"customWalk" query:"customWalk" validate:"required"`
+	Parameters    []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
+	OmitCommit    bool          `json:"omitCommit,omitempty" form:"omitCommit" query:"omitCommit" validate:"required"`
+	OmitResolve   bool          `json:"omitResolve,omitempty" form:"omitResolve" query:"omitResolve" validate:"required"`
+	OmitIsDirty   bool          `json:"omitIsDirty,omitempty" form:"omitIsDirty" query:"omitIsDirty" validate:"required"`
+	ValueStore    string        `json:"valueStore,omitempty" form:"valueStore" query:"valueStore" validate:"required"`
+	Root          bool          `json:"root,omitempty" form:"root" query:"root" validate:"required"`
+	Interface     bool          `json:"interface,omitempty" form:"interface" query:"interface" validate:"required"`
+	Attributes    []Record      `json:"attributes,omitempty" form:"attributes" query:"attributes" validate:"required"`
 }
 
 type IndexRecord struct {
@@ -139,25 +139,25 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 
 func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type              RecordType                              `json:"type"`
-		Parent            *EntityRecord                           `json:"parent,omitempty"`
-		Description       string                                  `json:"description,omitempty"`
-		OmitAccessor      bool                                    `json:"omitAccessor,omitempty"`
-		Private           bool                                    `json:"private,omitempty"`
-		Name              string                                  `json:"name,omitempty"`
-		Fields            encoding.JsonList[*Field]               `json:"fields,omitempty"`
-		CustomCommit      bool                                    `json:"customCommit,omitempty"`
-		CustomResolve     bool                                    `json:"customResolve,omitempty"`
-		CustomIsDirty     bool                                    `json:"customIsDirty,omitempty"`
-		CustomWalkChanges bool                                    `json:"customWalkChanges,omitempty"`
-		Parameters        encoding.JsonList[*Field]               `json:"parameters,omitempty"`
-		OmitCommit        bool                                    `json:"omitCommit,omitempty"`
-		OmitResolve       bool                                    `json:"omitResolve,omitempty"`
-		OmitIsDirty       bool                                    `json:"omitIsDirty,omitempty"`
-		ValueStore        string                                  `json:"valueStore,omitempty"`
-		Root              bool                                    `json:"root,omitempty"`
-		Interface         bool                                    `json:"interface,omitempty"`
-		Attributes        *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type          RecordType                              `json:"type"`
+		Parent        *EntityRecord                           `json:"parent,omitempty"`
+		Description   string                                  `json:"description,omitempty"`
+		OmitAccessor  bool                                    `json:"omitAccessor,omitempty"`
+		Private       bool                                    `json:"private,omitempty"`
+		Name          string                                  `json:"name,omitempty"`
+		Fields        encoding.JsonList[*Field]               `json:"fields,omitempty"`
+		CustomCommit  bool                                    `json:"customCommit,omitempty"`
+		CustomResolve bool                                    `json:"customResolve,omitempty"`
+		CustomIsDirty bool                                    `json:"customIsDirty,omitempty"`
+		CustomWalk    bool                                    `json:"customWalk,omitempty"`
+		Parameters    encoding.JsonList[*Field]               `json:"parameters,omitempty"`
+		OmitCommit    bool                                    `json:"omitCommit,omitempty"`
+		OmitResolve   bool                                    `json:"omitResolve,omitempty"`
+		OmitIsDirty   bool                                    `json:"omitIsDirty,omitempty"`
+		ValueStore    string                                  `json:"valueStore,omitempty"`
+		Root          bool                                    `json:"root,omitempty"`
+		Interface     bool                                    `json:"interface,omitempty"`
+		Attributes    *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Parent == nil) {
@@ -187,8 +187,8 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	if !(!v.CustomIsDirty) {
 		u.CustomIsDirty = v.CustomIsDirty
 	}
-	if !(!v.CustomWalkChanges) {
-		u.CustomWalkChanges = v.CustomWalkChanges
+	if !(!v.CustomWalk) {
+		u.CustomWalk = v.CustomWalk
 	}
 	if !(len(v.Parameters) == 0) {
 		u.Parameters = v.Parameters
@@ -414,25 +414,25 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 
 func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type              RecordType                              `json:"type"`
-		Parent            *EntityRecord                           `json:"parent,omitempty"`
-		Description       string                                  `json:"description,omitempty"`
-		OmitAccessor      bool                                    `json:"omitAccessor,omitempty"`
-		Private           bool                                    `json:"private,omitempty"`
-		Name              string                                  `json:"name,omitempty"`
-		Fields            encoding.JsonList[*Field]               `json:"fields,omitempty"`
-		CustomCommit      bool                                    `json:"customCommit,omitempty"`
-		CustomResolve     bool                                    `json:"customResolve,omitempty"`
-		CustomIsDirty     bool                                    `json:"customIsDirty,omitempty"`
-		CustomWalkChanges bool                                    `json:"customWalkChanges,omitempty"`
-		Parameters        encoding.JsonList[*Field]               `json:"parameters,omitempty"`
-		OmitCommit        bool                                    `json:"omitCommit,omitempty"`
-		OmitResolve       bool                                    `json:"omitResolve,omitempty"`
-		OmitIsDirty       bool                                    `json:"omitIsDirty,omitempty"`
-		ValueStore        string                                  `json:"valueStore,omitempty"`
-		Root              bool                                    `json:"root,omitempty"`
-		Interface         bool                                    `json:"interface,omitempty"`
-		Attributes        *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type          RecordType                              `json:"type"`
+		Parent        *EntityRecord                           `json:"parent,omitempty"`
+		Description   string                                  `json:"description,omitempty"`
+		OmitAccessor  bool                                    `json:"omitAccessor,omitempty"`
+		Private       bool                                    `json:"private,omitempty"`
+		Name          string                                  `json:"name,omitempty"`
+		Fields        encoding.JsonList[*Field]               `json:"fields,omitempty"`
+		CustomCommit  bool                                    `json:"customCommit,omitempty"`
+		CustomResolve bool                                    `json:"customResolve,omitempty"`
+		CustomIsDirty bool                                    `json:"customIsDirty,omitempty"`
+		CustomWalk    bool                                    `json:"customWalk,omitempty"`
+		Parameters    encoding.JsonList[*Field]               `json:"parameters,omitempty"`
+		OmitCommit    bool                                    `json:"omitCommit,omitempty"`
+		OmitResolve   bool                                    `json:"omitResolve,omitempty"`
+		OmitIsDirty   bool                                    `json:"omitIsDirty,omitempty"`
+		ValueStore    string                                  `json:"valueStore,omitempty"`
+		Root          bool                                    `json:"root,omitempty"`
+		Interface     bool                                    `json:"interface,omitempty"`
+		Attributes    *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
@@ -444,7 +444,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u.CustomCommit = v.CustomCommit
 	u.CustomResolve = v.CustomResolve
 	u.CustomIsDirty = v.CustomIsDirty
-	u.CustomWalkChanges = v.CustomWalkChanges
+	u.CustomWalk = v.CustomWalk
 	u.Parameters = v.Parameters
 	u.OmitCommit = v.OmitCommit
 	u.OmitResolve = v.OmitResolve
@@ -468,7 +468,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	v.CustomCommit = u.CustomCommit
 	v.CustomResolve = u.CustomResolve
 	v.CustomIsDirty = u.CustomIsDirty
-	v.CustomWalkChanges = u.CustomWalkChanges
+	v.CustomWalk = u.CustomWalk
 	v.Parameters = u.Parameters
 	v.OmitCommit = u.OmitCommit
 	v.OmitResolve = u.OmitResolve

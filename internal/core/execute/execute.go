@@ -111,14 +111,14 @@ type BlockState interface {
 	// DidCompleteMajorBlock indicates that this block completed a major block.
 	DidCompleteMajorBlock() (uint64, time.Time, bool)
 
+	// ChangeSet is the database batch.
+	ChangeSet() record.Record
+
 	// Commit commits changes made by this block.
 	Commit() error
 
 	// Discard discards changes made by this block.
 	Discard()
-
-	// WalkChanges walks changes made by this block.
-	WalkChanges(record.WalkFunc) error
 }
 
 func NewDatabaseObserver() database.Observer {

@@ -11,6 +11,8 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -58,6 +60,8 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.K
 	return &Chain2{account, key, c, nil, labelfmt}
 }
 
+func (c *Chain2) Key() *record.Key { return c.key }
+
 func (c *Chain2) dirtyChains() []*MerkleManager {
 	if c == nil {
 		return nil
@@ -91,7 +95,7 @@ func (a *Account) UpdatedChains() ([]*protocol.BlockEntry, error) {
 }
 
 // Account returns the URL of the account.
-func (c *Chain2) Account() *url.URL { return c.Key(1).(*url.URL) }
+func (c *Chain2) Account() *url.URL { return c.key.Get(1).(*url.URL) }
 
 // Name returns the name of the chain.
 func (c *Chain2) Name() string { return c.inner.Name() }
@@ -113,30 +117,25 @@ func (c *Chain2) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	return c.inner.Resolve(key)
 }
 
-func (c *Chain2) WalkChanges(fn record.WalkFunc) error {
+func (c *Chain2) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	var err error
-	record.FieldWalkChanges(&err, c.inner, fn)
-	record.FieldWalkChanges(&err, c.index, fn)
+	values.Walk(&err, c.inner, opts, fn)
+	values.Walk(&err, c.index, opts, fn)
 	return err
 }
 
 func (c *Chain2) IsDirty() bool {
-	return record.FieldIsDirty(c.index) || record.FieldIsDirty(c.inner)
+	return values.IsDirty(c.index) || values.IsDirty(c.inner)
 }
 
 func (c *Chain2) Commit() error {
 	var err error
-	record.FieldCommit(&err, c.index)
-	record.FieldCommit(&err, c.inner)
+	values.Commit(&err, c.index)
+	values.Commit(&err, c.inner)
 	return err
 }
 
-// Key returns the Ith key of the chain record.
-func (c *Chain2) Key(i int) interface{} {
-	return c.key.Get(i)
-}
-
-func (c *Chain2) Head() record.Value[*MerkleState] {
+func (c *Chain2) Head() values.Value[*MerkleState] {
 	return c.inner.Head()
 }
 
@@ -175,7 +174,7 @@ func (c *Chain2) Index() *Chain2 {
 	if c.Type() == merkle.ChainTypeIndex {
 		panic("cannot index an index chain")
 	}
-	return record.FieldGetOrCreate(&c.index, func() *Chain2 {
+	return values.GetOrCreate(&c.index, func() *Chain2 {
 		key := c.key.Append("Index")
 		label := c.labelfmt + " index"
 		m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
