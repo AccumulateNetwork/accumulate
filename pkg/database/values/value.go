@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package record
+package values
 
 //lint:file-ignore U1000 false positive
 
@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -57,8 +58,8 @@ const (
 
 type value[T any] struct {
 	logger       logging.OptionalLogger
-	store        Store
-	key          *Key
+	store        database.Store
+	key          *database.Key
 	name         string
 	status       valueStatus
 	value        encodableValue[T]
@@ -66,11 +67,10 @@ type value[T any] struct {
 	version      int
 }
 
-var _ ValueReader = (*value[*wrappedValue[uint64]])(nil)
-var _ ValueWriter = (*value[*wrappedValue[uint64]])(nil)
+var _ database.Value = (*value[*wrappedValue[uint64]])(nil)
 
 // NewValue returns a new value using the given encodable value.
-func newValue[T any](logger log.Logger, store Store, key *Key, name string, allowMissing bool, ev encodableValue[T]) *value[T] {
+func newValue[T any](logger log.Logger, store database.Store, key *database.Key, name string, allowMissing bool, ev encodableValue[T]) *value[T] {
 	v := &value[T]{}
 	v.logger.L = logger
 	v.store = store
@@ -81,6 +81,8 @@ func newValue[T any](logger log.Logger, store Store, key *Key, name string, allo
 	v.status = valueUndefined
 	return v
 }
+
+func (v *value[T]) Key() *database.Key { return v.key }
 
 // Get loads the value, unmarshalling it if necessary. If IsDirty returns true,
 // Get is guaranteed to succeed.
@@ -201,24 +203,19 @@ func (v *value[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (v *value[T]) Resolve(key *Key) (Record, *Key, error) {
+func (v *value[T]) Resolve(key *database.Key) (database.Record, *database.Key, error) {
 	if key.Len() == 0 {
 		return v, nil, nil
 	}
 	return nil, nil, errors.InternalError.With("bad key for value")
 }
 
-type walkValue[T any] struct{ *value[T] }
-
-func (v walkValue[T]) Key() *Key {
-	return v.key
-}
-
-func (v *value[T]) WalkChanges(fn WalkFunc) error {
-	if v.IsDirty() {
-		return fn(walkValue[T]{v})
+func (v *value[T]) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
+	if opts.Changes && !v.IsDirty() {
+		return nil
 	}
-	return nil
+	_, err := fn(v)
+	return err
 }
 
 // GetValue loads the value.
@@ -232,7 +229,7 @@ func (v *value[T]) GetValue() (encoding.BinaryValue, int, error) {
 
 // LoadValue sets the value from the reader. If put is false, the value will be
 // copied. If put is true, the value will be marked dirty.
-func (v *value[T]) LoadValue(value ValueReader, put bool) error {
+func (v *value[T]) LoadValue(value database.Value, put bool) error {
 	uv, version, err := value.GetValue()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -260,7 +257,7 @@ func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 	return nil
 }
 
-func isBptValue(key *Key) bool {
+func isBptValue(key *database.Key) bool {
 	if key.Len() < 2 {
 		return false
 	}
