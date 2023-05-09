@@ -55,6 +55,7 @@
         "-b=2",
         "-v=2",
         "-f=0",
+        "-s=2",
         "--globals={\"executorVersion\": \"v2\"}",
         "--faucet-seed=ci",
       ]
@@ -133,6 +134,7 @@
         "run",
         "--truncate",
         "-w=${workspaceFolder}/.nodes/node-1/dnn",
+        // "-w=${workspaceFolder}/.nodes/bsn-1/bsnn",
       ]
     },
 
