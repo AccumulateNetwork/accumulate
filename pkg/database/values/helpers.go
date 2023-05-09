@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package record
+package values
 
 import (
 	"bytes"
@@ -44,13 +44,13 @@ func MapKeyUrl(v *url.URL) [32]byte {
 	return v.AccountID32()
 }
 
-type ValueMarshaller[T any] func(value T) ([]byte, error)
-type ValueUnmarshaller[T any] func(data []byte) (T, error)
+type valueMarshaller[T any] func(value T) ([]byte, error)
+type valueUnmarshaller[T any] func(data []byte) (T, error)
 
 type wrapperFuncs[T any] struct {
 	copy      func(T) T
-	marshal   ValueMarshaller[T]
-	unmarshal ValueUnmarshaller[T]
+	marshal   valueMarshaller[T]
+	unmarshal valueUnmarshaller[T]
 }
 
 // UintWrapper defines un/marshalling functions for uint fields.
@@ -95,13 +95,13 @@ var StringWrapper = &wrapperFuncs[string]{
 	unmarshal: encoding.UnmarshalString,
 }
 
-func oldMarshal[T any](fn func(T) []byte) ValueMarshaller[T] {
+func oldMarshal[T any](fn func(T) []byte) valueMarshaller[T] {
 	return func(value T) ([]byte, error) {
 		return fn(value), nil
 	}
 }
 
-func oldMarshalPtr[T any](fn func(*T) []byte) ValueMarshaller[T] {
+func oldMarshalPtr[T any](fn func(*T) []byte) valueMarshaller[T] {
 	return func(value T) ([]byte, error) {
 		return fn(&value), nil
 	}
@@ -111,7 +111,7 @@ func marshalAsString[T fmt.Stringer](v T) ([]byte, error) {
 	return encoding.MarshalString(v.String()), nil
 }
 
-func unmarshalFromString[T any](fn func(string) (T, error)) ValueUnmarshaller[T] {
+func unmarshalFromString[T any](fn func(string) (T, error)) valueUnmarshaller[T] {
 	return func(data []byte) (T, error) {
 		s, err := encoding.UnmarshalString(data)
 		if err != nil {
