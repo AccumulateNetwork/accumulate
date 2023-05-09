@@ -313,7 +313,7 @@ func (cm *connectionManager) InitClients(lclClient client.Client, statusChecker 
 func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 	cm2, ok := other.(*connectionManager)
 	if !ok {
-		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, cm2)
+		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, other)
 	}
 
 	for _, connCtx := range cm.all {
