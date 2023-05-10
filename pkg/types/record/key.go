@@ -16,7 +16,6 @@ import (
 	"io"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -66,12 +65,32 @@ func (k *Key) Append(v ...any) *Key {
 	return &Key{l}
 }
 
-// Hash converts the record key to a storage key.
-func (k *Key) Hash() storage.Key {
-	if k == nil {
-		return storage.MakeKey()
+// AppendKey appends one key to another. AppendKey will panic if K is not empty
+// and L starts with a precomputed [KeyHash].
+func (k *Key) AppendKey(l *Key) *Key {
+	if k.Len() == 0 {
+		return l
 	}
-	return storage.MakeKey(k.values...)
+	if l.Len() == 0 {
+		return k
+	}
+	if _, ok := l.values[0].(KeyHash); ok {
+		panic("cannot append a precomputed key hash to another key")
+	}
+	return k.Append(l.values...)
+}
+
+// Hash converts the record key to a storage key.
+func (k *Key) Hash() KeyHash {
+	if k.Len() == 0 {
+		return KeyHash{}
+	}
+
+	// If the first value is a KeyHash, append to that
+	if h, ok := k.values[0].(KeyHash); ok {
+		return h.Append(k.values[1:]...)
+	}
+	return (KeyHash{}).Append(k.values...)
 }
 
 // String returns a human-readable string for the key.
@@ -131,6 +150,22 @@ func (k *Key) Equal(l *Key) bool {
 		}
 	}
 	return true
+}
+
+// Compare compares two keys. Compare may panic if either key has an unexpected
+// value type.
+func (k *Key) Compare(l *Key) int {
+	n := k.Len()
+	if l.Len() < n {
+		n = l.Len()
+	}
+	for i := 0; i < n; i++ {
+		c := keyPartsCompare(k.values[i], l.values[i])
+		if c != 0 {
+			return c
+		}
+	}
+	return k.Len() - l.Len()
 }
 
 // MarshalBinary marshals the key to bytes.

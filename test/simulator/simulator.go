@@ -20,13 +20,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -53,7 +53,7 @@ type Simulator struct {
 	DropDispatchedMessages bool
 }
 
-type OpenDatabaseFunc func(partition string, node int, logger log.Logger) storage.KeyValueStore
+type OpenDatabaseFunc func(partition string, node int, logger log.Logger) keyvalue.Beginner
 type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
 
 func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
@@ -130,15 +130,12 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 	return s, nil
 }
 
-func MemoryDatabase(_ string, _ int, logger log.Logger) storage.KeyValueStore {
-	if logger != nil {
-		logger = logger.With("module", "storage")
-	}
-	return memory.New(logger)
+func MemoryDatabase(string, int, log.Logger) keyvalue.Beginner {
+	return memory.New(nil)
 }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc {
-	return func(partition string, node int, logger log.Logger) storage.KeyValueStore {
+	return func(partition string, node int, logger log.Logger) keyvalue.Beginner {
 		if logger != nil {
 			logger = logger.With("module", "storage")
 		}

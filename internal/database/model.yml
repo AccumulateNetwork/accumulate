@@ -16,8 +16,6 @@
     pointer: true
   - name: observer
     type: Observer
-  - name: kvstore
-    type: storage.KeyValueTxn
   attributes:
   - name: BPT
     type: other

@@ -8,17 +8,16 @@ package bsn
 
 import (
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // New
-func NewChangeSet(store storage.Beginner, logger log.Logger) *ChangeSet {
+func NewChangeSet(store keyvalue.Beginner, logger log.Logger) *ChangeSet {
 	c := new(ChangeSet)
-	c.kvstore = store.Begin(true)
-	c.store = record.KvStore{Store: c.kvstore}
+	c.kvstore = store.Begin(nil, true)
+	c.store = keyvalue.RecordStore{Store: c.kvstore}
 	c.logger.Set(logger, "module", "database")
 	return c
 }
@@ -28,7 +27,7 @@ func (c *ChangeSet) Begin() *ChangeSet {
 	d.logger = c.logger
 	d.store = values.RecordStore{Record: c}
 	d.parent = c
-	d.kvstore = c.kvstore.Begin(true)
+	d.kvstore = c.kvstore.Begin(nil, true)
 	return d
 }
 

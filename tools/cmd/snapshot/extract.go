@@ -7,16 +7,12 @@
 package main
 
 import (
-	"bytes"
 	"os"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,7 +30,7 @@ func init() { cmd.AddCommand(extractCmd) }
 func extractSnapshot(_ *cobra.Command, args []string) {
 	store1, err := badger.New(args[0], nil)
 	check(err)
-	stx := store1.Begin(false)
+	stx := store1.Begin(nil, false)
 	defer stx.Discard()
 
 	db1 := database.New(store1, nil)
@@ -45,58 +41,38 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 	txnHashes := new(snapshot.HashSet)
 	sigHashes := new(snapshot.HashSet)
 
-	bpt := pmt.NewBPTManager(stx)
-	place := pmt.FirstPossibleBptKey
-	const window = 1000 //                                       Process this many BPT entries at a time
-	var count int       //                                       Recalculate number of nodes
-	for {
-		bptVals, next := bpt.Bpt.GetRange(place, int(window)) // Read a thousand values from the BPT
-		count += len(bptVals)
-		if len(bptVals) == 0 { //                                If there are none left, we break out
-			break
+	check(batch1.ForEachAccount(func(account *database.Account, hash [32]byte) error {
+		acct, err := account.Main().Get()
+		check(err)
+		u := acct.GetUrl()
+
+		// Skip system accounts
+		if protocol.AcmeUrl().LocalTo(u) ||
+			protocol.FaucetUrl.LocalTo(u) {
+			return nil
 		}
-		place = next                //                           We will get the next 1000 after the last 1000
-		for _, v := range bptVals { //                           For all the key values we got (as many as 1000)
-			b, err := stx.Get(storage.Key(v.Key).Append("Main"))
-			checkf(err, "get %v", v.Key)
-
-			// Every account starts with the account type and the URL
-			r := encoding.NewReader(bytes.NewReader(b))
-			r.ReadEnum(1, new(protocol.AccountType))
-			u, ok := r.ReadUrl(2)
-			if !ok {
-				fatalf("get %v: URL is missing", v.Key)
-			}
-			_, err = r.Reset(nil)
-			checkf(err, "get %v", v.Key)
-
-			// Skip system accounts
-			if protocol.AcmeUrl().LocalTo(u) ||
-				protocol.FaucetUrl.LocalTo(u) {
-				continue
-			}
-			if _, ok := protocol.ParsePartitionUrl(u); ok {
-				continue
-			}
-
-			accounts = append(accounts, u)
-			account := batch1.Account(u)
-			pending, err := account.Pending().Get()
-			checkf(err, "get %v pending", u)
-			for _, txid := range pending {
-				txnHashes.Add(txid.Hash())
-			}
-
-			err = txnHashes.CollectFromChain(account, account.MainChain())
-			checkf(err, "get %v main chain", u)
-
-			err = txnHashes.CollectFromChain(account, account.ScratchChain())
-			checkf(err, "get %v scratch chain", u)
-
-			err = sigHashes.CollectFromChain(account, account.SignatureChain())
-			checkf(err, "get %v signature chain", u)
+		if _, ok := protocol.ParsePartitionUrl(u); ok {
+			return nil
 		}
-	}
+
+		accounts = append(accounts, u)
+		pending, err := account.Pending().Get()
+		checkf(err, "get %v pending", u)
+		for _, txid := range pending {
+			txnHashes.Add(txid.Hash())
+		}
+
+		err = txnHashes.CollectFromChain(account, account.MainChain())
+		checkf(err, "get %v main chain", u)
+
+		err = txnHashes.CollectFromChain(account, account.ScratchChain())
+		checkf(err, "get %v scratch chain", u)
+
+		err = sigHashes.CollectFromChain(account, account.SignatureChain())
+		checkf(err, "get %v signature chain", u)
+
+		return nil
+	}))
 
 	db2 := database.OpenInMemory(nil)
 	batch2 := db2.Begin(true)

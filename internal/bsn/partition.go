@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 func (c *ChangeSet) Partition(id string) *database.Batch {
@@ -25,7 +26,7 @@ func (c *ChangeSet) Partition(id string) *database.Batch {
 
 	var b *database.Batch
 	if c.parent == nil {
-		s := c.kvstore.BeginWithPrefix(true, id+"·")
+		s := c.kvstore.Begin(record.NewKey(id+"·"), true)
 		b = database.NewBatch(id, s, true, c.logger)
 		b.SetObserver(execute.NewDatabaseObserver())
 	} else {
