@@ -15,7 +15,6 @@ import (
 	"strconv"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/bpt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
@@ -35,7 +34,6 @@ type Batch struct {
 	nextChildId int64
 	parent      *Batch
 	observer    Observer
-	kvstore     storage.KeyValueTxn
 
 	bpt         *bpt.BPT
 	account     map[accountKey]*Account
