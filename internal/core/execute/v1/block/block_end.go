@@ -34,12 +34,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(m.Describe.Synthetic()).GetStateAs(&synthLedger)
+	err := block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	var anchorLedger *protocol.AnchorLedger
-	err = block.Batch.Account(m.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	err = block.Batch.Account(m.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
@@ -69,7 +69,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
 	var ledgerState *protocol.SystemLedger
-	err = ledger.GetStateAs(&ledgerState)
+	err = ledger.Main().GetAs(&ledgerState)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
@@ -206,7 +206,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Write the updated ledger
-	err = ledger.PutState(ledgerState)
+	err = ledger.Main().Put(ledgerState)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store system ledger: %w", err)
 	}
@@ -504,7 +504,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 	var sigs []protocol.Signature
 	for _, txid := range pending {
 		h := txid.Hash()
-		status, err := batch.Transaction(h[:]).GetStatus()
+		status, err := batch.Transaction(h[:]).Status().Get()
 		if err != nil {
 			x.logger.Error("Error loading synthetic transaction status", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
 			continue

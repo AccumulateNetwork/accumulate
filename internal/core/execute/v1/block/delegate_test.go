@@ -573,7 +573,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 		// alice/book/1 should have one delegated signature each from bob/book/1
 		// and charlie/book/1
 		record := batch.Transaction(txnHash)
-		status, err := record.GetStatus()
+		status, err := record.Status().Get()
 		require.NoError(t, err)
 		sigs, err := GetAllSignatures(batch, record, status, nil)
 		require.NoError(t, err)

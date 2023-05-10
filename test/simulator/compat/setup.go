@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -19,7 +19,7 @@ import (
 
 func writeAccountState(s *Simulator, batch *database.Batch, account protocol.Account) {
 	record := batch.Account(account.GetUrl())
-	require.NoError(s.TB, record.PutState(account))
+	require.NoError(s.TB, record.Main().Put(account))
 
 	txid := sha256.Sum256([]byte("fake txid"))
 	mainChain, err := record.MainChain().Get()
@@ -50,7 +50,7 @@ func (s *Simulator) CreateAccount(account protocol.Account) {
 		require.True(s.TB, ok, "Attempted to create an account with no auth")
 
 		var identity *protocol.ADI
-		require.NoError(s.TB, batch.Account(identityUrl).GetStateAs(&identity))
+		require.NoError(s.TB, batch.Account(identityUrl).Main().GetAs(&identity))
 
 		*auth = identity.AccountAuth
 		writeAccountState(s, batch, account)
@@ -124,7 +124,7 @@ func (s *Simulator) CreateKeyBook(bookUrl *url.URL, pubKey ...[]byte) {
 func (s *Simulator) CreateKeyPage(bookUrl *url.URL, pubKey ...[]byte) {
 	_ = s.PartitionFor(bookUrl).Database.Update(func(batch *database.Batch) error {
 		var book *protocol.KeyBook
-		require.NoError(s.TB, batch.Account(bookUrl).GetStateAs(&book))
+		require.NoError(s.TB, batch.Account(bookUrl).Main().GetAs(&book))
 		pageUrl := protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
 		book.PageCount++
 
@@ -150,7 +150,7 @@ func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.
 	s.TB.Helper()
 	_ = s.PartitionFor(accountUrl).Database.Update(func(batch *database.Batch) error {
 		s.TB.Helper()
-		account, err := batch.Account(accountUrl).GetState()
+		account, err := batch.Account(accountUrl).Main().Get()
 		require.NoError(s.TB, err)
 		fn(account)
 		writeAccountState(s, batch, account)
@@ -163,7 +163,7 @@ func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
 	var account T
 	_ = sim.PartitionFor(accountUrl).Database.View(func(batch *database.Batch) error {
 		sim.TB.Helper()
-		require.NoError(sim.TB, batch.Account(accountUrl).GetStateAs(&account))
+		require.NoError(sim.TB, batch.Account(accountUrl).Main().GetAs(&account))
 		return nil
 	})
 	return account

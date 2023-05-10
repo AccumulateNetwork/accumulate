@@ -214,7 +214,7 @@ func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContex
 	// The ledger's Delivered number needs to be updated if the transaction
 	// succeeds or fails
 	if partLedger.Add(!pending, seq.Number, seq.ID()) {
-		err = batch.Account(ledger.GetUrl()).PutState(ledger)
+		err = batch.Account(ledger.GetUrl()).Main().Put(ledger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("store synthetic transaction ledger: %w", err)
 		}
