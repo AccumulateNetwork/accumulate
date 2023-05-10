@@ -49,7 +49,7 @@ func TestSequencer(t *testing.T) {
 	g := new(core.GlobalValues)
 	require.NoError(t, g.Load(PartitionUrl("BVN0"), func(account *url.URL, target interface{}) error {
 		return sim.DatabaseFor(alice).View(func(batch *database.Batch) error {
-			return batch.Account(account).GetStateAs(target)
+			return batch.Account(account).Main().GetAs(target)
 		})
 	}))
 

@@ -46,10 +46,10 @@ func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 
 	// Add lite record to data chain if applicable
 	if op.liteStateRec != nil {
-		_, err := record.GetState()
+		_, err := record.Main().Get()
 		if err != nil {
 			//if we have no state, store it
-			err = record.PutState(op.liteStateRec)
+			err = record.Main().Put(op.liteStateRec)
 			if err != nil {
 				return nil, err
 			}

@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -126,7 +127,7 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 }
 
 func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.URL, receipt *merkle.Receipt, sequence map[*Delivery]int) ([]*Delivery, error) {
-	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(anchor))
+	synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(anchor)).Get()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", anchor[:4], err)
 	}
@@ -169,7 +170,7 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 }
 
 func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.PartitionSignature, error) {
-	status, err := transaction.GetStatus()
+	status, err := transaction.Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
@@ -181,12 +182,13 @@ func getSyntheticSignature(batch *database.Batch, transaction *database.Transact
 		}
 
 		for _, entry := range sigset.Entries() {
-			state, err := batch.Transaction(entry.SignatureHash[:]).GetState()
+			var state messaging.MessageWithSignature
+			err := batch.Message(entry.SignatureHash).Main().GetAs(&state)
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("load signature %x: %w", entry.SignatureHash[:8], err)
 			}
 
-			sig, ok := state.Signature.(*protocol.PartitionSignature)
+			sig, ok := state.GetSignature().(*protocol.PartitionSignature)
 			if ok {
 				return sig, nil
 			}

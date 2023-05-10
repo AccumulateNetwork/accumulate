@@ -19,7 +19,7 @@ import (
 
 func writeAccountState(t TB, batch *database.Batch, account protocol.Account) {
 	record := batch.Account(account.GetUrl())
-	require.NoError(tb{t}, record.PutState(account))
+	require.NoError(tb{t}, record.Main().Put(account))
 
 	txid := sha256.Sum256([]byte("fake txid"))
 	mainChain, err := record.MainChain().Get()
@@ -50,7 +50,7 @@ func (s *Simulator) CreateAccount(account protocol.Account) {
 		require.True(tb{s}, ok, "Attempted to create an account with no auth")
 
 		var identity *protocol.ADI
-		require.NoError(tb{s}, batch.Account(identityUrl).GetStateAs(&identity))
+		require.NoError(tb{s}, batch.Account(identityUrl).Main().GetAs(&identity))
 
 		*auth = identity.AccountAuth
 		writeAccountState(s, batch, account)
@@ -124,7 +124,7 @@ func (s *Simulator) CreateKeyBook(bookUrl *url.URL, pubKey ...[]byte) {
 func (s *Simulator) CreateKeyPage(bookUrl *url.URL, pubKey ...[]byte) {
 	_ = s.PartitionFor(bookUrl).Database.Update(func(batch *database.Batch) error {
 		var book *protocol.KeyBook
-		require.NoError(tb{s}, batch.Account(bookUrl).GetStateAs(&book))
+		require.NoError(tb{s}, batch.Account(bookUrl).Main().GetAs(&book))
 		pageUrl := protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
 		book.PageCount++
 
@@ -150,7 +150,7 @@ func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.
 	s.Helper()
 	_ = s.PartitionFor(accountUrl).Database.Update(func(batch *database.Batch) error {
 		s.Helper()
-		account, err := batch.Account(accountUrl).GetState()
+		account, err := batch.Account(accountUrl).Main().Get()
 		require.NoError(tb{s}, err)
 		fn(account)
 		writeAccountState(s, batch, account)
@@ -163,7 +163,7 @@ func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
 	var account T
 	_ = sim.PartitionFor(accountUrl).Database.View(func(batch *database.Batch) error {
 		sim.Helper()
-		require.NoError(tb{sim}, batch.Account(accountUrl).GetStateAs(&account))
+		require.NoError(tb{sim}, batch.Account(accountUrl).Main().GetAs(&account))
 		return nil
 	})
 	return account

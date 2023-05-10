@@ -41,7 +41,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	// Record when the transaction is received
 	if status.Received == 0 {
 		status.Received = block.Index
-		err = block.Batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
+		err = block.Batch.Transaction(delivery.Transaction.GetHash()).Status().Put(status)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
