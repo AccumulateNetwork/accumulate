@@ -487,7 +487,7 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		obj, err := batch.Transaction(hash).GetStatus()
+		obj, err := batch.Transaction(hash).Status().Get()
 		require.NoError(s, err)
 		if status(obj) {
 			return x
@@ -526,15 +526,16 @@ func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionSta
 		return nil, nil, nil
 	}
 
+	var state *messaging.TransactionMessage
 	batch := x.Database.Begin(false)
-	synth, err1 := batch.Transaction(txnHash).GetSyntheticTxns()
-	state, err2 := batch.Transaction(txnHash).GetState()
-	status, err3 := batch.Transaction(txnHash).GetStatus()
+	synth, err1 := batch.Transaction(txnHash).Produced().Get()
+	err2 := batch.Message2(txnHash).Main().GetAs(&state)
+	status, err3 := batch.Transaction(txnHash).Status().Get()
 	batch.Discard()
 	require.NoError(s, err1)
 	require.NoError(s, err2)
 	require.NoError(s, err3)
-	return state.Transaction, status, synth.Entries
+	return state.Transaction, status, synth
 }
 
 func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
@@ -684,7 +685,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	} else {
 		_ = x.Database.View(func(batch *database.Batch) error {
 			var ledger *protocol.SystemLedger
-			err := batch.Account(x.Executor.Describe.Ledger()).GetStateAs(&ledger)
+			err := batch.Account(x.Executor.Describe.Ledger()).Main().GetAs(&ledger)
 			switch {
 			case err == nil:
 				x.BlockIndex = ledger.Index + 1
