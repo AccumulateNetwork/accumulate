@@ -18,9 +18,9 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
@@ -230,10 +230,10 @@ func TestBadgerReceipts(t *testing.T) {
 	require.NoError(t, err)
 	defer badger.Close()
 
-	batch := badger.Begin(true)
+	batch := badger.Begin(nil, true)
 	defer batch.Discard()
 
-	manager := testChain(record.KvStore{Store: batch}, 2)
+	manager := testChain(keyvalue.RecordStore{Store: batch}, 2)
 
 	PopulateDatabase(t, manager, 700)
 

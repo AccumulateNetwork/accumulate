@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 func TestRestart(t *testing.T) {
@@ -46,13 +48,13 @@ func TestRestart(t *testing.T) {
 func TestRestartCache(t *testing.T) {
 	rand.Seed(12344)
 	var rh common.RandHash
-	store := memory.New(nil)
-	txn := store.Begin(true)
+	store := new(memdb)
+	txn := store.Begin(nil, true)
 
 	MarkPower := int64(2)
 
 	for i := uint(0); i < 50; i += uint(rand.Int()) % 10 { //
-		MM1 := testChain(record.KvStore{Store: txn}, MarkPower) //                  Create a MerkleManager
+		MM1 := testChain(keyvalue.RecordStore{Store: txn}, MarkPower) //                  Create a MerkleManager
 
 		var cached [][]byte // Using this slice to track the hashes that have been written to MM1
 		//                       but not yet written to disk by MM1.  Calling EndBatch on MM1 will need to
@@ -68,19 +70,19 @@ func TestRestartCache(t *testing.T) {
 			ended := rand.Int()%30 > 0 && len(cached) > 0 // Every so often we are going to write to disk
 			if ended {                                    //   so what is cached is going away too.
 				require.NoError(t, txn.Commit())
-				txn = store.Begin(true)
+				txn = store.Begin(nil, true)
 				cached = cached[:0] //  Clear the cache
-				MM1 = testChain(record.KvStore{Store: txn}, MarkPower)
+				MM1 = testChain(keyvalue.RecordStore{Store: txn}, MarkPower)
 			}
 
 			if j == i {
-				ndb := store.Copy() // This simulates opening a new database later (MM2)
-				nbatch := ndb.Begin(true)
-				MM2 := testChain(record.KvStore{Store: nbatch}, MarkPower) // Then get the highest state stored
-				h1, err := MM1.Head().Get()                                //
-				require.NoError(t, err)                                    //
-				h2, err := MM2.Head().Get()                                //
-				require.NoError(t, err)                                    //
+				ndb := store.Copy()
+				nbatch := ndb.Begin(nil, true)                                   // This simulates opening a new database later (MM2)
+				MM2 := testChain(keyvalue.RecordStore{Store: nbatch}, MarkPower) // Then get the highest state stored
+				h1, err := MM1.Head().Get()                                      //
+				require.NoError(t, err)                                          //
+				h2, err := MM2.Head().Get()                                      //
+				require.NoError(t, err)                                          //
 
 				if h1.Equal(h2) && len(cached) > 0 {
 					t.Error("MM2 should not be the same as MM1 if some hashes are in the cache still")
@@ -99,4 +101,37 @@ func TestRestartCache(t *testing.T) {
 		}
 
 	}
+}
+
+type memdb map[[32]byte]memory.Entry
+
+func (d *memdb) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
+	var commit memory.CommitFunc
+	if writable {
+		commit = func(m map[[32]byte]memory.Entry) error {
+			if *d == nil {
+				*d = m
+				return nil
+			}
+			for k, e := range m {
+				(*d)[k] = e
+			}
+			return nil
+		}
+	}
+	return memory.NewChangeSet(prefix, func(k *record.Key) ([]byte, error) {
+		e, ok := (*d)[k.Hash()]
+		if ok {
+			return e.Value, nil
+		}
+		return nil, errors.NotFound
+	}, commit)
+}
+
+func (d memdb) Copy() memdb {
+	e := make(memdb, len(d))
+	for k, v := range d {
+		e[k] = v
+	}
+	return e
 }

@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -21,9 +21,9 @@ import (
 // const markPower = 8
 
 func TestRecords(t *testing.T) {
-	store := memory.New(nil).Begin(true)
+	store := memory.New(nil).Begin(nil, true)
 	cs := new(changeSet)
-	cs.store = record.KvStore{store}
+	cs.store = keyvalue.RecordStore{Store: store}
 
 	txn1 := new(protocol.Transaction)
 	txn1.Header.Principal = url.MustParse("foo/1")
@@ -44,7 +44,7 @@ func TestRecords(t *testing.T) {
 
 	// Verify
 	cs = new(changeSet)
-	cs.store = record.KvStore{store}
+	cs.store = keyvalue.RecordStore{Store: store}
 
 	// Verify the URL of the union
 	account, err := cs.Entity("foo").Union().Get()

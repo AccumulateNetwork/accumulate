@@ -12,7 +12,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -49,18 +49,17 @@ func (b *Batch) SetObserver(observer Observer) {
 func (d *Database) Begin(writable bool) *Batch {
 	id := atomic.AddInt64(&d.nextBatchId, 1)
 
-	b := NewBatch(fmt.Sprint(id), d.store.Begin(writable), writable, d.logger)
+	b := NewBatch(fmt.Sprint(id), d.store.Begin(nil, writable), writable, d.logger)
 	b.observer = d.observer
 	return b
 }
 
-func NewBatch(id string, store storage.KeyValueTxn, writable bool, logger log.Logger) *Batch {
+func NewBatch(id string, store keyvalue.ChangeSet, writable bool, logger log.Logger) *Batch {
 	b := new(Batch)
 	b.id = id
 	b.writable = writable
 	b.logger.Set(logger)
-	b.kvstore = store
-	b.store = record.KvStore{Store: store}
+	b.store = keyvalue.RecordStore{Store: store}
 	return b
 }
 
@@ -78,15 +77,15 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.parent = b
 	c.logger = b.logger
 	c.store = values.RecordStore{Record: b}
-	c.kvstore = b.kvstore.Begin(c.writable)
 	return c
 }
 
-// DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes an
-// account from the database.
+// DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes
+// an account from the database. It will panic if the batch's store is not a
+// key-value store.
 func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
 	a := record.NewKey("Account", url, "Main")
-	return b.kvstore.Put(a.Hash(), nil)
+	return b.kvs().Put(a, nil)
 }
 
 // View runs the function with a read-only transaction.
@@ -147,14 +146,26 @@ func (b *Batch) Commit() error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	return b.kvstore.Commit()
+	if b.parent != nil {
+		return nil
+	}
+
+	return b.kvs().Commit()
 }
 
 // Discard discards pending writes. Attempting to use the Batch after calling
 // Discard will result in a panic.
 func (b *Batch) Discard() {
 	b.done = true
-	b.kvstore.Discard()
+
+	// If the parent is nil, the store _must_ be a key-value store
+	if b.parent == nil {
+		b.kvs().Discard()
+	}
+}
+
+func (b *Batch) kvs() keyvalue.ChangeSet {
+	return b.store.(interface{ Unwrap() keyvalue.Store }).Unwrap().(keyvalue.ChangeSet)
 }
 
 // Transaction returns an Transaction for the given hash.
