@@ -264,7 +264,7 @@ func (AuthoritySignature) signerIsAuthorized(batch *database.Batch, ctx *Signatu
 	}
 
 	// Load the principal
-	principal, err := batch.Account(ctx.transaction.Header.Principal).GetState()
+	principal, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load principal: %w", err)
 	}

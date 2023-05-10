@@ -155,7 +155,7 @@ func TestAnchorChain(t *testing.T) {
 	// // Check each anchor
 	// // TODO FIX This is broken because the ledger no longer has a list of updates
 	// var ledgerState *protocol.InternalLedger
-	// require.NoError(t, ledger.GetStateAs(&ledgerState))
+	// require.NoError(t, ledger.Main().GetAs(&ledgerState))
 	// rootChain, err := ledger.MinorRootChain().Get()
 	// require.NoError(t, err)
 	// first := rootChain.Height() - int64(len(ledgerState.Updates))
@@ -323,12 +323,12 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	firstEntryHash := firstEntry.Hash()
 
 	n.View(func(batch *database.Batch) {
-		synthIds, err := batch.Transaction(ids[0][:]).GetSyntheticTxns()
+		synthIds, err := batch.Transaction(ids[0][:]).Produced().Get()
 		require.NoError(t, err)
 
 		// Verify the entry hash in the transaction result
-		h := synthIds.Entries[0].Hash()
-		txStatus, err := batch.Transaction(h[:]).GetStatus()
+		h := synthIds[0].Hash()
+		txStatus, err := batch.Transaction(h[:]).Status().Get()
 		require.NoError(t, err)
 		require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
 		txResult := txStatus.Result.(*protocol.WriteDataResult)
@@ -1369,7 +1369,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 
 func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	account := batch.Account(accountUrl)
-	state, err := account.GetState()
+	state, err := account.Main().Get()
 	require.NoError(t, err)
 	fmt.Println("Dump", accountUrl, state.Type())
 	chains, err := account.Chains().Get()
@@ -1392,9 +1392,10 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 			if seen[id32] {
 				continue
 			}
-			txState, err := batch.Transaction(id).GetState()
+			var txState *messaging.TransactionMessage
+			err := batch.Message2(id).Main().GetAs(&txState)
 			require.NoError(t, err)
-			txStatus, err := batch.Transaction(id).GetStatus()
+			txStatus, err := batch.Transaction(id).Status().Get()
 			require.NoError(t, err)
 			if seen[*(*[32]byte)(txState.Transaction.GetHash())] {
 				fmt.Printf("      TX: hash=%X\n", txState.Transaction.GetHash())

@@ -225,6 +225,7 @@
       dataType: protocol.TransactionStatus
       emptyIfMissing: true
       pointer: true
+      private: true
     - name: Produced
       type: state
       dataType: txid
