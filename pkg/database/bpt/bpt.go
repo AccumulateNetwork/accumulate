@@ -8,13 +8,13 @@ package bpt
 
 import (
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // New returns a new BPT.
-func New(parent record.Record, logger log.Logger, store record.Store, key *record.Key, label string) *BPT {
+func New(parent database.Record, logger log.Logger, store database.Store, key *database.Key, label string) *BPT {
 	b := new(BPT)
 	b.logger.Set(logger)
 	b.store = store
@@ -219,8 +219,8 @@ again:
 	goto again
 }
 
-// Resolve implements [record.Record].
-func (b *BPT) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+// Resolve implements [database.Record].
+func (b *BPT) Resolve(key *database.Key) (database.Record, *database.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for bpt")
 	}

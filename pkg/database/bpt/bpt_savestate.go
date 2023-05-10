@@ -50,7 +50,7 @@ func (b *BPT) ForEach(fn func(key record.KeyHash, hash [32]byte) error) error {
 	return nil
 }
 
-// SaveSnapshot
+// SaveSnapshotV1
 // Saves a snapshot of the state of the BVN/DVN.
 // 1) The first thing done is copy the entire BVN and persist it to disk
 // 2) Then all the states are pulled from the database and persisted.
@@ -73,7 +73,7 @@ func (b *BPT) ForEach(fn func(key record.KeyHash, hash [32]byte) error) error {
 //
 //	8  byte                  -- length of value
 //	n  [length of value]byte -- the bytes of the value
-func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, hash [32]byte) ([]byte, error)) error {
+func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key, hash [32]byte) ([]byte, error)) error {
 	err := b.executePending()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -153,8 +153,8 @@ func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, 
 	return nil
 }
 
-// LoadSnapshot restores a snapshot to the BPT
-func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
+// LoadSnapshotV1 restores a snapshot to the BPT
+func LoadSnapshotV1(b *BPT, file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
 	s, err := b.getState().Get()
 	if err != nil {
 		return err
@@ -163,7 +163,7 @@ func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key stora
 		return errors.BadRequest.With("a snapshot can only be read into a new BPT")
 	}
 
-	return ReadSnapshot(file, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+	return ReadSnapshotV1(file, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 		err := b.Insert(key, hash) // Insert the key/hash into the BPT
 		if err != nil {
 			return err
@@ -172,8 +172,8 @@ func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key stora
 	})
 }
 
-// ReadSnapshot reads a snapshot
-func ReadSnapshot(file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
+// ReadSnapshotV1 reads a snapshot
+func ReadSnapshotV1(file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
 	buff := make([]byte, window*(nLen))    //			          buff is a window's worth of key/hash/offset
 	vBuff := make([]byte, 1024*128)        //                    Big enough to load any value. 128k?
 	_, err := io.ReadFull(file, vBuff[:8]) //                    Read number of entries
