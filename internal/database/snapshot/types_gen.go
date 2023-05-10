@@ -46,11 +46,11 @@ type Account struct {
 
 type Chain struct {
 	fieldsSet  []bool
-	Name       string                  `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Type       merkle.ChainType        `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MarkPower  uint64                  `json:"markPower,omitempty" form:"markPower" query:"markPower" validate:"required"`
-	Head       *database.MerkleState   `json:"head,omitempty" form:"head" query:"head" validate:"required"`
-	MarkPoints []*database.MerkleState `json:"markPoints,omitempty" form:"markPoints" query:"markPoints" validate:"required"`
+	Name       string           `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type       merkle.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MarkPower  uint64           `json:"markPower,omitempty" form:"markPower" query:"markPower" validate:"required"`
+	Head       *merkle.State    `json:"head,omitempty" form:"head" query:"head" validate:"required"`
+	MarkPoints []*merkle.State  `json:"markPoints,omitempty" form:"markPoints" query:"markPoints" validate:"required"`
 	extraData  []byte
 }
 
@@ -168,7 +168,7 @@ func (v *Chain) Copy() *Chain {
 	if v.Head != nil {
 		u.Head = (v.Head).Copy()
 	}
-	u.MarkPoints = make([]*database.MerkleState, len(v.MarkPoints))
+	u.MarkPoints = make([]*merkle.State, len(v.MarkPoints))
 	for i, v := range v.MarkPoints {
 		if v != nil {
 			u.MarkPoints[i] = (v).Copy()
@@ -1256,11 +1256,11 @@ func (v *Chain) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.MarkPower = x
 	}
-	if x := new(database.MerkleState); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+	if x := new(merkle.State); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Head = x
 	}
 	for {
-		if x := new(database.MerkleState); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+		if x := new(merkle.State); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 			v.MarkPoints = append(v.MarkPoints, x)
 		} else {
 			break
@@ -1546,11 +1546,11 @@ func (v *Account) MarshalJSON() ([]byte, error) {
 
 func (v *Chain) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Name       string                                   `json:"name,omitempty"`
-		Type       merkle.ChainType                         `json:"type,omitempty"`
-		MarkPower  uint64                                   `json:"markPower,omitempty"`
-		Head       *database.MerkleState                    `json:"head,omitempty"`
-		MarkPoints encoding.JsonList[*database.MerkleState] `json:"markPoints,omitempty"`
+		Name       string                           `json:"name,omitempty"`
+		Type       merkle.ChainType                 `json:"type,omitempty"`
+		MarkPower  uint64                           `json:"markPower,omitempty"`
+		Head       *merkle.State                    `json:"head,omitempty"`
+		MarkPoints encoding.JsonList[*merkle.State] `json:"markPoints,omitempty"`
 	}{}
 	if !(len(v.Name) == 0) {
 		u.Name = v.Name
@@ -1734,11 +1734,11 @@ func (v *Account) UnmarshalJSON(data []byte) error {
 
 func (v *Chain) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Name       string                                   `json:"name,omitempty"`
-		Type       merkle.ChainType                         `json:"type,omitempty"`
-		MarkPower  uint64                                   `json:"markPower,omitempty"`
-		Head       *database.MerkleState                    `json:"head,omitempty"`
-		MarkPoints encoding.JsonList[*database.MerkleState] `json:"markPoints,omitempty"`
+		Name       string                           `json:"name,omitempty"`
+		Type       merkle.ChainType                 `json:"type,omitempty"`
+		MarkPower  uint64                           `json:"markPower,omitempty"`
+		Head       *merkle.State                    `json:"head,omitempty"`
+		MarkPoints encoding.JsonList[*merkle.State] `json:"markPoints,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.Type = v.Type

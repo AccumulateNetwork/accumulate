@@ -34,8 +34,8 @@ type BlockStateSynthTxnEntry struct {
 
 type ReceiptList struct {
 	fieldsSet []bool
-	// MerkleState MerkleState at the beginning of the list.
-	MerkleState      *MerkleState    `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
+	// MerkleState merkle.State at the beginning of the list.
+	MerkleState      *merkle.State   `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
 	Elements         [][]byte        `json:"elements,omitempty" form:"elements" query:"elements" validate:"required"`
 	Receipt          *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	ContinuedReceipt *merkle.Receipt `json:"continuedReceipt,omitempty" form:"continuedReceipt" query:"continuedReceipt" validate:"required"`
@@ -984,7 +984,7 @@ func (v *ReceiptList) UnmarshalBinary(data []byte) error {
 func (v *ReceiptList) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(MerkleState); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+	if x := new(merkle.State); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.MerkleState = x
 	}
 	for {
@@ -1222,7 +1222,7 @@ func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 
 func (v *ReceiptList) MarshalJSON() ([]byte, error) {
 	u := struct {
-		MerkleState      *MerkleState               `json:"merkleState,omitempty"`
+		MerkleState      *merkle.State              `json:"merkleState,omitempty"`
 		Elements         encoding.JsonList[*string] `json:"elements,omitempty"`
 		Receipt          *merkle.Receipt            `json:"receipt,omitempty"`
 		ContinuedReceipt *merkle.Receipt            `json:"continuedReceipt,omitempty"`
@@ -1359,7 +1359,7 @@ func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
 
 func (v *ReceiptList) UnmarshalJSON(data []byte) error {
 	u := struct {
-		MerkleState      *MerkleState               `json:"merkleState,omitempty"`
+		MerkleState      *merkle.State              `json:"merkleState,omitempty"`
 		Elements         encoding.JsonList[*string] `json:"elements,omitempty"`
 		Receipt          *merkle.Receipt            `json:"receipt,omitempty"`
 		ContinuedReceipt *merkle.Receipt            `json:"continuedReceipt,omitempty"`
