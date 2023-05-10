@@ -100,6 +100,9 @@ var goFuncs = template.FuncMap{
 	"errVirtualFieldNotEqual": GoErrVirtualFieldNotEqual,
 
 	"needsCustomJSON": func(typ *Type) bool {
+		if typ.NonJSON {
+			return false
+		}
 		if typ.IsUnion() {
 			return true
 		}
