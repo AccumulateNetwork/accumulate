@@ -15,7 +15,7 @@ import (
 
 func loadSigner(batch *database.Batch, signerUrl *url.URL) (protocol.Signer, error) {
 	// Load signer
-	account, err := batch.Account(signerUrl).GetState()
+	account, err := batch.Account(signerUrl).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load signer: %w", err)
 	}
@@ -72,7 +72,7 @@ func (x *Executor) SignerIsAuthorized(batch *database.Batch, transaction *protoc
 // the principal.
 func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
 	// Load the principal
-	principal, err := batch.Account(transaction.Header.Principal).GetState()
+	principal, err := batch.Account(transaction.Header.Principal).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load principal: %w", err)
 	}
