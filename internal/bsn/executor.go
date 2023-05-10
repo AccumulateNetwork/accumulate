@@ -21,8 +21,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -32,7 +34,7 @@ var executors []func(ExecutorOptions) (messaging.MessageType, MessageExecutor)
 type Executor struct {
 	executors   map[messaging.MessageType]MessageExecutor
 	logger      logging.OptionalLogger
-	store       storage.KeyValueStore
+	store       keyvalue.Beginner
 	eventBus    *events.Bus
 	partitionID string
 }
@@ -40,7 +42,7 @@ type Executor struct {
 type ExecutorOptions struct {
 	PartitionID string
 	Logger      log.Logger
-	Store       storage.KeyValueStore
+	Store       keyvalue.Beginner
 	EventBus    *events.Bus
 }
 
@@ -203,14 +205,14 @@ func (x *Executor) Restore(file ioutil2.SectionReader, validators []*execute.Val
 
 type partitionBeginner struct {
 	logger    log.Logger
-	store     storage.KeyValueStore
+	store     keyvalue.Beginner
 	partition string
 }
 
 func (p *partitionBeginner) SetObserver(observer database.Observer) {}
 
 func (p *partitionBeginner) Begin(writable bool) *database.Batch {
-	s := p.store.BeginWithPrefix(true, p.partition+"·")
+	s := p.store.Begin(record.NewKey(p.partition+"·"), true)
 	b := database.NewBatch(p.partition, s, writable, p.logger)
 	b.SetObserver(execute.NewDatabaseObserver())
 	return b
