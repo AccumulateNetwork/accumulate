@@ -26,7 +26,7 @@ func (t *Transaction) GetHash() []byte {
 	return t.hash
 }
 
-func (t *Transaction) HeaderIs64Bytes() bool {
+func (t *Transaction) headerIs64Bytes() bool {
 	t.calcHash()
 	return t.header64bytes
 }
