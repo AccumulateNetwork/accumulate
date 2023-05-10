@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -33,7 +33,7 @@ func (t BatchTest) Run(name string, run func(t BatchTest)) {
 }
 
 func (t *BatchTest) PutAccount(account protocol.Account) {
-	require.NoError(t, t.Account(account.GetUrl()).PutState(account))
+	require.NoError(t, t.Account(account.GetUrl()).Main().Put(account))
 }
 
 func (t *BatchTest) PutAccountCopy(account protocol.Account) protocol.Account {
@@ -48,7 +48,7 @@ func (t *BatchTest) AddSignature(txnHash []byte, keyEntryIndex uint64, sig proto
 }
 
 func (t *BatchTest) GetTxnStatus(txnHash []byte) *protocol.TransactionStatus {
-	status, err := t.Transaction(txnHash).GetStatus()
+	status, err := t.Transaction(txnHash).Status().Get()
 	require.NoError(t, err)
 	return status
 }

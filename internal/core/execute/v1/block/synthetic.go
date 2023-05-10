@@ -96,7 +96,7 @@ func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Tran
 		return errors.InternalError.WithFormat("compute refund: %w", err)
 	}
 
-	status, err := batch.Transaction(from.GetHash()).GetStatus()
+	status, err := batch.Transaction(from.GetHash()).Status().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load status: %w", err)
 	}
@@ -128,7 +128,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 	var ledger *protocol.SyntheticLedger
 	record := batch.Account(m.Describe.Synthetic())
-	err := record.GetStateAs(&ledger)
+	err := record.Main().GetAs(&ledger)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
@@ -156,7 +156,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	m.logger.Debug("Built synthetic transaction", "module", "synthetic", "txid", logging.AsHex(txn.GetHash()), "destination", dest.String(), "type", body.Type(), "seq-num", destLedger.Produced)
 
 	// Update the ledger
-	err = record.PutState(ledger)
+	err = record.Main().Put(ledger)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 	for i, transaction := range produced {
 		// TODO Can we make this less hacky?
 		record := batch.Transaction(transaction.GetHash())
-		status, err := record.GetStatus()
+		status, err := record.Status().Get()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load synthetic transaction status: %w", err)
 		}
@@ -255,7 +255,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		}
 
 		status.Proof = r
-		err = record.PutStatus(status)
+		err = record.Status().Put(status)
 		if err != nil {
 			return errors.UnknownError.WithFormat("store synthetic transaction status: %w", err)
 		}
@@ -294,13 +294,13 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Store the transaction
 	obj := batch.Transaction(transaction.GetHash())
-	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})
+	err := obj.Main().Put(&database.SigOrTxn{Transaction: transaction})
 	if err != nil {
 		return fmt.Errorf("store transaction: %w", err)
 	}
 
 	// Update the status
-	err = obj.PutStatus(status)
+	err = obj.Status().Put(status)
 	if err != nil {
 		return fmt.Errorf("store status: %w", err)
 	}

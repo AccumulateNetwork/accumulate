@@ -129,7 +129,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	var signer protocol.Signer
-	err = batch.Account(signerUrl).GetStateAs(&signer)
+	err = batch.Account(signerUrl).Main().GetAs(&signer)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load signer: %w", err)
 	}
@@ -140,7 +140,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Load the principal
-	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
+	principal, err := batch.Account(delivery.Transaction.Header.Principal).Main().Get()
 	switch {
 	case err == nil:
 		// Ok
