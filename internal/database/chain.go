@@ -17,7 +17,7 @@ import (
 // Chain manages a Merkle tree (chain).
 type Chain struct {
 	merkle *MerkleManager
-	head   *MerkleState
+	head   *merkle.State
 }
 
 func wrapChain(merkle *MerkleManager) (*Chain, error) {
@@ -80,12 +80,12 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 }
 
 // State returns the state of the chain at the given height.
-func (c *Chain) State(height int64) (*MerkleState, error) {
+func (c *Chain) State(height int64) (*merkle.State, error) {
 	return c.merkle.GetAnyState(height)
 }
 
 // CurrentState returns the current state of the chain.
-func (c *Chain) CurrentState() *MerkleState {
+func (c *Chain) CurrentState() *merkle.State {
 	return c.head
 }
 
@@ -96,7 +96,7 @@ func (c *Chain) HeightOf(hash []byte) (int64, error) {
 
 // Anchor calculates the anchor of the current Merkle state.
 func (c *Chain) Anchor() []byte {
-	return c.head.GetMDRoot()
+	return c.head.Anchor()
 }
 
 // AnchorAt calculates the anchor of the chain at the given height.
@@ -105,7 +105,7 @@ func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ms.GetMDRoot(), nil
+	return ms.Anchor(), nil
 }
 
 // Pending returns the pending roots of the current Merkle state.
