@@ -336,7 +336,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	var account *DataAccount
 	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	require.NoError(t, batch.Account(bobUrl.JoinPath("account")).GetStateAs(&account))
+	require.NoError(t, batch.Account(bobUrl.JoinPath("account")).Main().GetAs(&account))
 	require.True(t, account.RemoveAuthority(bobUrl.JoinPath("book")))
 	require.Len(t, account.Authorities, 1)
 	require.NoError(t, batch.Account(bobUrl.JoinPath("account")).PutState(account))

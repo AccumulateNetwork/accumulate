@@ -156,7 +156,7 @@ func (x UpdateAccountAuth) Execute(st *StateManager, tx *Delivery) (protocol.Tra
 		case *protocol.AddAccountAuthorityOperation:
 			if account.GetUrl().LocalTo(op.Authority) {
 				// If the authority is local, make sure it exists
-				_, err := st.batch.Account(op.Authority).GetState()
+				_, err := st.batch.Account(op.Authority).Main().Get()
 				if err != nil {
 					return nil, err
 				}

@@ -64,7 +64,7 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	}
 
 	// Check the transaction status
-	status, err := batch.Transaction(d.Transaction.GetHash()).GetStatus()
+	status, err := batch.Transaction(d.Transaction.GetHash()).Status().Get()
 	switch {
 	case err != nil:
 		// Unknown error
