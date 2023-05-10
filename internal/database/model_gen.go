@@ -1357,8 +1357,8 @@ type MerkleManager struct {
 	markFreq  int64
 	markMask  int64
 
-	head         values.Value[*MerkleState]
-	states       map[merkleManagerStatesKey]values.Value[*MerkleState]
+	head         values.Value[*merkle.State]
+	states       map[merkleManagerStatesKey]values.Value[*merkle.State]
 	elementIndex map[merkleManagerElementIndexKey]values.Value[uint64]
 	element      map[merkleManagerElementKey]values.Value[[]byte]
 }
@@ -1389,15 +1389,15 @@ func keyForMerkleManagerElement(index uint64) merkleManagerElementKey {
 	return merkleManagerElementKey{index}
 }
 
-func (c *MerkleManager) Head() values.Value[*MerkleState] {
-	return values.GetOrCreate(&c.head, func() values.Value[*MerkleState] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" "+"head", true, values.Struct[MerkleState]())
+func (c *MerkleManager) Head() values.Value[*merkle.State] {
+	return values.GetOrCreate(&c.head, func() values.Value[*merkle.State] {
+		return values.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" "+"head", true, values.Struct[merkle.State]())
 	})
 }
 
-func (c *MerkleManager) States(index uint64) values.Value[*MerkleState] {
-	return values.GetOrCreateMap(&c.states, keyForMerkleManagerStates(index), func() values.Value[*MerkleState] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" "+"states"+" "+strconv.FormatUint(index, 10), false, values.Struct[MerkleState]())
+func (c *MerkleManager) States(index uint64) values.Value[*merkle.State] {
+	return values.GetOrCreateMap(&c.states, keyForMerkleManagerStates(index), func() values.Value[*merkle.State] {
+		return values.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" "+"states"+" "+strconv.FormatUint(index, 10), false, values.Struct[merkle.State]())
 	})
 }
 

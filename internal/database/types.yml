@@ -90,8 +90,8 @@ BlockStateSynthTxnEntry:
 ReceiptList:
   fields:
     - name: MerkleState
-      description: MerkleState at the beginning of the list
-      type: MerkleState
+      description: merkle.State at the beginning of the list
+      type: merkle.State
       marshal-as: reference
       pointer: true
     - name: Elements

@@ -112,7 +112,7 @@ func export(_ *cobra.Command, args []string) {
 				c.Head = factom.Head
 				c.MarkPoints = factom.MarkPoints
 				c.AddEntry(genesisTx)
-				if !bytes.Equal(c.Head.GetMDRoot(), head.GetMDRoot()) {
+				if !bytes.Equal(c.Head.Anchor(), head.Anchor()) {
 					return errors.InternalError.WithFormat("restoring Factom entries changed the anchor")
 				}
 			}
