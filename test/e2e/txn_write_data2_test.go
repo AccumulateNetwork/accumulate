@@ -7,6 +7,8 @@
 package e2e
 
 import (
+	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -205,6 +207,39 @@ func Test65ByteBody(t *testing.T) {
 		build.SignatureForTransaction(txn).
 			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 	require.NoError(t, st.AsError())
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+}
+
+func Test64ByteHeader(t *testing.T) {
+	var timestamp uint64
+
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	aliceX := alice.JoinPath(strings.Repeat("x", 28-len(alice.String())))
+
+	env := MustBuild(t, build.Transaction().For(aliceX).
+		BurnTokens(1, 0).
+		SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	b, err := env.Transaction[0].Header.MarshalBinary()
+	require.NoError(t, err)
+	require.Equal(t, 64, len(b), "Header should be 64 bytes")
+
+	// Initialize
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1DoubleHashEntries
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: aliceX, Balance: *big.NewInt(1), TokenUrl: AcmeUrl()})
+
+	// Execute
+	st := sim.SubmitTxnSuccessfully(env)
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
 }
