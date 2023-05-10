@@ -58,5 +58,5 @@ func (m *MerkleManager) BuildReceipt(r *merkle.Receipt) error {
 	state.Trim()                          // If Pending has any trailing nils, remove them.
 	return r.Build(func(element, height int64) ([]byte, []byte, error) {
 		return m.GetIntermediate(element, height)
-	}, &state.State)
+	}, state)
 }
