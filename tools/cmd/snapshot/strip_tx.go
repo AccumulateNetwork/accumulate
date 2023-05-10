@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -15,7 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -80,7 +80,7 @@ func stripSnapshot(_ *cobra.Command, args []string) {
 
 			var i int
 			start := time.Now()
-			check(pmt.ReadSnapshot(sr, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+			check(bpt.ReadSnapshot(sr, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 				account := new(snapshot.Account)
 				check(account.UnmarshalBinaryFrom(reader))
 
