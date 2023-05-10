@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,7 +7,7 @@
 //go:build !production
 // +build !production
 
-package storage
+package record
 
 var debugKeys = false
 

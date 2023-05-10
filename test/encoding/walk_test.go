@@ -18,11 +18,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -145,7 +145,7 @@ func TestWalkAndReplay(t *testing.T) {
 
 	// Restore snapshot into BSN database
 	logger := acctesting.NewTestLogger(t)
-	store := memory.New(logger.With("module", "storage"))
+	store := memory.New(nil)
 	bsndb := bsn.NewChangeSet(store, logger.With("module", "database"))
 	for _, part := range sim.Partitions() {
 		err := snapshot.Restore(bsndb.Partition(part.ID), ioutil2.NewBuffer(genesis[part.ID]), logger.With("module", "snapshot"))
@@ -211,14 +211,14 @@ func TestWalkAndReplay(t *testing.T) {
 
 type partitionBeginner struct {
 	logger    log.Logger
-	store     storage.Beginner
+	store     keyvalue.Beginner
 	partition string
 }
 
 func (p *partitionBeginner) SetObserver(observer database.Observer) {}
 
 func (p *partitionBeginner) Begin(writable bool) *database.Batch {
-	s := p.store.BeginWithPrefix(true, p.partition+"·")
+	s := p.store.Begin(record.NewKey(p.partition+"·"), true)
 	b := database.NewBatch(p.partition, s, writable, p.logger)
 	b.SetObserver(execute.NewDatabaseObserver())
 	return b

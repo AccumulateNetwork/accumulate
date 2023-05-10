@@ -4,23 +4,39 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package record
+package keyvalue
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-// KvStore is a Store that reads/writes from/to a key-value store.
-type KvStore struct {
-	Store storage.KeyValueTxn
+// Store is a key-value store.
+type Store interface {
+	// Get loads a value.
+	Get(*record.Key) ([]byte, error)
+
+	// Put stores a value.
+	Put(*record.Key, []byte) error
+
+	// Delete deletes a key-value pair.
+	Delete(*record.Key) error
 }
 
-var _ Store = KvStore{}
+// RecordStore implements [database.Store].
+type RecordStore struct {
+	Store Store
+}
+
+var _ database.Store = RecordStore{}
+
+// Unwrap returns the underlying store.
+func (s RecordStore) Unwrap() Store { return s.Store }
 
 // GetValue loads the raw value and calls value.LoadBytes.
-func (s KvStore) GetValue(key *Key, value ValueWriter) error {
-	b, err := s.Store.Get(key.Hash())
+func (s RecordStore) GetValue(key *record.Key, value database.Value) error {
+	b, err := s.Store.Get(key)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -39,7 +55,7 @@ func (s KvStore) GetValue(key *Key, value ValueWriter) error {
 }
 
 // PutValue marshals the value and stores it.
-func (s KvStore) PutValue(key *Key, value ValueReader) error {
+func (s RecordStore) PutValue(key *record.Key, value database.Value) error {
 	// TODO Detect conflicting writes at this level, when multiple batches are
 	// created from the same database
 	v, _, err := value.GetValue()
@@ -52,7 +68,7 @@ func (s KvStore) PutValue(key *Key, value ValueReader) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	err = s.Store.Put(key.Hash(), b)
+	err = s.Store.Put(key, b)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
