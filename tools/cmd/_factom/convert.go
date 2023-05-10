@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -19,13 +19,13 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom"
@@ -365,7 +365,7 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 	chain := new(snapshot.Chain)
 	chain.Name = "main"
 	chain.Type = protocol.ChainTypeTransaction
-	chain.Head = new(database.MerkleState)
+	chain.Head = new(merkle.State)
 	chain.AddEntry(txn.Transaction.GetHash())
 
 	account = new(snapshot.Account)
@@ -395,7 +395,7 @@ func hashChains(a *snapshot.Account) hash.Hasher {
 		if c.Head.Count == 0 {
 			hasher.AddHash(new([32]byte))
 		} else {
-			hasher.AddHash((*[32]byte)(c.Head.GetMDRoot()))
+			hasher.AddHash((*[32]byte)(c.Head.Anchor()))
 		}
 	}
 	return hasher

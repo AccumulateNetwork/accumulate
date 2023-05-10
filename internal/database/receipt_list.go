@@ -39,10 +39,10 @@ func (r *ReceiptList) Validate(opts *merkle.ValidateOptions) bool {
 		if h == nil || len(h) != 32 { //      Make sure every element in Elements
 			return false //                     is a proper hash and not nil
 		} //
-		MS.AddToMerkleTree(append([]byte{}, h...)) // Add each element to the MS
+		MS.Add(append([]byte{}, h...)) // Add each element to the MS
 	} //                                      Once all elements are added, compute
-	anchor := MS.GetMDRoot() //                 the anchor at this point.
-	if len(anchor) == 0 {    //               If an anchor can't be produced, this
+	anchor := MS.Anchor() //                 the anchor at this point.
+	if len(anchor) == 0 { //               If an anchor can't be produced, this
 		return false //                         receiptList fails. (shouldn't happen)
 	}
 
@@ -91,7 +91,7 @@ func (r *ReceiptList) Included(entry []byte) bool {
 // Return a new ReceiptList with at least a MerkleState initialized
 func NewReceiptList() *ReceiptList {
 	r := new(ReceiptList)
-	r.MerkleState = new(MerkleState)
+	r.MerkleState = new(merkle.State)
 	return r
 }
 

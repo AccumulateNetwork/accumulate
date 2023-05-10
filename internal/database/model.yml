@@ -282,11 +282,11 @@
   - name: Head
     type: state
     emptyIfMissing: true
-    dataType: MerkleState
+    dataType: merkle.State
     pointer: true
   - name: States
     type: state
-    dataType: MerkleState
+    dataType: merkle.State
     pointer: true
     parameters:
     - name: Index
