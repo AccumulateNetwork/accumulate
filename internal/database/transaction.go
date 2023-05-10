@@ -63,11 +63,15 @@ func (t *transactionStatus) Put(v *protocol.TransactionStatus) error {
 		return nil
 	}
 
-	// Ensure the principal's BPT entry is up to date
-	var txn *messaging.TransactionMessage
-	err = t.parent.parent.Message(t.parent.hash32()).Main().GetAs(&txn)
+	// Ensure the principal's BPT entry is up to date (if the message is a
+	// transaction)
+	msg, err := t.parent.parent.Message(t.parent.hash32()).Main().Get()
 	if err != nil {
 		return err
+	}
+	txn, ok := msg.(*messaging.TransactionMessage)
+	if !ok {
+		return nil
 	}
 	return t.parent.parent.Account(txn.Transaction.Header.Principal).putBpt()
 }
