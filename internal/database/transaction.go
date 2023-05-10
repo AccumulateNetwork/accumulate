@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -29,62 +30,30 @@ func (r *Transaction) hash() []byte {
 
 // ensureSigner ensures that the transaction's status includes the given signer.
 func (t *Transaction) ensureSigner(signer protocol.Signer2) error {
-	status, err := t.GetStatus()
+	status, err := t.Status().Get()
 	if err != nil {
 		return err
 	}
 
 	status.AddSigner(signer)
-	return t.PutStatus(status)
+	return t.Status().Put(status)
 }
 
-// GetState loads the transaction state.
-func (t *Transaction) GetState() (*SigOrTxn, error) {
-	msg, err := t.parent.Message2(t.hash()).Main().Get()
-	if !errors.Is(err, errors.NotFound) {
-		if err != nil {
-			return nil, err
-		}
-		switch msg := msg.(type) {
-		case messaging.MessageWithTransaction:
-			return &SigOrTxn{
-				Transaction: msg.GetTransaction(),
-			}, nil
-		case messaging.MessageWithSignature:
-			return &SigOrTxn{
-				Signature: msg.GetSignature(),
-				Txid:      msg.GetTxID(),
-			}, nil
-		}
-	}
-
-	v, err := t.Main().Get()
-	if err == nil {
-		return v, nil
-	}
-	if !errors.Is(err, errors.NotFound) {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return nil, errors.NotFound.WithCauseAndFormat(err, "transaction %X not found", t.hash())
+func (t *Transaction) Status() values.Value[*protocol.TransactionStatus] {
+	return &transactionStatus{t.getStatus(), t}
 }
 
-// PutState stores the transaction state.
-func (t *Transaction) PutState(v *SigOrTxn) error {
-	return t.Main().Put(v)
+type transactionStatus struct {
+	values.Value[*protocol.TransactionStatus]
+	parent *Transaction
 }
 
-// GetStatus loads the transaction status.
-func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
-	return t.Status().Get()
-}
-
-// PutStatus stores the transaction status.
-func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
+func (t *transactionStatus) Put(v *protocol.TransactionStatus) error {
 	if v.Result == nil {
 		v.Result = new(protocol.EmptyResult)
 	}
 
-	err := t.Status().Put(v)
+	err := t.Value.Put(v)
 	if err != nil {
 		return err
 	}
@@ -94,12 +63,17 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 		return nil
 	}
 
-	// Ensure the principal's BPT entry is up to date
-	txn, err := t.GetState()
+	// Ensure the principal's BPT entry is up to date (if the message is a
+	// transaction)
+	msg, err := t.parent.parent.Message(t.parent.hash32()).Main().Get()
 	if err != nil {
 		return err
 	}
-	return t.parent.Account(txn.Transaction.Header.Principal).putBpt()
+	txn, ok := msg.(*messaging.TransactionMessage)
+	if !ok {
+		return nil
+	}
+	return t.parent.parent.Account(txn.Transaction.Header.Principal).putBpt()
 }
 
 // RestoreSignatureSets is specifically only to be used to restore a
@@ -166,7 +140,7 @@ func (t *Transaction) AddSystemSignature(net *config.Describe, newSignature prot
 
 func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {
 	var acct protocol.Signer
-	err := t.parent.Account(signer).GetStateAs(&acct)
+	err := t.parent.Account(signer).Main().GetAs(&acct)
 	switch {
 	case err == nil:
 		// If the signer exists, use its version
@@ -186,35 +160,4 @@ func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, 
 	}
 
 	return set, nil
-}
-
-// GetSyntheticTxns loads the IDs of synthetic transactions produced by the
-// transaction.
-func (t *Transaction) GetSyntheticTxns() (*protocol.TxIdSet, error) {
-	v, err := t.Produced().Get()
-	if err != nil {
-		return nil, err
-	}
-	return &protocol.TxIdSet{Entries: v}, nil
-}
-
-// PutSyntheticTxns stores the IDs of synthetic transactions produced by the
-// transaction.
-func (t *Transaction) PutSyntheticTxns(v *protocol.TxIdSet) error {
-	return t.Produced().Put(v.Entries)
-}
-
-// AddSyntheticTxns is a convenience method that calls GetSyntheticTxns, adds
-// the IDs, and calls PutSyntheticTxns.
-func (t *Transaction) AddSyntheticTxns(txids ...*url.TxID) error {
-	set, err := t.GetSyntheticTxns()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return err
-	}
-
-	for _, id := range txids {
-		set.Add(id)
-	}
-
-	return t.PutSyntheticTxns(set)
 }
