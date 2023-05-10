@@ -14,11 +14,12 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var testEntries = [][2][32]byte{
@@ -35,21 +36,24 @@ func must(err error) {
 }
 
 var testRoot = func() [32]byte {
-	bpt := pmt.NewBPTManager(nil)
+	// Manually construct a tree
+	root := new(branch)
+	root.bpt = New(nil, nil, nilStore{}, nil, "")
+	root.Key, _ = nodeKeyAt(0, [32]byte{})
 	for _, e := range testEntries {
-		bpt.InsertKV(e[0], e[1])
+		_, err := root.merge(&leaf{Key: e[0], Hash: e[1]}, true)
+		must(err)
 	}
-	must(bpt.Bpt.Update())
-	return bpt.GetRootHash()
+	return root.getHash()
 }()
 
 // TestInsertDirect inserts values, commits to the key-value store, recreates
 // the model and inserts the last value, and verifies the root hash of the root
 // batch's BPT.
 func TestInsertDirect(t *testing.T) {
-	store := memory.New(nil).Begin(true)
+	store := memory.New(nil).Begin(nil, true)
 	model := new(ChangeSet)
-	model.store = record.KvStore{Store: store}
+	model.store = keyvalue.RecordStore{Store: store}
 
 	n := len(testEntries)
 	for _, e := range testEntries[:n-1] {
@@ -58,7 +62,7 @@ func TestInsertDirect(t *testing.T) {
 	require.NoError(t, model.Commit())
 
 	model = new(ChangeSet)
-	model.store = record.KvStore{Store: store}
+	model.store = keyvalue.RecordStore{Store: store}
 	require.NoError(t, model.BPT().Insert(testEntries[n-1][0], testEntries[n-1][1]))
 	root, err := model.BPT().GetRootHash()
 	require.NoError(t, err)
@@ -69,9 +73,9 @@ func TestInsertDirect(t *testing.T) {
 // child batch, commits the child batch, and verifies the root hash of the root
 // batch's BPT.
 func TestInsertNested(t *testing.T) {
-	store := memory.New(nil).Begin(true)
+	store := memory.New(nil).Begin(nil, true)
 	model := new(ChangeSet)
-	model.store = record.KvStore{Store: store}
+	model.store = keyvalue.RecordStore{Store: store}
 
 	n := len(testEntries)
 	for _, e := range testEntries[:n/2] {
@@ -97,9 +101,9 @@ func TestInsertNested(t *testing.T) {
 // root batch's BPT.
 func TestInsertConcurrent(t *testing.T) {
 	e := testEntries
-	store := memory.New(nil).Begin(true)
+	store := memory.New(nil).Begin(nil, true)
 	model := new(ChangeSet)
-	model.store = record.KvStore{Store: store}
+	model.store = keyvalue.RecordStore{Store: store}
 
 	sub1 := model.Begin()
 	sub2 := model.Begin()
@@ -127,9 +131,9 @@ func TestInsertConcurrent(t *testing.T) {
 }
 
 func TestRange(t *testing.T) {
-	store := memory.New(nil).Begin(true)
+	store := memory.New(nil).Begin(nil, true)
 	model := new(ChangeSet)
-	model.store = record.KvStore{Store: store}
+	model.store = keyvalue.RecordStore{Store: store}
 
 	sub := model.Begin()
 	var rh common.RandHash
@@ -149,7 +153,7 @@ func TestRange(t *testing.T) {
 	require.Greater(t, s.MaxHeight, s.Power)
 
 	model = new(ChangeSet)
-	model.store = record.KvStore{Store: store}
+	model.store = keyvalue.RecordStore{Store: store}
 	var actual [][2][32]byte
 	require.NoError(t, model.BPT().ForEach(func(key storage.Key, hash [32]byte) error {
 		actual = append(actual, [2][32]byte{key, hash})
@@ -163,7 +167,7 @@ func TestRange(t *testing.T) {
 // committed without constructing a tree.
 func TestTreelessCommit(t *testing.T) {
 	kvs := memory.New(nil)
-	b1 := newBPT(nil, nil, record.KvStore{Store: kvs.Begin(true)}, nil, "BPT", "BPT")
+	b1 := newBPT(nil, nil, keyvalue.RecordStore{Store: kvs.Begin(nil, true)}, nil, "BPT", "BPT")
 	require.Empty(t, b1.pending)
 
 	rs := testTreelessCommitRecordStore{t, b1}
@@ -207,3 +211,10 @@ func (s testTreelessCommitRecordStore) PutValue(key *database.Key, value databas
 	s.t.Fatalf("Unexpected call to PutValue")
 	panic("not reached")
 }
+
+type nilStore struct{}
+
+var _ database.Store = nilStore{}
+
+func (nilStore) GetValue(key *record.Key, value database.Value) error { return errors.NotFound }
+func (nilStore) PutValue(key *record.Key, value database.Value) error { panic("no!") }

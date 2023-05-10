@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 const window = uint64(1000) //                               Process this many BPT entries at a time
@@ -27,7 +28,7 @@ var FirstPossibleBptKey = [32]byte{
 	255, 255, 255, 255, 255, 255, 255, 255,
 }
 
-func (b *BPT) ForEach(fn func(key storage.Key, hash [32]byte) error) error {
+func (b *BPT) ForEach(fn func(key record.KeyHash, hash [32]byte) error) error {
 	place := FirstPossibleBptKey
 	NodeCnt := uint64(0) //                                 Recalculate number of nodes
 	for {                //
