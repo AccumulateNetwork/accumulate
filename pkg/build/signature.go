@@ -139,17 +139,17 @@ func (b *SignatureBuilder) adjust64() {
 	}
 
 	// Are the body or header exactly 64 bytes?
-	header, err := b.transaction.Header.MarshalBinary()
-	if err != nil {
-		b.errorf(errors.EncodingError, "marshal header: %w", err)
-		return
-	}
+	// header, err := b.transaction.Header.MarshalBinary()
+	// if err != nil {
+	// 	b.errorf(errors.EncodingError, "marshal header: %w", err)
+	// 	return
+	// }
 	body, err := b.transaction.Body.MarshalBinary()
 	if err != nil {
 		b.errorf(errors.EncodingError, "marshal body: %w", err)
 		return
 	}
-	if len(header) != 64 && len(body) != 64 {
+	if /*len(header) != 64 &&*/ len(body) != 64 {
 		return
 	}
 
@@ -166,13 +166,13 @@ func (b *SignatureBuilder) adjust64() {
 		}
 	}
 
-	if len(header) == 64 {
-		header = append(header, 0)
-		b.transaction.Header = protocol.TransactionHeader{}
-		err = b.transaction.Header.UnmarshalBinary(header)
-		if err != nil {
-			b.errorf(errors.EncodingError, "unmarshal header: %w", err)
-			return
-		}
-	}
+	// if len(header) == 64 {
+	// 	header = append(header, 0)
+	// 	b.transaction.Header = protocol.TransactionHeader{}
+	// 	err = b.transaction.Header.UnmarshalBinary(header)
+	// 	if err != nil {
+	// 		b.errorf(errors.EncodingError, "unmarshal header: %w", err)
+	// 		return
+	// 	}
+	// }
 }
