@@ -61,7 +61,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 
 	var ledger *protocol.SystemLedger
 	u := protocol.DnUrl().JoinPath(protocol.Ledger)
-	err := part.Account(u).GetStateAs(&ledger)
+	err := part.Account(u).Main().GetAs(&ledger)
 	switch {
 	case err == nil:
 		// Database has been initialized, load globals
@@ -239,7 +239,7 @@ func (x *Executor) loadGlobals(partition string, batch *ChangeSet, old *core.Glo
 	g := new(core.GlobalValues)
 	err := g.Load(protocol.PartitionUrl(partition), func(account *url.URL, target interface{}) error {
 		return batch.Partition(partition).View(func(batch *database.Batch) error {
-			return batch.Account(account).GetStateAs(target)
+			return batch.Account(account).Main().GetAs(target)
 		})
 	})
 	if err != nil {

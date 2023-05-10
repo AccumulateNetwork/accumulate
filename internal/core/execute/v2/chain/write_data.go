@@ -32,7 +32,7 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 		return false, nil //nolint:nilerr // Not a lite data address
 	}
 
-	account, err := batch.Account(transaction.Header.Principal).GetState()
+	account, err := batch.Account(transaction.Header.Principal).Main().Get()
 	switch {
 	case err == nil:
 		// Found the account, is it a lite data account?

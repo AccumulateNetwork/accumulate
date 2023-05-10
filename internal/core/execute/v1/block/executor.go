@@ -167,7 +167,7 @@ func newExecutor(opts ExecutorOptions, isGenesis bool, executors ...chain.Transa
 
 	// Load globals if the database has been initialized
 	var ledger *protocol.SystemLedger
-	err := batch.Account(m.Describe.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
+	err := batch.Account(m.Describe.NodeUrl(protocol.Ledger)).Main().GetAs(&ledger)
 	switch {
 	case err == nil:
 		// Database has been initialized
@@ -220,7 +220,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	delivery := new(chain.Delivery)
 	delivery.Transaction = txn
 
-	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
+	err = block.Batch.Transaction(txn.GetHash()).Status().Put(&protocol.TransactionStatus{
 		Initiator: txn.Header.Principal,
 	})
 	if err != nil {
@@ -244,7 +244,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 }
 
 func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
-	_, err := batch.Account(m.Describe.NodeUrl()).GetState()
+	_, err := batch.Account(m.Describe.NodeUrl()).Main().Get()
 	switch {
 	case err == nil:
 		h, err := batch.BPT().GetRootHash()

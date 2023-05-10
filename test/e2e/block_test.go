@@ -78,16 +78,16 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	batch = sim.PartitionFor(aliceUrl).Database.Begin(false)
 	defer batch.Discard()
 	var account *LiteTokenAccount
-	require.NoError(t, batch.Account(aliceUrl).GetStateAs(&account))
+	require.NoError(t, batch.Account(aliceUrl).Main().GetAs(&account))
 	assert.Equal(t, int64(AcmeFaucetAmount*AcmePrecision), account.Balance.Int64())
 
 	// The synthetic transaction should fail
-	synth, err := batch.Transaction(env.Transaction[0].GetHash()).GetSyntheticTxns()
+	synth, err := batch.Transaction(env.Transaction[0].GetHash()).Produced().Get()
 	require.NoError(t, err)
 	batch = sim.PartitionFor(AccountUrl("foo")).Database.Begin(false)
 	defer batch.Discard()
-	h := synth.Entries[0].Hash()
-	status, err := batch.Transaction(h[:]).GetStatus()
+	h := synth[0].Hash()
+	status, err := batch.Transaction(h[:]).Status().Get()
 	require.NoError(t, err)
 	assert.Equal(t, errors.NotFound, status.Code)
 }
@@ -142,7 +142,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	var creditsBefore uint64
 	_ = sim.PartitionFor(aliceUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteIdentity
-		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
+		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).Main().GetAs(&account))
 		creditsBefore = account.CreditBalance
 		return nil
 	})
@@ -207,7 +207,7 @@ func TestCreateRootIdentity(t *testing.T) {
 	// Verify the account is created
 	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *ADI
-		require.NoError(t, batch.Account(alice).GetStateAs(&identity))
+		require.NoError(t, batch.Account(alice).Main().GetAs(&identity))
 		return nil
 	})
 }
@@ -291,7 +291,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	partialChainId, err := ParseLiteDataAddress(liteDataAddress)
 	require.NoError(t, err)
 	var account *LiteDataAccount
-	require.NoError(t, batch.Account(liteDataAddress).GetStateAs(&account))
+	require.NoError(t, batch.Account(liteDataAddress).Main().GetAs(&account))
 	require.Equal(t, liteDataAddress.String(), account.Url.String())
 	require.Equal(t, partialChainId, chainId)
 
@@ -385,7 +385,7 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 	// Verify the account is created
 	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *ADI
-		require.NoError(t, batch.Account(alice).GetStateAs(&identity))
+		require.NoError(t, batch.Account(alice).Main().GetAs(&identity))
 		return nil
 	})
 }
@@ -422,7 +422,7 @@ func TestAddCreditsToNewLiteIdentity(t *testing.T) {
 	// Verify
 	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteIdentity
-		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
+		require.NoError(t, batch.Account(bobUrl).Main().GetAs(&account))
 		require.Equal(t,
 			FormatAmount(1e3*InitialAcmeOracleValue, CreditPrecisionPower),
 			FormatAmount(account.CreditBalance, CreditPrecisionPower))
@@ -462,7 +462,7 @@ func TestSubAdi(t *testing.T) {
 	// Verify
 	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *ADI
-		require.NoError(t, batch.Account(alice.JoinPath("sub")).GetStateAs(&identity))
+		require.NoError(t, batch.Account(alice.JoinPath("sub")).Main().GetAs(&identity))
 		require.Len(t, identity.Authorities, 1)
 		require.Equal(t, "alice.acme/book", identity.Authorities[0].Url.ShortString())
 		return nil
