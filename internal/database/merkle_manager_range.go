@@ -14,7 +14,7 @@ import (
 // returns the list of hashes with indexes indicated by range: (begin,end)
 // begin must be before or equal to end.  The hash with index begin upto
 // but not including end are the hashes returned.  Indexes are zero based, so the
-// first hash in the MerkleState is at 0
+// first hash in the merkle.State is at 0
 func (m *MerkleManager) GetRange(begin, end int64) ([][]byte, error) {
 	head, err := m.Head().Get()
 	if err != nil {

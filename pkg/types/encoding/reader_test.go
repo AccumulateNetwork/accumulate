@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -32,7 +31,7 @@ func TestReadLargeValue(t *testing.T) {
 	}
 	for _, c := range account.Chains {
 		for i := 0; i < 50_000; i++ {
-			s := new(database.MerkleState)
+			s := new(merkle.State)
 			for i := 0; i < 256; i++ {
 				s.HashList = append(s.HashList, make([]byte, 32))
 			}

@@ -33,8 +33,8 @@ func loadMerkleTrees(t *testing.T) (manager, manager2 *MerkleManager) {
 		ms, err := manager.Head().Get()               // Get the current merkle state
 		require.NoError(t, err)                       //
 
-		require.NoError(t, manager2.AddHash(ms.GetMDRoot().Bytes(), false)) // Then anchor the first chain into the second
-		for i := 0; i < int(rh2.GetRandInt64())%10; i++ {                   // Mix some non matching hashes in.
+		require.NoError(t, manager2.AddHash(ms.Anchor(), false)) // Then anchor the first chain into the second
+		for i := 0; i < int(rh2.GetRandInt64())%10; i++ {        // Mix some non matching hashes in.
 			require.NoError(t, manager2.AddHash(rh2.NextList(), false)) // Then anchor the first chain into the second
 		}
 	}

@@ -72,7 +72,7 @@ func (a *observedAccount) hashChains() (hash.Hasher, error) {
 		if chain.CurrentState().Count == 0 {
 			hasher.AddHash(new([32]byte))
 		} else {
-			hasher.AddHash((*[32]byte)(chain.CurrentState().GetMDRoot()))
+			hasher.AddHash((*[32]byte)(chain.CurrentState().Anchor()))
 		}
 	}
 	return hasher, err

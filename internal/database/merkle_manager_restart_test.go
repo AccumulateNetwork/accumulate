@@ -38,7 +38,7 @@ func TestRestart(t *testing.T) {
 				}
 			}
 			for rand.Int()%3 > 0 { //                                       Add 0 or more random hashes
-				require.NoError(t, MM1.AddHash(Sha256(common.Int64Bytes(rand.Int63())), false)) // Generate and add one random hash
+				require.NoError(t, MM1.AddHash(doSha(common.Int64Bytes(rand.Int63())), false)) // Generate and add one random hash
 			}
 			require.NoError(t, MM1.Commit())
 		}

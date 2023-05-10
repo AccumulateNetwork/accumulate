@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/test/testdata"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"gopkg.in/yaml.v3"
@@ -27,17 +28,16 @@ func TestDAGRoot(t *testing.T) {
 			result = append(result, database.Hash(e))
 		}
 		t.Run(fmt.Sprintf("%X", c.Root[:4]), func(t *testing.T) {
-			ms := new(database.MerkleState)
-			ms.InitSha256()
+			ms := new(merkle.State)
 			for _, e := range c.Entries {
-				ms.AddToMerkleTree(e)
+				ms.Add(e)
 			}
 			// Pending may be padded
 			for len(ms.Pending) > len(result) {
 				result = append(result, nil)
 			}
 			require.Equal(t, [][]byte(result), ms.Pending)
-			require.Equal(t, database.Hash(c.Root), ms.GetMDRoot())
+			require.Equal(t, []byte(c.Root), ms.Anchor())
 		})
 	}
 }
