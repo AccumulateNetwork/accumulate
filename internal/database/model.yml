@@ -21,6 +21,7 @@
     type: other
     dataType: bpt.BPT
     constructor: newBPT
+    pointer: true
 
   - name: Account
     type: entity

@@ -12,9 +12,9 @@ import (
 	stderrs "errors"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -131,7 +131,7 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 			}
 
 			var i int
-			err = bpt.ReadSnapshot(sr, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+			err = bpt.ReadSnapshotV1(sr, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 				account := new(Account)
 				err := account.UnmarshalBinaryFrom(reader)
 				if err != nil {
