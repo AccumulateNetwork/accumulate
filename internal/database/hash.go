@@ -56,11 +56,14 @@ type HashFunc func([]byte) Hash
 
 // Combine
 // Hash this hash (the left hash) with the given right hash to produce a new hash
-func (h Hash) Combine(hf HashFunc, right Hash) Hash {
-	return hf(append(h.Copy(), right[:]...)) // Process the left side, i.e. v from this position in c.MD
+func (h Hash) Combine(right Hash) Hash {
+	var b [64]byte
+	copy(b[:], h)
+	copy(b[32:], right)
+	return doSha(b[:]) // Process the left side, i.e. v from this position in c.MD
 }
 
-func Sha256(b []byte) Hash {
+func doSha(b []byte) Hash {
 	h := sha256.Sum256(b)
 	return h[:]
 }
