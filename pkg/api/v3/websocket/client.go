@@ -14,18 +14,16 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"golang.org/x/exp/slog"
 )
 
 // Client is a WebSocket message transport client for API v3.
 type Client struct {
-	logger   logging.OptionalLogger
 	inner    message.Client
 	conn     message.StreamOf[*Message]
 	outgoing chan *Message
@@ -55,7 +53,7 @@ func (c clientConn) Write(msg *Message) error {
 }
 
 // NewClient returns a new WebSocket API client for the given server.
-func NewClient(server, network string, logger log.Logger) (*Client, error) {
+func NewClient(server, network string) (*Client, error) {
 	// Dial the websocket server
 	conn, _, err := websocket.DefaultDialer.Dial(server, nil)
 	if err != nil {
@@ -63,7 +61,7 @@ func NewClient(server, network string, logger log.Logger) (*Client, error) {
 	}
 
 	// Create a new client
-	c := newClient(network, clientConn{conn}, logger)
+	c := newClient(network, clientConn{conn})
 
 	// Close the websocket once the client is done
 	go func() { <-c.Done(); conn.Close() }()
@@ -72,9 +70,8 @@ func NewClient(server, network string, logger log.Logger) (*Client, error) {
 }
 
 // newClient is separate from [NewClient] purely to facilitate testing.
-func newClient(network string, s message.StreamOf[*Message], logger log.Logger) *Client {
+func newClient(network string, s message.StreamOf[*Message]) *Client {
 	c := new(Client)
-	c.logger.Set(logger)
 	c.inner.Transport = &message.RoutedTransport{
 		Network: network,
 		Dialer:  (*clientDialer)(c),
@@ -98,7 +95,7 @@ func newClient(network string, s message.StreamOf[*Message], logger log.Logger) 
 				err := c.conn.Write(msg)
 				if err != nil {
 					if !errors.Is(err, io.EOF) {
-						c.logger.Info("Failed to write to connection", "message", msg, "error", err)
+						slog.Info("Failed to write to connection", "message", msg, "error", err, "module", "api")
 					}
 					return
 				}
@@ -114,7 +111,7 @@ func newClient(network string, s message.StreamOf[*Message], logger log.Logger) 
 			msg, err := c.conn.Read()
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					c.logger.Error("Failed to read from connection", "error", err)
+					slog.Error("Failed to read from connection", "error", err, "module", "api")
 				}
 				return
 			}
@@ -124,7 +121,7 @@ func newClient(network string, s message.StreamOf[*Message], logger log.Logger) 
 			p, ok := c.streams[msg.ID]
 			c.dialMu.RUnlock()
 			if !ok {
-				c.logger.Error("Got message for unknown stream", "message", msg)
+				slog.Error("Got message for unknown stream", "message", msg, "module", "api")
 				continue
 			}
 
@@ -133,7 +130,7 @@ func newClient(network string, s message.StreamOf[*Message], logger log.Logger) 
 				err = p.Write(msg.Message)
 				if err != nil {
 					if !errors.Is(err, io.EOF) {
-						c.logger.Info("Failed to write to stream", "id", msg.ID, "error", err)
+						slog.Info("Failed to write to stream", "id", msg.ID, "error", err, "module", "api")
 					}
 					return
 				}
@@ -248,7 +245,7 @@ func (c *clientDialer) Dial(ctx context.Context, _ multiaddr.Multiaddr) (message
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				c.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
+				slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
 			}
 		}()
 		defer cancel()
@@ -256,7 +253,7 @@ func (c *clientDialer) Dial(ctx context.Context, _ multiaddr.Multiaddr) (message
 			msg, err := p.Read()
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					c.logger.Info("Failed to read from stream", "id", id, "error", err)
+					slog.Info("Failed to read from stream", "id", id, "error", err, "module", "api")
 				}
 				return
 			}

@@ -13,7 +13,6 @@ import (
 	"io"
 	"sort"
 
-	"github.com/tendermint/tendermint/libs/log"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -26,9 +25,9 @@ type set[T any] struct {
 }
 
 // NewSet returns a new set using the given encoder and comparison.
-func newSet[T any](logger log.Logger, store database.Store, key *database.Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
+func newSet[T any](store database.Store, key *database.Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
 	s := &set[T]{}
-	s.value = *newValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
+	s.value = *newValue[[]T](store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
 	s.compare = cmp
 	return s
 }

@@ -135,18 +135,14 @@ func MemoryDatabase(string, int, log.Logger) keyvalue.Beginner {
 }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc {
-	return func(partition string, node int, logger log.Logger) keyvalue.Beginner {
-		if logger != nil {
-			logger = logger.With("module", "storage")
-		}
-
+	return func(partition string, node int, _ log.Logger) keyvalue.Beginner {
 		err := os.MkdirAll(dir, 0700)
 		if err != nil {
 			onErr(err)
 			panic(err)
 		}
 
-		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)), logger)
+		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)))
 		if err != nil {
 			onErr(err)
 			panic(err)

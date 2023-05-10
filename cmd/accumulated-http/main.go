@@ -110,7 +110,6 @@ func run(_ *cobra.Command, args []string) {
 	node, err := p2p.New(p2p.Options{
 		Key:            loadOrGenerateKey(),
 		Network:        args[0],
-		Logger:         logger,
 		Listen:         flag.P2pListen,
 		BootstrapPeers: flag.Peers,
 	})
@@ -246,6 +245,6 @@ func serve(server *http.Server, l net.Listener, secure bool, wg *sync.WaitGroup,
 		} else {
 			err = server.Serve(l)
 		}
-		slog.Error("Server stopped", err, "address", l.Addr())
+		slog.Error("Server stopped", "error", err, "address", l.Addr())
 	}()
 }

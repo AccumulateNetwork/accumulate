@@ -14,7 +14,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	mocks "gitlab.com/accumulatenetwork/accumulate/test/mocks/pkg/api/v3"
@@ -27,8 +26,7 @@ func TestBatchDialer(t *testing.T) {
 	s.EXPECT().Query(mock.Anything, mock.Anything, mock.Anything).Return(expect, nil)
 
 	// Set up the service and handler
-	logger := logging.ConsoleLoggerForTest(t, "info")
-	handler, err := NewHandler(logger, Querier{Querier: s})
+	handler, err := NewHandler(Querier{Querier: s})
 	require.NoError(t, err)
 
 	// Create a dialer that counts dials, creating a pipe and spawning a

@@ -24,7 +24,7 @@ func GetKey(key []byte) (dbKey [32]byte) {
 }
 
 func TestDatabase(t *testing.T) {
-	db, err := New(t.TempDir(), nil)
+	db, err := New(t.TempDir())
 	require.NoError(t, err)
 	defer db.Close()
 	batch := db.Begin(nil, true)
@@ -48,7 +48,7 @@ func TestDatabase(t *testing.T) {
 }
 
 func TestSubBatch(t *testing.T) {
-	db, err := New(t.TempDir(), nil)
+	db, err := New(t.TempDir())
 	require.NoError(t, err)
 	defer db.Close()
 	batch := db.Begin(nil, true)
@@ -78,7 +78,7 @@ func TestPrefix(t *testing.T) {
 	_, err := io.ReadFull(rand.Reader, data)
 	require.NoError(t, err)
 
-	db, err := New(t.TempDir(), nil)
+	db, err := New(t.TempDir())
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -96,7 +96,7 @@ func TestPrefix(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	db, err := New(t.TempDir(), nil)
+	db, err := New(t.TempDir())
 	require.NoError(t, err)
 	defer db.Close()
 

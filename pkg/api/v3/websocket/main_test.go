@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -118,13 +117,12 @@ func TestEvents(t *testing.T) {
 }
 
 func setupTest(t testing.TB, services ...message.Service) *Client {
-	logger := logging.ConsoleLoggerForTest(t, "info")
-	handler, err := NewHandler(logger, services...)
+	handler, err := NewHandler(services...)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	p, q := message.DuplexPipeOf[Message](ctx)
 	go handler.handle(p, ctx, cancel)
-	c := newClient("foo", q, logger)
+	c := newClient("foo", q)
 	go func() { <-c.Done(); cancel() }()
 	return c
 }
