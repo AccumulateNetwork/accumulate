@@ -28,7 +28,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	defer x.BlockTimers.Stop(r)
 
 	// Load the status
-	status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
+	status, err := batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -36,14 +36,14 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// The status txid should not be nil, but fix it if it is *shrug*
 	if status.TxID == nil && delivery.Transaction.Header.Principal != nil {
 		status.TxID = delivery.Transaction.ID()
-		err = batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
+		err = batch.Transaction(delivery.Transaction.GetHash()).Status().Put(status)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
 	// Load the principal
-	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
+	principal, err := batch.Account(delivery.Transaction.Header.Principal).Main().Get()
 	switch {
 	case err == nil, errors.Is(err, storage.ErrNotFound):
 		// Ok
@@ -330,14 +330,14 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 
 	// Update the status
 	db := batch.Transaction(delivery.Transaction.GetHash())
-	status, err := db.GetStatus()
+	status, err := db.Status().Get()
 	if err != nil {
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}
 
 	status.TxID = delivery.Transaction.ID()
 	updateStatus(status)
-	err = db.PutStatus(status)
+	err = db.Status().Put(status)
 	if err != nil {
 		return nil, fmt.Errorf("store transaction status: %w", err)
 	}
@@ -365,7 +365,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 	}
 
 	// Add the user transaction to the principal's list of pending transactions
-	err = batch.Account(delivery.Transaction.Header.Principal).AddPending(delivery.Transaction.ID())
+	err = batch.Account(delivery.Transaction.Header.Principal).Pending().Add(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
@@ -395,7 +395,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 
 	// Remove the transaction from the principal's list of pending transactions
 	record := batch.Account(delivery.Transaction.Header.Principal)
-	err = record.RemovePending(delivery.Transaction.ID())
+	err = record.Pending().Remove(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
@@ -451,7 +451,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	err = batch.Account(delivery.Transaction.Header.Principal).RemovePending(delivery.Transaction.ID())
+	err = batch.Account(delivery.Transaction.Header.Principal).Pending().Remove(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("update pending list: %w", err)
 	}

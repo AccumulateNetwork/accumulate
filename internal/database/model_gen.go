@@ -1146,7 +1146,7 @@ func (c *Transaction) Main() values.Value[*SigOrTxn] {
 	})
 }
 
-func (c *Transaction) Status() values.Value[*protocol.TransactionStatus] {
+func (c *Transaction) getStatus() values.Value[*protocol.TransactionStatus] {
 	return values.GetOrCreate(&c.status, func() values.Value[*protocol.TransactionStatus] {
 		return values.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" "+"status", true, values.Struct[protocol.TransactionStatus]())
 	})
@@ -1179,7 +1179,7 @@ func (c *Transaction) Resolve(key *record.Key) (record.Record, *record.Key, erro
 	case "Main":
 		return c.Main(), key.SliceI(1), nil
 	case "Status":
-		return c.Status(), key.SliceI(1), nil
+		return c.getStatus(), key.SliceI(1), nil
 	case "Produced":
 		return c.Produced(), key.SliceI(1), nil
 	case "Signatures":

@@ -134,7 +134,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 
 	// Load globals if the database has been initialized
 	var ledger *protocol.SystemLedger
-	err := batch.Account(m.Describe.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
+	err := batch.Account(m.Describe.NodeUrl(protocol.Ledger)).Main().GetAs(&ledger)
 	switch {
 	case err == nil:
 		// Database has been initialized

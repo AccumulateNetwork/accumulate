@@ -33,7 +33,7 @@ func LoadStateManager(net *config.Describe, globals *core.GlobalValues, batch *d
 	}
 
 	var signer protocol.Signer
-	err := batch.Account(status.Initiator).GetStateAs(&signer)
+	err := batch.Account(status.Initiator).Main().GetAs(&signer)
 	switch {
 	case err == nil:
 		// Found it

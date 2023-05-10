@@ -144,7 +144,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 	var ledger *protocol.SyntheticLedger
 	record := batch.Account(m.Describe.Synthetic())
-	err = record.GetStateAs(&ledger)
+	err = record.Main().GetAs(&ledger)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
@@ -171,7 +171,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		"type", seq.Message.Type())
 
 	// Update the ledger
-	err = record.PutState(ledger)
+	err = record.Main().Put(ledger)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func putMessageWithStatus(batch *database.Batch, message messaging.Message, stat
 	}
 
 	// Update the status
-	err = batch.Transaction(h[:]).PutStatus(status)
+	err = batch.Transaction(h[:]).Status().Put(status)
 	if err != nil {
 		return fmt.Errorf("store status: %w", err)
 	}

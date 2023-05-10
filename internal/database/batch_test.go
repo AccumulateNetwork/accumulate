@@ -26,7 +26,7 @@ func TestBatchCommit(t *testing.T) {
 	ledger := new(protocol.SystemLedger)
 	ledger.Url = ledgerUrl
 	ledger.Index = 5
-	require.NoError(t, batch.Account(ledgerUrl).PutState(ledger))
+	require.NoError(t, batch.Account(ledgerUrl).Main().Put(ledger))
 	require.NoError(t, batch.Commit())
 
 	// Create a long-running batch
@@ -37,16 +37,16 @@ func TestBatchCommit(t *testing.T) {
 	sub := batch.Begin(true)
 	defer sub.Discard()
 	ledger = nil
-	require.NoError(t, sub.Account(ledgerUrl).GetStateAs(&ledger))
+	require.NoError(t, sub.Account(ledgerUrl).Main().GetAs(&ledger))
 	require.Equal(t, uint64(5), ledger.Index)
 	ledger.Index = 6
-	require.NoError(t, sub.Account(ledgerUrl).PutState(ledger))
+	require.NoError(t, sub.Account(ledgerUrl).Main().Put(ledger))
 	require.NoError(t, sub.Commit())
 
 	// Reload the ledger in a new batch and verify that the update is seen
 	sub = batch.Begin(false)
 	defer sub.Discard()
 	ledger = nil
-	require.NoError(t, sub.Account(ledgerUrl).GetStateAs(&ledger))
+	require.NoError(t, sub.Account(ledgerUrl).Main().GetAs(&ledger))
 	require.Equal(t, uint64(6), ledger.Index)
 }

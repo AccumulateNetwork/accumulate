@@ -183,7 +183,7 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 	for _, partition := range s.S.Partitions() {
 		var txid *url.TxID
 		err := s.S.Database(partition.ID).View(func(batch *database.Batch) error {
-			obj, err := batch.Transaction(hash).GetStatus()
+			obj, err := batch.Transaction(hash).Status().Get()
 			require.NoError(s.TB, err)
 			if !status(obj) {
 				return nil
