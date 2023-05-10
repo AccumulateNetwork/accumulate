@@ -9,6 +9,7 @@ package snapshot
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 // AddEntry adds an entry to the snapshot as if it were added to the chain.
@@ -18,13 +19,13 @@ func (c *Chain) AddEntry(hash []byte) {
 	var markMask = markFreq - 1
 	switch (c.Head.Count + 1) & markMask {
 	case 0:
-		c.Head.AddToMerkleTree(hash)
+		c.Head.Add(hash)
 		c.MarkPoints = append(c.MarkPoints, c.Head.Copy()) // Save the mark point
 	case 1:
 		c.Head.HashList = c.Head.HashList[:0]
 		fallthrough
 	default:
-		c.Head.AddToMerkleTree(hash)
+		c.Head.Add(hash)
 	}
 }
 
@@ -97,7 +98,7 @@ func (s *Chain) RestoreHead(c *database.MerkleManager) error {
 
 func (s *Chain) RestoreMarkPointRange(c *database.MerkleManager, start, end int) error {
 	for _, state := range s.MarkPoints[start:end] {
-		if state == new(database.MerkleState) {
+		if state == new(merkle.State) {
 			continue
 		}
 
@@ -126,7 +127,7 @@ func (s *Chain) RestoreElementIndexFromHead(c *database.MerkleManager) error {
 
 func (s *Chain) RestoreElementIndexFromMarkPoints(c *database.MerkleManager, start, end int) error {
 	for _, state := range s.MarkPoints[start:end] {
-		if state == new(database.MerkleState) {
+		if state == new(merkle.State) {
 			continue
 		}
 
