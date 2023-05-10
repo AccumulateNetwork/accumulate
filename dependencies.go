@@ -9,8 +9,8 @@
 
 package accumulate
 
-// Force `go mod tidy` to include tool dependencies
 import (
+	_ "github.com/FactomProject/factom"
 	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
 	_ "github.com/rinchsan/gosimports/cmd/gosimports"
 	_ "github.com/vektra/mockery/v2"
