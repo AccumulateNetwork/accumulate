@@ -86,11 +86,9 @@ func (s *SimEngine) GetDirectory(account *URL) ([]*URL, error) {
 
 func (s *SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) {
 	for _, partition := range s.Partitions() {
-		var state *database.SigOrTxn
+		var state *messaging.TransactionMessage
 		err := s.Database(partition.ID).View(func(batch *database.Batch) error {
-			var err error
-			state, err = batch.Transaction(hash[:]).GetState()
-			return err
+			return batch.Message(hash).Main().GetAs(&state)
 		})
 		switch {
 		case err == nil:
@@ -138,7 +136,7 @@ func (s *SimEngine) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 	for _, partition := range s.Partitions() {
 		var txid *url.TxID
 		err := s.Database(partition.ID).View(func(batch *database.Batch) error {
-			obj, err := batch.Transaction(hash).GetStatus()
+			obj, err := batch.Transaction(hash).Status().Get()
 			if err != nil {
 				s.session.Abort(err)
 			}

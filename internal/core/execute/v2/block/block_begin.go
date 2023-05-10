@@ -75,7 +75,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	// Load the ledger state
 	ledger := block.Batch.Account(x.Describe.NodeUrl(protocol.Ledger))
 	var ledgerState *protocol.SystemLedger
-	err = ledger.GetStateAs(&ledgerState)
+	err = ledger.Main().GetAs(&ledgerState)
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
@@ -98,7 +98,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	ledgerState.AcmeBurnt = *big.NewInt(0)
 	ledgerState.Anchor = nil
 
-	err = ledger.PutState(ledgerState)
+	err = ledger.Main().Put(ledgerState)
 	if err != nil {
 		return nil, fmt.Errorf("cannot write ledger: %w", err)
 	}
@@ -137,7 +137,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 
 	var signer protocol.Signer
 	signerUrl := x.Describe.OperatorsPage()
-	err = batch.Account(signerUrl).GetStateAs(&signer)
+	err = batch.Account(signerUrl).Main().GetAs(&signer)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 
 	var da *protocol.DataAccount
 	va := batch.Account(dataAccountUrl)
-	err = va.GetStateAs(&da)
+	err = va.Main().GetAs(&da)
 	if err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 func (x *Executor) finalizeBlock(block *Block) error {
 	// Load the ledger state
 	var ledger *protocol.SystemLedger
-	err := block.Batch.Account(x.Describe.Ledger()).GetStateAs(&ledger)
+	err := block.Batch.Account(x.Describe.Ledger()).Main().GetAs(&ledger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
@@ -211,7 +211,7 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 
 	// Load the anchor ledger state
 	var anchorLedger *protocol.AnchorLedger
-	err := block.Batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	err := block.Batch.Account(x.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load anchor ledger: %w", err)
 	}

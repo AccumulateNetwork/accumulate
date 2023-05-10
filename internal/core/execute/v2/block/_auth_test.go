@@ -98,7 +98,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	sig.PublicKey = []byte{1}
 
 	// Add a bogus initiator
-	_ = t.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{Initiator: protocol.AccountUrl("x")})
+	_ = t.Transaction(txn.GetHash()).Status().Put(&protocol.TransactionStatus{Initiator: protocol.AccountUrl("x")})
 
 	// Singlesig unsigned
 	t.Run("Unsigned", func(t BatchTest) {
@@ -355,7 +355,7 @@ func TestAddAuthority(tt *testing.T) {
 		require.NoError(t, err)
 
 		// Transaction is not ready
-		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).Status().Get()
 		require.NoError(t, err)
 		ready, err := execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
@@ -369,7 +369,7 @@ func TestAddAuthority(tt *testing.T) {
 		require.NoError(t, err)
 
 		// Transaction is now ready
-		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).Status().Get()
 		require.NoError(t, err)
 		ready, err = execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
@@ -394,7 +394,7 @@ func TestAddAuthority(tt *testing.T) {
 		require.NoError(t, err)
 
 		// Transaction is not ready
-		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).Status().Get()
 		require.NoError(t, err)
 		ready, err := execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
@@ -408,7 +408,7 @@ func TestAddAuthority(tt *testing.T) {
 		require.NoError(t, err)
 
 		// Transaction is now ready
-		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).Status().Get()
 		require.NoError(t, err)
 		ready, err = execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
@@ -434,7 +434,7 @@ func TestAddAuthority(tt *testing.T) {
 		require.NoError(t, err)
 
 		// Transaction is not ready
-		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).Status().Get()
 		require.NoError(t, err)
 		ready, err := execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
@@ -448,7 +448,7 @@ func TestAddAuthority(tt *testing.T) {
 		require.NoError(t, err)
 
 		// Transaction is now ready
-		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).Status().Get()
 		require.NoError(t, err)
 		ready, err = execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
@@ -519,7 +519,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 		defer t.Discard()
 
 		var account *protocol.TokenAccount
-		require.NoError(t, t.Account(alice.JoinPath("tokens")).GetStateAs(&account))
+		require.NoError(t, t.Account(alice.JoinPath("tokens")).Main().GetAs(&account))
 		account = t.PutAccountCopy(account).(*protocol.TokenAccount)
 		a, _ := account.AddAuthority(protocol.AccountUrl("foo"))
 		a.Disabled = true

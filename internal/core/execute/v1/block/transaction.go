@@ -27,7 +27,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	defer x.BlockTimers.Stop(r)
 
 	// Load the status
-	status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
+	status, err := batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -35,14 +35,14 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// The status txid should not be nil, but fix it if it is *shrug*
 	if status.TxID == nil && delivery.Transaction.Header.Principal != nil {
 		status.TxID = delivery.Transaction.ID()
-		err = batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
+		err = batch.Transaction(delivery.Transaction.GetHash()).Status().Put(status)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
 	// Load the principal
-	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
+	principal, err := batch.Account(delivery.Transaction.Header.Principal).Main().Get()
 	switch {
 	case err == nil, errors.Is(err, storage.ErrNotFound):
 		// Ok
@@ -280,7 +280,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 
 	// Load the ledger
 	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.Synthetic()).Main().GetAs(&ledger)
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
 	}
@@ -345,7 +345,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 
 	// Load the ledger
 	var ledger *protocol.AnchorLedger
-	err := batch.Account(x.Describe.AnchorPool()).GetStateAs(&ledger)
+	err := batch.Account(x.Describe.AnchorPool()).Main().GetAs(&ledger)
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load anchor ledger: %w", err)
 	}
@@ -383,20 +383,20 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Delivery, state *chain.ProcessTransactionState, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
 	// Store the transaction state (without signatures)
 	db := batch.Transaction(delivery.Transaction.GetHash())
-	err := db.PutState(&database.SigOrTxn{Transaction: delivery.Transaction})
+	err := db.Main().Put(&database.SigOrTxn{Transaction: delivery.Transaction})
 	if err != nil {
 		return nil, fmt.Errorf("store transaction: %w", err)
 	}
 
 	// Update the status
-	status, err := db.GetStatus()
+	status, err := db.Status().Get()
 	if err != nil {
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}
 
 	status.TxID = delivery.Transaction.ID()
 	updateStatus(status)
-	err = db.PutStatus(status)
+	err = db.Status().Put(status)
 	if err != nil {
 		return nil, fmt.Errorf("store transaction status: %w", err)
 	}
@@ -415,7 +415,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	var partLedger *protocol.PartitionSyntheticLedger
 	if delivery.Transaction.Body.Type().IsSystem() {
 		var anchorLedger *protocol.AnchorLedger
-		err = batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+		err = batch.Account(x.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
 		}
@@ -423,7 +423,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 		partLedger = anchorLedger.Anchor(delivery.SourceNetwork)
 	} else {
 		var synthLedger *protocol.SyntheticLedger
-		err = batch.Account(x.Describe.Synthetic()).GetStateAs(&synthLedger)
+		err = batch.Account(x.Describe.Synthetic()).Main().GetAs(&synthLedger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load synthetic transaction ledger: %w", err)
 		}
@@ -439,7 +439,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	// The ledger's Delivered number needs to be updated if the transaction
 	// succeeds or fails
 	if partLedger.Add(!status.Pending(), delivery.SequenceNumber, delivery.Transaction.ID()) {
-		err = batch.Account(ledger.GetUrl()).PutState(ledger)
+		err = batch.Account(ledger.GetUrl()).Main().Put(ledger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("store synthetic transaction ledger: %w", err)
 		}
@@ -469,7 +469,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 
 	// Add the user transaction to the principal's list of pending transactions
 	if delivery.Transaction.Body.Type().IsUser() {
-		err = batch.Account(delivery.Transaction.Header.Principal).AddPending(delivery.Transaction.ID())
+		err = batch.Account(delivery.Transaction.Header.Principal).Pending().Add(delivery.Transaction.ID())
 		if err != nil {
 			return nil, nil, fmt.Errorf("store pending list: %w", err)
 		}
@@ -484,7 +484,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 
 	x.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "anchor", logging.AsHex(status.Proof.Anchor).Slice(0, 4), "module", "synthetic")
 
-	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(status.Proof.Anchor), delivery.Transaction.ID())
+	err = batch.Account(net.Ledger()).SyntheticForAnchor(*(*[32]byte)(status.Proof.Anchor)).Add(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, errors.UnknownError.Wrap(err)
 	}
@@ -514,7 +514,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 
 	// Remove the transaction from the principal's list of pending transactions
 	record := batch.Account(delivery.Transaction.Header.Principal)
-	err = record.RemovePending(delivery.Transaction.ID())
+	err = record.Pending().Remove(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
@@ -567,7 +567,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	err = batch.Account(delivery.Transaction.Header.Principal).RemovePending(delivery.Transaction.ID())
+	err = batch.Account(delivery.Transaction.Header.Principal).Pending().Remove(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("update pending list: %w", err)
 	}
