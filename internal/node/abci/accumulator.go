@@ -437,12 +437,12 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		resp.Log += fmt.Sprintf("envelope(%d/%s) %v;", i, result.Code.String(), result.Error)
 	}
 
-	// If a transaction header or body is 64 bytes, the batch fails
+	// If a transaction body is 64 bytes, the batch fails
 	if resp.Code == abci.CodeTypeOK {
 		for i, txn := range txns {
-			if txn.HeaderIs64Bytes() || txn.BodyIs64Bytes() {
+			if txn.BodyIs64Bytes() {
 				resp.Code = 1
-				resp.Log += fmt.Sprintf("envelope(%d) transaction has 64 byte header or body;", i)
+				resp.Log += fmt.Sprintf("envelope(%d) transaction has 64 byte body;", i)
 			}
 		}
 	}
