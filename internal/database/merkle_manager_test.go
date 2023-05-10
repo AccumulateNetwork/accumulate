@@ -16,17 +16,19 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func begin() record.KvStore {
+func begin() database.Store {
 	store := memory.New(nil)
-	txn := store.Begin(true)
-	return record.KvStore{Store: txn}
+	txn := store.Begin(nil, true)
+	return keyvalue.RecordStore{Store: txn}
 }
 
-func testChain(store record.KvStore, markPower int64, key ...interface{}) *MerkleManager {
+func testChain(store record.Store, markPower int64, key ...interface{}) *MerkleManager {
 	return NewChain(nil, store, record.NewKey(key...), markPower, merkle.ChainTypeUnknown, "chain", "chain")
 }
 

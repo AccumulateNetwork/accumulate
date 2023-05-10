@@ -13,11 +13,11 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -47,13 +47,13 @@ func TestSimulator(t *testing.T) {
 		}},
 	}
 
-	var bsnStore *memory.DB
-	openDb := func(partition string, node int, logger log.Logger) storage.KeyValueStore {
+	var bsnStore *memory.Database
+	openDb := func(partition string, node int, logger log.Logger) keyvalue.Beginner {
 		if partition == net.Bsn.Id && node == 0 {
-			bsnStore = memory.New(logger)
+			bsnStore = memory.New(nil)
 			return bsnStore
 		}
-		return memory.New(logger)
+		return memory.New(nil)
 	}
 
 	// Initialize
