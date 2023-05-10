@@ -135,7 +135,7 @@ func (c *Chain2) Commit() error {
 	return err
 }
 
-func (c *Chain2) Head() values.Value[*MerkleState] {
+func (c *Chain2) Head() values.Value[*merkle.State] {
 	return c.inner.Head()
 }
 
