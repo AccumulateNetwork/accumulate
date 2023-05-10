@@ -17,15 +17,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -121,11 +121,11 @@ func (d *Daemon) startSummary() error {
 }
 
 func (d *Daemon) startSummaryApp() (types.Application, error) {
-	var store storage.KeyValueStore
+	var store keyvalue.Beginner
 	var err error
 	switch d.Config.Accumulate.Storage.Type {
 	case config.MemoryStorage:
-		store = memory.New(d.Logger.With("module", "storage"))
+		store = memory.New(nil)
 	case config.BadgerStorage:
 		store, err = badger.New(config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Storage.Path), d.Logger.With("module", "storage"))
 	default:
