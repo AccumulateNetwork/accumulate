@@ -9,6 +9,7 @@ package snapshot
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 )
 
@@ -156,7 +157,7 @@ func (a *Account) ConvertOldChains(markPower int64) {
 		c.Name = oc.Name
 		c.Type = oc.Type
 		c.MarkPower = uint64(markPower)
-		c.Head = new(database.MerkleState)
+		c.Head = new(merkle.State)
 		c.Head.Count = int64(oc.Count)
 		c.Head.Pending = oc.Pending
 

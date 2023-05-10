@@ -67,11 +67,11 @@ Chain:
     - name: MarkPower
       type: uint
     - name: Head
-      type: database.MerkleState
+      type: merkle.State
       marshal-as: reference
       pointer: true
     - name: MarkPoints
-      type: database.MerkleState
+      type: merkle.State
       marshal-as: reference
       pointer: true
       repeatable: true
