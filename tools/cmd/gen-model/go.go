@@ -115,7 +115,10 @@ func recordType(r typegen.Record, noInterface bool) string {
 	case *typegen.ChainRecord:
 		return "*database.Chain"
 	case *typegen.OtherRecord:
-		return "*" + r.DataType
+		if r.Pointer {
+			return "*" + r.DataType
+		}
+		return r.DataType
 	case *typegen.EntityRecord:
 		if !noInterface && r.Interface {
 			return r.FullName()
