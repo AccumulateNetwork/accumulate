@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -62,12 +62,12 @@ func TestStateRelaunch(t *testing.T) {
 	sender := acctesting.AcmeLiteAddressStdPriv(senderKey)
 
 	// Create databases
-	stores := map[string]storage.KeyValueStore{}
+	stores := map[string]keyvalue.Beginner{}
 	for i := 0; i < bvnCount; i++ {
 		stores[fmt.Sprintf("%s-%d", Directory, i)] = memory.New(nil)
 		stores[fmt.Sprintf("BVN%d-0", i)] = memory.New(nil)
 	}
-	openDb := func(partition string, node int, logger log.Logger) storage.KeyValueStore {
+	openDb := func(partition string, node int, logger log.Logger) keyvalue.Beginner {
 		return stores[fmt.Sprintf("%s-%d", partition, node)]
 	}
 

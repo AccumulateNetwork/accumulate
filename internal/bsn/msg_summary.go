@@ -159,7 +159,7 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 		"hash", logging.AsHex(msg.StateTreeHash).Slice(0, 4),
 		"updates", len(msg.RecordUpdates))
 
-	storeTxn := batch.kvstore.Begin(true)
+	storeTxn := batch.kvstore.Begin(nil, true)
 	defer func() { commitOrDiscard(storeTxn, &err) }()
 
 	batch = NewChangeSet(storeTxn, ctx.executor.logger)

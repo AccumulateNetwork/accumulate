@@ -9,9 +9,11 @@ package encoding
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 
@@ -19,11 +21,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -43,14 +45,14 @@ func TestGenerateDbTestdata(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 
 	logger := acctesting.NewTestLogger(t)
-	store := memory.New(logger)
+	store := memory.New(nil)
 	db := database.New(store, logger)
 
 	// Initialize
 	sim := NewSim(t,
-		func(partition string, _ int, logger log.Logger) storage.KeyValueStore {
+		func(partition string, _ int, logger log.Logger) keyvalue.Beginner {
 			if strings.EqualFold(partition, protocol.Directory) {
-				return memory.New(logger)
+				return memory.New(nil)
 			}
 			return store
 		},
@@ -76,15 +78,30 @@ func TestGenerateDbTestdata(t *testing.T) {
 		Txn(st.TxID).Produced().Succeeds())
 
 	// Export
-	f, err := os.Create("../testdata/database.json")
+	exported, err := store.Export()
+	require.NoError(t, err)
+	sort.Slice(exported, func(i, j int) bool {
+		// This is totally unnecessary but makes the output look good
+		a, b := exported[i], exported[j]
+		return a.Key.Compare(b.Key) < 0
+	})
+	f, err := os.Create("../testdata/database-v1.0.0.json")
 	require.NoError(t, err)
 	defer f.Close()
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	err = enc.Encode(store)
-	require.NoError(t, err)
+	for i, e := range exported {
+		b, err := json.Marshal(e)
+		require.NoError(t, err)
+		switch i {
+		case 0:
+			fmt.Fprintf(f, "[%s,\n", b)
+		default:
+			fmt.Fprintf(f, " %s,\n", b)
+		case len(exported) - 1:
+			fmt.Fprintf(f, " %s]", b)
+		}
+	}
 
-	f, err = os.Create("../testdata/database.snapshot")
+	f, err = os.Create("../testdata/database-v1.0.0.snapshot")
 	require.NoError(t, err)
 	defer f.Close()
 	batch := db.Begin(false)
@@ -98,10 +115,11 @@ func TestGenerateDbTestdata(t *testing.T) {
 func TestDbEncoding(t *testing.T) {
 	b, err := os.ReadFile("../testdata/database-v1.0.0.json")
 	require.NoError(t, err)
+	var entries []memory.Entry
+	require.NoError(t, json.Unmarshal(b, &entries))
 	logger := acctesting.NewTestLogger(t)
-	store := memory.New(logger)
-	err = store.UnmarshalJSON(b)
-	require.NoError(t, err)
+	store := memory.New(nil)
+	require.NoError(t, store.Import(entries))
 
 	db := database.New(store, logger)
 	// db.SetObserver(block.NewDatabaseObserver())
