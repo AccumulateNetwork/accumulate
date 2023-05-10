@@ -7,6 +7,6 @@
 //go:build production
 // +build production
 
-package storage
+package record
 
 const debugKeys = false
