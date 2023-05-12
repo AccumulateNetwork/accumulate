@@ -892,9 +892,9 @@ func TestMessageCompat(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
+		simulator.UseABCI,
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])

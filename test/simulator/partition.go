@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -65,14 +66,14 @@ func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
 	return p
 }
 
-func newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
+func (o *Options) newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 	p := newPartition(s, protocol.PartitionInfo{
 		ID:   init.Id,
 		Type: protocol.PartitionTypeBlockValidator,
 	})
 
 	for _, node := range init.Nodes {
-		n, err := newNode(s, p, len(p.nodes), node)
+		n, err := o.newNode(s, p, len(p.nodes), node)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -81,15 +82,15 @@ func newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 	return p, nil
 }
 
-func newDn(s *Simulator, init *accumulated.NetworkInit) (*Partition, error) {
+func (o *Options) newDn(s *Simulator) (*Partition, error) {
 	p := newPartition(s, protocol.PartitionInfo{
 		ID:   protocol.Directory,
 		Type: protocol.PartitionTypeDirectory,
 	})
 
-	for _, init := range init.Bvns {
+	for _, init := range o.network.Bvns {
 		for _, init := range init.Nodes {
-			n, err := newNode(s, p, len(p.nodes), init)
+			n, err := o.newNode(s, p, len(p.nodes), init)
 			if err != nil {
 				return nil, errors.UnknownError.Wrap(err)
 			}
@@ -99,14 +100,14 @@ func newDn(s *Simulator, init *accumulated.NetworkInit) (*Partition, error) {
 	return p, nil
 }
 
-func newBsn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
+func (o *Options) newBsn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 	p := newPartition(s, protocol.PartitionInfo{
 		ID:   init.Id,
 		Type: protocol.PartitionTypeBlockSummary,
 	})
 
 	for _, node := range init.Nodes {
-		n, err := newNode(s, p, len(p.nodes), node)
+		n, err := o.newNode(s, p, len(p.nodes), node)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -295,12 +296,12 @@ func (p *Partition) loadBlockIndex() {
 		return
 	}
 
-	b, _, err := p.nodes[0].executor.LastBlock()
+	res, err := p.nodes[0].app.Info(&InfoRequest{})
 	if err != nil {
 		panic(err)
 	}
-	p.blockIndex = b.Index
-	p.blockTime = b.Time
+	p.blockIndex = res.LastBlock.Index
+	p.blockTime = res.LastBlock.Time
 }
 
 func (p *Partition) execute() error {
@@ -330,10 +331,11 @@ func (p *Partition) execute() error {
 	for i, n := range p.nodes {
 		var err error
 		blocks[i], err = n.beginBlock(execute.BlockParams{
-			Context:  context.Background(),
-			Index:    p.blockIndex,
-			Time:     p.blockTime,
-			IsLeader: i == leader,
+			Context:    context.Background(),
+			Index:      p.blockIndex,
+			Time:       p.blockTime,
+			IsLeader:   i == leader,
+			CommitInfo: new(abcitypes.CommitInfo),
 		})
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)

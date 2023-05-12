@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -26,8 +25,8 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 // NewSim creates a simulator with the given database, network initialization,
 // and snapshot function and calls NewSimWith.
-func NewSim(tb testing.TB, database simulator.OpenDatabaseFunc, init *accumulated.NetworkInit, snapshot simulator.SnapshotFunc) *Sim {
-	s, err := simulator.New(acctesting.NewTestLogger(tb), database, init, snapshot)
+func NewSim(tb testing.TB, opts ...simulator.Option) *Sim {
+	s, err := simulator.New(acctesting.NewTestLogger(tb), opts...)
 	require.NoError(tb, err)
 	return NewSimWith(tb, s)
 }

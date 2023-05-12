@@ -49,7 +49,7 @@ type Node struct {
 	privValKey []byte
 
 	globals  atomic.Value
-	executor execute.Executor
+	app      Application
 	apiV2    *apiv2.JrpcMethods
 	clientV2 *client.Client
 	querySvc api.Querier
@@ -59,7 +59,7 @@ type Node struct {
 	validatorUpdates []*validatorUpdate
 }
 
-func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (*Node, error) {
+func (o *Options) newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (*Node, error) {
 	n := new(Node)
 	n.id = node
 	n.mu = new(sync.Mutex)
@@ -90,9 +90,9 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	switch n.partition.Type {
 	case protocol.PartitionTypeDirectory,
 		protocol.PartitionTypeBlockValidator:
-		err = n.initValidator()
+		err = n.initValidator(o)
 	case protocol.PartitionTypeBlockSummary:
-		err = n.initSummary()
+		err = n.initSummary(o)
 	default:
 		err = errors.BadRequest.WithFormat("unknown partition type %v", n.partition.Type)
 	}
@@ -111,7 +111,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	return n, nil
 }
 
-func (n *Node) initValidator() error {
+func (n *Node) initValidator(o *Options) error {
 	store := n.simulator.database(n.partition.ID, n.id, n.logger)
 	n.database = database.New(store, n.logger)
 
@@ -175,8 +175,11 @@ func (n *Node) initValidator() error {
 	}
 
 	// Create an executor
-	var err error
-	n.executor, err = execute.NewExecutor(execOpts)
+	exec, err := execute.NewExecutor(execOpts)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	n.app, err = o.application(n, exec)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -247,15 +250,18 @@ func (n *Node) initCollector() error {
 	return nil
 }
 
-func (n *Node) initSummary() error {
-	var err error
-	n.executor, err = bsn.NewExecutor(bsn.ExecutorOptions{
+func (n *Node) initSummary(o *Options) error {
+	exec, err := bsn.NewExecutor(bsn.ExecutorOptions{
 		PartitionID: n.partition.ID,
 		Logger:      n.logger,
 		Store:       n.simulator.database(n.partition.ID, n.id, n.logger),
 		EventBus:    n.eventBus,
 	})
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 
+	n.app, err = o.application(n, exec)
 	return errors.UnknownError.Wrap(err)
 }
 
@@ -290,48 +296,31 @@ func (n *Node) willChangeGlobals(e events.WillChangeGlobals) error {
 }
 
 func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
-	// Check if initialization is required
-	_, root, err := n.executor.LastBlock()
-	switch {
-	case err == nil:
-		return root[:], nil
-	case errors.Is(err, errors.NotFound):
-		// Ok
-	default:
-		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
-	}
-
-	// Restore the snapshot
-	_, err = n.executor.Restore(snapshot, nil)
+	res, err := n.app.Init(&InitRequest{Snapshot: snapshot})
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
-
-	_, root, err = n.executor.LastBlock()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
-	}
-	return root[:], nil
+	return res.Hash, nil
 }
 
 func (n *Node) checkTx(envelope *messaging.Envelope, new bool) ([]*protocol.TransactionStatus, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	s, err := n.executor.Validate(envelope, !new)
+	res, err := n.app.Check(&CheckRequest{Envelope: envelope, New: new})
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("check messages: %w", err)
+		return nil, errors.UnknownError.WithFormat("check envelope: %w", err)
 	}
-	return s, nil
+	return res.Results, nil
 }
 
 func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	block, err := n.executor.Begin(params)
+	res, err := n.app.Begin(&BeginRequest{Params: params})
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("begin block: %w", err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	return block, nil
+	return res.Block, nil
 }
 
 func (n *Node) deliverTx(block execute.Block, envelopes []*messaging.Envelope) ([]*protocol.TransactionStatus, error) {
@@ -375,8 +364,11 @@ func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 		state.Discard()
 
 		// Get the old root
-		_, root, err := n.executor.LastBlock()
-		return root[:], errors.UnknownError.Wrap(err)
+		res, err := n.app.Info(&InfoRequest{})
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		return res.LastHash[:], nil
 	}
 
 	// Commit
@@ -397,6 +389,9 @@ func (n *Node) commit(state execute.BlockState) ([]byte, error) {
 	}
 
 	// Get the root
-	_, hash, err := n.executor.LastBlock()
-	return hash[:], err
+	res, err := n.app.Info(&InfoRequest{})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return res.LastHash[:], nil
 }

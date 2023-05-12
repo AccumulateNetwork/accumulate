@@ -49,7 +49,7 @@ func TestExecutorConsistency(t *testing.T) {
 	sim, err := simulator.New(
 		acctesting.NewTestLogger(t),
 		simulator.MemoryDatabase,
-		testData.Network,
+		simulator.WithNetwork(testData.Network),
 		simulator.SnapshotMap(testData.Genesis),
 	)
 	require.NoError(t, err)

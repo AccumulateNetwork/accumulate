@@ -37,7 +37,7 @@ func TestSimulator(t *testing.T) {
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	g.ExecutorVersion = ExecutorVersionLatest
 
-	net := simulator.SimpleNetwork(t.Name(), 1, 1)
+	net := simulator.NewSimpleNetwork(t.Name(), 1, 1)
 	net.Bsn = &accumulated.BvnInit{
 		Id: "BSN",
 		Nodes: []*accumulated.NodeInit{{
@@ -58,8 +58,8 @@ func TestSimulator(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		openDb,
-		net,
+		simulator.WithDatabase(openDb),
+		simulator.WithNetwork(net),
 		simulator.GenesisWith(GenesisTime, g),
 	)
 
