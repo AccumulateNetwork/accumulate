@@ -22,7 +22,6 @@ func TestSim(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.LocalNetwork(t.Name(), 3, 3, net.ParseIP("127.0.1.1"), 12345),
 		simulator.Genesis(GenesisTime),
 	)

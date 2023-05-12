@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -59,7 +59,6 @@ func TestGenesisRouting(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)

@@ -23,7 +23,6 @@ func TestCreateTokenAccount(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
