@@ -377,8 +377,8 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 	}
 
-	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-		return app.Executor.Validate(messages, req.Type == abci.CheckTxType_Recheck)
+	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+		return app.Executor.Validate(envelope, req.Type == abci.CheckTxType_Recheck)
 	}, req.Tx)
 	if err != nil {
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()

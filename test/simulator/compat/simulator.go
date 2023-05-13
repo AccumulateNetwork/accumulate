@@ -119,9 +119,7 @@ func (s *Simulator) ExecuteBlocks(n int) {
 
 func (s *Simulator) Submit(envelopes ...*messaging.Envelope) ([]*messaging.Envelope, error) {
 	for _, env := range envelopes {
-		deliveries, err := env.Normalize()
-		require.NoError(s.TB, err)
-		st, err := s.S.Submit(deliveries)
+		st, err := s.S.Submit(env)
 		require.NoError(s.TB, err)
 		for _, st := range st {
 			if st.Error != nil {

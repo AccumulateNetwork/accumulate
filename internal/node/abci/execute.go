@@ -18,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type executeFunc func([]messaging.Message) ([]*protocol.TransactionStatus, error)
+type executeFunc func(*messaging.Envelope) ([]*protocol.TransactionStatus, error)
 
 func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]messaging.Message, []*protocol.TransactionStatus, []byte, error) {
 	hash := sha256.Sum256(raw)
@@ -35,7 +35,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		return nil, nil, nil, errors.UnknownError.Wrap(err)
 	}
 
-	results, err := execute(deliveries)
+	results, err := execute(envelope)
 	if err != nil {
 		logger.Info("Failed to execute messages", "tx", logging.AsHex(hash), "error", err)
 		return nil, nil, nil, errors.UnknownError.Wrap(err)
