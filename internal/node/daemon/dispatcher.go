@@ -56,18 +56,10 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 		return err
 	}
 
-	// Convert the envelope into messages
-	messages, err := env.Normalize()
-	if err != nil {
-		return err
-	}
-
 	// Queue a pre-addressed message
 	d.messages = append(d.messages, &message.Addressed{
 		Address: addr,
-		Message: &message.SubmitRequest{
-			Envelope: &messaging.Envelope{Messages: messages},
-		},
+		Message: &message.SubmitRequest{Envelope: env},
 	})
 	return nil
 }
