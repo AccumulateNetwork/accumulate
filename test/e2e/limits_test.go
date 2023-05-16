@@ -190,7 +190,7 @@ func TestWriteData_LimitDataEntryParts(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
 
 	// Execute
-	entry := new(AccumulateDataEntry)
+	entry := new(DoubleHashDataEntry)
 	entry.Data = [][]byte{{1}, {2}}
 	st := sim.SubmitTxn(
 		acctesting.NewTransaction().
