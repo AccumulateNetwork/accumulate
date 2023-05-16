@@ -28,7 +28,7 @@ var extractCmd = &cobra.Command{
 func init() { cmd.AddCommand(extractCmd) }
 
 func extractSnapshot(_ *cobra.Command, args []string) {
-	store1, err := badger.New(args[0], nil)
+	store1, err := badger.New(args[0])
 	check(err)
 	stx := store1.Begin(nil, false)
 	defer stx.Discard()

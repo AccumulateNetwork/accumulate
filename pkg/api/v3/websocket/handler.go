@@ -13,23 +13,21 @@ import (
 	"runtime/debug"
 
 	"github.com/gorilla/websocket"
-	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 // NewHandler constructs a new Handler with the given list of services.
 // NewHandler only returns an error if more than one service attempts to
 // register a method for the same request type.
-func NewHandler(logger log.Logger, services ...message.Service) (*Handler, error) {
-	inner, err := message.NewHandler(logger, services...)
+func NewHandler(services ...message.Service) (*Handler, error) {
+	inner, err := message.NewHandler(services...)
 	if err != nil {
 		return nil, err
 	}
 
 	s := new(Handler)
-	s.logger.Set(logger)
 	s.inner = inner
 	s.upgrader = &websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -42,7 +40,6 @@ func NewHandler(logger log.Logger, services ...message.Service) (*Handler, error
 // Handler handles WebSocket connections.
 type Handler struct {
 	inner    *message.Handler
-	logger   logging.OptionalLogger
 	upgrader *websocket.Upgrader
 }
 
@@ -70,7 +67,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Upgrade to WebSocket.
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.logger.Error("Websocket upgrade failed", "error", err)
+		slog.Error("Websocket upgrade failed", "error", err, "module", "api")
 		return
 	}
 
@@ -94,7 +91,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				h.logger.Info("Write loop panicked", "error", r, "stack", debug.Stack())
+				slog.Info("Write loop panicked", "error", r, "stack", debug.Stack(), "module", "api")
 			}
 		}()
 		defer cancel()
@@ -102,7 +99,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 			err := s.Write(msg)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					h.logger.Info("Failed to write to connection", "error", err)
+					slog.Info("Failed to write to connection", "error", err, "module", "api")
 				}
 				return
 			}
@@ -115,7 +112,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		req, err := s.Read()
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				h.logger.Info("Failed to read from connection", "error", err)
+				slog.Info("Failed to read from connection", "error", err, "module", "api")
 			}
 			return
 		}
@@ -126,7 +123,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 			err = s.Write(req.Message)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					h.logger.Info("Failed to write to stream", "id", req.ID, "error", err)
+					slog.Info("Failed to write to stream", "id", req.ID, "error", err, "module", "api")
 				}
 				s.cancel()
 			}
@@ -149,7 +146,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					h.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
+					slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
 				}
 			}()
 			defer cancel()
@@ -157,7 +154,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 				msg, err := p.Read()
 				if err != nil {
 					if !errors.Is(err, io.EOF) {
-						h.logger.Info("Failed to read from stream", "id", req.ID, "error", err)
+						slog.Info("Failed to read from stream", "id", req.ID, "error", err, "module", "api")
 					}
 					return
 				}
@@ -170,7 +167,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					h.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
+					slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
 				}
 			}()
 			defer cancel()
@@ -180,7 +177,7 @@ func (h *Handler) handle(s message.StreamOf[*Message], ctx context.Context, canc
 		err = p.Write(req.Message)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				h.logger.Info("Failed to write to stream", "id", req.ID, "error", err)
+				slog.Info("Failed to write to stream", "id", req.ID, "error", err, "module", "api")
 			}
 			cancel()
 		}

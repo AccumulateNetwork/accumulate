@@ -295,7 +295,6 @@ func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *s
 	opts := p2p.Options{
 		Network: daemons[0].Config.Accumulate.Network.Id,
 		Key:     sk,
-		Logger:  logger,
 	}
 	inode, err := p2p.New(opts)
 	check(err)
@@ -329,7 +328,7 @@ func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *s
 	}()
 
 	// Register it
-	handler, err := message.NewHandler(logger, message.Faucet{Faucet: faucetSvc})
+	handler, err := message.NewHandler(message.Faucet{Faucet: faucetSvc})
 	check(err)
 	if !node.RegisterService(faucetSvc.Type().AddressForUrl(protocol.AcmeUrl()), handler.Handle) {
 		fatalf("failed to register faucet service")
