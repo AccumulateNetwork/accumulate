@@ -1,5 +1,7 @@
 module gitlab.com/accumulatenetwork/accumulate
 
+retract v1.1.0 // Causes consensus failure when run alongside v1.0.x
+
 go 1.19
 
 replace github.com/tendermint/tendermint v0.37.0-rc1 => github.com/AccumulateNetwork/tendermint v0.34.15-0.20221019224404-7f7149107231

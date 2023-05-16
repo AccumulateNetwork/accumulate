@@ -21,11 +21,11 @@ import (
 // Submit to make it easier to write tests that drop certain messages.
 type dispatcher struct {
 	sim       *Simulator
-	envelopes map[string][][]messaging.Message
+	envelopes map[string][]*messaging.Envelope
 }
 
 func (s *Simulator) newDispatcher() execute.Dispatcher {
-	return &dispatcher{sim: s, envelopes: map[string][][]messaging.Message{}}
+	return &dispatcher{sim: s, envelopes: map[string][]*messaging.Envelope{}}
 }
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
@@ -41,18 +41,13 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 		return err
 	}
 
-	deliveries, err := env.Normalize()
-	if err != nil {
-		return err
-	}
-
-	d.envelopes[partition] = append(d.envelopes[partition], deliveries)
+	d.envelopes[partition] = append(d.envelopes[partition], env)
 	return nil
 }
 
 // Send submits queued envelopes to the respective partitions.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
-	envelopes := make(map[string][][]messaging.Message, len(d.envelopes))
+	envelopes := make(map[string][]*messaging.Envelope, len(d.envelopes))
 	for p, e := range d.envelopes {
 		envelopes[p] = e
 	}

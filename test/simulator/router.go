@@ -128,7 +128,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *messagi
 	}
 
 	resp := new(routing.ResponseSubmit)
-	results, err := p.Submit(messages, pretend)
+	results, err := p.Submit(envelope, pretend)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

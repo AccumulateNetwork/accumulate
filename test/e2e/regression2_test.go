@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -212,12 +211,9 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 		}).
 		Initiate(SignatureTypeED25519, aliceKey).
 		Build()
-	deliveries, err := env.Normalize()
-	require.NoError(t, err)
-	require.Len(t, deliveries, 2)
 
 	// Submit the transaction directly to the wrong BVN
-	st, err := sim.SubmitTo(badBvn, deliveries)
+	st, err := sim.SubmitTo(badBvn, env)
 	require.NoError(t, err)
 	require.EqualError(t, st[1].AsError(), fmt.Sprintf("signature submitted to %s instead of %s", badBvn, goodBvn))
 }
@@ -734,33 +730,31 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
 
 	// Drop one anchor signature, but a different signature on each node
-	sim.SetNodeBlockHook(Directory, func(i int, b execute.BlockParams, m []messaging.Message) (_ []messaging.Message, keepHook bool) {
-		deliveries, err := chain.DeliveriesFromMessages(m)
-		require.NoError(t, err)
-
-		m = m[:0]
-		for _, d := range deliveries {
-			var sigs []protocol.KeySignature
-			m = append(m, &messaging.TransactionMessage{Transaction: d.Transaction})
-			for _, s := range d.Signatures {
-				if key, ok := s.(protocol.KeySignature); ok && d.Transaction.Body.Type().IsAnchor() {
-					sigs = append(sigs, key)
-					continue
-				}
-				m = append(m, &messaging.SignatureMessage{Signature: s, TxID: d.Transaction.ID()})
-			}
-
-			sort.Slice(sigs, func(i, j int) bool {
-				a, b := sigs[i], sigs[j]
-				return bytes.Compare(a.GetPublicKey(), b.GetPublicKey()) < 0
-			})
-			for j, sig := range sigs {
-				if i != j {
-					m = append(m, &messaging.SignatureMessage{Signature: sig, TxID: d.Transaction.ID()})
-				}
+	sim.SetNodeBlockHook(Directory, func(i int, b execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		var other, anchors []*messaging.Envelope
+		for _, env := range envelopes {
+			if env.Transaction[0].Body.Type().IsAnchor() {
+				require.Len(t, env.Transaction, 1)
+				require.Len(t, env.Signatures, 2)
+				require.Implements(t, (*protocol.KeySignature)(nil), env.Signatures[1])
+				anchors = append(anchors, env)
+			} else {
+				other = append(other, env)
 			}
 		}
-		return m, true
+		if len(anchors) > 0 {
+			print("")
+		}
+		sort.Slice(anchors, func(i, j int) bool {
+			a, b := anchors[i].Signatures[1].(protocol.KeySignature), anchors[j].Signatures[1].(protocol.KeySignature)
+			return bytes.Compare(a.GetPublicKey(), b.GetPublicKey()) < 0
+		})
+		for j, anchor := range anchors {
+			if i != j {
+				other = append(other, anchor)
+			}
+		}
+		return other, true
 	})
 
 	// Execute something
@@ -795,17 +789,22 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
 
 	// Drop one anchor signature, but a different signature on each node
-	sim.SetNodeBlockHook(Directory, func(i int, b execute.BlockParams, m []messaging.Message) (_ []messaging.Message, keepHook bool) {
-		var other, anchors []messaging.Message
-		for _, m := range m {
-			if _, ok := m.(*messaging.BlockAnchor); ok {
-				anchors = append(anchors, m)
+	sim.SetNodeBlockHook(Directory, func(i int, _ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		var other, anchors []*messaging.Envelope
+		for _, env := range envelopes {
+			if len(env.Messages) != 1 {
+				other = append(other, env)
+				continue
+			}
+
+			if _, ok := env.Messages[0].(*messaging.BlockAnchor); ok {
+				anchors = append(anchors, env)
 			} else {
-				other = append(other, m)
+				other = append(other, env)
 			}
 		}
 		sort.Slice(anchors, func(i, j int) bool {
-			a, b := anchors[i].(*messaging.BlockAnchor), anchors[j].(*messaging.BlockAnchor)
+			a, b := anchors[i].Messages[0].(*messaging.BlockAnchor), anchors[j].Messages[0].(*messaging.BlockAnchor)
 			return bytes.Compare(a.Signature.GetPublicKey(), b.Signature.GetPublicKey()) < 0
 		})
 		for j, anchor := range anchors {
@@ -828,4 +827,49 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 	}
 	require.Error(t, err, "Expected consensus failure within 50 blocks")
 	require.IsType(t, (simulator.CommitConsensusError)(nil), err)
+}
+
+func TestMessageCompat(t *testing.T) {
+	// https://gitlab.com/accumulatenetwork/accumulate/-/work_items/3312
+
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize with executor v1
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Settle
+	sim.StepN(10)
+
+	// Load the system ledger
+	ledger1 := GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger))
+
+	// Construct an envelope
+	env := MustBuild(t,
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	// Submit as messages
+	msgs, err := env.Normalize()
+	require.NoError(t, err)
+	st := sim.Submit(&messaging.Envelope{Messages: msgs})
+
+	// Verify that the messages field is ignored and no messages are processed
+	// (by verifying no blocks have been recorded)
+	require.Len(t, st, 0)
+	sim.StepN(10)
+	ledger2 := GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger))
+	require.Equal(t, ledger1.Index, ledger2.Index)
 }

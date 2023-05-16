@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -36,8 +35,8 @@ type Partition struct {
 	validators [][32]byte
 
 	mu         *sync.Mutex
-	mempool    []messaging.Message
-	deliver    []messaging.Message
+	mempool    []*messaging.Envelope
+	deliver    []*messaging.Envelope
 	blockIndex uint64
 	blockTime  time.Time
 
@@ -47,10 +46,10 @@ type Partition struct {
 	commitHook    CommitHookFunc
 }
 
-type SubmitHookFunc func([]messaging.Message) (drop, keepHook bool)
-type BlockHookFunc func(execute.BlockParams, []messaging.Message) (_ []messaging.Message, keepHook bool)
-type NodeBlockHookFunc func(int, execute.BlockParams, []messaging.Message) (_ []messaging.Message, keepHook bool)
-type CommitHookFunc func(*protocol.PartitionInfo, execute.BlockState)
+type SubmitHookFunc = func([]messaging.Message) (drop, keepHook bool)
+type BlockHookFunc = func(execute.BlockParams, []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool)
+type NodeBlockHookFunc = func(int, execute.BlockParams, []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool)
+type CommitHookFunc = func(*protocol.PartitionInfo, execute.BlockState)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -193,11 +192,15 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	return nil
 }
 
-func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*protocol.TransactionStatus, error) {
+func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*protocol.TransactionStatus, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.submitHook != nil {
+		messages, err := envelope.Normalize()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 		drop, keep := p.submitHook(messages)
 		if !keep {
 			p.submitHook = nil
@@ -218,7 +221,7 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 	for i, node := range p.nodes {
 		var err error
 		// Set type = recheck to make the executor create a new batch to avoid timing issues
-		results[i], err = node.checkTx(messages, types.CheckTxType_Recheck)
+		results[i], err = node.checkTx(envelope, false)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -244,12 +247,12 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 	}
 
 	if !pretend && ok {
-		p.mempool = append(p.mempool, messages...)
+		p.mempool = append(p.mempool, envelope)
 	}
 	return results[0], nil
 }
 
-func (p *Partition) applyBlockHook(node int, messages []messaging.Message) []messaging.Message {
+func (p *Partition) applyBlockHook(node int, messages []*messaging.Envelope) []*messaging.Envelope {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -303,15 +306,15 @@ func (p *Partition) loadBlockIndex() {
 func (p *Partition) execute() error {
 	// TODO: Limit how many transactions are added to the block? Call recheck?
 	p.mu.Lock()
-	messages := p.deliver
+	envelopes := p.deliver
 	p.deliver = p.mempool
 	p.mempool = nil
 	p.mu.Unlock()
 
-	if p.sim.Deterministic {
-		// Order transactions to ensure the simulator is deterministic
-		orderMessagesDeterministically(messages)
-	}
+	// if p.sim.Deterministic {
+	// 	// Order transactions to ensure the simulator is deterministic
+	// 	orderMessagesDeterministically(messages)
+	// }
 
 	// Initialize block index
 	p.loadBlockIndex()
@@ -319,7 +322,7 @@ func (p *Partition) execute() error {
 	p.blockTime = p.blockTime.Add(time.Second)
 	p.logger.Debug("Stepping", "block", p.blockIndex)
 
-	messages = p.applyBlockHook(-1, messages)
+	envelopes = p.applyBlockHook(-1, envelopes)
 
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)
@@ -341,15 +344,7 @@ func (p *Partition) execute() error {
 	var err error
 	results := make([][]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
-		// Copy the messages to avoid interference between nodes
-		m := make([]messaging.Message, len(messages))
-		for i, msg := range messages {
-			m[i] = messaging.CopyMessage(msg)
-		}
-
-		m = p.applyBlockHook(i, m)
-
-		results[i], err = node.deliverTx(blocks[i], m)
+		results[i], err = node.deliverTx(blocks[i], p.applyBlockHook(i, envelopes))
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
@@ -375,19 +370,25 @@ func (p *Partition) execute() error {
 			status[r.TxID.Hash()] = r.AsError()
 		}
 	}
-	for _, msg := range messages {
-		if msg.Type() == messaging.MessageTypeTransaction ||
-			msg.Type() == messaging.MessageTypeSignature {
-			continue
+	for _, envelope := range envelopes {
+		messages, err := envelope.Normalize()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
 		}
-		for {
-			if err, ok := status[msg.ID().Hash()]; ok {
-				p.logger.Error("System message failed", "err", err, "type", msg.Type(), "id", msg.ID())
+		for _, msg := range messages {
+			if msg.Type() == messaging.MessageTypeTransaction ||
+				msg.Type() == messaging.MessageTypeSignature {
+				continue
 			}
-			if u, ok := msg.(interface{ Unwrap() messaging.Message }); ok {
-				msg = u.Unwrap()
-			} else {
-				break
+			for {
+				if err, ok := status[msg.ID().Hash()]; ok {
+					p.logger.Error("System message failed", "err", err, "type", msg.Type(), "id", msg.ID())
+				}
+				if u, ok := msg.(interface{ Unwrap() messaging.Message }); ok {
+					msg = u.Unwrap()
+				} else {
+					break
+				}
 			}
 		}
 	}
