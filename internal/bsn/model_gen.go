@@ -31,9 +31,9 @@ type ChangeSet struct {
 	parent  *ChangeSet
 
 	lastBlock values.Value[*LastBlock]
-	summary   map[summaryKey]*Summary
-	pending   map[pendingKey]*Pending
-	partition map[partitionKey]*database.Batch
+	summary   map[summaryMapKey]*Summary
+	pending   map[pendingMapKey]*Pending
+	partition map[partitionMapKey]*database.Batch
 }
 
 func (c *ChangeSet) Key() *record.Key { return nil }
@@ -42,54 +42,72 @@ type summaryKey struct {
 	Hash [32]byte
 }
 
-func keyForSummary(hash [32]byte) summaryKey {
-	return summaryKey{hash}
+type summaryMapKey struct {
+	Hash [32]byte
+}
+
+func (k summaryKey) ForMap() summaryMapKey {
+	return summaryMapKey{k.Hash}
 }
 
 type pendingKey struct {
 	Partition string
 }
 
-func keyForPending(partition string) pendingKey {
-	return pendingKey{partition}
+type pendingMapKey struct {
+	Partition string
+}
+
+func (k pendingKey) ForMap() pendingMapKey {
+	return pendingMapKey{k.Partition}
 }
 
 type partitionKey struct {
 	ID string
 }
 
-func keyForPartition(id string) partitionKey {
-	return partitionKey{id}
+type partitionMapKey struct {
+	ID string
+}
+
+func (k partitionKey) ForMap() partitionMapKey {
+	return partitionMapKey{k.ID}
 }
 
 func (c *ChangeSet) LastBlock() values.Value[*LastBlock] {
-	return values.GetOrCreate(&c.lastBlock, func() values.Value[*LastBlock] {
-		return values.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), "last block", false, values.Struct[LastBlock]())
-	})
+	return values.GetOrCreate(c, &c.lastBlock, (*ChangeSet).newLastBlock)
+}
+
+func (c *ChangeSet) newLastBlock() values.Value[*LastBlock] {
+	return values.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), "last block", false, values.Struct[LastBlock]())
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
-	return values.GetOrCreateMap(&c.summary, keyForSummary(hash), func() *Summary {
-		v := new(Summary)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = (*record.Key)(nil).Append("Summary", hash)
-		v.parent = c
-		v.label = "summary" + " " + hex.EncodeToString(hash[:])
-		return v
-	})
+	return values.GetOrCreateMap(c, &c.summary, summaryKey{hash}, (*ChangeSet).newSummary)
+}
+
+func (c *ChangeSet) newSummary(k summaryKey) *Summary {
+	v := new(Summary)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = (*record.Key)(nil).Append("Summary", k.Hash)
+	v.parent = c
+	v.label = "summary" + " " + hex.EncodeToString(k.Hash[:])
+	return v
 }
 
 func (c *ChangeSet) Pending(partition string) *Pending {
-	return values.GetOrCreateMap(&c.pending, keyForPending(partition), func() *Pending {
-		v := new(Pending)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = (*record.Key)(nil).Append("Pending", partition)
-		v.parent = c
-		v.label = "pending" + " " + partition
-		return v
-	})
+	return values.GetOrCreateMap(c, &c.pending, pendingKey{partition}, (*ChangeSet).newPending)
+}
+
+func (c *ChangeSet) newPending(k pendingKey) *Pending {
+	v := new(Pending)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = (*record.Key)(nil).Append("Pending", k.Partition)
+	v.parent = c
+	v.label = "pending" + " " + k.Partition
+	return v
 }
 
 func (c *ChangeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -171,16 +189,10 @@ func (c *ChangeSet) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.lastBlock, opts, fn)
-	for _, v := range c.summary {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.pending {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.partition {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkField(&err, c.lastBlock, c.newLastBlock, opts, fn)
+	values.WalkMap(&err, c.summary, c.newSummary, nil, opts, fn)
+	values.WalkMap(&err, c.pending, c.newPending, nil, opts, fn)
+	values.WalkMap(&err, c.partition, c.newPartition, nil, opts, fn)
 	return err
 }
 
@@ -218,15 +230,19 @@ type Summary struct {
 func (c *Summary) Key() *record.Key { return c.key }
 
 func (c *Summary) Main() values.Value[*messaging.BlockSummary] {
-	return values.GetOrCreate(&c.main, func() values.Value[*messaging.BlockSummary] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Struct[messaging.BlockSummary]())
-	})
+	return values.GetOrCreate(c, &c.main, (*Summary).newMain)
+}
+
+func (c *Summary) newMain() values.Value[*messaging.BlockSummary] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Struct[messaging.BlockSummary]())
 }
 
 func (c *Summary) Signatures() values.Set[protocol.KeySignature] {
-	return values.GetOrCreate(&c.signatures, func() values.Set[protocol.KeySignature] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", values.Union(protocol.UnmarshalKeySignature), compareSignatures)
-	})
+	return values.GetOrCreate(c, &c.signatures, (*Summary).newSignatures)
+}
+
+func (c *Summary) newSignatures() values.Set[protocol.KeySignature] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", values.Union(protocol.UnmarshalKeySignature), compareSignatures)
 }
 
 func (c *Summary) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -268,8 +284,8 @@ func (c *Summary) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.main, opts, fn)
-	values.Walk(&err, c.signatures, opts, fn)
+	values.WalkField(&err, c.main, c.newMain, opts, fn)
+	values.WalkField(&err, c.signatures, c.newSignatures, opts, fn)
 	return err
 }
 
@@ -292,7 +308,7 @@ type Pending struct {
 	label  string
 	parent *ChangeSet
 
-	onBlock map[pendingOnBlockKey]values.Value[[32]byte]
+	onBlock map[pendingOnBlockMapKey]values.Value[[32]byte]
 }
 
 func (c *Pending) Key() *record.Key { return c.key }
@@ -301,14 +317,20 @@ type pendingOnBlockKey struct {
 	Index uint64
 }
 
-func keyForPendingOnBlock(index uint64) pendingOnBlockKey {
-	return pendingOnBlockKey{index}
+type pendingOnBlockMapKey struct {
+	Index uint64
+}
+
+func (k pendingOnBlockKey) ForMap() pendingOnBlockMapKey {
+	return pendingOnBlockMapKey{k.Index}
 }
 
 func (c *Pending) OnBlock(index uint64) values.Value[[32]byte] {
-	return values.GetOrCreateMap(&c.onBlock, keyForPendingOnBlock(index), func() values.Value[[32]byte] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", index), c.label+" "+"on block"+" "+strconv.FormatUint(index, 10), false, values.Wrapped(values.HashWrapper))
-	})
+	return values.GetOrCreateMap(c, &c.onBlock, pendingOnBlockKey{index}, (*Pending).newOnBlock)
+}
+
+func (c *Pending) newOnBlock(k pendingOnBlockKey) values.Value[[32]byte] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", k.Index), c.label+" "+"on block"+" "+strconv.FormatUint(k.Index, 10), false, values.Wrapped(values.HashWrapper))
 }
 
 func (c *Pending) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -355,9 +377,7 @@ func (c *Pending) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	for _, v := range c.onBlock {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.onBlock, c.newOnBlock, nil, opts, fn)
 	return err
 }
 
