@@ -35,7 +35,7 @@ c.label + " " +
 {{- end -}}
 "{{natural .Name}}"
 {{- if parameterized . -}}
-{{range .GetParameters}} + " " + {{keyToString . (lower .Name)}}{{end}}
+{{range .GetParameters}} + " " + {{keyToString . (print "k." .Name)}}{{end}}
 {{- end}}
 {{- end}}
 
@@ -50,7 +50,7 @@ c.key
 
 {{  define "keyArgs"}}
 {{- if parameterized . -}}
-"{{.Name}}", {{range .GetParameters}}{{lower .Name}}, {{end}}
+"{{.Name}}", {{range .GetParameters}}k.{{.Name}}, {{end}}
 {{- else -}}
 "{{.Name}}"
 {{- end}}
@@ -129,14 +129,20 @@ func (c *{{fullName $c}}) Key() *record.Key { return {{if .Root}}nil{{else}}c.ke
 {{range .Attributes}}
 {{if parameterized .}}
 type {{lower .FullName}}Key struct {
-	{{- range $index, $param := .GetParameters}}
-	{{.Name}} {{keyType $param}}
+	{{- range .GetParameters}}
+	{{.Name}} {{parameterType .}}
+	{{- end}}
+}
+
+type {{lower .FullName}}MapKey struct {
+	{{- range .GetParameters}}
+	{{.Name}} {{keyType .}}
 	{{- end}}
 }
 
 {{$a := .}}
-func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}}, {{end}}) {{lower $a.FullName}}Key {
-	return {{lower $a.FullName}}Key{ {{range .GetParameters}}{{asKey . (lower .Name)}}, {{end}} }
+func (k {{lower .FullName}}Key) ForMap() {{lower .FullName}}MapKey {
+	return {{lower $a.FullName}}MapKey{ {{range .GetParameters}}{{asKey . (print "k." .Name)}}, {{end}} }
 }
 {{end}}
 {{end}}
@@ -145,30 +151,32 @@ func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType
 {{if not .OmitAccessor}}
 func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}} {
 	{{- if parameterized .}}
-	return values.GetOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}),
+	return values.GetOrCreateMap(c, &c.{{lower .Name}}, {{lower .FullName}}Key{ {{range .GetParameters}}{{lower .Name}},{{end}} }, (*{{fullName $c}}).new{{.Name}})
 	{{- else}}
-	return values.GetOrCreate(&c.{{lower .Name}},
+	return values.GetOrCreate(c, &c.{{lower .Name}}, (*{{fullName $c}}).new{{.Name}})
 	{{- end -}}
+}
+{{end}}
 
-	func() {{recordType . true}} {
-		{{- if .Type.IsEntity}}
-		v := new({{fullName .}})
-		v.logger = c.logger
-		v.store = c.{{valueStore .}}
-		v.key = {{template "key" .}}
-		v.parent = c
-		v.label = {{template "valueLabel" .}}
-		return v
-		{{- else if .Type.IsChain}}
-		return database.NewChain(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
-		{{- else if .Type.IsOther}}
-		return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
-		{{- else if .IsCounted}}
-		{{- template "newCounted" .}}
-		{{- else}}
-		{{- template "newValue" .}}
-		{{- end}}
-	})
+{{if not .OmitConstructor}}
+func (c *{{fullName $c}}) new{{.Name}}({{if parameterized .}}k {{lower .FullName}}Key{{end}}) {{recordType . true}} {
+	{{- if .Type.IsEntity}}
+	v := new({{fullName .}})
+	v.logger = c.logger
+	v.store = c.{{valueStore .}}
+	v.key = {{template "key" .}}
+	v.parent = c
+	v.label = {{template "valueLabel" .}}
+	return v
+	{{- else if .Type.IsChain}}
+	return database.NewChain(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+	{{- else if .Type.IsOther}}
+	return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+	{{- else if .IsCounted}}
+	{{- template "newCounted" .}}
+	{{- else}}
+	{{- template "newValue" .}}
+	{{- end}}
 }
 {{end}}
 {{end}}
@@ -259,6 +267,7 @@ func (c *{{fullName .}}) dirtyChains() []*MerkleManager {
 }
 {{end}}
 
+{{if not .OmitWalk}}
 func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
@@ -270,18 +279,21 @@ func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptio
 	}
 
 	{{- range .Attributes}}
-	{{- if not .Type.IsIndex}}
-	{{- if parameterized .}}
-	for _, v := range c.{{lower .Name}} {
-		values.Walk(&err, v, opts, fn)
-	}
-	{{- else}}
-	values.Walk(&err, c.{{lower .Name}}, opts, fn)
+	{{- if .Type.IsIndex}}
+	if (!opts.IgnoreIndices) {
 	{{- end}}
+	{{- if parameterized .}}
+	values.WalkMap(&err, c.{{lower .Name}}, c.new{{.Name}}, {{if .Index}}c.{{.Index}}{{else}}nil{{end}}, opts, fn)
+	{{- else}}
+	values.WalkField(&err, c.{{lower .Name}}, c.new{{.Name}}, opts, fn)
+	{{- end}}
+	{{- if .Type.IsIndex}}
+	}
 	{{- end}}
 	{{- end}}
 	return err
 }
+{{end}}
 
 func (c *{{fullName .}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	if c == nil {
