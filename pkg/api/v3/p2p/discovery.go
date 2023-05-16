@@ -15,13 +15,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 // startDHT bootstraps a DHT instance.
-func startDHT(host host.Host, logger log.Logger, ctx context.Context, mode dht.ModeOpt, bootstrapPeers []multiaddr.Multiaddr) (*dht.IpfsDHT, error) {
+func startDHT(host host.Host, ctx context.Context, mode dht.ModeOpt, bootstrapPeers []multiaddr.Multiaddr) (*dht.IpfsDHT, error) {
 	// Allocate a DHT
 	d, err := dht.New(ctx, host, dht.Mode(mode))
 	if err != nil {
@@ -42,7 +42,7 @@ func startDHT(host host.Host, logger log.Logger, ctx context.Context, mode dht.M
 
 			err := host.Connect(ctx, *pi)
 			if err != nil {
-				logger.Info("Unable to connect to bootstrap peer", "error", err)
+				slog.Info("Unable to connect to bootstrap peer", "error", err, "module", "api")
 			}
 		}()
 	}
@@ -58,7 +58,7 @@ func startDHT(host host.Host, logger log.Logger, ctx context.Context, mode dht.M
 }
 
 // startServiceDiscovery sets up pubsub for node events.
-func startServiceDiscovery(ctx context.Context, host host.Host, logger log.Logger) (chan<- event, <-chan event, error) {
+func startServiceDiscovery(ctx context.Context, host host.Host) (chan<- event, <-chan event, error) {
 	// Create the pubsub
 	ps, err := pubsub.NewGossipSub(ctx, host)
 	if err != nil {
@@ -88,13 +88,13 @@ func startServiceDiscovery(ctx context.Context, host host.Host, logger log.Logge
 				if errors.Is(err, context.Canceled) {
 					return
 				}
-				logger.Error("Failed to get next topic message", "error", err)
+				slog.Error("Failed to get next topic message", "error", err, "module", "api")
 				return
 			}
 
 			event, err := unmarshalEvent(msg.Data)
 			if err != nil {
-				logger.Info("Received bad message", "error", err)
+				slog.Info("Received bad message", "error", err, "module", "api")
 				continue
 			}
 
@@ -119,13 +119,13 @@ func startServiceDiscovery(ctx context.Context, host host.Host, logger log.Logge
 
 			b, err := event.MarshalBinary()
 			if err != nil {
-				logger.Error("Failed to marshal event", "error", err)
+				slog.Error("Failed to marshal event", "error", err, "module", "api")
 				continue
 			}
 
 			err = topic.Publish(ctx, b)
 			if err != nil {
-				logger.Error("Failed to send topic message", "error", err)
+				slog.Error("Failed to send topic message", "error", err, "module", "api")
 				return
 			}
 		}
