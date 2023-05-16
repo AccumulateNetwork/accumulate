@@ -7,10 +7,12 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +21,8 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -26,6 +30,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -702,4 +707,125 @@ func TestOldExec(t *testing.T) {
 	// Verify
 	account := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
 	require.Equal(t, 123, int(account.Balance.Int64()))
+}
+
+// TestDifferentValidatorSignaturesV1 shows that, with executor v1, differences
+// in which validators sign an anchor are not reflected in the BPT. They are
+// reflected in the transaction results, which causes a consensus failure
+// (manually disabled here), but they really should be reflected in the BPT.
+func TestDifferentValidatorSignaturesV1(t *testing.T) {
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 3),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+	sim.S.IgnoreDeliverResults = true
+
+	sim.StepN(10)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Drop one anchor signature, but a different signature on each node
+	sim.SetNodeBlockHook(Directory, func(i int, b execute.BlockParams, m []messaging.Message) (_ []messaging.Message, keepHook bool) {
+		deliveries, err := chain.DeliveriesFromMessages(m)
+		require.NoError(t, err)
+
+		m = m[:0]
+		for _, d := range deliveries {
+			var sigs []protocol.KeySignature
+			m = append(m, &messaging.TransactionMessage{Transaction: d.Transaction})
+			for _, s := range d.Signatures {
+				if key, ok := s.(protocol.KeySignature); ok && d.Transaction.Body.Type().IsAnchor() {
+					sigs = append(sigs, key)
+					continue
+				}
+				m = append(m, &messaging.SignatureMessage{Signature: s, TxID: d.Transaction.ID()})
+			}
+
+			sort.Slice(sigs, func(i, j int) bool {
+				a, b := sigs[i], sigs[j]
+				return bytes.Compare(a.GetPublicKey(), b.GetPublicKey()) < 0
+			})
+			for j, sig := range sigs {
+				if i != j {
+					m = append(m, &messaging.SignatureMessage{Signature: sig, TxID: d.Transaction.ID()})
+				}
+			}
+		}
+		return m, true
+	})
+
+	// Execute something
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+}
+
+func TestDifferentValidatorSignaturesV2(t *testing.T) {
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV2
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 3),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+	sim.S.IgnoreDeliverResults = true
+
+	sim.StepN(10)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Drop one anchor signature, but a different signature on each node
+	sim.SetNodeBlockHook(Directory, func(i int, b execute.BlockParams, m []messaging.Message) (_ []messaging.Message, keepHook bool) {
+		var other, anchors []messaging.Message
+		for _, m := range m {
+			if _, ok := m.(*messaging.BlockAnchor); ok {
+				anchors = append(anchors, m)
+			} else {
+				other = append(other, m)
+			}
+		}
+		sort.Slice(anchors, func(i, j int) bool {
+			a, b := anchors[i].(*messaging.BlockAnchor), anchors[j].(*messaging.BlockAnchor)
+			return bytes.Compare(a.Signature.GetPublicKey(), b.Signature.GetPublicKey()) < 0
+		})
+		for j, anchor := range anchors {
+			if i != j {
+				other = append(other, anchor)
+			}
+		}
+		return other, true
+	})
+
+	// Execute something
+	sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	var err error
+	for i := 0; i < 50 && err == nil; i++ {
+		err = sim.S.Step()
+	}
+	require.Error(t, err, "Expected consensus failure within 50 blocks")
+	require.IsType(t, (simulator.CommitConsensusError)(nil), err)
 }
