@@ -120,7 +120,9 @@ func (c *Chain2) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 func (c *Chain2) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	var err error
 	values.Walk(&err, c.inner, opts, fn)
-	values.Walk(&err, c.index, opts, fn)
+	if c.inner.typ != merkle.ChainTypeIndex {
+		values.WalkField(&err, c.index, c.newIndex, opts, fn)
+	}
 	return err
 }
 
@@ -171,15 +173,17 @@ func (c *Chain2) Get() (*Chain, error) {
 // Index returns the index chain of this chain. Index will panic if called on an
 // index chain.
 func (c *Chain2) Index() *Chain2 {
+	return values.GetOrCreate(c, &c.index, (*Chain2).newIndex)
+}
+
+func (c *Chain2) newIndex() *Chain2 {
 	if c.Type() == merkle.ChainTypeIndex {
 		panic("cannot index an index chain")
 	}
-	return values.GetOrCreate(&c.index, func() *Chain2 {
-		key := c.key.Append("Index")
-		label := c.labelfmt + " index"
-		m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
-		return &Chain2{c.account, key, m, nil, label}
-	})
+	key := c.key.Append("Index")
+	label := c.labelfmt + " index"
+	m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
+	return &Chain2{c.account, key, m, nil, label}
 }
 
 // ChainByName returns account Chain2 for the named chain, or a not found error if
@@ -237,17 +241,15 @@ func (a *Account) chainByName(name string) *Chain2 {
 		return a.MajorBlockChain()
 	}
 
-	i := strings.IndexRune(name, '(')
-	j := strings.IndexRune(name, ')')
-	if i < 0 || j < 0 {
+	first, arg, rest, ok := splitChainName(name)
+	if !ok {
 		return nil
 	}
 
-	arg := name[i+1 : j]
-	switch name[:i] {
+	switch first {
 	case "anchor":
 		a := a.AnchorChain(arg)
-		switch name[j+1:] {
+		switch rest {
 		case "-root":
 			return a.Root()
 		case "-bpt":
@@ -261,10 +263,64 @@ func (a *Account) chainByName(name string) *Chain2 {
 	return nil
 }
 
+func splitChainName(name string) (first, arg, rest string, ok bool) {
+	i := strings.IndexRune(name, '(')
+	j := strings.IndexRune(name, ')')
+	if i < 0 || j < 0 {
+		return "", "", "", false
+	}
+
+	return name[:i], name[i+1 : j], name[j+1:], true
+}
+
 func (c *Account) SyntheticSequenceChain(partition string) *Chain2 {
 	return c.getSyntheticSequenceChain(strings.ToLower(partition))
 }
 
 func (c *Account) AnchorChain(partition string) *AccountAnchorChain {
 	return c.getAnchorChain(strings.ToLower(partition))
+}
+
+func (c *Account) getSyntheticSequenceKeys() ([]accountSyntheticSequenceChainKey, error) {
+	// List all of the account's chains
+	chains, err := c.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Find chains matching the pattern `synthetic-sequence(:id)`
+	keys := make([]accountSyntheticSequenceChainKey, 0, len(chains))
+	seen := map[string]bool{}
+	for _, c := range chains {
+		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
+		if !ok || first != "synthetic-sequence" || seen[arg] {
+			continue
+		}
+		seen[arg] = true
+		keys = append(keys, accountSyntheticSequenceChainKey{arg})
+	}
+
+	// Return the partition IDs
+	return keys, nil
+}
+
+func (c *Account) getAnchorKeys() ([]accountAnchorChainKey, error) {
+	// List all of the account's chains
+	chains, err := c.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Find chains matching the pattern `anchor(:id)`
+	keys := make([]accountAnchorChainKey, 0, len(chains))
+	for _, c := range chains {
+		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
+		if !ok || first != "anchor" {
+			continue
+		}
+		keys = append(keys, accountAnchorChainKey{arg})
+	}
+
+	// Return the partition IDs
+	return keys, nil
 }
