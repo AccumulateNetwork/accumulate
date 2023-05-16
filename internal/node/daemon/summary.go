@@ -91,7 +91,6 @@ func (d *Daemon) startSummary() error {
 	var err error
 	if d.p2pnode == nil {
 		d.p2pnode, err = p2p.New(p2p.Options{
-			Logger:         d.Logger.With("module", "acc-rpc"),
 			Network:        d.Config.Accumulate.Network.Id,
 			Listen:         d.Config.Accumulate.P2P.Listen,
 			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
@@ -127,7 +126,7 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 	case config.MemoryStorage:
 		store = memory.New(nil)
 	case config.BadgerStorage:
-		store, err = badger.New(config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Storage.Path), d.Logger.With("module", "storage"))
+		store, err = badger.New(config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Storage.Path))
 	default:
 		return nil, errors.BadRequest.WithFormat("unknown storage format %q", d.Config.Accumulate.Storage.Type)
 	}
@@ -177,7 +176,6 @@ func (d *Daemon) startSummaryServices() error {
 		Local:  d.localTm,
 	})
 	messageHandler, err := message.NewHandler(
-		d.Logger.With("module", "acc-rpc"),
 		&message.ConsensusService{ConsensusService: nodeSvc},
 		&message.Submitter{Submitter: submitSvc},
 		&message.Validator{Validator: validateSvc},
