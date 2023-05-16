@@ -41,13 +41,15 @@ type Partition struct {
 	blockIndex uint64
 	blockTime  time.Time
 
-	submitHook SubmitHookFunc
-	blockHook  BlockHookFunc
-	commitHook CommitHookFunc
+	submitHook    SubmitHookFunc
+	blockHook     BlockHookFunc
+	nodeBlockHook NodeBlockHookFunc
+	commitHook    CommitHookFunc
 }
 
 type SubmitHookFunc func([]messaging.Message) (drop, keepHook bool)
 type BlockHookFunc func(execute.BlockParams, []messaging.Message) (_ []messaging.Message, keepHook bool)
+type NodeBlockHookFunc func(int, execute.BlockParams, []messaging.Message) (_ []messaging.Message, keepHook bool)
 type CommitHookFunc func(*protocol.PartitionInfo, execute.BlockState)
 
 type validatorUpdate struct {
@@ -159,6 +161,12 @@ func (p *Partition) SetBlockHook(fn BlockHookFunc) {
 	p.blockHook = fn
 }
 
+func (p *Partition) SetNodeBlockHook(fn NodeBlockHookFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.nodeBlockHook = fn
+}
+
 func (p *Partition) SetCommitHook(fn CommitHookFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -241,22 +249,35 @@ func (p *Partition) Submit(messages []messaging.Message, pretend bool) ([]*proto
 	return results[0], nil
 }
 
-func (p *Partition) applyBlockHook(messages []messaging.Message) []messaging.Message {
+func (p *Partition) applyBlockHook(node int, messages []messaging.Message) []messaging.Message {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.blockHook == nil {
-		return messages
-	}
-
-	messages, keep := p.blockHook(execute.BlockParams{
+	block := execute.BlockParams{
 		Context: context.Background(),
 		Index:   p.blockIndex,
 		Time:    p.blockTime,
-	}, messages)
-	if !keep {
-		p.blockHook = nil
 	}
+
+	var keep bool
+	if node < 0 {
+		if p.blockHook == nil {
+			return messages
+		}
+		messages, keep = p.blockHook(block, messages)
+		if !keep {
+			p.blockHook = nil
+		}
+	} else {
+		if p.nodeBlockHook == nil {
+			return messages
+		}
+		messages, keep = p.nodeBlockHook(node, block, messages)
+		if !keep {
+			p.nodeBlockHook = nil
+		}
+	}
+
 	return messages
 }
 
@@ -298,7 +319,7 @@ func (p *Partition) execute() error {
 	p.blockTime = p.blockTime.Add(time.Second)
 	p.logger.Debug("Stepping", "block", p.blockIndex)
 
-	messages = p.applyBlockHook(messages)
+	messages = p.applyBlockHook(-1, messages)
 
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)
@@ -326,20 +347,24 @@ func (p *Partition) execute() error {
 			m[i] = messaging.CopyMessage(msg)
 		}
 
+		m = p.applyBlockHook(i, m)
+
 		results[i], err = node.deliverTx(blocks[i], m)
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
 	}
-	for _, r := range results[1:] {
-		if len(r) != len(results[0]) {
-			p.logger.Error("Consensus failure", "step", "deliver", "expected", results[0], "actual", r)
-			return errors.FatalError.WithFormat("consensus failure: different number of results")
-		}
-		for i, st := range r {
-			if !results[0][i].Equal(st) {
-				p.logger.Error("Consensus failure", "step", "deliver", "id", st.TxID, "expected", results[0][i], "actual", st)
-				return errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
+	if !p.sim.IgnoreDeliverResults {
+		for _, r := range results[1:] {
+			if len(r) != len(results[0]) {
+				p.logger.Error("Consensus failure", "step", "deliver", "expected", results[0], "actual", r)
+				return errors.FatalError.WithFormat("consensus failure: different number of results")
+			}
+			for i, st := range r {
+				if !results[0][i].Equal(st) {
+					p.logger.Error("Consensus failure", "step", "deliver", "id", st.TxID, "expected", results[0][i], "actual", st)
+					return errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
+				}
 			}
 		}
 	}
@@ -414,21 +439,32 @@ func (p *Partition) execute() error {
 	}
 
 	// Commit
-	commit := make([][]byte, len(p.nodes))
+	commit := make(CommitConsensusError, len(p.nodes))
 	for i, n := range p.nodes {
 		commit[i], err = n.commit(blockState[i])
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
 	}
-	for i, v := range commit[1:] {
-		if !bytes.Equal(commit[0], v) {
-			return errors.FatalError.WithFormat("consensus failure: commit %s.%d: expected %x, got %x", p.ID, i+1, commit[0], v)
-		}
+	if commit.isErr() {
+		return commit
 	}
 
 	return nil
 }
+
+type CommitConsensusError [][]byte
+
+func (c CommitConsensusError) isErr() bool {
+	for _, v := range c[1:] {
+		if !bytes.Equal(c[0], v) {
+			return true
+		}
+	}
+	return false
+}
+
+func (CommitConsensusError) Error() string { return "consensus failure during commit" }
 
 // orderMessagesDeterministically reorders messages deterministically,
 // preserving certain invariants. Transactions must sort first and user
