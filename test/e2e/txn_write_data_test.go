@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -33,7 +33,7 @@ func TestWriteData_ToState(t *testing.T) {
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
 
 	// Write data
-	entry := &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
+	entry := &DoubleHashDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
@@ -103,7 +103,7 @@ func TestWriteData_AdiAccumulateEntryHash(t *testing.T) {
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
 
 	// Write second entry
-	entry := &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
+	entry := &DoubleHashDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
 	st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
@@ -162,7 +162,7 @@ func TestWriteData_LiteAccumulateEntryHash(t *testing.T) {
 	)...)
 
 	// Write second entry
-	entry2 := &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
+	entry2 := &DoubleHashDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
 	st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(ldaAddr).
