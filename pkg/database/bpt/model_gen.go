@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type BPT struct {
@@ -30,6 +29,10 @@ type BPT struct {
 
 func (c *BPT) Key() *record.Key { return c.key }
 
+func (c *BPT) getState() values.Value[*parameters] {
+	return values.GetOrCreate(c, &c.state, (*BPT).newState)
+}
+
 func (c *BPT) baseIsDirty() bool {
 	if c == nil {
 		return false
@@ -43,20 +46,6 @@ func (c *BPT) baseIsDirty() bool {
 	}
 
 	return false
-}
-
-func (c *BPT) baseWalk(opts record.WalkOptions, fn record.WalkFunc) error {
-	if c == nil {
-		return nil
-	}
-
-	skip, err := values.WalkComposite(c, opts, fn)
-	if skip || err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	values.Walk(&err, c.state, opts, fn)
-	values.Walk(&err, c.root, opts, fn)
-	return err
 }
 
 func (c *BPT) baseCommit() error {
