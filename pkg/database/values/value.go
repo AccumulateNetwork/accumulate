@@ -11,12 +11,11 @@ package values
 import (
 	"io"
 
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"golang.org/x/exp/slog"
 )
 
 // debug is a bit field for enabling debug log messages
@@ -57,7 +56,6 @@ const (
 )
 
 type value[T any] struct {
-	logger       logging.OptionalLogger
 	store        database.Store
 	key          *database.Key
 	name         string
@@ -70,9 +68,8 @@ type value[T any] struct {
 var _ database.Value = (*value[*wrappedValue[uint64]])(nil)
 
 // NewValue returns a new value using the given encodable value.
-func newValue[T any](logger log.Logger, store database.Store, key *database.Key, name string, allowMissing bool, ev encodableValue[T]) *value[T] {
+func newValue[T any](store database.Store, key *database.Key, name string, allowMissing bool, ev encodableValue[T]) *value[T] {
 	v := &value[T]{}
-	v.logger.L = logger
 	v.store = store
 	v.key = key
 	v.name = name
@@ -101,19 +98,19 @@ func (v *value[T]) Get() (u T, err error) {
 	case debugGet | debugGetValue:
 		defer func() {
 			if err != nil {
-				v.logger.Debug("Get", "key", v.key, "value", err)
+				slog.Debug("Get", "key", v.key, "value", err, "module", "database")
 			} else {
-				v.logger.Debug("Get", "key", v.key, "value", u)
+				slog.Debug("Get", "key", v.key, "value", u, "module", "database")
 			}
 		}()
 	case debugGet:
-		v.logger.Debug("Get", "key", v.key)
+		slog.Debug("Get", "key", v.key, "module", "database")
 	case debugGetValue:
 		defer func() {
 			if err != nil {
-				v.logger.Debug("Get", "error", err)
+				slog.Debug("Get", "error", err, "module", "database")
 			} else {
-				v.logger.Debug("Get", "value", u)
+				slog.Debug("Get", "value", u, "module", "database")
 			}
 		}()
 	}
@@ -159,11 +156,11 @@ func (v *value[T]) GetAs(target interface{}) error {
 func (v *value[T]) Put(u T) error {
 	switch debug & (debugPut | debugPutValue) {
 	case debugPut | debugPutValue:
-		v.logger.Debug("Put", "key", v.key, "value", u)
+		slog.Debug("Put", "key", v.key, "value", u, "module", "database")
 	case debugPut:
-		v.logger.Debug("Put", "key", v.key)
+		slog.Debug("Put", "key", v.key, "module", "database")
 	case debugPutValue:
-		v.logger.Debug("Put", "value", u)
+		slog.Debug("Put", "value", u, "module", "database")
 	}
 
 	// Required for proper versioning
@@ -238,7 +235,7 @@ func (v *value[T]) LoadValue(value database.Value, put bool) error {
 	// Warn if a value is modified incorrectly - except for the BPT since it
 	// doesn't follow the rules
 	if put && version <= v.version && !isBptValue(v.key) {
-		v.logger.Error("Conflicting values written from concurrent batches", "key", v.key)
+		slog.Error("Conflicting values written from concurrent batches", "key", v.key, "module", "database")
 	}
 	v.version = version
 

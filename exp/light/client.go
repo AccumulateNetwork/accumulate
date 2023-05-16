@@ -39,7 +39,7 @@ func BadgerStore(filepath string) ClientOption {
 	return func(c *Client) error {
 		// Open the badger database
 		var err error
-		c.store, err = badger.New(filepath, c.logger)
+		c.store, err = badger.New(filepath)
 		return errors.UnknownError.Wrap(err)
 	}
 }

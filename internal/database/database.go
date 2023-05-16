@@ -49,12 +49,7 @@ func OpenInMemory(logger log.Logger) *Database {
 }
 
 func OpenBadger(filepath string, logger log.Logger) (*Database, error) {
-	var storeLogger log.Logger
-	if logger != nil {
-		storeLogger = logger.With("module", "storage")
-	}
-
-	store, err := badger.New(filepath, storeLogger)
+	store, err := badger.New(filepath)
 	if err != nil {
 		return nil, err
 	}

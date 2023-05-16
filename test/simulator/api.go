@@ -128,7 +128,6 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	var v3 http.Handler
 	if opts.ListenHTTPv3 {
 		jrpc, err := jsonrpc.NewHandler(
-			n.logger.With("module", "api"),
 			jsonrpc.ConsensusService{ConsensusService: (*nodeService)(n)},
 			jsonrpc.NetworkService{NetworkService: services},
 			jsonrpc.MetricsService{MetricsService: services},
@@ -144,7 +143,6 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 
 	if opts.ListenWSv3 {
 		ws, err := websocket.NewHandler(
-			n.logger.With("module", "api"),
 			message.ConsensusService{ConsensusService: (*nodeService)(n)},
 			message.NetworkService{NetworkService: services},
 			message.MetricsService{MetricsService: services},
@@ -223,7 +221,6 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	addr2 := n.init.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
 
 	h, err := message.NewHandler(
-		n.logger.With("module", "acc"),
 		&message.ConsensusService{ConsensusService: (*nodeService)(n)},
 		&message.MetricsService{MetricsService: (*nodeService)(n)},
 		&message.NetworkService{NetworkService: (*nodeService)(n)},
@@ -238,7 +235,6 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	}
 
 	p2p, err := p2p.New(p2p.Options{
-		Logger:        n.logger.With("module", "acc"),
 		Network:       n.simulator.init.Id,
 		Listen:        []multiaddr.Multiaddr{addr1, addr2},
 		Key:           n.nodeKey,

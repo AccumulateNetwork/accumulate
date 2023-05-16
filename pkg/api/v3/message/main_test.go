@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -118,8 +117,7 @@ func TestEvents(t *testing.T) {
 }
 
 func SetupTest(t testing.TB, services ...Service) *Client {
-	logger := logging.ConsoleLoggerForTest(t, "info")
-	handler, err := NewHandler(logger, services...)
+	handler, err := NewHandler(services...)
 	require.NoError(t, err)
 	addr, err := multiaddr.NewComponent(api.N_ACC_SVC, "unknown:foo")
 	require.NoError(t, err)
