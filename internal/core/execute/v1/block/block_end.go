@@ -427,6 +427,11 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
 			continue
 		}
+		txn, ok := resp.Message.(*messaging.TransactionMessage)
+		if !ok {
+			x.logger.Error("Response to query-synth is not a transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "type", resp.Message.Type())
+			continue
+		}
 
 		var gotSynth, gotReceipt, gotKey, bad bool
 		var signatures []protocol.Signature
@@ -482,8 +487,8 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{
-			Signatures: signatures,
-			Messages:   []messaging.Message{resp.Message},
+			Signatures:  signatures,
+			Transaction: []*protocol.Transaction{txn.Transaction},
 		})
 		if err != nil {
 			x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
