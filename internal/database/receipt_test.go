@@ -226,7 +226,7 @@ func TestBadgerReceipts(t *testing.T) {
 		t.Skip("Skipping test: running CI: flaky")
 	}
 
-	badger, err := badger.New(filepath.Join(t.TempDir(), "badger.db"), nil)
+	badger, err := badger.New(filepath.Join(t.TempDir(), "badger.db"))
 	require.NoError(t, err)
 	defer badger.Close()
 

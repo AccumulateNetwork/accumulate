@@ -7,16 +7,17 @@
 package badger
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/dgraph-io/badger"
-	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	"golang.org/x/exp/slog"
 )
 
 // TruncateBadger controls whether Badger is configured to truncate corrupted
@@ -30,12 +31,11 @@ var TruncateBadger = false
 
 type Database struct {
 	badger *badger.DB
-	logger logging.OptionalLogger
 	ready  bool
 	mu     sync.RWMutex
 }
 
-func New(filepath string, logger log.Logger) (*Database, error) {
+func New(filepath string) (*Database, error) {
 	// Make sure all directories exist
 	err := os.MkdirAll(filepath, 0700)
 	if err != nil {
@@ -43,20 +43,15 @@ func New(filepath string, logger log.Logger) (*Database, error) {
 	}
 
 	opts := badger.DefaultOptions(filepath)
+	opts = opts.WithLogger(slogger{})
 
 	// Truncate corrupted data
 	if TruncateBadger {
 		opts = opts.WithTruncate(true)
 	}
 
-	// Add logger
-	if logger != nil {
-		opts = opts.WithLogger(badgerLogger{logger})
-	}
-
 	d := new(Database)
 	d.ready = true
-	d.logger.Set(logger)
 
 	// Open Badger
 	d.badger, err = badger.Open(opts)
@@ -107,7 +102,7 @@ func (d *Database) gc() {
 		// Run GC if 50% space could be reclaimed
 		err = d.badger.RunValueLogGC(0.5)
 		if err != nil && !errors.Is(err, badger.ErrNoRewrite) {
-			d.logger.Error("Badger GC failed", "error", err)
+			slog.Error("Badger GC failed", "error", err, "module", "badger")
 		}
 
 		// Release the lock
@@ -135,4 +130,27 @@ func (d *Database) lock(closing bool) (sync.Locker, error) {
 	}
 
 	return l, nil
+}
+
+type slogger struct{}
+
+func (l slogger) format(format string, args ...interface{}) string {
+	s := fmt.Sprintf(format, args...)
+	return strings.TrimRight(s, "\n")
+}
+
+func (l slogger) Errorf(format string, args ...interface{}) {
+	slog.Error(l.format(format, args...), "module", "badger")
+}
+
+func (l slogger) Warningf(format string, args ...interface{}) {
+	slog.Warn(l.format(format, args...), "module", "badger")
+}
+
+func (l slogger) Infof(format string, args ...interface{}) {
+	slog.Info(l.format(format, args...), "module", "badger")
+}
+
+func (l slogger) Debugf(format string, args ...interface{}) {
+	slog.Debug(l.format(format, args...), "module", "badger")
 }

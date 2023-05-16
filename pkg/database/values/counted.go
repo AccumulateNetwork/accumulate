@@ -9,7 +9,6 @@ package values
 import (
 	"fmt"
 
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -21,10 +20,10 @@ type counted[T any] struct {
 	values []*value[T]
 }
 
-func newCounted[T any](logger log.Logger, store database.Store, key *database.Key, namefmt string, new func() encodableValue[T]) *counted[T] {
+func newCounted[T any](store database.Store, key *database.Key, namefmt string, new func() encodableValue[T]) *counted[T] {
 	c := &counted[T]{}
 	c.key = key
-	c.count = newValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
+	c.count = newValue(store, key, namefmt, true, Wrapped(UintWrapper))
 	c.new = new
 	return c
 }
@@ -50,7 +49,7 @@ func (c *counted[T]) value(i int) *value[T] {
 
 	key := c.count.key.Append(i)
 	name := fmt.Sprintf("%s %d", c.count.name, i)
-	v := newValue(c.count.logger.L, c.count.store, key, name, false, c.new())
+	v := newValue(c.count.store, key, name, false, c.new())
 	c.values[i] = v
 	return v
 }

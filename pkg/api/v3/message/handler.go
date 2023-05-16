@@ -12,23 +12,20 @@ import (
 	"runtime/debug"
 
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 // Handler handles message streams.
 type Handler struct {
-	logger  logging.OptionalLogger
 	methods serviceMethodMap
 }
 
 // NewHandler constructs a new Handler with the given list of services.
 // NewHandler only returns an error if more than one service attempts to
 // register a method for the same request type.
-func NewHandler(logger log.Logger, services ...Service) (*Handler, error) {
+func NewHandler(services ...Service) (*Handler, error) {
 	h := new(Handler)
-	h.logger.Set(logger)
 	h.methods = serviceMethodMap{}
 	for _, service := range services {
 		for typ, method := range service.methods() {
@@ -47,7 +44,7 @@ func (h *Handler) Handle(s Stream) {
 	// Panic protection
 	defer func() {
 		if r := recover(); r != nil {
-			h.logger.Error("Panicked while handling stream", "error", r, "stack", debug.Stack())
+			slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
 		}
 	}()
 
@@ -69,7 +66,7 @@ func (h *Handler) Handle(s Stream) {
 			return
 
 		default:
-			h.logger.Error("Unable to decode request from peer", "error", err)
+			slog.Error("Unable to decode request from peer", "error", err, "module", "api")
 			return
 		}
 
@@ -87,7 +84,7 @@ func (h *Handler) Handle(s Stream) {
 		if !ok {
 			err = s.Write(&ErrorResponse{Error: errors.NotAllowed.WithFormat("%v not supported", req.Type())})
 			if err != nil {
-				h.logger.Error("Unable to send error response to peer", "error", err)
+				slog.Error("Unable to send error response to peer", "error", err, "module", "api")
 				return
 			}
 			continue
@@ -96,7 +93,6 @@ func (h *Handler) Handle(s Stream) {
 		// And call it
 		m(&call[Message]{
 			context: ctx,
-			logger:  h.logger,
 			stream:  s,
 			params:  req,
 		})
