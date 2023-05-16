@@ -44,6 +44,19 @@ func compareVoteEntries(a, b *VoteEntry) int {
 	return a.Authority.Compare(b.Authority)
 }
 
+func (a *Account) getTransactionKeys() ([]accountTransactionKey, error) {
+	ids, err := a.Pending().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	keys := make([]accountTransactionKey, len(ids))
+	for i, id := range ids {
+		keys[i].Hash = id.Hash()
+	}
+	return keys, nil
+}
+
 // PathHash returns a hash derived from the delegation path.
 func (a *SignatureSetEntry) PathHash() [32]byte {
 	sha := sha256.New()

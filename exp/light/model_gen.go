@@ -34,71 +34,89 @@ type indexDB struct {
 	key    *record.Key
 	label  string
 
-	account     map[indexDBAccountKey]*indexDBAccount
-	partition   map[indexDBPartitionKey]*indexDBPartition
-	transaction map[indexDBTransactionKey]*indexDBTransaction
+	account     map[indexDBAccountMapKey]*indexDBAccount
+	partition   map[indexDBPartitionMapKey]*indexDBPartition
+	transaction map[indexDBTransactionMapKey]*indexDBTransaction
 }
 
 func (c *indexDB) Key() *record.Key { return c.key }
 
 type indexDBAccountKey struct {
+	Url *url.URL
+}
+
+type indexDBAccountMapKey struct {
 	Url [32]byte
 }
 
-func keyForIndexDBAccount(url *url.URL) indexDBAccountKey {
-	return indexDBAccountKey{values.MapKeyUrl(url)}
+func (k indexDBAccountKey) ForMap() indexDBAccountMapKey {
+	return indexDBAccountMapKey{values.MapKeyUrl(k.Url)}
 }
 
 type indexDBPartitionKey struct {
+	Url *url.URL
+}
+
+type indexDBPartitionMapKey struct {
 	Url [32]byte
 }
 
-func keyForIndexDBPartition(url *url.URL) indexDBPartitionKey {
-	return indexDBPartitionKey{values.MapKeyUrl(url)}
+func (k indexDBPartitionKey) ForMap() indexDBPartitionMapKey {
+	return indexDBPartitionMapKey{values.MapKeyUrl(k.Url)}
 }
 
 type indexDBTransactionKey struct {
 	Hash [32]byte
 }
 
-func keyForIndexDBTransaction(hash [32]byte) indexDBTransactionKey {
-	return indexDBTransactionKey{hash}
+type indexDBTransactionMapKey struct {
+	Hash [32]byte
+}
+
+func (k indexDBTransactionKey) ForMap() indexDBTransactionMapKey {
+	return indexDBTransactionMapKey{k.Hash}
 }
 
 func (c *indexDB) Account(url *url.URL) IndexDBAccount {
-	return values.GetOrCreateMap(&c.account, keyForIndexDBAccount(url), func() *indexDBAccount {
-		v := new(indexDBAccount)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Account", url)
-		v.parent = c
-		v.label = c.label + " " + "account" + " " + url.RawString()
-		return v
-	})
+	return values.GetOrCreateMap(c, &c.account, indexDBAccountKey{url}, (*indexDB).newAccount)
+}
+
+func (c *indexDB) newAccount(k indexDBAccountKey) *indexDBAccount {
+	v := new(indexDBAccount)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Account", k.Url)
+	v.parent = c
+	v.label = c.label + " " + "account" + " " + k.Url.RawString()
+	return v
 }
 
 func (c *indexDB) Partition(url *url.URL) IndexDBPartition {
-	return values.GetOrCreateMap(&c.partition, keyForIndexDBPartition(url), func() *indexDBPartition {
-		v := new(indexDBPartition)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Partition", url)
-		v.parent = c
-		v.label = c.label + " " + "partition" + " " + url.RawString()
-		return v
-	})
+	return values.GetOrCreateMap(c, &c.partition, indexDBPartitionKey{url}, (*indexDB).newPartition)
+}
+
+func (c *indexDB) newPartition(k indexDBPartitionKey) *indexDBPartition {
+	v := new(indexDBPartition)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Partition", k.Url)
+	v.parent = c
+	v.label = c.label + " " + "partition" + " " + k.Url.RawString()
+	return v
 }
 
 func (c *indexDB) Transaction(hash [32]byte) IndexDBTransaction {
-	return values.GetOrCreateMap(&c.transaction, keyForIndexDBTransaction(hash), func() *indexDBTransaction {
-		v := new(indexDBTransaction)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Transaction", hash)
-		v.parent = c
-		v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(hash[:])
-		return v
-	})
+	return values.GetOrCreateMap(c, &c.transaction, indexDBTransactionKey{hash}, (*indexDB).newTransaction)
+}
+
+func (c *indexDB) newTransaction(k indexDBTransactionKey) *indexDBTransaction {
+	v := new(indexDBTransaction)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Transaction", k.Hash)
+	v.parent = c
+	v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(k.Hash[:])
+	return v
 }
 
 func (c *indexDB) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -175,15 +193,9 @@ func (c *indexDB) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	for _, v := range c.account {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.partition {
-		values.Walk(&err, v, opts, fn)
-	}
-	for _, v := range c.transaction {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkMap(&err, c.account, c.newAccount, nil, opts, fn)
+	values.WalkMap(&err, c.partition, c.newPartition, nil, opts, fn)
+	values.WalkMap(&err, c.transaction, c.newTransaction, nil, opts, fn)
 	return err
 }
 
@@ -222,7 +234,7 @@ type indexDBAccount struct {
 
 	didIndexTransactionExecution values.Set[[32]byte]
 	didLoadTransaction           values.Set[[32]byte]
-	chain                        map[indexDBAccountChainKey]*indexDBAccountChain
+	chain                        map[indexDBAccountChainMapKey]*indexDBAccountChain
 }
 
 func (c *indexDBAccount) Key() *record.Key { return c.key }
@@ -231,32 +243,42 @@ type indexDBAccountChainKey struct {
 	Name string
 }
 
-func keyForIndexDBAccountChain(name string) indexDBAccountChainKey {
-	return indexDBAccountChainKey{name}
+type indexDBAccountChainMapKey struct {
+	Name string
+}
+
+func (k indexDBAccountChainKey) ForMap() indexDBAccountChainMapKey {
+	return indexDBAccountChainMapKey{k.Name}
 }
 
 func (c *indexDBAccount) DidIndexTransactionExecution() values.Set[[32]byte] {
-	return values.GetOrCreate(&c.didIndexTransactionExecution, func() values.Set[[32]byte] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), c.label+" "+"did index transaction execution", values.Wrapped(values.HashWrapper), values.CompareHash)
-	})
+	return values.GetOrCreate(c, &c.didIndexTransactionExecution, (*indexDBAccount).newDidIndexTransactionExecution)
+}
+
+func (c *indexDBAccount) newDidIndexTransactionExecution() values.Set[[32]byte] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), c.label+" "+"did index transaction execution", values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
 func (c *indexDBAccount) DidLoadTransaction() values.Set[[32]byte] {
-	return values.GetOrCreate(&c.didLoadTransaction, func() values.Set[[32]byte] {
-		return values.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), c.label+" "+"did load transaction", values.Wrapped(values.HashWrapper), values.CompareHash)
-	})
+	return values.GetOrCreate(c, &c.didLoadTransaction, (*indexDBAccount).newDidLoadTransaction)
+}
+
+func (c *indexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), c.label+" "+"did load transaction", values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
 func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
-	return values.GetOrCreateMap(&c.chain, keyForIndexDBAccountChain(name), func() *indexDBAccountChain {
-		v := new(indexDBAccountChain)
-		v.logger = c.logger
-		v.store = c.store
-		v.key = c.key.Append("Chain", name)
-		v.parent = c
-		v.label = c.label + " " + "chain" + " " + name
-		return v
-	})
+	return values.GetOrCreateMap(c, &c.chain, indexDBAccountChainKey{name}, (*indexDBAccount).newChain)
+}
+
+func (c *indexDBAccount) newChain(k indexDBAccountChainKey) *indexDBAccountChain {
+	v := new(indexDBAccountChain)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Chain", k.Name)
+	v.parent = c
+	v.label = c.label + " " + "chain" + " " + k.Name
+	return v
 }
 
 func (c *indexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -313,11 +335,9 @@ func (c *indexDBAccount) Walk(opts record.WalkOptions, fn record.WalkFunc) error
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.didIndexTransactionExecution, opts, fn)
-	values.Walk(&err, c.didLoadTransaction, opts, fn)
-	for _, v := range c.chain {
-		values.Walk(&err, v, opts, fn)
-	}
+	values.WalkField(&err, c.didIndexTransactionExecution, c.newDidIndexTransactionExecution, opts, fn)
+	values.WalkField(&err, c.didLoadTransaction, c.newDidLoadTransaction, opts, fn)
+	values.WalkMap(&err, c.chain, c.newChain, nil, opts, fn)
 	return err
 }
 
@@ -354,9 +374,11 @@ type indexDBAccountChain struct {
 func (c *indexDBAccountChain) Key() *record.Key { return c.key }
 
 func (c *indexDBAccountChain) Index() values.List[*protocol.IndexEntry] {
-	return values.GetOrCreate(&c.index, func() values.List[*protocol.IndexEntry] {
-		return values.NewList(c.logger.L, c.store, c.key.Append("Index"), c.label+" "+"index", values.Struct[protocol.IndexEntry]())
-	})
+	return values.GetOrCreate(c, &c.index, (*indexDBAccountChain).newIndex)
+}
+
+func (c *indexDBAccountChain) newIndex() values.List[*protocol.IndexEntry] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("Index"), c.label+" "+"index", values.Struct[protocol.IndexEntry]())
 }
 
 func (c *indexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -393,6 +415,9 @@ func (c *indexDBAccountChain) Walk(opts record.WalkOptions, fn record.WalkFunc) 
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
+	if !opts.IgnoreIndices {
+		values.WalkField(&err, c.index, c.newIndex, opts, fn)
+	}
 	return err
 }
 
@@ -425,9 +450,11 @@ type indexDBPartition struct {
 func (c *indexDBPartition) Key() *record.Key { return c.key }
 
 func (c *indexDBPartition) Anchors() values.List[*AnchorMetadata] {
-	return values.GetOrCreate(&c.anchors, func() values.List[*AnchorMetadata] {
-		return values.NewList(c.logger.L, c.store, c.key.Append("Anchors"), c.label+" "+"anchors", values.Struct[AnchorMetadata]())
-	})
+	return values.GetOrCreate(c, &c.anchors, (*indexDBPartition).newAnchors)
+}
+
+func (c *indexDBPartition) newAnchors() values.List[*AnchorMetadata] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("Anchors"), c.label+" "+"anchors", values.Struct[AnchorMetadata]())
 }
 
 func (c *indexDBPartition) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -464,7 +491,7 @@ func (c *indexDBPartition) Walk(opts record.WalkOptions, fn record.WalkFunc) err
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	values.Walk(&err, c.anchors, opts, fn)
+	values.WalkField(&err, c.anchors, c.newAnchors, opts, fn)
 	return err
 }
 
@@ -497,9 +524,11 @@ type indexDBTransaction struct {
 func (c *indexDBTransaction) Key() *record.Key { return c.key }
 
 func (c *indexDBTransaction) Executed() values.Value[*EventMetadata] {
-	return values.GetOrCreate(&c.executed, func() values.Value[*EventMetadata] {
-		return values.NewValue(c.logger.L, c.store, c.key.Append("Executed"), c.label+" "+"executed", false, values.Struct[EventMetadata]())
-	})
+	return values.GetOrCreate(c, &c.executed, (*indexDBTransaction).newExecuted)
+}
+
+func (c *indexDBTransaction) newExecuted() values.Value[*EventMetadata] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Executed"), c.label+" "+"executed", false, values.Struct[EventMetadata]())
 }
 
 func (c *indexDBTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -535,6 +564,9 @@ func (c *indexDBTransaction) Walk(opts record.WalkOptions, fn record.WalkFunc) e
 	skip, err := values.WalkComposite(c, opts, fn)
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
+	}
+	if !opts.IgnoreIndices {
+		values.WalkField(&err, c.executed, c.newExecuted, opts, fn)
 	}
 	return err
 }

@@ -3,14 +3,14 @@
   omitResolve: true
   customCommit: true
   customIsDirty: true
-  customWalk: true
+  omitWalk: true
   fields:
   - name: pending
     type: map[[32]byte][32]byte
   attributes:
   - name: State
     private: true
-    omitAccessor: true
+    omitConstructor: true
     type: state
     key: Root
     dataType: parameters
@@ -18,6 +18,7 @@
   - name: Root
     private: true
     omitAccessor: true
+    omitConstructor: true
     type: other
     dataType: rootRecord
     pointer: true
