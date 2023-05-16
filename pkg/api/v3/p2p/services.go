@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 // A MessageStreamHandler handles an incoming [message.Stream].
@@ -42,7 +43,7 @@ func (n *Node) RegisterService(sa *api.ServiceAddress, handler MessageStreamHand
 
 	err := n.peermgr.advertizeNewService(sa)
 	if err != nil {
-		n.logger.Error("Advertizing failed", "error", err)
+		slog.Error("Advertizing failed", "error", err, "module", "api")
 	}
 	return true
 }

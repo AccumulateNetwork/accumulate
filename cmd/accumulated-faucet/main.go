@@ -85,7 +85,6 @@ func run(_ *cobra.Command, args []string) {
 	node, err := p2p.New(p2p.Options{
 		Key:            loadOrGenerateKey(),
 		Network:        args[0],
-		Logger:         logger,
 		Listen:         flag.Listen,
 		BootstrapPeers: flag.Peers,
 	})
@@ -124,7 +123,7 @@ func run(_ *cobra.Command, args []string) {
 	Check(err)
 	defer faucetSvc.Stop()
 
-	handler, err := message.NewHandler(logger, message.Faucet{Faucet: faucetSvc})
+	handler, err := message.NewHandler(message.Faucet{Faucet: faucetSvc})
 	Check(err)
 	if !node.RegisterService(faucetSvc.Type().AddressForUrl(protocol.AcmeUrl()), handler.Handle) {
 		Fatalf("failed to register faucet service")
