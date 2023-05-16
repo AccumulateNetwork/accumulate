@@ -17,14 +17,12 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	"github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // peerManager manages the peer list and peer discovery for a [Node].
 type peerManager struct {
-	logger      logging.OptionalLogger
 	context     context.Context
 	host        host.Host
 	network     string
@@ -44,12 +42,11 @@ func newPeerManager(ctx context.Context, host host.Host, getServices func() []*s
 	m.host = host
 	m.context = ctx
 	m.network = opts.Network
-	m.logger.Set(opts.Logger, "module", "acc-p2p")
 	m.getServices = getServices
 
 	// Setup the DHT
 	var err error
-	m.dht, err = startDHT(host, m.logger, ctx, opts.DiscoveryMode, opts.BootstrapPeers)
+	m.dht, err = startDHT(host, ctx, opts.DiscoveryMode, opts.BootstrapPeers)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +55,7 @@ func newPeerManager(ctx context.Context, host host.Host, getServices func() []*s
 
 	// Setup events
 	var recvEvent <-chan event
-	m.sendEvent, recvEvent, err = startServiceDiscovery(ctx, host, m.logger)
+	m.sendEvent, recvEvent, err = startServiceDiscovery(ctx, host)
 	if err != nil {
 		return nil, err
 	}

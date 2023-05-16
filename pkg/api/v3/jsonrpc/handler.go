@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,20 +8,18 @@ package jsonrpc
 
 import (
 	"fmt"
-	"io"
-	stdlog "log"
 	"net/http"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 type Service interface {
 	methods() jsonrpc2.MethodMap
 }
 
-func NewHandler(logger log.Logger, services ...Service) (http.Handler, error) {
+func NewHandler(services ...Service) (http.Handler, error) {
 	methods := jsonrpc2.MethodMap{}
 	for _, service := range services {
 		for name, method := range service.methods() {
@@ -32,23 +30,15 @@ func NewHandler(logger log.Logger, services ...Service) (http.Handler, error) {
 		}
 	}
 
-	var jl jsonrpc2.Logger
-	if logger == nil {
-		jl = stdlog.New(io.Discard, "", 0)
-	} else {
-		jl = ll{logger}
-	}
-	return jsonrpc2.HTTPRequestHandler(methods, jl), nil
+	return jsonrpc2.HTTPRequestHandler(methods, slogger{}), nil
 }
 
-type ll struct {
-	l log.Logger
+type slogger struct{}
+
+func (slogger) Println(values ...interface{}) {
+	slog.Info(fmt.Sprint(values...), "module", "api")
 }
 
-func (l ll) Println(values ...interface{}) {
-	l.l.Info(fmt.Sprint(values...))
-}
-
-func (l ll) Printf(format string, values ...interface{}) {
-	l.l.Info(fmt.Sprintf(format, values...))
+func (slogger) Printf(format string, values ...interface{}) {
+	slog.Info(fmt.Sprintf(format, values...), "module", "api")
 }
