@@ -55,7 +55,7 @@ func TestReplay(t *testing.T) {
 			WithPrincipal(alice.JoinPath(account)).
 			WithBody(&WriteData{
 				WriteToState: true,
-				Entry: &AccumulateDataEntry{
+				Entry: &DoubleHashDataEntry{
 					Data: [][]byte{[]byte(entry)},
 				},
 			})
