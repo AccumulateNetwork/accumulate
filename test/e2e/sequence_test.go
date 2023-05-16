@@ -310,15 +310,13 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	})
 
 	// Resubmit the original, valid signature
-	var messages []messaging.Message
+	envelope := new(messaging.Envelope)
 	for _, delivery := range original {
-		messages = append(messages, &messaging.TransactionMessage{Transaction: delivery.Transaction})
-		for _, sig := range delivery.Signatures {
-			messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: delivery.Transaction.ID()})
-		}
+		envelope.Transaction = append(envelope.Transaction, delivery.Transaction)
+		envelope.Signatures = append(envelope.Signatures, delivery.Signatures...)
 	}
 
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(messages, false)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(envelope, false)
 	require.NoError(t, err)
 	for _, result := range results {
 		if result.Error != nil {

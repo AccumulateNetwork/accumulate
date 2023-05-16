@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
@@ -233,7 +232,7 @@ func (n *Node) initCollector() error {
 		msg.Anchor = e.Summary
 		msg.Signature = env.Signatures[0].(protocol.KeySignature)
 
-		st, err := n.simulator.SubmitTo(n.simulator.init.Bsn.Id, []messaging.Message{msg})
+		st, err := n.simulator.SubmitTo(n.simulator.init.Bsn.Id, &messaging.Envelope{Messages: []messaging.Message{msg}})
 		if err != nil {
 			n.logger.Error("Failed to submit block summary envelope", "error", err)
 			return
@@ -314,10 +313,10 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	return root[:], nil
 }
 
-func (n *Node) checkTx(messages []messaging.Message, typ abcitypes.CheckTxType) ([]*protocol.TransactionStatus, error) {
+func (n *Node) checkTx(envelope *messaging.Envelope, new bool) ([]*protocol.TransactionStatus, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	s, err := n.executor.Validate(messages, typ == abcitypes.CheckTxType_Recheck)
+	s, err := n.executor.Validate(envelope, !new)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("check messages: %w", err)
 	}
@@ -334,14 +333,20 @@ func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
 	return block, nil
 }
 
-func (n *Node) deliverTx(block execute.Block, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (n *Node) deliverTx(block execute.Block, envelopes []*messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	s, err := block.Process(messages)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("deliver messages: %w", err)
+
+	var results []*protocol.TransactionStatus
+	for _, envelope := range envelopes {
+		s, err := block.Process(envelope)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
+		}
+
+		results = append(results, s...)
 	}
-	return s, nil
+	return results, nil
 }
 
 func (n *Node) endBlock(block execute.Block) (execute.BlockState, []*validatorUpdate, error) {
