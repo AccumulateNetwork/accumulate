@@ -391,14 +391,11 @@ func (s *Simulator) Submit(envelopes ...*messaging.Envelope) ([]*messaging.Envel
 func (s *Simulator) SubmitTo(partition string, envelope *messaging.Envelope) error {
 	x := s.Partition(partition)
 
-	// Normalize - use a copy to avoid weird issues caused by modifying values
-	deliveries, err := envelope.Copy().Normalize()
-	if err != nil {
-		return err
-	}
+	// Use a copy to avoid weird issues caused by modifying values
+	envelope = envelope.Copy()
 
 	// Check - set recheck = true to make the executor create a new batch to avoid timing issues
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(deliveries, true)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(envelope, true)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -713,14 +710,12 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		err := x.Executor.BeginBlock(block)
 		require.NoError(x, err)
 
-		var messages []messaging.Message
+		env := new(messaging.Envelope)
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
-				messages = append(messages, &messaging.TransactionMessage{Transaction: deliveries[i].Transaction})
-				for _, sig := range deliveries[i].Signatures {
-					messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: deliveries[i].Transaction.ID()})
-				}
+				env.Transaction = append(env.Transaction, deliveries[i].Transaction)
+				env.Signatures = append(env.Signatures, deliveries[i].Signatures...)
 				continue
 			}
 			if !errors.Is(err, errors.Delivered) {
@@ -734,7 +729,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results, err := (&execute.BlockV1{Block: block, Executor: x.Executor}).Process(messages)
+		results, err := (&execute.BlockV1{Block: block, Executor: x.Executor}).Process(env)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}

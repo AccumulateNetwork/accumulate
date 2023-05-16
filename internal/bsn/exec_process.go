@@ -19,8 +19,13 @@ type bundle struct {
 	additional []messaging.Message
 }
 
-func (b *Block) Process(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	var statuses []*protocol.TransactionStatus
+
+	messages, err := envelope.Normalize()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	for len(messages) > 0 {
 		d := &bundle{Block: b}
