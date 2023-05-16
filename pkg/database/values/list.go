@@ -49,3 +49,22 @@ func (s *list[T]) Commit() error {
 	err := s.value.Commit()
 	return errors.UnknownError.Wrap(err)
 }
+
+func (v *list[T]) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
+	if opts.Modified && !v.IsDirty() {
+		return nil
+	}
+
+	// If the set is empty, skip it
+	u, err := v.Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if len(u) == 0 {
+		return nil
+	}
+
+	// Walk the record
+	_, err = fn(v)
+	return err
+}
