@@ -476,7 +476,6 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		ValidatorKey: d.Key().Bytes(),
 	})
 	messageHandler, err := message.NewHandler(
-		d.Logger.With("module", "acc-rpc"),
 		&message.ConsensusService{ConsensusService: nodeSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
 		&message.NetworkService{NetworkService: netSvc},
@@ -520,7 +519,6 @@ func (d *Daemon) startAPI() error {
 	var err error
 	if d.p2pnode == nil {
 		d.p2pnode, err = p2p.New(p2p.Options{
-			Logger:         d.Logger.With("module", "acc-rpc"),
 			Network:        d.Config.Accumulate.Network.Id,
 			Listen:         d.Config.Accumulate.P2P.Listen,
 			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,

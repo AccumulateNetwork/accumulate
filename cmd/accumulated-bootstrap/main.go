@@ -17,10 +17,8 @@ import (
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 )
 
@@ -52,16 +50,8 @@ func init() {
 }
 
 func run(*cobra.Command, []string) {
-	w, err := logging.NewConsoleWriter("plain")
-	Check(err)
-	level, w, err := logging.ParseLogLevel(flag.LogLevel, w)
-	Check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(w), level, false)
-	Check(err)
-
 	node, err := p2p.New(p2p.Options{
 		Key:            loadOrGenerateKey(),
-		Logger:         logger,
 		Listen:         flag.Listen,
 		BootstrapPeers: flag.Peers,
 		DiscoveryMode:  dht.ModeAutoServer,

@@ -7,7 +7,6 @@
 package values
 
 import (
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 )
 
@@ -46,21 +45,21 @@ type Counted[T any] interface {
 }
 
 // NewValue returns a new value using the given encodable value.
-func NewValue[T any](logger log.Logger, store database.Store, key *database.Key, name string, allowMissing bool, ev encodableValue[T]) Value[T] {
-	return newValue(logger, store, key, name, allowMissing, ev)
+func NewValue[T any](_ any, store database.Store, key *database.Key, name string, allowMissing bool, ev encodableValue[T]) Value[T] {
+	return newValue(store, key, name, allowMissing, ev)
 }
 
 // NewList returns a new list using the given encoder and comparison.
-func NewList[T any](logger log.Logger, store database.Store, key *database.Key, namefmt string, encoder encodableValue[T]) List[T] {
-	return newList(logger, store, key, namefmt, encoder)
+func NewList[T any](_ any, store database.Store, key *database.Key, namefmt string, encoder encodableValue[T]) List[T] {
+	return newList(store, key, namefmt, encoder)
 }
 
 // NewSet returns a new set using the given encoder and comparison.
-func NewSet[T any](logger log.Logger, store database.Store, key *database.Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) Set[T] {
-	return newSet(logger, store, key, namefmt, encoder, cmp)
+func NewSet[T any](_ any, store database.Store, key *database.Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) Set[T] {
+	return newSet(store, key, namefmt, encoder, cmp)
 }
 
 // NewCounted returns a new counted using the given encodable value type.
-func NewCounted[T any](logger log.Logger, store database.Store, key *database.Key, namefmt string, new func() encodableValue[T]) Counted[T] {
-	return newCounted(logger, store, key, namefmt, new)
+func NewCounted[T any](_ any, store database.Store, key *database.Key, namefmt string, new func() encodableValue[T]) Counted[T] {
+	return newCounted(store, key, namefmt, new)
 }

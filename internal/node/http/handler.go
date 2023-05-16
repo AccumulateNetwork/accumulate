@@ -77,7 +77,6 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	// JSON-RPC API v3
 	v3, err := jsonrpc.NewHandler(
-		opts.Logger,
 		jsonrpc.NodeService{NodeService: selfClient},
 		jsonrpc.ConsensusService{ConsensusService: selfClient},
 		jsonrpc.NetworkService{NetworkService: client},
@@ -93,7 +92,6 @@ func NewHandler(opts Options) (*Handler, error) {
 
 	// WebSocket API v3
 	ws, err := websocket.NewHandler(
-		opts.Logger,
 		message.NodeService{NodeService: selfClient},
 		message.ConsensusService{ConsensusService: selfClient},
 		message.NetworkService{NetworkService: client},
