@@ -21,8 +21,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -47,7 +45,6 @@ var BootstrapNodes = func() []multiaddr.Multiaddr {
 // Node implements peer-to-peer routing of API v3 messages over via binary
 // message transport.
 type Node struct {
-	logger   logging.OptionalLogger
 	context  context.Context
 	cancel   context.CancelFunc
 	peermgr  *peerManager
@@ -57,8 +54,6 @@ type Node struct {
 
 // Options are options for creating a [Node].
 type Options struct {
-	Logger log.Logger
-
 	// Network is the network the node is a part of. An empty Network indicates
 	// the node is not part of any network.
 	Network string
@@ -86,7 +81,6 @@ type Options struct {
 func New(opts Options) (_ *Node, err error) {
 	// Initialize basic fields
 	n := new(Node)
-	n.logger.Set(opts.Logger, "module", "acc-p2p")
 	n.context, n.cancel = context.WithCancel(context.Background())
 
 	// Cancel on fail
@@ -148,7 +142,7 @@ func New(opts Options) (_ *Node, err error) {
 	}
 
 	// Register the node service
-	mh, err := message.NewHandler(n.logger, &message.NodeService{NodeService: (*nodeService)(n)})
+	mh, err := message.NewHandler(&message.NodeService{NodeService: (*nodeService)(n)})
 	if err != nil {
 		return nil, err
 	}
