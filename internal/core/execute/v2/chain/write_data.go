@@ -113,6 +113,9 @@ func (WriteData) check(st *StateManager, tx *Delivery) (*protocol.WriteData, err
 	if body.Entry == nil {
 		return nil, errors.BadRequest.WithFormat("entry is nil")
 	}
+	if !entryIsAccepted(st, body.Entry) {
+		return nil, errors.BadRequest.WithFormat("%v data entries are not accepted", body.Entry.Type())
+	}
 
 	//check will return error if there is too much data or no data for the entry
 	_, err := protocol.CheckDataEntrySize(body.Entry)
@@ -188,9 +191,30 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	return result, nil
 }
 
+func entryIsAccepted(st *StateManager, entry protocol.DataEntry) bool {
+	switch entry.(type) {
+	case *protocol.FactomDataEntryWrapper:
+		// Factom entries are accepted
+		return true
+
+	case *protocol.AccumulateDataEntry:
+		// Accumulate entries are not accepted after v1-doubleHashEntries
+		return false
+
+	case *protocol.DoubleHashDataEntry:
+		// Double hash entries are not accepted before v1-doubleHashEntries
+		return true
+	}
+
+	return false
+}
+
 func validateDataEntry(st *StateManager, entry protocol.DataEntry) error {
 	if entry == nil {
 		return errors.BadRequest.WithFormat("entry is missing")
+	}
+	if !entryIsAccepted(st, entry) {
+		return errors.BadRequest.WithFormat("%v data entries are not accepted", entry.Type())
 	}
 
 	limit := int(st.Globals.Globals.Limits.DataEntryParts)

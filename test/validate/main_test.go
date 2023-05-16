@@ -717,7 +717,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.TB.Log("Write data to ADI Data Account")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "data").
-			WriteData([]byte("foo"), []byte("bar")).Scratch().
+			WriteData().DoubleHash([]byte("foo"), []byte("bar")).Scratch().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
