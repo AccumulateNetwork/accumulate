@@ -74,10 +74,8 @@ func TestValidateAPI(t *testing.T) {
 
 	// Set up the P2P client node
 	t.Log("Create the client")
-	logger := logging.ConsoleLoggerForTest(t, "info")
 	node, err := p2p.NewClient(p2p.Options{
 		Network: net.Id,
-		Logger:  logger,
 		BootstrapPeers: []multiaddr.Multiaddr{
 			net.Bvns[0].Nodes[0].Listen().Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr(),
 		},
@@ -86,7 +84,7 @@ func TestValidateAPI(t *testing.T) {
 	t.Cleanup(func() { _ = node.Close() })
 
 	// Run the faucet through the API
-	handler, err := message.NewHandler(logger, message.Faucet{Faucet: s.faucetSvc})
+	handler, err := message.NewHandler(message.Faucet{Faucet: s.faucetSvc})
 	require.NoError(t, err)
 	node.RegisterService(api.ServiceTypeFaucet.AddressForUrl(protocol.AcmeUrl()), handler.Handle)
 
@@ -220,7 +218,6 @@ func setupNetClient(t *testing.T, network string, addrs ...multiaddr.Multiaddr) 
 	t.Log("Create the client")
 	node, err := p2p.NewClient(p2p.Options{
 		Network:        network,
-		Logger:         logging.ConsoleLoggerForTest(t, "info"),
 		BootstrapPeers: addrs,
 	})
 	require.NoError(t, err)
@@ -920,7 +917,7 @@ func (s *ValidationTestSuite) TestFaucets() {
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { faucetSvc.Stop() })
 
-	handler, err := message.NewHandler(logger, message.Faucet{Faucet: faucetSvc})
+	handler, err := message.NewHandler(message.Faucet{Faucet: faucetSvc})
 	s.Require().NoError(err)
 	s.node.RegisterService(api.ServiceTypeFaucet.AddressForUrl(peg), handler.Handle)
 
