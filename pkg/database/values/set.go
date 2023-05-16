@@ -124,6 +124,25 @@ func (s *set[T]) Commit() error {
 	return errors.UnknownError.Wrap(err)
 }
 
+func (v *set[T]) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
+	if opts.Modified && !v.IsDirty() {
+		return nil
+	}
+
+	// If the set is empty, skip it
+	u, err := v.Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if len(u) == 0 {
+		return nil
+	}
+
+	// Walk the record
+	_, err = fn(v)
+	return err
+}
+
 // sliceValue uses an encoder to manage a slice.
 type sliceValue[T any] struct {
 	value   []T

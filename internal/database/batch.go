@@ -193,20 +193,6 @@ func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
 	return v, nil
 }
 
-// AccountByID returns an Account for the given ID.
-//
-// This is still needed in one place, so the deprecation warning is disabled in
-// order to pass static analysis.
-//
-// Deprecated: Use Account.
-func (b *Batch) AccountByID(id []byte) (*Account, error) {
-	u, err := b.getAccountUrl(record.NewKey("Account", id))
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return b.Account(u), nil
-}
-
 // UpdatedAccounts returns every account updated in this database batch.
 func (b *Batch) UpdatedAccounts() []*Account {
 	accounts := make([]*Account, 0, len(b.account))

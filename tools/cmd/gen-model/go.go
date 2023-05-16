@@ -94,7 +94,7 @@ func fieldType(r typegen.Record) string {
 	if len(r.GetParameters()) == 0 {
 		return recordType(r, true)
 	}
-	return "map[" + typegen.LowerFirstWord(r.FullName()) + "Key]" + recordType(r, true)
+	return "map[" + typegen.LowerFirstWord(r.FullName()) + "MapKey]" + recordType(r, true)
 }
 
 func recordType(r typegen.Record, noInterface bool) string {
