@@ -370,6 +370,10 @@ func (s *Simulator) Partitions() []*protocol.PartitionInfo {
 	return partitions
 }
 
+func (s *Simulator) Partition(partition string) *Partition {
+	return s.partitions[partition]
+}
+
 type errDb struct{ err error }
 
 func (e errDb) View(func(*database.Batch) error) error   { return e.err }

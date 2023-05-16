@@ -197,10 +197,11 @@ func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusO
 		return nil, errors.NotReady
 	}
 	return &api.NetworkStatus{
-		Oracle:  v.Oracle,
-		Network: v.Network,
-		Globals: v.Globals,
-		Routing: v.Routing,
+		Oracle:          v.Oracle,
+		Network:         v.Network,
+		Globals:         v.Globals,
+		Routing:         v.Routing,
+		ExecutorVersion: v.ExecutorVersion,
 	}, nil
 }
 
