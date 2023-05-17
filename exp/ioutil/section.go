@@ -1,10 +1,10 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package ioutil2
+package ioutil
 
 import (
 	"errors"
@@ -34,13 +34,13 @@ func NewSectionReader(rd SectionReader, start, end int64) (*io.SectionReader, er
 	return io.NewSectionReader(rd, start, end-start), nil
 }
 
-type sectionWriter struct {
+type SectionWriter struct {
 	wr io.WriteSeeker
 
 	start, offset, end int64
 }
 
-func NewSectionWriter(wr io.WriteSeeker, start, end int64) (io.WriteSeeker, error) {
+func NewSectionWriter(wr io.WriteSeeker, start, end int64) (*SectionWriter, error) {
 	offset, err := wr.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return nil, err
@@ -54,10 +54,10 @@ func NewSectionWriter(wr io.WriteSeeker, start, end int64) (io.WriteSeeker, erro
 			return nil, err
 		}
 	}
-	return &sectionWriter{wr, start, offset, end}, nil
+	return &SectionWriter{wr, start, offset, end}, nil
 }
 
-func (s *sectionWriter) Write(p []byte) (n int, err error) {
+func (s *SectionWriter) Write(p []byte) (n int, err error) {
 	if s.end >= 0 && s.offset+int64(len(p)) > s.end {
 		return 0, errors.New("attempted to write past the end of the section")
 	}
@@ -69,7 +69,7 @@ func (s *sectionWriter) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func (s *sectionWriter) Seek(offset int64, whence int) (int64, error) {
+func (s *SectionWriter) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
 		offset += s.start
