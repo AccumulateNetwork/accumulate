@@ -293,11 +293,6 @@ func (e *leaf) merge(f node, put bool) (node, error) {
 // appropriate side of the branch. If F is a branch, merge merges left into left
 // and right into right.
 func (e *branch) merge(f node, put bool) (node, error) {
-	// Nothing to do if the hashes are the same.
-	if e.getHash() == f.getHash() {
-		return nil, nil
-	}
-
 	switch f := f.(type) {
 	case *emptyNode:
 		// Nothing to do
