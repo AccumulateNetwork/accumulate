@@ -16,9 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-const window = 1000      //                               Process this many BPT entries at a time
-const nLen = 32 + 32 + 8 //                               Each node is a key (32), hash (32), offset(8)
-
 // SaveSnapshotV1
 // Saves a snapshot of the state of the BVN/DVN.
 // 1) The first thing done is copy the entire BVN and persist it to disk
@@ -61,10 +58,10 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 		return e2
 	}
 
-	it := b.Iterate(window)
-	vOffset := uint64(0) //           Offset from the beginning of value section
-	NodeCnt := uint64(0) //           Recalculate number of nodes
-	for {                //
+	it := b.Iterate(1000) // Process 100 entries at a time
+	vOffset := uint64(0)  // Offset from the beginning of value section
+	NodeCnt := uint64(0)  // Recalculate number of nodes
+	for {                 //
 		bptVals, ok := it.Next() // Read a thousand values from the BPT (intentionally mask the other variable)
 		if !ok {
 			break
@@ -144,7 +141,9 @@ func LoadSnapshotV1(b *BPT, file ioutil2.SectionReader, storeState func(key stor
 
 // ReadSnapshotV1 reads a snapshot
 func ReadSnapshotV1(file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
-	buff := make([]byte, window*(nLen))    //			          buff is a window's worth of key/hash/offset
+	const window = 1000                    //                    Process this many BPT entries at a time
+	const nLen = 32 + 32 + 8               //                    Each node is a key (32), hash (32), offset(8)
+	buff := make([]byte, window*(nLen))    //			         buff is a window's worth of key/hash/offset
 	vBuff := make([]byte, 1024*128)        //                    Big enough to load any value. 128k?
 	_, err := io.ReadFull(file, vBuff[:8]) //                    Read number of entries
 	if err != nil {

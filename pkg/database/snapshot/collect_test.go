@@ -43,8 +43,6 @@ func TestCollect(t *testing.T) {
 	collect(t, db, f, protocol.DnUrl())
 
 	// Try to read an account out of the snapshot
-	_, err = f.Seek(0, io.SeekEnd)
-	require.NoError(t, err)
 	rd, err := snapshot.Open(f)
 	require.NoError(t, err)
 	ss, err := rd.AsStore()

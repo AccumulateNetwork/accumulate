@@ -24,7 +24,7 @@ func newBPT(parent record.Record, logger log.Logger, store record.Store, key *re
 
 type AccountIterator struct {
 	batch   *Batch
-	it      bpt.Iterator
+	it      *bpt.Iterator
 	entries []bpt.KeyValuePair
 	pos     int
 	err     error

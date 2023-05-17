@@ -13,11 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-type Iterator interface {
-	Next() ([]KeyValuePair, bool)
-	Err() error
-}
-
 type KeyValuePair struct {
 	Key, Value [32]byte
 }
