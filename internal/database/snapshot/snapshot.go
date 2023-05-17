@@ -119,7 +119,7 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 			}
 		}
 
-		switch s.typ {
+		switch s.Type() {
 		case SectionTypeAccounts:
 			if vAccount == nil {
 				continue
@@ -178,7 +178,7 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 
 			var r io.Reader = sr
 			var gz *gzip.Reader
-			if s.typ == SectionTypeGzTransactions {
+			if s.Type() == SectionTypeGzTransactions {
 				gz, err = gzip.NewReader(sr)
 				if err != nil {
 					return errors.UnknownError.WithFormat("open gzip reader: %w", err)
