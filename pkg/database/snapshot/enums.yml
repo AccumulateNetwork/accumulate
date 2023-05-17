@@ -1,0 +1,28 @@
+SectionType:
+  Header:
+    description: is the snapshot's header
+    value: 1
+  AccountsV1:
+    description: contains accounts (v1)
+    value: 2
+  TransactionsV1:
+    description: contains transactions (v1)
+    value: 3
+  SignaturesV1:
+    description: contains signatures (v1)
+    value: 4
+  GzTransactionsV1:
+    description: contains gzipped transactions (v1)
+    value: 5
+  Snapshot:
+    description: contains another snapshot
+    value: 6
+  Records:
+    description: contains records stored as (key, record) pairs
+    value: 7
+  RecordIndex:
+    description: indexes record keys, including the offset and section number
+    value: 8
+  BPT:
+    description: contains the BPT
+    value: 9

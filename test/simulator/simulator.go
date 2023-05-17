@@ -9,6 +9,7 @@ package simulator
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -379,4 +380,8 @@ func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 		}
 	}
 	return nil
+}
+
+func (s *Simulator) Collect(partition string, file io.WriteSeeker, opts *database.CollectOptions) error {
+	return s.partitions[partition].nodes[0].database.Collect(file, protocol.PartitionUrl(partition), opts)
 }
