@@ -45,7 +45,7 @@ type Node struct {
 	partition  *Partition
 	logger     logging.OptionalLogger
 	eventBus   *events.Bus
-	database   database.Beginner
+	database   *database.Database
 	nodeKey    []byte
 	privValKey []byte
 
