@@ -155,7 +155,7 @@ func TestRange(t *testing.T) {
 	model = new(ChangeSet)
 	model.store = keyvalue.RecordStore{Store: store}
 	var actual [][2][32]byte
-	require.NoError(t, model.BPT().ForEach(func(key storage.Key, hash [32]byte) error {
+	require.NoError(t, ForEach(model.BPT(), func(key storage.Key, hash [32]byte) error {
 		actual = append(actual, [2][32]byte{key, hash})
 		return nil
 	}))
