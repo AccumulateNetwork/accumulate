@@ -98,8 +98,8 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 	if txn.Transaction.Body == nil {
 		return nil, errors.BadRequest.With("missing transaction body")
 	}
-	if txn.Transaction.HeaderIs64Bytes() || txn.Transaction.BodyIs64Bytes() {
-		return nil, errors.BadRequest.WithFormat("cannot process transaction: header or body is 64 bytes long")
+	if txn.Transaction.BodyIs64Bytes() {
+		return nil, errors.BadRequest.WithFormat("cannot process transaction: body is 64 bytes long")
 	}
 
 	isRemote := txn.Transaction.Body.Type() == protocol.TransactionTypeRemote

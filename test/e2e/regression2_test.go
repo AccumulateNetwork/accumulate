@@ -7,25 +7,31 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -79,7 +85,7 @@ func TestBadOracleUpdate(t *testing.T) {
 	// Execute
 	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(DnUrl(), Oracle).
-			WriteData([]byte("foo")).ToState().
+			WriteData().DoubleHash([]byte("foo")).ToState().
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 1)).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2)))
@@ -157,9 +163,9 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 		require.NotNil(t, receiptHash)
 	})
 
-	req := new(api.GeneralQuery)
+	req := new(v2.GeneralQuery)
 	req.Url = bob.WithTxID(*receiptHash).AsUrl()
-	resp := new(api.TransactionQueryResponse)
+	resp := new(v2.TransactionQueryResponse)
 	part, err := sim.Router().RouteAccount(bob)
 	require.NoError(t, err)
 	err = sim.Router().RequestAPIv2(context.Background(), part, "query", req, resp)
@@ -207,12 +213,9 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 		}).
 		Initiate(SignatureTypeED25519, aliceKey).
 		Build()
-	deliveries, err := env.Normalize()
-	require.NoError(t, err)
-	require.Len(t, deliveries, 2)
 
 	// Submit the transaction directly to the wrong BVN
-	st, err := sim.SubmitTo(badBvn, deliveries)
+	st, err := sim.SubmitTo(badBvn, env)
 	require.NoError(t, err)
 	require.EqualError(t, st[1].AsError(), fmt.Sprintf("signature submitted to %s instead of %s", badBvn, goodBvn))
 }
@@ -240,7 +243,7 @@ func TestAnchoring(t *testing.T) {
 	// Execute 1
 	st := sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "data").
-			WriteData([]byte("foo")).
+			WriteData().DoubleHash([]byte("foo")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
@@ -248,7 +251,7 @@ func TestAnchoring(t *testing.T) {
 
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "data").
-			WriteData([]byte("bar")).
+			WriteData().DoubleHash([]byte("bar")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
@@ -257,7 +260,7 @@ func TestAnchoring(t *testing.T) {
 	// Execute 2
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "data").
-			WriteData([]byte("baz")).
+			WriteData().DoubleHash([]byte("baz")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
@@ -265,7 +268,7 @@ func TestAnchoring(t *testing.T) {
 
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(alice, "data").
-			WriteData([]byte("bat")).
+			WriteData().DoubleHash([]byte("bat")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 
 	sim.StepUntil(
@@ -380,6 +383,27 @@ func TestSignatureChainAnchoring(t *testing.T) {
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV1SignatureAnchoring).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+}
+
+func TestProtocolVersionReactivation(t *testing.T) {
+	values := new(core.GlobalValues)
+	values.ExecutorVersion = ExecutorVersionLatest
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, values),
+	)
+
+	// Reactivate the current version
+	st := sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(values.ExecutorVersion).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -702,4 +726,203 @@ func TestOldExec(t *testing.T) {
 	// Verify
 	account := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
 	require.Equal(t, 123, int(account.Balance.Int64()))
+}
+
+func TestBadGlobalErrorMessage(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	g := new(core.GlobalValues)
+	g.Globals = new(NetworkGlobals)
+	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
+	g.ExecutorVersion = ExecutorVersionLatest
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	// Update
+	ns := sim.NetworkStatus(v3.NetworkStatusOptions{Partition: Directory})
+	g = &core.GlobalValues{Oracle: ns.Oracle}
+	g.Oracle.Price = 123456
+
+	// Construct a transaction but DO NOT write to state
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(DnUrl(), Oracle).
+			WriteData(&DoubleHashDataEntry{Data: g.FormatOracle().GetData()}).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 1)))
+
+	sim.StepUntil(
+		Txn(st.TxID).Capture(&st).FailsWithCode(errors.BadRequest))
+	require.EqualError(t, st.AsError(), "updates to acc://dn.acme/oracle must write to state")
+}
+
+// TestDifferentValidatorSignaturesV1 shows that, with executor v1, differences
+// in which validators sign an anchor are not reflected in the BPT. They are
+// reflected in the transaction results, which causes a consensus failure
+// (manually disabled here), but they really should be reflected in the BPT.
+func TestDifferentValidatorSignaturesV1(t *testing.T) {
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 3),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+	sim.S.IgnoreDeliverResults = true
+
+	sim.StepN(10)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Drop one anchor signature, but a different signature on each node
+	sim.SetNodeBlockHook(Directory, func(i int, b execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		var other, anchors []*messaging.Envelope
+		for _, env := range envelopes {
+			if env.Transaction[0].Body.Type().IsAnchor() {
+				require.Len(t, env.Transaction, 1)
+				require.Len(t, env.Signatures, 2)
+				require.Implements(t, (*protocol.KeySignature)(nil), env.Signatures[1])
+				anchors = append(anchors, env)
+			} else {
+				other = append(other, env)
+			}
+		}
+		if len(anchors) > 0 {
+			print("")
+		}
+		sort.Slice(anchors, func(i, j int) bool {
+			a, b := anchors[i].Signatures[1].(protocol.KeySignature), anchors[j].Signatures[1].(protocol.KeySignature)
+			return bytes.Compare(a.GetPublicKey(), b.GetPublicKey()) < 0
+		})
+		for j, anchor := range anchors {
+			if i != j {
+				other = append(other, anchor)
+			}
+		}
+		return other, true
+	})
+
+	// Execute something
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+}
+
+func TestDifferentValidatorSignaturesV2(t *testing.T) {
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV2
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 3),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+	sim.S.IgnoreDeliverResults = true
+
+	sim.StepN(10)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Drop one anchor signature, but a different signature on each node
+	sim.SetNodeBlockHook(Directory, func(i int, _ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		var other, anchors []*messaging.Envelope
+		for _, env := range envelopes {
+			if len(env.Messages) != 1 {
+				other = append(other, env)
+				continue
+			}
+
+			if _, ok := env.Messages[0].(*messaging.BlockAnchor); ok {
+				anchors = append(anchors, env)
+			} else {
+				other = append(other, env)
+			}
+		}
+		sort.Slice(anchors, func(i, j int) bool {
+			a, b := anchors[i].Messages[0].(*messaging.BlockAnchor), anchors[j].Messages[0].(*messaging.BlockAnchor)
+			return bytes.Compare(a.Signature.GetPublicKey(), b.Signature.GetPublicKey()) < 0
+		})
+		for j, anchor := range anchors {
+			if i != j {
+				other = append(other, anchor)
+			}
+		}
+		return other, true
+	})
+
+	// Execute something
+	sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	var err error
+	for i := 0; i < 50 && err == nil; i++ {
+		err = sim.S.Step()
+	}
+	require.Error(t, err, "Expected consensus failure within 50 blocks")
+	require.IsType(t, (simulator.CommitConsensusError)(nil), err)
+}
+
+func TestMessageCompat(t *testing.T) {
+	// https://gitlab.com/accumulatenetwork/accumulate/-/work_items/3312
+
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize with executor v1
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Settle
+	sim.StepN(10)
+
+	// Load the system ledger
+	ledger1 := GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger))
+
+	// Construct an envelope
+	env := MustBuild(t,
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	// Submit as messages
+	msgs, err := env.Normalize()
+	require.NoError(t, err)
+	st := sim.Submit(&messaging.Envelope{Messages: msgs})
+
+	// Verify that the messages field is ignored and no messages are processed
+	// (by verifying no blocks have been recorded)
+	require.Len(t, st, 0)
+	sim.StepN(10)
+	ledger2 := GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger))
+	require.Equal(t, ledger1.Index, ledger2.Index)
 }

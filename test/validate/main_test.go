@@ -633,15 +633,17 @@ func (s *ValidationTestSuite) TestMain() {
 	var dropped *url.TxID
 	if s.sim != nil {
 		s.TB.Log("Drop the next anchor")
-		s.sim.SetBlockHook(Directory, func(_ execute.BlockParams, messages []messaging.Message) (_ []messaging.Message, keepHook bool) {
+		s.sim.SetBlockHook(Directory, func(_ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
 			// Drop all block anchors, once
-			for i := 0; i < len(messages); i++ {
-				if anchor, ok := messages[i].(*messaging.BlockAnchor); ok {
-					messages = append(messages[:i], messages[i+1:]...)
-					dropped = anchor.Anchor.(*messaging.SequencedMessage).Message.ID()
+			for _, env := range envelopes {
+				for i := 0; i < len(env.Messages); i++ {
+					if anchor, ok := env.Messages[i].(*messaging.BlockAnchor); ok {
+						env.Messages = append(env.Messages[:i], env.Messages[i+1:]...)
+						dropped = anchor.Anchor.(*messaging.SequencedMessage).Message.ID()
+					}
 				}
 			}
-			return messages, dropped == nil
+			return envelopes, dropped == nil
 		})
 
 		defer func() {
@@ -717,7 +719,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.TB.Log("Write data to ADI Data Account")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "data").
-			WriteData([]byte("foo"), []byte("bar")).Scratch().
+			WriteData().DoubleHash([]byte("foo"), []byte("bar")).Scratch().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())

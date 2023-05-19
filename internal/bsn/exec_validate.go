@@ -12,7 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (x *Executor) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
+func (x *Executor) Validate(envelope *messaging.Envelope, recheck bool) ([]*protocol.TransactionStatus, error) {
 	b := new(Block)
 	b.executor = x
 	b.batch = NewChangeSet(x.store, x.logger)
@@ -20,6 +20,11 @@ func (x *Executor) Validate(messages []messaging.Message, recheck bool) ([]*prot
 
 	d := new(bundle)
 	d.Block = b
+
+	messages, err := envelope.Normalize()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 
 	// Validate each message
 	var statuses []*protocol.TransactionStatus

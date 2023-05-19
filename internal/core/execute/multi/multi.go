@@ -137,8 +137,8 @@ func (m *Multi) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorU
 	return additional, errors.UnknownError.Wrap(err)
 }
 
-func (m *Multi) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
-	return (*m.active.Load()).Validate(messages, recheck)
+func (m *Multi) Validate(envelope *messaging.Envelope, recheck bool) ([]*protocol.TransactionStatus, error) {
+	return (*m.active.Load()).Validate(envelope, recheck)
 }
 
 func (m *Multi) Begin(params BlockParams) (Block, error) {
