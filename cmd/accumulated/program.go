@@ -114,17 +114,42 @@ func (p *Program) Stop(service.Service) error {
 }
 
 func startDual(primary, secondary *accumulated.Daemon) error {
-	err := primary.Start()
+	err := primary.StartP2P()
 	if err != nil {
-		return errors.UnknownError.WithFormat("start primary: %w", err)
+		return errors.UnknownError.WithFormat("start p2p: %w", err)
 	}
 
-	err = secondary.StartSecondary(primary)
-	if err != nil {
-		_ = primary.Stop()
-		return errors.UnknownError.WithFormat("start secondary: %w", err)
+	done := make(chan struct{})
+	var ok bool
+	stopOnFail := func(d *accumulated.Daemon) {
+		<-done
+		if !ok {
+			_ = primary.Stop()
+		}
 	}
-	return nil
+
+	errg := new(errgroup.Group)
+	errg.Go(func() error {
+		err := primary.Start()
+		if err != nil {
+			return errors.UnknownError.WithFormat("start primary: %w", err)
+		}
+		go stopOnFail(primary)
+		return nil
+	})
+	errg.Go(func() error {
+		err := secondary.StartSecondary(primary)
+		if err != nil {
+			return errors.UnknownError.WithFormat("start secondary: %w", err)
+		}
+		go stopOnFail(secondary)
+		return nil
+	})
+
+	err = errg.Wait()
+	ok = err == nil
+	close(done)
+	return err
 }
 
 func stopDual(primary, secondary *accumulated.Daemon) error {
