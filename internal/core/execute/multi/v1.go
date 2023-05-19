@@ -58,14 +58,7 @@ func (x *ExecutorV1) LastBlock() (*execute.BlockParams, [32]byte, error) {
 }
 
 func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
-	batch := x.Database.Begin(true)
-	defer batch.Discard()
-	err = (*block.Executor)(x).RestoreSnapshot(batch, snapshot)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	err = batch.Commit()
+	err = (*block.Executor)(x).RestoreSnapshot(x.Database, snapshot)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
