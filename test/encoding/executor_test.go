@@ -64,9 +64,7 @@ func TestExecutorConsistency(t *testing.T) {
 		// Resubmit every user transaction
 		for part, envs := range step.Envelopes {
 			for _, env := range envs {
-				messages, err := env.Normalize()
-				require.NoError(t, err)
-				_, err = sim.SubmitTo(part, messages)
+				_, err = sim.SubmitTo(part, env)
 				require.NoError(t, err)
 			}
 		}

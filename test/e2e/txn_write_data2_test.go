@@ -7,6 +7,8 @@
 package e2e
 
 import (
+	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -62,7 +64,7 @@ func TestDoubleHashEntries(t *testing.T) {
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV1DoubleHashEntries).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -85,6 +87,63 @@ func TestDoubleHashEntries(t *testing.T) {
 	require.EqualError(t, st.AsError(), "accumulate data entries are not accepted")
 
 	// V1DoubleHashEntries allows DoubleHashDataEntries
+	st = sim.SubmitTxn(MustBuild(t,
+		build.Transaction().For(alice, "data").
+			WriteData(&DoubleHashDataEntry{Data: [][]byte{[]byte("foo")}}).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+
+	require.NoError(t, st.AsError())
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Update the version
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV1Halt).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Give it a few blocks for the anchor to propagate
+	sim.StepN(10)
+
+	// Verify version is set
+	require.Equal(t, ExecutorVersionV1Halt, GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV1Halt, GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV1Halt, GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV1Halt, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
+
+	// Give it a while for synthetic transactions to settle
+	sim.StepN(50)
+
+	// Update the version
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Give it a few blocks for the anchor to propagate
+	sim.StepN(10)
+
+	// Verify version is set
+	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion)
+	require.Equal(t, ExecutorVersionV2, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
+
+	// V2 does not allow AccumulateDataEntries
+	st = sim.SubmitTxn(MustBuild(t,
+		build.Transaction().For(alice, "data").
+			WriteData(&AccumulateDataEntry{Data: [][]byte{[]byte("foo")}}).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
+
+	require.EqualError(t, st.AsError(), "accumulate data entries are not accepted")
+
+	// V2 allows DoubleHashDataEntries
 	st = sim.SubmitTxn(MustBuild(t,
 		build.Transaction().For(alice, "data").
 			WriteData(&DoubleHashDataEntry{Data: [][]byte{[]byte("foo")}}).
@@ -129,7 +188,7 @@ func Test64ByteBody(t *testing.T) {
 
 	// Initialize
 	g := new(core.GlobalValues)
-	g.ExecutorVersion = ExecutorVersionV1DoubleHashEntries
+	g.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
@@ -190,7 +249,7 @@ func Test65ByteBody(t *testing.T) {
 
 	// Initialize
 	g := new(core.GlobalValues)
-	g.ExecutorVersion = ExecutorVersionV1DoubleHashEntries
+	g.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
@@ -205,6 +264,39 @@ func Test65ByteBody(t *testing.T) {
 		build.SignatureForTransaction(txn).
 			Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)))
 	require.NoError(t, st.AsError())
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+}
+
+func Test64ByteHeader(t *testing.T) {
+	var timestamp uint64
+
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	aliceX := alice.JoinPath(strings.Repeat("x", 28-len(alice.String())))
+
+	env := MustBuild(t, build.Transaction().For(aliceX).
+		BurnTokens(1, 0).
+		SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+	b, err := env.Transaction[0].Header.MarshalBinary()
+	require.NoError(t, err)
+	require.Equal(t, 64, len(b), "Header should be 64 bytes")
+
+	// Initialize
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionLatest
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: aliceX, Balance: *big.NewInt(1), TokenUrl: AcmeUrl()})
+
+	// Execute
+	st := sim.SubmitTxnSuccessfully(env)
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
 }

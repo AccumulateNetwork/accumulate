@@ -26,10 +26,10 @@ func (t *Transaction) GetHash() []byte {
 	return t.hash
 }
 
-func (t *Transaction) HeaderIs64Bytes() bool {
-	t.calcHash()
-	return t.header64bytes
-}
+// func (t *Transaction) HeaderIs64Bytes() bool {
+// 	t.calcHash()
+// 	return t.header64bytes
+// }
 
 func (t *Transaction) BodyIs64Bytes() bool {
 	t.calcHash()

@@ -89,11 +89,21 @@ func (s *Sim) SetBlockHookFor(account *url.URL, fn simulator.BlockHookFunc) {
 	s.S.SetBlockHookFor(account, fn)
 }
 
+// SetNodeBlockHook calls Simulator.SetNodeBlockHook.
+func (s *Sim) SetNodeBlockHook(partition string, fn simulator.NodeBlockHookFunc) {
+	s.S.SetNodeBlockHook(partition, fn)
+}
+
+// SetNodeBlockHookFor calls Simulator.SetNodeBlockHookFor.
+func (s *Sim) SetNodeBlockHookFor(account *url.URL, fn simulator.NodeBlockHookFunc) {
+	s.S.SetNodeBlockHookFor(account, fn)
+}
+
 // SignWithNode calls Simulator.SignWithNode.
 func (s *Sim) SignWithNode(partition string, i int) signing.Signer {
 	return s.S.SignWithNode(partition, i)
 }
 
-func (s *Sim) SubmitTo(partition string, message []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	return s.S.SubmitTo(partition, message)
+func (s *Sim) SubmitTo(partition string, envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+	return s.S.SubmitTo(partition, envelope)
 }

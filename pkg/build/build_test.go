@@ -17,6 +17,8 @@ import (
 )
 
 func TestBuild64Byte(t *testing.T) {
+	t.Skip("This logic has been disabled")
+
 	var timestamp uint64
 	key1 := acctesting.GenerateKey(1)
 	key2 := acctesting.GenerateKey(2)

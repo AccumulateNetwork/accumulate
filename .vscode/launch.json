@@ -148,6 +148,7 @@
       "program": "${workspaceFolder}/cmd/accumulated-http",
       "args": [
         "TestNet",
+        "--http-listen=/ip4/0.0.0.0/tcp/26660",
         "--peer=/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
       ]
     },

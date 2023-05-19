@@ -61,9 +61,10 @@ func (p *Partition) Globals() *core.GlobalValues {
 	ns, err := p.s.Services().NetworkStatus(context.Background(), api.NetworkStatusOptions{Partition: protocol.Directory})
 	require.NoError(p.tb, err)
 	return &core.GlobalValues{
-		Oracle:  ns.Oracle,
-		Globals: ns.Globals,
-		Network: ns.Network,
-		Routing: ns.Routing,
+		Oracle:          ns.Oracle,
+		Globals:         ns.Globals,
+		Network:         ns.Network,
+		Routing:         ns.Routing,
+		ExecutorVersion: ns.ExecutorVersion,
 	}
 }

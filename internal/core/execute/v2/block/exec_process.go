@@ -40,11 +40,16 @@ type bundle struct {
 }
 
 // Process processes a message bundle.
-func (b *Block) Process(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	var statuses []*protocol.TransactionStatus
 
+	messages, err := envelope.Normalize()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	// Make sure every transaction is signed
-	err := checkForUnsignedTransactions(messages)
+	err = checkForUnsignedTransactions(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

@@ -161,7 +161,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(bobUrl.JoinPath("account")).
 		WithBody(&WriteData{
-			Entry: &AccumulateDataEntry{Data: [][]byte{
+			Entry: &DoubleHashDataEntry{Data: [][]byte{
 				[]byte("foo"),
 			}},
 		}).
@@ -214,7 +214,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(bobUrl.JoinPath("account")).
 		WithBody(&WriteData{
-			Entry: &AccumulateDataEntry{Data: [][]byte{
+			Entry: &DoubleHashDataEntry{Data: [][]byte{
 				[]byte("foo"),
 			}},
 		}).
@@ -279,7 +279,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl.JoinPath("account")).
 			WithBody(&WriteData{
-				Entry: &AccumulateDataEntry{Data: [][]byte{
+				Entry: &DoubleHashDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -347,7 +347,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl.JoinPath("account")).
 			WithBody(&WriteData{
-				Entry: &AccumulateDataEntry{Data: [][]byte{
+				Entry: &DoubleHashDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).

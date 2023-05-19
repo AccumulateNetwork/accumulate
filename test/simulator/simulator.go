@@ -13,11 +13,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -47,11 +47,14 @@ type Simulator struct {
 	blockErrGroup *errgroup.Group
 
 	// Deterministic attempts to run the simulator in a fully deterministic,
-	// repeatable way
+	// repeatable way.
 	Deterministic bool
 
-	// DropDispatchedMessages drops all internally dispatched messages
+	// DropDispatchedMessages drops all internally dispatched messages.
 	DropDispatchedMessages bool
+
+	// IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx.
+	IgnoreDeliverResults bool
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) keyvalue.Beginner
@@ -284,7 +287,13 @@ func (s *Simulator) Step() error {
 		}
 	}
 
-	return s.blockErrGroup.Wait()
+	// Wait for execution to complete
+	err := s.blockErrGroup.Wait()
+
+	// Give any parallel processes a chance to run
+	runtime.Gosched()
+
+	return err
 }
 
 func (s *Simulator) SetSubmitHookFor(account *url.URL, fn SubmitHookFunc) {
@@ -311,6 +320,18 @@ func (s *Simulator) SetBlockHook(partition string, fn BlockHookFunc) {
 	s.partitions[partition].SetBlockHook(fn)
 }
 
+func (s *Simulator) SetNodeBlockHookFor(account *url.URL, fn NodeBlockHookFunc) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	s.partitions[partition].SetNodeBlockHook(fn)
+}
+
+func (s *Simulator) SetNodeBlockHook(partition string, fn NodeBlockHookFunc) {
+	s.partitions[partition].SetNodeBlockHook(fn)
+}
+
 func (s *Simulator) SetCommitHookFor(account *url.URL, fn CommitHookFunc) {
 	partition, err := s.router.RouteAccount(account)
 	if err != nil {
@@ -323,22 +344,22 @@ func (s *Simulator) SetCommitHook(partition string, fn CommitHookFunc) {
 	s.partitions[partition].SetCommitHook(fn)
 }
 
-func (s *Simulator) Submit(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	partition, err := routing.RouteMessages(s.router, messages)
+func (s *Simulator) Submit(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+	partition, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return s.SubmitTo(partition, messages)
+	return s.SubmitTo(partition, envelope)
 }
 
-func (s *Simulator) SubmitTo(partition string, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitTo(partition string, envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	return p.Submit(messages, false)
+	return p.Submit(envelope, false)
 }
 
 func (s *Simulator) Partitions() []*protocol.PartitionInfo {
@@ -347,6 +368,10 @@ func (s *Simulator) Partitions() []*protocol.PartitionInfo {
 		partitions = append(partitions, &p.PartitionInfo)
 	}
 	return partitions
+}
+
+func (s *Simulator) Partition(partition string) *Partition {
+	return s.partitions[partition]
 }
 
 type errDb struct{ err error }

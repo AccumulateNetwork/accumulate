@@ -281,7 +281,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 
 	//this test exercises WriteDataTo and SyntheticWriteData validators
 
-	firstEntry := protocol.AccumulateDataEntry{}
+	firstEntry := protocol.DoubleHashDataEntry{}
 
 	firstEntry.Data = append(firstEntry.Data, []byte{})
 	firstEntry.Data = append(firstEntry.Data, []byte("Factom PRO"))
@@ -441,7 +441,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		wd := new(protocol.WriteData)
 		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
-			entry := new(protocol.AccumulateDataEntry)
+			entry := new(protocol.DoubleHashDataEntry)
 			wd.Entry = entry
 			entry.Data = append(entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
 			for i := 0; i < 10; i++ {
@@ -500,7 +500,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		wd := new(protocol.WriteData)
 		wd.Scratch = true
 		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
-			entry := new(protocol.AccumulateDataEntry)
+			entry := new(protocol.DoubleHashDataEntry)
 			wd.Entry = entry
 			entry.Data = append(entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
 			for i := 0; i < 10; i++ {
