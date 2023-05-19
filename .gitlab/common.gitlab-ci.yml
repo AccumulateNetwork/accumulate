@@ -15,14 +15,14 @@ variables:
 
 .go:
   image: golang:1.20
-  cache:
-    key: go-mod-cache
-    paths:
-      - .go-mod-cache
-      - .golangci-cache
-  variables:
-    GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
-    GOLANGCI_LINT_CACHE: ${CI_PROJECT_DIR}/.golangci-cache
+  # cache:
+  #   key: go-mod-cache
+  #   paths:
+  #     - .go-mod-cache
+  #     - .golangci-cache
+  # variables:
+  #   GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
+  #   GOLANGCI_LINT_CACHE: ${CI_PROJECT_DIR}/.golangci-cache
   before_script:
   - |
     function build-daemon {
