@@ -1,6 +1,9 @@
 module gitlab.com/accumulatenetwork/accumulate
 
-retract v1.1.0 // Causes consensus failure when run alongside v1.0.x
+retract (
+	v1.1.1 // Tagged the wrong commit
+	v1.1.0 // Causes consensus failure when run alongside v1.0.x
+)
 
 go 1.19
 
