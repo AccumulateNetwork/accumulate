@@ -103,7 +103,7 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 		return b
 	}
 
-	// Adjust the body length
+	// Adjust the body length (header is handled by the signature builder)
 	if !b.adjustBody() {
 		return b
 	}
