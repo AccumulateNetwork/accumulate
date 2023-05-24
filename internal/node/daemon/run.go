@@ -141,10 +141,6 @@ func (d *Daemon) EventBus() *events.Bus           { return d.eventBus }
 // StartSecondary starts this daemon as a secondary process of the given daemon
 // (which must already be running).
 func (d *Daemon) StartSecondary(e *Daemon) error {
-	if e.done == nil {
-		return errors.BadRequest.WithFormat("not started")
-	}
-
 	// Reuse the P2P node. Otherwise, start everything normally.
 	d.p2pnode = e.p2pnode
 	return d.Start()
@@ -307,6 +303,10 @@ func (d *Daemon) startAnalysis() error {
 }
 
 func (d *Daemon) loadKeys() error {
+	if d.privVal != nil {
+		return nil
+	}
+
 	var err error
 	d.privVal, err = config.LoadFilePV(
 		d.Config.PrivValidatorKeyFile(),
@@ -509,6 +509,29 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	return nil
 }
 
+func (d *Daemon) StartP2P() error {
+	if d.p2pnode != nil {
+		return nil
+	}
+
+	err := d.loadKeys()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	d.p2pnode, err = p2p.New(p2p.Options{
+		Network:        d.Config.Accumulate.Network.Id,
+		Listen:         d.Config.Accumulate.P2P.Listen,
+		BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
+		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+		DiscoveryMode:  dht.ModeServer,
+	})
+	if err != nil {
+		return errors.UnknownError.WithFormat("initialize P2P: %w", err)
+	}
+	return nil
+}
+
 func (d *Daemon) startAPI() error {
 	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
 		return client.New(server)
@@ -516,18 +539,9 @@ func (d *Daemon) startAPI() error {
 	d.router = routing.NewRouter(d.eventBus, d.Logger)
 
 	// Setup the p2p node
-	var err error
-	if d.p2pnode == nil {
-		d.p2pnode, err = p2p.New(p2p.Options{
-			Network:        d.Config.Accumulate.Network.Id,
-			Listen:         d.Config.Accumulate.P2P.Listen,
-			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
-			Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
-			DiscoveryMode:  dht.ModeServer,
-		})
-		if err != nil {
-			return errors.UnknownError.WithFormat("initialize P2P: %w", err)
-		}
+	err := d.StartP2P()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
