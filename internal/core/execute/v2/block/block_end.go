@@ -296,9 +296,9 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	for err := range dispatcher.Send(ctx) {
 		switch err := err.(type) {
 		case protocol.TransactionStatusError:
-			x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
+			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 		default:
-			x.logger.Error("Failed to dispatch transactions", "error", err, "stack", fmt.Sprintf("%+v\n", err))
+			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", fmt.Sprintf("%+v\n", err))
 		}
 	}
 }
