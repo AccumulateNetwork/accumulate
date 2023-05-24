@@ -1,0 +1,44 @@
+recordHeader:
+  fields:
+  - name: Partition
+    type: protocol.PartitionInfo
+    marshal-as: reference
+    pointer: true
+  - name: Config
+    type: accumulated.NodeInit
+    marshal-as: reference
+    pointer: true
+  - name: NodeNum
+    type: int
+
+recordBlock:
+  fields:
+  - name: IsLeader
+    type: bool
+  - name: Index
+    type: uint
+  - name: Time
+    type: time
+  - name: CommitInfo
+    type: rawJson
+  - name: Evidence
+    type: rawJson
+  - name: Submissions
+    type: messaging.Envelope
+    marshal-as: reference
+    repeatable: true
+    pointer: true
+  - name: Changes
+    type: recordChange
+    marshal-as: reference
+    repeatable: true
+    pointer: true
+
+recordChange:
+  fields:
+  - name: Key
+    type: record.Key
+    marshal-as: reference
+    pointer: true
+  - name: Value
+    type: bytes

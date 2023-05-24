@@ -1,0 +1,7 @@
+recordSectionType:
+  Header:
+    value: 1
+  Snapshot:
+    value: 2
+  Block:
+    value: 3
