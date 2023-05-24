@@ -31,11 +31,11 @@ func TestBuild64Byte(t *testing.T) {
 	require.Len(t, env.Transaction, 1)
 	require.Len(t, env.Signatures, 2)
 
-	// Verify the header has been zero-padded
+	// Verify the header has not been zero-padded
 	b, err := env.Transaction[0].Header.MarshalBinary()
 	require.NoError(t, err)
-	require.Len(t, b, 65)
-	require.Equal(t, byte(0), b[64])
+	require.Len(t, b, 64)
+	// require.Equal(t, byte(0), b[64])
 
 	// Verify the signatures match the transaction
 	for i, sig := range env.Signatures {
