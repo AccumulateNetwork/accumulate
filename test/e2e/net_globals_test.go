@@ -37,7 +37,7 @@ func TestOracleDistribution(t *testing.T) {
 
 	// Update
 	price := 445.00
-	g = new(core.GlobalValues)
+	g = g.Copy()
 	g.Oracle = new(AcmeOracle)
 	g.Oracle.Price = uint64(price * AcmeOraclePrecision)
 	oracleEntry := g.FormatOracle()

@@ -218,7 +218,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceAdi := AccountUrl("alice")
 
-	firstEntry := AccumulateDataEntry{}
+	firstEntry := DoubleHashDataEntry{}
 	firstEntry.Data = append(firstEntry.Data, []byte{})
 	firstEntry.Data = append(firstEntry.Data, []byte("Factom PRO"))
 	firstEntry.Data = append(firstEntry.Data, []byte("Tutorial"))

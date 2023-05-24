@@ -49,12 +49,12 @@ func TestRepairIndices(t *testing.T) {
 	// Execute
 	tx1 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
-			WriteData([]byte("foo")).
+			WriteData().DoubleHash([]byte("foo")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
 	tx2 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
-			WriteData([]byte("bar")).Scratch().
+			WriteData().DoubleHash([]byte("bar")).Scratch().
 			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey))
 
 	sim.StepUntil(
@@ -63,7 +63,7 @@ func TestRepairIndices(t *testing.T) {
 
 	tx3 := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "data").
-			WriteData([]byte("baz")).
+			WriteData().DoubleHash([]byte("baz")).
 			SignWith(alice, "book", "1").Version(1).Timestamp(3).PrivateKey(aliceKey))
 
 	sim.StepUntil(

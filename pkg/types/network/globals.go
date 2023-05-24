@@ -123,23 +123,23 @@ func (g *GlobalValues) Load(net *url.URL, getState getStateFunc) error {
 // InitializeDataAccounts sets the initial state of the network data accounts
 // for genesis.
 func (g *GlobalValues) InitializeDataAccounts(net config.NetworkUrl, getState getStateFunc, putState putStateFunc) error {
-	if err := storeAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, putState, g.Oracle); err != nil {
+	if err := g.storeAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, putState, g.Oracle); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if err := storeAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, putState, g.Globals); err != nil {
+	if err := g.storeAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, putState, g.Globals); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	if g.Network != nil {
 		// TODO Make this unconditional once the corresponding part of genesis
 		// is unconditional
-		if err := storeAccount(net.JoinPath(protocol.Network), labelNetwork, getState, putState, g.Network); err != nil {
+		if err := g.storeAccount(net.JoinPath(protocol.Network), labelNetwork, getState, putState, g.Network); err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
 
-	if err := storeAccount(net.JoinPath(protocol.Routing), labelRouting, getState, putState, g.Routing); err != nil {
+	if err := g.storeAccount(net.JoinPath(protocol.Routing), labelRouting, getState, putState, g.Routing); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
@@ -151,7 +151,7 @@ func (g *GlobalValues) ParseOracle(entry protocol.DataEntry) error {
 }
 
 func (g *GlobalValues) FormatOracle() protocol.DataEntry {
-	return formatEntry(g.Oracle)
+	return g.formatEntry(g.Oracle)
 }
 
 func (g *GlobalValues) ParseGlobals(entry protocol.DataEntry) error {
@@ -159,7 +159,7 @@ func (g *GlobalValues) ParseGlobals(entry protocol.DataEntry) error {
 }
 
 func (g *GlobalValues) FormatGlobals() protocol.DataEntry {
-	return formatEntry(g.Globals)
+	return g.formatEntry(g.Globals)
 }
 
 func (g *GlobalValues) ParseNetwork(entry protocol.DataEntry) error {
@@ -176,7 +176,7 @@ func (g *GlobalValues) ParseNetwork(entry protocol.DataEntry) error {
 }
 
 func (g *GlobalValues) FormatNetwork() protocol.DataEntry {
-	return formatEntry(g.Network)
+	return g.formatEntry(g.Network)
 }
 
 func (g *GlobalValues) ParseRouting(entry protocol.DataEntry) error {
@@ -184,7 +184,7 @@ func (g *GlobalValues) ParseRouting(entry protocol.DataEntry) error {
 }
 
 func (g *GlobalValues) FormatRouting() protocol.DataEntry {
-	return formatEntry(g.Routing)
+	return g.formatEntry(g.Routing)
 }
 
 func loadAccount[T encoding.BinaryValue](accountUrl *url.URL, name string, getState getStateFunc, value T, ptr *T) error {
@@ -215,14 +215,14 @@ func parseEntryAs[T encoding.BinaryValue](name string, entry protocol.DataEntry,
 	return nil
 }
 
-func storeAccount(accountUrl *url.URL, name string, getState getStateFunc, putState putStateFunc, value encoding.BinaryValue) error {
+func (g *GlobalValues) storeAccount(accountUrl *url.URL, name string, getState getStateFunc, putState putStateFunc, value encoding.BinaryValue) error {
 	var dataAccount *protocol.DataAccount
 	err := getState(accountUrl, &dataAccount)
 	if err != nil {
 		return errors.BadRequest.WithFormat("load %s: %w", name, err)
 	}
 
-	dataAccount.Entry = formatEntry(value)
+	dataAccount.Entry = g.formatEntry(value)
 
 	err = putState(dataAccount)
 	if err != nil {
@@ -232,11 +232,14 @@ func storeAccount(accountUrl *url.URL, name string, getState getStateFunc, putSt
 	return nil
 }
 
-func formatEntry(value encoding.BinaryValue) protocol.DataEntry {
+func (g *GlobalValues) formatEntry(value encoding.BinaryValue) protocol.DataEntry {
 	data, err := value.MarshalBinary()
 	if err != nil {
 		panic(err) // Should be impossible
 	}
 
+	if g.ExecutorVersion.V2() {
+		return &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
+	}
 	return &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 }
