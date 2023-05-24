@@ -206,6 +206,11 @@ func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, ne
 
 	// Try each peer in descending priority
 	for p := range peers {
+		// If the DHT tells us we have the requested service, ignore it
+		if p.ID == d.host.selfID() {
+			continue
+		}
+
 		// Open a stream
 		s, err := openStreamFor(ctx, d.host, p.ID, sa)
 		switch {
