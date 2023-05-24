@@ -91,11 +91,3 @@ func (f routerFunc) RouteAccount(u *url.URL) (string, error) {
 func (f routerFunc) Route(env ...*messaging.Envelope) (string, error) {
 	return routing.RouteEnvelopes(f, env...)
 }
-
-func (f routerFunc) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
-	panic("not implemented")
-}
-
-func (f routerFunc) Submit(ctx context.Context, partition string, tx *messaging.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
-	panic("not implemented")
-}
