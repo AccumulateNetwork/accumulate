@@ -338,22 +338,22 @@ func (s *Simulator) SetCommitHook(partition string, fn CommitHookFunc) {
 	s.partitions[partition].SetCommitHook(fn)
 }
 
-func (s *Simulator) Submit(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	partition, err := routing.RouteMessages(s.router, messages)
+func (s *Simulator) Submit(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+	partition, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return s.SubmitTo(partition, messages)
+	return s.SubmitTo(partition, envelope)
 }
 
-func (s *Simulator) SubmitTo(partition string, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitTo(partition string, envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	return p.Submit(messages, false)
+	return p.Submit(envelope, false)
 }
 
 func (s *Simulator) Partitions() []*protocol.PartitionInfo {

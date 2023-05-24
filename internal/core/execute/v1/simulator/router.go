@@ -56,15 +56,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *messagin
 		return new(ResponseSubmit), nil
 	}
 
-	var messages []messaging.Message
-	for _, delivery := range deliveries {
-		messages = append(messages, &messaging.TransactionMessage{Transaction: delivery.Transaction})
-		for _, sig := range delivery.Signatures {
-			messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: delivery.Transaction.ID()})
-		}
-	}
-
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(messages, false)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(envelope, false)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
