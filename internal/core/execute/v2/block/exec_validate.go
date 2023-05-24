@@ -18,12 +18,17 @@ import (
 
 // Validate converts the message to a delivery and validates it. Validate
 // returns an error if the message is not a [message.LegacyMessage].
-func (x *Executor) Validate(messages []messaging.Message, _ bool) ([]*protocol.TransactionStatus, error) {
+func (x *Executor) Validate(envelope *messaging.Envelope, _ bool) ([]*protocol.TransactionStatus, error) {
 	batch := x.db.Begin(false)
 	defer batch.Discard()
 
+	messages, err := envelope.Normalize()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	// Make sure every transaction is signed
-	err := checkForUnsignedTransactions(messages)
+	err = checkForUnsignedTransactions(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
