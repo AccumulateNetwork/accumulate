@@ -13,11 +13,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -287,7 +287,13 @@ func (s *Simulator) Step() error {
 		}
 	}
 
-	return s.blockErrGroup.Wait()
+	// Wait for execution to complete
+	err := s.blockErrGroup.Wait()
+
+	// Give any parallel processes a chance to run
+	runtime.Gosched()
+
+	return err
 }
 
 func (s *Simulator) SetSubmitHookFor(account *url.URL, fn SubmitHookFunc) {
