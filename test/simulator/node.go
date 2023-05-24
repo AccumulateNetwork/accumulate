@@ -47,9 +47,7 @@ type Node struct {
 	database   *database.Database
 	nodeKey    []byte
 	privValKey []byte
-
-	record      *recorder
-	submissions []*messaging.Envelope
+	record     *recorder
 
 	globals  atomic.Value
 	executor execute.Executor
@@ -60,6 +58,9 @@ type Node struct {
 	seqSvc   private.Sequencer
 
 	validatorUpdates []*validatorUpdate
+	mempool          []*messaging.Envelope
+	deliver          []*messaging.Envelope
+	submissions      []*messaging.Envelope
 }
 
 func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (*Node, error) {
@@ -345,14 +346,31 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	return root[:], nil
 }
 
-func (n *Node) checkTx(envelope *messaging.Envelope, new bool) ([]*protocol.TransactionStatus, error) {
+func (n *Node) checkTx(data []byte, isNew, pretend bool) ([]*protocol.TransactionStatus, error) {
+	envelope := new(messaging.Envelope)
+	err := envelope.UnmarshalBinary(data)
+	if err != nil {
+		return nil, errors.InternalError.WithFormat("decode envelope: %w", err)
+	}
+
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	s, err := n.executor.Validate(envelope, !new)
+	results, err := n.executor.Validate(envelope, !isNew)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("check messages: %w", err)
 	}
-	return s, nil
+
+	ok := true
+	for _, st := range results {
+		if st.Failed() {
+			ok = false
+		}
+	}
+
+	if !pretend && ok {
+		n.mempool = append(n.mempool, envelope)
+	}
+	return results, nil
 }
 
 func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
@@ -365,14 +383,22 @@ func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
 	return block, nil
 }
 
-func (n *Node) deliverTx(block execute.Block, envelopes []*messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+func (n *Node) deliverTx(block execute.Block, hook BlockHookFunc) ([]*protocol.TransactionStatus, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	n.submissions = append(n.submissions, envelopes...)
+	// TODO: Limit how many transactions are added to the block? Call recheck?
+	n.submissions, _ = hook(block.Params(), n.deliver)
+	n.deliver = n.mempool
+	n.mempool = nil
+
+	// if p.sim.Deterministic {
+	// 	// Order transactions to ensure the simulator is deterministic
+	// 	orderMessagesDeterministically(messages)
+	// }
 
 	var results []*protocol.TransactionStatus
-	for _, envelope := range envelopes {
+	for _, envelope := range n.submissions {
 		s, err := block.Process(envelope)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)

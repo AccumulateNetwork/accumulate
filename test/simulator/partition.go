@@ -34,12 +34,10 @@ type Partition struct {
 	nodes      []*Node
 	validators [][32]byte
 
-	mu         *sync.Mutex
-	mempool    []*messaging.Envelope
-	deliver    []*messaging.Envelope
 	blockIndex uint64
 	blockTime  time.Time
 
+	hookMu        *sync.Mutex
 	submitHook    SubmitHookFunc
 	blockHook     BlockHookFunc
 	nodeBlockHook NodeBlockHookFunc
@@ -61,7 +59,7 @@ func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
 	p.PartitionInfo = partition
 	p.sim = s
 	p.logger.Set(s.logger, "partition", partition.ID)
-	p.mu = new(sync.Mutex)
+	p.hookMu = new(sync.Mutex)
 	return p
 }
 
@@ -149,26 +147,26 @@ func (p *Partition) SetObserver(observer database.Observer) {
 }
 
 func (p *Partition) SetSubmitHook(fn SubmitHookFunc) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.hookMu.Lock()
+	defer p.hookMu.Unlock()
 	p.submitHook = fn
 }
 
 func (p *Partition) SetBlockHook(fn BlockHookFunc) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.hookMu.Lock()
+	defer p.hookMu.Unlock()
 	p.blockHook = fn
 }
 
 func (p *Partition) SetNodeBlockHook(fn NodeBlockHookFunc) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.hookMu.Lock()
+	defer p.hookMu.Unlock()
 	p.nodeBlockHook = fn
 }
 
 func (p *Partition) SetCommitHook(fn CommitHookFunc) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.hookMu.Lock()
+	defer p.hookMu.Unlock()
 	p.commitHook = fn
 }
 
@@ -193,17 +191,18 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 }
 
 func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*protocol.TransactionStatus, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.hookMu.Lock()
+	hook := p.submitHook
+	p.hookMu.Unlock()
 
-	if p.submitHook != nil {
+	if hook != nil {
 		messages, err := envelope.Normalize()
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
-		drop, keep := p.submitHook(messages)
+		drop, keep := hook(messages)
 		if !keep {
-			p.submitHook = nil
+			hook = nil
 		}
 		if drop {
 			st := make([]*protocol.TransactionStatus, len(messages))
@@ -217,76 +216,41 @@ func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*proto
 		}
 	}
 
+	data, err := envelope.MarshalBinary()
+	if err != nil {
+		return nil, errors.InternalError.WithFormat("encode envelope: %w", err)
+	}
+
 	results := make([][]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
 		var err error
 		// Set type = recheck to make the executor create a new batch to avoid timing issues
-		results[i], err = node.checkTx(envelope, false)
+		results[i], err = node.checkTx(data, false, pretend)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
-	for _, r := range results[1:] {
-		if len(r) != len(results[0]) {
-			return nil, errors.FatalError.WithFormat("consensus failure: different number of results")
-		}
-		for i, st := range r {
-			if !results[0][i].Equal(st) {
-				p.logger.Error("Consensus failure", "expected", results[0][i], "actual", st)
-				return nil, errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
+	if !p.sim.IgnoreDeliverResults {
+		for _, r := range results[1:] {
+			if len(r) != len(results[0]) {
+				return nil, errors.FatalError.WithFormat("consensus failure: different number of results")
+			}
+			for i, st := range r {
+				if !results[0][i].Equal(st) {
+					p.logger.Error("Consensus failure", "expected", results[0][i], "actual", st)
+					return nil, errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
+				}
 			}
 		}
 	}
 
-	ok := true
-	for _, st := range results[0] {
-		if st.Failed() {
-			ok = false
-		}
-	}
-
-	if !pretend && ok {
-		p.mempool = append(p.mempool, envelope)
-	}
 	return results[0], nil
 }
 
-func (p *Partition) applyBlockHook(node int, messages []*messaging.Envelope) []*messaging.Envelope {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	block := execute.BlockParams{
-		Context: context.Background(),
-		Index:   p.blockIndex,
-		Time:    p.blockTime,
-	}
-
-	var keep bool
-	if node < 0 {
-		if p.blockHook == nil {
-			return messages
-		}
-		messages, keep = p.blockHook(block, messages)
-		if !keep {
-			p.blockHook = nil
-		}
-	} else {
-		if p.nodeBlockHook == nil {
-			return messages
-		}
-		messages, keep = p.nodeBlockHook(node, block, messages)
-		if !keep {
-			p.nodeBlockHook = nil
-		}
-	}
-
-	return messages
-}
-
 func (p *Partition) getCommitHook() CommitHookFunc {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.hookMu.Lock()
+	defer p.hookMu.Unlock()
 	return p.commitHook
 }
 
@@ -304,25 +268,11 @@ func (p *Partition) loadBlockIndex() {
 }
 
 func (p *Partition) execute() error {
-	// TODO: Limit how many transactions are added to the block? Call recheck?
-	p.mu.Lock()
-	envelopes := p.deliver
-	p.deliver = p.mempool
-	p.mempool = nil
-	p.mu.Unlock()
-
-	// if p.sim.Deterministic {
-	// 	// Order transactions to ensure the simulator is deterministic
-	// 	orderMessagesDeterministically(messages)
-	// }
-
 	// Initialize block index
 	p.loadBlockIndex()
 	p.blockIndex++
 	p.blockTime = p.blockTime.Add(time.Second)
 	p.logger.Debug("Stepping", "block", p.blockIndex)
-
-	envelopes = p.applyBlockHook(-1, envelopes)
 
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)
@@ -341,10 +291,47 @@ func (p *Partition) execute() error {
 	}
 
 	// Deliver Tx
+	p.hookMu.Lock()
+	sharedHook := p.blockHook
+	nodeHook := p.nodeBlockHook
+	p.hookMu.Unlock()
+
+	keepShared := true
+	keepNode := true
+	defer func() {
+		if keepShared && keepNode {
+			return
+		}
+
+		p.hookMu.Lock()
+		if !keepShared {
+			p.blockHook = nil
+		}
+		if !keepNode {
+			p.nodeBlockHook = nil
+		}
+		p.hookMu.Unlock()
+	}()
+
 	var err error
 	results := make([][]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
-		results[i], err = node.deliverTx(blocks[i], p.applyBlockHook(i, envelopes))
+		results[i], err = node.deliverTx(blocks[i], func(block execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+			var keep bool
+			if sharedHook != nil {
+				envelopes, keep = sharedHook(block, envelopes)
+				if !keep {
+					keepShared = false
+				}
+			}
+			if nodeHook != nil {
+				envelopes, keep = nodeHook(i, block, envelopes)
+				if !keep {
+					keepNode = false
+				}
+			}
+			return envelopes, false
+		})
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
@@ -359,35 +346,6 @@ func (p *Partition) execute() error {
 				if !results[0][i].Equal(st) {
 					p.logger.Error("Consensus failure", "step", "deliver", "id", st.TxID, "expected", results[0][i], "actual", st)
 					return errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
-				}
-			}
-		}
-	}
-
-	status := map[[32]byte]error{}
-	for _, r := range results[0] {
-		if r.Error != nil {
-			status[r.TxID.Hash()] = r.AsError()
-		}
-	}
-	for _, envelope := range envelopes {
-		messages, err := envelope.Normalize()
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		for _, msg := range messages {
-			if msg.Type() == messaging.MessageTypeTransaction ||
-				msg.Type() == messaging.MessageTypeSignature {
-				continue
-			}
-			for {
-				if err, ok := status[msg.ID().Hash()]; ok {
-					p.logger.Error("System message failed", "err", err, "type", msg.Type(), "id", msg.ID())
-				}
-				if u, ok := msg.(interface{ Unwrap() messaging.Message }); ok {
-					msg = u.Unwrap()
-				} else {
-					break
 				}
 			}
 		}
