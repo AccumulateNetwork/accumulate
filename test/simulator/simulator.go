@@ -47,11 +47,14 @@ type Simulator struct {
 	blockErrGroup *errgroup.Group
 
 	// Deterministic attempts to run the simulator in a fully deterministic,
-	// repeatable way
+	// repeatable way.
 	Deterministic bool
 
-	// DropDispatchedMessages drops all internally dispatched messages
+	// DropDispatchedMessages drops all internally dispatched messages.
 	DropDispatchedMessages bool
+
+	// IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx.
+	IgnoreDeliverResults bool
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) keyvalue.Beginner
@@ -309,6 +312,18 @@ func (s *Simulator) SetBlockHookFor(account *url.URL, fn BlockHookFunc) {
 
 func (s *Simulator) SetBlockHook(partition string, fn BlockHookFunc) {
 	s.partitions[partition].SetBlockHook(fn)
+}
+
+func (s *Simulator) SetNodeBlockHookFor(account *url.URL, fn NodeBlockHookFunc) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	s.partitions[partition].SetNodeBlockHook(fn)
+}
+
+func (s *Simulator) SetNodeBlockHook(partition string, fn NodeBlockHookFunc) {
+	s.partitions[partition].SetNodeBlockHook(fn)
 }
 
 func (s *Simulator) SetCommitHookFor(account *url.URL, fn CommitHookFunc) {
