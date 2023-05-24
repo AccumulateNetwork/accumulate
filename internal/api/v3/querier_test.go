@@ -126,7 +126,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 
 	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.alice, "data").
-			WriteData([]byte("foo")).
+			WriteData().DoubleHash([]byte("foo")).
 			SignWith(s.alice, "book", "1").Version(1).Timestamp(2).PrivateKey(s.aliceKey)))
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -228,7 +228,7 @@ func (s *QuerierTestSuite) TestQueryChainEntries() {
 }
 
 func (s *QuerierTestSuite) TestQueryDataEntry() {
-	entry := &AccumulateDataEntry{Data: [][]byte{[]byte("foo")}}
+	entry := &DoubleHashDataEntry{Data: [][]byte{[]byte("foo")}}
 
 	s.Run("Latest", func() {
 		r, err := s.QuerierFor(s.alice).QueryDataEntry(context.Background(), s.alice.JoinPath("data"), nil)

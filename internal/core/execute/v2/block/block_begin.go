@@ -132,7 +132,11 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	}
 
 	wd := protocol.SystemWriteData{}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
+		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
+	} else {
+		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	}
 	dataAccountUrl := x.Describe.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
