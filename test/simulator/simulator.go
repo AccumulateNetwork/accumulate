@@ -55,18 +55,30 @@ type Simulator struct {
 
 	// IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx.
 	IgnoreDeliverResults bool
+
+	// Recordings is a function that returns files to write node recordings to.
+	// TODO Make this an option once #3314 is merged.
+	Recordings RecordingFunc
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) keyvalue.Beginner
 type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
+type RecordingFunc func(partition string, node int) (io.WriteSeeker, error)
 
 func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
+	return New2(logger, database, network, snapshot, nil)
+}
+
+// New2 is a hack to avoid changing everything - this needs to be handled with
+// options.
+func New2(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc, recordings RecordingFunc) (*Simulator, error) {
 	s := new(Simulator)
 	s.logger.Set(logger, "module", "sim")
 	s.init = network
 	s.database = database
 	s.partitions = make(map[string]*Partition, len(network.Bvns)+1)
 	s.router = newRouter(logger, s.partitions)
+	s.Recordings = recordings
 
 	s.netcfg = new(config.Network)
 	s.netcfg.Id = network.Id
