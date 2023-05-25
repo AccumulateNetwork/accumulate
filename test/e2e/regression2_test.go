@@ -763,6 +763,11 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 // reflected in the transaction results, which causes a consensus failure
 // (manually disabled here), but they really should be reflected in the BPT.
 func TestDifferentValidatorSignaturesV1(t *testing.T) {
+	// This test requires that the simulator's dispatch of transactions is
+	// extremely predictable. That appears to no longer be the case so this test
+	// won't work until that has been fixed.
+	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3322")
+
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 

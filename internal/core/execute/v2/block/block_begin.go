@@ -65,9 +65,9 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 		for err := range errs {
 			switch err := err.(type) {
 			case protocol.TransactionStatusError:
-				x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
+				x.logger.Error("Failed to dispatch transactions", "block", block.Index, "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 			default:
-				x.logger.Error("Failed to dispatch transactions", "error", err, "stack", fmt.Sprintf("%+v\n", err))
+				x.logger.Error("Failed to dispatch transactions", "block", block.Index, "error", err, "stack", fmt.Sprintf("%+v\n", err))
 			}
 		}
 	})
