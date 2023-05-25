@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -276,26 +277,19 @@ func (c *Client) PullPendingTransactionsForAccount(ctx context.Context, account 
 	return errors.UnknownError.Wrap(err)
 }
 
-// PullTransactionsForAccount fetches transactions from the account's chains.
-func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.URL, chains ...string) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	batch := c.OpenDB(true)
-	defer batch.Discard()
-
+func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []string) ([]*url.TxID, error) {
 	// For each chain
 	missing := map[[32]byte]bool{}
 	didLoad := batch.Index().Account(account).DidLoadTransaction()
 	for _, name := range chains {
 		chain, err := batch.Account(account).ChainByName(name)
 		if err != nil {
-			return errors.UnknownError.WithFormat("load %s chain: %w", name, err)
+			return nil, errors.UnknownError.WithFormat("load %s chain: %w", name, err)
 		}
 
 		head, err := chain.Head().Get()
 		if err != nil {
-			return errors.UnknownError.WithFormat("load main chain head: %w", err)
+			return nil, errors.UnknownError.WithFormat("load main chain head: %w", err)
 		}
 
 		// Scan all the entries
@@ -303,7 +297,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 		for i := int64(0); i < head.Count; i += N {
 			entries, err := chain.Inner().GetRange(i, i+N)
 			if err != nil {
-				return errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
+				return nil, errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
 			}
 
 			// For each entry
@@ -321,7 +315,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 				case errors.Is(err, errors.NotFound):
 					// Continue
 				default:
-					return errors.UnknownError.WithFormat("load account did-load index: %w", err)
+					return nil, errors.UnknownError.WithFormat("load account did-load index: %w", err)
 				}
 
 				// Check if it has been fetched for a different account or chain
@@ -332,13 +326,13 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 				case errors.Is(err, errors.NotFound):
 					missing[hash] = true
 				default:
-					return errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", e, err)
+					return nil, errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", e, err)
 				}
 
 				// Record that it has been fetched
 				err = didLoad.Add(hash)
 				if err != nil {
-					return errors.UnknownError.WithFormat("store account did-load index: %w", err)
+					return nil, errors.UnknownError.WithFormat("store account did-load index: %w", err)
 				}
 			}
 		}
@@ -356,6 +350,22 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 		a, b := txids[i], txids[j]
 		return a.Compare(b) < 0
 	})
+	return txids, nil
+}
+
+// PullTransactionsForAccount fetches transactions from the account's chains.
+func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.URL, chains ...string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	batch := c.OpenDB(true)
+	defer batch.Discard()
+
+	// Get missing transactions
+	txids, err := c.getMissingMessageIDs(batch, account, chains)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
 
 	if len(txids) == 0 {
 		return nil
@@ -363,7 +373,7 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 
 	// Pull the transactions
 	c.logger.Info("Pulling transactions", "count", len(txids), "account", account)
-	err := c.pullTransactions(ctx, batch, txids)
+	err = c.pullTransactions(ctx, batch, txids)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -446,6 +456,41 @@ func (c *Client) pullTransactions(ctx context.Context, batch *DB, txids []*url.T
 	}
 
 	return nil
+}
+
+func (c *Client) PullMessagesForAccount(ctx context.Context, account *url.URL, chains ...string) error {
+	if c.query.Querier == nil {
+		return errors.BadRequest.With("client was initialized without a querier")
+	}
+
+	batch := c.OpenDB(true)
+	defer batch.Discard()
+
+	// Reuse connections
+	ctx, cancel, _ := api.ContextWithBatchData(ctx)
+	defer cancel()
+
+	// Get missing messages
+	ids, err := c.getMissingMessageIDs(batch, account, chains)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Fetch
+	for _, id := range ids {
+		r, err := c.query.QueryMessage(ctx, id, nil)
+		if err != nil {
+			return errors.UnknownError.WithFormat("query %v: %w", id, err)
+		}
+
+		err = batch.Message(id.Hash()).Main().Put(r.Message)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store transaction %v: %w", id, err)
+		}
+	}
+
+	err = batch.Commit()
+	return errors.UnknownError.Wrap(err)
 }
 
 // IndexAccountChains collates the index chain entries for an account's chains.
