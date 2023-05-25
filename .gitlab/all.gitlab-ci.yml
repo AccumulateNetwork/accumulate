@@ -34,7 +34,12 @@ go test 1/2:
   variables:
     GOMODCACHE: ''
     GOLANGCI_LINT_CACHE: ''
-  script: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
+  artifacts:
+    paths:
+      - failures/*
+  script:
+  - export RECORD_FAILURE="${PWD}/failures"
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
 
 .go test 2/2:
   # Full devnet validation test
