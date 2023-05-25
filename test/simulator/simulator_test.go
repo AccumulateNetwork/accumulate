@@ -7,7 +7,9 @@
 package simulator_test
 
 import (
+	"flag"
 	"math/big"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,4 +59,17 @@ func TestSimulator(t *testing.T) {
 	// Verify
 	account := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
 	require.Equal(t, 123, int(account.Balance.Int64()))
+}
+
+var flagRecording = flag.String("test.dump-recording", "", "Recording to dump")
+
+func TestDumpRecording(t *testing.T) {
+	if *flagRecording == "" {
+		t.Skip()
+	}
+
+	f, err := os.Open(*flagRecording)
+	require.NoError(t, err)
+	defer f.Close()
+	require.NoError(t, simulator.DumpRecording(f))
 }
