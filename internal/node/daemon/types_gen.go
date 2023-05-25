@@ -11,8 +11,12 @@ package accumulated
 //lint:file-ignore S1001,S1002,S1008,SA4013 generated code
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -30,6 +34,7 @@ type NetworkInit struct {
 }
 
 type NodeInit struct {
+	fieldsSet        []bool
 	DnnType          config.NodeType `json:"dnnType,omitempty" form:"dnnType" query:"dnnType" validate:"required"`
 	BvnnType         config.NodeType `json:"bvnnType,omitempty" form:"bvnnType" query:"bvnnType" validate:"required"`
 	BsnnType         config.NodeType `json:"bsnnType,omitempty" form:"bsnnType" query:"bsnnType" validate:"required"`
@@ -41,6 +46,255 @@ type NodeInit struct {
 	DnNodeKey        []byte          `json:"dnNodeKey,omitempty" form:"dnNodeKey" query:"dnNodeKey" validate:"required"`
 	BvnNodeKey       []byte          `json:"bvnNodeKey,omitempty" form:"bvnNodeKey" query:"bvnNodeKey" validate:"required"`
 	BsnNodeKey       []byte          `json:"bsnNodeKey,omitempty" form:"bsnNodeKey" query:"bsnNodeKey" validate:"required"`
+	extraData        []byte
+}
+
+func (v *NodeInit) Copy() *NodeInit {
+	u := new(NodeInit)
+
+	u.DnnType = v.DnnType
+	u.BvnnType = v.BvnnType
+	u.BsnnType = v.BsnnType
+	u.BasePort = v.BasePort
+	u.AdvertizeAddress = v.AdvertizeAddress
+	u.ListenAddress = v.ListenAddress
+	u.PeerAddress = v.PeerAddress
+	u.PrivValKey = encoding.BytesCopy(v.PrivValKey)
+	u.DnNodeKey = encoding.BytesCopy(v.DnNodeKey)
+	u.BvnNodeKey = encoding.BytesCopy(v.BvnNodeKey)
+	u.BsnNodeKey = encoding.BytesCopy(v.BsnNodeKey)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *NodeInit) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NodeInit) Equal(u *NodeInit) bool {
+	if !(v.DnnType == u.DnnType) {
+		return false
+	}
+	if !(v.BvnnType == u.BvnnType) {
+		return false
+	}
+	if !(v.BsnnType == u.BsnnType) {
+		return false
+	}
+	if !(v.BasePort == u.BasePort) {
+		return false
+	}
+	if !(v.AdvertizeAddress == u.AdvertizeAddress) {
+		return false
+	}
+	if !(v.ListenAddress == u.ListenAddress) {
+		return false
+	}
+	if !(v.PeerAddress == u.PeerAddress) {
+		return false
+	}
+	if !(bytes.Equal(v.PrivValKey, u.PrivValKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.DnNodeKey, u.DnNodeKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.BvnNodeKey, u.BvnNodeKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.BsnNodeKey, u.BsnNodeKey)) {
+		return false
+	}
+
+	return true
+}
+
+var fieldNames_NodeInit = []string{
+	1:  "DnnType",
+	2:  "BvnnType",
+	3:  "BsnnType",
+	4:  "BasePort",
+	5:  "AdvertizeAddress",
+	6:  "ListenAddress",
+	7:  "PeerAddress",
+	8:  "PrivValKey",
+	9:  "DnNodeKey",
+	10: "BvnNodeKey",
+	11: "BsnNodeKey",
+}
+
+func (v *NodeInit) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.DnnType == 0) {
+		writer.WriteEnum(1, v.DnnType)
+	}
+	if !(v.BvnnType == 0) {
+		writer.WriteEnum(2, v.BvnnType)
+	}
+	if !(v.BsnnType == 0) {
+		writer.WriteEnum(3, v.BsnnType)
+	}
+	if !(v.BasePort == 0) {
+		writer.WriteUint(4, v.BasePort)
+	}
+	if !(len(v.AdvertizeAddress) == 0) {
+		writer.WriteString(5, v.AdvertizeAddress)
+	}
+	if !(len(v.ListenAddress) == 0) {
+		writer.WriteString(6, v.ListenAddress)
+	}
+	if !(len(v.PeerAddress) == 0) {
+		writer.WriteString(7, v.PeerAddress)
+	}
+	if !(len(v.PrivValKey) == 0) {
+		writer.WriteBytes(8, v.PrivValKey)
+	}
+	if !(len(v.DnNodeKey) == 0) {
+		writer.WriteBytes(9, v.DnNodeKey)
+	}
+	if !(len(v.BvnNodeKey) == 0) {
+		writer.WriteBytes(10, v.BvnNodeKey)
+	}
+	if !(len(v.BsnNodeKey) == 0) {
+		writer.WriteBytes(11, v.BsnNodeKey)
+	}
+
+	_, _, err := writer.Reset(fieldNames_NodeInit)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *NodeInit) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field DnnType is missing")
+	} else if v.DnnType == 0 {
+		errs = append(errs, "field DnnType is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BvnnType is missing")
+	} else if v.BvnnType == 0 {
+		errs = append(errs, "field BvnnType is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field BsnnType is missing")
+	} else if v.BsnnType == 0 {
+		errs = append(errs, "field BsnnType is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field BasePort is missing")
+	} else if v.BasePort == 0 {
+		errs = append(errs, "field BasePort is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field AdvertizeAddress is missing")
+	} else if len(v.AdvertizeAddress) == 0 {
+		errs = append(errs, "field AdvertizeAddress is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field ListenAddress is missing")
+	} else if len(v.ListenAddress) == 0 {
+		errs = append(errs, "field ListenAddress is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field PeerAddress is missing")
+	} else if len(v.PeerAddress) == 0 {
+		errs = append(errs, "field PeerAddress is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field PrivValKey is missing")
+	} else if len(v.PrivValKey) == 0 {
+		errs = append(errs, "field PrivValKey is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field DnNodeKey is missing")
+	} else if len(v.DnNodeKey) == 0 {
+		errs = append(errs, "field DnNodeKey is not set")
+	}
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+		errs = append(errs, "field BvnNodeKey is missing")
+	} else if len(v.BvnNodeKey) == 0 {
+		errs = append(errs, "field BvnNodeKey is not set")
+	}
+	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
+		errs = append(errs, "field BsnNodeKey is missing")
+	} else if len(v.BsnNodeKey) == 0 {
+		errs = append(errs, "field BsnNodeKey is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+func (v *NodeInit) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NodeInit) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(config.NodeType); reader.ReadEnum(1, x) {
+		v.DnnType = *x
+	}
+	if x := new(config.NodeType); reader.ReadEnum(2, x) {
+		v.BvnnType = *x
+	}
+	if x := new(config.NodeType); reader.ReadEnum(3, x) {
+		v.BsnnType = *x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.BasePort = x
+	}
+	if x, ok := reader.ReadString(5); ok {
+		v.AdvertizeAddress = x
+	}
+	if x, ok := reader.ReadString(6); ok {
+		v.ListenAddress = x
+	}
+	if x, ok := reader.ReadString(7); ok {
+		v.PeerAddress = x
+	}
+	if x, ok := reader.ReadBytes(8); ok {
+		v.PrivValKey = x
+	}
+	if x, ok := reader.ReadBytes(9); ok {
+		v.DnNodeKey = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.BvnNodeKey = x
+	}
+	if x, ok := reader.ReadBytes(11); ok {
+		v.BsnNodeKey = x
+	}
+
+	seen, err := reader.Reset(fieldNames_NodeInit)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *BvnInit) MarshalJSON() ([]byte, error) {

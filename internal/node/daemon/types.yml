@@ -27,8 +27,6 @@ BvnInit:
     repeatable: true
 
 NodeInit:
-  non-binary: true
-  incomparable: true
   fields:
   - name: DnnType
     type: config.NodeType
