@@ -199,7 +199,7 @@ type TransactionStatusError struct {
 
 // AsError returns nil or the status wrapped as a [TransactionStatusError].
 func (s *TransactionStatus) AsError() error {
-	if s.Error == nil {
+	if s == nil || s.Error == nil {
 		return nil
 	}
 	return TransactionStatusError{s}
