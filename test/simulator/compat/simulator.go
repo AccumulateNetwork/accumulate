@@ -82,7 +82,7 @@ func (s *Simulator) Init(from simulator.SnapshotFunc) {
 	var err error
 	logger := acctesting.NewTestLogger(s.TB)
 	net := simulator.SimpleNetwork(s.TB.Name(), s.opts.BvnCount, 1)
-	s.S, err = simulator.New(logger, s.opts.OpenDB, net, from)
+	s.S, err = simulator.New2(logger, s.opts.OpenDB, net, from, harness.Recordings(s.TB))
 	require.NoError(s.TB, err)
 	s.H = harness.NewSimWith(s.TB, s.S)
 }
