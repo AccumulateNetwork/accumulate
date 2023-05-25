@@ -44,6 +44,26 @@ func (b SignatureBuilder) Delegator(delegator any, path ...string) SignatureBuil
 	return b
 }
 
+func (b SignatureBuilder) Accept() SignatureBuilder {
+	b.signer.Vote = protocol.VoteTypeAccept
+	return b
+}
+
+func (b SignatureBuilder) Reject() SignatureBuilder {
+	b.signer.Vote = protocol.VoteTypeReject
+	return b
+}
+
+func (b SignatureBuilder) Abstain() SignatureBuilder {
+	b.signer.Vote = protocol.VoteTypeAbstain
+	return b
+}
+
+func (b SignatureBuilder) Vote(vote protocol.VoteType) SignatureBuilder {
+	b.signer.Vote = vote
+	return b
+}
+
 func (b SignatureBuilder) Version(version any) SignatureBuilder {
 	b.signer.Version = b.parseUint(version)
 	return b

@@ -29,6 +29,7 @@ type Builder struct {
 	Delegators []*url.URL
 	Signer     Signer
 	Version    uint64
+	Vote       protocol.VoteType
 	Timestamp  Timestamp
 
 	// Ignore64Byte (when set) stops the signature builder from automatically
@@ -210,6 +211,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeUnknown, protocol.SignatureTypeED25519:
@@ -217,6 +219,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeRCD1:
@@ -224,6 +227,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeBTC:
@@ -231,6 +235,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeBTCLegacy:
@@ -238,6 +243,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeETH:
@@ -245,6 +251,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
+		sig.Vote = s.Vote
 		return sig, s.Signer.SetPublicKey(sig)
 
 	default:

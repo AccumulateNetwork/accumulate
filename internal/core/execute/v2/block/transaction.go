@@ -171,82 +171,126 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 		return false, fmt.Errorf("unable to load authority of %v: %w", delivery.Transaction.Header.Principal, err)
 	}
 
-	// For each authority
-	var authorized bool
-	authRequired := delivery.Transaction.Body.Type().RequireAuthorization()
-	for _, entry := range auth.Authorities {
-		// Do not check signers for disabled authorities
-		if entry.Disabled && !authRequired {
-			continue
-		}
-
-		// Check if any signer has reached its threshold
-		ok, err := t.AuthorityDidVote(batch, delivery.Transaction, entry.Url)
-		if err != nil {
-			return false, errors.UnknownError.Wrap(err)
-		}
-		if !ok {
-			return false, nil
-		}
-		authorized = true
-	}
-	if authorized {
-		return true, nil
-	}
-
-	// If every authority is disabled, at least one signature is required
+	// At a minimum (if every authority is disabled), at least one signature is
+	// required
 	voters, err := batch.Account(delivery.Transaction.Header.Principal).
 		Transaction(delivery.Transaction.ID().Hash()).
 		Votes().Get()
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load voters: %w", err)
 	}
+	if len(voters) == 0 {
+		return false, nil
+	}
 
-	return len(voters) > 0, nil
+	// For each authority
+	notReady := map[[32]byte]struct{}{}
+	ignoreDisabled := delivery.Transaction.Body.Type().RequireAuthorization()
+	for _, entry := range auth.Authorities {
+		// Ignore disabled authorities
+		if entry.Disabled && !ignoreDisabled {
+			continue
+		}
+
+		// Check if any signer has reached its threshold
+		ok, vote, err := t.AuthorityDidVote(batch, delivery.Transaction, entry.Url)
+		if err != nil {
+			return false, errors.UnknownError.Wrap(err)
+		}
+
+		// Did the authority vote?
+		if !ok {
+			notReady[entry.Url.AccountID32()] = struct{}{}
+			continue
+		}
+
+		// Any vote that is not accept is counted as reject. Since a transaction
+		// is only executed once _all_ authorities accept, a single authority
+		// rejecting or abstaining is sufficient to block the transaction.
+		if vote != protocol.VoteTypeAccept {
+			return false, errors.Rejected
+		}
+	}
+
+	// The transaction is only ready if all authorities have voted
+	return len(notReady) == 0, nil
 }
 
-func (m *MessageContext) AuthorityDidVote(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
-	_, err := batch.
+func (m *MessageContext) AuthorityDidVote(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, protocol.VoteType, error) {
+	// Find the vote
+	entry, err := batch.
 		Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
 		Votes().Find(&database.VoteEntry{Authority: authUrl})
 	switch {
 	case err == nil:
-		return true, nil
+		// Ok
 	case errors.Is(err, errors.NotFound):
-		return false, nil
+		return false, 0, nil
 	default:
-		return false, errors.UnknownError.With("load vote: %w", err)
+		return false, 0, errors.UnknownError.With("load vote entry: %w", err)
 	}
+
+	// Load the vote
+	sig, err := m.GetSignatureAs(batch, entry.Hash)
+	if err != nil {
+		return false, 0, errors.UnknownError.WithFormat("load vote %v: %w", transaction.Header.Principal.WithTxID(entry.Hash), err)
+	}
+
+	// Verify it is an authority signature
+	auth, ok := sig.(*protocol.AuthoritySignature)
+	if !ok {
+		return false, 0, errors.InternalError.WithFormat("invalid vote: expected %v, got %v", protocol.SignatureTypeAuthority, sig.Type())
+	}
+	return true, auth.Vote, nil
 }
 
-func (m *MessageContext) AuthorityWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
+func (m *MessageContext) AuthorityWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, authUrl *url.URL) (bool, protocol.VoteType, error) {
 	var authority protocol.Authority
 	err := batch.Account(authUrl).Main().GetAs(&authority)
 	if err != nil {
-		return false, errors.UnknownError.WithFormat("load authority %v: %w", authUrl, err)
+		return false, 0, errors.UnknownError.WithFormat("load authority %v: %w", authUrl, err)
 	}
 
 	for _, signer := range authority.GetSigners() {
-		ok, err := m.SignerWillVote(batch, block, transaction, signer)
+		ok, vote, err := m.SignerWillVote(batch, block, transaction, signer)
 		if err != nil {
-			return false, errors.UnknownError.Wrap(err)
+			return false, 0, errors.UnknownError.Wrap(err)
 		}
 		if ok {
-			return true, nil
+			return true, vote, nil
 		}
 	}
 
-	return false, nil
+	return false, 0, nil
 }
 
-func (m *MessageContext) SignerWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, signerUrl *url.URL) (bool, error) {
+func (m *MessageContext) SignerWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, signerUrl *url.URL) (bool, protocol.VoteType, error) {
 	// Load the signer
 	var signer protocol.Signer
 	err := batch.Account(signerUrl).Main().GetAs(&signer)
 	if err != nil {
-		return false, errors.UnknownError.WithFormat("load signer %v: %w", signerUrl, err)
+		return false, 0, errors.UnknownError.WithFormat("load signer %v: %w", signerUrl, err)
 	}
+
+	// Get thresholds
+	var tReject, tResponse, tBlock uint64
+	tAccept := signer.GetSignatureThreshold()
+	entryCount := 1
+
+	if page, ok := signer.(*protocol.KeyPage); ok {
+		tReject = page.RejectThreshold
+		tResponse = page.ResponseThreshold
+		tBlock = page.BlockThreshold
+		entryCount = len(page.Keys)
+	}
+
+	if tReject == 0 {
+		tReject = tAccept
+	}
+
+	// TODO Check the block threshold
+	_ = tBlock
 
 	// Load the active signature set
 	entries, err := batch.
@@ -255,21 +299,63 @@ func (m *MessageContext) SignerWillVote(batch *database.Batch, block uint64, tra
 		Signatures().
 		Get()
 	if err != nil {
-		return false, errors.UnknownError.WithFormat("load %v signatures: %w", signerUrl, err)
+		return false, 0, errors.UnknownError.WithFormat("load %v signatures: %w", signerUrl, err)
 	}
 
-	// Add up the number of signatures received for each delegation path. If the
-	// count for any path reaches the threshold, the signer is satisfied.
-	pathSigCount := map[[32]byte]uint64{}
+	// Add up the votes for each delegation path
+	pathVoteCount := map[[32]byte]map[protocol.VoteType]uint64{}
 	for _, entry := range entries {
+		sig, err := m.GetSignatureAs(batch, entry.Hash)
+		if err != nil {
+			return false, 0, errors.UnknownError.WithFormat("load %v: %w", signerUrl.WithTxID(entry.Hash), err)
+		}
+
 		h := entry.PathHash()
-		pathSigCount[h]++
-		if pathSigCount[h] >= signer.GetSignatureThreshold() {
-			return true, nil
+		m, ok := pathVoteCount[h]
+		if !ok {
+			m = map[protocol.VoteType]uint64{}
+			pathVoteCount[h] = m
+		}
+		m[sig.GetVote()]++
+	}
+
+	// Check each path
+	for _, votes := range pathVoteCount {
+		// Calculate the allVotes number of responses
+		var allVotes uint64
+		for _, count := range votes {
+			allVotes += count
+		}
+
+		// Check the response threshold
+		if allVotes < tResponse {
+			continue
+		}
+
+		// Check the accept threshold
+		if votes[protocol.VoteTypeAccept] >= tAccept {
+			return true, protocol.VoteTypeAccept, nil
+		}
+
+		// Check the reject threshold
+		if votes[protocol.VoteTypeReject] >= tReject {
+			return true, protocol.VoteTypeReject, nil
+		}
+
+		// If it is not possible to reach consensus, the authority abstains. If
+		// the vote can be swung by every remaining (undecided) voter voting
+		// together to accept or reject, it is still possible to reach
+		// consensus. Thus if that is not possible for accept, or for reject,
+		// consensus is unreachable.
+		undecided := uint64(entryCount) - allVotes
+		couldAccept := votes[protocol.VoteTypeAccept]+undecided >= tAccept
+		couldReject := votes[protocol.VoteTypeReject]+undecided >= tReject
+		if !couldAccept && !couldReject {
+			return true, protocol.VoteTypeAbstain, nil
 		}
 	}
 
-	return false, nil
+	return false, 0, nil
 }
 
 func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
