@@ -47,6 +47,9 @@ type RoutedTransport struct {
 
 	// Router determines the address a message should be routed to.
 	Router Router
+
+	// Attempts is the number of connection attempts to make.
+	Attempts int
 }
 
 // RoundTrip routes each requests and executes a round-trip call. If there are
@@ -236,7 +239,13 @@ func (c *RoutedTransport) dial(ctx context.Context, addr multiaddr.Multiaddr, st
 	addrStr := addr.String()
 	multi, isMulti := c.Dialer.(MultiDialer)
 
-	for i := 0; ; i++ {
+	n := c.Attempts
+	if n == 0 {
+		n = 3
+	}
+
+	var i int
+	for i = 0; i < n; i++ {
 		// Check for an existing stream
 		var err error
 		s, ok := streams[addrStr]
@@ -274,7 +283,9 @@ func (c *RoutedTransport) dial(ctx context.Context, addr multiaddr.Multiaddr, st
 
 		// Report the error and try again
 		if !multi.BadDial(ctx, addr, s, err) {
-			return nil, errors.NoPeer.WithFormat("unable to submit request to %v after %d attempts", addrStr, i+1)
+			break
 		}
 	}
+
+	return nil, errors.NoPeer.WithFormat("unable to submit request to %v after %d attempts", addrStr, i+1)
 }
