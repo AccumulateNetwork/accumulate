@@ -167,38 +167,10 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// If the signer's authority is satisfied
-	signerAuth := signer.GetAuthority()
-	ok, err = ctx.authorityWillVote(batch, signerAuth)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if !ok {
-		return nil
-	}
-
-	err = clearActiveSignatures(batch, ctx, signerAuth)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Send the next authority signature
-	auth := &protocol.AuthoritySignature{
+	// Send the next authority signature if the signer's authority is satisfied
+	return ctx.maybeSendAuthoritySignature(batch, &protocol.AuthoritySignature{
 		Origin:    signer.GetUrl(),
-		Authority: signerAuth,
-		Vote:      protocol.VoteTypeAccept,
-		TxID:      ctx.transaction.ID(),
-		Cause:     ctx.message.ID(),
+		Authority: signer.GetAuthority(),
 		Delegator: sig.Delegator[1:],
-	}
-
-	// TODO Deduplicate
-	return ctx.didProduce(
-		batch,
-		auth.RoutingLocation(),
-		&messaging.SignatureMessage{
-			Signature: auth,
-			TxID:      ctx.transaction.ID(),
-		},
-	)
+	})
 }
