@@ -542,13 +542,24 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 	}
 
 	// Authorization is disabled and the transaction type does not force authorization => authorized
-	if auth.AuthDisabled() && !transaction.Body.Type().RequireAuthorization() {
+	if badAuthDisabled(auth) && !transaction.Body.Type().RequireAuthorization() {
 		return nil
 	}
 
 	// Authorization is enabled => unauthorized
 	// Transaction type forces authorization => unauthorized
 	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
+}
+
+// badAuthDisabled is a reproduction of buggy logic from 1.0. This is known to
+// be buggy but it must be reproduced in order to replicate the logic of 1.0.
+func badAuthDisabled(a *protocol.AccountAuth) bool {
+	for _, e := range a.Authorities {
+		if e.Disabled {
+			return true
+		}
+	}
+	return false
 }
 
 // computeSignerFee computes the fee that will be charged to the signer.

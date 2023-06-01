@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,13 +18,13 @@ func (a *AccountAuth) KeyBook() *url.URL {
 	return nil
 }
 
-func (a *AccountAuth) AuthDisabled() bool {
+func (a *AccountAuth) AllAuthoritiesAreDisabled() bool {
 	for _, e := range a.Authorities {
-		if e.Disabled {
-			return true
+		if !e.Disabled {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func (a *AccountAuth) ManagerKeyBook() *url.URL {
