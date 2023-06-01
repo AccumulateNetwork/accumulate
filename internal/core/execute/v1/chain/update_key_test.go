@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -34,7 +35,7 @@ func TestUpdateKey_Duplicate(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	otherKey := acctesting.GenerateKey(alice, "other")
 	sim := simulator.New(t, 1)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1DoubleHashEntries})
 	sim.CreateIdentity(alice, aliceKey[32:], otherKey[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
 

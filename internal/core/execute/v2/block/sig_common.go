@@ -49,12 +49,11 @@ func (s *SignatureContext) getAuthority() *url.URL {
 	}
 }
 
-// authorityIsReady verifies that the authority is ready to vote.
-func (s *SignatureContext) authorityIsReady(batch *database.Batch, authority *url.URL) (bool, error) {
+func (s *SignatureContext) authorityWillVote(batch *database.Batch, authority *url.URL) (bool, error) {
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.AuthorityValidator](s.Executor, s.transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.AuthorityIsReady(s.Executor, batch, s.transaction, authority)
+		ready, fallback, err := val.AuthorityWillVote(s, batch, s.transaction, authority)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -63,7 +62,7 @@ func (s *SignatureContext) authorityIsReady(batch *database.Batch, authority *ur
 		}
 	}
 
-	ok, err := s.Executor.AuthorityIsReady(batch, s.transaction, authority)
+	ok, err := s.AuthorityWillVote(batch, s.Block.Index, s.transaction, authority)
 	return ok, errors.UnknownError.Wrap(err)
 }
 
@@ -126,9 +125,8 @@ func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.
 	return nil
 }
 
-func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext) error {
+func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext, authUrl *url.URL) error {
 	// Remove the transaction from the pending list
-	authUrl := ctx.getAuthority()
 	err := batch.Account(authUrl).Pending().Remove(ctx.transaction.ID())
 	if err != nil {
 		return errors.UnknownError.WithFormat("update the pending list: %w", err)
@@ -154,4 +152,97 @@ func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext) error {
 	}
 
 	return nil
+}
+
+// SignerIsAuthorized verifies that the signer is allowed to sign the transaction
+func signerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) error {
+	switch signer := signer.(type) {
+	case *protocol.LiteIdentity:
+		// Otherwise a lite token account is only allowed to sign for itself
+		if !signer.Url.Equal(transaction.Header.Principal.RootIdentity()) {
+			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
+		}
+
+		return nil
+
+	case *protocol.KeyPage:
+		// Verify that the key page is allowed to sign the transaction
+		bit, ok := transaction.Body.Type().AllowedTransactionBit()
+		if ok && signer.TransactionBlacklist.IsSet(bit) {
+			return errors.Unauthorized.WithFormat("page %s is not authorized to sign %v", signer.Url, transaction.Body.Type())
+		}
+
+		if !checkAuthz {
+			return nil
+		}
+
+	case *protocol.UnknownSigner:
+		if !checkAuthz {
+			return nil
+		}
+
+	default:
+		// This should never happen
+		return errors.InternalError.WithFormat("unknown signer type %v", signer.Type())
+	}
+
+	err := verifyPageIsAuthorized(batch, transaction, signer)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	return nil
+}
+
+// verifyPageIsAuthorized verifies that the key page is authorized to sign for
+// the principal.
+func verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
+	// Load the principal
+	principal, err := batch.Account(transaction.Header.Principal).Main().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load principal: %w", err)
+	}
+
+	// Get the principal's account auth
+	auth, err := getAccountAuthoritySet(batch, principal)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Get the signer book URL
+	signerBook, _, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
+	if !ok {
+		// If this happens, the database has bad data
+		return errors.InternalError.WithFormat("invalid key page URL: %v", signer.GetUrl())
+	}
+
+	// Page belongs to book => authorized
+	_, foundAuthority := auth.GetAuthority(signerBook)
+	if foundAuthority {
+		return nil
+	}
+
+	// Authorization is disabled and the transaction type does not force authorization => authorized
+	if auth.AuthDisabled() && !transaction.Body.Type().RequireAuthorization() {
+		return nil
+	}
+
+	// Authorization is enabled => unauthorized
+	// Transaction type forces authorization => unauthorized
+	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
+}
+
+func loadSigner(batch *database.Batch, signerUrl *url.URL) (protocol.Signer, error) {
+	// Load signer
+	account, err := batch.Account(signerUrl).Main().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load signer: %w", err)
+	}
+
+	signer, ok := account.(protocol.Signer)
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("invalid signer: %v cannot sign transactions", account.Type())
+	}
+
+	return signer, nil
 }

@@ -170,7 +170,7 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 
 	// If the signer's authority is satisfied
 	signerAuth := signer.GetAuthority()
-	ok, err = ctx.authorityIsReady(batch, signerAuth)
+	ok, err = ctx.authorityWillVote(batch, signerAuth)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -178,7 +178,7 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		return nil
 	}
 
-	err = clearActiveSignatures(batch, ctx)
+	err = clearActiveSignatures(batch, ctx, signerAuth)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -213,7 +213,7 @@ func (AuthoritySignature) signerCanSign(batch *database.Batch, ctx *SignatureCon
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](ctx.Executor, ctx.transaction.Body.Type())
 	if ok {
-		fallback, err := val.SignerIsAuthorized(ctx.Executor, batch, ctx.transaction, signer, md)
+		fallback, err := val.SignerIsAuthorized(ctx, batch, ctx.transaction, signer, md)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -254,7 +254,7 @@ func (AuthoritySignature) signerIsAuthorized(batch *database.Batch, ctx *Signatu
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](ctx.Executor, ctx.transaction.Body.Type())
 	if ok {
-		fallback, err := val.SignerIsAuthorized(ctx.Executor, batch, ctx.transaction, &protocol.UnknownSigner{Url: sig.Origin}, md)
+		fallback, err := val.SignerIsAuthorized(ctx, batch, ctx.transaction, &protocol.UnknownSigner{Url: sig.Origin}, md)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -270,7 +270,7 @@ func (AuthoritySignature) signerIsAuthorized(batch *database.Batch, ctx *Signatu
 	}
 
 	// Get the principal's account auth
-	auth, err := ctx.Executor.GetAccountAuthoritySet(batch, principal)
+	auth, err := ctx.GetAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

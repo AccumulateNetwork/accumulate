@@ -8,6 +8,7 @@ package protocol
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"sort"
 
@@ -211,6 +212,10 @@ func (e TransactionStatusError) Error() string {
 
 func (e TransactionStatusError) Unwrap() error {
 	return e.TransactionStatus.Error
+}
+
+func (e TransactionStatusError) Format(f fmt.State, verb rune) {
+	e.TransactionStatus.Error.Format(f, verb)
 }
 
 // NewErrorStatus returns a new transaction status for the given ID with the

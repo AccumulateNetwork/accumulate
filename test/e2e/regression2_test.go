@@ -752,8 +752,9 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 1)))
 
 	sim.StepUntil(
-		Txn(st.TxID).Capture(&st).FailsWithCode(errors.BadRequest))
-	require.EqualError(t, st.AsError(), "updates to acc://dn.acme/oracle must write to state")
+		Txn(st.TxID).Capture(&st).Fails().
+			WithError(errors.BadRequest).
+			WithMessage("updates to acc://dn.acme/oracle must write to state"))
 }
 
 // TestDifferentValidatorSignaturesV1 shows that, with executor v1, differences
