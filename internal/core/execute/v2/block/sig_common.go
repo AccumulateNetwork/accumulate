@@ -154,54 +154,49 @@ func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext, authUrl
 	return nil
 }
 
-// SignerIsAuthorized verifies that the signer is allowed to sign the transaction
-func signerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) error {
+func (s *SignatureContext) signerCanSignTransaction(batch *database.Batch, txn *protocol.Transaction, signer protocol.Signer) error {
+	if val, ok := getValidator[chain.SignerCanSignValidator](s.Executor, txn.Body.Type()); ok {
+		fallback, err := val.SignerCanSign(s, batch, txn, signer)
+		if !fallback || err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	return baseSignerCanSignTransaction(txn, signer)
+}
+
+func baseSignerCanSignTransaction(txn *protocol.Transaction, signer protocol.Signer) error {
 	switch signer := signer.(type) {
 	case *protocol.LiteIdentity:
-		// Otherwise a lite token account is only allowed to sign for itself
-		if !signer.Url.Equal(transaction.Header.Principal.RootIdentity()) {
-			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
+		// A lite token account is only allowed to sign for itself
+		if !signer.Url.Equal(txn.Header.Principal.RootIdentity()) {
+			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, txn.Header.Principal)
 		}
-
 		return nil
 
 	case *protocol.KeyPage:
 		// Verify that the key page is allowed to sign the transaction
-		bit, ok := transaction.Body.Type().AllowedTransactionBit()
+		bit, ok := txn.Body.Type().AllowedTransactionBit()
 		if ok && signer.TransactionBlacklist.IsSet(bit) {
-			return errors.Unauthorized.WithFormat("page %s is not authorized to sign %v", signer.Url, transaction.Body.Type())
+			return errors.Unauthorized.WithFormat("%s is not authorized to sign %v", signer.Url, txn.Body.Type())
 		}
-
-		if !checkAuthz {
-			return nil
-		}
-
-	case *protocol.UnknownSigner:
-		if !checkAuthz {
-			return nil
-		}
+		return nil
 
 	default:
 		// This should never happen
 		return errors.InternalError.WithFormat("unknown signer type %v", signer.Type())
 	}
-
-	err := verifyPageIsAuthorized(batch, transaction, signer)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	return nil
 }
 
-// verifyPageIsAuthorized verifies that the key page is authorized to sign for
-// the principal.
-func verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
+// signerIsAuthorized checks that an authority is authorized to sign for an account.
+func signerIsAuthorized(batch *database.Batch, txn *protocol.Transaction, sig *protocol.AuthoritySignature) error {
 	// Load the principal
-	principal, err := batch.Account(transaction.Header.Principal).Main().Get()
+	principal, err := batch.Account(txn.Header.Principal).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load principal: %w", err)
 	}
+
+	// TODO LTA/LID
 
 	// Get the principal's account auth
 	auth, err := getAccountAuthoritySet(batch, principal)
@@ -209,27 +204,38 @@ func verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transac
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Get the signer book URL
-	signerBook, _, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
-	if !ok {
-		// If this happens, the database has bad data
-		return errors.InternalError.WithFormat("invalid key page URL: %v", signer.GetUrl())
-	}
-
 	// Page belongs to book => authorized
-	_, foundAuthority := auth.GetAuthority(signerBook)
+	_, foundAuthority := auth.GetAuthority(sig.Authority)
 	if foundAuthority {
 		return nil
 	}
 
 	// Authorization is disabled and the transaction type does not force authorization => authorized
-	if auth.AuthDisabled() && !transaction.Body.Type().RequireAuthorization() {
+	if auth.AuthDisabled() && !txn.Body.Type().RequireAuthorization() {
 		return nil
 	}
 
 	// Authorization is enabled => unauthorized
 	// Transaction type forces authorization => unauthorized
-	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
+	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", sig.Origin, principal.GetUrl())
+}
+
+// signerIsAuthorized calls the transaction executor's SignerIsAuthorized if it
+// is defined. Otherwise it calls the default signerIsAuthorized.
+func (s *SignatureContext) signerIsAuthorized(batch *database.Batch, sig *protocol.AuthoritySignature) error {
+	// Delegate to the transaction executor?
+	val, ok := getValidator[chain.SignerValidator](s.Executor, s.transaction.Body.Type())
+	if ok {
+		fallback, err := val.AuthorityIsAccepted(s, batch, s.transaction, sig)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if !fallback {
+			return nil
+		}
+	}
+
+	return signerIsAuthorized(batch, s.transaction, sig)
 }
 
 func loadSigner(batch *database.Batch, signerUrl *url.URL) (protocol.Signer, error) {

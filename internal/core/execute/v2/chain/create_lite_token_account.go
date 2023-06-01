@@ -46,22 +46,22 @@ func (CreateLiteTokenAccount) check(transaction *protocol.Transaction) (*url.URL
 	return tok, nil
 }
 
-func (CreateLiteTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
-	_, err = CreateLiteTokenAccount{}.check(transaction)
-	if err != nil {
-		return false, errors.UnknownError.Wrap(err)
+func (CreateLiteTokenAccount) SignerCanSign(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+	// LTAs are allowed to create LTAs
+	if _, ok := signer.(*protocol.LiteIdentity); ok {
+		return false, nil
 	}
 
+	// Fallback
+	return true, nil
+}
+
+func (CreateLiteTokenAccount) AuthorityIsAccepted(AuthDelegate, *database.Batch, *protocol.Transaction, *protocol.AuthoritySignature) (fallback bool, err error) {
 	// Anyone is allowed to create a lite token account
 	return false, nil
 }
 
 func (CreateLiteTokenAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
-	_, err = CreateLiteTokenAccount{}.check(transaction)
-	if err != nil {
-		return false, false, errors.UnknownError.Wrap(err)
-	}
-
 	// Anyone is allowed to create a lite token account
 	return true, false, nil
 }

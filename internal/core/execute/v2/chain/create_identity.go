@@ -15,12 +15,33 @@ import (
 
 type CreateIdentity struct{}
 
+var _ SignerCanSignValidator = (*CreateIdentity)(nil)
 var _ SignerValidator = (*CreateIdentity)(nil)
 var _ PrincipalValidator = (*CreateIdentity)(nil)
 
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
-func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
+func (CreateIdentity) SignerCanSign(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateIdentity)
+	if !ok {
+		return false, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
+	}
+
+	// Creating a root ADI?
+	if !body.Url.IsRootIdentity() {
+		return true, nil // Fallback
+	}
+
+	// Signer is lite?
+	if _, ok := signer.(*protocol.LiteIdentity); !ok {
+		return true, nil // Fallback
+	}
+
+	// Lite identities can sign to create a root ADI
+	return false, nil
+}
+
+func (CreateIdentity) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return false, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
@@ -32,7 +53,7 @@ func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.
 	}
 
 	// Check additional authorities
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
+	return additionalAuthorities(body.Authorities).AuthorityIsAccepted(delegate, batch, transaction, sig)
 }
 
 func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {

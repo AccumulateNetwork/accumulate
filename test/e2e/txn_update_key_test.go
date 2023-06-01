@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -111,13 +112,17 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book3", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 
 	// Update the key
-	st := sim.Submit(
+	st := sim.SubmitTxnSuccessfully(
 		MustBuild(t, build.Transaction().
 			For(alice.JoinPath("book", "1")).
 			Body(&UpdateKey{NewKeyHash: hash(newKey[32:])}).
 			SignWith(alice.JoinPath("book3", "1")).Version(1).Delegator(alice.JoinPath("book2", "1")).Timestamp(&timestamp).PrivateKey(otherKey)),
 	)
-	require.EqualError(t, st[1].AsError(), "cannot updateKey with a delegated signature")
+
+	sim.StepUntil(
+		Txn(st.TxID).Fails().
+			WithError(errors.Unauthorized).
+			WithMessage("acc://alice/book3/1 is not authorized to initiate updateKey for acc://alice/book/1"))
 }
 
 func TestUpdateKey_TwoDelegates(t *testing.T) {

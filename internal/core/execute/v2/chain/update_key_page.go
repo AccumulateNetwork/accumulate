@@ -23,22 +23,25 @@ func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
+func (UpdateKeyPage) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
 	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
 	if !ok {
 		return false, errors.BadRequest.WithFormat("principal is not a key page")
 	}
 
-	signerBook, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
+	signerBook, signerPageIdx, ok := protocol.ParseKeyPageUrl(sig.Origin)
 	if !ok {
 		return true, nil // Signer is not a page
 	}
+	if !sig.Authority.Equal(signerBook) {
+		return false, errors.InternalError.WithFormat("%v is not a page of %v", sig.Origin, sig.Authority)
+	}
 
 	// If the signer is a page of the principal
-	if principalBook.Equal(signerBook) {
+	if principalBook.Equal(sig.Authority) {
 		// Lower indices are higher priority
 		if signerPageIdx > principalPageIdx {
-			return false, errors.Unauthorized.WithFormat("signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+			return false, errors.Unauthorized.WithFormat("signer %v is lower priority than the principal %v", sig.Origin, transaction.Header.Principal)
 		}
 
 		// Operation-specific checks
@@ -56,17 +59,13 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 		}
 	}
 
-	if !md.Location.LocalTo(transaction.Header.Principal) {
-		return true, nil
-	}
-
 	// Signers belonging to new delegates are authorized to sign the transaction
 	newOwners, err := updateKeyPage_getNewOwners(batch, transaction)
 	if err != nil {
 		return false, err
 	}
 
-	return newOwners.SignerIsAuthorized(delegate, batch, transaction, signer, md)
+	return newOwners.AuthorityIsAccepted(delegate, batch, transaction, sig)
 }
 
 func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
