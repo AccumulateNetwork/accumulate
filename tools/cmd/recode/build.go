@@ -131,7 +131,8 @@ func (b *BuildCall) generate(fset *token.FileSet) ast.Node {
 		fatalf("expected WithTransaction or WithPrincipal+WithBody (%v)", fset.Position(b.Calls[0].Pos()))
 	}
 
-	var withSigner, withDelegator, withTimestamp *MethodCall
+	var withSigner, withTimestamp *MethodCall
+	var withDelegator []*MethodCall
 	mustBuild := "MustBuild"
 	for _, c := range calls {
 		pos := fset.Position(c.Pos())
@@ -139,7 +140,7 @@ func (b *BuildCall) generate(fset *token.FileSet) ast.Node {
 		case "WithSigner":
 			withSigner = c
 		case "WithDelegator":
-			withDelegator = c
+			withDelegator = append(withDelegator, c)
 		case "WithTimestamp", "WithTimestampVar":
 			withTimestamp = c
 		case "WithCurrentTimestamp":
@@ -172,8 +173,8 @@ func (b *BuildCall) generate(fset *token.FileSet) ast.Node {
 			}
 			expr = fluent(expr, "Version", withSigner.Args[1])
 
-			if withDelegator != nil {
-				expr = fluent(expr, "Delegator", withDelegator.Args...)
+			for _, c := range withDelegator {
+				expr = fluent(expr, "Delegator", c.Args...)
 			}
 
 			if withTimestamp != nil {

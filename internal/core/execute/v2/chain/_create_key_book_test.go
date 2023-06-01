@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -34,13 +35,11 @@ func TestCreateKeyBook_HashSize(t *testing.T) {
 
 	// Execute
 	st := sim.Submit(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestamp(1).
-			WithBody(&CreateKeyBook{Url: alice.JoinPath("foo"), PublicKeyHash: []byte{1}}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build())
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&CreateKeyBook{Url: alice.JoinPath("foo"), PublicKeyHash: []byte{1}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey)),
+	)
 	require.NotZero(t, st.Code)
 	require.EqualError(t, st.Error, "public key hash length is invalid")
 }

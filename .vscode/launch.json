@@ -475,7 +475,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/recode",
       "args": [
-        "${workspaceFolder}/internal/core/execute/v1/block/remote_test.go"
+        "${workspaceFolder}/internal/core/execute/v1/block/delegate_test.go"
       ]
     }
   ]
