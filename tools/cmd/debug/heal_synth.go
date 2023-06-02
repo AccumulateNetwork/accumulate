@@ -35,6 +35,7 @@ func init() {
 func healSynth(_ *cobra.Command, args []string) {
 	c, err := client.New(args[0])
 	check(err)
+	c.DebugRequest = true
 
 	desc, err := c.Describe(context.Background())
 	check(err)
