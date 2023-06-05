@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func (b *Batch) Message2(hash []byte) *Message {
@@ -24,6 +25,10 @@ func (m *Message) hash() [32]byte {
 
 func (m *Message) Main() values.Value[messaging.Message] {
 	return (*messageMain)(m)
+}
+
+func (m *Message) TxnStatus() values.Value[*protocol.TransactionStatus] {
+	return m.parent.Transaction2(m.hash()).Status()
 }
 
 // messageMain returns the message's main state but falls back to

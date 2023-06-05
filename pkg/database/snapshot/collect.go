@@ -60,17 +60,35 @@ type Collector struct {
 	number   int
 }
 
+type CollectOptions struct {
+	Walk      database.WalkOptions
+	Predicate func(database.Record) (bool, error)
+}
+
 func (c *Collector) Close() error {
 	return c.wr.Close()
 }
 
-func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error {
-	opts.Values = true
-	return r.Walk(opts, func(r database.Record) (skip bool, err error) {
+func (c *Collector) Collect(r database.Record, opts CollectOptions) error {
+	if opts.Predicate == nil {
+		opts.Walk.Values = true
+	}
+
+	return r.Walk(opts.Walk, func(r database.Record) (skip bool, err error) {
+		if opts.Predicate != nil {
+			ok, err := opts.Predicate(r)
+			if err != nil {
+				return false, errors.UnknownError.Wrap(err)
+			}
+			if ok {
+				return true, nil
+			}
+		}
+
 		// Load the value
 		v, ok := r.(database.Value)
 		if !ok {
-			return false, errors.Conflict.WithFormat("asked for values but got %T", r)
+			return false, nil
 		}
 
 		u, _, err := v.GetValue()

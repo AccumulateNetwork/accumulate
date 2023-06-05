@@ -22,7 +22,7 @@ import (
 )
 
 type CollectOptions struct {
-	PreserveAll bool
+	Predicate func(database.Record) (bool, error)
 }
 
 func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
@@ -117,15 +117,18 @@ func (db *Database) collectAccounts(w *snapshot.Writer, messages *hashSet, opts 
 		}
 
 		// Collect the account's records
-		err = records.Collect(account, database.WalkOptions{
-			IgnoreIndices: true,
+		err = records.Collect(account, snapshot.CollectOptions{
+			Walk: database.WalkOptions{
+				IgnoreIndices: true,
+			},
+			Predicate: opts.Predicate,
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect %v: %w", account.Url(), err)
 		}
 
 		// Collect message hashes from all the message chains
-		err = collectMessageHashes(account, messages)
+		err = collectMessageHashes(account, messages, opts)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -148,9 +151,24 @@ func (db *Database) collectMessages(w *snapshot.Writer, messages [][32]byte, opt
 	batch := db.Begin(false)
 	defer batch.Discard()
 	for _, hash := range messages {
+		// Check if the caller wants to skip this message
+		message := batch.newMessage(messageKey{Hash: hash})
+		if opts.Predicate != nil {
+			ok, err := opts.Predicate(message)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if ok {
+				continue
+			}
+		}
+
 		// Collect the message's records
-		err = records.Collect(batch.newMessage(messageKey{Hash: hash}), database.WalkOptions{
-			IgnoreIndices: true,
+		err = records.Collect(message, snapshot.CollectOptions{
+			Walk: database.WalkOptions{
+				IgnoreIndices: true,
+			},
+			Predicate: opts.Predicate,
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect %x: %w", hash, err)
@@ -158,8 +176,11 @@ func (db *Database) collectMessages(w *snapshot.Writer, messages [][32]byte, opt
 
 		// Collect the transaction status (which is the only part of the
 		// transaction entity that is still used by exec v2)
-		err = records.Collect(batch.newTransaction(transactionKey{Hash: hash}).newStatus(), database.WalkOptions{
-			IgnoreIndices: true,
+		err = records.Collect(batch.newTransaction(transactionKey{Hash: hash}).newStatus(), snapshot.CollectOptions{
+			Walk: database.WalkOptions{
+				IgnoreIndices: true,
+			},
+			Predicate: opts.Predicate,
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect %x status: %w", hash, err)
@@ -171,14 +192,26 @@ func (db *Database) collectMessages(w *snapshot.Writer, messages [][32]byte, opt
 }
 
 func (db *Database) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
+	batch := db.Begin(false)
+	defer batch.Discard()
+
+	// Check if the caller wants to skip the BPT
+	if opts.Predicate != nil {
+		ok, err := opts.Predicate(batch.BPT())
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if ok {
+			return nil
+		}
+	}
+
 	wr, err := w.OpenRaw(snapshot.SectionTypeBPT)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Iterate over the BPT and collect hashes
-	batch := db.Begin(false)
-	defer batch.Discard()
 	it := batch.BPT().Iterate(1000)
 	for {
 		entries, ok := it.Next()
@@ -375,7 +408,7 @@ func (s *hashSet) Add(h [32]byte) {
 	s.Hashes = append(s.Hashes, h)
 }
 
-func collectMessageHashes(a *Account, hashes *hashSet) error {
+func collectMessageHashes(a *Account, hashes *hashSet, opts *CollectOptions) error {
 	chains, err := a.Chains().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load chains index: %w", err)
@@ -388,6 +421,25 @@ func collectMessageHashes(a *Account, hashes *hashSet) error {
 		c, err := a.ChainByName(chain.Name)
 		if err != nil {
 			return errors.InvalidRecord.Wrap(err)
+		}
+
+		// Check if the caller wants to skip this chain
+		if opts.Predicate != nil {
+			ok, err := opts.Predicate(c)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if ok {
+				continue
+			}
+			ok, err = opts.Predicate(c.Inner())
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if ok {
+				continue
+			}
+			continue
 		}
 
 		head, err := c.Head().Get()

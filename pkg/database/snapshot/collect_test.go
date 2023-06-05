@@ -154,8 +154,10 @@ func collect(t testing.TB, db *coredb.Database, file io.WriteSeeker, partition *
 		}
 
 		// Collect the account's records
-		err = records.Collect(account, database.WalkOptions{
-			IgnoreIndices: true,
+		err = records.Collect(account, snapshot.CollectOptions{
+			Walk: database.WalkOptions{
+				IgnoreIndices: true,
+			},
 		})
 		require.NoError(t, err)
 	}
