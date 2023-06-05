@@ -50,14 +50,16 @@
       "args": [
         "init",
         "devnet",
-        "-w=${workspaceFolder}/.nodes",
-        "--reset",
-        "-b=2",
-        "-v=2",
+        "-w=${workspaceFolder}/.nodes/foo",
+        "-b=3",
+        "-v=1",
         "-f=0",
-        "-s=2",
-        "--globals={\"executorVersion\": \"v2\"}",
-        "--faucet-seed=ci",
+        "--reset",
+        "--faucet-seed=Pepe is a fool",
+        "--snapshot=${workspaceFolder}/.nodes/dn.snap",
+        "--snapshot=${workspaceFolder}/.nodes/bvn0.snap",
+        "--snapshot=${workspaceFolder}/.nodes/bvn1.snap",
+        "--snapshot=${workspaceFolder}/.nodes/bvn2.snap",
       ]
     },
     {
