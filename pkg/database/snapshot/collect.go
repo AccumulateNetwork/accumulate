@@ -80,7 +80,7 @@ func (c *Collector) Collect(r database.Record, opts CollectOptions) error {
 			if err != nil {
 				return false, errors.UnknownError.Wrap(err)
 			}
-			if ok {
+			if !ok {
 				return true, nil
 			}
 		}

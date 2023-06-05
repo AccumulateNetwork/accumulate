@@ -23,6 +23,8 @@ import (
 
 type CollectOptions struct {
 	Predicate func(database.Record) (bool, error)
+
+	HashCount *int
 }
 
 func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
@@ -116,6 +118,17 @@ func (db *Database) collectAccounts(w *snapshot.Writer, messages *hashSet, opts 
 			break
 		}
 
+		// Check if the caller wants to skip this account
+		if opts.Predicate != nil {
+			ok, err := opts.Predicate(account)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if !ok {
+				continue
+			}
+		}
+
 		// Collect the account's records
 		err = records.Collect(account, snapshot.CollectOptions{
 			Walk: database.WalkOptions{
@@ -158,7 +171,7 @@ func (db *Database) collectMessages(w *snapshot.Writer, messages [][32]byte, opt
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
-			if ok {
+			if !ok {
 				continue
 			}
 		}
@@ -201,7 +214,7 @@ func (db *Database) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
-		if ok {
+		if !ok {
 			return nil
 		}
 	}
@@ -429,17 +442,16 @@ func collectMessageHashes(a *Account, hashes *hashSet, opts *CollectOptions) err
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
-			if ok {
+			if !ok {
 				continue
 			}
 			ok, err = opts.Predicate(c.Inner())
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
-			if ok {
+			if !ok {
 				continue
 			}
-			continue
 		}
 
 		head, err := c.Head().Get()
@@ -456,6 +468,9 @@ func collectMessageHashes(a *Account, hashes *hashSet, opts *CollectOptions) err
 		}
 		for _, h := range entries {
 			hashes.Add(*(*[32]byte)(h))
+		}
+		if opts.HashCount != nil {
+			*opts.HashCount = len(hashes.Hashes)
 		}
 	}
 	return nil
