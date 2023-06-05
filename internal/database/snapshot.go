@@ -73,27 +73,27 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 }
 
 func (db *Database) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, opts *CollectOptions) error {
-	// Load the ledger
-	batch := db.Begin(false)
-	defer batch.Discard()
-
-	var ledger *protocol.SystemLedger
-	err := batch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load system ledger: %w", err)
-	}
+	header := new(snapshot.Header)
 
 	// Load the BPT root hash
-	rootHash, err := batch.BPT().GetRootHash()
+	batch := db.Begin(false)
+	defer batch.Discard()
+	var err error
+	header.RootHash, err = batch.BPT().GetRootHash()
 	if err != nil {
 		return errors.UnknownError.WithFormat("get root hash: %w", err)
 	}
 
+	// Load the ledger
+	if partition != nil {
+		err = batch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&header.SystemLedger)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load system ledger: %w", err)
+		}
+	}
+
 	// Write the header
-	err = w.WriteHeader(&snapshot.Header{
-		RootHash:     rootHash,
-		SystemLedger: ledger,
-	})
+	err = w.WriteHeader(header)
 	if err != nil {
 		return errors.UnknownError.WithFormat("write header: %w", err)
 	}
@@ -253,6 +253,8 @@ func (db *Database) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 
 type RestoreOptions struct {
 	BatchRecordLimit int
+	SkipHashCheck    bool
+	Predicate        func(database.Value) (bool, error)
 }
 
 func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) error {
@@ -266,7 +268,7 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 		return errors.UnknownError.WithFormat("open snapshot: %w", err)
 	}
 
-	hashes, err := readBptSnapshot(rd)
+	hashes, err := readBptSnapshot(rd, opts)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load hashes: %w", err)
 	}
@@ -310,6 +312,16 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 				return errors.UnknownError.WithFormat("resolve %v: %w", entry.Key, err)
 			}
 
+			if opts.Predicate != nil {
+				ok, err := opts.Predicate(v)
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
+				}
+				if !ok {
+					continue
+				}
+			}
+
 			err = v.LoadBytes(entry.Value, true)
 			if err != nil {
 				return errors.UnknownError.WithFormat("restore %v: %w", entry.Key, err)
@@ -320,6 +332,10 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 	err = batch.Commit()
 	if err != nil {
 		return errors.UnknownError.WithFormat("commit changes: %w", err)
+	}
+
+	if opts.SkipHashCheck {
+		return nil
 	}
 
 	// We can't check an account's hash until its records are written
@@ -368,7 +384,11 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 	return nil
 }
 
-func readBptSnapshot(snap *snapshot.Reader) (map[[32]byte][32]byte, error) {
+func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte][32]byte, error) {
+	if opts.SkipHashCheck {
+		return nil, nil
+	}
+
 	hashes := map[[32]byte][32]byte{}
 	var bpt *ioutil.Segment[snapshot.SectionType, *snapshot.SectionType]
 	for _, s := range snap.Sections {

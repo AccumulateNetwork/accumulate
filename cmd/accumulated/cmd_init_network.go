@@ -22,18 +22,14 @@ import (
 	"github.com/spf13/cobra"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -199,10 +195,6 @@ func createFaucet(seedStrs []string) []byte {
 	}
 	sk := ed25519.NewKeyFromSeed(seed[:])
 
-	store := memory.New(nil)
-	batch := store.Begin(nil, true)
-	defer batch.Discard()
-	theBpt := bpt.New(nil, nil, keyvalue.RecordStore{Store: batch}, record.NewKey("BPT"), "bpt")
 	var err error
 	lta := new(protocol.LiteTokenAccount)
 	lta.Url, err = protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
@@ -211,49 +203,21 @@ func createFaucet(seedStrs []string) []byte {
 	lta.Balance = *big.NewInt(200_000_000 * protocol.AcmePrecision)
 	fmt.Printf("Faucet: %v\n", lta.Url)
 
-	hasher := make(hash.Hasher, 4)
-	lookup := map[[32]byte]*snapshot.Account{}
-
-	hasher = hasher[:0]
-	b, _ := lta.MarshalBinary()
-	hasher.AddBytes(b)
-	hasher.AddHash(new([32]byte))
-	hasher.AddHash(new([32]byte))
-	hasher.AddHash(new([32]byte))
-	check(theBpt.Insert(lta.Url.AccountID32(), *(*[32]byte)(hasher.MerkleHash())))
-	lookup[lta.Url.AccountID32()] = &snapshot.Account{Main: lta}
-
 	lid := new(protocol.LiteIdentity)
 	lid.Url = lta.Url.RootIdentity()
 	lid.CreditBalance = math.MaxUint64
-	a := new(snapshot.Account)
-	a.Url = lid.Url
-	a.Main = lid
-	a.Directory = []*url.URL{lta.Url}
-	hasher = hasher[:0]
-	b, _ = lid.MarshalBinary()
-	hasher.AddBytes(b)
-	hasher.AddValue(hashSecondaryState(a))
-	hasher.AddHash(new([32]byte))
-	hasher.AddHash(new([32]byte))
-	check(theBpt.Insert(lid.Url.AccountID32(), *(*[32]byte)(hasher.MerkleHash())))
-	lookup[lid.Url.AccountID32()] = a
 
-	check(theBpt.Commit())
+	db := database.OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
+	batch := db.Begin(true)
+	defer batch.Discard()
+	for _, a := range []protocol.Account{lta, lid} {
+		check(batch.Account(a.GetUrl()).Main().Put(a))
+	}
+	check(batch.Commit())
 
 	buf := new(ioutil2.Buffer)
-	w, err := snapshot.Create(buf, new(snapshot.Header))
-	checkf(err, "initialize snapshot")
-	sw, err := w.Open(snapshot.SectionTypeAccounts)
-	checkf(err, "open accounts snapshot")
-	check(bpt.SaveSnapshotV1(theBpt, sw, func(key storage.Key, _ [32]byte) ([]byte, error) {
-		b, err := lookup[key].MarshalBinary()
-		if err != nil {
-			return nil, errors.EncodingError.WithFormat("marshal account: %w", err)
-		}
-		return b, nil
-	}))
-	check(sw.Close())
+	check(db.Collect(buf, nil, nil))
 	return buf.Bytes()
 }
 

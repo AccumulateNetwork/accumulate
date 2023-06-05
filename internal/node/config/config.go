@@ -23,6 +23,7 @@ import (
 	tm "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -130,7 +131,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
-	c.Accumulate.Snapshots.Enable = true
+	c.Accumulate.Snapshots.Enable = false
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
 	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
@@ -138,6 +139,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	c.Accumulate.BatchReplayLimit = 500
+	c.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
 	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
