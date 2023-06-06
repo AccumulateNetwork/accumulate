@@ -70,9 +70,9 @@
       "args": [
         "run",
         "devnet",
-        "-w=${workspaceFolder}/.nodes",
+        "-w=${workspaceFolder}/.nodes/foo",
         "--truncate",
-        "--faucet-seed=ci",
+        "--faucet-seed=Pepe is a fool",
       ]
     },
     {
@@ -375,9 +375,9 @@
       "cwd": "${workspaceFolder}",
       "args": [
         "heal",
-        "tcp://bvn0-seed.testnet.accumulatenetwork.io:16591",
-        "tcp://bvn1-seed.testnet.accumulatenetwork.io:16591",
-        "tcp://bvn2-seed.testnet.accumulatenetwork.io:16591",
+        "tcp://kermit-bvn0.accumulate.defidevs.io:16591",
+        "tcp://kermit-bvn1.accumulate.defidevs.io:16591",
+        "tcp://kermit-bvn2.accumulate.defidevs.io:16591",
       ]
     },
     {

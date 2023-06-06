@@ -43,6 +43,11 @@ func extract2Snapshot(_ *cobra.Command, args []string) {
 	check(db.Collect(f, protocol.PartitionUrl(args[2]), &database.CollectOptions{
 		Metrics: &metrics,
 		Predicate: func(r record.Record) (bool, error) {
+			if r.Key().Len() == 3 && r.Key().Get(0) == "Account" && r.Key().Get(2) == "Pending" {
+				// Don't retain pending transactions
+				return false, nil
+			}
+
 			switch r := r.(type) {
 			case *bpt.BPT:
 				// Skip the BPT
@@ -50,10 +55,6 @@ func extract2Snapshot(_ *cobra.Command, args []string) {
 
 			case *database.Account:
 				h := r.Key().Hash()
-
-				if r.Url().ShortString() == "c1d729874cf20f80b74af5cb4f9f843320302057918dca94/ACME" {
-					print("")
-				}
 
 				// Skip system accounts
 				_, ok := protocol.ParsePartitionUrl(r.Url())

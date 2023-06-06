@@ -265,7 +265,7 @@ func (db *Database) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 type RestoreOptions struct {
 	BatchRecordLimit int
 	SkipHashCheck    bool
-	Predicate        func(database.Value) (bool, error)
+	Predicate        func(*snapshot.RecordEntry, database.Value) (bool, error)
 }
 
 func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) error {
@@ -324,7 +324,7 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 			}
 
 			if opts.Predicate != nil {
-				ok, err := opts.Predicate(v)
+				ok, err := opts.Predicate(entry, v)
 				if err != nil {
 					return errors.UnknownError.Wrap(err)
 				}

@@ -345,7 +345,7 @@ func newNodeWriter(w io.Writer, format, partition string, node int, color bool) 
 	switch format {
 	case tmconfig.LogFormatPlain:
 		id := fmt.Sprintf("%s.%d", partition, node)
-		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen+len("bvnxx")-len(id)+1)
+		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen+len("bvnxxxxx")-len(id)+1)
 		if !color {
 			return &plainNodeWriter{s, w}
 		}

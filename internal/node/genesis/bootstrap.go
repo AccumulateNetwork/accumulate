@@ -30,6 +30,7 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	snap2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -444,25 +445,28 @@ func (b *bootstrap) unpackSnapshots() error {
 		err = b.db.Restore(file, &database.RestoreOptions{
 			BatchRecordLimit: 50_000,
 			SkipHashCheck:    true,
-			Predicate: func(v record.TerminalRecord) (bool, error) {
-				switch v.Key().Get(0) {
+			Predicate: func(e *snap2.RecordEntry, v record.TerminalRecord) (bool, error) {
+				switch e.Key.Get(0) {
 				case "Account":
+					// Skip the faucet
+					u := e.Key.Get(1).(*url.URL)
+					if protocol.FaucetUrl.Equal(u) {
+						return false, nil
+					}
+
 					// Track ACME issued
-					if v.Key().Len() == 3 && v.Key().Get(2) == "Main" {
-						u, _, err := v.GetValue()
-						switch {
-						case err == nil:
-							if acct, ok := u.(protocol.AccountWithTokens); ok && protocol.AcmeUrl().Equal(acct.GetTokenUrl()) {
-								b.acmeIssued.Add(b.acmeIssued, acct.TokenBalance())
+					if e.Key.Len() == 3 && e.Key.Get(2) == "Main" {
+						acct, _ := protocol.UnmarshalAccount(e.Value)
+						if acct, ok := acct.(protocol.AccountWithTokens); ok && protocol.AcmeUrl().Equal(acct.GetTokenUrl()) {
+							if acct.TokenBalance().Uint64() >= 10e6*protocol.AcmePrecision {
+								fmt.Printf("%v has %v\n", u, protocol.FormatBigAmount(acct.TokenBalance(), protocol.AcmePrecisionPower))
 							}
-						case !errors.Is(err, errors.NotFound):
-							return false, errors.UnknownError.Wrap(err)
+							b.acmeIssued.Add(b.acmeIssued, acct.TokenBalance())
 						}
 					}
 
 					// Is this record for an account that belongs to this
 					// partition?
-					u := v.Key().Get(1).(*url.URL)
 					partition, err := b.router.RouteAccount(u)
 					if err != nil {
 						return false, errors.InternalError.WithFormat("route %v: %w", u, err)
@@ -471,7 +475,6 @@ func (b *bootstrap) unpackSnapshots() error {
 						return false, nil
 					}
 
-					fmt.Printf("Restoring %v\n", v.Key())
 					if !seen[u.AccountID32()] {
 						accounts = append(accounts, u)
 						seen[u.AccountID32()] = true
@@ -539,10 +542,10 @@ func (b *bootstrap) unpackSnapshots() error {
 
 		b.db.Restore(file, &database.RestoreOptions{
 			BatchRecordLimit: 50_000,
-			Predicate: func(v record.TerminalRecord) (bool, error) {
-				switch v.Key().Get(0) {
+			Predicate: func(e *snap2.RecordEntry, v record.TerminalRecord) (bool, error) {
+				switch e.Key.Get(0) {
 				case "Transaction", "Message":
-					h := v.Key().Get(1).([32]byte)
+					h := e.Key.Get(1).([32]byte)
 					return hashes[h], nil
 
 				default:

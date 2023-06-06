@@ -54,6 +54,24 @@ func TestCollect(t *testing.T) {
 	require.IsType(t, (*protocol.SystemLedger)(nil), account)
 }
 
+func TestDB(t *testing.T) {
+	f, err := os.Open("/home/firelizzard/src/Accumulate/accumulate/.nodes/bvn2.snap")
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Try to read an account out of the snapshot
+	rd, err := snapshot.Open(f)
+	require.NoError(t, err)
+	ss, err := rd.AsStore()
+	require.NoError(t, err)
+
+	batch := coredb.NewBatch(t.Name(), fakeChangeSet{ss}, false, nil)
+
+	account, err := batch.Account(url.MustParse("bd03896c5ae39009180e7543dd9d57ee658eb3112d8b3604/acme")).Main().Get()
+	require.NoError(t, err)
+	fmt.Println(account.Type())
+}
+
 func BenchmarkCollect(b *testing.B) {
 	N := []int{1, 5, 25}
 	const M = 1000
