@@ -431,6 +431,7 @@ func (b *bootstrap) unpackSnapshots() error {
 
 	// Restore accounts
 	var accounts []*url.URL
+	seen := map[[32]byte]bool{}
 	for i, open := range b.Snapshots {
 		_ = i
 		file, err := open()
@@ -471,7 +472,11 @@ func (b *bootstrap) unpackSnapshots() error {
 						return false, nil
 					}
 
-					accounts = append(accounts, u)
+					fmt.Printf("Restoring %v\n", v.Key())
+					if !seen[u.AccountID32()] {
+						accounts = append(accounts, u)
+						seen[u.AccountID32()] = true
+					}
 					return true, nil
 
 				default:
@@ -507,7 +512,7 @@ func (b *bootstrap) unpackSnapshots() error {
 
 			head, err := c.Head().Get()
 			if err != nil {
-				return errors.UnknownError.WithFormat("load %s chain head: %w", c.Name(), err)
+				return errors.UnknownError.WithFormat("load %v %s chain head: %w", u, c.Name(), err)
 			}
 			if head.Count == 0 {
 				return nil
@@ -515,7 +520,7 @@ func (b *bootstrap) unpackSnapshots() error {
 
 			entries, err := c.Inner().GetRange(0, head.Count)
 			if err != nil {
-				return errors.UnknownError.WithFormat("load %s chain entries: %w", c.Name(), err)
+				return errors.UnknownError.WithFormat("load %v %s chain entries: %w", u, c.Name(), err)
 			}
 			for _, h := range entries {
 				hashes[*(*[32]byte)(h)] = true
