@@ -75,60 +75,12 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 		return err
 	}
 
-	ns, err := m.Network.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
-	if err != nil {
-		return accumulateError(err)
-	}
-
-	if !ns.ExecutorVersion.V2() {
-		txrq, body, err := constructFaucetTxnV1(req)
-		if err != nil {
-			return err
-		}
-		return m.execute(ctx, txrq, body)
-	}
-
 	sub, err := m.Options.Faucet.Faucet(ctx, req.Url, api.FaucetOptions{})
 	if err != nil {
 		return accumulateError(err)
 	}
 
 	return submissionV3(sub)
-}
-
-func constructFaucetTxnV1(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = protocol.FaucetUrl
-	txn.Body = req
-	env := new(messaging.Envelope)
-	env.Transaction = []*protocol.Transaction{txn}
-	sig, err := new(signing.Builder).
-		UseFaucet().
-		UseSimpleHash().
-		Initiate(txn)
-	if err != nil {
-		return nil, nil, accumulateError(err)
-	}
-	env.Signatures = append(env.Signatures, sig)
-
-	keySig := sig.(protocol.KeySignature)
-
-	txrq := new(TxRequest)
-	txrq.Origin = txn.Header.Principal
-	txrq.Signer.SignatureType = sig.Type()
-	txrq.Signer.Timestamp = keySig.GetTimestamp()
-	txrq.Signer.PublicKey = keySig.GetPublicKey()
-	txrq.Signer.Url = protocol.FaucetUrl.RootIdentity()
-	txrq.Signer.Version = keySig.GetSignerVersion()
-	txrq.Signer.UseSimpleHash = true
-	txrq.Signature = keySig.GetSignature()
-
-	body, err := txn.Body.MarshalBinary()
-	if err != nil {
-		return nil, nil, accumulateError(err)
-	}
-
-	return txrq, body, nil
 }
 
 type txRequestSigner struct {
