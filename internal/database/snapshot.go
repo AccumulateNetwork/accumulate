@@ -24,7 +24,14 @@ import (
 type CollectOptions struct {
 	Predicate func(database.Record) (bool, error)
 
-	HashCount *int
+	Metrics *CollectMetrics
+}
+
+type CollectMetrics struct {
+	Messages struct {
+		Count      int
+		Collecting int
+	}
 }
 
 func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
@@ -163,7 +170,11 @@ func (db *Database) collectMessages(w *snapshot.Writer, messages [][32]byte, opt
 
 	batch := db.Begin(false)
 	defer batch.Discard()
-	for _, hash := range messages {
+	for i, hash := range messages {
+		if opts.Metrics != nil {
+			opts.Metrics.Messages.Collecting = i
+		}
+
 		// Check if the caller wants to skip this message
 		message := batch.newMessage(messageKey{Hash: hash})
 		if opts.Predicate != nil {
@@ -489,8 +500,8 @@ func collectMessageHashes(a *Account, hashes *hashSet, opts *CollectOptions) err
 		for _, h := range entries {
 			hashes.Add(*(*[32]byte)(h))
 		}
-		if opts.HashCount != nil {
-			*opts.HashCount = len(hashes.Hashes)
+		if opts.Metrics != nil {
+			opts.Metrics.Messages.Count = len(hashes.Hashes)
 		}
 	}
 	return nil

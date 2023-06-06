@@ -60,8 +60,8 @@ func (c *MerkleManager) getMarkPoints() ([]merkleManagerStatesKey, error) {
 
 	n := head.Count / c.markFreq
 	keys := make([]merkleManagerStatesKey, 0, n)
-	for i := int64(0); i < head.Count; i += c.markFreq {
-		keys = append(keys, merkleManagerStatesKey{Index: uint64(i)})
+	for i := c.markFreq; i < head.Count; i += c.markFreq {
+		keys = append(keys, merkleManagerStatesKey{Index: uint64(i - 1)})
 	}
 	return keys, nil
 }

@@ -39,9 +39,9 @@ func extract2Snapshot(_ *cobra.Command, args []string) {
 	defer f.Close()
 
 	fmt.Println("Collecting...")
-	var hashCount, txnCount int
+	var metrics database.CollectMetrics
 	check(db.Collect(f, protocol.PartitionUrl(args[2]), &database.CollectOptions{
-		HashCount: &hashCount,
+		Metrics: &metrics,
 		Predicate: func(r record.Record) (bool, error) {
 			switch r := r.(type) {
 			case *bpt.BPT:
@@ -51,16 +51,20 @@ func extract2Snapshot(_ *cobra.Command, args []string) {
 			case *database.Account:
 				h := r.Key().Hash()
 
+				if r.Url().ShortString() == "c1d729874cf20f80b74af5cb4f9f843320302057918dca94/ACME" {
+					print("")
+				}
+
 				// Skip system accounts
 				_, ok := protocol.ParsePartitionUrl(r.Url())
 				if ok {
-					fmt.Printf("\033[A\rSkipping   [%x] (%d) %v\n", h[:4], hashCount, r.Url())
+					fmt.Printf("\033[A\rSkipping   [%x] (%d) %v\n", h[:4], metrics.Messages.Count, r.Url())
 					return false, nil
 				}
 
 				// Skip ACME
 				if protocol.AcmeUrl().Equal(r.Url()) {
-					fmt.Printf("\033[A\rSkipping   [%x] (%d) %v\n", h[:4], hashCount, r.Url())
+					fmt.Printf("\033[A\rSkipping   [%x] (%d) %v\n", h[:4], metrics.Messages.Count, r.Url())
 					return false, nil
 				}
 
@@ -75,7 +79,7 @@ func extract2Snapshot(_ *cobra.Command, args []string) {
 					return false, nil
 				}
 
-				fmt.Printf("\033[A\rCollecting [%x] (%d) %v\n", h[:4], hashCount, r.Url())
+				fmt.Printf("\033[A\rCollecting [%x] (%d) %v\n", h[:4], metrics.Messages.Count, r.Url())
 
 			case *database.MerkleManager:
 				// Skip all chains except the main chain
@@ -85,8 +89,6 @@ func extract2Snapshot(_ *cobra.Command, args []string) {
 				}
 
 			case *database.Message:
-				txnCount++
-
 				// Skip non-transactions
 				msg, err := r.Main().Get()
 				if err != nil {
@@ -108,7 +110,7 @@ func extract2Snapshot(_ *cobra.Command, args []string) {
 					return false, nil
 				}
 
-				fmt.Printf("\033[A\rCollecting (%d/%d) %v\n", txnCount, hashCount, msg.ID())
+				fmt.Printf("\033[A\rCollecting (%d/%d) %v\n", metrics.Messages.Collecting, metrics.Messages.Count, msg.ID())
 			}
 
 			return true, nil

@@ -432,8 +432,7 @@ func (b *bootstrap) unpackSnapshots() error {
 	// Restore accounts
 	var accounts []*url.URL
 	seen := map[[32]byte]bool{}
-	for i, open := range b.Snapshots {
-		_ = i
+	for _, open := range b.Snapshots {
 		file, err := open()
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
