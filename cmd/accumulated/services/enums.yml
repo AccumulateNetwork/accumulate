@@ -1,0 +1,9 @@
+ServiceType:
+  Faucet:
+    value: 1
+
+KeyStorageType:
+  Inline:
+    value: 1
+  File:
+    value: 2

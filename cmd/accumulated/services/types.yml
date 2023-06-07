@@ -1,0 +1,35 @@
+P2P:
+  fields:
+    - name: Key
+      type: KeyStorage
+      marshal-as: union
+    - name: Listen
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
+    - name: Bootstrap
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
+
+Faucet:
+  union: { type: service }
+  fields:
+    - name: Key
+      type: KeyStorage
+      marshal-as: union
+    - name: Account
+      type: url
+      pointer: true
+
+InlineKeyStorage:
+  union: { type: keyStorage }
+  fields:
+    - name: Address
+      type: string
+
+FileKeyStorage:
+  union: { type: keyStorage }
+  fields:
+    - name: Path
+      type: string
