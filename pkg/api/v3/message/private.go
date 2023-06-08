@@ -36,15 +36,20 @@ func (s *Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
 }
 
 // PrivateClient is a binary message transport client for private API v3 services.
-type PrivateClient Client
+type PrivateClient AddressedClient
 
 // Private returns a [PrivateClient].
 func (c *Client) Private() private.Sequencer {
-	return (*PrivateClient)(c)
+	return c.ForAddress(nil).Private()
+}
+
+// Private returns a [PrivateClient].
+func (c AddressedClient) Private() private.Sequencer {
+	return PrivateClient(c)
 }
 
 // Sequence implements [private.Sequencer.Sequence].
-func (c *PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
+func (c PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	req := &PrivateSequenceRequest{Source: src, Destination: dst, SequenceNumber: num}
-	return typedRequest[*PrivateSequenceResponse, *api.MessageRecord[messaging.Message]]((*Client)(c), ctx, req)
+	return typedRequest[*PrivateSequenceResponse, *api.MessageRecord[messaging.Message]](AddressedClient(c), ctx, req)
 }
