@@ -201,7 +201,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	}
 
 	// Create network variable accounts
-	err := b.GenesisGlobals.InitializeDataAccounts(b.partition, func(accountUrl *url.URL, target interface{}) error {
+	err := b.GenesisGlobals.InitializeDataAccounts(b.partition.URL, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
 		da.AddAuthority(b.networkAuthority)
