@@ -7,6 +7,7 @@
 package accumulated
 
 import (
+	"net"
 	"strconv"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -189,6 +190,9 @@ func (b AddressBuilder) String() string {
 // Multiaddr builds the address as a multiaddr.
 func (b AddressBuilder) Multiaddr() multiaddr.Multiaddr {
 	addr := "/ip4/" + b.baseAddr
+	if net.ParseIP(b.baseAddr) == nil {
+		addr = "/dns/" + b.baseAddr
+	}
 
 	// Add the port
 	if b.scheme != "" {
