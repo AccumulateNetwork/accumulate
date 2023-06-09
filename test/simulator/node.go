@@ -57,6 +57,7 @@ type Node struct {
 	clientV2 *client.Client
 	querySvc api.Querier
 	eventSvc api.EventService
+	netSvc   api.NetworkService
 	seqSvc   private.Sequencer
 
 	validatorUpdates []*validatorUpdate
@@ -145,8 +146,16 @@ func (n *Node) initValidator() error {
 		Partition: n.partition.ID,
 	})
 
-	// Create an EventService
+	// Create an Event service
 	n.eventSvc = apiimpl.NewEventService(apiimpl.EventServiceParams{
+		Logger:    n.logger.With("module", "acc-rpc"),
+		Database:  n.database,
+		Partition: n.partition.ID,
+		EventBus:  n.eventBus,
+	})
+
+	// Create a Network service
+	n.netSvc = apiimpl.NewNetworkService(apiimpl.NetworkServiceParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
 		Database:  n.database,
 		Partition: n.partition.ID,

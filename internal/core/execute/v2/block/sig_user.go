@@ -335,7 +335,6 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 
 	// Send the authority signature if the authority is ready
 	err = ctx.maybeSendAuthoritySignature(batch, &protocol.AuthoritySignature{
-		Origin:    ctx.getSigner(),
 		Authority: ctx.getAuthority(),
 		Delegator: ctx2.delegators,
 	})

@@ -245,26 +245,29 @@ func (m *MessageContext) AuthorityDidVote(batch *database.Batch, transaction *pr
 	return true, auth.Vote, nil
 }
 
-func (m *MessageContext) AuthorityWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, authUrl *url.URL) (bool, protocol.VoteType, error) {
+// AuthorityWillVote checks if the authority is ready to vote. MUST NOT MODIFY
+// STATE.
+func (m *MessageContext) AuthorityWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, authUrl *url.URL) (*chain.AuthVote, error) {
 	var authority protocol.Authority
 	err := batch.Account(authUrl).Main().GetAs(&authority)
 	if err != nil {
-		return false, 0, errors.UnknownError.WithFormat("load authority %v: %w", authUrl, err)
+		return nil, errors.UnknownError.WithFormat("load authority %v: %w", authUrl, err)
 	}
 
 	for _, signer := range authority.GetSigners() {
 		ok, vote, err := m.SignerWillVote(batch, block, transaction, signer)
 		if err != nil {
-			return false, 0, errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 		if ok {
-			return true, vote, nil
+			return &chain.AuthVote{Source: signer, Vote: vote}, nil
 		}
 	}
 
-	return false, 0, nil
+	return nil, nil
 }
 
+// SignerWillVote checks if the signer is ready to vote. MUST NOT MODIFY STATE.
 func (m *MessageContext) SignerWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, signerUrl *url.URL) (bool, protocol.VoteType, error) {
 	// Load the signer
 	var signer protocol.Signer
@@ -274,23 +277,19 @@ func (m *MessageContext) SignerWillVote(batch *database.Batch, block uint64, tra
 	}
 
 	// Get thresholds
-	var tReject, tResponse, tBlock uint64
+	var tReject, tResponse uint64
 	tAccept := signer.GetSignatureThreshold()
 	entryCount := 1
 
 	if page, ok := signer.(*protocol.KeyPage); ok {
 		tReject = page.RejectThreshold
 		tResponse = page.ResponseThreshold
-		tBlock = page.BlockThreshold
 		entryCount = len(page.Keys)
 	}
 
 	if tReject == 0 {
 		tReject = tAccept
 	}
-
-	// TODO Check the block threshold
-	_ = tBlock
 
 	// Load the active signature set
 	entries, err := batch.
@@ -356,6 +355,57 @@ func (m *MessageContext) SignerWillVote(batch *database.Batch, block uint64, tra
 	}
 
 	return false, 0, nil
+}
+
+func (m *MessageContext) blockThresholdIsMet(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
+	// TODO If minimum thresholds are added (to pages, books, or accounts),
+	// UpdateKey will need a way of overriding them.
+
+	hold := transaction.Header.HoldUntil
+	if hold == nil {
+		return true, nil
+	}
+
+	// Check the hold index against the latest DN block height
+	if hold.MinorBlock != 0 {
+		dnHeight, err := m.getDnHeight(batch)
+		if err != nil {
+			return false, errors.UnknownError.Wrap(err)
+		}
+		if hold.MinorBlock > dnHeight {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func (m *MessageContext) getDnHeight(batch *database.Batch) (uint64, error) {
+	c := batch.Account(m.Executor.Describe.AnchorPool()).MainChain()
+	head, err := c.Head().Get()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load anchor ledger main chain head: %w", err)
+	}
+
+	for i := head.Count - 1; i >= 0; i-- {
+		entry, err := c.Entry(i)
+		if err != nil {
+			return 0, errors.UnknownError.WithFormat("load anchor ledger main chain entry %d (1): %w", i, err)
+		}
+
+		var msg *messaging.TransactionMessage
+		err = batch.Message2(entry).Main().GetAs(&msg)
+		if err != nil {
+			return 0, errors.UnknownError.WithFormat("load anchor ledger main chain entry %d (2): %w", i, err)
+		}
+
+		body, ok := msg.Transaction.Body.(*protocol.DirectoryAnchor)
+		if ok {
+			return body.MinorBlockIndex, nil
+		}
+	}
+
+	return 0, nil
 }
 
 func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
