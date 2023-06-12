@@ -62,23 +62,31 @@ type simpleTracker struct {
 
 func (t *simpleTracker) isBad(p peer.ID) bool {
 	t.RLock()
-	defer t.RUnlock()
+	v, ok := t.peerErrorCount[p]
+	t.RUnlock()
+	if ok {
+		return v > t.best
+	}
+
+	t.Lock()
+	defer t.Unlock()
 
 	if t.peerErrorCount == nil {
 		t.peerErrorCount = map[peer.ID]int{}
 		t.countOfCount = []int{0}
 	}
 
-	v, ok := t.peerErrorCount[p]
-	if !ok {
-		t.peerErrorCount[p] = 0
-		t.countOfCount[0]++
-		if t.best > 0 {
-			t.best = 0
-		}
+	v, ok = t.peerErrorCount[p]
+	if ok {
+		return v > t.best
 	}
 
-	return v > t.best
+	t.peerErrorCount[p] = 0
+	t.countOfCount[0]++
+	if t.best > 0 {
+		t.best = 0
+	}
+	return false
 }
 
 func (t *simpleTracker) markBad(p peer.ID) {
