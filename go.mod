@@ -48,6 +48,7 @@ require (
 	github.com/FactomProject/factomd v1.13.0
 	github.com/chzyer/readline v1.5.1
 	github.com/ethereum/go-ethereum v1.10.25
+	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/ghodss/yaml v1.0.0
 	github.com/libp2p/go-libp2p v0.25.1
 	github.com/libp2p/go-libp2p-kad-dht v0.21.1

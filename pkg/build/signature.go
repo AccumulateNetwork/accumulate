@@ -20,7 +20,9 @@ type SignatureBuilder struct {
 	transaction *protocol.Transaction
 	message     messaging.Message
 	signatures  []protocol.Signature
-	signer      signing.Builder
+
+	signer signing.Builder
+	noInit bool
 
 	// Ignore64Byte (when set) stops the signature builder from automatically
 	// correcting a transaction header or body that marshals to 64 bytes.
@@ -49,6 +51,13 @@ func (b SignatureBuilder) Version(version any) SignatureBuilder {
 
 func (b SignatureBuilder) Timestamp(timestamp any) SignatureBuilder {
 	b.signer.Timestamp = b.parseTimestamp(timestamp)
+	return b
+}
+
+// NoInitiator tells the signature builder not to initiate the transaction, even
+// if the initiator hash is not set.
+func (b SignatureBuilder) NoInitiator() SignatureBuilder {
+	b.noInit = true
 	return b
 }
 
@@ -118,7 +127,8 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 	case b.message != nil:
 		h := b.message.Hash()
 		signature, err = b.signer.Sign(h[:])
-	case b.transaction.Body.Type() == protocol.TransactionTypeRemote,
+	case b.noInit,
+		b.transaction.Body.Type() == protocol.TransactionTypeRemote,
 		b.transaction.Header.Initiator != [32]byte{}:
 		signature, err = b.signer.Sign(b.transaction.GetHash())
 	default:
@@ -130,6 +140,9 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 		b.signatures = append(b.signatures, signature)
 	}
 
+	// Reset the signer fields
+	b.signer = signing.Builder{}
+	b.noInit = false
 	return b
 }
 
