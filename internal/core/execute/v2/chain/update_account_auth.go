@@ -23,7 +23,7 @@ func (UpdateAccountAuth) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateAccountAuth
 }
 
-func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
+func (UpdateAccountAuth) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.UpdateAccountAuth)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateAccountAuth), transaction.Body)
@@ -34,7 +34,7 @@ func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *databa
 		return false, err
 	}
 
-	return newOwners.SignerIsAuthorized(delegate, batch, transaction, signer, md)
+	return newOwners.AuthorityIsAccepted(delegate, batch, transaction, sig)
 }
 
 func (UpdateAccountAuth) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
