@@ -25,19 +25,9 @@ func (UpdateKey) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKey
 }
 
-func (UpdateKey) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
-	// Do not allow delegation
-	if md.Delegated {
-		return false, errors.Unauthorized.WithFormat("cannot %v with a delegated signature", transaction.Body.Type())
-	}
-
-	// Can't do much if we're not at the principal
-	if !transaction.Header.Principal.LocalTo(md.Location) {
-		return true, nil
-	}
-
+func (UpdateKey) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
 	// The principal is allowed to sign
-	if signer.GetUrl().Equal(transaction.Header.Principal) {
+	if sig.Origin.Equal(transaction.Header.Principal) {
 		return false, nil
 	}
 
@@ -47,12 +37,12 @@ func (UpdateKey) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch
 	if err != nil {
 		return false, err
 	}
-	_, _, ok := page.EntryByDelegate(signer.GetUrl())
+	_, _, ok := page.EntryByDelegate(sig.Authority)
 	if ok {
 		return false, nil
 	}
 
-	return false, errors.Unauthorized.WithFormat("%v is not authorized to sign %v for %v", signer.GetUrl(), transaction.Body.Type(), transaction.Header.Principal)
+	return false, errors.Unauthorized.WithFormat("%v is not authorized to sign %v for %v", sig.Origin, transaction.Body.Type(), transaction.Header.Principal)
 }
 
 func (x UpdateKey) AuthorityWillVote(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, authority *url.URL) (ready, fallback bool, err error) {
@@ -61,16 +51,31 @@ func (x UpdateKey) AuthorityWillVote(delegate AuthDelegate, batch *database.Batc
 		return false, true, nil
 	}
 
-	// Otherwise, the principal must submit at least one signature
-	_, err = batch.Message(transaction.ID().Hash()).Signers().Index(transaction.Header.Principal)
-	switch {
-	case err == nil:
-		return true, false, nil
-	case errors.Is(err, errors.NotFound):
-		return false, false, nil
-	default:
+	// Load the principal's signatures
+	entries, err := batch.
+		Account(transaction.Header.Principal).
+		Transaction(transaction.ID().Hash()).
+		Signatures().
+		Get()
+	if err != nil {
 		return false, false, errors.UnknownError.WithFormat("load %v signers: %w", transaction.ID(), err)
 	}
+
+	for _, entry := range entries {
+		sig, err := delegate.GetSignatureAs(batch, entry.Hash)
+		if err != nil {
+			return false, false, errors.UnknownError.WithFormat("load %v: %w", transaction.Header.Principal.WithTxID(entry.Hash), err)
+		}
+
+		// Ignore any signatures that are not the initiator
+		if protocol.SignatureDidInitiate(sig, transaction.Header.Initiator[:], nil) {
+			// Initiator received, transaction is ready
+			return true, false, nil
+		}
+	}
+
+	// Not ready
+	return false, false, nil
 }
 
 func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
