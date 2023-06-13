@@ -21,7 +21,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -45,16 +47,16 @@ func BenchmarkPerformance(b *testing.B) {
 	require.NoError(b, batch.Commit())
 
 	// Create the transaction
-	delivery := acctesting.NewTransaction().
-		WithPrincipal(aliceUrl).
-		WithSigner(aliceUrl, 1).
-		WithCurrentTimestamp().
-		WithBody(&protocol.SendTokens{
-			To: []*protocol.TokenRecipient{
-				{Url: bobUrl, Amount: *big.NewInt(1000)},
-				{Url: charlieUrl, Amount: *big.NewInt(2000)},
-			},
-		}).Initiate(protocol.SignatureTypeED25519, alice).BuildDelivery()
+	delivery :=
+		MustBuildDeliveryV1(t, build.Transaction().
+			For(aliceUrl).
+			Body(&protocol.SendTokens{
+				To: []*protocol.TokenRecipient{
+					{Url: bobUrl, Amount: *big.NewInt(1000)},
+					{Url: charlieUrl, Amount: *big.NewInt(2000)},
+				},
+			}).
+			SignWith(aliceUrl).Version(1).Timestamp(time.Now()).PrivateKey(alice).Type(protocol.SignatureTypeED25519))
 
 	for i := 0; i < b.N; i++ {
 		batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
