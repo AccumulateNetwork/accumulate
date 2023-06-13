@@ -392,11 +392,8 @@ func (s *ValidationTestSuite) TestMain() {
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
 			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))[1]
-
-	s.StepUntil(
-		Sig(st.TxID).AuthoritySignature().Fails().
-			WithError(errors.Unauthorized).
-			WithMessage("acc://test.acme/book/2 cannot modify its own allowed operations"))
+	_ = s.ErrorIs(st.AsError(), errors.Unauthorized) &&
+		s.EqualError(st.AsError(), "acc://test.acme/book/2 cannot modify its own allowed operations")
 
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
