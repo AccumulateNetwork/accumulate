@@ -16,6 +16,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -122,7 +123,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries})
 
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
@@ -170,7 +171,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries})
 
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
@@ -218,7 +219,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries})
 
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
@@ -280,7 +281,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries})
 
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
