@@ -209,7 +209,7 @@ func authorityIsAccepted(batch *database.Batch, txn *protocol.Transaction, sig *
 	}
 
 	// Authorization is disabled and the transaction type does not force authorization => authorized
-	if auth.AuthDisabled() && !txn.Body.Type().RequireAuthorization() {
+	if auth.AllAuthoritiesAreDisabled() && !txn.Body.Type().RequireAuthorization() {
 		return nil
 	}
 
