@@ -16,6 +16,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -35,39 +36,30 @@ func TestLockAccount_LiteToken(t *testing.T) {
 
 	// No lock, can send
 	st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(lite).
-			WithSigner(lite, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{To: []*TokenRecipient{{Url: recipient, Amount: *big.NewInt(1)}}}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(lite).
+			Body(&SendTokens{To: []*TokenRecipient{{Url: recipient, Amount: *big.NewInt(1)}}}).
+			SignWith(lite).Version(1).Timestamp(&timestamp).PrivateKey(liteKey)),
 	)...)
 	require.False(t, st[0].Failed(), "Expected the transaction to succeed")
 	require.Equal(t, int(1), int(simulator.GetAccount[*LiteTokenAccount](sim, recipient).Balance.Int64()))
 
 	// Lock
 	st, _ = sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(lite).
-			WithSigner(lite, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&LockAccount{Height: 10}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(lite).
+			Body(&LockAccount{Height: 10}).
+			SignWith(lite).Version(1).Timestamp(&timestamp).PrivateKey(liteKey)),
 	)...)
 	require.False(t, st[0].Failed(), "Expected the transaction to succeed")
 	require.Equal(t, int(10), int(simulator.GetAccount[*LiteTokenAccount](sim, lite).LockHeight))
 
 	// Locked, cannot send
 	st, err := sim.SubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(lite).
-			WithSigner(lite, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{To: []*TokenRecipient{{Url: recipient, Amount: *big.NewInt(1)}}}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(lite).
+			Body(&SendTokens{To: []*TokenRecipient{{Url: recipient, Amount: *big.NewInt(1)}}}).
+			SignWith(lite).Version(1).Timestamp(&timestamp).PrivateKey(liteKey)),
 	)
 	require.NoError(t, err)
 	sim.H.StepUntil(harness.Txn(st[0].TxID).Capture(&st[0]).Fails())
@@ -115,13 +107,10 @@ func TestLockAccount_LiteToken_WrongSigner(t *testing.T) {
 
 	// Attempt to lock
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(lite).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&LockAccount{Height: 10}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(lite).
+			Body(&LockAccount{Height: 10}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)
 	sim.WaitForTransaction(delivered, envs[0].Transaction[0].GetHash(), 50) // TODO How do we wait for the signature?
 
