@@ -81,7 +81,7 @@ func RouteMessages(r Router, messages []messaging.Message) (string, error) {
 	for _, msg := range messages {
 		err := routeMessage(r.RouteAccount, &route, msg)
 		if err != nil {
-			return "", errors.UnknownError.With("cannot route message(s): %w", err)
+			return "", errors.UnknownError.WithFormat("cannot route message(s): %w", err)
 		}
 	}
 	if route == "" {
@@ -105,13 +105,16 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*messag
 		for _, msg := range env.Messages {
 			err := routeMessage(routeAccount, &route, msg)
 			if err != nil {
-				return "", errors.UnknownError.With("cannot route message(s): %w", err)
+				return "", errors.UnknownError.WithFormat("cannot route message(s): %w", err)
 			}
 		}
 		for _, sig := range env.Signatures {
 			err := routeMessage(routeAccount, &route, &messaging.SignatureMessage{Signature: sig})
 			if err != nil {
-				return "", errors.UnknownError.With("cannot route message(s): %w", err)
+				return "", errors.UnknownError.WithFormat("cannot route message(s): %w", err)
+			}
+			if sig.Type() == protocol.SignatureTypePartition {
+				break
 			}
 		}
 	}
@@ -127,6 +130,14 @@ func routeMessage(routeAccount func(*url.URL) (string, error), route *string, ms
 	var err error
 	switch msg := msg.(type) {
 	case *messaging.SignatureMessage:
+		switch sig := msg.Signature.(type) {
+		case *protocol.ReceiptSignature, *protocol.InternalSignature:
+			return nil
+		case protocol.KeySignature:
+			if protocol.DnUrl().ParentOf(sig.GetSigner()) {
+				return nil
+			}
+		}
 		r, err = routeAccount(msg.Signature.RoutingLocation())
 
 	case *messaging.SequencedMessage:
