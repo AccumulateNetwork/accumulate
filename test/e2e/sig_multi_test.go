@@ -73,7 +73,7 @@ func TestSimpleMultisig(t *testing.T) {
 		Txn(st[0].TxID).Succeeds())
 }
 
-func TestMultiAuthority(t *testing.T) {
+func TestOtherAuthority(t *testing.T) {
 	// Tests AC-3069
 	alice := AccountUrl("alice")
 	bob := AccountUrl("bob")
@@ -114,6 +114,9 @@ func TestMultiAuthority(t *testing.T) {
 		return false
 	}))
 
+	sim.StepUntil(
+		Txn(st[0].TxID).IsPending())
+
 	// Verify that payments and votes are recorded
 	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
 		pay, err := batch.Account(alice).Transaction(st[0].TxID.Hash()).Payments().Get()
@@ -142,4 +145,63 @@ func TestMultiAuthority(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, votes)
 	})
+}
+
+func TestMultiAuthority(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e12)
+
+	// Initiate
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice).
+			CreateTokenAccount(alice, "tokens").ForToken(ACME).
+			WithAuthority(alice, "book").
+			WithAuthority(bob, "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	// Wait for the transaction to appear (it must be pending)
+	sim.StepUntil(
+		Txn(st[0].TxID).IsPending())
+
+	// Sign with the other authority
+	st = sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTxID(st[0].TxID).Load(sim.Query()).
+			Url(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
+
+	sim.StepUntil(
+		Txn(st[0].TxID).Succeeds(),
+		Sig(st[1].TxID).Completes())
+
+	// Remove the second authority
+	st = sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			UpdateAccountAuth().Remove(bob, "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	sim.StepUntil(
+		Txn(st[0].TxID).IsPending())
+
+	// Sign with the other authority
+	st = sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTransaction(sim.QueryTransaction(st[0].TxID, nil).Message.Transaction).
+			Url(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
+
+	sim.StepUntil(
+		Txn(st[0].TxID).Succeeds(),
+		Sig(st[1].TxID).Completes())
 }

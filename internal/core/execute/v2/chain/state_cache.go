@@ -50,9 +50,10 @@ func newStateCache(net *config.Describe, globals *core.GlobalValues, txtype prot
 	return c
 }
 
-func newStatelessCache(net *config.Describe, txtype protocol.TransactionType, txid [32]byte) *stateCache {
+func newStatelessCache(net *config.Describe, globals *core.GlobalValues, txtype protocol.TransactionType, txid [32]byte) *stateCache {
 	c := new(stateCache)
 	c.Describe = net
+	c.Globals = globals
 	c.txType = txtype
 	c.txHash = txid
 	c.operations = c.operations[:0]
