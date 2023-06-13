@@ -325,28 +325,13 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Verify the signer's authority is satisfied
-	authority := ctx.getAuthority()
-	ok, err := ctx.authorityWillVote(batch, authority)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	if !ok {
-		return nil, nil
-	}
-
-	// Send the authority signature
-	err = x.sendAuthoritySignature(batch, ctx2)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	err = clearActiveSignatures(batch, ctx, authority)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	return nil, nil
+	// Send the authority signature if the authority is ready
+	err = ctx.maybeSendAuthoritySignature(batch, &protocol.AuthoritySignature{
+		Origin:    ctx.getSigner(),
+		Authority: ctx.getAuthority(),
+		Delegator: ctx2.delegators,
+	})
+	return nil, errors.UnknownError.Wrap(err)
 }
 
 // process processes the signature.
@@ -419,28 +404,6 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 	}
 
 	return nil
-}
-
-// sendAuthoritySignature sends the authority signature for the signer.
-func (UserSignature) sendAuthoritySignature(batch *database.Batch, ctx *userSigContext) error {
-	auth := &protocol.AuthoritySignature{
-		Origin:    ctx.getSigner(),
-		Authority: ctx.getAuthority(),
-		Vote:      protocol.VoteTypeAccept,
-		TxID:      ctx.transaction.ID(),
-		Cause:     ctx.message.ID(),
-		Delegator: ctx.delegators,
-	}
-
-	// TODO Deduplicate
-	return ctx.didProduce(
-		batch,
-		auth.RoutingLocation(),
-		&messaging.SignatureMessage{
-			Signature: auth,
-			TxID:      ctx.transaction.ID(),
-		},
-	)
 }
 
 // sendCreditPayment sends the principal a notice that the signer paid and (if
