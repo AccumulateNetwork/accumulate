@@ -111,8 +111,8 @@ func (h *Hasher) AddValue(v interface{ MerkleHash() []byte }) {
 	*h = append(*h, v.MerkleHash())
 }
 
-func (h *Hasher) AddEnum(v interface{ ID() uint64 }) {
-	h.AddUint(v.ID())
+func (h *Hasher) AddEnum(v interface{ GetEnumValue() uint64 }) {
+	h.AddUint(v.GetEnumValue())
 }
 
 func (h Hasher) MerkleHash() []byte {
