@@ -22,13 +22,13 @@ func (CreateDataAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateDataAccount
 }
 
-func (CreateDataAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
+func (CreateDataAccount) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateDataAccount)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateDataAccount), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
+	return additionalAuthorities(body.Authorities).AuthorityIsAccepted(delegate, batch, transaction, sig)
 }
 
 func (CreateDataAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
