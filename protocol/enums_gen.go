@@ -149,6 +149,12 @@ const KeyPageOperationTypeSetThreshold KeyPageOperationType = 4
 // KeyPageOperationTypeUpdateAllowed updates the transactions the key page is allowed to execute.
 const KeyPageOperationTypeUpdateAllowed KeyPageOperationType = 5
 
+// KeyPageOperationTypeSetRejectThreshold sets the rejection threshold.
+const KeyPageOperationTypeSetRejectThreshold KeyPageOperationType = 6
+
+// KeyPageOperationTypeSetResponseThreshold sets the response threshold.
+const KeyPageOperationTypeSetResponseThreshold KeyPageOperationType = 7
+
 // ObjectTypeUnknown is used when the object type is not known.
 const ObjectTypeUnknown ObjectType = 0
 
@@ -843,7 +849,7 @@ func (v KeyPageOperationType) GetEnumValue() uint64 { return uint64(v) }
 func (v *KeyPageOperationType) SetEnumValue(id uint64) bool {
 	u := KeyPageOperationType(id)
 	switch u {
-	case KeyPageOperationTypeUnknown, KeyPageOperationTypeUpdate, KeyPageOperationTypeRemove, KeyPageOperationTypeAdd, KeyPageOperationTypeSetThreshold, KeyPageOperationTypeUpdateAllowed:
+	case KeyPageOperationTypeUnknown, KeyPageOperationTypeUpdate, KeyPageOperationTypeRemove, KeyPageOperationTypeAdd, KeyPageOperationTypeSetThreshold, KeyPageOperationTypeUpdateAllowed, KeyPageOperationTypeSetRejectThreshold, KeyPageOperationTypeSetResponseThreshold:
 		*v = u
 		return true
 	}
@@ -865,6 +871,10 @@ func (v KeyPageOperationType) String() string {
 		return "setThreshold"
 	case KeyPageOperationTypeUpdateAllowed:
 		return "updateAllowed"
+	case KeyPageOperationTypeSetRejectThreshold:
+		return "setRejectThreshold"
+	case KeyPageOperationTypeSetResponseThreshold:
+		return "setResponseThreshold"
 	}
 	return fmt.Sprintf("KeyPageOperationType:%d", v)
 }
@@ -884,6 +894,10 @@ func KeyPageOperationTypeByName(name string) (KeyPageOperationType, bool) {
 		return KeyPageOperationTypeSetThreshold, true
 	case "updateallowed":
 		return KeyPageOperationTypeUpdateAllowed, true
+	case "setrejectthreshold":
+		return KeyPageOperationTypeSetRejectThreshold, true
+	case "setresponsethreshold":
+		return KeyPageOperationTypeSetResponseThreshold, true
 	}
 	return 0, false
 }
