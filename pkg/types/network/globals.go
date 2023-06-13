@@ -7,7 +7,6 @@
 package network
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -122,7 +121,7 @@ func (g *GlobalValues) Load(net *url.URL, getState getStateFunc) error {
 
 // InitializeDataAccounts sets the initial state of the network data accounts
 // for genesis.
-func (g *GlobalValues) InitializeDataAccounts(net config.NetworkUrl, getState getStateFunc, putState putStateFunc) error {
+func (g *GlobalValues) InitializeDataAccounts(net *url.URL, getState getStateFunc, putState putStateFunc) error {
 	if err := g.storeAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, putState, g.Oracle); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
