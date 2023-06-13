@@ -135,7 +135,7 @@ func (c msgCond) with(message string, mod ...predicateModifier) msgCond {
 	}
 }
 
-func (c msgCond) make(message string, predicate statusPredicate) Condition {
+func (c msgCond) make(message string, predicate statusPredicate) *condition {
 	parts := make([]string, len(c.message)+1)
 	n := copy(parts, c.message)
 	parts[n] = message
@@ -172,16 +172,6 @@ func (c msgCond) IsPending() Condition { return c.make("is pending", isPending) 
 // Succeeds waits until the messages has been delivered and succeeds if the
 // messages succeeded (and fails otherwise).
 func (c msgCond) Succeeds() Condition { return c.make("succeeds", deliveredThen(succeeds)) }
-
-// Fails waits until the messages has been delivered and succeeds if the
-// messages failed (and fails otherwise).
-func (c msgCond) Fails() Condition { return c.make("fails", deliveredThen(fails)) }
-
-// Fails waits until the messages has been delivered and succeeds if the
-// messages failed with the given code (and fails otherwise).
-func (c msgCond) FailsWithCode(code errors.Status) Condition {
-	return c.make("fails", failsWithCode(code))
-}
 
 // Completes waits until the messages has been delivered, verifies the
 // messages succeeded, and recursively waits on any produced messages.
@@ -538,38 +528,11 @@ func succeeds(h *Harness, c *condition, r *msgResult) bool {
 
 	// Must be success
 	if r.Status.Failed() {
-		h.TB.Logf("%v\n", r.Status.AsError())
+		h.TB.Logf("%+v\n", r.Status.AsError())
 		h.TB.Fatal(c.messageReplaceEnd("did not succeed 🗴\n"))
 	}
 	if h.VerboseConditions {
 		fmt.Print(c.Format("", " ✔\n"))
 	}
 	return c.replacePredicate(h, always)
-}
-
-func fails(h *Harness, c *condition, r *msgResult) bool {
-	h.TB.Helper()
-
-	// Must be failure
-	if !r.Status.Failed() {
-		h.TB.Fatal(c.messageReplaceEnd("did not fail 🗴\n"))
-	}
-	return true
-}
-
-func failsWithCode(code errors.Status) statusPredicate {
-	return func(h *Harness, c *condition, r *msgResult) bool {
-		h.TB.Helper()
-
-		// Must be failure
-		if !r.Status.Failed() {
-			h.TB.Fatal(c.messageReplaceEnd("did not fail 🗴\n"))
-		}
-
-		if r.Status.Code != code {
-			m := fmt.Sprintf("failed with %v, not %v 🗴\n", r.Status.Code, code)
-			h.TB.Fatal(c.messageReplaceEnd(m))
-		}
-		return true
-	}
 }

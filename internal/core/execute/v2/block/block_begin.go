@@ -151,9 +151,6 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, x, batch.Begin(true), nil, txn, x.logger)
-	defer st.Discard()
-
 	var da *protocol.DataAccount
 	va := batch.Account(dataAccountUrl)
 	err = va.Main().GetAs(&da)
@@ -161,7 +158,18 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 		return err
 	}
 
-	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
+	// Add data index entry
+	err = indexing.Data(batch, dataAccountUrl).Put(wd.Entry.Hash(), txn.GetHash())
+	if err != nil {
+		return fmt.Errorf("failed to add entry to data index of %q: %v", dataAccountUrl, err)
+	}
+
+	// Add TX to main chain
+	var st chain.ProcessTransactionState
+	err = st.ChainUpdates.AddChainEntry(batch, batch.Account(dataAccountUrl).MainChain(), txn.GetHash(), 0, 0)
+	if err != nil {
+		return err
+	}
 
 	err = putMessageWithStatus(batch,
 		&messaging.TransactionMessage{Transaction: txn},
@@ -170,8 +178,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 		return err
 	}
 
-	_, err = st.Commit()
-	return err
+	return nil
 }
 
 // finalizeBlock builds the block anchor and signs and sends synthetic
