@@ -9,6 +9,7 @@ package message
 import (
 	"context"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -19,6 +20,11 @@ import (
 // Client is a binary message client for API v3.
 type Client struct {
 	Transport Transport
+}
+
+type AddressedClient struct {
+	*Client
+	Address multiaddr.Multiaddr
 }
 
 // A Router determines the address a message should be routed to.
@@ -36,36 +42,93 @@ var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
 var _ api.Faucet = (*Client)(nil)
 
+func (c *Client) ForAddress(addr multiaddr.Multiaddr) AddressedClient {
+	return AddressedClient{c, addr}
+}
+
+func (c *Client) ForPeer(peer peer.ID) AddressedClient {
+	addr, err := multiaddr.NewComponent("p2p", peer.String())
+	if err != nil {
+		panic(err)
+	}
+	return AddressedClient{c, addr}
+}
+
 // NodeInfo implements [api.NodeService.NodeInfo].
 func (c *Client) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
+	return c.ForAddress(nil).NodeInfo(ctx, opts)
+}
+
+// FindService implements [api.NodeService.FindService].
+func (c *Client) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+	return c.ForAddress(nil).FindService(ctx, opts)
+}
+
+// ConsensusStatus implements [api.NodeService.ConsensusStatus].
+func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	return c.ForAddress(nil).ConsensusStatus(ctx, opts)
+}
+
+// NetworkStatus implements [api.NetworkService.NetworkStatus].
+func (c *Client) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
+	return c.ForAddress(nil).NetworkStatus(ctx, opts)
+}
+
+// Metrics implements [api.MetricsService.Metrics].
+func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
+	return c.ForAddress(nil).Metrics(ctx, opts)
+}
+
+// Query implements [api.Querier.Query].
+func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	return c.ForAddress(nil).Query(ctx, scope, query)
+}
+
+// Submit implements [api.Submitter.Submit].
+func (c *Client) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	return c.ForAddress(nil).Submit(ctx, envelope, opts)
+}
+
+// Validate implements [api.Validator.Validate].
+func (c *Client) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+	return c.ForAddress(nil).Validate(ctx, envelope, opts)
+}
+
+// Faucet implements [api.Faucet.Faucet].
+func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return c.ForAddress(nil).Faucet(ctx, account, opts)
+}
+
+// NodeInfo implements [api.NodeService.NodeInfo].
+func (c AddressedClient) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a NodeInfo
 	return typedRequest[*NodeInfoResponse, *api.NodeInfo](c, ctx, &NodeInfoRequest{NodeInfoOptions: opts})
 }
 
 // FindService implements [api.NodeService.FindService].
-func (c *Client) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+func (c AddressedClient) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a FindServiceResult
 	return typedRequest[*FindServiceResponse, []*api.FindServiceResult](c, ctx, &FindServiceRequest{FindServiceOptions: opts})
 }
 
 // ConsensusStatus implements [api.NodeService.ConsensusStatus].
-func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+func (c AddressedClient) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a ConsensusStatus
 	return typedRequest[*ConsensusStatusResponse, *api.ConsensusStatus](c, ctx, &ConsensusStatusRequest{ConsensusStatusOptions: opts})
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
-func (c *Client) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
+func (c AddressedClient) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
 	// Wrap the request as a NetworkStatusRequest and expect a
 	// NetworkStatusResponse, which is unpacked into a NetworkStatus
 	return typedRequest[*NetworkStatusResponse, *api.NetworkStatus](c, ctx, &NetworkStatusRequest{NetworkStatusOptions: opts})
 }
 
 // Metrics implements [api.MetricsService.Metrics].
-func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
+func (c AddressedClient) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	// Wrap the request as a MetricsRequest and expect a MetricsResponse, which
 	// is unpacked into Metrics.
 	req := &MetricsRequest{MetricsOptions: opts}
@@ -73,7 +136,7 @@ func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Met
 }
 
 // Query implements [api.Querier.Query].
-func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+func (c AddressedClient) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	// Wrap the request as a QueryRequest and expect a QueryResponse, which is
 	// unpacked into a Record
 	req := &QueryRequest{Scope: scope, Query: query}
@@ -81,7 +144,7 @@ func (c *Client) Query(ctx context.Context, scope *url.URL, query api.Query) (ap
 }
 
 // Submit implements [api.Submitter.Submit].
-func (c *Client) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+func (c AddressedClient) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	// Wrap the request as a SubmitRequest and expect a SubmitResponse, which is
 	// unpacked into Submissions
 	req := &SubmitRequest{Envelope: envelope, SubmitOptions: opts}
@@ -89,7 +152,7 @@ func (c *Client) Submit(ctx context.Context, envelope *messaging.Envelope, opts 
 }
 
 // Validate implements [api.Validator.Validate].
-func (c *Client) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+func (c AddressedClient) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	// Wrap the request as a ValidateRequest and expect a ValidateResponse,
 	// which is unpacked into Submissions
 	req := &ValidateRequest{Envelope: envelope, ValidateOptions: opts}
@@ -97,7 +160,7 @@ func (c *Client) Validate(ctx context.Context, envelope *messaging.Envelope, opt
 }
 
 // Faucet implements [api.Faucet.Faucet].
-func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+func (c AddressedClient) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
 	// Wrap the request as a FaucetRequest and expect a FaucetResponse,
 	// which is unpacked into Submissions
 	req := &FaucetRequest{Account: account, FaucetOptions: opts}
@@ -106,7 +169,11 @@ func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOp
 
 // typedRequest executes a round-trip call, sending the request and expecting a
 // response of the given type.
-func typedRequest[M response[T], T any](c *Client, ctx context.Context, req Message) (T, error) {
+func typedRequest[M response[T], T any](c AddressedClient, ctx context.Context, req Message) (T, error) {
+	if c.Address != nil {
+		req = &Addressed{Message: req, Address: c.Address}
+	}
+
 	var typRes M
 	var errRes *ErrorResponse
 	err := c.Transport.RoundTrip(ctx, []Message{req}, func(res, _ Message) error {
