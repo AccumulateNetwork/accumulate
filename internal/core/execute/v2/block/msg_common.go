@@ -7,6 +7,7 @@
 package block
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -34,6 +35,22 @@ type MessageContext struct {
 }
 
 func (m *MessageContext) Type() messaging.MessageType { return m.message.Type() }
+
+func (m *MessageContext) GetActiveGlobals() *core.GlobalValues {
+	return &m.Executor.globals.Active
+}
+
+func (*MessageContext) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+	return getAccountAuthoritySet(batch, account)
+}
+
+func (*MessageContext) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
+	return transactionIsInitiated(batch, transaction)
+}
+
+func (*MessageContext) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) error {
+	return signerIsAuthorized(batch, transaction, signer, checkAuthz)
+}
 
 // childWith constructs a child message context for the given message.
 func (m *MessageContext) childWith(msg messaging.Message) *MessageContext {
@@ -189,6 +206,26 @@ func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol
 	return txn.GetTransaction(), nil
 }
 
+// GetSignatureAs loads a Signature from the database or from the message bundle.
+func (b *bundle) GetSignatureAs(batch *database.Batch, hash [32]byte) (protocol.Signature, error) {
+	// Look in the bundle
+	for _, msg := range b.messages {
+		sig, ok := messaging.UnwrapAs[messaging.MessageWithSignature](msg)
+		if ok && sig.Hash() == hash {
+			return sig.GetSignature(), nil
+		}
+	}
+
+	// Look in the database
+	var txn messaging.MessageWithSignature
+	err := batch.Message(hash).Main().GetAs(&txn)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	return txn.GetSignature(), nil
+}
+
 func (b *bundle) recordPending(batch *database.Batch, ctx *MessageContext, msg messaging.Message) (*protocol.TransactionStatus, error) {
 	// Store the message
 	h := msg.Hash()
@@ -304,7 +341,7 @@ func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *p
 	return nil
 }
 
-func (x *Executor) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
+func transactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
 	payments, err := batch.Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
 		Payments().

@@ -177,13 +177,13 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 		var md chain.SignatureValidationMetadata
 		md.Location = signerUrl
 		md.Delegated = ctx.signature.Type() == protocol.SignatureTypeDelegated
-		fallback, err = val.SignerIsAuthorized(ctx.Executor, batch, ctx.transaction, ctx.signer, md)
+		fallback, err = val.SignerIsAuthorized(ctx, batch, ctx.transaction, ctx.signer, md)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
 	if !ok || fallback {
-		err = ctx.Executor.SignerIsAuthorized(batch, ctx.transaction, ctx.signer, false)
+		err = ctx.SignerIsAuthorized(batch, ctx.transaction, ctx.signer, false)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -218,7 +218,7 @@ func (x UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) 
 
 	// Check for errors, such as payload is too big
 	var err error
-	ctx.fee, err = ctx.Executor.computeSignerFee(ctx.transaction, ctx.signature, ctx.isInitiator)
+	ctx.fee, err = x.computeSignerFee(ctx)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -340,7 +340,7 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 
 	// Verify the signer's authority is satisfied
 	authority := ctx.getAuthority()
-	ok, err := ctx.authorityIsReady(batch, authority)
+	ok, err := ctx.authorityWillVote(batch, authority)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -354,7 +354,7 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	err = clearActiveSignatures(batch, ctx)
+	err = clearActiveSignatures(batch, ctx, authority)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -479,4 +479,40 @@ func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContex
 			Initiator: didInit,
 		},
 	)
+}
+
+// computeSignerFee computes the fee that will be charged to the signer.
+//
+// If the signature is the initial signature, the fee is the base transaction
+// fee + signature data surcharge + transaction data surcharge.
+//
+// Otherwise, the fee is the base signature fee + signature data surcharge.
+func (UserSignature) computeSignerFee(ctx *userSigContext) (protocol.Fee, error) {
+	// Don't charge fees for internal administrative functions
+	signer := ctx.signature.GetSigner()
+	_, isBvn := protocol.ParsePartitionUrl(signer)
+	if isBvn || protocol.IsDnUrl(signer) {
+		return 0, nil
+	}
+
+	// Compute the signature fee
+	fee, err := ctx.GetActiveGlobals().Globals.FeeSchedule.ComputeSignatureFee(ctx.signature)
+	if err != nil {
+		return 0, errors.UnknownError.Wrap(err)
+	}
+
+	// Only charge the transaction fee for the initial signature
+	if !ctx.isInitiator {
+		return fee, nil
+	}
+
+	// Add the transaction fee for the initial signature
+	txnFee, err := ctx.GetActiveGlobals().Globals.FeeSchedule.ComputeTransactionFee(ctx.transaction)
+	if err != nil {
+		return 0, errors.UnknownError.Wrap(err)
+	}
+
+	// Subtract the base signature fee, but not the oversize surcharge if there is one
+	fee += txnFee - protocol.FeeSignature
+	return fee, nil
 }

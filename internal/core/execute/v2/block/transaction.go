@@ -9,6 +9,7 @@ package block
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -20,10 +21,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// ProcessTransaction processes a transaction. It will not return an error if
+// processTransaction processes a transaction. It will not return an error if
 // the transaction fails - in that case the status code will be non zero. It
 // only returns an error in cases like a database failure.
-func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (t *TransactionContext) processTransaction(batch *database.Batch) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+	x := t.Executor
+	delivery := &chain.Delivery{
+		Transaction: t.transaction,
+		Internal:    t.isWithin(internal.MessageTypeNetworkUpdate),
+	}
+
 	r := x.BlockTimers.Start(BlockTimerTypeProcessTransaction)
 	defer x.BlockTimers.Stop(r)
 
@@ -53,7 +60,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Check if the transaction is ready to be executed
-	ready, err := x.TransactionIsReady(batch, delivery, status, principal)
+	ready, err := t.transactionIsReady(batch, delivery, status, principal)
 	if err != nil {
 		if errors.Is(err, errors.Delivered) {
 			// If a synthetic transaction is re-delivered, don't record anything
@@ -66,7 +73,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, x, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+	st := chain.NewStateManager(&x.Describe, &x.globals.Active, t, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	defer st.Discard()
 
 	// Execute the transaction
@@ -101,25 +108,26 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	return x.recordSuccessfulTransaction(batch, state, delivery, result)
 }
 
-func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (t *TransactionContext) transactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
 	var ready bool
 	var err error
 	typ := delivery.Transaction.Body.Type()
 	switch {
 	case typ.IsUser():
-		ready, err = x.userTransactionIsReady(batch, delivery, principal)
+		ready, err = t.userTransactionIsReady(batch, delivery, principal)
 	case typ.IsSynthetic():
-		ready, err = x.synthTransactionIsReady(batch, delivery, principal)
+		ready, err = t.Executor.synthTransactionIsReady(batch, delivery, principal)
 	case typ.IsSystem():
-		ready, err = x.systemTransactionIsReady(batch, delivery, principal)
+		ready, err = t.Executor.systemTransactionIsReady(batch, delivery, principal)
 	default:
 		return false, errors.InternalError.WithFormat("unknown transaction type %v", typ)
 	}
 	return ready, errors.UnknownError.Wrap(err)
 }
 
-func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
-	isInit, _, err := x.TransactionIsInitiated(batch, delivery.Transaction)
+func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
+	x := t.Executor
+	isInit, _, err := transactionIsInitiated(batch, delivery.Transaction)
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
 	}
@@ -143,7 +151,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](x, delivery.Transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction)
+		ready, fallback, err := val.TransactionIsReady(t, batch, delivery.Transaction)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -158,7 +166,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	}
 
 	// Get the principal's account auth
-	auth, err := x.GetAccountAuthoritySet(batch, principal)
+	auth, err := getAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return false, fmt.Errorf("unable to load authority of %v: %w", delivery.Transaction.Header.Principal, err)
 	}
@@ -173,7 +181,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 		}
 
 		// Check if any signer has reached its threshold
-		ok, err := x.AuthorityIsSatisfied(batch, delivery.Transaction, entry.Url)
+		ok, err := t.AuthorityDidVote(batch, delivery.Transaction, entry.Url)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -197,7 +205,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	return len(voters) > 0, nil
 }
 
-func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
+func (m *MessageContext) AuthorityDidVote(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
 	_, err := batch.
 		Account(transaction.Header.Principal).
 		Transaction(transaction.ID().Hash()).
@@ -212,7 +220,7 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	}
 }
 
-func (x *Executor) AuthorityIsReady(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
+func (m *MessageContext) AuthorityWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, authUrl *url.URL) (bool, error) {
 	var authority protocol.Authority
 	err := batch.Account(authUrl).Main().GetAs(&authority)
 	if err != nil {
@@ -220,7 +228,7 @@ func (x *Executor) AuthorityIsReady(batch *database.Batch, transaction *protocol
 	}
 
 	for _, signer := range authority.GetSigners() {
-		ok, err := x.SignerIsSatisfied(batch, transaction, signer)
+		ok, err := m.SignerWillVote(batch, block, transaction, signer)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -232,7 +240,7 @@ func (x *Executor) AuthorityIsReady(batch *database.Batch, transaction *protocol
 	return false, nil
 }
 
-func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, signerUrl *url.URL) (bool, error) {
+func (m *MessageContext) SignerWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, signerUrl *url.URL) (bool, error) {
 	// Load the signer
 	var signer protocol.Signer
 	err := batch.Account(signerUrl).Main().GetAs(&signer)
@@ -457,7 +465,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Issue a refund to the initial signer
-	isInit, initiator, err := x.TransactionIsInitiated(batch, delivery.Transaction)
+	isInit, initiator, err := transactionIsInitiated(batch, delivery.Transaction)
 	if err != nil {
 		return nil, nil, errors.UnknownError.Wrap(err)
 	}
