@@ -23,6 +23,7 @@ import (
 	tm "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -138,6 +139,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	c.Accumulate.BatchReplayLimit = 500
+	c.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
 	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
