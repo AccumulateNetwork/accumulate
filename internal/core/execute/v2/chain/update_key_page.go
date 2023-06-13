@@ -17,48 +17,52 @@ import (
 
 type UpdateKeyPage struct{}
 
+var _ SignerCanSignValidator = (*UpdateKeyPage)(nil)
 var _ SignerValidator = (*UpdateKeyPage)(nil)
 
 func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
+func (UpdateKeyPage) SignerCanSign(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
 	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
 	if !ok {
 		return false, errors.BadRequest.WithFormat("principal is not a key page")
 	}
 
-	signerBook, signerPageIdx, ok := protocol.ParseKeyPageUrl(sig.Origin)
+	signerBook, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
 	if !ok {
 		return true, nil // Signer is not a page
 	}
-	if !sig.Authority.Equal(signerBook) {
-		return false, errors.InternalError.WithFormat("%v is not a page of %v", sig.Origin, sig.Authority)
+	if !principalBook.Equal(signerBook) {
+		return true, nil // Signer belongs to a different book
 	}
 
-	// If the signer is a page of the principal
-	if principalBook.Equal(sig.Authority) {
-		// Lower indices are higher priority
-		if signerPageIdx > principalPageIdx {
-			return false, errors.Unauthorized.WithFormat("signer %v is lower priority than the principal %v", sig.Origin, transaction.Header.Principal)
-		}
+	// Lower indices are higher priority
+	if signerPageIdx > principalPageIdx {
+		return false, errors.Unauthorized.WithFormat("signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+	}
 
-		// Operation-specific checks
-		body, ok := transaction.Body.(*protocol.UpdateKeyPage)
-		if !ok {
-			return false, errors.BadRequest.WithFormat("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
-		}
-		for _, op := range body.Operation {
-			switch op.Type() {
-			case protocol.KeyPageOperationTypeUpdateAllowed:
-				if signerPageIdx == principalPageIdx {
-					return false, errors.Unauthorized.WithFormat("%v cannot modify its own allowed operations", transaction.Header.Principal)
-				}
+	// Operation-specific checks
+	body, ok := transaction.Body.(*protocol.UpdateKeyPage)
+	if !ok {
+		return false, errors.BadRequest.WithFormat("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
+	}
+	for _, op := range body.Operation {
+		switch op.Type() {
+		case protocol.KeyPageOperationTypeUpdateAllowed:
+			if signerPageIdx == principalPageIdx {
+				return false, errors.Unauthorized.WithFormat("%v cannot modify its own allowed operations", transaction.Header.Principal)
 			}
 		}
 	}
 
+	// Fall back - this override adds additional checks but all the normal
+	// checks should also be applied
+	return true, nil
+}
+
+func (UpdateKeyPage) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
 	// Signers belonging to new delegates are authorized to sign the transaction
 	newOwners, err := updateKeyPage_getNewOwners(batch, transaction)
 	if err != nil {

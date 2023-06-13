@@ -33,6 +33,8 @@ func (WriteData) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
 // SignerCanSign returns nil if the transaction is writing to a lite data
 // account.
 func (WriteData) SignerCanSign(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+	// TODO If WriteData is added as a blacklist option, consider checking it
+	// here
 	lite := isWriteToLiteDataAccount(transaction)
 	return !lite, nil
 }

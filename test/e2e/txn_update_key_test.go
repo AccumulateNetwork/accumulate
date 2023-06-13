@@ -55,6 +55,53 @@ func TestUpdateKey(t *testing.T) {
 	require.True(t, ok)
 }
 
+func TestUpdateKey_MultisigDelegate(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey1 := acctesting.GenerateKey(bob, 1)
+	bobKey2 := acctesting.GenerateKey(bob, 2)
+
+	// Initialize
+	var timestamp uint64
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey1[32:], bobKey2[32:])
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book")})
+	})
+	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.AcceptThreshold = 2
+	})
+
+	// Update the key
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().
+			For(alice, "book", "1").
+			UpdateKey(bobKey1, SignatureTypeED25519).
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey1))
+
+	// Transaction should be pending
+	sim.StepUntil(
+		Txn(st.TxID).IsPending())
+
+	// Sign with the second key
+	sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTxID(st.TxID).
+			Url(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey2))
+
+	// Transaction should execute
+	sim.StepUntil(
+		Txn(st.TxID).Completes())
+}
+
 func TestUpdateKey_HasDelegate(t *testing.T) {
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice, "main")

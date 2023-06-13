@@ -68,17 +68,9 @@ func (x UpdateKey) AuthorityWillVote(delegate AuthDelegate, batch *database.Batc
 		}
 
 		// Ignore any signatures that are not the initiator
-		if !protocol.SignatureDidInitiate(sig, transaction.Header.Initiator[:], nil) {
-			continue
-		}
-
-		// Return the vote if its accept or reject, otherwise we're not ready
-		switch v := sig.GetVote(); v {
-		case protocol.VoteTypeAccept,
-			protocol.VoteTypeReject:
+		if protocol.SignatureDidInitiate(sig, transaction.Header.Initiator[:], nil) {
+			// Initiator received, transaction is ready
 			return true, false, nil
-		default:
-			return false, false, nil
 		}
 	}
 
