@@ -14,9 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	. "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -338,17 +340,14 @@ func TestAddAuthority(tt *testing.T) {
 	defer t.Discard()
 
 	t.Run("UpdateAccountAuthority.Add", func(t BatchTest) {
-		tx := NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestamp(1).
-			WithBody(&protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{
-				&protocol.AddAccountAuthorityOperation{Authority: bob.JoinPath("book")},
-			}}).
-			Initiate(protocol.SignatureTypeED25519, aliceKey).
-			WithSigner(bob.JoinPath("book", "1"), 1).
-			Sign(protocol.SignatureTypeED25519, bobKey).
-			BuildDelivery()
+		tx :=
+			helpers.MustBuildDeliveryV1(t, build.Transaction().
+				For(alice.JoinPath("tokens")).
+				Body(&protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{
+					&protocol.AddAccountAuthorityOperation{Authority: bob.JoinPath("book")},
+				}}).
+				SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519).
+				SignWith(bob.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(bobKey).Type(protocol.SignatureTypeED25519))
 
 		// First signature is accepted
 		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])
@@ -377,17 +376,14 @@ func TestAddAuthority(tt *testing.T) {
 	})
 
 	t.Run("UpdateKeyPage.Add w/Owner", func(t BatchTest) {
-		tx := NewTransaction().
-			WithPrincipal(alice.JoinPath("book", "1")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestamp(1).
-			WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
-				&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Delegate: bob.JoinPath("book")}},
-			}}).
-			Initiate(protocol.SignatureTypeED25519, aliceKey).
-			WithSigner(bob.JoinPath("book", "1"), 1).
-			Sign(protocol.SignatureTypeED25519, bobKey).
-			BuildDelivery()
+		tx :=
+			helpers.MustBuildDeliveryV1(t, build.Transaction().
+				For(alice.JoinPath("book", "1")).
+				Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+					&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Delegate: bob.JoinPath("book")}},
+				}}).
+				SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519).
+				SignWith(bob.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(bobKey).Type(protocol.SignatureTypeED25519))
 
 		// First signature is accepted
 		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])
@@ -416,18 +412,15 @@ func TestAddAuthority(tt *testing.T) {
 	})
 
 	t.Run("Create Account", func(t BatchTest) {
-		tx := NewTransaction().
-			WithPrincipal(alice).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestamp(1).
-			WithBody(&protocol.CreateDataAccount{
-				Url:         alice.JoinPath("data"),
-				Authorities: []*url.URL{bob.JoinPath("book")},
-			}).
-			Initiate(protocol.SignatureTypeED25519, aliceKey).
-			WithSigner(bob.JoinPath("book", "1"), 1).
-			Sign(protocol.SignatureTypeED25519, bobKey).
-			BuildDelivery()
+		tx :=
+			helpers.MustBuildDeliveryV1(t, build.Transaction().
+				For(alice).
+				Body(&protocol.CreateDataAccount{
+					Url:         alice.JoinPath("data"),
+					Authorities: []*url.URL{bob.JoinPath("book")},
+				}).
+				SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519).
+				SignWith(bob.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(bobKey).Type(protocol.SignatureTypeED25519))
 
 		// First signature is accepted
 		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])
@@ -479,36 +472,30 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 
 	// An unauthorized signer must not be allowed to enable auth
 	_, err := sim.SubmitAndExecuteBlock(
-		NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("unauth", "book", "1"), 1).
-			WithBody(&protocol.UpdateAccountAuth{
+		helpers.MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&protocol.UpdateAccountAuth{
 				Operations: []protocol.AccountAuthOperation{
 					&protocol.EnableAccountAuthOperation{
 						Authority: alice.JoinPath("book"),
 					},
 				},
 			}).
-			WithTimestampVar(&timestamp).
-			Initiate(protocol.SignatureTypeLegacyED25519, unauthKey).
-			Build(),
+			SignWith(alice.JoinPath("unauth", "book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(unauthKey).Type(protocol.SignatureTypeLegacyED25519)),
 	)
 	require.EqualError(t, err, "signature 0: acc://alice.acme/unauth/book/1 is not authorized to sign transactions for acc://alice.acme/tokens")
 
 	// An unauthorized signer should be able to send tokens
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("unauth", "book", "1"), 1).
-			WithBody(&protocol.SendTokens{
+		helpers.MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&protocol.SendTokens{
 				To: []*protocol.TokenRecipient{{
 					Url:    lite,
 					Amount: *big.NewInt(68),
 				}},
 			}).
-			WithTimestampVar(&timestamp).
-			Initiate(protocol.SignatureTypeLegacyED25519, unauthKey).
-			Build(),
+			SignWith(alice.JoinPath("unauth", "book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(unauthKey).Type(protocol.SignatureTypeLegacyED25519)),
 	)...)
 
 	// A signature for updating auth is still required from all key books, even
@@ -592,17 +579,14 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 
 	// Generate a deposit
 	envs := sim.MustSubmitAndExecuteBlock(
-		NewTransaction().
-			WithPrincipal(alice).
-			WithSigner(alice, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&protocol.SendTokens{
+		helpers.MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&protocol.SendTokens{
 				To: []*protocol.TokenRecipient{
 					{Url: bob, Amount: *big.NewInt(68)},
 				},
 			}).
-			Initiate(protocol.SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519)),
 	)
 	txnHash := envs[0].Transaction[0].GetHash()
 	if txn, _, _ := sim.WaitForTransaction(delivered, txnHash, 50); txn == nil {
@@ -668,17 +652,16 @@ func TestKeySignaturePartition(t *testing.T) {
 	}
 
 	// Generate a deposit
-	envs := sim.MustSubmitAndExecuteBlock(NewTransaction().
-		WithPrincipal(alice).
-		WithSigner(alice, 1).
-		WithTimestampVar(&timestamp).
-		WithBody(&protocol.SendTokens{
-			To: []*protocol.TokenRecipient{
-				{Url: bob, Amount: *big.NewInt(68)},
-			},
-		}).
-		Initiate(protocol.SignatureTypeED25519, aliceKey).
-		Build())
+	envs := sim.MustSubmitAndExecuteBlock(
+		helpers.MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&protocol.SendTokens{
+				To: []*protocol.TokenRecipient{
+					{Url: bob, Amount: *big.NewInt(68)},
+				},
+			}).
+			SignWith(alice).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519)),
+	)
 	if txn, _, _ := sim.WaitForTransaction(delivered, envs[0].Transaction[0].GetHash(), 50); txn == nil {
 		t.Fatal("Transaction has not been delivered after 50 blocks")
 	}

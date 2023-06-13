@@ -16,8 +16,10 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"golang.org/x/exp/rand"
@@ -63,13 +65,11 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			body := new(protocol.UpdateKeyPage)
 			body.Operation = append(body.Operation, op)
 
-			env := acctesting.NewTransaction().
-				WithPrincipal(protocol.FormatKeyPageUrl(bookUrl, 1)).
-				WithSigner(protocol.FormatKeyPageUrl(bookUrl, idx), 1).
-				WithTimestamp(1).
-				WithBody(body).
-				Initiate(protocol.SignatureTypeED25519, testKey).
-				Build()
+			env :=
+				MustBuild(t, build.Transaction().
+					For(protocol.FormatKeyPageUrl(bookUrl, 1)).
+					Body(body).
+					SignWith(protocol.FormatKeyPageUrl(bookUrl, idx)).Version(1).Timestamp(1).PrivateKey(testKey).Type(protocol.SignatureTypeED25519))
 
 			batch := db.Begin(true)
 			defer batch.Discard()
@@ -143,22 +143,20 @@ func TestUpdateKeyPage_Duplicate(t *testing.T) {
 			require.NoError(t, batch.Account(pageUrl).Main().GetAs(&page))
 			page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: doHash(c.OldPublicKey), Delegate: c.OldDelegate})
 
-			env := acctesting.NewTransaction().
-				WithPrincipal(pageUrl).
-				WithSigner(pageUrl, 1).
-				WithTimestamp(1).
-				WithBody(&protocol.UpdateKeyPage{
-					Operation: []protocol.KeyPageOperation{
-						&protocol.AddKeyOperation{
-							Entry: protocol.KeySpecParams{
-								KeyHash:  doHash(c.NewPublicKey),
-								Delegate: c.NewDelegate,
+			env :=
+				MustBuild(t, build.Transaction().
+					For(pageUrl).
+					Body(&protocol.UpdateKeyPage{
+						Operation: []protocol.KeyPageOperation{
+							&protocol.AddKeyOperation{
+								Entry: protocol.KeySpecParams{
+									KeyHash:  doHash(c.NewPublicKey),
+									Delegate: c.NewDelegate,
+								},
 							},
 						},
-					},
-				}).
-				Initiate(protocol.SignatureTypeED25519, aliceKey).
-				Build()
+					}).
+					SignWith(pageUrl).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
 
 			st, delivery := LoadStateManagerForTest(t, batch, env)
 			defer st.Discard()
@@ -175,25 +173,23 @@ func TestUpdateKeyPage_Duplicate(t *testing.T) {
 			require.NoError(t, batch.Account(pageUrl).Main().GetAs(&page))
 			page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: doHash(c.OldPublicKey), Delegate: c.OldDelegate})
 
-			env := acctesting.NewTransaction().
-				WithPrincipal(pageUrl).
-				WithSigner(pageUrl, 1).
-				WithTimestamp(1).
-				WithBody(&protocol.UpdateKeyPage{
-					Operation: []protocol.KeyPageOperation{
-						&protocol.UpdateKeyOperation{
-							OldEntry: protocol.KeySpecParams{
-								KeyHash: doHash(aliceKey[32:]),
-							},
-							NewEntry: protocol.KeySpecParams{
-								KeyHash:  doHash(c.NewPublicKey),
-								Delegate: c.NewDelegate,
+			env :=
+				MustBuild(t, build.Transaction().
+					For(pageUrl).
+					Body(&protocol.UpdateKeyPage{
+						Operation: []protocol.KeyPageOperation{
+							&protocol.UpdateKeyOperation{
+								OldEntry: protocol.KeySpecParams{
+									KeyHash: doHash(aliceKey[32:]),
+								},
+								NewEntry: protocol.KeySpecParams{
+									KeyHash:  doHash(c.NewPublicKey),
+									Delegate: c.NewDelegate,
+								},
 							},
 						},
-					},
-				}).
-				Initiate(protocol.SignatureTypeED25519, aliceKey).
-				Build()
+					}).
+					SignWith(pageUrl).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
 
 			st, delivery := LoadStateManagerForTest(t, batch, env)
 			defer st.Discard()
@@ -267,26 +263,24 @@ func TestUpdateKeyPage_Update(t *testing.T) {
 			require.NoError(t, batch.Account(pageUrl).Main().GetAs(&page))
 			page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: doHash(c.OldPublicKey), Delegate: c.OldDelegate})
 
-			env := acctesting.NewTransaction().
-				WithPrincipal(pageUrl).
-				WithSigner(pageUrl, 1).
-				WithTimestamp(1).
-				WithBody(&protocol.UpdateKeyPage{
-					Operation: []protocol.KeyPageOperation{
-						&protocol.UpdateKeyOperation{
-							OldEntry: protocol.KeySpecParams{
-								KeyHash:  doHash(c.OldPublicKey),
-								Delegate: c.OldDelegate,
-							},
-							NewEntry: protocol.KeySpecParams{
-								KeyHash:  doHash(c.NewPublicKey),
-								Delegate: c.NewDelegate,
+			env :=
+				MustBuild(t, build.Transaction().
+					For(pageUrl).
+					Body(&protocol.UpdateKeyPage{
+						Operation: []protocol.KeyPageOperation{
+							&protocol.UpdateKeyOperation{
+								OldEntry: protocol.KeySpecParams{
+									KeyHash:  doHash(c.OldPublicKey),
+									Delegate: c.OldDelegate,
+								},
+								NewEntry: protocol.KeySpecParams{
+									KeyHash:  doHash(c.NewPublicKey),
+									Delegate: c.NewDelegate,
+								},
 							},
 						},
-					},
-				}).
-				Initiate(protocol.SignatureTypeED25519, aliceKey).
-				Build()
+					}).
+					SignWith(pageUrl).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
 
 			st, delivery := LoadStateManagerForTest(t, batch, env)
 			defer st.Discard()
@@ -306,19 +300,17 @@ func TestUpdateKeyPage_SelfDelegation_Add(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	sim.CreateIdentity(alice)
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("book", "1")).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithTimestamp(1).
-		WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
-			&protocol.AddKeyOperation{
-				Entry: protocol.KeySpecParams{
-					Delegate: alice.JoinPath("book"),
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.AddKeyOperation{
+					Entry: protocol.KeySpecParams{
+						Delegate: alice.JoinPath("book"),
+					},
 				},
-			},
-		}}).
-		Initiate(protocol.SignatureTypeED25519, aliceKey).
-		Build()
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
 
 	x := sim.PartitionFor(alice)
 	st, txn := LoadStateManagerForTest(t, x.Database, env)
@@ -337,23 +329,21 @@ func TestUpdateKeyPage_SelfDelegation_Update(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	sim.CreateIdentity(alice)
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("book", "1")).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithTimestamp(1).
-		WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
-			&protocol.UpdateKeyOperation{
-				OldEntry: protocol.KeySpecParams{
-					KeyHash: doHash(aliceKey),
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.UpdateKeyOperation{
+					OldEntry: protocol.KeySpecParams{
+						KeyHash: doHash(aliceKey),
+					},
+					NewEntry: protocol.KeySpecParams{
+						KeyHash:  doHash(aliceKey),
+						Delegate: alice.JoinPath("book"),
+					},
 				},
-				NewEntry: protocol.KeySpecParams{
-					KeyHash:  doHash(aliceKey),
-					Delegate: alice.JoinPath("book"),
-				},
-			},
-		}}).
-		Initiate(protocol.SignatureTypeED25519, aliceKey).
-		Build()
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
 
 	x := sim.PartitionFor(alice)
 	st, txn := LoadStateManagerForTest(t, x.Database, env)
@@ -373,19 +363,17 @@ func TestUpdateKeyPage_PageDelegate_Add(t *testing.T) {
 	sim.CreateIdentity(alice, aliceKey[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("book", "1")).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithTimestamp(1).
-		WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
-			&protocol.AddKeyOperation{
-				Entry: protocol.KeySpecParams{
-					Delegate: alice.JoinPath("book", "1"),
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.AddKeyOperation{
+					Entry: protocol.KeySpecParams{
+						Delegate: alice.JoinPath("book", "1"),
+					},
 				},
-			},
-		}}).
-		Initiate(protocol.SignatureTypeED25519, aliceKey).
-		Build()
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
 
 	_, err := sim.SubmitAndExecuteBlock(env)
 	require.EqualError(t, err, "invalid delegate acc://alice.acme/book/1: a key page is not a valid authority")
@@ -401,23 +389,21 @@ func TestUpdateKeyPage_PageDelegate_Update(t *testing.T) {
 	sim.CreateIdentity(alice, aliceKey[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("book", "1")).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithTimestamp(1).
-		WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
-			&protocol.UpdateKeyOperation{
-				OldEntry: protocol.KeySpecParams{
-					KeyHash: doHash(aliceKey),
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.UpdateKeyOperation{
+					OldEntry: protocol.KeySpecParams{
+						KeyHash: doHash(aliceKey),
+					},
+					NewEntry: protocol.KeySpecParams{
+						KeyHash:  doHash(aliceKey),
+						Delegate: alice.JoinPath("book", "1"),
+					},
 				},
-				NewEntry: protocol.KeySpecParams{
-					KeyHash:  doHash(aliceKey),
-					Delegate: alice.JoinPath("book", "1"),
-				},
-			},
-		}}).
-		Initiate(protocol.SignatureTypeED25519, aliceKey).
-		Build()
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
 
 	_, err := sim.SubmitAndExecuteBlock(env)
 	require.EqualError(t, err, "invalid delegate acc://alice.acme/book/1: a key page is not a valid authority")

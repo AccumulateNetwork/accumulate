@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -67,13 +68,11 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	send := protocol.SendTokens{}
 	send.AddRecipient(u, big.NewInt(int64(amount)))
 
-	return NewTransaction().
-		WithPrincipal(from).
-		WithSigner(from.RootIdentity(), 1).
-		WithTimestamp(1).
-		WithBody(&send).
-		Initiate(protocol.SignatureTypeLegacyED25519, sponsor).
-		Build(), nil
+	return build.Transaction().
+		For(from).
+		Body(&send).
+		SignWith(from.RootIdentity()).Version(1).Timestamp(1).PrivateKey(sponsor).Type(protocol.SignatureTypeLegacyED25519).
+		Done()
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
