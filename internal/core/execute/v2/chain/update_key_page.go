@@ -99,7 +99,7 @@ func (x UpdateKeyPage) check(st *StateManager, tx *Delivery) (*protocol.UpdateKe
 	}
 
 	for _, op := range body.Operation {
-		err := x.checkOperation(tx, op)
+		err := x.checkOperation(st, tx, op)
 		if err != nil {
 			return nil, err
 		}
@@ -149,8 +149,13 @@ func (x UpdateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 	return nil, nil
 }
 
-func (UpdateKeyPage) checkOperation(tx *Delivery, op protocol.KeyPageOperation) error {
+func (UpdateKeyPage) checkOperation(st *StateManager, tx *Delivery, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
+	case *protocol.SetRejectThresholdKeyPageOperation,
+		*protocol.SetResponseThresholdKeyPageOperation:
+		// No validation required
+		return nil
+
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
 			return errors.BadRequest.With("cannot add an empty entry")
@@ -249,6 +254,12 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		if page.AcceptThreshold > uint64(len(page.Keys)) {
 			page.AcceptThreshold = uint64(len(page.Keys))
 		}
+		if page.RejectThreshold > uint64(len(page.Keys)) {
+			page.RejectThreshold = uint64(len(page.Keys))
+		}
+		if page.ResponseThreshold > uint64(len(page.Keys)) {
+			page.ResponseThreshold = uint64(len(page.Keys))
+		}
 		return nil
 
 	case *protocol.UpdateKeyOperation:
@@ -256,6 +267,22 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)
+
+	case *protocol.SetRejectThresholdKeyPageOperation:
+		if op.Threshold >= uint64(len(page.Keys)) {
+			return fmt.Errorf("cannot require %d rejections on a key page with %d keys", op.Threshold, len(page.Keys))
+		}
+
+		page.RejectThreshold = op.Threshold
+		return nil
+
+	case *protocol.SetResponseThresholdKeyPageOperation:
+		if op.Threshold >= uint64(len(page.Keys)) {
+			return fmt.Errorf("cannot require %d responses on a key page with %d keys", op.Threshold, len(page.Keys))
+		}
+
+		page.ResponseThreshold = op.Threshold
+		return nil
 
 	case *protocol.UpdateAllowedKeyPageOperation:
 		if page.TransactionBlacklist == nil {
