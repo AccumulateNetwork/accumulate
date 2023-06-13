@@ -55,7 +55,7 @@ func (UpdateKey) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch
 	return false, errors.Unauthorized.WithFormat("%v is not authorized to sign %v for %v", signer.GetUrl(), transaction.Body.Type(), transaction.Header.Principal)
 }
 
-func (x UpdateKey) AuthorityIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, authority *url.URL) (satisfied, fallback bool, err error) {
+func (x UpdateKey) AuthorityWillVote(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, authority *url.URL) (ready, fallback bool, err error) {
 	// If the authority is a delegate, fallback to the normal logic
 	if !authority.ParentOf(transaction.Header.Principal) {
 		return false, true, nil
@@ -86,7 +86,7 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 	// If the initiator is the principal, the transaction is ready once the
 	// book's authority signature is received
 	if pay.Payer.Equal(transaction.Header.Principal) {
-		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, transaction.Header.Principal.Identity())
+		ok, err := delegate.AuthorityDidVote(batch, transaction, transaction.Header.Principal.Identity())
 		return ok, false, err
 	}
 
@@ -101,9 +101,9 @@ func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Bat
 	if !ok {
 		// If the initiator is neither the principal nor a delegate, it is not
 		// authorized
-		return false, false, errors.Unauthorized.WithFormat("initiator %v is not authorized to sign %v for %v", pay.Payer, transaction.Body.Type(), transaction.Header.Principal)
+		return false, false, errors.Unauthorized.WithFormat("%v is not authorized to initiate %v for %v", pay.Payer, transaction.Body.Type(), transaction.Header.Principal)
 	}
-	ok, err = delegate.AuthorityIsSatisfied(batch, transaction, entry.(*protocol.KeySpec).Delegate)
+	ok, err = delegate.AuthorityDidVote(batch, transaction, entry.(*protocol.KeySpec).Delegate)
 	return ok, false, errors.UnknownError.Wrap(err)
 }
 
