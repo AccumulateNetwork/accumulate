@@ -12,14 +12,17 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -65,17 +68,14 @@ func TestStateSaveAndRestore(t *testing.T) {
 	// Send tokens to a lite account
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey(sim.TB.Name(), "Recipient"))
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(name.JoinPath("tokens")).
-			WithSigner(name.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{
+		MustBuild(t, build.Transaction().
+			For(name.JoinPath("tokens")).
+			Body(&SendTokens{
 				To: []*TokenRecipient{
 					{Url: liteUrl, Amount: *big.NewInt(68)},
 				},
 			}).
-			Initiate(SignatureTypeED25519, key).
-			Build(),
+			SignWith(name.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(key)),
 	)...)
 }
 
@@ -84,85 +84,71 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 	liteKey := acctesting.GenerateKey(sim.TB.Name(), "SetupIdentity", name)
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(FaucetUrl).
-			WithBody(&AcmeFaucet{Url: liteUrl}).
-			Faucet(),
+		MustBuild(sim.TB, build.Transaction().
+			For(FaucetUrl).
+			Body(&AcmeFaucet{Url: liteUrl}).
+			SignWith(protocol.FaucetUrl).
+			Version(1).Timestamp(time.Now().UnixNano()).Signer(protocol.Faucet.Signer())),
 	)...)
 
 	// Add credits to the lite account
 	const liteCreditAmount = 1 * AcmePrecision
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
-			WithSigner(liteUrl, 1).
-			WithTimestampVar(timestamp).
-			WithBody(&AddCredits{
+		MustBuild(sim.TB, build.Transaction().
+			For(liteUrl).
+			Body(&AddCredits{
 				Recipient: liteUrl,
 				Amount:    *big.NewInt(liteCreditAmount),
 				Oracle:    InitialAcmeOracleValue,
 			}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+			SignWith(liteUrl).Version(1).Timestamp(timestamp).PrivateKey(liteKey)),
 	)...)
 
 	// Create the ADI
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
-			WithSigner(liteUrl, 1).
-			WithTimestampVar(timestamp).
-			WithBody(&CreateIdentity{
+		MustBuild(sim.TB, build.Transaction().
+			For(liteUrl).
+			Body(&CreateIdentity{
 				Url:        name,
 				KeyBookUrl: name.JoinPath("book"),
 				KeyHash:    doSha256(key[32:]),
 			}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+			SignWith(liteUrl).Version(1).Timestamp(timestamp).PrivateKey(liteKey)),
 	)...)
 
 	// Add credits to the key page
 	const tokenAccountAmount = 5 * AcmePrecision
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
-			WithSigner(liteUrl, 1).
-			WithTimestampVar(timestamp).
-			WithBody(&AddCredits{
+		MustBuild(sim.TB, build.Transaction().
+			For(liteUrl).
+			Body(&AddCredits{
 				Recipient: name.JoinPath("book", "1"),
 				Amount:    *big.NewInt(AcmePrecision*AcmeFaucetAmount - liteCreditAmount - tokenAccountAmount),
 				Oracle:    InitialAcmeOracleValue,
 			}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+			SignWith(liteUrl).Version(1).Timestamp(timestamp).PrivateKey(liteKey)),
 	)...)
 
 	// Create a token account
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(name).
-			WithSigner(name.JoinPath("book", "1"), 1).
-			WithTimestampVar(timestamp).
-			WithBody(&CreateTokenAccount{
+		MustBuild(sim.TB, build.Transaction().
+			For(name).
+			Body(&CreateTokenAccount{
 				Url:      name.JoinPath("tokens"),
 				TokenUrl: AcmeUrl(),
 			}).
-			Initiate(SignatureTypeED25519, key).
-			Build(),
+			SignWith(name.JoinPath("book", "1")).Version(1).Timestamp(timestamp).PrivateKey(key)),
 	)...)
 
 	// Send tokens to the ADI token account
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
-			WithSigner(liteUrl, 1).
-			WithTimestampVar(timestamp).
-			WithBody(&SendTokens{
+		MustBuild(sim.TB, build.Transaction().
+			For(liteUrl).
+			Body(&SendTokens{
 				To: []*TokenRecipient{
 					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount)},
 				},
 			}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+			SignWith(liteUrl).Version(1).Timestamp(timestamp).PrivateKey(liteKey)),
 	)...)
 }

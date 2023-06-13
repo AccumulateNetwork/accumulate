@@ -22,10 +22,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	randpkg "golang.org/x/exp/rand"
@@ -67,14 +69,18 @@ func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*
 		body := new(protocol.AcmeFaucet)
 		body.Url = senderUrl
 
-		send(acctesting.NewTransaction().
-			WithPrincipal(protocol.FaucetUrl.RootIdentity()).
-			WithBody(body).
-			Faucet())
+		send(
+			MustBuild(n.T(), build.Transaction().
+				For(protocol.FaucetUrl.RootIdentity()).
+				Body(body).
+				SignWith(protocol.FaucetUrl).Version(1).Timestamp(time.Now().
+
+				//acme to credits @ $0.05 acme price is 1:5
+				UnixNano()).Signer(protocol.Faucet.Signer())))
 	})
 
 	n.Update(func(batch *database.Batch) {
-		//acme to credits @ $0.05 acme price is 1:5
+
 		liteTokenId := senderUrl.RootIdentity()
 		n.Require().NoError(acctesting.AddCredits(batch, liteTokenId, credits))
 	})
@@ -88,10 +94,12 @@ func testLiteTx(n *simulator.FakeNode, N, M int, credits float64) (string, map[*
 
 				exch := new(protocol.SendTokens)
 				exch.AddRecipient(recipient, big.NewInt(int64(1000)))
-				send(newTxn(senderUrl.String()).
-					WithBody(exch).
-					Initiate(protocol.SignatureTypeLegacyED25519, sender).
-					Build())
+				send(
+					MustBuild(n.T(), build.Transaction().
+						For(mustParseOrigin(senderUrl.String())).
+						Body(exch).
+						SignWith(mustParseOrigin(senderUrl.String())).Version(1).Timestamp(&globalNonce).PrivateKey(sender).Type(protocol.SignatureTypeLegacyED25519)),
+				)
 			}
 		})
 	}
@@ -108,12 +116,11 @@ func TestFaucet(t *testing.T) {
 		body := new(protocol.AcmeFaucet)
 		body.Url = aliceUrl
 
-		faucet := protocol.Faucet.Signer()
-		send(acctesting.NewTransaction().
-			WithPrincipal(protocol.FaucetUrl).
-			WithTimestamp(faucet.Timestamp()).
-			WithBody(body).
-			Faucet())
+		send(
+			MustBuild(t, build.Transaction().
+				For(protocol.FaucetUrl).
+				Body(body).
+				SignWith(protocol.FaucetUrl).Version(1).Timestamp(time.Now().UnixNano()).Signer(protocol.Faucet.Signer())))
 	})
 
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
@@ -138,10 +145,12 @@ func TestAnchorChain(t *testing.T) {
 		adi.KeyHash = keyHash[:]
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).RootIdentity().String()
-		send(newTxn(sponsorUrl).
-			WithBody(adi).
-			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(sponsorUrl)).
+				Body(adi).
+				SignWith(mustParseOrigin(sponsorUrl)).Version(1).Timestamp(&globalNonce).PrivateKey(liteAccount).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	// Sanity check
@@ -202,10 +211,12 @@ func TestCreateADI(t *testing.T) {
 		require.NoError(t, err)
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).RootIdentity().String()
-		send(newTxn(sponsorUrl).
-			WithBody(adi).
-			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(sponsorUrl)).
+				Body(adi).
+				SignWith(mustParseOrigin(sponsorUrl)).Version(1).Timestamp(&globalNonce).PrivateKey(liteAccount).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	r := n.GetADI("RoadRunner")
@@ -240,10 +251,12 @@ func TestAdiUrlLengthLimit(t *testing.T) {
 		require.NoError(t, err)
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).RootIdentity().String()
-		send(newTxn(sponsorUrl).
-			WithBody(adi).
-			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(sponsorUrl)).
+				Body(adi).
+				SignWith(mustParseOrigin(sponsorUrl)).Version(1).Timestamp(&globalNonce).PrivateKey(liteAccount).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	res := n.QueryTx(txn[0][:], time.Second, true)
@@ -269,10 +282,12 @@ func TestCreateADIWithoutKeybook(t *testing.T) {
 		adi.KeyHash = keyHash[:]
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
-		send(newTxn(sponsorUrl).
-			WithBody(adi).
-			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(sponsorUrl)).
+				Body(adi).
+				SignWith(mustParseOrigin(sponsorUrl)).Version(1).Timestamp(&globalNonce).PrivateKey(liteAccount).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 	require.Error(t, err)
 }
@@ -305,11 +320,12 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		wdt := new(protocol.WriteDataTo)
 		wdt.Recipient = liteDataAddress
 		wdt.Entry = &firstEntry
-		send(newTxn("FooBar").
-			WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-			WithBody(wdt).
-			Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("FooBar")).
+				Body(wdt).
+				SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	partialChainId, err := protocol.ParseLiteDataAddress(liteDataAddress)
@@ -363,11 +379,12 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "oof")
-			send(newTxn("FooBar").
-				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-				WithBody(tac).
-				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("FooBar")).
+					Body(tac).
+					SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519)),
+			)
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
@@ -397,15 +414,14 @@ func TestCreateAdiDataAccount(t *testing.T) {
 				protocol.AccountUrl("FooBar", "foo", "book1"),
 				protocol.AccountUrl("FooBar", "mgr", "book1"),
 			}
-			send(newTxn("FooBar").
-				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-				WithBody(cda).
-				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				WithSigner(protocol.AccountUrl("FooBar", "foo", "book1", "1"), 1).
-				Sign(protocol.SignatureTypeED25519, pageKey).
-				WithSigner(protocol.AccountUrl("FooBar", "mgr", "book1", "2"), 1).
-				Sign(protocol.SignatureTypeED25519, pageKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("FooBar")).
+					Body(cda).
+					SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519).
+					SignWith(protocol.AccountUrl("FooBar", "foo", "book1", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(pageKey).Type(protocol.SignatureTypeED25519).
+					SignWith(protocol.AccountUrl("FooBar", "mgr", "book1", "2")).Version(1).Timestamp(&globalNonce).PrivateKey(pageKey).Type(protocol.SignatureTypeED25519)),
+			)
 		})
 
 		u := protocol.AccountUrl("FooBar", "foo", "book1")
@@ -428,11 +444,12 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "oof")
-			send(newTxn("FooBar").
-				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-				WithBody(tac).
-				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("FooBar")).
+					Body(tac).
+					SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519)),
+			)
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
@@ -448,11 +465,12 @@ func TestCreateAdiDataAccount(t *testing.T) {
 				entry.Data = append(entry.Data, []byte(fmt.Sprintf("test id %d", i)))
 			}
 
-			send(newTxn("FooBar/oof").
-				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-				WithBody(wd).
-				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("FooBar/oof")).
+					Body(wd).
+					SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519)),
+			)
 		})
 
 		// Test getting the data by URL
@@ -486,11 +504,12 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "scr")
-			send(newTxn("FooBar").
-				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-				WithBody(tac).
-				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("FooBar")).
+					Body(tac).
+					SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519)),
+			)
 		})
 
 		r := n.GetDataAccount("FooBar/scr")
@@ -507,11 +526,12 @@ func TestCreateAdiDataAccount(t *testing.T) {
 				entry.Data = append(entry.Data, []byte(fmt.Sprintf("test id %d", i)))
 			}
 
-			send(newTxn("FooBar/scr").
-				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-				WithBody(wd).
-				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("FooBar/scr")).
+					Body(wd).
+					SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519)),
+			)
 		})
 
 		// Test getting the data by URL
@@ -548,11 +568,12 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = protocol.AccountUrl("FooBar", "Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
-			send(newTxn("FooBar").
-				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-				WithBody(tac).
-				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("FooBar")).
+					Body(tac).
+					SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519)),
+			)
 		})
 
 		r := n.GetTokenAccount("FooBar/Baz")
@@ -581,13 +602,13 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac.Url = protocol.AccountUrl("FooBar", "Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
 			tac.Authorities = []*url.URL{protocol.AccountUrl("FooBar", "book1")}
-			send(newTxn("FooBar").
-				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
-				WithBody(tac).
-				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				WithSigner(protocol.AccountUrl("FooBar", "book1", "1"), 1).
-				Sign(protocol.SignatureTypeED25519, pageKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("FooBar")).
+					Body(tac).
+					SignWith(protocol.AccountUrl("FooBar", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(adiKey).Type(protocol.SignatureTypeLegacyED25519).
+					SignWith(protocol.AccountUrl("FooBar", "book1", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(pageKey).Type(protocol.SignatureTypeED25519)),
+			)
 		})
 	})
 
@@ -605,13 +626,13 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac.Url = protocol.AccountUrl("alice", "tokens")
 			tac.TokenUrl = protocol.AcmeUrl()
 			tac.Authorities = []*url.URL{protocol.AccountUrl("bob", "book0")}
-			send(newTxn("alice").
-				WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
-				WithBody(tac).
-				Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
-				WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).
-				Sign(protocol.SignatureTypeED25519, bobKey).
-				Build())
+			send(
+				MustBuild(t, build.Transaction().
+					For(mustParseOrigin("alice")).
+					Body(tac).
+					SignWith(protocol.AccountUrl("alice", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(aliceKey).Type(protocol.SignatureTypeLegacyED25519).
+					SignWith(protocol.AccountUrl("bob", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(bobKey).Type(protocol.SignatureTypeED25519)),
+			)
 		})
 
 		// Wait for the remote signature to settle
@@ -643,11 +664,12 @@ func TestLiteAccountTx(t *testing.T) {
 		exch.AddRecipient(bobUrl, big.NewInt(int64(1000)))
 		exch.AddRecipient(charlieUrl, big.NewInt(int64(2000)))
 
-		send(newTxn(aliceUrl.String()).
-			WithSigner(aliceUrl.RootIdentity(), 1).
-			WithBody(exch).
-			Initiate(protocol.SignatureTypeLegacyED25519, alice).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(aliceUrl.String())).
+				Body(exch).
+				SignWith(aliceUrl.RootIdentity()).Version(1).Timestamp(&globalNonce).PrivateKey(alice).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-3000), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
@@ -670,11 +692,12 @@ func TestAdiAccountTx(t *testing.T) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(protocol.AccountUrl("bar", "tokens"), big.NewInt(int64(68)))
 
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(exch).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/tokens")).
+				Body(exch).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	require.Equal(t, int64(protocol.AcmePrecision-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
@@ -696,11 +719,12 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(protocol.AccountUrl("foo"), big.NewInt(int64(1000)))
 
-		send(newTxn(aliceUrl.String()).
-			WithSigner(aliceUrl.RootIdentity(), 1).
-			WithBody(exch).
-			Initiate(protocol.SignatureTypeLegacyED25519, alice).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(aliceUrl.String())).
+				Body(exch).
+				SignWith(aliceUrl.RootIdentity()).Version(1).Timestamp(&globalNonce).PrivateKey(alice).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	// The synthetic transaction should fail
@@ -738,11 +762,12 @@ func TestCreateKeyPage(t *testing.T) {
 			KeyHash: tkh[:],
 		})
 
-		send(newTxn("foo/book0").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(cms).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/book0")).
+				Body(cms).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	page = n.GetKeyPage("foo/book0/2")
@@ -768,11 +793,12 @@ func TestCreateKeyBook(t *testing.T) {
 		csg.Url = protocol.AccountUrl("foo", "book1")
 		csg.PublicKeyHash = testKey.PubKey().Bytes()
 
-		send(newTxn("foo").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(csg).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo")).
+				Body(csg).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	book := n.GetKeyBook("foo/book1")
@@ -800,11 +826,12 @@ func TestAddKeyPage(t *testing.T) {
 			KeyHash: testKey2.PubKey().Bytes(),
 		})
 
-		send(newTxn("foo/book1").
-			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
-			WithBody(cms).
-			Initiate(protocol.SignatureTypeLegacyED25519, testKey1).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/book1")).
+				Body(cms).
+				SignWith(protocol.AccountUrl("foo", "book1", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(testKey1).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	page := n.GetKeyPage("foo/book1/2")
@@ -834,11 +861,12 @@ func TestAddKey(t *testing.T) {
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = append(body.Operation, op)
 
-		send(newTxn("foo/book1/1").
-			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, testKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/book1/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book1", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(testKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	page := n.GetKeyPage("foo/book1/1")
@@ -870,11 +898,12 @@ func TestUpdateKeyPage(t *testing.T) {
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = append(body.Operation, op)
 
-		send(newTxn("foo/book1/1").
-			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, testKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/book1/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book1", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(testKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	page := n.GetKeyPage("foo/book1/1")
@@ -908,11 +937,12 @@ func TestUpdateKey(t *testing.T) {
 		body := new(protocol.UpdateKey)
 		body.NewKeyHash = newKeyHash[:]
 
-		send(newTxn("foo/book1/1").
-			WithBody(body).
-			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
-			Initiate(protocol.SignatureTypeLegacyED25519, testKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/book1/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book1", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(testKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 	r := n.QueryTx(txnHashes[0][:], 0, false)
 	require.False(t, r.Status == errors.Pending, "Transaction is still pending")
@@ -941,11 +971,12 @@ func TestRemoveKey(t *testing.T) {
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = append(body.Operation, op)
 
-		send(newTxn("foo/book1/1").
-			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, testKey1).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/book1/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book1", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(testKey1).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 	h1 := sha256.Sum256(testKey1.PubKey().Bytes())
 	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
@@ -955,11 +986,12 @@ func TestRemoveKey(t *testing.T) {
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = append(body.Operation, op)
 
-		send(newTxn("foo/book1/1").
-			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 2).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, testKey2).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/book1/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book1", "1")).Version(2).Timestamp(&globalNonce).PrivateKey(testKey2).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	page := n.GetKeyPage("foo/book1/1")
@@ -1005,10 +1037,12 @@ func TestSignatorHeight(t *testing.T) {
 		adi.KeyHash = h[:]
 		adi.KeyBookUrl = keyBookUrl
 
-		send(newTxn(liteUrl.RootIdentity().String()).
-			WithBody(adi).
-			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(liteUrl.RootIdentity().String())).
+				Body(adi).
+				SignWith(mustParseOrigin(liteUrl.RootIdentity().String())).Version(1).Timestamp(&globalNonce).PrivateKey(liteKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	n.Update(func(batch *database.Batch) {
@@ -1021,11 +1055,12 @@ func TestSignatorHeight(t *testing.T) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = tokenUrl
 		tac.TokenUrl = protocol.AcmeUrl()
-		send(newTxn("foo").
-			WithSigner(protocol.FormatKeyPageUrl(keyBookUrl, 0), 1).
-			WithBody(tac).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo")).
+				Body(tac).
+				SignWith(protocol.FormatKeyPageUrl(keyBookUrl, 0)).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	require.Equal(t, keyPageHeight, getHeight(keyPageUrl), "Key page height changed")
@@ -1045,11 +1080,12 @@ func TestCreateToken(t *testing.T) {
 		body.Symbol = "FOO"
 		body.Precision = 10
 
-		send(newTxn("foo").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	n.GetTokenIssuer("foo/tokens")
@@ -1075,11 +1111,12 @@ func TestIssueTokens(t *testing.T) {
 		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
 
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/tokens")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	// Verify tokens were received
@@ -1095,11 +1132,12 @@ func TestIssueTokens(t *testing.T) {
 		body.Recipient = n.GetTokenAccount("acc://foo.acme/acmetokens").Url
 		body.Amount.SetUint64(123)
 
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/tokens")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	// Verify tokens were not received
@@ -1136,11 +1174,12 @@ func TestIssueTokensRefund(t *testing.T) {
 		body.Precision = uint64(fooDecimals)
 		body.SupplyLimit = supplyLimit
 
-		send(newTxn("foo").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	//test to make sure supply limit is set
@@ -1153,11 +1192,12 @@ func TestIssueTokensRefund(t *testing.T) {
 		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
 
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/tokens")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 	issuer = n.GetTokenIssuer("foo/tokens")
 	require.Equal(t, int64(123), issuer.Issued.Int64())
@@ -1174,11 +1214,12 @@ func TestIssueTokensRefund(t *testing.T) {
 		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
 
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/tokens")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 	issuer = n.GetTokenIssuer("foo/tokens")
 	require.Equal(t, int64(123), issuer.Issued.Int64())
@@ -1240,11 +1281,12 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body.Precision = uint64(fooDecimals)
 		body.SupplyLimit = supplyLimit
 
-		send(newTxn("foo").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	//test to make sure supply limit is set
@@ -1267,11 +1309,12 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 
 		body.Amount.SetInt64(underLimit)
 
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/tokens")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	account := n.GetLiteTokenAccount(liteAddr.String())
@@ -1289,11 +1332,12 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 
 		body.Amount.SetInt64(atLimit)
 
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/tokens")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	account = n.GetLiteTokenAccount(liteAddr.String())
@@ -1313,11 +1357,12 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 
 		body.Amount.SetInt64(overLimit)
 
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("foo/tokens")).
+				Body(body).
+				SignWith(protocol.AccountUrl("foo", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(fooKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	require.Error(t, err, "expected a failure but instead spending over the supply limit passed")
@@ -1336,11 +1381,12 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body.Amount.SetUint64(100 * protocol.AcmePrecision)
 		body.Oracle = n.GetOraclePrice()
 
-		send(newTxn(liteAcmeAddr.String()).
-			WithSigner(liteId.RootIdentity(), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(liteAcmeAddr.String())).
+				Body(body).
+				SignWith(liteId.RootIdentity()).Version(1).Timestamp(&globalNonce).PrivateKey(liteKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	//now lets burn some tokens to see if they get returned to the supply
@@ -1349,11 +1395,12 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		//burn the underLimit amount to see if that gets returned to the pool
 		body.Amount.SetInt64(underLimit)
 
-		send(newTxn(liteAddr.String()).
-			WithSigner(liteAddr.RootIdentity(), 1).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin(liteAddr.String())).
+				Body(body).
+				SignWith(liteAddr.RootIdentity()).Version(1).Timestamp(&globalNonce).PrivateKey(liteKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 
 	account = n.GetLiteTokenAccount(liteAddr.String())
@@ -1407,89 +1454,6 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	}
 }
 
-// func TestMultisig(t *testing.T) {
-// 	check := newDefaultCheckError(t, true)
-// 	n := simulator.NewFakeNode(t, check.ErrorHandler())
-
-// 	key1, key2 := acctesting.GenerateTmKey(t.Name(), 1), acctesting.GenerateTmKey(t.Name(), 2)
-
-// 	t.Log("Setup")
-// 	n.Update(func(batch *database.Batch) {
-// 		require.NoError(t, acctesting.CreateADI(batch, key1, "foo"))
-// 		require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("foo", "book0", "1"), func(page *protocol.KeyPage) {
-// 			hash := sha256.Sum256(key2[32:])
-// 			page.AcceptThreshold = 2
-// 			page.CreditBalance = 1e8
-// 			page.AddKeySpec(&protocol.KeySpec{
-// 				PublicKeyHash: hash[:],
-// 			})
-// 		}))
-// 	})
-
-// 	t.Log("Initiate the transaction")
-// 	ids := n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
-// 		send(newTxn("foo").
-// 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-// 			WithBody(&protocol.CreateTokenAccount{
-// 				Url:      protocol.AccountUrl("foo", "tokens"),
-// 				TokenUrl: protocol.AcmeUrl(),
-// 			}).
-// 			Initiate(protocol.SignatureTypeED25519, key1.Bytes()).
-// 			Build())
-// 	})
-
-// 	txnResp := n.queryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-// 	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
-// 	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
-
-// 	t.Log("Double signing with key 1 should not complete the transaction")
-// 	sigHashes, _ := n.MustExecute(func(send func(*messaging.Envelope)) {
-// 		send(acctesting.NewTransaction().
-// 			WithTimestampVar(&globalNonce).
-// 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-// 			WithTxnHash(ids[0][:]).
-// 			Sign(protocol.SignatureTypeED25519, key1.Bytes()).
-// 			Build())
-// 	})
-// 	n.MustWaitForTxns(convertIds32(sigHashes...)...)
-
-// 	txnResp = n.queryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-// 	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
-// 	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
-
-// 	t.Log("Signing with key 2 should complete the transaction")
-// 	sigHashes, _ = n.MustExecute(func(send func(*messaging.Envelope)) {
-// 		send(acctesting.NewTransaction().
-// 			WithTimestampVar(&globalNonce).
-// 			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-// 			WithTxnHash(ids[0][:]).
-// 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
-// 			Build())
-// 	})
-// 	n.MustWaitForTxns(convertIds32(sigHashes...)...)
-
-// 	txnResp = n.queryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-// 	require.True(t, txnResp.Status.Delivered(), "Transaction is was not delivered")
-// 	require.False(t, txnResp.Status.Pending(), "Transaction is still pending")
-
-// 	// this should fail, so tell fake tendermint not to give up
-// 	// an error will be displayed on the console, but this is exactly what we expect so don't panic
-// 	check.Disable = true
-// 	t.Run("Signing a complete transaction should fail", func(t *testing.T) {
-// 		t.Skip("No longer an error")
-
-// 		_, _, err := n.Execute(func(send func(*messaging.Envelope)) {
-// 			send(acctesting.NewTransaction().
-// 				WithTimestampVar(&globalNonce).
-// 				WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-// 				WithTxnHash(ids[0][:]).
-// 				Sign(protocol.SignatureTypeED25519, key2.Bytes()).
-// 				Build())
-// 		})
-// 		require.Error(t, err)
-// 	})
-// }
-
 func TestDelegatedKeypageUpdate(t *testing.T) {
 	check := newDefaultCheckError(t, false)
 	n := simulator.NewFakeNode(t, check.ErrorHandler())
@@ -1521,9 +1485,12 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	n.MustExecuteAndWait(func(send func(*messaging.Envelope)) {
 		body := new(protocol.UpdateKey)
 		body.NewKeyHash = newKey1hash[:]
-		send(newTxn("jj/book0/1").WithSigner(protocol.AccountUrl("jj", "book0", "1"), 1).WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, jjkey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("jj/book0/1")).
+				Body(body).
+				SignWith(protocol.AccountUrl("jj", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(jjkey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 	page = n.GetKeyPage("jj/book0/1")
 	//look for the key.
@@ -1540,13 +1507,14 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 
 		body := new(protocol.UpdateKey)
 		body.NewKeyHash = newKey2hash[:]
-		send(newTxn("alice/book0/1").
-			WithBody(body).
-
-			// Sign with Charlie
-			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
-			Initiate(protocol.SignatureTypeED25519, charlieKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("alice/book0/1")).
+				Body(body).
+				SignWith(
+					// Sign with Charlie
+					protocol.AccountUrl("charlie", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(charlieKey).Type(protocol.SignatureTypeED25519)),
+		)
 	})
 
 	page = n.GetKeyPage("alice/book0/1")
@@ -1583,11 +1551,12 @@ func TestDuplicateKeyNewKeypage(t *testing.T) {
 			KeyHash: aliceKeyHash1[:],
 		})
 
-		send(newTxn("alice/book0").
-			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
-			WithBody(cms).
-			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("alice/book0")).
+				Body(cms).
+				SignWith(protocol.AccountUrl("alice", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(aliceKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 	require.NoError(t, err)
 	_ = txns
@@ -1612,11 +1581,12 @@ func TestDuplicateKeyNewKeypage(t *testing.T) {
 			KeyHash: aliceKeyHash[:],
 		})
 
-		send(newTxn("alice/book0").
-			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
-			WithBody(cms).
-			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
-			Build())
+		send(
+			MustBuild(t, build.Transaction().
+				For(mustParseOrigin("alice/book0")).
+				Body(cms).
+				SignWith(protocol.AccountUrl("alice", "book0", "1")).Version(1).Timestamp(&globalNonce).PrivateKey(aliceKey).Type(protocol.SignatureTypeLegacyED25519)),
+		)
 	})
 	require.EqualError(t, err, "duplicate keys: signing keys of a keypage must be unique")
 }

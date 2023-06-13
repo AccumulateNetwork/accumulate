@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -38,17 +40,14 @@ func TestAddCredits_BurnsAcme(t *testing.T) {
 
 	// Execute
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&AddCredits{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&AddCredits{
 				Recipient: alice.JoinPath("book", "1"),
 				Amount:    *big.NewInt(spend * AcmePrecision),
 				Oracle:    oracle,
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Wait a few blocks for everything to settle
@@ -98,17 +97,14 @@ func TestAddCredits_RefundsAcme(t *testing.T) {
 
 	// Execute
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&AddCredits{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&AddCredits{
 				Recipient: AccountUrl("foo"),
 				Amount:    *big.NewInt(spend * AcmePrecision),
 				Oracle:    oracle,
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Wait a few blocks for everything to settle
