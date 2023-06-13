@@ -8,11 +8,14 @@ package block_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -33,12 +36,11 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 
 	// Fund the lite account
-	faucet := protocol.Faucet.Signer()
-	env := acctesting.NewTransaction().
-		WithPrincipal(protocol.FaucetUrl).
-		WithTimestamp(faucet.Timestamp()).
-		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
-		Faucet()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(protocol.FaucetUrl).
+			Body(&protocol.AcmeFaucet{Url: aliceUrl}).
+			SignWith(protocol.FaucetUrl).Version(1).Timestamp(time.Now().UnixNano()).Signer(protocol.Faucet.Signer()))
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 

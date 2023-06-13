@@ -11,9 +11,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestOracleDistribution(t *testing.T) {
@@ -42,18 +43,16 @@ func TestOracleDistribution(t *testing.T) {
 	g.Oracle.Price = uint64(price * AcmeOraclePrecision)
 	oracleEntry := g.FormatOracle()
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(dn.Executor.Describe.NodeUrl(Oracle)).
-			WithTimestampVar(&timestamp).
-			WithSigner(signer.Url, signer.Version).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(dn.Executor.Describe.NodeUrl(Oracle)).
+			Body(&WriteData{
 				Entry:        oracleEntry,
 				WriteToState: true,
 			}).
-			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			Sign(SignatureTypeED25519, bvn0.Executor.Key).
-			// Sign(SignatureTypeED25519, bvn1.Executor.Key).
-			Build(),
+			SignWith(signer.Url).Version(signer.Version).Timestamp(&timestamp).PrivateKey(dn.Executor.Key).
+			SignWith(signer.Url).Version(signer.Version).Timestamp(&timestamp).PrivateKey(bvn0.Executor.Key)),
+	// Sign(SignatureTypeED25519, bvn1.Executor.Key).
+
 	)...)
 
 	// Give it a few blocks for the DN to send its anchor
@@ -97,16 +96,13 @@ func TestRoutingDistribution(t *testing.T) {
 	})
 	entry := g.FormatRouting()
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(dn.Executor.Describe.NodeUrl(Routing)).
-			WithTimestampVar(&timestamp).
-			WithSigner(signer.Url, signer.Version).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(dn.Executor.Describe.NodeUrl(Routing)).
+			Body(&WriteData{
 				Entry:        entry,
 				WriteToState: true,
 			}).
-			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			Build(),
+			SignWith(signer.Url).Version(signer.Version).Timestamp(&timestamp).PrivateKey(dn.Executor.Key)),
 	)...)
 
 	// Give it a few blocks for the DN to send its anchor

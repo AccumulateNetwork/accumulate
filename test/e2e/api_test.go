@@ -15,7 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -39,17 +41,14 @@ func TestMinorBlock_Expand(t *testing.T) {
 
 	// Execute something
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl.RootIdentity()).
-			WithTimestampVar(&timestamp).
-			WithSigner(liteUrl.RootIdentity(), 1).
-			WithBody(&CreateIdentity{
+		MustBuild(t, build.Transaction().
+			For(liteUrl.RootIdentity()).
+			Body(&CreateIdentity{
 				Url:        alice,
 				KeyHash:    keyHash[:],
 				KeyBookUrl: alice.JoinPath("book"),
 			}).
-			Initiate(SignatureTypeLegacyED25519, lite).
-			Build(),
+			SignWith(liteUrl.RootIdentity()).Version(1).Timestamp(&timestamp).PrivateKey(lite).Type(SignatureTypeLegacyED25519)),
 	)...)
 
 	// Call the API

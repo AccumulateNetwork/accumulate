@@ -18,11 +18,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -37,16 +39,15 @@ func sendLotsOfTokens(sim *simulator.Simulator, N, M int, timestamp *uint64, sen
 		var envs []*messaging.Envelope
 
 		for i := 0; i < N; i++ {
-			envs = append(envs, acctesting.NewTransaction().
-				WithPrincipal(sender).
-				WithSigner(sender, 1).
-				WithTimestampVar(timestamp).
-				WithBody(&SendTokens{To: []*TokenRecipient{{
-					Url:    recipients[rand.Intn(len(recipients))],
-					Amount: *big.NewInt(1000),
-				}}}).
-				Initiate(SignatureTypeED25519, senderKey).
-				Build())
+			envs = append(envs,
+				MustBuild(sim.TB, build.Transaction().
+					For(sender).
+					Body(&SendTokens{To: []*TokenRecipient{{
+						Url:    recipients[rand.Intn(len(recipients))],
+						Amount: *big.NewInt(1000),
+					}}}).
+					SignWith(sender).Version(1).Timestamp(timestamp).PrivateKey(senderKey)),
+			)
 		}
 
 		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(envs...)...)

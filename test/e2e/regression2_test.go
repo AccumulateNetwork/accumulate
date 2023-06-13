@@ -201,18 +201,16 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 	}
 
 	// Create the transaction
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice).
-		WithSigner(alice, 1).
-		WithTimestamp(1).
-		WithBody(&SendTokens{
-			To: []*TokenRecipient{{
-				Url:    bob,
-				Amount: *big.NewInt(1),
-			}},
-		}).
-		Initiate(SignatureTypeED25519, aliceKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bob,
+					Amount: *big.NewInt(1),
+				}},
+			}).
+			SignWith(alice).Version(1).Timestamp(1).PrivateKey(aliceKey))
 
 	// Submit the transaction directly to the wrong BVN
 	st, err := sim.SubmitTo(badBvn, env)

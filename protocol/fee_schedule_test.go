@@ -10,34 +10,36 @@ import (
 	"math/big"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestFee(t *testing.T) {
 	s := new(FeeSchedule)
 	t.Run("SendTokens", func(t *testing.T) {
-		env := acctesting.NewTransaction().
-			WithCurrentTimestamp().
-			WithPrincipal(AcmeUrl()).
-			WithSigner(AccountUrl("foo", "book", "1"), 1).
-			WithCurrentTimestamp().
-			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
-			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				Body(&SendTokens{To: []*TokenRecipient{{}}}).
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
 		require.Equal(t, FeeTransferTokens, fee)
 	})
 
 	t.Run("Lots of data", func(t *testing.T) {
-		env := acctesting.NewTransaction().
-			WithPrincipal(AcmeUrl()).
-			WithSigner(AccountUrl("foo", "book", "1"), 1).
-			WithCurrentTimestamp().
-			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
-			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				Body(&SendTokens{To: []*TokenRecipient{{}}}).
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
@@ -45,12 +47,12 @@ func TestFee(t *testing.T) {
 	})
 
 	t.Run("Scratch data", func(t *testing.T) {
-		env := acctesting.NewTransaction().
-			WithPrincipal(AcmeUrl()).
-			WithSigner(AccountUrl("foo", "book", "1"), 1).
-			WithCurrentTimestamp().
-			WithBody(&WriteData{Scratch: true}).
-			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				Body(&WriteData{Scratch: true}).
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
@@ -118,13 +120,12 @@ func TestSubAdiFee(t *testing.T) {
 		FeeCreateIdentity << 1,
 	}
 
-	env := acctesting.NewTransaction().
-		WithCurrentTimestamp().
-		WithPrincipal(AcmeUrl()).
-		WithSigner(AccountUrl("foo", "book", "1"), 1).
-		WithCurrentTimestamp().
-		WithBody(&CreateIdentity{Url: AccountUrl("foo.acme", "sub")}).
-		Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+	env :=
+		MustBuild(t, build.Transaction().
+			For(AcmeUrl()).
+			Body(&CreateIdentity{Url: AccountUrl("foo.acme", "sub")}).
+			SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
 	fee, err := s.ComputeTransactionFee(env.Transaction[0])
 	require.NoError(t, err)
 
@@ -149,13 +150,12 @@ func TestSlidingIdentityFeeSchedule(t *testing.T) {
 	}
 
 	for i := 0; i <= len(s.CreateIdentitySliding); i++ {
-		env := acctesting.NewTransaction().
-			WithCurrentTimestamp().
-			WithPrincipal(AcmeUrl()).
-			WithSigner(AccountUrl("foo", "book", "1"), 1).
-			WithCurrentTimestamp().
-			WithBody(&CreateIdentity{Url: AccountUrl(strings.Repeat("a", i+1))}).
-			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				Body(&CreateIdentity{Url: AccountUrl(strings.Repeat("a", i+1))}).
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
 
