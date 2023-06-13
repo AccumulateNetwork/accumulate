@@ -12,9 +12,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -39,16 +41,14 @@ func TestIssueTokens_Good(t *testing.T) {
 
 	// Execute
 	st := sim.H.SubmitSuccessfully(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&IssueTokens{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&IssueTokens{
 				Recipient: lite,
 				Amount:    *big.NewInt(123),
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build())
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
+	)
 	sim.H.StepUntil(
 		Txn(st[0].TxID).Completes(),
 		Sig(st[1].TxID).SingleCompletes())
@@ -75,16 +75,13 @@ func TestIssueTokens_Bad(t *testing.T) {
 
 	// Execute
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&IssueTokens{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&IssueTokens{
 				Recipient: lite,
 				Amount:    *big.NewInt(123),
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// All issued tokens should be returned
@@ -112,18 +109,16 @@ func TestIssueTokens_Multi(t *testing.T) {
 
 	// Execute
 	st := sim.H.SubmitSuccessfully(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&IssueTokens{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&IssueTokens{
 				To: []*TokenRecipient{
 					{Url: lite1, Amount: *big.NewInt(123)},
 					{Url: lite2, Amount: *big.NewInt(456)},
 				},
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build())
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
+	)
 	sim.H.StepUntil(
 		Txn(st[0].TxID).Completes(),
 		Sig(st[1].TxID).SingleCompletes())

@@ -14,7 +14,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -89,16 +91,13 @@ func TestBlockLedger(t *testing.T) {
 
 	// Do something
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestamp(1).
-			WithBody(&protocol.CreateTokenAccount{
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&protocol.CreateTokenAccount{
 				Url:      alice.JoinPath("tokens"),
 				TokenUrl: protocol.AcmeUrl(),
 			}).
-			Initiate(protocol.SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519)),
 	)...)
 
 	// Check the block ledger
