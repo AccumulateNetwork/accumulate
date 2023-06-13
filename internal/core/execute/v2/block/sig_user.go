@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -170,23 +169,10 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Verify that the signer is authorized
-	val, ok := getValidator[chain.SignerValidator](ctx.Executor, ctx.transaction.Body.Type())
-	var fallback bool
-	if ok {
-		var md chain.SignatureValidationMetadata
-		md.Location = signerUrl
-		md.Delegated = ctx.signature.Type() == protocol.SignatureTypeDelegated
-		fallback, err = val.SignerIsAuthorized(ctx, batch, ctx.transaction, ctx.signer, md)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-	if !ok || fallback {
-		err = ctx.SignerIsAuthorized(batch, ctx.transaction, ctx.signer, false)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
+	// Verify the signer is allowed to sign
+	err = ctx.signerCanSignTransaction(batch, ctx.transaction, ctx.signer)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Check the signer version
@@ -195,6 +181,7 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 	}
 
 	// Find the key entry
+	var ok bool
 	ctx.keyIndex, ctx.keyEntry, ok = ctx.signer.EntryByKeyHash(ctx.keySig.GetPublicKeyHash())
 	if !ok {
 		return errors.Unauthorized.With("key does not belong to signer")
@@ -425,7 +412,7 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 		msg.Authority = auth
 		msg.Cause = ctx.message.ID()
 		msg.TxID = ctx.transaction.ID()
-		err = ctx.didProduce(batch, msg.Authority, msg)
+		err := ctx.didProduce(batch, msg.Authority, msg)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}

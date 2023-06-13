@@ -392,8 +392,8 @@ func (s *ValidationTestSuite) TestMain() {
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
 			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))[1]
-
-	s.EqualError(st.AsError(), "acc://test.acme/book/2 cannot modify its own allowed operations")
+	_ = s.ErrorIs(st.AsError(), errors.Unauthorized) &&
+		s.EqualError(st.AsError(), "acc://test.acme/book/2 cannot modify its own allowed operations")
 
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
@@ -413,7 +413,7 @@ func (s *ValidationTestSuite) TestMain() {
 			UpdateKeyPage().Add().Entry().Key(key31, SignatureTypeED25519).FinishEntry().FinishOperation().
 			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))[1]
 
-	s.EqualError(st.AsError(), "page acc://test.acme/book/2 is not authorized to sign updateKeyPage")
+	s.EqualError(st.AsError(), "acc://test.acme/book/2 is not authorized to sign updateKeyPage")
 
 	s.Len(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "3")).Keys, 1)
 

@@ -49,13 +49,19 @@ type TransactionExecutor interface {
 	Execute(*StateManager, *Delivery) (protocol.TransactionResult, error)
 }
 
+// SignerCanSignValidator validates that a signer is authorized to sign a
+// transaction (e.g a key page's black list).
+type SignerCanSignValidator interface {
+	SignerCanSign(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error)
+}
+
 // SignerValidator validates signatures for a specific type of transaction.
 type SignerValidator interface {
 	TransactionExecutor
 
-	// SignerIsAuthorized checks if the signature is authorized for the
+	// AuthorityIsAccepted checks if the authority signature is accepted for the
 	// transaction.
-	SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error)
+	AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error)
 
 	// TransactionIsReady checks if the transaction is ready to be executed.
 	TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error)
@@ -92,9 +98,9 @@ type AuthDelegate interface {
 	// initiator signature has been processed.
 	TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error)
 
-	// SignerIsAuthorized verifies the signer is authorized to sign a given
-	// transaction.
-	SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) error
+	// SignerCanSign returns an error if the signer is not authorized to sign
+	// the transaction (e.g. a key page's transaction blacklist).
+	SignerCanSign(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error
 
 	// AuthorityDidVote verifies the authority is ready to send an authority
 	// signature. For most transactions, this succeeds if at least one of the

@@ -48,8 +48,8 @@ func (*MessageContext) TransactionIsInitiated(batch *database.Batch, transaction
 	return transactionIsInitiated(batch, transaction)
 }
 
-func (*MessageContext) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) error {
-	return signerIsAuthorized(batch, transaction, signer, checkAuthz)
+func (*MessageContext) SignerCanSign(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
+	return baseSignerCanSignTransaction(transaction, signer)
 }
 
 // childWith constructs a child message context for the given message.
