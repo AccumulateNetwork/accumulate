@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"context"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -204,4 +206,95 @@ func TestMultiAuthority(t *testing.T) {
 	sim.StepUntil(
 		Txn(st[0].TxID).Succeeds(),
 		Sig(st[1].TxID).Completes())
+}
+
+func TestBadAuthDisabledLogicV1(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	g := &network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries}
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	tokens := new(TokenAccount)
+	tokens.Url = alice.JoinPath("tokens")
+	tokens.TokenUrl = AcmeUrl()
+	tokens.Balance = *big.NewInt(1e12)
+
+	// Two authorities, one  of which is disabled
+	tokens.AddAuthority(alice.JoinPath("book"))
+	auth, _ := tokens.AddAuthority(alice.JoinPath("book2"))
+	auth.Disabled = true
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+	MakeAccount(t, sim.DatabaseFor(alice), tokens)
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e12)
+
+	// Attempt to sign with Bob, who is not a valid signer
+	st := sim.BuildAndSubmitTxn(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
+
+	// Because of the bug, the signature is accepted though the actual authority
+	// is still required
+	sim.StepUntil(
+		Txn(st.TxID).IsPending())
+}
+
+func TestBadAuthDisabledLogicV2(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	g := &network.GlobalValues{ExecutorVersion: ExecutorVersionLatest}
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	tokens := new(TokenAccount)
+	tokens.Url = alice.JoinPath("tokens")
+	tokens.TokenUrl = AcmeUrl()
+	tokens.Balance = *big.NewInt(1e12)
+
+	// Two authorities, one  of which is disabled
+	tokens.AddAuthority(alice.JoinPath("book"))
+	auth, _ := tokens.AddAuthority(alice.JoinPath("book2"))
+	auth.Disabled = true
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+	MakeAccount(t, sim.DatabaseFor(alice), tokens)
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e12)
+
+	// Attempt to sign with Bob, who is not a valid signer
+	st := sim.BuildAndSubmit(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
+
+	// The signature is accepted since the authorization check occurs on the
+	// authority signature, not the user signature
+	require.NoError(t, st[0].AsError())
+
+	// But the authority signature is rejected
+	sim.StepUntil(
+		Sig(st[1].TxID).AuthoritySignature().Fails().
+			WithError(errors.Unauthorized).
+			WithMessage("acc://bob.acme/book/1 is not authorized to sign transactions for acc://alice.acme/tokens"))
 }
