@@ -25,7 +25,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -181,9 +180,7 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 }
 
 func TestFaucetMultiNetwork(t *testing.T) {
-	if !protocol.IsTestNet {
-		t.Skip("Not a testnet")
-	}
+	t.Skip("This test is not relevant to the faucet-as-a-service model")
 
 	// Initialize v1 (v2 does not support the faucet)
 	sim := simulator.New(t, 3)
