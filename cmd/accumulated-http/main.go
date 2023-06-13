@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
 	"github.com/rs/zerolog"
@@ -75,6 +76,7 @@ func init() {
 	cmd.Flags().StringSliceVar(&flag.LetsEncrypt, "lets-encrypt", nil, "Enable HTTPS on 443 and use Let's Encrypt to retrieve a certificate. Use of this feature implies acceptance of the LetsEncrypt Terms of Service.")
 	cmd.Flags().StringVar(&flag.TlsCert, "tls-cert", "", "Certificate used for HTTPS")
 	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
+	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
 
 	_ = cmd.MarkFlagRequired("peer")
 }
