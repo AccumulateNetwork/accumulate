@@ -98,11 +98,19 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 		return errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
-	// The initiator must have a timestamp
 	ctx.isInitiator = protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil)
 	if ctx.isInitiator {
+		// The initiator must have a timestamp
 		if ctx.keySig.GetTimestamp() == 0 {
 			return errors.BadTimestamp.WithFormat("initial signature does not have a timestamp")
+		}
+
+		// The initiator must accept the transaction. The Merkle style of
+		// initiator hash does not incorporate the vote type so accepting
+		// non-accept votes is potentially problematic. Also, is there any
+		// reason to initiate and reject or abstain?
+		if ctx.keySig.GetVote() != protocol.VoteTypeAccept {
+			return errors.BadRequest.WithFormat("initial signature cannot be a %v vote", ctx.keySig.GetVote())
 		}
 	}
 
