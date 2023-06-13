@@ -33,6 +33,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -116,12 +117,17 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 			dnn.P2P.AddrBookStrict = strict
 			bvnn.P2P.AddrBookStrict = strict
 
-			p2pPeers := network.Peers(node).AccumulateP2P().WithKey().
-				Do(AddressBuilder.Directory, AddressBuilder.BlockValidator).
-				Do(func(b AddressBuilder) AddressBuilder { return b.Scheme("tcp") }, func(b AddressBuilder) AddressBuilder { return b.Scheme("udp") }).
-				Multiaddr()
-			dnn.Accumulate.P2P.BootstrapPeers = p2pPeers
-			bvnn.Accumulate.P2P.BootstrapPeers = p2pPeers
+			dnn.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
+			bvnn.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
+
+			if network.Id == "DevNet" {
+				p2pPeers := network.Peers(node).AccumulateP2P().WithKey().
+					Do(AddressBuilder.Directory, AddressBuilder.BlockValidator).
+					Do(func(b AddressBuilder) AddressBuilder { return b.Scheme("tcp") }, func(b AddressBuilder) AddressBuilder { return b.Scheme("udp") }).
+					Multiaddr()
+				dnn.Accumulate.P2P.BootstrapPeers = p2pPeers
+				bvnn.Accumulate.P2P.BootstrapPeers = p2pPeers
+			}
 
 			bvnConfigs = append(bvnConfigs, []*config.Config{dnn, bvnn})
 		}
