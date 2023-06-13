@@ -8,7 +8,6 @@ package block
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -117,7 +116,7 @@ func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureC
 	}
 
 	// Verify the signer is authorized to sign for the principal
-	err = x.signerIsAuthorized(batch, ctx, sig)
+	err = ctx.signerIsAuthorized(batch, sig)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -151,8 +150,8 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		return errors.BadRequest.WithFormat("%v is not a delegate of %v", sig.Authority, sig.Delegator[0])
 	}
 
-	// Verify that the delegator can sign this transaction
-	err = x.signerCanSign(batch, ctx, sig, signer)
+	// Verify the delegator is allowed to sign this type of transaction
+	err = ctx.signerCanSignTransaction(batch, ctx.transaction, signer)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -202,91 +201,4 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 			TxID:      ctx.transaction.ID(),
 		},
 	)
-}
-
-func (AuthoritySignature) signerCanSign(batch *database.Batch, ctx *SignatureContext, sig *protocol.AuthoritySignature, signer protocol.Signer) error {
-	var md chain.SignatureValidationMetadata
-	md.Location = sig.Delegator[0]
-	md.Delegated = true
-	md.Forwarded = true
-
-	// Delegate to the transaction executor?
-	val, ok := getValidator[chain.SignerValidator](ctx.Executor, ctx.transaction.Body.Type())
-	if ok {
-		fallback, err := val.SignerIsAuthorized(ctx, batch, ctx.transaction, signer, md)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		if !fallback {
-			return nil
-		}
-	}
-
-	// Verify the signer is allowed to sign this transaction
-	switch signer := signer.(type) {
-	case *protocol.LiteIdentity:
-		// Otherwise a lite token account is only allowed to sign for itself
-		if !signer.Url.Equal(ctx.transaction.Header.Principal.RootIdentity()) {
-			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.Url, ctx.transaction.Header.Principal)
-		}
-
-	case *protocol.KeyPage:
-		// Verify that the key page is allowed to sign the transaction
-		bit, ok := ctx.transaction.Body.Type().AllowedTransactionBit()
-		if ok && signer.TransactionBlacklist.IsSet(bit) {
-			return errors.Unauthorized.WithFormat("page %s is not authorized to sign %v", signer.Url, ctx.transaction.Body.Type())
-		}
-
-	default:
-		// This should never happen
-		return errors.InternalError.WithFormat("unknown signer type %v", signer.Type())
-	}
-
-	return nil
-}
-
-func (AuthoritySignature) signerIsAuthorized(batch *database.Batch, ctx *SignatureContext, sig *protocol.AuthoritySignature) error {
-	var md chain.SignatureValidationMetadata
-	md.Location = sig.TxID.Account()
-	md.Delegated = len(sig.Delegator) > 0
-	md.Forwarded = true
-
-	// Delegate to the transaction executor?
-	val, ok := getValidator[chain.SignerValidator](ctx.Executor, ctx.transaction.Body.Type())
-	if ok {
-		fallback, err := val.SignerIsAuthorized(ctx, batch, ctx.transaction, &protocol.UnknownSigner{Url: sig.Origin}, md)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		if !fallback {
-			return nil
-		}
-	}
-
-	// Load the principal
-	principal, err := batch.Account(ctx.transaction.Header.Principal).Main().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load principal: %w", err)
-	}
-
-	// Get the principal's account auth
-	auth, err := ctx.GetAccountAuthoritySet(batch, principal)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Page belongs to book => authorized
-	_, foundAuthority := auth.GetAuthority(sig.Authority)
-	if foundAuthority {
-		return nil
-	}
-
-	// Authorization is disabled and the transaction type does not force authorization => authorized
-	if auth.AuthDisabled() && !ctx.transaction.Body.Type().RequireAuthorization() {
-		return nil
-	}
-
-	// Authorization is enabled => unauthorized
-	// Transaction type forces authorization => unauthorized
-	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", sig.Origin, principal.GetUrl())
 }
