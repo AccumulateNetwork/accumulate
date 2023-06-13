@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -26,6 +27,20 @@ func MustBuild(t testing.TB, b interface {
 	env, err := b.Done()
 	require.NoError(t, err)
 	return env
+}
+
+func MustBuildDeliveryV1(t testing.TB, b interface {
+	Done() (*messaging.Envelope, error)
+}) *chain.Delivery {
+	t.Helper()
+	env, err := b.Done()
+	require.NoError(t, err)
+	msg, err := env.Normalize()
+	require.NoError(t, err)
+	d, err := chain.DeliveriesFromMessages(msg)
+	require.NoError(t, err)
+	require.Len(t, d, 1)
+	return d[0]
 }
 
 func MustGet0[T any](t testing.TB, fn func() (T, error)) T {

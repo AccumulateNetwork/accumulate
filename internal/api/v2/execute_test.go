@@ -11,13 +11,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -29,10 +32,11 @@ func init() { acctesting.EnableDebugFeatures() }
 func TestExecuteCheckOnly(t *testing.T) {
 	t.Skip("Keeping this test up to date with API changes is not worth the effort")
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(protocol.FaucetUrl).
-		WithBody(&protocol.AcmeFaucet{}).
-		Faucet()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(protocol.FaucetUrl).
+			Body(&protocol.AcmeFaucet{}).
+			SignWith(protocol.FaucetUrl).Version(1).Timestamp(time.Now().UnixNano()).Signer(protocol.Faucet.Signer()))
 
 	data, err := env.MarshalBinary()
 	require.NoError(t, err)

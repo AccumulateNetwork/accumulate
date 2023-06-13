@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -20,15 +21,10 @@ func generateKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(key)
 }
 
-func newTxn(origin string) acctesting.TransactionBuilder {
+func mustParseOrigin(origin string) *url.URL {
 	u, err := acctesting.ParseUrl(origin)
 	if err != nil {
 		panic(err)
 	}
-
-	return acctesting.NewTransaction().
-		WithPrincipal(u).
-		WithTimestampVar(&globalNonce).
-		WithSigner(u.RootIdentity(), 1)
-
+	return u
 }
