@@ -61,37 +61,22 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	}
 
 	// Signers belonging to new delegates are authorized to sign the transaction
-	newOwners, err := getNewOwners(batch, transaction)
+	newOwners, err := updateKeyPage_getNewOwners(batch, transaction)
 	if err != nil {
-		return false, errors.UnknownError.Wrap(err)
+		return false, err
 	}
 
-	for _, owner := range newOwners {
-		if owner.Equal(signerBook) {
-			return false, delegate.SignerIsAuthorized(batch, transaction, signer, false)
-		}
-	}
-
-	// Run the normal checks
-	return true, nil
+	return newOwners.SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
 func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	// All new delegates must sign the transaction
-	newOwners, err := getNewOwners(batch, transaction)
+	newOwners, err := updateKeyPage_getNewOwners(batch, transaction)
 	if err != nil {
 		return false, false, errors.UnknownError.Wrap(err)
 	}
 
-	for _, owner := range newOwners {
-		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, owner)
-		if !ok || err != nil {
-			return false, false, err
-		}
-	}
-
-	// Fallback to general authorization
-	return false, true, nil
+	return newOwners.TransactionIsReady(delegate, batch, transaction)
 }
 
 func (x UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -331,7 +316,7 @@ func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (i
 	return i, keySpec, ok
 }
 
-func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*url.URL, error) {
+func updateKeyPage_getNewOwners(batch *database.Batch, transaction *protocol.Transaction) (additionalAuthorities, error) {
 	body, ok := transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
