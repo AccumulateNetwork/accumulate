@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -23,6 +24,38 @@ type SignatureContext struct {
 }
 
 func (s *SignatureContext) Type() protocol.SignatureType { return s.signature.Type() }
+
+// maybeSendAuthoritySignature checks if the authority is ready to send an
+// authority signature. Sending an authority signature also clears the active
+// signature set.
+func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, authSig *protocol.AuthoritySignature) error {
+	ok, err := s.authorityWillVote(batch, authSig.Authority)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if !ok {
+		return nil
+	}
+
+	err = clearActiveSignatures(batch, s, authSig.Authority)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	authSig.Vote = protocol.VoteTypeAccept
+	authSig.TxID = s.transaction.ID()
+	authSig.Cause = s.message.ID()
+
+	err = s.didProduce(
+		batch,
+		authSig.RoutingLocation(),
+		&messaging.SignatureMessage{
+			Signature: authSig,
+			TxID:      s.transaction.ID(),
+		},
+	)
+	return errors.UnknownError.Wrap(err)
+}
 
 // getSigner gets the signature's signer, resolving a LTA to a LID.
 func (s *SignatureContext) getSigner() *url.URL {
