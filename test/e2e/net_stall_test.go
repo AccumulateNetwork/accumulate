@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -44,13 +45,11 @@ func TestDnStall(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	st := sim.SubmitTxnSuccessfully(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestamp(1).
-			WithBody(&SendTokens{To: []*TokenRecipient{{Url: bob.JoinPath("tokens"), Amount: *big.NewInt(123)}}}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build())
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&SendTokens{To: []*TokenRecipient{{Url: bob.JoinPath("tokens"), Amount: *big.NewInt(123)}}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey)),
+	)
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
@@ -82,13 +81,11 @@ func TestDnStall(t *testing.T) {
 
 	// Trigger another block
 	sim.SubmitTxnSuccessfully(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestamp(2).
-			WithBody(&SendTokens{To: []*TokenRecipient{{Url: bob.JoinPath("tokens"), Amount: *big.NewInt(123)}}}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build())
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&SendTokens{To: []*TokenRecipient{{Url: bob.JoinPath("tokens"), Amount: *big.NewInt(123)}}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(2).PrivateKey(aliceKey)),
+	)
 
 	// Run some blocks
 	for i := 0; i < 50; i++ {
