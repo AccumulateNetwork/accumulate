@@ -40,7 +40,7 @@ func (a additionalAuthorities) SignerIsAuthorized(delegate AuthDelegate, batch *
 // TransactionIsReady verifies that each additional authority is satisfied.
 func (a additionalAuthorities) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	for _, authority := range a {
-		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, authority)
+		ok, err := delegate.AuthorityDidVote(batch, transaction, authority)
 		if !ok || err != nil {
 			return false, false, err
 		}
