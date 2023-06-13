@@ -588,6 +588,20 @@ func (b UpdateKeyPageBuilder) SetThreshold(v uint64) UpdateKeyPageBuilder {
 	return b
 }
 
+func (b UpdateKeyPageBuilder) SetRejectThreshold(v uint64) UpdateKeyPageBuilder {
+	op := new(protocol.SetRejectThresholdKeyPageOperation)
+	op.Threshold = v
+	b.body.Operation = append(b.body.Operation, op)
+	return b
+}
+
+func (b UpdateKeyPageBuilder) SetResponseThreshold(v uint64) UpdateKeyPageBuilder {
+	op := new(protocol.SetResponseThresholdKeyPageOperation)
+	op.Threshold = v
+	b.body.Operation = append(b.body.Operation, op)
+	return b
+}
+
 func (b UpdateKeyPageBuilder) UpdateAllowed() UpdateAllowedKeyPageOperationBuilder {
 	return UpdateAllowedKeyPageOperationBuilder{b: b}
 }

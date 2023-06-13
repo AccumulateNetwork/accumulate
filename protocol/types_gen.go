@@ -726,6 +726,18 @@ type SendTokens struct {
 	extraData []byte
 }
 
+type SetRejectThresholdKeyPageOperation struct {
+	fieldsSet []bool
+	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
+	extraData []byte
+}
+
+type SetResponseThresholdKeyPageOperation struct {
+	fieldsSet []bool
+	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
+	extraData []byte
+}
+
 type SetThresholdKeyPageOperation struct {
 	fieldsSet []bool
 	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
@@ -1129,6 +1141,14 @@ func (*RemoveAccountAuthorityOperation) Type() AccountAuthOperationType {
 func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeRemove }
 
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
+
+func (*SetRejectThresholdKeyPageOperation) Type() KeyPageOperationType {
+	return KeyPageOperationTypeSetRejectThreshold
+}
+
+func (*SetResponseThresholdKeyPageOperation) Type() KeyPageOperationType {
+	return KeyPageOperationTypeSetResponseThreshold
+}
 
 func (*SetThresholdKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeSetThreshold
@@ -2671,6 +2691,34 @@ func (v *SendTokens) Copy() *SendTokens {
 }
 
 func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SetRejectThresholdKeyPageOperation) Copy() *SetRejectThresholdKeyPageOperation {
+	u := new(SetRejectThresholdKeyPageOperation)
+
+	u.Threshold = v.Threshold
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SetRejectThresholdKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SetResponseThresholdKeyPageOperation) Copy() *SetResponseThresholdKeyPageOperation {
+	u := new(SetResponseThresholdKeyPageOperation)
+
+	u.Threshold = v.Threshold
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SetResponseThresholdKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SetThresholdKeyPageOperation) Copy() *SetThresholdKeyPageOperation {
 	u := new(SetThresholdKeyPageOperation)
@@ -4877,6 +4925,22 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 		if !((v.To[i]).Equal(u.To[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SetRejectThresholdKeyPageOperation) Equal(u *SetRejectThresholdKeyPageOperation) bool {
+	if !(v.Threshold == u.Threshold) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SetResponseThresholdKeyPageOperation) Equal(u *SetResponseThresholdKeyPageOperation) bool {
+	if !(v.Threshold == u.Threshold) {
+		return false
 	}
 
 	return true
@@ -10347,6 +10411,102 @@ func (v *SendTokens) IsValid() error {
 	}
 }
 
+var fieldNames_SetRejectThresholdKeyPageOperation = []string{
+	1: "Type",
+	2: "Threshold",
+}
+
+func (v *SetRejectThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Threshold == 0) {
+		writer.WriteUint(2, v.Threshold)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SetRejectThresholdKeyPageOperation)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SetRejectThresholdKeyPageOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Threshold is missing")
+	} else if v.Threshold == 0 {
+		errs = append(errs, "field Threshold is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SetResponseThresholdKeyPageOperation = []string{
+	1: "Type",
+	2: "Threshold",
+}
+
+func (v *SetResponseThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Threshold == 0) {
+		writer.WriteUint(2, v.Threshold)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SetResponseThresholdKeyPageOperation)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SetResponseThresholdKeyPageOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Threshold is missing")
+	} else if v.Threshold == 0 {
+		errs = append(errs, "field Threshold is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SetThresholdKeyPageOperation = []string{
 	1: "Type",
 	2: "Threshold",
@@ -15427,6 +15587,76 @@ func (v *SendTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *SetRejectThresholdKeyPageOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SetRejectThresholdKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SetRejectThresholdKeyPageOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.Threshold = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SetRejectThresholdKeyPageOperation)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SetResponseThresholdKeyPageOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SetResponseThresholdKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SetResponseThresholdKeyPageOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.Threshold = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SetResponseThresholdKeyPageOperation)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SetThresholdKeyPageOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -18188,6 +18418,30 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SetRejectThresholdKeyPageOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      KeyPageOperationType `json:"type"`
+		Threshold uint64               `json:"threshold,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Threshold == 0) {
+		u.Threshold = v.Threshold
+	}
+	return json.Marshal(&u)
+}
+
+func (v *SetResponseThresholdKeyPageOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      KeyPageOperationType `json:"type"`
+		Threshold uint64               `json:"threshold,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Threshold == 0) {
+		u.Threshold = v.Threshold
+	}
+	return json.Marshal(&u)
+}
+
 func (v *SetThresholdKeyPageOperation) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      KeyPageOperationType `json:"type"`
@@ -20635,6 +20889,40 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	}
 	v.Meta = u.Meta
 	v.To = u.To
+	return nil
+}
+
+func (v *SetRejectThresholdKeyPageOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      KeyPageOperationType `json:"type"`
+		Threshold uint64               `json:"threshold,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Threshold = v.Threshold
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Threshold = u.Threshold
+	return nil
+}
+
+func (v *SetResponseThresholdKeyPageOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      KeyPageOperationType `json:"type"`
+		Threshold uint64               `json:"threshold,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Threshold = v.Threshold
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Threshold = u.Threshold
 	return nil
 }
 

@@ -39,6 +39,9 @@ Status:
   NotAllowed:
     value: 405
     description: means the requested action could not be performed
+  Rejected:
+    value: 406
+    description: is returned when a transaction is rejected
   Conflict:
     value: 409
     description: means the request failed due to a conflict

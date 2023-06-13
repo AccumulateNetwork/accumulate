@@ -113,6 +113,12 @@ KeyPageOperationType:
   UpdateAllowed:
     value: 5
     description: updates the transactions the key page is allowed to execute
+  SetRejectThreshold:
+    value: 6
+    description: sets the rejection threshold
+  SetResponseThreshold:
+    value: 7
+    description: sets the response threshold
 
 AccountAuthOperationType:
   Unknown:
