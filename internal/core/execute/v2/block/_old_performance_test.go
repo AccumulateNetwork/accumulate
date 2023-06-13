@@ -12,9 +12,11 @@ import (
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 )
 
@@ -70,13 +72,12 @@ func BenchmarkBlock(b *testing.B) {
 				var timestamp uint64
 				envs := make([]*messaging.Envelope, blockSize)
 				for j := range envs {
-					envs[j] = acctesting.NewTransaction().
-						WithPrincipal(alice).
-						WithSigner(alice.JoinPath("book", "1"), 1).
-						WithTimestampVar(&timestamp).
-						WithBody(&protocol.AddCredits{}).
-						Initiate(protocol.SignatureTypeED25519, aliceKey).
-						Build()
+					envs[j] =
+						MustBuild(t, build.Transaction().
+							For(alice).
+							Body(&protocol.AddCredits{}).
+							SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
+
 				}
 
 				b.Run(fmt.Sprintf("%d BVNs, %d txns, %s", bvnCount, blockSize, scname), func(b *testing.B) {
