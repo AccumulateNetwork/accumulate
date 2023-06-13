@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -38,13 +40,11 @@ func TestSyntheticCreateIdentity_MultiSlash(t *testing.T) {
 	cause := [32]byte{1}
 	body.SetCause(cause, protocol.PartitionUrl("X"))
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(protocol.AccountUrl("foo")).
-		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
-		WithTimestamp(1).
-		WithBody(body).
-		Initiate(protocol.SignatureTypeED25519, fooKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(protocol.AccountUrl("foo")).
+			Body(body).
+			SignWith(protocol.FormatKeyPageUrl(book, 0)).Version(1).Timestamp(1).PrivateKey(fooKey).Type(protocol.SignatureTypeED25519))
 
 	st, d := LoadStateManagerForTest(t, db, env)
 	defer st.Discard()
@@ -75,13 +75,11 @@ func TestSyntheticCreateIdentity_MultiSlash_SubADI(t *testing.T) {
 	cause := [32]byte{1}
 	body.SetCause(cause, protocol.PartitionUrl("X"))
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(protocol.AccountUrl("foo")).
-		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
-		WithTimestamp(1).
-		WithBody(body).
-		Initiate(protocol.SignatureTypeED25519, fooKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(protocol.AccountUrl("foo")).
+			Body(body).
+			SignWith(protocol.FormatKeyPageUrl(book, 0)).Version(1).Timestamp(1).PrivateKey(fooKey).Type(protocol.SignatureTypeED25519))
 
 	st, d := LoadStateManagerForTest(t, db, env)
 	defer st.Discard()

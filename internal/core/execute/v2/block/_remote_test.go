@@ -15,7 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -48,90 +50,69 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 
 	// Create the ADIs
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
-			WithSigner(aliceUrl, 1).
-			WithTimestampVar(timestamp).
-			WithBody(&CreateIdentity{
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(&CreateIdentity{
 				Url:        bobUrl,
 				KeyBookUrl: bobUrl.JoinPath("book"),
 				KeyHash:    doSha256(bob[32:]),
 			}).
-			Initiate(SignatureTypeED25519, alice).
-			Build(),
-		acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
-			WithSigner(aliceUrl, 1).
-			WithTimestampVar(timestamp).
-			WithBody(&CreateIdentity{
+			SignWith(aliceUrl).Version(1).Timestamp(timestamp).PrivateKey(alice)),
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(&CreateIdentity{
 				Url:        charlieUrl,
 				KeyBookUrl: charlieUrl.JoinPath("book"),
 				KeyHash:    doSha256(charlie[32:]),
 			}).
-			Initiate(SignatureTypeED25519, alice).
-			Build(),
+			SignWith(aliceUrl).Version(1).Timestamp(timestamp).PrivateKey(alice)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Add credits to the key pages
 	envs = sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(aliceAcmeUrl).
-			WithSigner(aliceUrl, 1).
-			WithTimestampVar(timestamp).
-			WithBody(&AddCredits{
+		MustBuild(t, build.Transaction().
+			For(aliceAcmeUrl).
+			Body(&AddCredits{
 				Recipient: bobUrl.JoinPath("book", "1"),
 				Amount:    *big.NewInt(AcmePrecision * 1e3),
 				Oracle:    InitialAcmeOracleValue,
 			}).
-			Initiate(SignatureTypeED25519, alice).
-			Build(),
-		acctesting.NewTransaction().
-			WithPrincipal(aliceAcmeUrl).
-			WithSigner(aliceUrl, 1).
-			WithTimestampVar(timestamp).
-			WithBody(&AddCredits{
+			SignWith(aliceUrl).Version(1).Timestamp(timestamp).PrivateKey(alice)),
+		MustBuild(t, build.Transaction().
+			For(aliceAcmeUrl).
+			Body(&AddCredits{
 				Recipient: charlieUrl.JoinPath("book", "1"),
 				Amount:    *big.NewInt(AcmePrecision * 1e3),
 				Oracle:    InitialAcmeOracleValue,
 			}).
-			Initiate(SignatureTypeED25519, alice).
-			Build(),
+			SignWith(aliceUrl).Version(1).Timestamp(timestamp).PrivateKey(alice)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Create the data account
 	envs = sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(bobUrl).
-			WithSigner(bobUrl.JoinPath("book", "1"), 1).
-			WithTimestampVar(timestamp).
-			WithBody(&CreateDataAccount{
+		MustBuild(t, build.Transaction().
+			For(bobUrl).
+			Body(&CreateDataAccount{
 				Url: bobUrl.JoinPath("account"),
 			}).
-			Initiate(SignatureTypeED25519, bob).
-			Build(),
+			SignWith(bobUrl.JoinPath("book", "1")).Version(1).Timestamp(timestamp).PrivateKey(bob)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Add the second authority
 	envs = sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(bobUrl.JoinPath("account")).
-			WithSigner(bobUrl.JoinPath("book", "1"), 1).
-			WithTimestampVar(timestamp).
-			WithBody(&UpdateAccountAuth{Operations: []AccountAuthOperation{
+		MustBuild(t, build.Transaction().
+			For(bobUrl.JoinPath("account")).
+			Body(&UpdateAccountAuth{Operations: []AccountAuthOperation{
 				&AddAccountAuthorityOperation{Authority: charlieUrl.JoinPath("book")},
 			}}).
-			Initiate(SignatureTypeED25519, bob).
-			Build(),
+			SignWith(bobUrl.JoinPath("book", "1")).Version(1).Timestamp(timestamp).PrivateKey(bob)),
 	)
 	sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithTransaction(envs[0].Transaction[0]).
-			WithSigner(charlieUrl.JoinPath("book", "1"), 1).
-			Sign(SignatureTypeED25519, charlie).
-			Build(),
+		MustBuild(t, build.SignatureForTransaction(envs[0].Transaction[0]).
+			Url(charlieUrl.JoinPath("book", "1")).Version(1).PrivateKey(charlie)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 }
@@ -158,25 +139,20 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	SetupForRemoteSignatures(sim, &timestamp, alice, bobKey, charlieKey)
 
 	// Initiate with the local authority
-	env := acctesting.NewTransaction().
-		WithPrincipal(bobUrl.JoinPath("account")).
-		WithBody(&WriteData{
-			Entry: &AccumulateDataEntry{Data: [][]byte{
-				[]byte("foo"),
-			}},
-		}).
-		WithSigner(bobUrl.JoinPath("book", "1"), 1).
-		WithTimestampVar(&timestamp).
-		Initiate(SignatureTypeED25519, bobKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(bobUrl.JoinPath("account")).
+			Body(&WriteData{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
+					[]byte("foo"),
+				}},
+			}).
+			SignWith(bobUrl.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
 
 	// Sign with the remote authority
-	sig := acctesting.NewTransaction().
-		WithTransaction(env.Transaction[0]).
-		WithSigner(charlieUrl.JoinPath("book", "1"), 1).
-		WithTimestamp(0).
-		Sign(SignatureTypeED25519, charlieKey).
-		Build()
+	sig :=
+		MustBuild(t, build.SignatureForTransaction(env.Transaction[0]).
+			Url(charlieUrl.JoinPath("book", "1")).Version(1).Timestamp(0).PrivateKey(charlieKey))
 
 	envs := sim.MustSubmitAndExecuteBlock(env, sig)
 	sim.WaitForTransactions(delivered, envs...)
@@ -211,25 +187,20 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	SetupForRemoteSignatures(sim, &timestamp, alice, bobKey, charlieKey)
 
 	// Initiate with the local authority
-	env := acctesting.NewTransaction().
-		WithPrincipal(bobUrl.JoinPath("account")).
-		WithBody(&WriteData{
-			Entry: &AccumulateDataEntry{Data: [][]byte{
-				[]byte("foo"),
-			}},
-		}).
-		WithSigner(bobUrl.JoinPath("book", "1"), 1).
-		WithTimestampVar(&timestamp).
-		Initiate(SignatureTypeED25519, bobKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(bobUrl.JoinPath("account")).
+			Body(&WriteData{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
+					[]byte("foo"),
+				}},
+			}).
+			SignWith(bobUrl.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(bobKey))
 
 	// Sign with the remote authority
-	sig := acctesting.NewTransaction().
-		WithTransaction(env.Transaction[0]).
-		WithSigner(charlieUrl.JoinPath("book", "1"), 1).
-		WithTimestamp(0).
-		Sign(SignatureTypeED25519, charlieKey).
-		Build()
+	sig :=
+		MustBuild(t, build.SignatureForTransaction(env.Transaction[0]).
+			Url(charlieUrl.JoinPath("book", "1")).Version(1).Timestamp(0).PrivateKey(charlieKey))
 
 	envs := sim.MustSubmitAndExecuteBlock(env, sig)
 	sim.WaitForTransactions(delivered, envs...)
@@ -276,30 +247,23 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 
 	// Initiate with the remote authority
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(bobUrl.JoinPath("account")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(bobUrl.JoinPath("account")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithTimestampVar(&timestamp).
-			WithSigner(charlieUrl.JoinPath("book", "1"), 1).
-			Initiate(SignatureTypeED25519, charlieKey1).
-			Sign(SignatureTypeED25519, charlieKey2).
-			Sign(SignatureTypeED25519, charlieKey3).
-			Build(),
+			SignWith(charlieUrl.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(charlieKey1).
+			SignWith(charlieUrl.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(charlieKey2).
+			SignWith(charlieUrl.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(charlieKey3)),
 	)
 	sim.WaitForTransactions(pending, envs...)
 
 	// Sign with the local authority
 	envs = sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithTransaction(envs[0].Transaction[0]).
-			WithTimestamp(0).
-			WithSigner(bobUrl.JoinPath("book", "1"), 1).
-			Sign(SignatureTypeED25519, bobKey).
-			Build(),
+		MustBuild(t, build.SignatureForTransaction(envs[0].Transaction[0]).
+			Url(bobUrl.JoinPath("book", "1")).Version(1).Timestamp(0).PrivateKey(bobKey)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
@@ -344,17 +308,14 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 
 	// Execute with the remote authority
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(bobUrl.JoinPath("account")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(bobUrl.JoinPath("account")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithTimestampVar(&timestamp).
-			WithSigner(charlieUrl.JoinPath("book", "1"), 1).
-			Initiate(SignatureTypeED25519, charlieKey).
-			Build(),
+			SignWith(charlieUrl.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(charlieKey)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 

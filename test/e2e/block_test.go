@@ -18,10 +18,12 @@ import (
 	oldsim "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -64,13 +66,12 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 
 	exch := new(SendTokens)
 	exch.AddRecipient(AccountUrl("foo"), big.NewInt(int64(1000)))
-	env := acctesting.NewTransaction().
-		WithPrincipal(aliceUrl).
-		WithTimestampVar(&timestamp).
-		WithSigner(aliceUrl.RootIdentity(), 1).
-		WithBody(exch).
-		Initiate(SignatureTypeLegacyED25519, alice).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(exch).
+			SignWith(aliceUrl.RootIdentity()).Version(1).Timestamp(&timestamp).PrivateKey(alice).Type(SignatureTypeLegacyED25519))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
@@ -108,16 +109,13 @@ func TestDoesChargeFee(t *testing.T) {
 
 	// Send tokens
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithSigner(alice, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{To: []*TokenRecipient{{
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&SendTokens{To: []*TokenRecipient{{
 				Url:    bob,
 				Amount: *big.NewInt(1),
 			}}}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	lid := simulator.GetAccount[*LiteIdentity](sim, alice.RootIdentity())
@@ -150,13 +148,12 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	exch := new(SendTokens)
 	exch.AddRecipient(AccountUrl("foo"), big.NewInt(int64(1000)))
 	exch.AddRecipient(bobUrl, big.NewInt(int64(1000)))
-	env := acctesting.NewTransaction().
-		WithPrincipal(aliceUrl).
-		WithTimestampVar(&timestamp).
-		WithSigner(aliceUrl, 1).
-		WithBody(exch).
-		Initiate(SignatureTypeLegacyED25519, alice).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(exch).
+			SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice).Type(SignatureTypeLegacyED25519))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
@@ -188,17 +185,14 @@ func TestCreateRootIdentity(t *testing.T) {
 	keyHash := sha256.Sum256(aliceKey[32:])
 
 	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithTimestampVar(&timestamp).
-			WithSigner(liteUrl.RootIdentity(), 1).
-			WithBody(&CreateIdentity{
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&CreateIdentity{
 				Url:        alice,
 				KeyHash:    keyHash[:],
 				KeyBookUrl: alice.JoinPath("book"),
 			}).
-			Initiate(SignatureTypeLegacyED25519, lite).
-			Build(),
+			SignWith(liteUrl.RootIdentity()).Version(1).Timestamp(&timestamp).PrivateKey(lite).Type(SignatureTypeLegacyED25519)),
 	)...)
 
 	// There should not be a synthetic transaction
@@ -238,13 +232,12 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		require.NoError(t, batch.Commit())
 
 		// Write data
-		env := acctesting.NewTransaction().
-			WithPrincipal(liteDataAddress).
-			WithBody(&WriteData{Entry: &firstEntry}).
-			WithSigner(aliceUrl, 1).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, alice).
-			Build()
+		env :=
+			MustBuild(t, build.Transaction().
+				For(liteDataAddress).
+				Body(&WriteData{Entry: &firstEntry}).
+				SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice))
+
 		sim.MustSubmitAndExecuteBlock(env)
 		status, _ := sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
@@ -266,13 +259,12 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		require.NoError(t, batch.Commit())
 
 		// Write data
-		env := acctesting.NewTransaction().
-			WithPrincipal(liteDataAddress).
-			WithBody(&WriteData{Entry: &firstEntry}).
-			WithSigner(aliceAdi.JoinPath("book0", "1"), 1).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, alice).
-			Build()
+		env :=
+			MustBuild(t, build.Transaction().
+				For(liteDataAddress).
+				Body(&WriteData{Entry: &firstEntry}).
+				SignWith(aliceAdi.JoinPath("book0", "1")).Version(1).Timestamp(&timestamp).PrivateKey(alice))
+
 		sim.MustSubmitAndExecuteBlock(env)
 		status, _ := sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
@@ -332,17 +324,14 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	_, err := sim.SubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
-			WithTimestampVar(&timestamp).
-			WithSigner(liteUrl, 1).
-			WithBody(&CreateIdentity{
+		MustBuild(t, build.Transaction().
+			For(liteUrl).
+			Body(&CreateIdentity{
 				Url:        alice.JoinPath("sub"),
 				KeyHash:    keyHash[:],
 				KeyBookUrl: alice.JoinPath("sub", "book"),
 			}).
-			Initiate(SignatureTypeLegacyED25519, liteKey).
-			Build(),
+			SignWith(liteUrl).Version(1).Timestamp(&timestamp).PrivateKey(liteKey).Type(SignatureTypeLegacyED25519)),
 	)
 	var err2 *errors.Error
 	require.Error(t, err)
@@ -366,17 +355,14 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithTimestampVar(&timestamp).
-			WithSigner(liteUrl, 1).
-			WithBody(&CreateIdentity{
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&CreateIdentity{
 				Url:        alice,
 				KeyHash:    keyHash[:],
 				KeyBookUrl: alice.JoinPath("book"),
 			}).
-			Initiate(SignatureTypeLegacyED25519, liteKey).
-			Build(),
+			SignWith(liteUrl).Version(1).Timestamp(&timestamp).PrivateKey(liteKey).Type(SignatureTypeLegacyED25519)),
 	)...)
 
 	// There should not be a synthetic transaction
@@ -406,17 +392,14 @@ func TestAddCreditsToNewLiteIdentity(t *testing.T) {
 
 	// Execute
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
-			WithSigner(aliceUrl.RootIdentity(), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&AddCredits{
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(&AddCredits{
 				Recipient: bobUrl,
 				Amount:    *big.NewInt(AcmePrecision * 1e3),
 				Oracle:    InitialAcmeOracleValue,
 			}).
-			Initiate(SignatureTypeED25519, alice).
-			Build(),
+			SignWith(aliceUrl.RootIdentity()).Version(1).Timestamp(&timestamp).PrivateKey(alice)),
 	)...)
 
 	// Verify
@@ -448,15 +431,12 @@ func TestSubAdi(t *testing.T) {
 
 	// Execute
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithTimestampVar(&timestamp).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithBody(&CreateIdentity{
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&CreateIdentity{
 				Url: alice.JoinPath("sub"),
 			}).
-			Initiate(SignatureTypeLegacyED25519, aliceKey).
-			Build(),
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey).Type(SignatureTypeLegacyED25519)),
 	)...)
 
 	// Verify

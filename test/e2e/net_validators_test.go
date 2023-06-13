@@ -13,8 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -172,17 +174,14 @@ func TestUpdateOperators(t *testing.T) {
 	opKeyAdd := acctesting.GenerateKey(1)
 	addKeyHash := sha256.Sum256(opKeyAdd[32:])
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(signerUrl).
-			WithTimestampVar(&timestamp).
-			WithSigner(signerUrl, 1).
-			WithBody(&UpdateKeyPage{Operation: []KeyPageOperation{
+		MustBuild(t, build.Transaction().
+			For(signerUrl).
+			Body(&UpdateKeyPage{Operation: []KeyPageOperation{
 				&AddKeyOperation{
 					Entry: KeySpecParams{KeyHash: addKeyHash[:]},
 				},
 			}}).
-			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			Build(),
+			SignWith(signerUrl).Version(1).Timestamp(&timestamp).PrivateKey(dn.Executor.Key)),
 	)...)
 
 	// Give it a second for the DN to send its anchor
@@ -198,18 +197,15 @@ func TestUpdateOperators(t *testing.T) {
 	opKeyUpd := acctesting.GenerateKey(2)
 	updKeyHash := sha256.Sum256(opKeyUpd[32:])
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(signerUrl).
-			WithTimestampVar(&timestamp).
-			WithSigner(signerUrl, 2).
-			WithBody(&UpdateKeyPage{Operation: []KeyPageOperation{
+		MustBuild(t, build.Transaction().
+			For(signerUrl).
+			Body(&UpdateKeyPage{Operation: []KeyPageOperation{
 				&UpdateKeyOperation{
 					OldEntry: KeySpecParams{KeyHash: addKeyHash[:]},
 					NewEntry: KeySpecParams{KeyHash: updKeyHash[:]},
 				},
 			}}).
-			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			Build(),
+			SignWith(signerUrl).Version(2).Timestamp(&timestamp).PrivateKey(dn.Executor.Key)),
 	)...)
 
 	// Give it a second for the DN to send its anchor
@@ -224,17 +220,14 @@ func TestUpdateOperators(t *testing.T) {
 	// Remove
 	t.Log("Remove")
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(signerUrl).
-			WithTimestampVar(&timestamp).
-			WithSigner(signerUrl, 3).
-			WithBody(&UpdateKeyPage{Operation: []KeyPageOperation{
+		MustBuild(t, build.Transaction().
+			For(signerUrl).
+			Body(&UpdateKeyPage{Operation: []KeyPageOperation{
 				&RemoveKeyOperation{
 					Entry: KeySpecParams{KeyHash: updKeyHash[:]},
 				},
 			}}).
-			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			Build(),
+			SignWith(signerUrl).Version(3).Timestamp(&timestamp).PrivateKey(dn.Executor.Key)),
 	)...)
 
 	// Give it a second for the DN to send its anchor

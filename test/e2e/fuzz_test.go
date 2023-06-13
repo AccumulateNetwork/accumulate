@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,7 +10,9 @@ import (
 	"math/big"
 	"testing"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	fuzzutil "gitlab.com/accumulatenetwork/accumulate/test/util/fuzz"
@@ -18,13 +20,12 @@ import (
 
 func FuzzEnvelopeDecode(f *testing.F) {
 	key := acctesting.GenerateKey()
-	fuzzutil.AddValue(f, acctesting.NewTransaction().
-		WithPrincipal(AccountUrl("foo")).
-		WithSigner(AccountUrl("bar"), 1).
-		WithTimestamp(1).
-		WithBody(&AddCredits{Recipient: AccountUrl("baz"), Amount: *big.NewInt(100000000)}).
-		Initiate(SignatureTypeED25519, key).
-		Build())
+	fuzzutil.AddValue(f,
+		MustBuild(f, build.Transaction().
+			For(AccountUrl("foo")).
+			Body(&AddCredits{Recipient: AccountUrl("baz"), Amount: *big.NewInt(100000000)}).
+			SignWith(AccountUrl("bar")).Version(1).Timestamp(1).PrivateKey(key)),
+	)
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		t.Parallel()
@@ -48,17 +49,14 @@ func FuzzAddCredits(f *testing.F) {
 		sim.CreateLiteTokenAccount(liteKey, AcmeUrl(), 1e9, 1e12)
 
 		_, _ = sim.SubmitAndExecuteBlock(
-			acctesting.NewTransaction().
-				WithPrincipal(lite).
-				WithSigner(lite, 1).
-				WithTimestamp(1).
-				WithBody(&AddCredits{
+			MustBuild(t, build.Transaction().
+				For(lite).
+				Body(&AddCredits{
 					Recipient: fuzzutil.MustParseUrl(t, recipient),
 					Amount:    fuzzutil.MustParseBigInt(t, amount),
 					Oracle:    oracle,
 				}).
-				Initiate(SignatureTypeED25519, liteKey).
-				Build(),
+				SignWith(lite).Version(1).Timestamp(1).PrivateKey(liteKey)),
 		)
 	})
 }
@@ -82,13 +80,10 @@ func FuzzUpdateAccountAuth(f *testing.F) {
 		sim.CreateIdentity(alice, aliceKey[32:])
 
 		_, _ = sim.SubmitAndExecuteBlock(
-			acctesting.NewTransaction().
-				WithPrincipal(alice).
-				WithSigner(alice.JoinPath("book", "1"), 1).
-				WithTimestamp(1).
-				WithBody(body).
-				Initiate(SignatureTypeED25519, aliceKey).
-				Build(),
+			MustBuild(t, build.Transaction().
+				For(alice).
+				Body(body).
+				SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey)),
 		)
 	})
 }
