@@ -9,7 +9,6 @@ package block
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -29,7 +28,7 @@ func (s *SignatureContext) Type() protocol.SignatureType { return s.signature.Ty
 // authority signature. Sending an authority signature also clears the active
 // signature set.
 func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, authSig *protocol.AuthoritySignature) error {
-	ok, err := s.authorityWillVote(batch, authSig.Authority)
+	ok, vote, err := s.authorityWillVote(batch, authSig.Authority)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -42,7 +41,7 @@ func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, au
 		return errors.UnknownError.Wrap(err)
 	}
 
-	authSig.Vote = protocol.VoteTypeAccept
+	authSig.Vote = vote
 	authSig.TxID = s.transaction.ID()
 	authSig.Cause = s.message.ID()
 
@@ -82,21 +81,21 @@ func (s *SignatureContext) getAuthority() *url.URL {
 	}
 }
 
-func (s *SignatureContext) authorityWillVote(batch *database.Batch, authority *url.URL) (bool, error) {
+func (s *SignatureContext) authorityWillVote(batch *database.Batch, authority *url.URL) (bool, protocol.VoteType, error) {
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.AuthorityValidator](s.Executor, s.transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.AuthorityWillVote(s, batch, s.transaction, authority)
+		ready, fallback, vote, err := val.AuthorityWillVote(s, batch, s.transaction, authority)
 		if err != nil {
-			return false, errors.UnknownError.Wrap(err)
+			return false, 0, errors.UnknownError.Wrap(err)
 		}
 		if !fallback {
-			return ready, nil
+			return ready, vote, nil
 		}
 	}
 
-	ok, err := s.AuthorityWillVote(batch, s.Block.Index, s.transaction, authority)
-	return ok, errors.UnknownError.Wrap(err)
+	ok, vote, err := s.AuthorityWillVote(batch, s.Block.Index, s.transaction, authority)
+	return ok, vote, errors.UnknownError.Wrap(err)
 }
 
 func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.Signer, entry *database.SignatureSetEntry) error {
@@ -121,13 +120,8 @@ func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.
 
 	switch {
 	case version == entry.Version:
-		// Ignore repeated signatures
-		_, ok := sortutil.Search(all, func(e *database.SignatureSetEntry) int { return int(e.KeyIndex) - int(entry.KeyIndex) })
-		if ok {
-			return nil
-		}
-
 		// Add to the active set if the signature's signer version is the same
+		// (overwrite the previous entry if there is one)
 		err = txn.Signatures().Add(entry)
 
 	case version < entry.Version:
