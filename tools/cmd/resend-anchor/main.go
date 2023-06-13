@@ -113,7 +113,7 @@ func executeLocal(c *client.Client, dst *url.URL, txn *protocol.Transaction, sig
 	req.Envelope.Transaction = []*protocol.Transaction{txn}
 	req.Envelope.Signatures = sigs
 	res2, err := c.ExecuteLocal(context.Background(), req)
-	if warnf(err, "execute anchor %x from directory for %v: %v", txn.GetHash()[:4], dst) {
+	if warnf(err, "execute anchor %x from directory for %v", txn.GetHash()[:4], dst) {
 		return
 	}
 
