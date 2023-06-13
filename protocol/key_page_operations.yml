@@ -28,6 +28,18 @@ SetThresholdKeyPageOperation:
     - name: Threshold
       type: uvarint
 
+SetRejectThresholdKeyPageOperation:
+  union: { type: keyPageOperation }
+  fields:
+    - name: Threshold
+      type: uvarint
+
+SetResponseThresholdKeyPageOperation:
+  union: { type: keyPageOperation }
+  fields:
+    - name: Threshold
+      type: uvarint
+
 UpdateAllowedKeyPageOperation:
   union: { type: keyPageOperation }
   fields:
