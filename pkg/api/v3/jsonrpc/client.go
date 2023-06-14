@@ -25,6 +25,7 @@ type Client struct {
 	Server string
 }
 
+var _ api.NodeService = (*Client)(nil)
 var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
@@ -39,6 +40,14 @@ func NewClient(server string) *Client {
 	c.Client.Timeout = 15 * time.Second
 	c.Server = server
 	return c
+}
+
+func (c *Client) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
+	return sendRequestUnmarshalAs[*api.NodeInfo](c, ctx, "node-info", &message.NodeInfoRequest{NodeInfoOptions: opts})
+}
+
+func (c *Client) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+	return sendRequestUnmarshalAs[[]*api.FindServiceResult](c, ctx, "find-service", &message.FindServiceRequest{FindServiceOptions: opts})
 }
 
 func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {

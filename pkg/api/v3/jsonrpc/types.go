@@ -9,6 +9,8 @@ package jsonrpc
 import "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 
 type RangeOptions = api.RangeOptions
+type NodeInfoOptions = api.NodeInfoOptions
+type FindServiceOptions = api.FindServiceOptions
 type ConsensusStatusOptions = api.ConsensusStatusOptions
 type NetworkStatusOptions = api.NetworkStatusOptions
 type MetricsOptions = api.MetricsOptions
