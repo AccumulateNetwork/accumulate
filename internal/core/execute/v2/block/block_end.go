@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -31,10 +32,15 @@ func (m *Executor) EndBlock(block *Block) error {
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
+	err := m.processEventBacklog(block)
+	if err != nil {
+		return errors.UnknownError.WithFormat("process event backlog: %w", err)
+	}
+
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
+	err = block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
@@ -74,9 +80,31 @@ func (m *Executor) EndBlock(block *Block) error {
 		"produced", block.State.Produced)
 	t := time.Now()
 
-	// Load the main chain of the minor root
+	// Record pending transactions
 	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
+	if len(block.State.Pending) > 0 {
+		// Get the major block height
+		major, err := getMajorHeight(m.Describe, block.Batch)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		// Set the expiration height
+		if m.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
+			major += 14 // default to 2 weeks
+		} else {
+			major += m.globals.Active.Globals.Limits.PendingMajorBlocks
+		}
+
+		// Record the IDs
+		err = ledger.Events().Major().Pending(major).Add(block.State.GetPending()...)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store pending expirations: %w", err)
+		}
+	}
+
+	// Load the main chain of the minor root
 	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load root chain: %w", err)
@@ -251,6 +279,30 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
 	return nil
+}
+
+func getMajorHeight(desc config.Describe, batch *database.Batch) (uint64, error) {
+	c := batch.Account(desc.AnchorPool()).MajorBlockChain()
+	head, err := c.Head().Get()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load major block chain head: %w", err)
+	}
+	if head.Count == 0 {
+		return 0, nil
+	}
+
+	hash, err := c.Entry(head.Count - 1)
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load major block chain latest entry: %w", err)
+	}
+
+	entry := new(protocol.IndexEntry)
+	err = entry.UnmarshalBinary(hash)
+	if err != nil {
+		return 0, errors.EncodingError.WithFormat("decode major block chain entry: %w", err)
+	}
+
+	return entry.BlockIndex, nil
 }
 
 // anchorSynthChain anchors the synthetic transaction chain.

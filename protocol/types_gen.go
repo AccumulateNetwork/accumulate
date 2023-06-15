@@ -570,7 +570,11 @@ type NetworkLimits struct {
 	PageEntries uint64 `json:"pageEntries,omitempty" form:"pageEntries" query:"pageEntries" validate:"required"`
 	// IdentityAccounts is the maximum number of accounts an identity can have (excluding accounts of sub ADIs).
 	IdentityAccounts uint64 `json:"identityAccounts,omitempty" form:"identityAccounts" query:"identityAccounts" validate:"required"`
-	extraData        []byte
+	// PendingMajorBlocks is the maximum number of major blocks a transaction can remain pending for.
+	PendingMajorBlocks uint64 `json:"pendingMajorBlocks,omitempty" form:"pendingMajorBlocks" query:"pendingMajorBlocks" validate:"required"`
+	// EventsPerBlock is the maximum number of scheduled events that will be executed per block.
+	EventsPerBlock uint64 `json:"eventsPerBlock,omitempty" form:"eventsPerBlock" query:"eventsPerBlock" validate:"required"`
+	extraData      []byte
 }
 
 type Object struct {
@@ -2387,6 +2391,8 @@ func (v *NetworkLimits) Copy() *NetworkLimits {
 	u.BookPages = v.BookPages
 	u.PageEntries = v.PageEntries
 	u.IdentityAccounts = v.IdentityAccounts
+	u.PendingMajorBlocks = v.PendingMajorBlocks
+	u.EventsPerBlock = v.EventsPerBlock
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -4637,6 +4643,12 @@ func (v *NetworkLimits) Equal(u *NetworkLimits) bool {
 		return false
 	}
 	if !(v.IdentityAccounts == u.IdentityAccounts) {
+		return false
+	}
+	if !(v.PendingMajorBlocks == u.PendingMajorBlocks) {
+		return false
+	}
+	if !(v.EventsPerBlock == u.EventsPerBlock) {
 		return false
 	}
 
@@ -9376,6 +9388,8 @@ var fieldNames_NetworkLimits = []string{
 	3: "BookPages",
 	4: "PageEntries",
 	5: "IdentityAccounts",
+	6: "PendingMajorBlocks",
+	7: "EventsPerBlock",
 }
 
 func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
@@ -9400,6 +9414,12 @@ func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.IdentityAccounts == 0) {
 		writer.WriteUint(5, v.IdentityAccounts)
+	}
+	if !(v.PendingMajorBlocks == 0) {
+		writer.WriteUint(6, v.PendingMajorBlocks)
+	}
+	if !(v.EventsPerBlock == 0) {
+		writer.WriteUint(7, v.EventsPerBlock)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkLimits)
@@ -9437,6 +9457,16 @@ func (v *NetworkLimits) IsValid() error {
 		errs = append(errs, "field IdentityAccounts is missing")
 	} else if v.IdentityAccounts == 0 {
 		errs = append(errs, "field IdentityAccounts is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field PendingMajorBlocks is missing")
+	} else if v.PendingMajorBlocks == 0 {
+		errs = append(errs, "field PendingMajorBlocks is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field EventsPerBlock is missing")
+	} else if v.EventsPerBlock == 0 {
+		errs = append(errs, "field EventsPerBlock is not set")
 	}
 
 	switch len(errs) {
@@ -15064,6 +15094,12 @@ func (v *NetworkLimits) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(5); ok {
 		v.IdentityAccounts = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.PendingMajorBlocks = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.EventsPerBlock = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkLimits)

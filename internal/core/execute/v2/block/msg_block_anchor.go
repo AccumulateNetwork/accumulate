@@ -10,7 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -99,42 +98,7 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *MessageContext, msg *me
 
 	// Process the transaction
 	_, err = ctx.callMessageExecutor(batch, seq)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Release held transactions
-	if body, ok := txn.Body.(*protocol.DirectoryAnchor); ok {
-		// TODO Move to transaction executor once it has been refactored
-		record := batch.Account(ctx.Executor.Describe.Ledger()).
-			Event().Minor().Blocks()
-		blocks, err := record.Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("load on-hold minor block list: %w", err)
-		}
-
-		// Find the block in the list
-		i, found := sortutil.Search(blocks, func(b uint64) int { return int(b) - int(body.MinorBlockIndex) })
-		if found {
-			i++ // If there is an exact match, we want the index _after_ it
-		}
-
-		if i > 0 {
-			// Truncate the list
-			err = record.Put(blocks[i:])
-			if err != nil {
-				return errors.UnknownError.WithFormat("store on-hold minor block list: %w", err)
-			}
-
-			// Send the authority signatures
-			err = ctx.releaseHeldAuthSigs(batch, blocks[:i])
-			if err != nil {
-				return errors.UnknownError.WithFormat("release held authority signatures: %w", err)
-			}
-		}
-	}
-
-	return nil
+	return errors.UnknownError.Wrap(err)
 }
 
 // check checks if the message is garbage or not.

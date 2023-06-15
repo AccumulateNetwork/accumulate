@@ -75,7 +75,7 @@ func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Tran
 		return errors.InternalError.WithFormat("compute refund: %w", err)
 	}
 
-	isInit, initiator, err := transactionIsInitiated(batch, from)
+	isInit, initiator, err := transactionIsInitiated(batch, from.ID())
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
