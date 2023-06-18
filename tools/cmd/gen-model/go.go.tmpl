@@ -49,15 +49,12 @@ c.key
 {{- end}}
 
 {{  define "keyArgs"}}
-{{- if parameterized . -}}
-"{{.Name}}", {{range .GetParameters}}k.{{.Name}}, {{end}}
-{{- else -}}
-"{{.Name}}"
-{{- end}}
+{{- if .Key}}"{{.Key}}"{{else}}"{{.Name}}"{{end}}
+{{- if parameterized .}}, {{range .GetParameters}}k.{{.Name}}, {{end}}{{end}}
 {{- end}}
 
 {{  define "encoder" -}}
-{{- if .Wrapped -}}
+{{- if wrapped . -}}
 values.Wrapped(values.{{title .DataType.String}}Wrapper)
 {{- else if .Union -}}
 values.Union({{unionMethod . "Unmarshal"}})
@@ -107,7 +104,7 @@ type {{.FullName}} interface {
 {{end}}
 
 type {{fullName .}} struct {
-	logger logging.OptionalLogger
+	logger {{logger}}
 	store record.Store
 	{{- if not .Root}}
 	key *record.Key
@@ -189,7 +186,7 @@ func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key *record.Key
 
 	switch key.Get(0) {
 	{{- range .Attributes}}
-	case "{{.Name}}":
+	case {{if .Key}}"{{.Key}}"{{else}}"{{.Name}}"{{end}}:
 		{{- if parameterized .}}
 		if key.Len() < {{add 1 (parameterCount .)}} {
 			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")

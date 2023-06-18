@@ -9,11 +9,13 @@ package simulator
 import (
 	"context"
 	"crypto/sha256"
+	"math/big"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -28,7 +30,53 @@ type simService Simulator
 func (s *simService) Private() private.Sequencer { return s }
 
 func (s *simService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
-	return nil, errors.NotAllowed.With("not implemented")
+	err := (*Simulator)(s).DatabaseFor(account).Update(func(batch *database.Batch) error {
+		var acct protocol.AccountWithTokens
+		err := batch.Account(account).Main().GetAs(&acct)
+		switch {
+		case err == nil:
+			if !acct.GetTokenUrl().Equal(protocol.AcmeUrl()) {
+				return errors.BadRequest.WithFormat("%v is not an ACME account", account)
+			}
+
+			acct.CreditTokens(big.NewInt(10 * protocol.AcmePrecision))
+			return nil
+
+		case !errors.Is(err, errors.NotFound):
+			return err
+		}
+
+		_, tok, _ := protocol.ParseLiteTokenAddress(account)
+		if tok == nil {
+			return err
+		}
+		if !tok.Equal(protocol.AcmeUrl()) {
+			return errors.BadRequest.WithFormat("%v is not an ACME account", account)
+		}
+
+		lid := new(protocol.LiteIdentity)
+		lid.Url = account.RootIdentity()
+		err = batch.Account(lid.Url).Main().Put(lid)
+		if err != nil {
+			return err
+		}
+
+		lta := new(protocol.LiteTokenAccount)
+		lta.Url = account
+		lta.Balance = *big.NewInt(10 * protocol.AcmePrecision)
+		lta.TokenUrl = protocol.AcmeUrl()
+		return batch.Account(lta.Url).Main().Put(lta)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &api.Submission{
+		Status: &protocol.TransactionStatus{
+			Code: errors.Delivered,
+			TxID: account.WithTxID([32]byte{1}),
+		},
+		Success: true,
+	}, nil
 }
 
 // ConsensusStatus finds the specified node and returns its ConsensusStatus.
