@@ -83,7 +83,7 @@ func NewCollect(outputName string, build bool) (collect *Collect, err error) {
 	E(err, "failed to create tmp directory")                 //
 	err = os.Mkdir(thd, os.ModePerm)                         // Create a hashes directory
 	E(err, "error creating hashes tmp directory")            //
-	c.outHash, err = os.Create(fmt.Sprintf("%s/h.tmp", thd)) // Create tmp hash directory
+	c.outHash, err = os.Create(filepath.Join(thd, "h.tmp")) // Create tmp hash directory
 	E(err, "failed to create tmp hash file")                 //
 
 	c.tmpHashFiles = make(map[byte]*os.File, 256) // Create map for all 256 tmp hash files
