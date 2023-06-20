@@ -166,14 +166,14 @@ func (c *Collect) BuildHashFile() (err error) {
 			last = h
 		} //                                                        then read the transaction.
 	}
-	c.outHash.Seek(0,io.SeekStart)	// Leave the file position at start of file
+	c.outHash.Seek(0, io.SeekStart) // Leave the file position at start of file
 	return nil
 }
 
 // NumberHashes
 // Returns the number of Hashes in the temporary hashes file
 // Note this call is only valid after calling BuildHshFile()
-func (c *Collect) NumberHashes() (hashCnt int,err error) {
+func (c *Collect) NumberHashes() (hashCnt int, err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
 			err = fmt.Errorf("%v", msg) // Return panic's error
@@ -181,8 +181,8 @@ func (c *Collect) NumberHashes() (hashCnt int,err error) {
 		}
 	}()
 	info, err := c.outHash.Stat()
-	E(err,"error getting information on hashes.")
-	return int(info.Size())/32, nil
+	E(err, "error getting information on hashes.")
+	return int(info.Size()) / 32, nil
 }
 
 // GetHash
@@ -192,12 +192,12 @@ func (c *Collect) NumberHashes() (hashCnt int,err error) {
 func (c *Collect) GetHash() []byte {
 	var h [32]byte
 	l, err := c.outHash.Read(h[:])
-	if errors.Is(err,io.EOF) {
+	if errors.Is(err, io.EOF) {
 		return nil
 	}
-	E(err,"error reading hash")
+	E(err, "error reading hash")
 	EB(l != 32, "return from GetHash not 32 bytes")
-	return h[:]	
+	return h[:]
 }
 
 // Close
@@ -211,15 +211,15 @@ func (c *Collect) Close() (err error) {
 
 	// Close all the files
 	err = c.out.Close()
-	
+
 	E(err, "failed to close the output file")
 	for _, f := range c.tmpHashFiles {
 		err := f.Close()
-		E(err,"failed to close file")
+		E(err, "failed to close file")
 	}
 	for _, f := range c.tmpFiles {
 		err := f.Close()
-		E(err,"failed to close file")
+		E(err, "failed to close file")
 	}
 	c.outHash.Close()
 
@@ -378,42 +378,51 @@ func (c *Collect) readTx(index int) (transaction, hash []byte, err error) {
 }
 
 // Fetch
-// Read a transaction from the transaction file built by Collect
-func (c *Collect) Fetch(index interface{}) (transaction, hash []byte, err error) {
+// Find "KeySought" in the transactions.
+// It is easy if the KeySought is an index.
+// It is a bit harder if the KeySought is a hash, because we have to search
+// Anything else is an error.
+func (c *Collect) Fetch(KeySought interface{}) (transaction, hash []byte, err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
 			err = fmt.Errorf("%v", msg) // Return panic's error
 			os.RemoveAll(c.TmpDirName)  // Remove any lingering temp directory
 		}
 	}()
-	switch t := index.(type) {
+	switch key := KeySought.(type) {
 	case int:
-		tx, hash, err := c.readTx(t)
+		tx, hash, err := c.readTx(key)
 		E(err, "index is out of bounds")
 		return tx, hash, err
 	case []byte:
-		c.GuessCnt = 0                                            // Clear the guess count (info only)
-		var buff [10 * 40]byte                                    // Max buffer of 10 entries used in search
-		lb := int64(0)                                            // lower and upper bounds of the search for a hash
-		ub := (c.OffsetEnd - c.Offset) / 40                       //   that matches t.  The table is sorted by hash
-		ratio := float64(binary.BigEndian.Uint32(t)) / 0xFFFFFFFF // Hashes are evenly spread, so estimate location
-		step := float64(1) / float64(ub)                          // "weight" of being off by 1 for this many entries
-		_ = step                                                  //
-		indexRange := float64(ub - lb)                            // Range of indexes where the value might be
-		guess := int64(indexRange * ratio)                        // file by using the first 4 bytes of the hash sought
-
+		c.GuessCnt = 0                               // Clear the guess count (info only)
+		window := int64(4)                           // How many elements we read per buffer
+		step := window / 2                           // Just make step 100; optimizing is hard
+		buff := make([]byte, window*40)              // Max buffer to cover window used in search
+		lb := int64(0)                               // lower and upper bounds of the search for a hash
+		ub := (c.OffsetEnd - c.Offset) / 40          //   that matches t.  The table is sorted by hash
+		KeySoughtInt := binary.BigEndian.Uint32(key) // Get an estimate of where the key is in the list
+		ratio := float64(KeySoughtInt) / 0xFFFFFFFF  // Hashes are evenly spread, so estimate location
+		indexRange := float64(ub - lb)               // Range of indexes where the value might be
+		guess := int64(indexRange * ratio)           // file by using the first 4 bytes of the hash sought
+		_ = step
 		for {
 			if lb == ub { //                        If the guess is out of bounds, t wasn't found
-				return transaction, hash, fmt.Errorf("transaction %x... not found", t[:8])
+				return nil, nil, fmt.Errorf("transaction %x... not found", key[:8])
 			}
-			c.GuessCnt++   // Just count guesses in batches of roughly 10
-			b := guess - 5 // Will read 10 entries a round (each entry 40 bytes)
-			e := guess + 5 //
-			if b < lb {    // Make sure b and e are both in the table
-				b = lb
+			c.GuessCnt++      //  Just count guesses in batches of roughly 10
+			b := guess - step //  Will read 10 entries a round (each entry 40 bytes)
+			e := guess + step //
+			if b < lb {       //  Make sure b and e are both in the table
+				b = lb          // If b is less than lb, then we should search at least starting at the lower bound
+				e = lb + window // No worries if e > ub, because we search upward
 			}
-			if e > ub {
-				e = ub
+			if e > ub { //     If e > ub, then trim to upper bound
+				e = ub         //   because the answer can't be past ub
+				b = e - window // Beginning has to stay lower than e
+				if b < lb {    // If fixing the end breaks the beginning
+					b = lb //    beginning is the lb
+				}
 			}
 			_, err = c.out.Seek(c.Offset+b*40, io.SeekStart) // c-Offset (start of table) b (entry offset) 40 (size of entries)
 			E(err, "failed to seek into the index table")    //
@@ -425,23 +434,24 @@ func (c *Collect) Fetch(index interface{}) (transaction, hash []byte, err error)
 			}
 		search:
 			for i := int64(0); i < e-b; i++ { // Read all the entries we read
-				switch bytes.Compare(t, hashes[i]) { //
-				case -1: //                                     Is t < buff+i? Gotta keep looking
-					ub = b + i    //                            table hash is greater than t, a HIGHER bound
-					guess = b - 5 //							The next guess is at least 5 above that
+				switch bytes.Compare(key, hashes[i]) { //
+				case -1: //                                  Is key < buff+i? Gotta keep looking
+					ub = b + i                //                 table hash is greater than t, a HIGHER bound
+					guess = (ub*3 + lb*2) / 5 //                 Interval halve
 					break search
-				case 0: //                                      Is t == buff, we have found the answer!
-					tx, hash, err := c.readTx(int(b + i)) //    Read the tx, and return what it gives us!
-					E(err, "transaction not found")       //
-					return tx, hash, err                  //    Return the tx
+				case 0: //                                   Is key == buff, we have found the answer!
+					tx, hash, err := c.readTx(int(b + i)) // Read the tx, and return what it gives us!
+					return tx, hash, err                  // Return the tx
+				case 1: //                                   Is key > buff, look through the whole buff
+					lb = b + i + 1            // Hash found here is lower than t a LOWER bound
+					guess = (ub*2 + lb*3) / 5 //
 
-				case 1: //                                      is t > hash
-					lb = b + i + 1 //                           Hash found here is lower than t a LOWER bound
-					guess = e + 5  //                           The next guess will be 5 entries before that
+					if i == 0 && bytes.Compare(key, hashes[e-b-1]) == 1 { // Break out of loop quick (happens a lot)
+						break search
+					}
 				}
 			}
 		}
 	}
 	panic("type not supported by c.Fetch()")
 }
-

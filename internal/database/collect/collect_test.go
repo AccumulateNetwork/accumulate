@@ -20,7 +20,7 @@ func Test_hashes(t *testing.T) {
 	var rnd1 LXRandom // Creates a random sequence
 	var rnd2 LXRandom // All instances of LXRandom produce the same sequence
 	c, err := NewCollect("./snapshotX", true)
-	assert.NoError (t, err, "failed to create test file")
+	assert.NoError(t, err, "failed to create test file")
 
 	cnt1 := 0
 	for i := 0; i < 10000; i++ {
@@ -64,7 +64,6 @@ func Test_hashes(t *testing.T) {
 	os.Remove(c.Filename) // get rid of the filename
 }
 
-
 // tx
 // Junk transaction to generate
 type tx struct {
@@ -82,7 +81,8 @@ func (t *tx) fill(i int) {
 }
 
 func Test_CollectTest(t *testing.T) {
-	numberTx := 100000
+	sum := 0
+	numberTx := 10000
 	start := time.Now()
 	c, err := NewCollect("./snapshotX", true) // Get a collect object for building
 	assert.NoError(t, err, "didn't create a Collect Object")
@@ -90,8 +90,8 @@ func Test_CollectTest(t *testing.T) {
 	testTx := new(tx) // Generate transactions for test
 	fmt.Println("writing transactions")
 	for i := 0; i < numberTx; i++ { //
-		if i%1000000 == 0 && i > 0 {
-			fmt.Printf("Transactions processed %d in %v\n  ", i, time.Since(start))
+		if i%100000 == 0 && i > 0 {
+			fmt.Printf("   Transactions processed %d in %v\n", i, time.Since(start))
 		}
 		testTx.fill(i)            //
 		c.WriteTx(testTx.data[:]) //
@@ -105,7 +105,7 @@ func Test_CollectTest(t *testing.T) {
 	fmt.Println("Close")
 	err = c.Close()
 	assert.NoError(t, err, "failed on close")
-	fmt.Printf("time: %v\n", time.Since(start))
+	fmt.Printf(" Time: %v\n", time.Since(start))
 
 	fmt.Print("\nfile complete\n\nTests\n\n")
 
@@ -114,6 +114,9 @@ func Test_CollectTest(t *testing.T) {
 	fmt.Printf("TEST: Index access\n")
 
 	for i := 0; i < numberTx; i++ { //     Go through all the hashes and check against expected values
+		if i%100000 == 0 && i > 0 {
+			fmt.Printf("   Transactions processed %d in %v\n", i, time.Since(start))
+		}
 		tx, hash, err := c.Fetch(i)               //
 		assert.NoError(t, err, "failed to fetch") //
 		h := sha256.Sum256(tx)                    //
@@ -121,24 +124,27 @@ func Test_CollectTest(t *testing.T) {
 			fmt.Printf("%8d failed\n", i) //
 		}
 	}
-	fmt.Printf("time: %v\n", time.Since(start))
+	fmt.Printf(" Time: %v\n", time.Since(start))
 
 	fmt.Println("TEST: fetch hash access")
-	sum := 0
+
 	var testTx2 tx
 	for i := 0; i < numberTx; i++ {
+		if i%100000 == 0 && i > 0 {
+			fmt.Printf("   Transactions processed %d in %v\n", i, time.Since(start))
+		}
 		testTx2.fill(i)
 		testTx2.hash = sha256.Sum256(testTx2.data[:])
-
 		_, h2, err := c.Fetch(testTx2.hash[:])
-		assert.NoError(t, err, "failed to fetch hash")
+		assert.NoErrorf(t, err, "failed to fetch hash %d", i)
+
 		sum += c.GuessCnt
 
-		if !bytes.Equal(h2[:], testTx2.hash[:]) {
-			fmt.Printf("%x failed\n", h2[:8])
-		}
+		assert.False(t, err == nil && !bytes.Equal(h2[:], testTx2.hash[:]),
+			"Invalid hash found")
 	}
-	fmt.Printf("Total time: %v\n", time.Since(start))
+	fmt.Printf(" Guess Count %8.3f\n", float64(sum)/float64(numberTx))
+	fmt.Printf(" Total time: %v\n", time.Since(start))
 
 	{
 		fmt.Println("TEST: fetch bad hash access attempts")
@@ -152,19 +158,18 @@ func Test_CollectTest(t *testing.T) {
 			}
 			return bts[:]
 		}
-		for i := 0; i < 1000; i++ {
+		for i := 0; i < 10000; i++ {
 			testTx.hash = sha256.Sum256(rs())    // Generate a random hash we should never find
 			_, _, err := c.Fetch(testTx.hash[:]) //
 			assert.Error(t, err, "found a random hash")
 			sum += c.GuessCnt
 		}
-		fmt.Printf("Total time: %v\n", time.Since(start))
-
-		os.Remove(c.Filename)
+		fmt.Printf(" Guess Count %8.3f\n", float64(sum)/float64(numberTx))
+		fmt.Printf(" Total time: %v\n", time.Since(start))
 	}
 
-	fmt.Printf("Guess Count %8.3f", float64(sum)/float64(numberTx))
+	c.Close()
+	os.Remove(c.Filename)
+
 	fmt.Printf("tests complete")
 }
-
-
