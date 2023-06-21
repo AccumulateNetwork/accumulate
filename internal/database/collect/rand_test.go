@@ -33,7 +33,7 @@ func (r *LXRandom) spin() {
 // Modifies the state using the given seed and state. Any call to SetState will
 // create a different sequence of random values.
 func (r *LXRandom) SetRandomSequence(state uint64, seed [32]byte) {
-	r.state = r.state <<19 ^ r.state>>3 ^ state
+	r.state = r.state<<19 ^ r.state>>3 ^ state
 	r.seed = seed
 	r.spin() // a zero seed requires a few spins to randomize the state
 	r.spin() // so to be safe, spin is called 3 times to shake up the state
@@ -83,5 +83,5 @@ func Test_LXRandom(t *testing.T) {
 	for i := 0; i < calls; i++ {
 		r.Hash()
 	}
-	fmt.Printf("Time %10s/s\n",humanize.Comma(int64(float64(calls)/float64(time.Since(start).Seconds()))))
+	fmt.Printf("Time %10s/s\n", humanize.Comma(int64(float64(calls)/float64(time.Since(start).Seconds()))))
 }

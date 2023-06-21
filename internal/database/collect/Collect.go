@@ -31,8 +31,8 @@ func EB(err bool, s string) {
 // Record
 // each entry in the index for the transactions
 type Record struct {
-	hash  [32]byte
-	index [8]byte
+	hash  []byte
+	index []byte
 }
 
 type Collect struct {
@@ -64,31 +64,31 @@ func NewCollect(outputName string, build bool) (collect *Collect, err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
 			collect = nil
-	        c.Close()
+			c.Close()
 			err = fmt.Errorf("%v", msg) // Return panic's error
 		}
 
 	}()
 	c.Filename = outputName
-	currentDir,e1 := os.Getwd()
-	E(e1,"couldn't get current directory")
-	c.TmpDirName = filepath.Join(currentDir,c.Filename+".tmp")
+	currentDir, e1 := os.Getwd()
+	E(e1, "couldn't get current directory")
+	c.TmpDirName = filepath.Join(currentDir, c.Filename+".tmp")
 	thd := filepath.Join(c.TmpDirName, "/hashes")
 
 	if !build {
 		return c, c.Open(outputName)
 	}
 
-	c.out, err = os.Create(c.Filename)                       // create transactions
-	E(err, "create transactions fail")                       //
-	c.setLength()                                            // write the offset to the index (length of all tx)
-	os.RemoveAll(c.TmpDirName)                               // Remove any lingering temp directory
-	err = os.Mkdir(c.TmpDirName, os.ModePerm)                // Create a new one
-	E(err, "failed to create tmp directory")                 //
-	err = os.Mkdir(thd, os.ModePerm)                         // Create a hashes directory
-	E(err, "error creating hashes tmp directory")            //
+	c.out, err = os.Create(c.Filename)                      // create transactions
+	E(err, "create transactions fail")                      //
+	c.setLength()                                           // write the offset to the index (length of all tx)
+	os.RemoveAll(c.TmpDirName)                              // Remove any lingering temp directory
+	err = os.Mkdir(c.TmpDirName, os.ModePerm)               // Create a new one
+	E(err, "failed to create tmp directory")                //
+	err = os.Mkdir(thd, os.ModePerm)                        // Create a hashes directory
+	E(err, "error creating hashes tmp directory")           //
 	c.outHash, err = os.Create(filepath.Join(thd, "h.tmp")) // Create tmp hash directory
-	E(err, "failed to create tmp hash file")                 //
+	E(err, "failed to create tmp hash file")                //
 
 	c.tmpHashFiles = make(map[byte]*os.File, 256) // Create map for all 256 tmp hash files
 	for i := 0; i < 256; i++ {                    // Create a bucket file for every byte value
@@ -137,29 +137,23 @@ func (c *Collect) BuildHashFile() (err error) {
 
 	}()
 
-	var buffer [32 * 10240]byte //
-	var hashes [][32]byte       //
-	for i := 0; i < 256; i++ {  //         Run through all file bins
+	var hashes [][]byte        //
+	for i := 0; i < 256; i++ { //                                  Run through all buckets
 		hashes = hashes[:0]
-		_, err := c.tmpHashFiles[byte(i)].Seek(0, io.SeekStart) // Seek to start of tmp file
-		E(err, "failed set 0 on tmp hash file")                 //
-		for {                                                   //
-			len, err := c.tmpHashFiles[byte(i)].Read(buffer[:]) // Read the buffer
-			EB(len%32 != 0, "read encountered partial hash")    // Going to ignore nasty edge cases if the
-			if errors.Is(err, io.EOF) {                         // If err is end of file break
-				break //
-			} //
-			for i := 0; i < len/32; i++ { //                       Run through the buffer and break up the hashes
-				var h [32]byte             //                      Put each hash into a slice to sort
-				copy(h[:], buffer[i*32:])  //
-				hashes = append(hashes, h) //
-			} //
-		} //                                                       After all the records in a bucket are collected
-		sort.Slice(hashes, func(i, j int) bool { //                  Sort them
-			less := bytes.Compare(hashes[i][:], hashes[j][:]) //
-			return less == -1
+		_, err := c.tmpHashFiles[byte(i)].Seek(0, io.SeekStart)      // Seek to start of tmp file
+		E(err, "failed set 0 on tmp hash file")                      //
+		info, e1 := os.Stat(c.tmpHashFiles[byte(i)].Name())          // Make sure bucket isn't hilariously too big
+		E(e1, "failed to get file size of hash bucket")              //
+		EB(info.Size() > 1024*1024*1024*2, "hash bucket is too big") // 2 GB limit on bucket, thats a 512 GB snapshot
+		buffer, e2 := io.ReadAll(c.tmpHashFiles[byte(i)])            // Read the whole file in one hit
+		E(e2, "failed to read a bucket")                             //
+		for i := 0; i < len(buffer); i += 32 {                       // Run through the buffer and break up the hashes
+			hashes = append(hashes, buffer[i:i+32])
+		} //
+		sort.Slice(hashes, func(i, j int) bool { //                  Sort the hashes
+			return 0 > bytes.Compare(hashes[i][:], hashes[j][:])
 		}) //
-		var last [32]byte
+		var last []byte
 		for _, h := range hashes { //                                Then write them all out to the end of
 			if !bytes.Equal(last[:], h[:]) {
 				_, e1 := c.outHash.Write(h[:])                    // every record in the
@@ -307,32 +301,24 @@ func (c *Collect) SortIndexes() (err error) {
 	_, e := c.setLength() // Set the offset to the index table
 
 	E(e, "failed to set length") // table at the end of the output file
-	var buffer [40 * 10240]byte  //
-	cnt := 0                     //
 	var rs []Record              //
-	for i := 0; i < 256; i++ {   //         Run through all file bins
+	for i := 0; i < 256; i++ {   //         Run through all the buckets
 		rs = rs[:0]
-		_, err := c.tmpFiles[byte(i)].Seek(0, 0) //            Seek to start of tmp file
-		E(err, "Couldn't set 0 on tmp file")     //
-		for {                                    //
-			len, err := c.tmpFiles[byte(i)].Read(buffer[:]) // Read the buffer
-			if len%40 != 0 {                                // Going to ignore nasty edge cases if the
-				panic("read a partial record") //               file system won't give me full buffers
-			} //                                                but check if it doesn't
-			if errors.Is(err, io.EOF) { //	                   If len is 0 and err is end of file break
-				break //
-			} //
-			var r Record                  //                   Assume we can hold a full bin in memory
-			for i := 0; i < len/40; i++ { //                   Run through the buffer and create records
-				copy(r.hash[:], buffer[i*40:])     //
-				copy(r.index[:], buffer[i*40+32:]) //
-				rs = append(rs, r)                 //          Collect 'em all
-				cnt++                              //          Sanity.  Counting
-			} //
-		} //                                                         After all the records in a bucket are collected
+		_, err := c.tmpFiles[byte(i)].Seek(0, 0)                // Seek to start of tmp file
+		E(err, "Couldn't set 0 on tmp file")                    //
+		info, e1 := os.Stat(c.tmpFiles[byte(i)].Name())         // Make sure bucket isn't hilariously too big
+		E(e1, "failed to get file size of bucket")              //
+		EB(info.Size() > 1024*1024*1024*2, "bucket is too big") // 2 GB limit on bucket, thats a 512 GB snapshot
+		buffer, e2 := io.ReadAll(c.tmpFiles[byte(i)])           // Read the whole file in one hit
+		E(e2, "failed to read a bucket")                        //
+		var r Record                                            //
+		for i := 0; i < len(buffer); i += 40 {                  // Run through the buffer and create records
+			r.hash = buffer[i : i+32]     //           Slice up the buffer into records
+			r.index = buffer[i+32 : i+40] //
+			rs = append(rs, r)            //           Collect 'em all
+		} //
 		sort.Slice(rs, func(i, j int) bool { //                      Sort them
-			less := bytes.Compare(rs[i].hash[:], rs[j].hash[:]) //
-			return less == -1
+			return 0 > bytes.Compare(rs[i].hash, rs[j].hash) //
 		}) //
 		for _, r := range rs { //                                    Then write them all out to the end of
 			_, e1 := c.out.Write(r.hash[:])                      // every record in the
