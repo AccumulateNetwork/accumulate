@@ -362,6 +362,7 @@ func (d *Daemon) startApp() (types.Application, error) {
 		EventBus: d.eventBus,
 		Config:   d.Config,
 		Tracer:   d.tracer,
+		Database: d.db,
 	})
 	return app, nil
 }

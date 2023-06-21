@@ -9,6 +9,7 @@ package database
 import (
 	"io"
 	"os"
+	"strings"
 
 	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -19,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -142,11 +144,8 @@ func (db *Database) collectAccounts(w *snapshot.Writer, index *badger.DB, opts *
 	defer batch.Discard()
 	it := batch.IterateAccounts()
 	close, copts := collectOptions(index, opts)
-	for {
-		account, ok := it.Next()
-		if !ok {
-			break
-		}
+	for it.Next() {
+		account := it.Value()
 
 		// Check if the caller wants to skip this account
 		if opts.Predicate != nil {
@@ -266,13 +265,8 @@ func (db *Database) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 
 	// Iterate over the BPT and collect hashes
 	it := batch.BPT().Iterate(1000)
-	for {
-		entries, ok := it.Next()
-		if !ok {
-			break
-		}
-
-		for _, entry := range entries {
+	for it.Next() {
+		for _, entry := range it.Value() {
 			_, err = wr.Write(entry.Key[:])
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
@@ -295,11 +289,21 @@ type RestoreOptions struct {
 	BatchRecordLimit int
 	SkipHashCheck    bool
 	Predicate        func(*snapshot.RecordEntry, database.Value) (bool, error)
+
+	Metrics *RestoreMetrics
+}
+
+type RestoreMetrics struct {
+	Records struct {
+		Restoring int
+	}
 }
 
 func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) error {
 	if opts == nil {
 		opts = new(RestoreOptions)
+	}
+	if opts.BatchRecordLimit == 0 {
 		opts.BatchRecordLimit = 50_000
 	}
 
@@ -352,6 +356,10 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 				return errors.UnknownError.WithFormat("resolve %v: %w", entry.Key, err)
 			}
 
+			if opts.Metrics != nil {
+				opts.Metrics.Records.Restoring = count
+			}
+
 			if opts.Predicate != nil {
 				ok, err := opts.Predicate(entry, v)
 				if err != nil {
@@ -380,14 +388,9 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 
 	// We can't check an account's hash until its records are written
 	batch = db.Begin(false)
-	for it := batch.IterateAccounts(); ; {
-		account, ok := it.Next()
-		if !ok {
-			if it.Err() != nil {
-				return errors.UnknownError.Wrap(it.Err())
-			}
-			break
-		}
+	it := batch.IterateAccounts()
+	for it.Next() {
+		account := it.Value()
 
 		hash, err := account.Hash()
 		if err != nil {
@@ -398,6 +401,9 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 			return errors.InvalidRecord.WithFormat("account %v hash does not match", account.Url())
 		}
 		delete(hashes, kh)
+	}
+	if it.Err() != nil {
+		return errors.UnknownError.Wrap(it.Err())
 	}
 
 	for kh := range hashes {
@@ -472,6 +478,7 @@ func collectMessageHashes(a *Account, index *badger.DB, opts *CollectOptions) er
 			continue
 		}
 
+		isSig := strings.EqualFold(chain.Name, "signature")
 		c, err := a.ChainByName(chain.Name)
 		if err != nil {
 			return errors.InvalidRecord.Wrap(err)
@@ -511,6 +518,22 @@ func collectMessageHashes(a *Account, index *badger.DB, opts *CollectOptions) er
 			err = wb.Set(append([]byte(collectIndexTxnPrefix), h...), []byte{})
 			if err != nil {
 				return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+			}
+
+			if !isSig {
+				continue
+			}
+
+			msg, err := a.parent.newMessage(messageKey{*(*[32]byte)(h)}).Main().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load %s chain entry: %w", c.Name(), err)
+			}
+			if msg, ok := msg.(messaging.MessageForTransaction); ok {
+				h := msg.GetTxID().Hash()
+				err = wb.Set(append([]byte(collectIndexTxnPrefix), h[:]...), []byte{})
+				if err != nil {
+					return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+				}
 			}
 		}
 		if opts.Metrics != nil {

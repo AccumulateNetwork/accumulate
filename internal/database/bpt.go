@@ -28,19 +28,25 @@ type AccountIterator struct {
 	entries []bpt.KeyValuePair
 	pos     int
 	err     error
+	current *Account
 }
 
-func (it *AccountIterator) Next() (*Account, bool) {
+func (it *AccountIterator) Value() *Account { return it.current }
+
+func (it *AccountIterator) Next() bool {
 	if it.err != nil {
-		return nil, false
+		return false
 	}
 
 	if it.pos >= len(it.entries) {
-		var ok bool
 		it.pos = 0
-		it.entries, ok = it.it.Next()
-		if !ok || len(it.entries) == 0 {
-			return nil, false
+		if it.it.Next() {
+			it.entries = it.it.Value()
+		} else {
+			it.entries = nil
+		}
+		if len(it.entries) == 0 {
+			return false
 		}
 	}
 
@@ -50,11 +56,12 @@ func (it *AccountIterator) Next() (*Account, bool) {
 	u, err := it.batch.getAccountUrl(record.NewKey(storage.Key(v.Key)))
 	if err != nil {
 		it.err = errors.UnknownError.WithFormat("resolve key hash: %w", err)
-		return nil, false
+		return false
 	}
 
 	// Create a new account record but don't add it to the map
-	return it.batch.newAccount(accountKey{u}), true
+	it.current = it.batch.newAccount(accountKey{u})
+	return true
 }
 
 func (it *AccountIterator) Err() error {

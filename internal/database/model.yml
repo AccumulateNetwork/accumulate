@@ -218,7 +218,9 @@
 
     # Indices
     - name: Chains
-      type: index
+      # This should be an index but because of a bug in the BPT calculations it
+      # needs to be preserved a snapshot
+      type: state
       dataType: protocol.ChainMetadata
       pointer: true
       collection: set

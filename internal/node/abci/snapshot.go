@@ -7,9 +7,6 @@
 package abci
 
 import (
-	"bytes"
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -55,77 +52,89 @@ func ListSnapshots(cfg *config.Config) ([]*snapshot.Header, error) {
 }
 
 func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.ResponseListSnapshots {
-	entries, err := ListSnapshots(app.Config)
-	if err != nil {
-		app.logger.Error("Failed to list snapshots", "error", err)
-		return abci.ResponseListSnapshots{}
-	}
+	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3356
+	return abci.ResponseListSnapshots{}
 
-	var resp abci.ResponseListSnapshots
-	resp.Snapshots = make([]*abci.Snapshot, 0, len(entries))
-	for _, header := range entries {
-		resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
-			Height: header.Height,
-			Format: uint32(header.Version),
-			Chunks: 1,
-			Hash:   header.RootHash[:],
-		})
-	}
-	return resp
+	// entries, err := ListSnapshots(app.Config)
+	// if err != nil {
+	// 	app.logger.Error("Failed to list snapshots", "error", err)
+	// 	return abci.ResponseListSnapshots{}
+	// }
+
+	// var resp abci.ResponseListSnapshots
+	// resp.Snapshots = make([]*abci.Snapshot, 0, len(entries))
+	// for _, header := range entries {
+	// 	resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
+	// 		Height: header.Height,
+	// 		Format: uint32(header.Version),
+	// 		Chunks: 1,
+	// 		Hash:   header.RootHash[:],
+	// 	})
+	// }
+	// return resp
 }
 
 // LoadSnapshotChunk queries the node for the body of a snapshot.
 func (app *Accumulator) LoadSnapshotChunk(req abci.RequestLoadSnapshotChunk) abci.ResponseLoadSnapshotChunk {
-	if req.Format != snapshot.Version1 || req.Chunk != 0 {
-		app.logger.Error("Invalid snapshot request", "height", req.Height, "format", req.Format, "chunk", req.Chunk)
-		return abci.ResponseLoadSnapshotChunk{}
-	}
+	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3356
+	return abci.ResponseLoadSnapshotChunk{}
 
-	snapDir := config.MakeAbsolute(app.RootDir, app.Accumulate.Snapshots.Directory)
-	f, err := os.Open(filepath.Join(snapDir, fmt.Sprintf(core.SnapshotMajorFormat, req.Height)))
-	if err != nil {
-		app.logger.Error("Failed to load snapshot", "error", err, "height", req.Height, "format", req.Format, "chunk", req.Chunk)
-		return abci.ResponseLoadSnapshotChunk{}
-	}
-	defer f.Close()
+	// if req.Format != snapshot.Version1 || req.Chunk != 0 {
+	// 	app.logger.Error("Invalid snapshot request", "height", req.Height, "format", req.Format, "chunk", req.Chunk)
+	// 	return abci.ResponseLoadSnapshotChunk{}
+	// }
 
-	data, err := io.ReadAll(f)
-	if err != nil {
-		app.logger.Error("Failed to load snapshot", "error", err, "height", req.Height, "format", req.Format, "chunk", req.Chunk)
-		return abci.ResponseLoadSnapshotChunk{}
-	}
+	// snapDir := config.MakeAbsolute(app.RootDir, app.Accumulate.Snapshots.Directory)
+	// f, err := os.Open(filepath.Join(snapDir, fmt.Sprintf(core.SnapshotMajorFormat, req.Height)))
+	// if err != nil {
+	// 	app.logger.Error("Failed to load snapshot", "error", err, "height", req.Height, "format", req.Format, "chunk", req.Chunk)
+	// 	return abci.ResponseLoadSnapshotChunk{}
+	// }
+	// defer f.Close()
 
-	return abci.ResponseLoadSnapshotChunk{Chunk: data}
+	// data, err := io.ReadAll(f)
+	// if err != nil {
+	// 	app.logger.Error("Failed to load snapshot", "error", err, "height", req.Height, "format", req.Format, "chunk", req.Chunk)
+	// 	return abci.ResponseLoadSnapshotChunk{}
+	// }
+
+	// return abci.ResponseLoadSnapshotChunk{Chunk: data}
 }
 
 // OfferSnapshot offers a snapshot to the node.
 func (app *Accumulator) OfferSnapshot(req abci.RequestOfferSnapshot) abci.ResponseOfferSnapshot {
-	if req.Snapshot == nil {
-		return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}
-	}
-	if req.Snapshot.Format != snapshot.Version1 {
-		return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT_FORMAT}
-	}
-	if req.Snapshot.Chunks != 1 {
-		return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}
-	}
+	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3356
+	return abci.ResponseOfferSnapshot{}
 
-	return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ACCEPT}
+	// if req.Snapshot == nil {
+	// 	return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}
+	// }
+	// if req.Snapshot.Format != snapshot.Version1 {
+	// 	return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT_FORMAT}
+	// }
+	// if req.Snapshot.Chunks != 1 {
+	// 	return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}
+	// }
+
+	// return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ACCEPT}
 }
 
 // ApplySnapshotChunk applies a snapshot to the node.
 func (app *Accumulator) ApplySnapshotChunk(req abci.RequestApplySnapshotChunk) abci.ResponseApplySnapshotChunk {
-	if req.Index != 0 {
-		return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_REJECT_SNAPSHOT}
-	}
+	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3356
+	return abci.ResponseApplySnapshotChunk{}
 
-	rd := bytes.NewReader(req.Chunk)
-	_, err := app.Executor.Restore(rd, nil)
-	if err != nil {
-		app.logger.Error("Failed to restore snapshot", "error", err)
-		return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ABORT}
-	}
+	// if req.Index != 0 {
+	// 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_REJECT_SNAPSHOT}
+	// }
 
-	app.ready = true
-	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}
+	// rd := bytes.NewReader(req.Chunk)
+	// err := snapshot.FullRestore(app.Database, rd, app.logger, &app.Accumulate.Describe)
+	// if err != nil {
+	// 	app.logger.Error("Failed to restore snapshot", "error", err)
+	// 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ABORT}
+	// }
+
+	// app.ready = true
+	// return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}
 }
