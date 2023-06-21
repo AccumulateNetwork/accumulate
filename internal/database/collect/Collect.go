@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 )
 
@@ -62,17 +63,20 @@ func NewCollect(outputName string, build bool) (collect *Collect, err error) {
 	c := new(Collect)
 	defer func() {
 		if msg := recover(); msg != nil {
-			err = fmt.Errorf("%v", msg) // Return panic's error
-			c.Close()
 			collect = nil
+	        c.Close()
+			err = fmt.Errorf("%v", msg) // Return panic's error
 		}
+
 	}()
 	c.Filename = outputName
-	c.TmpDirName = outputName + ".tmp"
-	thd := c.TmpDirName + "/hashes"
+	currentDir,e1 := os.Getwd()
+	E(e1,"couldn't get current directory")
+	c.TmpDirName = filepath.Join(currentDir,c.Filename+".tmp")
+	thd := filepath.Join(c.TmpDirName, "/hashes")
 
 	if !build {
-		return c, c.Open()
+		return c, c.Open(outputName)
 	}
 
 	c.out, err = os.Create(c.Filename)                       // create transactions
@@ -109,18 +113,15 @@ func NewCollect(outputName string, build bool) (collect *Collect, err error) {
 func (c *Collect) WriteHash(hash []byte) (err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
-			err = fmt.Errorf("%v", msg) // Return panic's error
 			c.Close()
-		}
-	}()
-	defer func() {
-		if msg := recover(); msg != nil {
 			err = fmt.Errorf("%v", msg) // Return panic's error
 		}
+
 	}()
 	_, err = c.outHash.Seek(0, io.SeekEnd)       // Position to the end of the file (get that index)
 	E(err, "failed to sync to EOF in writeHash") //
 	_, err = c.tmpHashFiles[hash[0]].Write(hash) // Write the record to the bucket indicated by the transaction hash
+	E(err, "filed to write hash to tmpHashFiles")
 	return nil
 }
 
@@ -130,9 +131,10 @@ func (c *Collect) WriteHash(hash []byte) (err error) {
 func (c *Collect) BuildHashFile() (err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
-			err = fmt.Errorf("%v", msg) // Return panic's error
 			c.Close()
+			err = fmt.Errorf("%v", msg) // Return panic's error
 		}
+
 	}()
 
 	var buffer [32 * 10240]byte //
@@ -166,7 +168,8 @@ func (c *Collect) BuildHashFile() (err error) {
 			last = h
 		} //                                                        then read the transaction.
 	}
-	c.outHash.Seek(0, io.SeekStart) // Leave the file position at start of file
+	_, err = c.outHash.Seek(0, io.SeekStart) // Leave the file position at start of file
+	E(err, "failed to seek to start of file")
 	return nil
 }
 
@@ -176,8 +179,8 @@ func (c *Collect) BuildHashFile() (err error) {
 func (c *Collect) NumberHashes() (hashCnt int, err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
-			err = fmt.Errorf("%v", msg) // Return panic's error
 			c.Close()
+			err = fmt.Errorf("%v", msg) // Return panic's error
 		}
 	}()
 	info, err := c.outHash.Stat()
@@ -189,7 +192,9 @@ func (c *Collect) NumberHashes() (hashCnt int, err error) {
 // Get the next hash out of the hash file. After all the hashes have been put into collect,
 // the user then does a BuildHashFile().  Afterwards, the caller can walk serially through
 // the hashes by making repeated calls to GetHash.  Returns nil on EOF
-func (c *Collect) GetHash() []byte {
+//
+// GetHash will panic on any error other than EOF
+func (c *Collect) GetHash() (hash []byte) {
 	var h [32]byte
 	l, err := c.outHash.Read(h[:])
 	if errors.Is(err, io.EOF) {
@@ -205,14 +210,15 @@ func (c *Collect) GetHash() []byte {
 func (c *Collect) Close() (err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
+
 			err = fmt.Errorf("%v", msg) // Return panic's error
 		}
+
 	}()
 
 	// Close all the files
-	err = c.out.Close()
-
-	E(err, "failed to close the output file")
+	err1 := c.out.Close()
+	E(err1, "failed to close the output file")
 	for _, f := range c.tmpHashFiles {
 		err := f.Close()
 		E(err, "failed to close file")
@@ -221,11 +227,12 @@ func (c *Collect) Close() (err error) {
 		err := f.Close()
 		E(err, "failed to close file")
 	}
-	c.outHash.Close()
+	err2 := c.outHash.Close()
 
 	// Remove all the tmp files; just have to kill the tmp directory
-	err = os.RemoveAll(c.TmpDirName)
-	E(err, "failed to remove the temporary directory")
+	err3 := os.RemoveAll(c.TmpDirName)
+	E(err2, "failed to close outHash")
+	E(err3, "failed to remove the temporary directory")
 	return nil
 }
 
@@ -238,8 +245,8 @@ func (c *Collect) Close() (err error) {
 func (c *Collect) setLength() (offset int64, err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
+			c.Close()
 			err = fmt.Errorf("%v", msg) // Return panic's error
-			os.RemoveAll(c.TmpDirName)  // Remove any lingering temp directory
 		}
 	}()
 	c.Offset, err = c.out.Seek(0, io.SeekEnd)                        // Get size of file
@@ -263,8 +270,8 @@ func (c *Collect) setLength() (offset int64, err error) {
 func (c *Collect) WriteTx(tx []byte) (err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
+			err = c.Close()
 			err = fmt.Errorf("%v", msg) // Return panic's error
-			os.RemoveAll(c.TmpDirName)  // Remove any lingering temp directory
 		}
 	}()
 	hash := sha256.Sum256(tx) // Hash of the transaction
@@ -293,11 +300,10 @@ func (c *Collect) WriteTx(tx []byte) (err error) {
 func (c *Collect) SortIndexes() (err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
+			c.Close()
 			err = fmt.Errorf("%v", msg) // Return panic's error
-			os.RemoveAll(c.TmpDirName)  // Remove any lingering temp directory
 		}
 	}()
-
 	_, e := c.setLength() // Set the offset to the index table
 
 	E(e, "failed to set length") // table at the end of the output file
@@ -335,26 +341,32 @@ func (c *Collect) SortIndexes() (err error) {
 			E(e2, "couldn't write record index to transactions") //
 		} //                                                        then read the transaction.
 	}
+	info, err := os.Stat(c.out.Name())
+	E(err, "output file does not exist after SortIndexes")
+	c.OffsetEnd = info.Size()
 
 	return nil
 }
 
 // Open
 // Opens the output file for read access after building a transaction file
-func (c *Collect) Open() (err error) {
+func (c *Collect) Open(filename string) (err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
+			err = c.Close()
 			err = fmt.Errorf("%v", msg) // Return panic's error
 		}
 	}()
-
+	c.Filename = filename
 	c.out, err = os.Open(c.Filename)
 	E(err, "failed to open the transaction file")
 	b, e := c.out.Read(c.OffsetToIndex[:])
 	E(e, "failed to read offset to index")
 	EB(b != 8, "failed to read the whole 8 bytes of the index")
 	c.Offset = int64(binary.BigEndian.Uint64(c.OffsetToIndex[:]))
-	c.OffsetEnd, err = c.out.Seek(0, io.SeekEnd)
+	info, err := os.Stat(c.out.Name())
+	E(err, "output file does not exist after SortIndexes")
+	c.OffsetEnd = info.Size()
 	return nil
 }
 
@@ -385,8 +397,8 @@ func (c *Collect) readTx(index int) (transaction, hash []byte, err error) {
 func (c *Collect) Fetch(KeySought interface{}) (transaction, hash []byte, err error) {
 	defer func() {
 		if msg := recover(); msg != nil {
+			c.Close()
 			err = fmt.Errorf("%v", msg) // Return panic's error
-			os.RemoveAll(c.TmpDirName)  // Remove any lingering temp directory
 		}
 	}()
 	switch key := KeySought.(type) {

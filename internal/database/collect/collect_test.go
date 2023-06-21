@@ -5,11 +5,55 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// tx
+// Junk transaction to generate
+type tx struct {
+	hash   [32]byte
+	length int
+	data   [2000]byte
+	r      LXRandom
+}
+
+// fill
+// create data for a transaction
+func (t *tx) fill(i int) {
+	t.length = t.r.Uint()%500 + 100
+	copy(t.data[:], t.r.Slice(t.length))
+}
+
+// buildSnapshot
+// builds a collect for a snapshot and generates the given number of transactions and
+// stuffs them into said snapshot
+func buildSnapshot(t *testing.T, numberTx int) *Collect {
+	start := time.Now()
+	c, err := NewCollect("./snapshotX", true) // Get a collect object for building
+	assert.NoError(t, err, "didn't create a Collect Object")
+
+	testTx := new(tx) // Generate transactions for test
+	fmt.Println("writing transactions")
+	for i := 0; i < numberTx; i++ { //
+		if i%100000 == 0 && i > 0 {
+			fmt.Printf("   Transactions processed %d in %v\n", i, time.Since(start))
+		}
+		testTx.fill(i)            //
+		c.WriteTx(testTx.data[:]) //
+
+	} //
+	fmt.Printf("time: %v\n", time.Since(start))
+	fmt.Println("sorting Indexes")
+	err = c.SortIndexes() //              Sort all the transactions indexes
+	assert.NoError(t, err, "failed to sort transactions")
+	fmt.Printf("time: %v\n", time.Since(start))
+
+	return c
+}
 
 // Test_hashes
 // Puts a pile of hashes into Collect
@@ -64,54 +108,17 @@ func Test_hashes(t *testing.T) {
 	os.Remove(c.Filename) // get rid of the filename
 }
 
-// tx
-// Junk transaction to generate
-type tx struct {
-	hash   [32]byte
-	length int
-	data   [2000]byte
-	r      LXRandom
-}
-
-// fill
-// create data for a transaction
-func (t *tx) fill(i int) {
-	t.length = t.r.Uint()%500 + 100
-	copy(t.data[:], t.r.Slice(t.length))
-}
-
-func Test_CollectTest(t *testing.T) {
-	sum := 0
-	numberTx := 10000
-	start := time.Now()
-	c, err := NewCollect("./snapshotX", true) // Get a collect object for building
-	assert.NoError(t, err, "didn't create a Collect Object")
-
-	testTx := new(tx) // Generate transactions for test
-	fmt.Println("writing transactions")
-	for i := 0; i < numberTx; i++ { //
-		if i%100000 == 0 && i > 0 {
-			fmt.Printf("   Transactions processed %d in %v\n", i, time.Since(start))
-		}
-		testTx.fill(i)            //
-		c.WriteTx(testTx.data[:]) //
-
-	} //
-	fmt.Printf("time: %v\n", time.Since(start))
-	fmt.Println("sorting Indexes")
-	err = c.SortIndexes() //              Sort all the transactions indexes
-	assert.NoError(t, err, "failed to sort transactions")
-	fmt.Printf("time: %v\n", time.Since(start))
-	fmt.Println("Close")
-	err = c.Close()
-	assert.NoError(t, err, "failed on close")
-	fmt.Printf(" Time: %v\n", time.Since(start))
-
-	fmt.Print("\nfile complete\n\nTests\n\n")
-
-	c.Open()
-
+// Test_FetchIndex
+// Fetch all elements out of the standard Collect object
+func Test_FetchIndex(t *testing.T) {
 	fmt.Printf("TEST: Index access\n")
+
+	numberTx := 10000
+	c := buildSnapshot(t, numberTx)
+	c.Close() // Test close and open
+
+	c.Open("./snapshotX")
+	start := time.Now()
 
 	for i := 0; i < numberTx; i++ { //     Go through all the hashes and check against expected values
 		if i%100000 == 0 && i > 0 {
@@ -125,8 +132,23 @@ func Test_CollectTest(t *testing.T) {
 		}
 	}
 	fmt.Printf(" Time: %v\n", time.Since(start))
+	c.Close()
+	os.Remove(c.Filename)
+}
 
+// Test_FetchHash
+// Tests access by hash by building a snapshot, and ensuring we can pull every entry.
+func Test_FetchHash(t *testing.T) {
 	fmt.Println("TEST: fetch hash access")
+
+	numberTx := 10000
+	var c *Collect
+	if err := c.Open("./snapshotX"); err != nil {
+		c = buildSnapshot(t, numberTx)
+	}
+
+	start := time.Now()
+	sum := 0
 
 	var testTx2 tx
 	for i := 0; i < numberTx; i++ {
@@ -146,30 +168,32 @@ func Test_CollectTest(t *testing.T) {
 	fmt.Printf(" Guess Count %8.3f\n", float64(sum)/float64(numberTx))
 	fmt.Printf(" Total time: %v\n", time.Since(start))
 
-	{
-		fmt.Println("TEST: fetch bad hash access attempts")
-		sum = 0               // Set up for test
-		r := 1423142          // Set up for random string generator
-		var bts [32]byte      //
-		rs := func() []byte { //
-			for i, b := range bts { //  Simple shift xor random
-				r := r<<7 ^ r ^ r>>3 // generated string
-				bts[i] = b ^ byte(r) // but purely deterministic
-			}
-			return bts[:]
-		}
-		for i := 0; i < 10000; i++ {
-			testTx.hash = sha256.Sum256(rs())    // Generate a random hash we should never find
-			_, _, err := c.Fetch(testTx.hash[:]) //
-			assert.Error(t, err, "found a random hash")
-			sum += c.GuessCnt
-		}
-		fmt.Printf(" Guess Count %8.3f\n", float64(sum)/float64(numberTx))
-		fmt.Printf(" Total time: %v\n", time.Since(start))
-	}
-
+	os.Remove(c.out.Name())
 	c.Close()
-	os.Remove(c.Filename)
+}
 
-	fmt.Printf("tests complete")
+func Test_FetchBadHash(t *testing.T) {
+	fmt.Println("TEST: fetch bad hash access attempts")
+	numberTx := 10000
+	c := buildSnapshot(t, numberTx)
+
+	var testTx tx
+	start := time.Now()
+	sum := 0 // Set up for test
+
+	var r LXRandom
+	r.SetRandomSequence(2424234, [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+
+	// None of these hashes in this sequence should be in the Snapshot
+	for i := 0; i < numberTx; i++ {
+		testTx.hash = r.Hash()
+		_, _, err := c.Fetch(testTx.hash) //
+		assert.Error(t, err, "found a random hash")
+		sum += c.GuessCnt
+	}
+	fmt.Printf(" Guess Count %8.3f\n", float64(sum)/float64(numberTx))
+	fmt.Printf(" Total time: %v\n", time.Since(start))
+
+	os.Remove(c.out.Name())
+	c.Close()
 }
