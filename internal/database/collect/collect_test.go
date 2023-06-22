@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,13 +61,16 @@ func buildSnapshot(t *testing.T, numberTx int) *Collect {
 // Reads the hashes out using Collect.GetHash()
 // Ensures all the hashes we expect are in the file, and no more.
 func Test_hashes(t *testing.T) {
+	numberHashes := 10000
 	var rnd1 LXRandom // Creates a random sequence
 	var rnd2 LXRandom // All instances of LXRandom produce the same sequence
 	c, err := NewCollect("./snapshotX", true)
 	assert.NoError(t, err, "failed to create test file")
 
+	fmt.Printf("starting build of %s hashes\n",humanize.Comma(int64(numberHashes)))
+	start := time.Now()
 	cnt1 := 0
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < numberHashes/2; i++ {
 		cnt1 += 2        // The way we stuff things in, we get 2 entries per loop, sans duplicates
 		h := rnd1.Hash() // The first two hashes of the sequence into the hash file
 		c.WriteHash(h[:])
@@ -75,8 +79,11 @@ func Test_hashes(t *testing.T) {
 		h = rnd2.Hash() // Now just add the hashes of the sequence one at a time (duplicates)
 		c.WriteHash(h[:])
 	}
-
+	fmt.Printf("collection complete (%v), now sorting:\n",time.Since(start))
+	start2 := time.Now()
 	c.BuildHashFile() // Deduplicate and sort hashes
+	fmt.Printf("sorting complete (%v), now reading:\n",time.Since(start2))
+	start3 := time.Now()
 
 	nh, e2 := c.NumberHashes() // Get the number of deduplicated hashes; should match our count
 	assert.NoError(t, e2, "failed to get number of hashes")
@@ -105,6 +112,7 @@ func Test_hashes(t *testing.T) {
 	assert.Truef(t, cnt2 == cnt1, "Should have same number of elements %d %d", cnt1, cnt2)
 	c.Close()             // Get rid of all tmp files
 	os.Remove(c.Filename) // get rid of the filename
+	fmt.Printf("reading complete (%v), total test time: %v\n",time.Since(start3),time.Since(start))
 }
 
 // Test_FetchIndex
