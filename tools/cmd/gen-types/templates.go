@@ -9,12 +9,12 @@ package main
 import (
 	_ "embed"
 	"fmt"
-	"github.com/gobeam/stringy"
 	"path"
 	"regexp"
 	"strings"
 	"text/template"
 
+	"github.com/gobeam/stringy"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 

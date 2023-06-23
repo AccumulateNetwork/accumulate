@@ -1,11 +1,20 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
 	_ "embed"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"strings"
 	"text/template"
+
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
 var cFuncMap = template.FuncMap{
@@ -112,7 +121,7 @@ func init() {
 }
 
 func CMethodName(typ, name string) string {
-	return strings.Title(typ) + "_" + name
+	return cases.Title(language.English).String(typ) + "_" + name
 }
 
 func CErrVirtualFieldNotEqual(field *Field, varName, valName string) (string, error) {
@@ -163,7 +172,7 @@ func CIsZero(field *Field, varName string) (string, error) {
 
 	switch field.Type.Code {
 	case Bytes, RawJson, String:
-		return fmt.Sprintf("%s.Length(&%s) == 0", varName), nil
+		return fmt.Sprintf("%s.Length(&%s) == 0", varName, varName), nil
 	case Any:
 		return fmt.Sprintf("%s == nil", varName), nil
 	case Bool:
@@ -241,14 +250,11 @@ func CInit(field *Field, varName string) (string, error) {
 		expr = "%s"
 		varName = "false"
 	case "rawJson":
-		typ = "bytes"
 		fallthrough
 	case "bytes", "string", "chainSet", "duration", "time":
-		typ = CResolveType(field, false, false)
 		expr = CMethodName(typ, "init") + "(%s, buffer->ptr, buffer->size)"
 		varName = "0"
 	case "bigint", "chain", "varint", "uvarint":
-		typ = CResolveType(field, false, false)
 		expr = CMethodName(typ, "init") + "(%s)"
 		varName = "0"
 	case "slice":
@@ -368,16 +374,6 @@ func CBinarySize(field *Field, varName string) (string, error) {
 	return w.String(), nil
 }
 
-func cUnionMethod(field *Field, name string) string {
-	parts := strings.SplitN(field.Type.String(), ".", 2)
-	if len(parts) == 1 {
-		return name + parts[0]
-	}
-	return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
-}
-
-//	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-//		expr, size = CMethodName(typ, "UnmarshalBinary")+"(data)", CMethodName(typ, "BinarySize")+"(%s)"
 func cBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type.Code {
 	case Bool, String, Duration, Time, Bytes, Uint, Int, Float:
@@ -397,19 +393,6 @@ func cBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 		return "Value", false
 	case Enum:
 		return "Enum", false
-	}
-
-	return "", false
-}
-
-func cJsonMethod(field *Field) (methodName string, wantPtr bool) {
-	switch field.Type.Code {
-	case Bytes, Duration, Any:
-		return field.Type.Title(), false
-	case Hash:
-		return "Chain", false
-	case BigInt:
-		return "Bigint", true
 	}
 
 	return "", false
@@ -664,53 +647,4 @@ func CCopy(field *Field, dstName, srcName string) (string, error) {
 		"\t%[1]s = make(%[2]s, len(%[3]s))\n"+
 			"\tfor i, v := range %[3]s { %s }",
 		dstName, CResolveType(field, false, false), srcName, expr), nil
-}
-
-func cCopy(field *Field, dstName, srcName string) (string, error) {
-	switch field.Type.Code {
-	case Bool, String, Duration, Time, Uint, Float, Int, Hash:
-		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
-
-	case Bytes, RawJson:
-		return goCopyNonPointer(field, "%s = encoding.BytesCopy(%s)", dstName, srcName), nil
-
-	case Url, TxID:
-		// URLs and TxIDs should be immutable and thus do not need to be copied
-		return goCopyPointer(field, "%s", dstName, srcName), nil
-
-	case BigInt:
-		return goCopyPointer(field, "encoding.BigintCopy(%s)", dstName, srcName), nil
-	}
-
-	switch field.MarshalAs {
-	case Union:
-		return goCopyNonPointer(field, "if %[1]s != nil { %[2]s = (%[1]s).CopyAsInterface().(%[3]s) }", srcName, dstName, CResolveType(field, false, true)), nil
-	case Reference:
-		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
-	case Value, Enum:
-		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
-	default:
-		return "", fmt.Errorf("field %q: cannot determine how to copy %s", field.Name, CResolveType(field, false, false))
-	}
-}
-
-func cCopyNonPointer(field *Field, expr, dstName, srcName string, exprArgs ...interface{}) string {
-	if !field.Pointer {
-		exprArgs = append([]interface{}{dstName, srcName}, exprArgs...)
-		return fmt.Sprintf(expr, exprArgs...)
-	}
-
-	exprArgs = append([]interface{}{"*" + dstName, "*" + srcName}, exprArgs...)
-	expr = fmt.Sprintf(expr, exprArgs...)
-	return fmt.Sprintf("if %s != nil { %s = new(%s); %s }", srcName, dstName, CResolveType(field, true, true), expr)
-}
-
-func cCopyPointer(field *Field, expr, dstName, srcName string) string {
-	if field.Pointer {
-		expr = fmt.Sprintf(expr, srcName)
-		return fmt.Sprintf("if %s != nil { %s = %s }", srcName, dstName, expr)
-	}
-
-	expr = fmt.Sprintf(expr, "&"+srcName)
-	return fmt.Sprintf("%s = *%s", dstName, expr)
 }

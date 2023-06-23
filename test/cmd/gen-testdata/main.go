@@ -13,23 +13,27 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"math/big"
+	"os"
+	"path/filepath"
+
+	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	sdktest "gitlab.com/accumulatenetwork/accumulate/test/sdk"
 	randPkg "golang.org/x/exp/rand"
-	"math/big"
-	"os"
-	"path/filepath"
 )
 
-//seed: m/44'/281'/0'/0'/0'
+// seed: m/44'/281'/0'/0'/0'
 var keySeed, _ = hex.DecodeString("a2fd3e3b8c130edac176da83dcf809e22a01ab5a853560806e6cc054b3e160b0")
 var key = ed25519.NewKeyFromSeed(keySeed[:])
 var rand = randPkg.New(randPkg.NewSource(binary.BigEndian.Uint64(keySeed[:])))
-var useSimpleHash = flag.Bool("simple", false, "Use simple hashes for signatures")
+var useSimpleHash = flag.Bool("simple", true, "Use simple hashes for signatures")
 
 func fatalf(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
@@ -71,7 +75,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	check(ts.Store(file))
 
-	if len(args) > 2 {
+	if len(args) > 1 {
 		lts := &sdktest.TestSuite{
 			Transactions: transactionTests(txnLedgerTestVectors),
 			Accounts:     accountTests(txnLedgerTestVectors),
@@ -240,11 +244,16 @@ func txnLedgerTestVectors(originUrl *url.URL, body TransactionBody) *TC {
 	signer.Url = originUrl
 	signer.Version = 1
 	signer.SetTimestamp(uint64(1234567890))
-	env := new(Envelope)
+
+	env := new(messaging.Envelope)
 	txn := new(Transaction)
 	env.Transaction = []*Transaction{txn}
 	txn.Header.Principal = originUrl
 	txn.Body = body
+
+	if *useSimpleHash {
+		signer.InitMode = signing.InitWithSimpleHash
+	}
 
 	sig, err := signer.Initiate(txn)
 	if err != nil && !errors.Is(err, UseHardwareError) {
@@ -252,5 +261,9 @@ func txnLedgerTestVectors(originUrl *url.URL, body TransactionBody) *TC {
 	}
 
 	env.Signatures = append(env.Signatures, sig)
+	if txn.Body.Type() == TransactionTypeSendTokens {
+		data, _ := env.MarshalBinary()
+		fmt.Println(hex.EncodeToString(data))
+	}
 	return sdktest.NewTxnTest(env)
 }
