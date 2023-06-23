@@ -8,6 +8,7 @@ package database
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -18,10 +19,10 @@ func (b *Batch) Message2(hash []byte) *Message {
 }
 
 func (m *Message) hash() [32]byte {
-	return m.key[1].([32]byte)
+	return m.key.Get(1).([32]byte)
 }
 
-func (m *Message) Main() record.Value[messaging.Message] {
+func (m *Message) Main() values.Value[messaging.Message] {
 	return (*messageMain)(m)
 }
 
@@ -29,6 +30,7 @@ func (m *Message) Main() record.Value[messaging.Message] {
 // batch.Transaction(hash).Main() if the message's main state does not exist.
 type messageMain Message
 
+func (m *messageMain) Key() *record.Key              { return (*Message)(m).getMain().Key() }
 func (m *messageMain) IsDirty() bool                 { return (*Message)(m).getMain().IsDirty() }
 func (m *messageMain) Commit() error                 { return (*Message)(m).getMain().Commit() }
 func (m *messageMain) Put(v messaging.Message) error { return (*Message)(m).getMain().Put(v) }
@@ -83,15 +85,15 @@ func (m *messageMain) GetAs(target interface{}) error {
 }
 
 // Resolve implements Record.Resolve.
-func (m *messageMain) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (m *messageMain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return m, nil, nil
 	}
 	return nil, nil, errors.InternalError.With("bad key for value")
 }
 
-func (m *messageMain) WalkChanges(fn record.WalkFunc) error {
+func (m *messageMain) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	var err error
-	record.FieldWalkChanges(&err, m.main, fn)
+	values.Walk(&err, m.main, opts, fn)
 	return err
 }

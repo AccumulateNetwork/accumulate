@@ -26,7 +26,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -377,8 +376,8 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 	}
 
-	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-		return app.Executor.Validate(messages, req.Type == abci.CheckTxType_Recheck)
+	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+		return app.Executor.Validate(envelope, req.Type == abci.CheckTxType_Recheck)
 	}, req.Tx)
 	if err != nil {
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
@@ -437,13 +436,12 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		resp.Log += fmt.Sprintf("envelope(%d/%s) %v;", i, result.Code.String(), result.Error)
 	}
 
-	// If a transaction header or body is 64 bytes, the batch fails
+	// If a transaction body is 64 bytes, the batch fails
 	if resp.Code == abci.CodeTypeOK {
 		for i, txn := range txns {
-			_, is64 := txn.GetHash2()
-			if is64 {
+			if txn.BodyIs64Bytes() {
 				resp.Code = 1
-				resp.Log += fmt.Sprintf("envelope(%d) transaction has 64 byte header or body;", i)
+				resp.Log += fmt.Sprintf("envelope(%d) transaction has 64 byte body;", i)
 			}
 		}
 	}

@@ -7,9 +7,15 @@
 package harness
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -27,9 +33,56 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 // NewSim creates a simulator with the given database, network initialization,
 // and snapshot function and calls NewSimWith.
 func NewSim(tb testing.TB, database simulator.OpenDatabaseFunc, init *accumulated.NetworkInit, snapshot simulator.SnapshotFunc) *Sim {
-	s, err := simulator.New(acctesting.NewTestLogger(tb), database, init, snapshot)
+	s, err := simulator.New2(acctesting.NewTestLogger(tb), database, init, snapshot, Recordings(tb))
 	require.NoError(tb, err)
 	return NewSimWith(tb, s)
+}
+
+func Recordings(tb testing.TB) simulator.RecordingFunc {
+	onFail := os.Getenv("RECORD_FAILURE")
+	if onFail == "" {
+		return nil
+	}
+
+	require.NoError(tb, os.MkdirAll(onFail, 0755))
+
+	prefix := sha256.Sum256([]byte(tb.Name()))
+	var didAnnounce bool
+
+	dir := tb.TempDir()
+	return func(partition string, node int) (io.WriteSeeker, error) {
+		file := filepath.Join(dir, fmt.Sprintf("%s-%d.record", partition, node))
+		f, err := os.Create(file)
+		if err != nil {
+			return nil, err
+		}
+		tb.Cleanup(func() {
+			if !tb.Failed() {
+				assert.NoError(tb, f.Close())
+				return
+			}
+			if !didAnnounce {
+				tb.Logf("Failure recordings for %s are prefixed with %x", tb.Name(), prefix)
+				didAnnounce = true
+			}
+			dst := filepath.Join(onFail, fmt.Sprintf("%x-%s-%d.record", prefix, partition, node))
+			g, err := os.Create(dst)
+			if !assert.NoError(tb, err) {
+				return
+			}
+			_, err = f.Seek(0, io.SeekStart)
+			if !assert.NoError(tb, err) {
+				return
+			}
+			_, err = io.Copy(g, f)
+			if !assert.NoError(tb, err) {
+				return
+			}
+			assert.NoError(tb, f.Close())
+			assert.NoError(tb, g.Close())
+		})
+		return f, nil
+	}
 }
 
 // NewSimWith creates a Harness for the given simulator instance and wraps it as
@@ -89,11 +142,21 @@ func (s *Sim) SetBlockHookFor(account *url.URL, fn simulator.BlockHookFunc) {
 	s.S.SetBlockHookFor(account, fn)
 }
 
+// SetNodeBlockHook calls Simulator.SetNodeBlockHook.
+func (s *Sim) SetNodeBlockHook(partition string, fn simulator.NodeBlockHookFunc) {
+	s.S.SetNodeBlockHook(partition, fn)
+}
+
+// SetNodeBlockHookFor calls Simulator.SetNodeBlockHookFor.
+func (s *Sim) SetNodeBlockHookFor(account *url.URL, fn simulator.NodeBlockHookFunc) {
+	s.S.SetNodeBlockHookFor(account, fn)
+}
+
 // SignWithNode calls Simulator.SignWithNode.
 func (s *Sim) SignWithNode(partition string, i int) signing.Signer {
 	return s.S.SignWithNode(partition, i)
 }
 
-func (s *Sim) SubmitTo(partition string, message []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	return s.S.SubmitTo(partition, message)
+func (s *Sim) SubmitTo(partition string, envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+	return s.S.SubmitTo(partition, envelope)
 }

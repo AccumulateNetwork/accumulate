@@ -8,13 +8,18 @@ package p2p
 
 import (
 	"context"
+	"crypto/ed25519"
+	"fmt"
 	"io"
 	"testing"
 
+	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 )
 
@@ -67,7 +72,7 @@ func TestDialAddress(t *testing.T) {
 		"tcp-network-partition": {false, "/tcp/123/acc/foo/acc-svc/query:foo"},
 	}
 
-	dialer := &dialer{host, peers}
+	dialer := &dialer{host, peers, &simpleTracker{}}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := dialer.Dial(context.Background(), addr(t, c.Addr))
@@ -92,7 +97,7 @@ func TestDialSelfPeer(t *testing.T) {
 	host.EXPECT().selfID().Return(pid)
 	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
-	dialer := &dialer{host, nil}
+	dialer := &dialer{host, nil, &simpleTracker{}}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
 	require.NoError(t, err)
 	<-done
@@ -108,8 +113,61 @@ func TestDialSelfPartition(t *testing.T) {
 	host := newMockDialerHost(t)
 	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
-	dialer := &dialer{host, nil}
+	dialer := &dialer{host, nil, &simpleTracker{}}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo"))
 	require.NoError(t, err)
 	<-done
+}
+
+func TestSimpleTracker(t *testing.T) {
+	newPeer := func(seed ...any) peer.ID {
+		h := storage.MakeKey(seed...)
+		std := ed25519.NewKeyFromSeed(h[:])
+		k, _, err := ic.KeyPairFromStdKey(&std)
+		require.NoError(t, err)
+		id, err := peer.IDFromPrivateKey(k)
+		require.NoError(t, err)
+		return id
+	}
+
+	// Set up 3 peers
+	p1 := newPeer(1)
+	p2 := newPeer(2)
+	p3 := newPeer(3)
+
+	// Test cases
+	type T1 struct {
+		Peer  peer.ID
+		Count int
+	}
+	cases := []struct {
+		Bad  []T1
+		Good map[peer.ID]bool
+	}{
+		// If P1 is bad twice and P2 is bad once, P3 should be the only good peer
+		{Bad: []T1{{p1, 2}, {p2, 1}}, Good: map[peer.ID]bool{p3: true}},
+
+		// If all peers are marked bad the same number of times, they should all be good
+		{Bad: []T1{{p1, 1}, {p2, 1}, {p3, 1}}, Good: map[peer.ID]bool{p1: true, p2: true, p3: true}},
+	}
+
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("Case %d", i), func(t *testing.T) {
+			// Make sure the tracker knows about all of the peers
+			s := new(simpleTracker)
+			s.isBad(p1)
+			s.isBad(p2)
+			s.isBad(p3)
+
+			for _, b := range c.Bad {
+				for i := 0; i < b.Count; i++ {
+					s.markBad(b.Peer)
+				}
+			}
+
+			assert.Equal(t, c.Good[p1], !s.isBad(p1), "Is P1 good?")
+			assert.Equal(t, c.Good[p2], !s.isBad(p2), "Is P2 good?")
+			assert.Equal(t, c.Good[p3], !s.isBad(p3), "Is P3 good?")
+		})
+	}
 }

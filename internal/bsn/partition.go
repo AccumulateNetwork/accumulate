@@ -11,27 +11,31 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 func (c *ChangeSet) Partition(id string) *database.Batch {
 	id = strings.ToLower(id)
-	if b, ok := c.partition[partitionKey{id}]; ok {
+	if b, ok := c.partition[partitionMapKey{id}]; ok {
 		return b
 	}
 
 	if c.partition == nil {
-		c.partition = map[partitionKey]*database.Batch{}
+		c.partition = map[partitionMapKey]*database.Batch{}
 	}
 
-	var b *database.Batch
-	if c.parent == nil {
-		s := c.kvstore.BeginWithPrefix(true, id+"·")
-		b = database.NewBatch(id, s, true, c.logger)
-		b.SetObserver(execute.NewDatabaseObserver())
-	} else {
-		b = c.parent.Partition(id).Begin(true)
+	b := c.newPartition(partitionKey{id})
+	c.partition[partitionMapKey{id}] = b
+	return b
+}
+
+func (c *ChangeSet) newPartition(key partitionKey) *database.Batch {
+	if c.parent != nil {
+		return c.parent.Partition(key.ID).Begin(true)
 	}
 
-	c.partition[partitionKey{id}] = b
+	s := c.kvstore.Begin(record.NewKey(key.ID+"·"), true)
+	b := database.NewBatch(key.ID, s, true, c.logger)
+	b.SetObserver(execute.NewDatabaseObserver())
 	return b
 }

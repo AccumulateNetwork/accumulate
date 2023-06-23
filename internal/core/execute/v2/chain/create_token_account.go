@@ -26,13 +26,13 @@ func (CreateTokenAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateTokenAccount
 }
 
-func (CreateTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
+func (CreateTokenAccount) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateTokenAccount)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
+	return additionalAuthorities(body.Authorities).AuthorityIsAccepted(delegate, batch, transaction, sig)
 }
 
 func (CreateTokenAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
@@ -155,7 +155,7 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 	// If the issuer is local, check if it exists
 	local := principal.LocalTo(body.TokenUrl)
 	if local {
-		account, err := batch.Account(body.TokenUrl).GetState()
+		account, err := batch.Account(body.TokenUrl).Main().Get()
 		switch {
 		case err == nil:
 			// Ok

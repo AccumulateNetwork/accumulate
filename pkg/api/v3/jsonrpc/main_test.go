@@ -17,12 +17,11 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	mocks "gitlab.com/accumulatenetwork/accumulate/test/mocks/pkg/api/v3"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	testhttp "gitlab.com/accumulatenetwork/accumulate/test/util/http"
 )
 
 func setupTest(t testing.TB, services ...Service) *Client {
-	handler, err := NewHandler(acctesting.NewTestLogger(t), services...)
+	handler, err := NewHandler(services...)
 	require.NoError(t, err)
 	client := new(Client)
 	client.Client = *testhttp.DirectHttpClient(handler)

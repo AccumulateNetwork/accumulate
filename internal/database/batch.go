@@ -12,7 +12,8 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -48,18 +49,17 @@ func (b *Batch) SetObserver(observer Observer) {
 func (d *Database) Begin(writable bool) *Batch {
 	id := atomic.AddInt64(&d.nextBatchId, 1)
 
-	b := NewBatch(fmt.Sprint(id), d.store.Begin(writable), writable, d.logger)
+	b := NewBatch(fmt.Sprint(id), d.store.Begin(nil, writable), writable, d.logger)
 	b.observer = d.observer
 	return b
 }
 
-func NewBatch(id string, store storage.KeyValueTxn, writable bool, logger log.Logger) *Batch {
+func NewBatch(id string, store keyvalue.ChangeSet, writable bool, logger log.Logger) *Batch {
 	b := new(Batch)
 	b.id = id
 	b.writable = writable
 	b.logger.Set(logger)
-	b.kvstore = store
-	b.store = record.KvStore{Store: store}
+	b.store = keyvalue.RecordStore{Store: store}
 	return b
 }
 
@@ -76,16 +76,16 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
-	c.store = b
-	c.kvstore = b.kvstore.Begin(c.writable)
+	c.store = values.RecordStore{Record: b}
 	return c
 }
 
-// DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes an
-// account from the database.
+// DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes
+// an account from the database. It will panic if the batch's store is not a
+// key-value store.
 func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
-	a := record.Key{"Account", url, "Main"}
-	return b.kvstore.Put(a.Hash(), nil)
+	a := record.NewKey("Account", url, "Main")
+	return b.kvs().Put(a, nil)
 }
 
 // View runs the function with a read-only transaction.
@@ -141,19 +141,31 @@ func (b *Batch) Commit() error {
 	}
 
 	// Committing may have changed the BPT, so commit it
-	record.FieldCommit(&err, b.bpt)
+	values.Commit(&err, b.bpt)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	return b.kvstore.Commit()
+	if b.parent != nil {
+		return nil
+	}
+
+	return b.kvs().Commit()
 }
 
 // Discard discards pending writes. Attempting to use the Batch after calling
 // Discard will result in a panic.
 func (b *Batch) Discard() {
 	b.done = true
-	b.kvstore.Discard()
+
+	// If the parent is nil, the store _must_ be a key-value store
+	if b.parent == nil {
+		b.kvs().Discard()
+	}
+}
+
+func (b *Batch) kvs() keyvalue.ChangeSet {
+	return b.store.(interface{ Unwrap() keyvalue.Store }).Unwrap().(keyvalue.ChangeSet)
 }
 
 // Transaction returns an Transaction for the given hash.
@@ -165,91 +177,19 @@ func (b *Batch) Transaction2(id [32]byte) *Transaction {
 	return b.getTransaction(id)
 }
 
-func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
-	v, err := record.NewValue(
+func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
+	v, err := values.NewValue(
 		b.logger.L,
 		b.store,
 		// This must match the key used for the account's Url state
 		key.Append("Url"),
 		fmt.Sprintf("account %v URL", key),
 		false,
-		record.Wrapped(record.UrlWrapper),
+		values.Wrapped(values.UrlWrapper),
 	).Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	return v, nil
-}
-
-// AccountByID returns an Account for the given ID.
-//
-// This is still needed in one place, so the deprecation warning is disabled in
-// order to pass static analysis.
-//
-// Deprecated: Use Account.
-func (b *Batch) AccountByID(id []byte) (*Account, error) {
-	u, err := b.getAccountUrl(record.Key{"Account", id})
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return b.Account(u), nil
-}
-
-// GetValue implements record.Store.
-func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
-	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
-	}
-
-	v, err := resolveValue[record.ValueReader](b, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	err = value.LoadValue(v, false)
-	return errors.UnknownError.Wrap(err)
-}
-
-// PutValue implements record.Store.
-func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
-	if b.done {
-		panic(fmt.Sprintf("batch %s: attempted to use a committed or discarded batch", b.id))
-	}
-
-	v, err := resolveValue[record.ValueWriter](b, key)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	err = v.LoadValue(value, true)
-	return errors.UnknownError.Wrap(err)
-}
-
-func zero[T any]() T {
-	var z T
-	return z
-}
-
-// resolveValue resolves the value for the given key.
-func resolveValue[T any](c *Batch, key record.Key) (T, error) {
-	var r record.Record = c
-	var err error
-	for len(key) > 0 {
-		r, key, err = r.Resolve(key)
-		if err != nil {
-			return zero[T](), errors.UnknownError.Wrap(err)
-		}
-	}
-
-	if s, _, err := r.Resolve(nil); err == nil {
-		r = s
-	}
-
-	v, ok := r.(T)
-	if !ok {
-		return zero[T](), errors.InternalError.WithFormat("bad key: %T is not value", r)
-	}
-
 	return v, nil
 }
 

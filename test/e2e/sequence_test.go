@@ -18,12 +18,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -59,25 +61,24 @@ func TestOutOfSequenceSynth(t *testing.T) {
 	// Execute
 	txns := make([]*messaging.Envelope, 5)
 	for i := range txns {
-		txns[i] = acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
-			WithTimestampVar(&timestamp).
-			WithSigner(aliceUrl, 1).
-			WithBody(&SendTokens{
-				To: []*TokenRecipient{{
-					Url:    bobUrl,
-					Amount: *big.NewInt(1),
-				}},
-			}).
-			Initiate(SignatureTypeLegacyED25519, alice).
-			Build()
+		txns[i] =
+			MustBuild(t, build.Transaction().
+				For(aliceUrl).
+				Body(&SendTokens{
+					To: []*TokenRecipient{{
+						Url:    bobUrl,
+						Amount: *big.NewInt(1),
+					}},
+				}).
+				SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice).Type(SignatureTypeLegacyED25519))
+
 	}
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(txns...)...)
 
 	// Verify
 	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteTokenAccount
-		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
+		require.NoError(t, batch.Account(bobUrl).Main().GetAs(&account))
 		require.Equal(t, uint64(len(txns)), account.Balance.Uint64())
 		return nil
 	})
@@ -113,18 +114,16 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 
 	// Execute
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
-			WithTimestampVar(&timestamp).
-			WithSigner(aliceUrl, 1).
-			WithBody(&SendTokens{
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(&SendTokens{
 				To: []*TokenRecipient{{
 					Url:    bobUrl,
 					Amount: *big.NewInt(1),
 				}},
 			}).
-			Initiate(SignatureTypeED25519, alice).
-			Build())
+			SignWith(aliceUrl).Version(1).Timestamp(&timestamp).PrivateKey(alice)),
+	)
 	sim.WaitForTransaction(delivered, envs[0].Transaction[0].GetHash(), 50)
 
 	// Wait for the synthetic transaction to be sent and the block to be
@@ -166,13 +165,11 @@ func TestMissingAnchorTxn(t *testing.T) {
 
 	// Cause a synthetic transaction
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(faucet).
-			WithBody(&SendTokens{To: []*TokenRecipient{{Url: lite, Amount: *big.NewInt(1e15)}}}).
-			WithTimestamp(1).
-			WithSigner(faucet, 1).
-			Initiate(SignatureTypeED25519, faucetKey).
-			Build())
+		MustBuild(t, build.Transaction().
+			For(faucet).
+			Body(&SendTokens{To: []*TokenRecipient{{Url: lite, Amount: *big.NewInt(1e15)}}}).
+			SignWith(faucet).Version(1).Timestamp(1).PrivateKey(faucetKey)),
+	)
 
 	// Get the local anchor of the produced transaction
 	var anchor, synth [32]byte
@@ -215,13 +212,11 @@ func TestMissingAnchorTxn(t *testing.T) {
 
 	// Do something to cause another block/anchor
 	sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestamp(1).
-			WithBody(&CreateDataAccount{Url: alice.JoinPath("account")}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build())
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&CreateDataAccount{Url: alice.JoinPath("account")}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey)),
+	)
 
 	// Wait for the synthetic transaction - the BVN must be able to heal itself
 	sim.WaitForTransactionFlow(delivered, synth[:])
@@ -310,15 +305,13 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	})
 
 	// Resubmit the original, valid signature
-	var messages []messaging.Message
+	envelope := new(messaging.Envelope)
 	for _, delivery := range original {
-		messages = append(messages, &messaging.TransactionMessage{Transaction: delivery.Transaction})
-		for _, sig := range delivery.Signatures {
-			messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: delivery.Transaction.ID()})
-		}
+		envelope.Transaction = append(envelope.Transaction, delivery.Transaction)
+		envelope.Signatures = append(envelope.Signatures, delivery.Signatures...)
 	}
 
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(messages, false)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(envelope, false)
 	require.NoError(t, err)
 	for _, result := range results {
 		if result.Error != nil {

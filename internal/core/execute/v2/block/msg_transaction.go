@@ -65,7 +65,7 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		return nil, nil
 	}
 
-	st := chain.NewStatelessManager(&ctx.Executor.Describe, txn.Transaction, ctx.Executor.logger.With("operation", "Validate"))
+	st := chain.NewStatelessManager(&ctx.Executor.Describe, ctx.GetActiveGlobals(), txn.Transaction, ctx.Executor.logger.With("operation", "Validate"))
 	st.Pretend = true
 
 	r, err := exec.Validate(st, &chain.Delivery{Transaction: txn.Transaction})
@@ -97,6 +97,9 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 	}
 	if txn.Transaction.Body == nil {
 		return nil, errors.BadRequest.With("missing transaction body")
+	}
+	if txn.Transaction.BodyIs64Bytes() {
+		return nil, errors.BadRequest.WithFormat("cannot process transaction: body is 64 bytes long")
 	}
 
 	isRemote := txn.Transaction.Body.Type() == protocol.TransactionTypeRemote
@@ -320,12 +323,7 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		return status, nil
 	}
 
-	delivery := &chain.Delivery{
-		Transaction: ctx.transaction,
-		Internal:    ctx.isWithin(internal.MessageTypeNetworkUpdate),
-	}
-
-	status, state, err := ctx.Executor.ProcessTransaction(batch, delivery)
+	status, state, err := ctx.processTransaction(batch)
 	if err != nil {
 		return nil, err
 	}
@@ -382,8 +380,8 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 
 	// Clear votes and payments
 	if status.Delivered() {
-		txn := batch.Account(delivery.Transaction.Header.Principal).
-			Transaction(delivery.Transaction.ID().Hash())
+		txn := batch.Account(ctx.transaction.Header.Principal).
+			Transaction(ctx.transaction.ID().Hash())
 
 		err = txn.Payments().Put(nil)
 		if err != nil {

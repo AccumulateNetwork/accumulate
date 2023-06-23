@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -54,7 +54,7 @@ func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) er
 }
 
 func (r *Account) Url() *url.URL {
-	return r.key[1].(*url.URL)
+	return r.key.Get(1).(*url.URL)
 }
 
 func (a *Account) Commit() error {
@@ -62,35 +62,50 @@ func (a *Account) Commit() error {
 		return nil
 	}
 
-	if record.FieldIsDirty(a.main) {
+	if values.IsDirty(a.main) {
 		acc, err := a.Main().Get()
-		switch {
-		case err == nil:
-			// Strip the URL of user info, query, and fragment
-			u := acc.GetUrl()
-			if !u.StripExtras().Equal(u) {
-				acc.StripUrl()
-				u = acc.GetUrl()
+		if err != nil {
+			// This should not be possible
+			return errors.InternalError.Wrap(err)
+		}
 
-				err = a.Main().Put(acc)
-				if err != nil {
-					return errors.BadRequest.WithFormat("strip url: %w", err)
-				}
-			}
+		// Does the record state have a URL?
+		u := acc.GetUrl()
+		if u == nil {
+			return errors.InternalError.With("invalid URL: empty")
+		}
 
-			if len(u.String()) > protocol.AccountUrlMaxLength {
-				return errors.BadUrlLength.Wrap(fmt.Errorf("url specified exceeds maximum character length: %s", u.String()))
-			}
+		// Strip the URL of user info, query, and fragment
+		if !u.StripExtras().Equal(u) {
+			acc.StripUrl()
+			u = acc.GetUrl()
 
-			err = protocol.IsValidAccountPath(u.Path)
+			err = a.Main().Put(acc)
 			if err != nil {
-				return errors.BadRequest.WithFormat("invalid path: %w", err)
+				return errors.BadRequest.WithFormat("strip url: %w", err)
 			}
+		}
 
-		case errors.Is(err, errors.NotFound):
-			// The main state is unset so there's nothing to check
-		default:
-			return errors.UnknownError.WithFormat("load state: %w", err)
+		// Is this the right URL - does it match the record's key?
+		if !a.Url().Equal(u) {
+			return fmt.Errorf("mismatched url: key is %v, URL is %v", a.Url(), u)
+		}
+
+		// Check the URL length
+		if len(u.String()) > protocol.AccountUrlMaxLength {
+			return errors.BadUrlLength.Wrap(fmt.Errorf("url specified exceeds maximum character length: %s", u.String()))
+		}
+
+		// Check the URL path
+		err = protocol.IsValidAccountPath(u.Path)
+		if err != nil {
+			return errors.BadRequest.WithFormat("invalid path: %w", err)
+		}
+
+		// Make sure the key book is set
+		account, ok := acc.(protocol.FullAccount)
+		if ok && len(account.GetAuth().Authorities) == 0 {
+			return fmt.Errorf("missing key book")
 		}
 	}
 
@@ -128,64 +143,6 @@ func (a *Account) Commit() error {
 	// Do the normal commit stuff
 	err = a.baseCommit()
 	return errors.UnknownError.Wrap(err)
-}
-
-// GetState loads the record state.
-func (r *Account) GetState() (protocol.Account, error) {
-	return r.Main().Get()
-}
-
-// GetStateAs loads the record state and unmarshals into the given value. In
-// most cases `state` should be a double pointer.
-func (r *Account) GetStateAs(state interface{}) error {
-	return r.Main().GetAs(state)
-}
-
-// PutState stores the record state.
-func (r *Account) PutState(state protocol.Account) error {
-	// Does the record state have a URL?
-	if state.GetUrl() == nil {
-		return errors.InternalError.With("invalid URL: empty")
-	}
-
-	// Is this the right URL - does it match the record's key?
-	if !r.Url().Equal(state.GetUrl()) {
-		return fmt.Errorf("mismatched url: key is %v, URL is %v", r.Url(), state.GetUrl())
-	}
-
-	// Make sure the key book is set
-	account, ok := state.(protocol.FullAccount)
-	if ok && len(account.GetAuth().Authorities) == 0 {
-		return fmt.Errorf("missing key book")
-	}
-
-	// Store the state
-	err := r.Main().Put(state)
-	return errors.UnknownError.Wrap(err)
-}
-
-func (r *Account) GetPending() (*protocol.TxIdSet, error) {
-	v, err := r.Pending().Get()
-	if err != nil {
-		return nil, err
-	}
-	return &protocol.TxIdSet{Entries: v}, nil
-}
-
-func (r *Account) AddPending(txid *url.TxID) error {
-	return r.Pending().Add(txid)
-}
-
-func (r *Account) RemovePending(txid *url.TxID) error {
-	return r.Pending().Remove(txid)
-}
-
-func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
-	return r.SyntheticForAnchor(anchor).Add(txid)
-}
-
-func (r *Account) GetSyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
-	return r.SyntheticForAnchor(anchor).Get()
 }
 
 func compareSignatureByKey(a, b protocol.KeySignature) int {

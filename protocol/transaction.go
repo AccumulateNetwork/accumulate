@@ -8,6 +8,7 @@ package protocol
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"sort"
 
@@ -199,7 +200,7 @@ type TransactionStatusError struct {
 
 // AsError returns nil or the status wrapped as a [TransactionStatusError].
 func (s *TransactionStatus) AsError() error {
-	if s.Error == nil {
+	if s == nil || s.Error == nil {
 		return nil
 	}
 	return TransactionStatusError{s}
@@ -211,6 +212,10 @@ func (e TransactionStatusError) Error() string {
 
 func (e TransactionStatusError) Unwrap() error {
 	return e.TransactionStatus.Error
+}
+
+func (e TransactionStatusError) Format(f fmt.State, verb rune) {
+	e.TransactionStatus.Error.Format(f, verb)
 }
 
 // NewErrorStatus returns a new transaction status for the given ID with the

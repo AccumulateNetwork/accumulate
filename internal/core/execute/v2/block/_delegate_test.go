@@ -16,12 +16,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	newsim "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -148,18 +150,14 @@ func TestDelegatedSignature_Local(t *testing.T) {
 
 	// Execute
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithSigner(alice.JoinPath("other-book", "1"), 1).
-			WithDelegator(alice.JoinPath("book", "1")).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, key2).
-			Build(),
+			SignWith(alice.JoinPath("other-book", "1")).Version(1).Delegator(alice.JoinPath("book", "1")).Timestamp(&timestamp).PrivateKey(key2)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
@@ -170,6 +168,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
+
 func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 	var timestamp uint64
 
@@ -193,20 +192,17 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
 
 	// Execute
-	envs := sim.MustSubmitAndExecuteBlock(acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("data")).
-		WithBody(&WriteData{
-			Entry: &AccumulateDataEntry{Data: [][]byte{
-				[]byte("foo"),
-			}},
-		}).
-		WithSigner(alice.JoinPath("other-book", "1"), 1).
-		WithDelegator(alice.JoinPath("book", "1")).
-		WithTimestampVar(&timestamp).
-		Initiate(SignatureTypeED25519, otherKey1).
-		WithTimestamp(0).
-		Sign(SignatureTypeED25519, otherKey2).
-		Build())
+	envs := sim.MustSubmitAndExecuteBlock(
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
+					[]byte("foo"),
+				}},
+			}).
+			SignWith(alice.JoinPath("other-book", "1")).Version(1).Delegator(alice.JoinPath("book", "1")).Timestamp(&timestamp).PrivateKey(otherKey1).
+			SignWith(alice.JoinPath("other-book", "1")).Version(1).Delegator(alice.JoinPath("book", "1")).Timestamp(0).PrivateKey(otherKey2)),
+	)
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
@@ -244,19 +240,14 @@ func TestDelegatedSignature_Double(t *testing.T) {
 
 	// Execute
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithSigner(alice.JoinPath("book2", "1"), 1).
-			WithDelegator(alice.JoinPath("book1", "1")).
-			WithDelegator(alice.JoinPath("book0", "1")).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, key2).
-			Build(),
+			SignWith(alice.JoinPath("book2", "1")).Version(1).Delegator(alice.JoinPath("book0", "1")).Timestamp(&timestamp).PrivateKey(key2)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
@@ -294,18 +285,14 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 
 	// Execute
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithSigner(bob.JoinPath("book0", "1"), 1).
-			WithDelegator(alice.JoinPath("book0", "1")).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, key2).
-			Build(),
+			SignWith(bob.JoinPath("book0", "1")).Version(1).Delegator(alice.JoinPath("book0", "1")).Timestamp(&timestamp).PrivateKey(key2)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
@@ -345,18 +332,14 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 
 	// Execute
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithSigner(bob.JoinPath("book1", "1"), 1).
-			WithDelegator(bob.JoinPath("book0", "1")).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, key2).
-			Build(),
+			SignWith(bob.JoinPath("book1", "1")).Version(1).Delegator(bob.JoinPath("book0", "1")).Timestamp(&timestamp).PrivateKey(key2)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
@@ -398,18 +381,14 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 
 	// Execute
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithSigner(charlie.JoinPath("book0", "1"), 1).
-			WithDelegator(bob.JoinPath("book0", "1")).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, key2).
-			Build(),
+			SignWith(charlie.JoinPath("book0", "1")).Version(1).Delegator(bob.JoinPath("book0", "1")).Timestamp(&timestamp).PrivateKey(key2)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
@@ -454,19 +433,14 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 
 	// Execute
 	envs := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithSigner(charlie.JoinPath("book0", "1"), 1).
-			WithDelegator(bob.JoinPath("book0", "1")).
-			WithDelegator(alice.JoinPath("book0", "1")).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, key2).
-			Build(),
+			SignWith(charlie.JoinPath("book0", "1")).Version(1).Delegator(alice.JoinPath("book0", "1")).Timestamp(&timestamp).PrivateKey(key2)),
 	)
 	sim.WaitForTransactions(delivered, envs...)
 
@@ -516,52 +490,33 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 
 	// Initiate with bob/book/1
 	_, txn := sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
-			WithSigner(bob.JoinPath("book", "1"), 1).
-			WithDelegator(alice.JoinPath("book", "1")).
-			WithTimestampVar(&timestamp).
-			Initiate(SignatureTypeED25519, bobK1).
-			Build(),
+			SignWith(bob.JoinPath("book", "1")).Version(1).Delegator(alice.JoinPath("book", "1")).Timestamp(&timestamp).PrivateKey(bobK1)),
 	)...)
 	txnHash := txn[0].GetHash()
 
 	// Sign with bob/book/2
 	sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithTransaction(txn[0]).
-			WithSigner(bob.JoinPath("book", "2"), 1).
-			WithDelegator(alice.JoinPath("book", "1")).
-			WithTimestampVar(&timestamp).
-			Sign(SignatureTypeED25519, bobK2).
-			Build(),
+		MustBuild(t, build.SignatureForTransaction(txn[0]).
+			Url(bob.JoinPath("book", "2")).Version(1).Delegator(alice.JoinPath("book", "1")).Timestamp(&timestamp).PrivateKey(bobK2)),
 	)...)
 
 	// Sign with charlie/book/1
 	sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithTransaction(txn[0]).
-			WithSigner(charlie.JoinPath("book", "1"), 1).
-			WithDelegator(alice.JoinPath("book", "1")).
-			WithTimestampVar(&timestamp).
-			Sign(SignatureTypeED25519, charlieK1).
-			Build(),
+		MustBuild(t, build.SignatureForTransaction(txn[0]).
+			Url(charlie.JoinPath("book", "1")).Version(1).Delegator(alice.JoinPath("book", "1")).Timestamp(&timestamp).PrivateKey(charlieK1)),
 	)...)
 
 	// Sign with charlie/book/1
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithTransaction(txn[0]).
-			WithSigner(charlie.JoinPath("book", "1"), 1).
-			WithDelegator(alice.JoinPath("book", "1")).
-			WithTimestampVar(&timestamp).
-			Sign(SignatureTypeED25519, charlieK2).
-			Build(),
+		MustBuild(t, build.SignatureForTransaction(txn[0]).
+			Url(charlie.JoinPath("book", "1")).Version(1).Delegator(alice.JoinPath("book", "1")).Timestamp(&timestamp).PrivateKey(charlieK2)),
 	)...)
 
 	// Validate
@@ -573,7 +528,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 		// alice/book/1 should have one delegated signature each from bob/book/1
 		// and charlie/book/1
 		record := batch.Transaction(txnHash)
-		status, err := record.GetStatus()
+		status, err := record.Status().Get()
 		require.NoError(t, err)
 		sigs, err := GetAllSignatures(batch, record, status, nil)
 		require.NoError(t, err)

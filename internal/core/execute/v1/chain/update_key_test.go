@@ -10,10 +10,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -32,20 +35,19 @@ func TestUpdateKey_Duplicate(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(alice)
 	otherKey := acctesting.GenerateKey(alice, "other")
 	sim := simulator.New(t, 1)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(&network.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1DoubleHashEntries})
 	sim.CreateIdentity(alice, aliceKey[32:], otherKey[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
 
 	// Sign with other key, update to alice key
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("book", "1")).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithTimestamp(1).
-		WithBody(&protocol.UpdateKey{
-			NewKeyHash: doHash(aliceKey[32:]),
-		}).
-		Initiate(protocol.SignatureTypeED25519, otherKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&protocol.UpdateKey{
+				NewKeyHash: doHash(aliceKey[32:]),
+			}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(otherKey).Type(protocol.SignatureTypeED25519))
+
 	st := sim.H.SubmitTxnSuccessfully(env)
 	sim.H.StepUntil(
 		Txn(st.TxID).Fails())

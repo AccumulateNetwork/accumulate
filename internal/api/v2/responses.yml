@@ -36,7 +36,6 @@ TxReceipt:
   fields:
     - name: Account
       type: url
-      marshal-as: reference
       pointer: true
     - name: Chain
       type: string

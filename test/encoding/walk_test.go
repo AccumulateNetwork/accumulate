@@ -18,11 +18,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -77,7 +77,7 @@ func TestWalkAndReplay(t *testing.T) {
 
 	// Capture blocks
 	type Value struct {
-		Key   record.Key
+		Key   *record.Key
 		Value []byte
 	}
 	type Account struct {
@@ -95,13 +95,17 @@ func TestWalkAndReplay(t *testing.T) {
 		sim.S.SetCommitHook(p.ID, func(p *protocol.PartitionInfo, state execute.BlockState) {
 			block := new(Block)
 			block.Index = state.Params().Index
-			_ = state.WalkChanges(func(r record.TerminalRecord) error {
-				v, _, err := r.GetValue()
+			_ = state.ChangeSet().Walk(record.WalkOptions{
+				Values:        true,
+				Modified:      true,
+				IgnoreIndices: true,
+			}, func(r record.Record) (bool, error) {
+				v, _, err := r.(record.TerminalRecord).GetValue()
 				require.NoError(t, err)
 				b, err := v.MarshalBinary()
 				require.NoError(t, err)
 				block.Changes = append(block.Changes, &Value{r.Key(), b})
-				return nil
+				return false, nil
 			})
 			blocks[p.ID] = append(blocks[p.ID], block)
 		})
@@ -142,7 +146,7 @@ func TestWalkAndReplay(t *testing.T) {
 
 	// Restore snapshot into BSN database
 	logger := acctesting.NewTestLogger(t)
-	store := memory.New(logger.With("module", "storage"))
+	store := memory.New(nil)
 	bsndb := bsn.NewChangeSet(store, logger.With("module", "database"))
 	for _, part := range sim.Partitions() {
 		err := snapshot.Restore(bsndb.Partition(part.ID), ioutil2.NewBuffer(genesis[part.ID]), logger.With("module", "snapshot"))
@@ -208,14 +212,14 @@ func TestWalkAndReplay(t *testing.T) {
 
 type partitionBeginner struct {
 	logger    log.Logger
-	store     storage.Beginner
+	store     keyvalue.Beginner
 	partition string
 }
 
 func (p *partitionBeginner) SetObserver(observer database.Observer) {}
 
 func (p *partitionBeginner) Begin(writable bool) *database.Batch {
-	s := p.store.BeginWithPrefix(true, p.partition+"·")
+	s := p.store.Begin(record.NewKey(p.partition+"·"), true)
 	b := database.NewBatch(p.partition, s, writable, p.logger)
 	b.SetObserver(execute.NewDatabaseObserver())
 	return b
@@ -243,9 +247,9 @@ func zero[T any]() T {
 }
 
 // resolveValue resolves the value for the given key.
-func resolveValue[T any](r record.Record, key record.Key) (T, error) {
+func resolveValue[T any](r record.Record, key *record.Key) (T, error) {
 	var err error
-	for len(key) > 0 {
+	for key.Len() > 0 {
 		r, key, err = r.Resolve(key)
 		if err != nil {
 			return zero[T](), errors.UnknownError.Wrap(err)

@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -67,13 +68,11 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	send := protocol.SendTokens{}
 	send.AddRecipient(u, big.NewInt(int64(amount)))
 
-	return NewTransaction().
-		WithPrincipal(from).
-		WithSigner(from.RootIdentity(), 1).
-		WithTimestamp(1).
-		WithBody(&send).
-		Initiate(protocol.SignatureTypeLegacyED25519, sponsor).
-		Build(), nil
+	return build.Transaction().
+		For(from).
+		Body(&send).
+		SignWith(from.RootIdentity()).Version(1).Timestamp(1).PrivateKey(sponsor).Type(protocol.SignatureTypeLegacyED25519).
+		Done()
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
@@ -87,7 +86,7 @@ func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error 
 }
 
 func AddCredits(db DB, account *url.URL, credits float64) error {
-	state, err := db.Account(account).GetState()
+	state, err := db.Account(account).Main().Get()
 	if err != nil {
 		return err
 	}
@@ -98,7 +97,7 @@ func AddCredits(db DB, account *url.URL, credits float64) error {
 	}
 
 	state.(protocol.AccountWithCredits).CreditCredits(uint64(credits * protocol.CreditPrecision))
-	return db.Account(account).PutState(state)
+	return db.Account(account).Main().Put(state)
 }
 
 func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, credits float64) error {
@@ -118,7 +117,7 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 		urls[i] = c.GetUrl()
 
 		r := db.Account(c.GetUrl())
-		err := r.PutState(c)
+		err := r.Main().Put(c)
 		if err != nil {
 			return err
 		}
@@ -222,7 +221,7 @@ func CreateLiteIdentity(db DB, accUrl string, credits float64) error {
 	account.Url = u
 	account.CreditBalance = uint64(credits * protocol.CreditPrecision)
 	chain = account
-	return db.Account(u).PutState(chain)
+	return db.Account(u).Main().Put(chain)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
@@ -252,7 +251,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		chain = account
 	}
 
-	return db.Account(u).PutState(chain)
+	return db.Account(u).Main().Put(chain)
 }
 
 func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLimit *big.Int) error {
@@ -268,7 +267,7 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLim
 	issuer.Precision = precision
 	issuer.SupplyLimit = supplyLimit
 
-	return db.Account(u).PutState(issuer)
+	return db.Account(u).Main().Put(issuer)
 }
 
 func CreateKeyPage(db DB, bookUrlStr string, keys ...tmed25519.PubKey) error {
@@ -278,7 +277,7 @@ func CreateKeyPage(db DB, bookUrlStr string, keys ...tmed25519.PubKey) error {
 	}
 
 	account := db.Account(bookUrl)
-	state, err := account.GetState()
+	state, err := account.Main().Get()
 	if err != nil {
 		return err
 	}
@@ -330,7 +329,7 @@ func CreateAccount(db DB, account protocol.FullAccount) error {
 	}
 
 	var identity *protocol.ADI
-	err := db.Account(account.GetUrl().Identity()).GetStateAs(&identity)
+	err := db.Account(account.GetUrl().Identity()).Main().GetAs(&identity)
 	if err != nil {
 		return err
 	}
@@ -345,13 +344,13 @@ func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
 
 func UpdateAccount[T protocol.Account](db DB, accountUrl *url.URL, fn func(T)) error {
 	var account T
-	err := db.Account(accountUrl).GetStateAs(&account)
+	err := db.Account(accountUrl).Main().GetAs(&account)
 	if err != nil {
 		return err
 	}
 
 	fn(account)
-	return db.Account(accountUrl).PutState(account)
+	return db.Account(accountUrl).Main().Put(account)
 }
 
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING

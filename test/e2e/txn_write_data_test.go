@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,9 +11,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -33,18 +35,15 @@ func TestWriteData_ToState(t *testing.T) {
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
 
 	// Write data
-	entry := &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
+	entry := &DoubleHashDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry:        entry,
 				WriteToState: true,
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Check the result
@@ -70,16 +69,13 @@ func TestWriteData_Factom(t *testing.T) {
 	// Write data
 	entry := &FactomDataEntry{AccountId: [32]byte{1}, Data: []byte("foo"), ExtIds: [][]byte{[]byte("bar")}}
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&WriteData{
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{
 				Entry:        entry.Wrap(),
 				WriteToState: true,
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Check the result
@@ -103,15 +99,12 @@ func TestWriteData_AdiAccumulateEntryHash(t *testing.T) {
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
 
 	// Write second entry
-	entry := &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
+	entry := &DoubleHashDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
 	st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&WriteData{Entry: entry}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{Entry: entry}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Check the result
@@ -152,25 +145,19 @@ func TestWriteData_LiteAccumulateEntryHash(t *testing.T) {
 	ldaAddr, err := protocol.LiteDataAddress(entry1.AccountId[:])
 	require.NoError(t, err)
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(ldaAddr).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&WriteData{Entry: entry1.Wrap()}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(ldaAddr).
+			Body(&WriteData{Entry: entry1.Wrap()}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Write second entry
-	entry2 := &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
+	entry2 := &DoubleHashDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
 	st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(ldaAddr).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&WriteData{Entry: entry2}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(ldaAddr).
+			Body(&WriteData{Entry: entry2}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Check the result
@@ -210,13 +197,10 @@ func TestWriteData_AdiFactomEntryHash(t *testing.T) {
 	// Write second entry
 	entry := &FactomDataEntry{ExtIds: [][]byte{[]byte("foo"), []byte("bar")}, AccountId: [32]byte{1}}
 	st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&WriteData{Entry: entry.Wrap()}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("data")).
+			Body(&WriteData{Entry: entry.Wrap()}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Check the result
@@ -257,25 +241,19 @@ func TestWriteData_LiteFactomEntryHash(t *testing.T) {
 	ldaAddr, err := protocol.LiteDataAddress(entry1.AccountId[:])
 	require.NoError(t, err)
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(ldaAddr).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&WriteData{Entry: entry1.Wrap()}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(ldaAddr).
+			Body(&WriteData{Entry: entry1.Wrap()}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Write second entry
 	entry2 := &FactomDataEntry{ExtIds: [][]byte{[]byte("foo"), []byte("bar")}, AccountId: entry1.AccountId}
 	st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(ldaAddr).
-			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&WriteData{Entry: entry2.Wrap()}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+		MustBuild(t, build.Transaction().
+			For(ldaAddr).
+			Body(&WriteData{Entry: entry2.Wrap()}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Check the result

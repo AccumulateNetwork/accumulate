@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -99,11 +98,19 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 		return errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
-	// The initiator must have a timestamp
 	ctx.isInitiator = protocol.SignatureDidInitiate(ctx.signature, ctx.transaction.Header.Initiator[:], nil)
 	if ctx.isInitiator {
+		// The initiator must have a timestamp
 		if ctx.keySig.GetTimestamp() == 0 {
 			return errors.BadTimestamp.WithFormat("initial signature does not have a timestamp")
+		}
+
+		// The initiator must accept the transaction. The Merkle style of
+		// initiator hash does not incorporate the vote type so accepting
+		// non-accept votes is potentially problematic. Also, is there any
+		// reason to initiate and reject or abstain?
+		if ctx.keySig.GetVote() != protocol.VoteTypeAccept {
+			return errors.BadRequest.WithFormat("initial signature cannot be a %v vote", ctx.keySig.GetVote())
 		}
 	}
 
@@ -170,23 +177,10 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Verify that the signer is authorized
-	val, ok := getValidator[chain.SignerValidator](ctx.Executor, ctx.transaction.Body.Type())
-	var fallback bool
-	if ok {
-		var md chain.SignatureValidationMetadata
-		md.Location = signerUrl
-		md.Delegated = ctx.signature.Type() == protocol.SignatureTypeDelegated
-		fallback, err = val.SignerIsAuthorized(ctx.Executor, batch, ctx.transaction, ctx.signer, md)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-	if !ok || fallback {
-		err = ctx.Executor.SignerIsAuthorized(batch, ctx.transaction, ctx.signer, false)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
+	// Verify the signer is allowed to sign
+	err = ctx.signerCanSignTransaction(batch, ctx.transaction, ctx.signer)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Check the signer version
@@ -195,6 +189,7 @@ func (UserSignature) verifySigner(batch *database.Batch, ctx *userSigContext) er
 	}
 
 	// Find the key entry
+	var ok bool
 	ctx.keyIndex, ctx.keyEntry, ok = ctx.signer.EntryByKeyHash(ctx.keySig.GetPublicKeyHash())
 	if !ok {
 		return errors.Unauthorized.With("key does not belong to signer")
@@ -218,7 +213,7 @@ func (x UserSignature) verifyCanPay(batch *database.Batch, ctx *userSigContext) 
 
 	// Check for errors, such as payload is too big
 	var err error
-	ctx.fee, err = ctx.Executor.computeSignerFee(ctx.transaction, ctx.signature, ctx.isInitiator)
+	ctx.fee, err = x.computeSignerFee(ctx)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -338,28 +333,13 @@ func (x UserSignature) Process(batch *database.Batch, ctx *SignatureContext) (_ 
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Verify the signer's authority is satisfied
-	authority := ctx.getAuthority()
-	ok, err := ctx.authorityIsReady(batch, authority)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	if !ok {
-		return nil, nil
-	}
-
-	// Send the authority signature
-	err = x.sendAuthoritySignature(batch, ctx2)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	err = clearActiveSignatures(batch, ctx)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	return nil, nil
+	// Send the authority signature if the authority is ready
+	err = ctx.maybeSendAuthoritySignature(batch, &protocol.AuthoritySignature{
+		Origin:    ctx.getSigner(),
+		Authority: ctx.getAuthority(),
+		Delegator: ctx2.delegators,
+	})
+	return nil, errors.UnknownError.Wrap(err)
 }
 
 // process processes the signature.
@@ -425,35 +405,13 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 		msg.Authority = auth
 		msg.Cause = ctx.message.ID()
 		msg.TxID = ctx.transaction.ID()
-		err = ctx.didProduce(batch, msg.Authority, msg)
+		err := ctx.didProduce(batch, msg.Authority, msg)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	return nil
-}
-
-// sendAuthoritySignature sends the authority signature for the signer.
-func (UserSignature) sendAuthoritySignature(batch *database.Batch, ctx *userSigContext) error {
-	auth := &protocol.AuthoritySignature{
-		Origin:    ctx.getSigner(),
-		Authority: ctx.getAuthority(),
-		Vote:      protocol.VoteTypeAccept,
-		TxID:      ctx.transaction.ID(),
-		Cause:     ctx.message.ID(),
-		Delegator: ctx.delegators,
-	}
-
-	// TODO Deduplicate
-	return ctx.didProduce(
-		batch,
-		auth.RoutingLocation(),
-		&messaging.SignatureMessage{
-			Signature: auth,
-			TxID:      ctx.transaction.ID(),
-		},
-	)
 }
 
 // sendCreditPayment sends the principal a notice that the signer paid and (if
@@ -479,4 +437,40 @@ func (UserSignature) sendCreditPayment(batch *database.Batch, ctx *userSigContex
 			Initiator: didInit,
 		},
 	)
+}
+
+// computeSignerFee computes the fee that will be charged to the signer.
+//
+// If the signature is the initial signature, the fee is the base transaction
+// fee + signature data surcharge + transaction data surcharge.
+//
+// Otherwise, the fee is the base signature fee + signature data surcharge.
+func (UserSignature) computeSignerFee(ctx *userSigContext) (protocol.Fee, error) {
+	// Don't charge fees for internal administrative functions
+	signer := ctx.signature.GetSigner()
+	_, isBvn := protocol.ParsePartitionUrl(signer)
+	if isBvn || protocol.IsDnUrl(signer) {
+		return 0, nil
+	}
+
+	// Compute the signature fee
+	fee, err := ctx.GetActiveGlobals().Globals.FeeSchedule.ComputeSignatureFee(ctx.signature)
+	if err != nil {
+		return 0, errors.UnknownError.Wrap(err)
+	}
+
+	// Only charge the transaction fee for the initial signature
+	if !ctx.isInitiator {
+		return fee, nil
+	}
+
+	// Add the transaction fee for the initial signature
+	txnFee, err := ctx.GetActiveGlobals().Globals.FeeSchedule.ComputeTransactionFee(ctx.transaction)
+	if err != nil {
+		return 0, errors.UnknownError.Wrap(err)
+	}
+
+	// Subtract the base signature fee, but not the oversize surcharge if there is one
+	fee += txnFee - protocol.FeeSignature
+	return fee, nil
 }

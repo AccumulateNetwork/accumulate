@@ -82,7 +82,7 @@ func (s *Simulator) Init(from simulator.SnapshotFunc) {
 	var err error
 	logger := acctesting.NewTestLogger(s.TB)
 	net := simulator.SimpleNetwork(s.TB.Name(), s.opts.BvnCount, 1)
-	s.S, err = simulator.New(logger, s.opts.OpenDB, net, from)
+	s.S, err = simulator.New2(logger, s.opts.OpenDB, net, from, harness.Recordings(s.TB))
 	require.NoError(s.TB, err)
 	s.H = harness.NewSimWith(s.TB, s.S)
 }
@@ -119,9 +119,7 @@ func (s *Simulator) ExecuteBlocks(n int) {
 
 func (s *Simulator) Submit(envelopes ...*messaging.Envelope) ([]*messaging.Envelope, error) {
 	for _, env := range envelopes {
-		deliveries, err := env.Normalize()
-		require.NoError(s.TB, err)
-		st, err := s.S.Submit(deliveries)
+		st, err := s.S.Submit(env)
 		require.NoError(s.TB, err)
 		for _, st := range st {
 			if st.Error != nil {
@@ -183,7 +181,7 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 	for _, partition := range s.S.Partitions() {
 		var txid *url.TxID
 		err := s.S.Database(partition.ID).View(func(batch *database.Batch) error {
-			obj, err := batch.Transaction(hash).GetStatus()
+			obj, err := batch.Transaction(hash).Status().Get()
 			require.NoError(s.TB, err)
 			if !status(obj) {
 				return nil

@@ -89,7 +89,8 @@ func TestRefundCycle(t *testing.T) {
 	// The deposit and refund should fail (because the account no longer exists)
 	sim.StepUntil(
 		Txn(st.TxID).Produced().Fails(),
-		Txn(st.TxID).Refund().FailsWithCode(errors.NotFound))
+		Txn(st.TxID).Refund().Fails().
+			WithError(errors.NotFound))
 
 	// Ensure the refund did not produce anything
 	for _, id := range sim.QueryTransaction(st.TxID, nil).Produced.Records { //      Produced by SendTokens

@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
@@ -45,9 +44,12 @@ type Node struct {
 	partition  *Partition
 	logger     logging.OptionalLogger
 	eventBus   *events.Bus
-	database   database.Beginner
+	database   *database.Database
 	nodeKey    []byte
 	privValKey []byte
+
+	record      *recorder
+	submissions []*messaging.Envelope
 
 	globals  atomic.Value
 	executor execute.Executor
@@ -81,6 +83,14 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		return nil, errors.InternalError.WithFormat("unknown partition type %v", p.Type)
 	}
 
+	if s.Recordings != nil {
+		f, err := s.Recordings(p.ID, node)
+		if err != nil {
+			return nil, errors.InternalError.WithFormat("open record file: %w", err)
+		}
+		n.record = newRecorder(f)
+	}
+
 	// This is hacky, but 🤷 I don't see another choice that wouldn't be
 	// significantly less readable
 	if p.Type == protocol.PartitionTypeDirectory && node == 0 {
@@ -104,6 +114,18 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	// Collect and submit block summaries
 	if s.init.Bsn != nil && n.partition.Type != protocol.PartitionTypeBlockSummary {
 		err := n.initCollector()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// Record the header
+	if n.record != nil {
+		err = n.record.WriteHeader(&recordHeader{
+			Partition: &p.PartitionInfo,
+			Config:    init,
+			NodeNum:   int64(node),
+		})
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -234,7 +256,7 @@ func (n *Node) initCollector() error {
 		msg.Anchor = e.Summary
 		msg.Signature = env.Signatures[0].(protocol.KeySignature)
 
-		st, err := n.simulator.SubmitTo(n.simulator.init.Bsn.Id, []messaging.Message{msg})
+		st, err := n.simulator.SubmitTo(n.simulator.init.Bsn.Id, &messaging.Envelope{Messages: []messaging.Message{msg}})
 		if err != nil {
 			n.logger.Error("Failed to submit block summary envelope", "error", err)
 			return
@@ -308,6 +330,14 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
 	}
 
+	// Record the snapshot
+	if n.record != nil {
+		err = n.record.WriteSnapshot(snapshot)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("record snapshot: %w", err)
+		}
+	}
+
 	_, root, err = n.executor.LastBlock()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
@@ -315,10 +345,10 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	return root[:], nil
 }
 
-func (n *Node) checkTx(messages []messaging.Message, typ abcitypes.CheckTxType) ([]*protocol.TransactionStatus, error) {
+func (n *Node) checkTx(envelope *messaging.Envelope, new bool) ([]*protocol.TransactionStatus, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	s, err := n.executor.Validate(messages, typ == abcitypes.CheckTxType_Recheck)
+	s, err := n.executor.Validate(envelope, !new)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("check messages: %w", err)
 	}
@@ -335,14 +365,22 @@ func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
 	return block, nil
 }
 
-func (n *Node) deliverTx(block execute.Block, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (n *Node) deliverTx(block execute.Block, envelopes []*messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	s, err := block.Process(messages)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("deliver messages: %w", err)
+
+	n.submissions = append(n.submissions, envelopes...)
+
+	var results []*protocol.TransactionStatus
+	for _, envelope := range envelopes {
+		s, err := block.Process(envelope)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
+		}
+
+		results = append(results, s...)
 	}
-	return s, nil
+	return results, nil
 }
 
 func (n *Node) endBlock(block execute.Block) (execute.BlockState, []*validatorUpdate, error) {
@@ -353,10 +391,18 @@ func (n *Node) endBlock(block execute.Block) (execute.BlockState, []*validatorUp
 		return nil, nil, errors.UnknownError.WithFormat("end block: %w", err)
 	}
 
+	if n.record != nil {
+		err = n.record.WriteBlock(state, n.submissions)
+		if err != nil {
+			return nil, nil, errors.UnknownError.WithFormat("record block: %w", err)
+		}
+	}
+
 	if state.IsEmpty() {
 		return state, nil, nil
 	}
 
+	n.submissions = n.submissions[:0]
 	u := n.validatorUpdates
 	n.validatorUpdates = nil
 	return state, u, nil

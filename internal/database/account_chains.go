@@ -11,6 +11,8 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -20,13 +22,13 @@ import (
 // Chain2 is a wrapper for Chain.
 type Chain2 struct {
 	account  *Account
-	key      record.Key
+	key      *record.Key
 	inner    *MerkleManager
 	index    *Chain2
 	labelfmt string
 }
 
-func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Key, namefmt, labelfmt string) *Chain2 {
+func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.Key, namefmt, labelfmt string) *Chain2 {
 	var account *Account
 	switch parent := parent.(type) {
 	case *Account:
@@ -38,7 +40,7 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Ke
 	}
 
 	var typ merkle.ChainType
-	switch key[2].(string) {
+	switch key.Get(2).(string) {
 	case "MainChain",
 		"SignatureChain",
 		"ScratchChain",
@@ -57,6 +59,8 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Ke
 	c := NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt, labelfmt)
 	return &Chain2{account, key, c, nil, labelfmt}
 }
+
+func (c *Chain2) Key() *record.Key { return c.key }
 
 func (c *Chain2) dirtyChains() []*MerkleManager {
 	if c == nil {
@@ -91,7 +95,7 @@ func (a *Account) UpdatedChains() ([]*protocol.BlockEntry, error) {
 }
 
 // Account returns the URL of the account.
-func (c *Chain2) Account() *url.URL { return c.Key(1).(*url.URL) }
+func (c *Chain2) Account() *url.URL { return c.key.Get(1).(*url.URL) }
 
 // Name returns the name of the chain.
 func (c *Chain2) Name() string { return c.inner.Name() }
@@ -106,40 +110,34 @@ func (c *Chain2) Url() *url.URL {
 	return c.Account().WithFragment("chain/" + c.Name())
 }
 
-func (c *Chain2) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) > 0 && key[0] == "Index" {
-		return c.Index(), key[1:], nil
+func (c *Chain2) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() > 0 && key.Get(0) == "Index" {
+		return c.Index(), key.SliceI(1), nil
 	}
 	return c.inner.Resolve(key)
 }
 
-func (c *Chain2) WalkChanges(fn record.WalkFunc) error {
+func (c *Chain2) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	var err error
-	record.FieldWalkChanges(&err, c.inner, fn)
-	record.FieldWalkChanges(&err, c.index, fn)
+	values.Walk(&err, c.inner, opts, fn)
+	if c.inner.typ != merkle.ChainTypeIndex {
+		values.WalkField(&err, c.index, c.newIndex, opts, fn)
+	}
 	return err
 }
 
 func (c *Chain2) IsDirty() bool {
-	return record.FieldIsDirty(c.index) || record.FieldIsDirty(c.inner)
+	return values.IsDirty(c.index) || values.IsDirty(c.inner)
 }
 
 func (c *Chain2) Commit() error {
 	var err error
-	record.FieldCommit(&err, c.index)
-	record.FieldCommit(&err, c.inner)
+	values.Commit(&err, c.index)
+	values.Commit(&err, c.inner)
 	return err
 }
 
-// Key returns the Ith key of the chain record.
-func (c *Chain2) Key(i int) interface{} {
-	if i >= len(c.key) {
-		return nil
-	}
-	return c.key[i]
-}
-
-func (c *Chain2) Head() record.Value[*MerkleState] {
+func (c *Chain2) Head() values.Value[*merkle.State] {
 	return c.inner.Head()
 }
 
@@ -175,15 +173,17 @@ func (c *Chain2) Get() (*Chain, error) {
 // Index returns the index chain of this chain. Index will panic if called on an
 // index chain.
 func (c *Chain2) Index() *Chain2 {
+	return values.GetOrCreate(c, &c.index, (*Chain2).newIndex)
+}
+
+func (c *Chain2) newIndex() *Chain2 {
 	if c.Type() == merkle.ChainTypeIndex {
 		panic("cannot index an index chain")
 	}
-	return record.FieldGetOrCreate(&c.index, func() *Chain2 {
-		key := c.key.Append("Index")
-		label := c.labelfmt + " index"
-		m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
-		return &Chain2{c.account, key, m, nil, label}
-	})
+	key := c.key.Append("Index")
+	label := c.labelfmt + " index"
+	m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
+	return &Chain2{c.account, key, m, nil, label}
 }
 
 // ChainByName returns account Chain2 for the named chain, or a not found error if
@@ -241,17 +241,15 @@ func (a *Account) chainByName(name string) *Chain2 {
 		return a.MajorBlockChain()
 	}
 
-	i := strings.IndexRune(name, '(')
-	j := strings.IndexRune(name, ')')
-	if i < 0 || j < 0 {
+	first, arg, rest, ok := splitChainName(name)
+	if !ok {
 		return nil
 	}
 
-	arg := name[i+1 : j]
-	switch name[:i] {
+	switch first {
 	case "anchor":
 		a := a.AnchorChain(arg)
-		switch name[j+1:] {
+		switch rest {
 		case "-root":
 			return a.Root()
 		case "-bpt":
@@ -265,10 +263,64 @@ func (a *Account) chainByName(name string) *Chain2 {
 	return nil
 }
 
+func splitChainName(name string) (first, arg, rest string, ok bool) {
+	i := strings.IndexRune(name, '(')
+	j := strings.IndexRune(name, ')')
+	if i < 0 || j < 0 {
+		return "", "", "", false
+	}
+
+	return name[:i], name[i+1 : j], name[j+1:], true
+}
+
 func (c *Account) SyntheticSequenceChain(partition string) *Chain2 {
 	return c.getSyntheticSequenceChain(strings.ToLower(partition))
 }
 
 func (c *Account) AnchorChain(partition string) *AccountAnchorChain {
 	return c.getAnchorChain(strings.ToLower(partition))
+}
+
+func (c *Account) getSyntheticSequenceKeys() ([]accountSyntheticSequenceChainKey, error) {
+	// List all of the account's chains
+	chains, err := c.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Find chains matching the pattern `synthetic-sequence(:id)`
+	keys := make([]accountSyntheticSequenceChainKey, 0, len(chains))
+	seen := map[string]bool{}
+	for _, c := range chains {
+		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
+		if !ok || first != "synthetic-sequence" || seen[arg] {
+			continue
+		}
+		seen[arg] = true
+		keys = append(keys, accountSyntheticSequenceChainKey{arg})
+	}
+
+	// Return the partition IDs
+	return keys, nil
+}
+
+func (c *Account) getAnchorKeys() ([]accountAnchorChainKey, error) {
+	// List all of the account's chains
+	chains, err := c.Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Find chains matching the pattern `anchor(:id)`
+	keys := make([]accountAnchorChainKey, 0, len(chains))
+	for _, c := range chains {
+		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
+		if !ok || first != "anchor" {
+			continue
+		}
+		keys = append(keys, accountAnchorChainKey{arg})
+	}
+
+	// Return the partition IDs
+	return keys, nil
 }

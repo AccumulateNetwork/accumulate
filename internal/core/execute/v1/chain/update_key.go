@@ -72,7 +72,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 
 	// Find the first signature
 	txObj := st.batch.Transaction(tx.Transaction.GetHash())
-	status, err := txObj.GetStatus()
+	status, err := txObj.Status().Get()
 	if err != nil {
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}

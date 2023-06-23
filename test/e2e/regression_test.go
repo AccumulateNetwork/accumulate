@@ -25,9 +25,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -63,17 +63,14 @@ func TestOverwriteCreditBalance(t *testing.T) {
 	acme.Mul(acme, big.NewInt(AcmeOraclePrecision))
 	acme.Div(acme, big.NewInt(oracle))
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
-			WithSigner(liteUrl, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&AddCredits{
+		MustBuild(t, build.Transaction().
+			For(liteUrl).
+			Body(&AddCredits{
 				Recipient: alice.JoinPath("book", "1"),
 				Amount:    *acme,
 				Oracle:    oracle,
 			}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+			SignWith(liteUrl).Version(1).Timestamp(&timestamp).PrivateKey(liteKey)),
 	)...)
 
 	// The balance should be added
@@ -137,17 +134,14 @@ func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {
 	acme.Mul(acme, big.NewInt(AcmeOraclePrecision))
 	acme.Div(acme, big.NewInt(oracle))
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(sender).
-			WithSigner(sender, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&AddCredits{
+		MustBuild(t, build.Transaction().
+			For(sender).
+			Body(&AddCredits{
 				Recipient: receiver,
 				Amount:    *acme,
 				Oracle:    oracle,
 			}).
-			Initiate(SignatureTypeED25519, sendKey).
-			Build(),
+			SignWith(sender).Version(1).Timestamp(&timestamp).PrivateKey(sendKey)),
 	)...)
 
 	// Verify
@@ -169,15 +163,12 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 
 	// Burn credits
 	txn := sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(lite).
-			WithSigner(lite, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&BurnTokens{
+		MustBuild(t, build.Transaction().
+			For(lite).
+			Body(&BurnTokens{
 				Amount: *big.NewInt(1),
 			}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
+			SignWith(lite).Version(1).Timestamp(&timestamp).PrivateKey(liteKey)),
 	)
 	_, _, synth := sim.WaitForTransaction(delivered, txn[0].Transaction[0].GetHash(), 50)
 
@@ -189,9 +180,7 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 }
 
 func TestFaucetMultiNetwork(t *testing.T) {
-	if !protocol.IsTestNet {
-		t.Skip("Not a testnet")
-	}
+	t.Skip("This test is not relevant to the faucet-as-a-service model")
 
 	// Initialize v1 (v2 does not support the faucet)
 	sim := simulator.New(t, 3)
@@ -235,18 +224,15 @@ func TestSigningDeliveredTxnDoesNothing(t *testing.T) {
 
 	// Execute
 	_, txns := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithTimestampVar(&timestamp).
-			WithSigner(alice, 1).
-			WithBody(&SendTokens{
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&SendTokens{
 				To: []*TokenRecipient{{
 					Url:    bob,
 					Amount: *big.NewInt(1),
 				}},
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Verify
@@ -288,18 +274,17 @@ func TestSynthTxnToDirectory(t *testing.T) {
 	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	// Send tokens from BVN to DN
-	env := acctesting.NewTransaction().
-		WithPrincipal(aliceUrl).
-		WithTimestampVar(&timestamp).
-		WithSigner(aliceUrl.RootIdentity(), 1).
-		WithBody(&SendTokens{
-			To: []*TokenRecipient{{
-				Url:    bobUrl,
-				Amount: *big.NewInt(1e6),
-			}},
-		}).
-		Initiate(SignatureTypeED25519, alice).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bobUrl,
+					Amount: *big.NewInt(1e6),
+				}},
+			}).
+			SignWith(aliceUrl.RootIdentity()).Version(1).Timestamp(&timestamp).PrivateKey(alice))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 }
@@ -328,18 +313,17 @@ func TestSynthTxnFromDirectory(t *testing.T) {
 	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	// Send tokens from BVN to DN
-	env := acctesting.NewTransaction().
-		WithPrincipal(aliceUrl).
-		WithTimestampVar(&timestamp).
-		WithSigner(aliceUrl.RootIdentity(), 1).
-		WithBody(&SendTokens{
-			To: []*TokenRecipient{{
-				Url:    bobUrl,
-				Amount: *big.NewInt(1e6),
-			}},
-		}).
-		Initiate(SignatureTypeED25519, alice).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bobUrl,
+					Amount: *big.NewInt(1e6),
+				}},
+			}).
+			SignWith(aliceUrl.RootIdentity()).Version(1).Timestamp(&timestamp).PrivateKey(alice))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 }
@@ -368,18 +352,17 @@ func TestSynthTxnFromAndToDirectory(t *testing.T) {
 	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	// Send tokens from BVN to DN
-	env := acctesting.NewTransaction().
-		WithPrincipal(aliceUrl).
-		WithTimestampVar(&timestamp).
-		WithSigner(aliceUrl.RootIdentity(), 1).
-		WithBody(&SendTokens{
-			To: []*TokenRecipient{{
-				Url:    bobUrl,
-				Amount: *big.NewInt(1e6),
-			}},
-		}).
-		Initiate(SignatureTypeED25519, alice).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(aliceUrl).
+			Body(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bobUrl,
+					Amount: *big.NewInt(1e6),
+				}},
+			}).
+			SignWith(aliceUrl.RootIdentity()).Version(1).Timestamp(&timestamp).PrivateKey(alice))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 }
@@ -404,28 +387,26 @@ func TestDelegateBetweenPartitions(t *testing.T) {
 	updateAccount(sim, bob.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
 
 	// Submit with Alice
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("book", "1")).
-		WithTimestampVar(&timestamp).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithBody(&UpdateKeyPage{Operation: []KeyPageOperation{
-			&AddKeyOperation{
-				Entry: KeySpecParams{
-					Delegate: bob.JoinPath("book"),
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("book", "1")).
+			Body(&UpdateKeyPage{Operation: []KeyPageOperation{
+				&AddKeyOperation{
+					Entry: KeySpecParams{
+						Delegate: bob.JoinPath("book"),
+					},
 				},
-			},
-		}}).
-		Initiate(SignatureTypeED25519, aliceKey).
-		Build()
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(pending, env.Transaction[0].GetHash())
 
 	// Sign with Bob
-	env = acctesting.NewTransaction().
-		WithTransaction(env.Transaction[0]).
-		WithSigner(bob.JoinPath("book", "1"), 1).
-		Sign(SignatureTypeED25519, bobKey).
-		Build()
+	env =
+		MustBuild(t, build.SignatureForTransaction(env.Transaction[0]).
+			Url(bob.JoinPath("book", "1")).Version(1).PrivateKey(bobKey))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
@@ -454,26 +435,24 @@ func TestAuthorityBetweenPartitions(t *testing.T) {
 	updateAccount(sim, bob.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
 
 	// Submit with Alice
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice).
-		WithTimestampVar(&timestamp).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithBody(&UpdateAccountAuth{Operations: []AccountAuthOperation{
-			&AddAccountAuthorityOperation{
-				Authority: bob.JoinPath("book"),
-			},
-		}}).
-		Initiate(SignatureTypeED25519, aliceKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&UpdateAccountAuth{Operations: []AccountAuthOperation{
+				&AddAccountAuthorityOperation{
+					Authority: bob.JoinPath("book"),
+				},
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(pending, env.Transaction[0].GetHash())
 
 	// Sign with Bob
-	env = acctesting.NewTransaction().
-		WithTransaction(env.Transaction[0]).
-		WithSigner(bob.JoinPath("book", "1"), 1).
-		Sign(SignatureTypeED25519, bobKey).
-		Build()
+	env =
+		MustBuild(t, build.SignatureForTransaction(env.Transaction[0]).
+			Url(bob.JoinPath("book", "1")).Version(1).PrivateKey(bobKey))
+
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
@@ -503,13 +482,12 @@ func TestPendingTransactionForMissingAccount(t *testing.T) {
 	updateAccount(sim, bob.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
 
 	// Create charlie (but don't sign with bob)
-	env := acctesting.NewTransaction().
-		WithPrincipal(charlie).
-		WithTimestampVar(&timestamp).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithBody(&CreateIdentity{Url: charlie, Authorities: []*url.URL{bob.JoinPath("book")}}).
-		Initiate(SignatureTypeED25519, aliceKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(charlie).
+			Body(&CreateIdentity{Url: charlie, Authorities: []*url.URL{bob.JoinPath("book")}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
 	sim.MustSubmitAndExecuteBlock(env)
 
 	// Should be pending because bob hasn't signed
@@ -549,18 +527,15 @@ func TestDnAnchorAcknowledged(t *testing.T) {
 
 	// Create some history
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(alice).
-			WithTimestampVar(&timestamp).
-			WithSigner(alice, 1).
-			WithBody(&SendTokens{
+		MustBuild(t, build.Transaction().
+			For(alice).
+			Body(&SendTokens{
 				To: []*TokenRecipient{{
 					Url:    bob,
 					Amount: *big.NewInt(1),
 				}},
 			}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			Build(),
+			SignWith(alice).Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)),
 	)...)
 
 	// Wait a few blocks

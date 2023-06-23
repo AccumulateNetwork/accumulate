@@ -9,24 +9,25 @@ package simulator
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -46,23 +47,38 @@ type Simulator struct {
 	blockErrGroup *errgroup.Group
 
 	// Deterministic attempts to run the simulator in a fully deterministic,
-	// repeatable way
+	// repeatable way.
 	Deterministic bool
 
-	// DropDispatchedMessages drops all internally dispatched messages
+	// DropDispatchedMessages drops all internally dispatched messages.
 	DropDispatchedMessages bool
+
+	// IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx.
+	IgnoreDeliverResults bool
+
+	// Recordings is a function that returns files to write node recordings to.
+	// TODO Make this an option once #3314 is merged.
+	Recordings RecordingFunc
 }
 
-type OpenDatabaseFunc func(partition string, node int, logger log.Logger) storage.KeyValueStore
+type OpenDatabaseFunc func(partition string, node int, logger log.Logger) keyvalue.Beginner
 type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
+type RecordingFunc func(partition string, node int) (io.WriteSeeker, error)
 
 func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
+	return New2(logger, database, network, snapshot, nil)
+}
+
+// New2 is a hack to avoid changing everything - this needs to be handled with
+// options.
+func New2(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc, recordings RecordingFunc) (*Simulator, error) {
 	s := new(Simulator)
 	s.logger.Set(logger, "module", "sim")
 	s.init = network
 	s.database = database
 	s.partitions = make(map[string]*Partition, len(network.Bvns)+1)
 	s.router = newRouter(logger, s.partitions)
+	s.Recordings = recordings
 
 	s.netcfg = new(config.Network)
 	s.netcfg.Id = network.Id
@@ -130,26 +146,19 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 	return s, nil
 }
 
-func MemoryDatabase(_ string, _ int, logger log.Logger) storage.KeyValueStore {
-	if logger != nil {
-		logger = logger.With("module", "storage")
-	}
-	return memory.New(logger)
+func MemoryDatabase(string, int, log.Logger) keyvalue.Beginner {
+	return memory.New(nil)
 }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc {
-	return func(partition string, node int, logger log.Logger) storage.KeyValueStore {
-		if logger != nil {
-			logger = logger.With("module", "storage")
-		}
-
+	return func(partition string, node int, _ log.Logger) keyvalue.Beginner {
 		err := os.MkdirAll(dir, 0700)
 		if err != nil {
 			onErr(err)
 			panic(err)
 		}
 
-		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)), logger)
+		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)))
 		if err != nil {
 			onErr(err)
 			panic(err)
@@ -290,7 +299,13 @@ func (s *Simulator) Step() error {
 		}
 	}
 
-	return s.blockErrGroup.Wait()
+	// Wait for execution to complete
+	err := s.blockErrGroup.Wait()
+
+	// Give any parallel processes a chance to run
+	runtime.Gosched()
+
+	return err
 }
 
 func (s *Simulator) SetSubmitHookFor(account *url.URL, fn SubmitHookFunc) {
@@ -317,6 +332,18 @@ func (s *Simulator) SetBlockHook(partition string, fn BlockHookFunc) {
 	s.partitions[partition].SetBlockHook(fn)
 }
 
+func (s *Simulator) SetNodeBlockHookFor(account *url.URL, fn NodeBlockHookFunc) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	s.partitions[partition].SetNodeBlockHook(fn)
+}
+
+func (s *Simulator) SetNodeBlockHook(partition string, fn NodeBlockHookFunc) {
+	s.partitions[partition].SetNodeBlockHook(fn)
+}
+
 func (s *Simulator) SetCommitHookFor(account *url.URL, fn CommitHookFunc) {
 	partition, err := s.router.RouteAccount(account)
 	if err != nil {
@@ -329,22 +356,22 @@ func (s *Simulator) SetCommitHook(partition string, fn CommitHookFunc) {
 	s.partitions[partition].SetCommitHook(fn)
 }
 
-func (s *Simulator) Submit(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
-	partition, err := routing.RouteMessages(s.router, messages)
+func (s *Simulator) Submit(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+	partition, err := s.router.Route(envelope)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return s.SubmitTo(partition, messages)
+	return s.SubmitTo(partition, envelope)
 }
 
-func (s *Simulator) SubmitTo(partition string, messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (s *Simulator) SubmitTo(partition string, envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
-	return p.Submit(messages, false)
+	return p.Submit(envelope, false)
 }
 
 func (s *Simulator) Partitions() []*protocol.PartitionInfo {
@@ -353,6 +380,10 @@ func (s *Simulator) Partitions() []*protocol.PartitionInfo {
 		partitions = append(partitions, &p.PartitionInfo)
 	}
 	return partitions
+}
+
+func (s *Simulator) Partition(partition string) *Partition {
+	return s.partitions[partition]
 }
 
 type errDb struct{ err error }
@@ -386,4 +417,8 @@ func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 		}
 	}
 	return nil
+}
+
+func (s *Simulator) Collect(partition string, file io.WriteSeeker, opts *database.CollectOptions) error {
+	return s.partitions[partition].nodes[0].database.Collect(file, protocol.PartitionUrl(partition), opts)
 }

@@ -150,7 +150,7 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2, blockInde
 	return indexIndex, true, nil
 }
 
-func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+func getAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
 	auth, url, err := shared.GetAccountAuthoritySet(account)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -159,11 +159,11 @@ func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protoco
 		return auth, nil
 	}
 
-	account, err = batch.Account(url).GetState()
+	account, err = batch.Account(url).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	return x.GetAccountAuthoritySet(batch, account)
+	return getAccountAuthoritySet(batch, account)
 }
 
 func getValidator[T any](x *Executor, typ protocol.TransactionType) (T, bool) {

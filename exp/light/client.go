@@ -7,16 +7,19 @@
 package light
 
 import (
+	"io"
+
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -27,7 +30,8 @@ import (
 type Client struct {
 	logger      logging.OptionalLogger
 	v2          *client.Client
-	store       storage.KeyValueStore
+	query       api.Querier2
+	store       keyvalue.Beginner
 	storePrefix string
 }
 
@@ -37,19 +41,19 @@ func BadgerStore(filepath string) ClientOption {
 	return func(c *Client) error {
 		// Open the badger database
 		var err error
-		c.store, err = badger.New(filepath, c.logger)
+		c.store, err = badger.New(filepath)
 		return errors.UnknownError.Wrap(err)
 	}
 }
 
 func MemoryStore() ClientOption {
 	return func(c *Client) error {
-		c.store = memory.New(c.logger)
+		c.store = memory.New(nil)
 		return nil
 	}
 }
 
-func Store(s storage.KeyValueStore, prefix string) ClientOption {
+func Store(s keyvalue.Beginner, prefix string) ClientOption {
 	return func(c *Client) error {
 		c.store = s
 		c.storePrefix = prefix
@@ -80,6 +84,13 @@ func ClientV2(client *client.Client) ClientOption {
 	}
 }
 
+func Querier(querier api.Querier) ClientOption {
+	return func(c *Client) error {
+		c.query.Querier = querier
+		return nil
+	}
+}
+
 // NewClient creates a new light client instance.
 func NewClient(opts ...ClientOption) (*Client, error) {
 	c := new(Client)
@@ -103,7 +114,10 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 
 // Close frees any resources opened by the light client.
 func (c *Client) Close() error {
-	return c.store.Close()
+	if c, ok := c.store.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 // router loads the global values and creates a static router.
@@ -126,13 +140,13 @@ func (c *Client) router(batch *DB) (routing.Router, error) {
 
 // OpenDB opens a [DB].
 func (c *Client) OpenDB(writable bool) *DB {
-	kvb := c.store.BeginWithPrefix(writable, c.storePrefix)
+	kvb := c.store.Begin(record.NewKey(c.storePrefix), writable)
 	batch := database.NewBatch("", kvb, writable, nil)
 	batch.SetObserver(testing.NullObserver{}) // Ignore the BPT
 	index := new(indexDB)
-	index.key = record.Key{"Light", "Index"}
+	index.key = record.NewKey("Light", "Index")
 	index.label = "light index"
-	index.store = record.KvStore{Store: kvb}
+	index.store = keyvalue.RecordStore{Store: kvb}
 	return &DB{batch, index}
 }
 

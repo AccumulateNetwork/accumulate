@@ -34,12 +34,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(m.Describe.Synthetic()).GetStateAs(&synthLedger)
+	err := block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	var anchorLedger *protocol.AnchorLedger
-	err = block.Batch.Account(m.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	err = block.Batch.Account(m.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
@@ -296,9 +296,9 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	for err := range dispatcher.Send(ctx) {
 		switch err := err.(type) {
 		case protocol.TransactionStatusError:
-			x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
+			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 		default:
-			x.logger.Error("Failed to dispatch transactions", "error", err, "stack", fmt.Sprintf("%+v\n", err))
+			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", fmt.Sprintf("%+v\n", err))
 		}
 	}
 }
@@ -507,8 +507,8 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 			continue
 		}
 
-		partition, ok := chain.Key(3).(string)
-		if chain.Key(2) != "AnchorChain" || !ok {
+		partition, ok := chain.Key().Get(3).(string)
+		if chain.Key().Get(2) != "AnchorChain" || !ok {
 			continue
 		}
 

@@ -391,14 +391,11 @@ func (s *Simulator) Submit(envelopes ...*messaging.Envelope) ([]*messaging.Envel
 func (s *Simulator) SubmitTo(partition string, envelope *messaging.Envelope) error {
 	x := s.Partition(partition)
 
-	// Normalize - use a copy to avoid weird issues caused by modifying values
-	deliveries, err := envelope.Copy().Normalize()
-	if err != nil {
-		return err
-	}
+	// Use a copy to avoid weird issues caused by modifying values
+	envelope = envelope.Copy()
 
 	// Check - set recheck = true to make the executor create a new batch to avoid timing issues
-	results, err := (*execute.ExecutorV1)(x.Executor).Validate(deliveries, true)
+	results, err := (*execute.ExecutorV1)(x.Executor).Validate(envelope, true)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -487,7 +484,7 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		obj, err := batch.Transaction(hash).GetStatus()
+		obj, err := batch.Transaction(hash).Status().Get()
 		require.NoError(s, err)
 		if status(obj) {
 			return x
@@ -526,15 +523,16 @@ func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionSta
 		return nil, nil, nil
 	}
 
+	var state *messaging.TransactionMessage
 	batch := x.Database.Begin(false)
-	synth, err1 := batch.Transaction(txnHash).GetSyntheticTxns()
-	state, err2 := batch.Transaction(txnHash).GetState()
-	status, err3 := batch.Transaction(txnHash).GetStatus()
+	synth, err1 := batch.Transaction(txnHash).Produced().Get()
+	err2 := batch.Message2(txnHash).Main().GetAs(&state)
+	status, err3 := batch.Transaction(txnHash).Status().Get()
 	batch.Discard()
 	require.NoError(s, err1)
 	require.NoError(s, err2)
 	require.NoError(s, err3)
-	return state.Transaction, status, synth.Entries
+	return state.Transaction, status, synth
 }
 
 func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
@@ -684,7 +682,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	} else {
 		_ = x.Database.View(func(batch *database.Batch) error {
 			var ledger *protocol.SystemLedger
-			err := batch.Account(x.Executor.Describe.Ledger()).GetStateAs(&ledger)
+			err := batch.Account(x.Executor.Describe.Ledger()).Main().GetAs(&ledger)
 			switch {
 			case err == nil:
 				x.BlockIndex = ledger.Index + 1
@@ -713,14 +711,12 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		err := x.Executor.BeginBlock(block)
 		require.NoError(x, err)
 
-		var messages []messaging.Message
+		env := new(messaging.Envelope)
 		for i := 0; i < len(deliveries); i++ {
 			status, err := deliveries[i].LoadTransaction(block.Batch)
 			if err == nil {
-				messages = append(messages, &messaging.TransactionMessage{Transaction: deliveries[i].Transaction})
-				for _, sig := range deliveries[i].Signatures {
-					messages = append(messages, &messaging.SignatureMessage{Signature: sig, TxID: deliveries[i].Transaction.ID()})
-				}
+				env.Transaction = append(env.Transaction, deliveries[i].Transaction)
+				env.Signatures = append(env.Signatures, deliveries[i].Signatures...)
 				continue
 			}
 			if !errors.Is(err, errors.Delivered) {
@@ -734,7 +730,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results, err := (&execute.BlockV1{Block: block, Executor: x.Executor}).Process(messages)
+		results, err := (&execute.BlockV1{Block: block, Executor: x.Executor}).Process(env)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}

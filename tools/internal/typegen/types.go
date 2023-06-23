@@ -26,8 +26,9 @@ type MarshalAs int
 type TypeCode int
 
 type FieldType struct {
-	Code TypeCode
-	Name string
+	Code       TypeCode
+	Name       string
+	Parameters []*Field
 }
 
 func (t TypeCode) Title() string {
@@ -35,10 +36,18 @@ func (t TypeCode) Title() string {
 }
 
 func (f *FieldType) Equal(g *FieldType) bool {
-	if f == g {
+	switch {
+	case f == g:
 		return true
+	case f == nil,
+		g == nil,
+		f.Code != g.Code,
+		f.Name != g.Name,
+		len(f.Parameters) != len(g.Parameters):
+		return false
 	}
-	return f != nil && g != nil && *f == *g
+	// TODO Check the parameters properly
+	return true
 }
 
 func (f *FieldType) Title() string {
@@ -69,10 +78,19 @@ func (f FieldType) MarshalYAML() (interface{}, error) {
 }
 
 func (f *FieldType) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.MappingNode {
+		type x FieldType
+		return value.Decode((*x)(f))
+	}
+
 	var s string
 	err := value.Decode(&s)
 	if err != nil {
 		return err
+	}
+
+	if strings.Contains(s, "[") {
+		return errors.New("bracket notation is deprecated")
 	}
 
 	if strings.HasSuffix(s, "!") {
@@ -220,6 +238,8 @@ type Type struct {
 	Union Union
 	// NonBinary specifies whether the type is binary marshallable.
 	NonBinary bool `yaml:"non-binary"`
+	// NonJSON specifies whether the type is JSON marshallable.
+	NonJSON bool `yaml:"non-json"`
 	// Incomparable specifies whether two values of the type can be checked for equality.
 	Incomparable    bool `yaml:"incomparable"`
 	NoCopy          bool `yaml:"no-copy"`

@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -171,14 +172,14 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	isLocalTxn := !isSystemSig && delivery.Transaction.Header.Principal.LocalTo(md.Location)
 	if isLocalTxn && delivery.Transaction.Body.Type() != protocol.TransactionTypeRemote {
 		err = batch.Transaction(delivery.Transaction.GetHash()).
-			PutState(&database.SigOrTxn{Transaction: delivery.Transaction})
+			Main().Put(&database.SigOrTxn{Transaction: delivery.Transaction})
 		if err != nil {
 			return nil, fmt.Errorf("store transaction: %w", err)
 		}
 	}
 
 	var statusDirty bool
-	status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
+	status, err := batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load transaction status: %w", err)
 	}
@@ -290,7 +291,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	if statusDirty {
-		err = batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
+		err = batch.Transaction(delivery.Transaction.GetHash()).Status().Put(status)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -305,7 +306,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	env.Txid = delivery.Transaction.ID()
 	env.Signature = sigToStore
 	sigHash := signature.Hash()
-	err = batch.Transaction(sigHash).PutState(env)
+	err = batch.Transaction(sigHash).Main().Put(env)
 	if err != nil {
 		return nil, fmt.Errorf("store envelope: %w", err)
 	}
@@ -436,7 +437,7 @@ func (x *Executor) validateSigner(batch *database.Batch, transaction *protocol.T
 
 func loadSigner(batch *database.Batch, signerUrl *url.URL) (protocol.Signer, error) {
 	// Load signer
-	account, err := batch.Account(signerUrl).GetState()
+	account, err := batch.Account(signerUrl).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load signer: %w", err)
 	}
@@ -516,7 +517,7 @@ func (x *Executor) SignerIsAuthorized(batch *database.Batch, transaction *protoc
 // the principal.
 func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
 	// Load the principal
-	principal, err := batch.Account(transaction.Header.Principal).GetState()
+	principal, err := batch.Account(transaction.Header.Principal).Main().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load principal: %w", err)
 	}
@@ -541,13 +542,24 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 	}
 
 	// Authorization is disabled and the transaction type does not force authorization => authorized
-	if auth.AuthDisabled() && !transaction.Body.Type().RequireAuthorization() {
+	if badAuthDisabled(auth) && !transaction.Body.Type().RequireAuthorization() {
 		return nil
 	}
 
 	// Authorization is enabled => unauthorized
 	// Transaction type forces authorization => unauthorized
 	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
+}
+
+// badAuthDisabled is a reproduction of buggy logic from 1.0. This is known to
+// be buggy but it must be reproduced in order to replicate the logic of 1.0.
+func badAuthDisabled(a *protocol.AccountAuth) bool {
+	for _, e := range a.Authorities {
+		if e.Disabled {
+			return true
+		}
+	}
+	return false
 }
 
 // computeSignerFee computes the fee that will be charged to the signer.
@@ -629,7 +641,7 @@ func (x *Executor) processSigner(batch *database.Batch, transaction *protocol.Tr
 	}
 
 	record := batch.Transaction(transaction.GetHash())
-	status, err := record.GetStatus()
+	status, err := record.Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -637,7 +649,7 @@ func (x *Executor) processSigner(batch *database.Batch, transaction *protocol.Tr
 	// Add all signers to the signer list so that the transaction readiness
 	// check knows to look for delegates
 	status.AddSigner(signer)
-	err = record.PutStatus(status)
+	err = record.Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -687,7 +699,7 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	}
 
 	// Store changes to the signer
-	err = batch.Account(signer.GetUrl()).PutState(signer)
+	err = batch.Account(signer.GetUrl()).Main().Put(signer)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store signer: %w", err)
 	}
@@ -777,7 +789,7 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 
 func (x *Executor) processPartitionSignature(batch *database.Batch, signature protocol.KeySignature, transaction *protocol.Transaction) (protocol.Signer2, error) {
 	record := batch.Transaction(transaction.GetHash())
-	status, err := record.GetStatus()
+	status, err := record.Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -793,7 +805,7 @@ func (x *Executor) processPartitionSignature(batch *database.Batch, signature pr
 	if transaction.Body.Type().IsAnchor() {
 		status.AddAnchorSigner(signature)
 	}
-	err = record.PutStatus(status)
+	err = record.Status().Put(status)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -812,17 +824,18 @@ func hasKeySignature(batch *database.Batch, status *protocol.TransactionStatus) 
 		}
 
 		for _, e := range sigset.Entries() {
-			state, err := batch.Transaction(e.SignatureHash[:]).GetState()
+			var state messaging.MessageWithSignature
+			err := batch.Message(e.SignatureHash).Main().GetAs(&state)
 			if err != nil {
 				return false, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
 			}
 
-			if state.Signature == nil {
+			if state.GetSignature() == nil {
 				// This should not happen
 				continue
 			}
 
-			if _, ok := state.Signature.(protocol.KeySignature); ok {
+			if _, ok := state.GetSignature().(protocol.KeySignature); ok {
 				return true, nil
 			}
 		}

@@ -20,7 +20,13 @@ type SignatureBuilder struct {
 	transaction *protocol.Transaction
 	message     messaging.Message
 	signatures  []protocol.Signature
-	signer      signing.Builder
+
+	signer signing.Builder
+	noInit bool
+
+	// Ignore64Byte (when set) stops the signature builder from automatically
+	// correcting a transaction header or body that marshals to 64 bytes.
+	Ignore64Byte bool
 }
 
 func (b SignatureBuilder) Type(typ protocol.SignatureType) SignatureBuilder {
@@ -38,6 +44,26 @@ func (b SignatureBuilder) Delegator(delegator any, path ...string) SignatureBuil
 	return b
 }
 
+func (b SignatureBuilder) Accept() SignatureBuilder {
+	b.signer.Vote = protocol.VoteTypeAccept
+	return b
+}
+
+func (b SignatureBuilder) Reject() SignatureBuilder {
+	b.signer.Vote = protocol.VoteTypeReject
+	return b
+}
+
+func (b SignatureBuilder) Abstain() SignatureBuilder {
+	b.signer.Vote = protocol.VoteTypeAbstain
+	return b
+}
+
+func (b SignatureBuilder) Vote(vote protocol.VoteType) SignatureBuilder {
+	b.signer.Vote = vote
+	return b
+}
+
 func (b SignatureBuilder) Version(version any) SignatureBuilder {
 	b.signer.Version = b.parseUint(version)
 	return b
@@ -45,6 +71,13 @@ func (b SignatureBuilder) Version(version any) SignatureBuilder {
 
 func (b SignatureBuilder) Timestamp(timestamp any) SignatureBuilder {
 	b.signer.Timestamp = b.parseTimestamp(timestamp)
+	return b
+}
+
+// NoInitiator tells the signature builder not to initiate the transaction, even
+// if the initiator hash is not set.
+func (b SignatureBuilder) NoInitiator() SignatureBuilder {
+	b.noInit = true
 	return b
 }
 
@@ -99,16 +132,23 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 		return b
 	}
 
+	// Adjust the body length (header is handled by the signature builder)
+	if !b.adjustBody() {
+		return b
+	}
+
 	// Always use a simple hash
 	b.signer.InitMode = signing.InitWithSimpleHash
 
 	var signature protocol.Signature
 	var err error
+	b.signer.Ignore64Byte = b.Ignore64Byte
 	switch {
 	case b.message != nil:
 		h := b.message.Hash()
 		signature, err = b.signer.Sign(h[:])
-	case b.transaction.Body.Type() == protocol.TransactionTypeRemote,
+	case b.noInit,
+		b.transaction.Body.Type() == protocol.TransactionTypeRemote,
 		b.transaction.Header.Initiator != [32]byte{}:
 		signature, err = b.signer.Sign(b.transaction.GetHash())
 	default:
@@ -119,5 +159,38 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 	} else {
 		b.signatures = append(b.signatures, signature)
 	}
+
+	// Reset the signer fields
+	b.signer = signing.Builder{}
+	b.noInit = false
 	return b
+}
+
+func (b *SignatureBuilder) adjustBody() bool {
+	if b.Ignore64Byte || b.transaction == nil {
+		return b.ok()
+	}
+
+	// Is the body exactly 64 bytes?
+	body, err := b.transaction.Body.MarshalBinary()
+	if err != nil {
+		b.errorf(errors.EncodingError, "marshal body: %w", err)
+		return b.ok()
+	}
+	if len(body) != 64 {
+		return b.ok()
+	}
+
+	// Copy to reset the cached hash if there is one
+	b.transaction = b.transaction.Copy()
+
+	// Pad
+	body = append(body, 0)
+	b.transaction.Body, err = protocol.UnmarshalTransactionBody(body)
+	if err != nil {
+		b.errorf(errors.EncodingError, "unmarshal body: %w", err)
+		return b.ok()
+	}
+
+	return b.ok()
 }

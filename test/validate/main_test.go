@@ -74,10 +74,8 @@ func TestValidateAPI(t *testing.T) {
 
 	// Set up the P2P client node
 	t.Log("Create the client")
-	logger := logging.ConsoleLoggerForTest(t, "info")
 	node, err := p2p.NewClient(p2p.Options{
 		Network: net.Id,
-		Logger:  logger,
 		BootstrapPeers: []multiaddr.Multiaddr{
 			net.Bvns[0].Nodes[0].Listen().Scheme("tcp").Directory().AccumulateP2P().WithKey().Multiaddr(),
 		},
@@ -86,7 +84,7 @@ func TestValidateAPI(t *testing.T) {
 	t.Cleanup(func() { _ = node.Close() })
 
 	// Run the faucet through the API
-	handler, err := message.NewHandler(logger, message.Faucet{Faucet: s.faucetSvc})
+	handler, err := message.NewHandler(message.Faucet{Faucet: s.faucetSvc})
 	require.NoError(t, err)
 	node.RegisterService(api.ServiceTypeFaucet.AddressForUrl(protocol.AcmeUrl()), handler.Handle)
 
@@ -220,7 +218,6 @@ func setupNetClient(t *testing.T, network string, addrs ...multiaddr.Multiaddr) 
 	t.Log("Create the client")
 	node, err := p2p.NewClient(p2p.Options{
 		Network:        network,
-		Logger:         logging.ConsoleLoggerForTest(t, "info"),
 		BootstrapPeers: addrs,
 	})
 	require.NoError(t, err)
@@ -395,8 +392,8 @@ func (s *ValidationTestSuite) TestMain() {
 		build.Transaction().For(adi, "book", "2").
 			UpdateKeyPage().UpdateAllowed().Deny(TransactionTypeUpdateKeyPage).FinishOperation().
 			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))[1]
-
-	s.EqualError(st.AsError(), "acc://test.acme/book/2 cannot modify its own allowed operations")
+	_ = s.ErrorIs(st.AsError(), errors.Unauthorized) &&
+		s.EqualError(st.AsError(), "acc://test.acme/book/2 cannot modify its own allowed operations")
 
 	s.Nil(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "2")).TransactionBlacklist)
 
@@ -416,7 +413,7 @@ func (s *ValidationTestSuite) TestMain() {
 			UpdateKeyPage().Add().Entry().Key(key31, SignatureTypeED25519).FinishEntry().FinishOperation().
 			SignWith(adi, "book", "2").Version(1).Timestamp(&s.nonce).PrivateKey(key20))[1]
 
-	s.EqualError(st.AsError(), "page acc://test.acme/book/2 is not authorized to sign updateKeyPage")
+	s.EqualError(st.AsError(), "acc://test.acme/book/2 is not authorized to sign updateKeyPage")
 
 	s.Len(QueryAccountAs[*KeyPage](s.Harness, adi.JoinPath("book", "3")).Keys, 1)
 
@@ -636,15 +633,17 @@ func (s *ValidationTestSuite) TestMain() {
 	var dropped *url.TxID
 	if s.sim != nil {
 		s.TB.Log("Drop the next anchor")
-		s.sim.SetBlockHook(Directory, func(_ execute.BlockParams, messages []messaging.Message) (_ []messaging.Message, keepHook bool) {
+		s.sim.SetBlockHook(Directory, func(_ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
 			// Drop all block anchors, once
-			for i := 0; i < len(messages); i++ {
-				if anchor, ok := messages[i].(*messaging.BlockAnchor); ok {
-					messages = append(messages[:i], messages[i+1:]...)
-					dropped = anchor.Anchor.(*messaging.SequencedMessage).Message.ID()
+			for _, env := range envelopes {
+				for i := 0; i < len(env.Messages); i++ {
+					if anchor, ok := env.Messages[i].(*messaging.BlockAnchor); ok {
+						env.Messages = append(env.Messages[:i], env.Messages[i+1:]...)
+						dropped = anchor.Anchor.(*messaging.SequencedMessage).Message.ID()
+					}
 				}
 			}
-			return messages, dropped == nil
+			return envelopes, dropped == nil
 		})
 
 		defer func() {
@@ -720,7 +719,7 @@ func (s *ValidationTestSuite) TestMain() {
 	s.TB.Log("Write data to ADI Data Account")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(adi, "data").
-			WriteData([]byte("foo"), []byte("bar")).Scratch().
+			WriteData().DoubleHash([]byte("foo"), []byte("bar")).Scratch().
 			SignWith(adi, "book", "1").Version(1).Timestamp(&s.nonce).PrivateKey(key10))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -920,7 +919,7 @@ func (s *ValidationTestSuite) TestFaucets() {
 	s.Require().NoError(err)
 	s.T().Cleanup(func() { faucetSvc.Stop() })
 
-	handler, err := message.NewHandler(logger, message.Faucet{Faucet: faucetSvc})
+	handler, err := message.NewHandler(message.Faucet{Faucet: faucetSvc})
 	s.Require().NoError(err)
 	s.node.RegisterService(api.ServiceTypeFaucet.AddressForUrl(peg), handler.Handle)
 

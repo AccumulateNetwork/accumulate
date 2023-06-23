@@ -1,5 +1,10 @@
 module gitlab.com/accumulatenetwork/accumulate
 
+retract (
+	v1.1.1 // Tagged the wrong commit
+	v1.1.0 // Causes consensus failure when run alongside v1.0.x
+)
+
 go 1.19
 
 replace github.com/tendermint/tendermint v0.37.0-rc1 => github.com/AccumulateNetwork/tendermint v0.34.15-0.20221019224404-7f7149107231
@@ -29,11 +34,11 @@ require (
 	github.com/tendermint/tendermint v0.37.0-rc1
 	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118
 	gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e
-	golang.org/x/exp v0.0.0-20221205204356-47842c84f3db
+	golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.6.0
-	golang.org/x/term v0.6.0
-	golang.org/x/text v0.8.0
+	golang.org/x/sys v0.7.0
+	golang.org/x/term v0.7.0
+	golang.org/x/text v0.9.0
 	golang.org/x/tools v0.7.0
 	gopkg.in/yaml.v3 v3.0.1
 	gotest.tools/gotestsum v1.8.1
@@ -43,6 +48,7 @@ require (
 	github.com/FactomProject/factomd v1.13.0
 	github.com/chzyer/readline v1.5.1
 	github.com/ethereum/go-ethereum v1.10.25
+	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/ghodss/yaml v1.0.0
 	github.com/gobeam/stringy v0.0.6
 	github.com/libp2p/go-libp2p v0.25.1
@@ -306,7 +312,7 @@ require (
 	github.com/quasilyte/gogrep v0.5.0 // indirect
 	github.com/quasilyte/regex/syntax v0.0.0-20210819130434-b3f0c404a727 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
-	github.com/rs/cors v1.8.2 // indirect
+	github.com/rs/cors v1.9.0
 	github.com/russross/blackfriday/v2 v2.1.0
 	github.com/ryancurrah/gomodguard v1.3.0 // indirect
 	github.com/ryanrolds/sqlclosecheck v0.4.0 // indirect
@@ -343,9 +349,9 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.5.0
+	golang.org/x/crypto v0.8.0
 	golang.org/x/mod v0.9.0 // indirect
-	golang.org/x/net v0.8.0 // indirect
+	golang.org/x/net v0.9.0 // indirect
 	google.golang.org/genproto v0.0.0-20220725144611-272f38e5d71b // indirect
 	google.golang.org/grpc v1.49.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect

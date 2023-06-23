@@ -12,9 +12,9 @@ import (
 	stderrs "errors"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -119,7 +119,7 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 			}
 		}
 
-		switch s.typ {
+		switch s.Type() {
 		case SectionTypeAccounts:
 			if vAccount == nil {
 				continue
@@ -131,7 +131,7 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 			}
 
 			var i int
-			err = pmt.ReadSnapshot(sr, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+			err = bpt.ReadSnapshotV1(sr, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 				account := new(Account)
 				err := account.UnmarshalBinaryFrom(reader)
 				if err != nil {
@@ -178,7 +178,7 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 
 			var r io.Reader = sr
 			var gz *gzip.Reader
-			if s.typ == SectionTypeGzTransactions {
+			if s.Type() == SectionTypeGzTransactions {
 				gz, err = gzip.NewReader(sr)
 				if err != nil {
 					return errors.UnknownError.WithFormat("open gzip reader: %w", err)

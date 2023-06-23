@@ -59,14 +59,7 @@ func (x *ExecutorV1) LastBlock() (*execute.BlockParams, [32]byte, error) {
 }
 
 func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
-	batch := x.Database.Begin(true)
-	defer batch.Discard()
-	err = (*block.Executor)(x).RestoreSnapshot(batch, snapshot)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	err = batch.Commit()
+	err = (*block.Executor)(x).RestoreSnapshot(x.Database, snapshot)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -76,7 +69,11 @@ func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*Valid
 
 // Validate converts the message to a delivery and validates it. Validate
 // returns an error if the message is not a [message.LegacyMessage].
-func (x *ExecutorV1) Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error) {
+func (x *ExecutorV1) Validate(envelope *messaging.Envelope, recheck bool) ([]*protocol.TransactionStatus, error) {
+	// The messages field does not exist in v1.0 so it must be ignored to
+	// preserve the same behavior
+	envelope.Messages = nil
+
 	// Only use the shared batch when the check type is CheckTxType_New,
 	//   we want to avoid changes to variables version increments to and stick and therefore be done multiple times
 	var batch *database.Batch
@@ -89,6 +86,11 @@ func (x *ExecutorV1) Validate(messages []messaging.Message, recheck bool) ([]*pr
 			x.CheckTxBatch = x.Database.Begin(false)
 		}
 		batch = x.CheckTxBatch
+	}
+
+	messages, err := envelope.Normalize()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	deliveries, err := chain.DeliveriesFromMessages(messages)
@@ -157,7 +159,16 @@ func isHalted(x *block.Executor, delviery *chain.Delivery) bool {
 
 // Process converts the message to a delivery and processes it. Process returns
 // an error if the message is not a [message.LegacyMessage].
-func (b *BlockV1) Process(messages []messaging.Message) ([]*protocol.TransactionStatus, error) {
+func (b *BlockV1) Process(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+	// The messages field does not exist in v1.0 so it must be ignored to
+	// preserve the same behavior
+	envelope.Messages = nil
+
+	messages, err := envelope.Normalize()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	deliveries, err := chain.DeliveriesFromMessages(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -237,6 +248,6 @@ func (s *BlockStateV1) Discard() {
 	s.Block.Batch.Discard()
 }
 
-func (s *BlockStateV1) WalkChanges(fn record.WalkFunc) error {
-	return s.Block.Batch.WalkChanges(fn)
+func (s *BlockStateV1) ChangeSet() record.Record {
+	return s.Block.Batch
 }

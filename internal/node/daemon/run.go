@@ -124,6 +124,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 		return nil, errors.UnknownError.WithFormat("initialize logger: %v", err)
 	}
 
+	daemon.eventBus = events.NewBus(daemon.Logger.With("module", "events"))
 	return &daemon, nil
 }
 
@@ -140,10 +141,6 @@ func (d *Daemon) EventBus() *events.Bus           { return d.eventBus }
 // StartSecondary starts this daemon as a secondary process of the given daemon
 // (which must already be running).
 func (d *Daemon) StartSecondary(e *Daemon) error {
-	if e.done == nil {
-		return errors.BadRequest.WithFormat("not started")
-	}
-
 	// Reuse the P2P node. Otherwise, start everything normally.
 	d.p2pnode = e.p2pnode
 	return d.Start()
@@ -180,10 +177,34 @@ func (d *Daemon) Start() (err error) {
 		d.snapshotSchedule = s
 	}
 
+	// Load keys
+	err = d.loadKeys()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	switch d.Config.Accumulate.NetworkType {
+	case protocol.PartitionTypeDirectory,
+		protocol.PartitionTypeBlockValidator:
+		err = d.startValidator()
+	case protocol.PartitionTypeBlockSummary:
+		err = d.startSummary()
+	default:
+		return errors.InternalError.WithFormat("unknown partition type %v", d.Config.Accumulate.NetworkType)
+	}
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	d.startMonitoringAndCleanup()
+	return nil
+}
+
+func (d *Daemon) startValidator() (err error) {
 	// Start the database
 	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
-		return errors.UnknownError.WithFormat("open database: %v", err)
+		return errors.UnknownError.WithFormat("open database: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -191,14 +212,7 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
-	// Load keys
-	err = d.loadKeys()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Setup the event buss
-	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
+	// Setup the event bus
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	globals := make(chan *core.GlobalValues, 1)
@@ -238,12 +252,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Start services
 	err = d.startServices(globals)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	d.startMonitoringAndCleanup()
-	return nil
+	return errors.UnknownError.Wrap(err)
 }
 
 func (d *Daemon) startAnalysis() error {
@@ -294,6 +303,10 @@ func (d *Daemon) startAnalysis() error {
 }
 
 func (d *Daemon) loadKeys() error {
+	if d.privVal != nil {
+		return nil
+	}
+
 	var err error
 	d.privVal, err = config.LoadFilePV(
 		d.Config.PrivValidatorKeyFile(),
@@ -406,7 +419,6 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
 	err := d.connectionManager.InitClients(d.localTm, statusChecker)
-
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize the connection manager: %v", err)
 	}
@@ -464,7 +476,6 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		ValidatorKey: d.Key().Bytes(),
 	})
 	messageHandler, err := message.NewHandler(
-		d.Logger.With("module", "acc-rpc"),
 		&message.ConsensusService{ConsensusService: nodeSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
 		&message.NetworkService{NetworkService: netSvc},
@@ -498,6 +509,29 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	return nil
 }
 
+func (d *Daemon) StartP2P() error {
+	if d.p2pnode != nil {
+		return nil
+	}
+
+	err := d.loadKeys()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	d.p2pnode, err = p2p.New(p2p.Options{
+		Network:        d.Config.Accumulate.Network.Id,
+		Listen:         d.Config.Accumulate.P2P.Listen,
+		BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
+		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+		DiscoveryMode:  dht.ModeServer,
+	})
+	if err != nil {
+		return errors.UnknownError.WithFormat("initialize P2P: %w", err)
+	}
+	return nil
+}
+
 func (d *Daemon) startAPI() error {
 	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
 		return client.New(server)
@@ -505,19 +539,9 @@ func (d *Daemon) startAPI() error {
 	d.router = routing.NewRouter(d.eventBus, d.Logger)
 
 	// Setup the p2p node
-	var err error
-	if d.p2pnode == nil {
-		d.p2pnode, err = p2p.New(p2p.Options{
-			Logger:         d.Logger.With("module", "acc-rpc"),
-			Network:        d.Config.Accumulate.Network.Id,
-			Listen:         d.Config.Accumulate.P2P.Listen,
-			BootstrapPeers: d.Config.Accumulate.P2P.BootstrapPeers,
-			Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
-			DiscoveryMode:  dht.ModeServer,
-		})
-		if err != nil {
-			return errors.UnknownError.WithFormat("initialize P2P: %w", err)
-		}
+	err := d.StartP2P()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	d.api, err = nodeapi.NewHandler(nodeapi.Options{
@@ -576,18 +600,22 @@ func (d *Daemon) startMonitoringAndCleanup() {
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 		defer cancel()
 
-		err := d.apiServer.Shutdown(ctx)
-		if err != nil {
-			d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
+		if d.apiServer != nil {
+			err := d.apiServer.Shutdown(ctx)
+			if err != nil {
+				d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
+			}
 		}
 
-		err = d.db.Close()
-		if err != nil {
-			module := "badger"
-			if d.UseMemDB {
-				module = "memdb"
+		if d.db != nil {
+			err := d.db.Close()
+			if err != nil {
+				module := "badger"
+				if d.UseMemDB {
+					module = "memdb"
+				}
+				d.Logger.Error("Error closing database", "module", module, "error", err)
 			}
-			d.Logger.Error("Error closing database", "module", module, "error", err)
 		}
 	}()
 }
@@ -614,6 +642,10 @@ func (d *Daemon) ConnectDirectly(e *Daemon) error {
 	err = e.p2pnode.ConnectDirectly(d.p2pnode)
 	if err != nil {
 		return err
+	}
+
+	if d.connectionManager == nil {
+		return nil
 	}
 
 	err = d.connectionManager.ConnectDirectly(e.connectionManager)

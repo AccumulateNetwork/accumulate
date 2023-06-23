@@ -143,7 +143,9 @@ func run(*cobra.Command, []string) {
 	}()
 
 	check(sim.ListenAndServe(context.Background(), simulator.ListenOptions{
-		ServeError: check,
+		ListenHTTPv2: true,
+		ListenHTTPv3: true,
+		ServeError:   check,
 	}))
 
 	select {}

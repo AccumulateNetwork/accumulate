@@ -10,9 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -48,21 +49,20 @@ func TestReplay(t *testing.T) {
 		return sim
 	}
 
-	newTxn := func(account, entry string) acctesting.TransactionBuilder {
-		return acctesting.NewTransaction().
-			Unsafe().
-			UseSimpleHash().
-			WithPrincipal(alice.JoinPath(account)).
-			WithBody(&WriteData{
+	newTxn := func(account, entry string) build.TransactionBuilder {
+		return build.Transaction().
+			For(alice.JoinPath(account)).
+			Body(&WriteData{
 				WriteToState: true,
-				Entry: &AccumulateDataEntry{
+				Entry: &DoubleHashDataEntry{
 					Data: [][]byte{[]byte(entry)},
 				},
 			})
 	}
 
-	succeeds := func(sim *simulator.Simulator, env *messaging.Envelope) {
+	succeeds := func(sim *simulator.Simulator, b build.SignatureBuilder) {
 		t.Helper()
+		env := helpers.MustBuild(t, b)
 		st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
 		for _, st := range st {
 			require.False(t, st.Failed(), "Expected %x to succeed", env.Transaction[0].GetHash())
@@ -73,8 +73,9 @@ func TestReplay(t *testing.T) {
 		require.True(t, protocol.EqualDataEntry(entry, account.Entry))
 	}
 
-	fails := func(sim *simulator.Simulator, env *messaging.Envelope) {
+	fails := func(sim *simulator.Simulator, b build.SignatureBuilder) {
 		t.Helper()
+		env := helpers.MustBuild(t, b)
 		sts, err := sim.SubmitAndExecuteBlock(env)
 		if err != nil {
 			// t.Log("Failed to submit: ", err)
@@ -112,67 +113,69 @@ func TestReplay(t *testing.T) {
 
 	t.Run("Uninitiated without timestamp", func(t *testing.T) {
 		fails(setup(t), newTxn("data1", t.Name()).
-			WithSigner(alice.JoinPath("book", "1"), 1). // Sign with alice/book/1
-			WithTimestamp(0).                           // No timestamp
-			Sign(SignatureTypeED25519, aliceKey).       // Sign
-			Build())
+			SignWith(alice.JoinPath("book", "1")). // Sign with alice/book/1
+			Version(1).                            //
+			NoInitiator().                         // Don't initiate
+			Timestamp(0).                          // No timestamp
+			PrivateKey(aliceKey))                  // Sign
 	})
 
 	t.Run("Uninitiated with timestamp", func(t *testing.T) {
 		fails(setup(t), newTxn("data1", t.Name()).
-			WithSigner(alice.JoinPath("book", "1"), 1). // Sign with alice/book/1
-			WithTimestamp(1).                           // With timestamp
-			Sign(SignatureTypeED25519, aliceKey).       // Sign
-			Build())
+			SignWith(alice.JoinPath("book", "1")). // Sign with alice/book/1
+			Version(1).                            //
+			NoInitiator().                         // Don't initiate
+			Timestamp(1).                          // With timestamp
+			PrivateKey(aliceKey))                  // Sign
 	})
 
 	t.Run("Direct without timestamp", func(t *testing.T) {
 		fails(setup(t), newTxn("data1", t.Name()).
-			WithSigner(alice.JoinPath("book", "1"), 1). // Sign with alice/book/1
-			WithTimestamp(0).                           // No timestamp
-			Initiate(SignatureTypeED25519, aliceKey).   // Initiate
-			Build())
+			SignWith(alice.JoinPath("book", "1")). // Sign with alice/book/1
+			Version(1).                            //
+			Timestamp(0).                          // No timestamp
+			PrivateKey(aliceKey))                  // Initiate
 	})
 
 	t.Run("Direct with timestamp", func(t *testing.T) {
 		succeeds(setup(t), newTxn("data1", t.Name()).
-			WithSigner(alice.JoinPath("book", "1"), 1). // Sign with alice/book/1
-			WithTimestamp(1).                           // With timestamp
-			Initiate(SignatureTypeED25519, aliceKey).   // Initiate
-			Build())
+			SignWith(alice.JoinPath("book", "1")). // Sign with alice/book/1
+			Version(1).                            //
+			Timestamp(1).                          // With timestamp
+			PrivateKey(aliceKey))                  // Initiate
 	})
 
 	t.Run("Remote without timestamp", func(t *testing.T) {
 		fails(setup(t), newTxn("data2", t.Name()).
-			WithSigner(bob.JoinPath("book", "1"), 1). // Sign with bob/book/1
-			WithTimestamp(0).                         // No timestamp
-			Initiate(SignatureTypeED25519, bobKey).   // Initiate
-			Build())
+			SignWith(bob.JoinPath("book", "1")). // Sign with bob/book/1
+			Version(1).                          //
+			Timestamp(0).                        // No timestamp
+			PrivateKey(bobKey))                  // Initiate
 	})
 
 	t.Run("Remote with timestamp", func(t *testing.T) {
 		succeeds(setup(t), newTxn("data2", t.Name()).
-			WithSigner(bob.JoinPath("book", "1"), 1). // Sign with bob/book/1
-			WithTimestamp(1).                         // With timestamp
-			Initiate(SignatureTypeED25519, bobKey).   // Initiate
-			Build())
+			SignWith(bob.JoinPath("book", "1")). // Sign with bob/book/1
+			Version(1).                          //
+			Timestamp(1).                        // With timestamp
+			PrivateKey(bobKey))                  // Initiate
 	})
 
 	t.Run("Delegated without timestamp", func(t *testing.T) {
 		fails(setup(t), newTxn("data1", t.Name()).
-			WithSigner(charlie.JoinPath("book", "1"), 1). // Sign with charlie/book/1
-			WithDelegator(alice.JoinPath("book", "1")).   //   delegate of alice/book/1
-			WithTimestamp(0).                             // No timestamp
-			Initiate(SignatureTypeED25519, charlieKey).   // Initiate
-			Build())
+			SignWith(charlie.JoinPath("book", "1")). // Sign with charlie/book/1
+			Version(1).                              //
+			Delegator(alice.JoinPath("book", "1")).  //   delegate of alice/book/1
+			Timestamp(0).                            // No timestamp
+			PrivateKey(charlieKey))                  // Initiate
 	})
 
 	t.Run("Delegated with timestamp", func(t *testing.T) {
 		succeeds(setup(t), newTxn("data1", t.Name()).
-			WithSigner(charlie.JoinPath("book", "1"), 1). // Sign with charlie/book/1
-			WithDelegator(alice.JoinPath("book", "1")).   //   delegate of alice/book/1
-			WithTimestamp(1).                             // With timestamp
-			Initiate(SignatureTypeED25519, charlieKey).   // Initiate
-			Build())
+			SignWith(charlie.JoinPath("book", "1")). // Sign with charlie/book/1
+			Version(1).                              //
+			Delegator(alice.JoinPath("book", "1")).  //   delegate of alice/book/1
+			Timestamp(1).                            // With timestamp
+			PrivateKey(charlieKey))                  // Initiate
 	})
 }

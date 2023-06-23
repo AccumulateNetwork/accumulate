@@ -13,9 +13,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -71,10 +72,10 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	require.NoError(t, snapshot.Restore(db, buf, nil))
 
 	// Verify the account chain
-	key := record.Key{"Account", foo, "MainChain"}
-	storetx := store.Begin(false)
+	key := record.NewKey("Account", foo, "MainChain")
+	storetx := store.Begin(nil, false)
 	defer storetx.Discard()
-	c := database.NewChain(nil, record.KvStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
+	c := database.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
 
 	entriesShouldFailOrReturnCorrectNumber(t, c, 0, 300)
 	entriesShouldFailOrReturnCorrectNumber(t, c, 100, 300)
@@ -125,10 +126,10 @@ func TestSnapshotFullHistory(t *testing.T) {
 		require.NoError(t, snapshot.Restore(db, buf, nil))
 
 		// Verify the account chain
-		key := record.Key{"Account", foo, "MainChain"}
-		storetx := store.Begin(false)
+		key := record.NewKey("Account", foo, "MainChain")
+		storetx := store.Begin(nil, false)
 		defer storetx.Discard()
-		c := database.NewChain(nil, record.KvStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
+		c := database.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
 
 		for i := 0; i < n; i++ {
 			hash, err := c.Get(int64(i))

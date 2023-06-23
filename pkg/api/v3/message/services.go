@@ -9,9 +9,9 @@ package message
 import (
 	"context"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 // A Service is implements binary message transport for an API v3 service.
@@ -49,7 +49,6 @@ func makeServiceMethod[T any, PT msgPtr[T]](fn func(*call[PT])) (Type, serviceMe
 			// Call it
 			fn(&call[PT]{
 				context: c.context,
-				logger:  c.logger,
 				stream:  c.stream,
 				params:  params,
 			})
@@ -60,7 +59,6 @@ func makeServiceMethod[T any, PT msgPtr[T]](fn func(*call[PT])) (Type, serviceMe
 // call is a convenience struct to facilitate Service implementations.
 type call[T Message] struct {
 	context context.Context
-	logger  logging.OptionalLogger
 	stream  Stream
 	params  T
 }
@@ -70,7 +68,7 @@ type call[T Message] struct {
 func (c *call[T]) Write(msg Message) bool {
 	err := c.stream.Write(msg)
 	if err != nil {
-		c.logger.Error("Unable to send response to peer", "error", err)
+		slog.Error("Unable to send response to peer", "error", err, "module", "api")
 		return false
 	}
 	return true

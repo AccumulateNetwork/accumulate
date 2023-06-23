@@ -220,13 +220,25 @@ type WriteDataBuilder struct {
 
 func (b TransactionBuilder) WriteData(data ...any) WriteDataBuilder {
 	c := WriteDataBuilder{t: b}
-	c.body.Entry = c.t.parseDataEntry(data...)
-	return c
+	if len(data) == 0 {
+		return c
+	}
+	return c.Entry(c.t.parseDataEntry(data...))
 }
 
 func (b WriteDataBuilder) Entry(e protocol.DataEntry) WriteDataBuilder {
 	b.body.Entry = e
 	return b
+}
+
+func (b WriteDataBuilder) Accumulate(data ...any) WriteDataBuilder {
+	parts := b.t.parseDataEntryParts(data...)
+	return b.Entry(&protocol.AccumulateDataEntry{Data: parts})
+}
+
+func (b WriteDataBuilder) DoubleHash(data ...any) WriteDataBuilder {
+	parts := b.t.parseDataEntryParts(data...)
+	return b.Entry(&protocol.DoubleHashDataEntry{Data: parts})
 }
 
 func (b WriteDataBuilder) Scratch() WriteDataBuilder {
@@ -571,6 +583,20 @@ func (b UpdateKeyPageBuilder) Remove() RemoveKeyOperationBuilder {
 
 func (b UpdateKeyPageBuilder) SetThreshold(v uint64) UpdateKeyPageBuilder {
 	op := new(protocol.SetThresholdKeyPageOperation)
+	op.Threshold = v
+	b.body.Operation = append(b.body.Operation, op)
+	return b
+}
+
+func (b UpdateKeyPageBuilder) SetRejectThreshold(v uint64) UpdateKeyPageBuilder {
+	op := new(protocol.SetRejectThresholdKeyPageOperation)
+	op.Threshold = v
+	b.body.Operation = append(b.body.Operation, op)
+	return b
+}
+
+func (b UpdateKeyPageBuilder) SetResponseThreshold(v uint64) UpdateKeyPageBuilder {
+	op := new(protocol.SetResponseThresholdKeyPageOperation)
 	op.Threshold = v
 	b.body.Operation = append(b.body.Operation, op)
 	return b

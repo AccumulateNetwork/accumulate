@@ -96,16 +96,14 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		return nil, errors.BadRequest.WithFormat("invalid proof start: expected %x, got %x", h, syn.Proof.Receipt.Start)
 	}
 
-	// Verify the proof ends with a DN anchor
-	_, err := batch.Account(ctx.Executor.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().IndexOf(syn.Proof.Receipt.Anchor)
-	switch {
-	case err == nil:
-		// Ok
-	case errors.Is(err, errors.NotFound):
-		return nil, errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)
-	default:
-		return nil, errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
-	}
+	// Don't check the anchor during validation. If we check the anchor during
+	// validation, there is a race condition: partition X may receive a DN
+	// anchor and submit synthetic messages to partition Y before that partition
+	// receives and processes that anchor, which could cause partition Y to
+	// reject the message during CheckTx. Waiting until DeliverTx to check the
+	// anchor does not eliminate the race but it does significantly reduce the
+	// likelihood it will strike, since partition Y will almost process the DN
+	// anchor before it processes the synthetic message.
 
 	// Verify the message within the sequenced message is an allowed type
 	switch seq.Message.Type() {
@@ -135,19 +133,8 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	// Add a transaction state to ensure the block gets recorded
 	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
 
-	syn, err := x.check(batch, ctx)
-	if err == nil {
-		_, err = ctx.callMessageExecutor(batch, syn.Message)
-	}
-
-	// Record the signature
-	err = batch.Account(syn.Signature.GetSigner()).
-		Transaction(syn.Message.Hash()).
-		ValidatorSignatures().
-		Add(syn.Signature)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
+	// Process the message (error is handled by the next step)
+	err = x.process(batch, ctx)
 
 	// Record the message and its status
 	err = ctx.recordMessageAndStatus(batch, status, errors.Delivered, err)
@@ -156,4 +143,39 @@ func (x SyntheticMessage) Process(batch *database.Batch, ctx *MessageContext) (_
 	}
 
 	return status, nil
+}
+
+func (x SyntheticMessage) process(batch *database.Batch, ctx *MessageContext) error {
+	// Validate
+	syn, err := x.check(batch, ctx)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Verify the proof ends with a DN anchor
+	_, err = batch.Account(ctx.Executor.Describe.AnchorPool()).
+		AnchorChain(protocol.Directory).
+		Root().
+		IndexOf(syn.Proof.Receipt.Anchor)
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		return errors.BadRequest.WithFormat("invalid proof anchor: %x is not a known directory anchor", syn.Proof.Receipt.Anchor)
+	default:
+		return errors.UnknownError.WithFormat("search for directory anchor %x: %w", syn.Proof.Receipt.Anchor, err)
+	}
+
+	// Execute the inner message
+	_, err = ctx.callMessageExecutor(batch, syn.Message)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Record the signature (must not fail)
+	err = batch.Account(syn.Signature.GetSigner()).
+		Transaction(syn.Message.Hash()).
+		ValidatorSignatures().
+		Add(syn.Signature)
+	return errors.InternalError.Wrap(err)
 }

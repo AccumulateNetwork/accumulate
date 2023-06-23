@@ -69,23 +69,22 @@ func TestCreateIdentity(t *testing.T) {
 		MakeIdentity(t, sim.DatabaseFor(charlie), charlie, acctesting.GenerateKey(charlie)[32:])
 		UpdateAccount(t, sim.DatabaseFor(alice), alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
 
-		bld := acctesting.NewTransaction()
+		bld := build.Transaction()
 		if c.Direct {
-			bld = bld.WithPrincipal(c.IdentityUrl)
+			bld = bld.For(c.IdentityUrl)
 		} else {
-			bld = bld.WithPrincipal(c.SignerUrl)
+			bld = bld.For(c.SignerUrl)
 		}
 
-		st := sim.Submit(
-			bld.WithSigner(c.SignerUrl, 1).
-				WithTimestampVar(&timestamp).
-				WithBody(&CreateIdentity{
-					Url:        c.IdentityUrl,
-					KeyHash:    bobKeyHash[:],
-					KeyBookUrl: c.IdentityUrl.JoinPath("book"),
-				}).
-				Initiate(SignatureTypeED25519, c.SignerKey).
-				Build())
+		st := sim.Submit(MustBuild(t,
+			bld.Body(&CreateIdentity{
+				Url:        c.IdentityUrl,
+				KeyHash:    bobKeyHash[:],
+				KeyBookUrl: c.IdentityUrl.JoinPath("book"),
+			}).SignWith(c.SignerUrl).
+				Version(1).
+				Timestamp(&timestamp).
+				PrivateKey(c.SignerKey)))
 
 		var didFail error
 		for _, st := range st {

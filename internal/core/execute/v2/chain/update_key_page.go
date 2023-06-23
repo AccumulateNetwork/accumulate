@@ -17,13 +17,14 @@ import (
 
 type UpdateKeyPage struct{}
 
+var _ SignerCanSignValidator = (*UpdateKeyPage)(nil)
 var _ SignerValidator = (*UpdateKeyPage)(nil)
 
 func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
+func (UpdateKeyPage) SignerCanSign(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
 	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
 	if !ok {
 		return false, errors.BadRequest.WithFormat("principal is not a key page")
@@ -33,65 +34,52 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	if !ok {
 		return true, nil // Signer is not a page
 	}
+	if !principalBook.Equal(signerBook) {
+		return true, nil // Signer belongs to a different book
+	}
 
-	// If the signer is a page of the principal
-	if principalBook.Equal(signerBook) {
-		// Lower indices are higher priority
-		if signerPageIdx > principalPageIdx {
-			return false, errors.Unauthorized.WithFormat("signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
-		}
+	// Lower indices are higher priority
+	if signerPageIdx > principalPageIdx {
+		return false, errors.Unauthorized.WithFormat("signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+	}
 
-		// Operation-specific checks
-		body, ok := transaction.Body.(*protocol.UpdateKeyPage)
-		if !ok {
-			return false, errors.BadRequest.WithFormat("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
-		}
-		for _, op := range body.Operation {
-			switch op.Type() {
-			case protocol.KeyPageOperationTypeUpdateAllowed:
-				if signerPageIdx == principalPageIdx {
-					return false, errors.Unauthorized.WithFormat("%v cannot modify its own allowed operations", transaction.Header.Principal)
-				}
+	// Operation-specific checks
+	body, ok := transaction.Body.(*protocol.UpdateKeyPage)
+	if !ok {
+		return false, errors.BadRequest.WithFormat("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
+	}
+	for _, op := range body.Operation {
+		switch op.Type() {
+		case protocol.KeyPageOperationTypeUpdateAllowed:
+			if signerPageIdx == principalPageIdx {
+				return false, errors.Unauthorized.WithFormat("%v cannot modify its own allowed operations", transaction.Header.Principal)
 			}
 		}
 	}
 
-	if !md.Location.LocalTo(transaction.Header.Principal) {
-		return true, nil
-	}
-
-	// Signers belonging to new delegates are authorized to sign the transaction
-	newOwners, err := getNewOwners(batch, transaction)
-	if err != nil {
-		return false, errors.UnknownError.Wrap(err)
-	}
-
-	for _, owner := range newOwners {
-		if owner.Equal(signerBook) {
-			return false, delegate.SignerIsAuthorized(batch, transaction, signer, false)
-		}
-	}
-
-	// Run the normal checks
+	// Fall back - this override adds additional checks but all the normal
+	// checks should also be applied
 	return true, nil
+}
+
+func (UpdateKeyPage) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, sig *protocol.AuthoritySignature) (fallback bool, err error) {
+	// Signers belonging to new delegates are authorized to sign the transaction
+	newOwners, err := updateKeyPage_getNewOwners(batch, transaction)
+	if err != nil {
+		return false, err
+	}
+
+	return newOwners.AuthorityIsAccepted(delegate, batch, transaction, sig)
 }
 
 func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
 	// All new delegates must sign the transaction
-	newOwners, err := getNewOwners(batch, transaction)
+	newOwners, err := updateKeyPage_getNewOwners(batch, transaction)
 	if err != nil {
 		return false, false, errors.UnknownError.Wrap(err)
 	}
 
-	for _, owner := range newOwners {
-		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, owner)
-		if !ok || err != nil {
-			return false, false, err
-		}
-	}
-
-	// Fallback to general authorization
-	return false, true, nil
+	return newOwners.TransactionIsReady(delegate, batch, transaction)
 }
 
 func (x UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -111,7 +99,7 @@ func (x UpdateKeyPage) check(st *StateManager, tx *Delivery) (*protocol.UpdateKe
 	}
 
 	for _, op := range body.Operation {
-		err := x.checkOperation(tx, op)
+		err := x.checkOperation(st, tx, op)
 		if err != nil {
 			return nil, err
 		}
@@ -161,8 +149,13 @@ func (x UpdateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 	return nil, nil
 }
 
-func (UpdateKeyPage) checkOperation(tx *Delivery, op protocol.KeyPageOperation) error {
+func (UpdateKeyPage) checkOperation(st *StateManager, tx *Delivery, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
+	case *protocol.SetRejectThresholdKeyPageOperation,
+		*protocol.SetResponseThresholdKeyPageOperation:
+		// No validation required
+		return nil
+
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
 			return errors.BadRequest.With("cannot add an empty entry")
@@ -261,6 +254,12 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		if page.AcceptThreshold > uint64(len(page.Keys)) {
 			page.AcceptThreshold = uint64(len(page.Keys))
 		}
+		if page.RejectThreshold > uint64(len(page.Keys)) {
+			page.RejectThreshold = uint64(len(page.Keys))
+		}
+		if page.ResponseThreshold > uint64(len(page.Keys)) {
+			page.ResponseThreshold = uint64(len(page.Keys))
+		}
 		return nil
 
 	case *protocol.UpdateKeyOperation:
@@ -268,6 +267,22 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)
+
+	case *protocol.SetRejectThresholdKeyPageOperation:
+		if op.Threshold >= uint64(len(page.Keys)) {
+			return fmt.Errorf("cannot require %d rejections on a key page with %d keys", op.Threshold, len(page.Keys))
+		}
+
+		page.RejectThreshold = op.Threshold
+		return nil
+
+	case *protocol.SetResponseThresholdKeyPageOperation:
+		if op.Threshold >= uint64(len(page.Keys)) {
+			return fmt.Errorf("cannot require %d responses on a key page with %d keys", op.Threshold, len(page.Keys))
+		}
+
+		page.ResponseThreshold = op.Threshold
+		return nil
 
 	case *protocol.UpdateAllowedKeyPageOperation:
 		if page.TransactionBlacklist == nil {
@@ -331,14 +346,14 @@ func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (i
 	return i, keySpec, ok
 }
 
-func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*url.URL, error) {
+func updateKeyPage_getNewOwners(batch *database.Batch, transaction *protocol.Transaction) (additionalAuthorities, error) {
 	body, ok := transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
 	}
 
 	var page *protocol.KeyPage
-	err := batch.Account(transaction.Header.Principal).GetStateAs(&page)
+	err := batch.Account(transaction.Header.Principal).Main().GetAs(&page)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load principal: %w", err)
 	}

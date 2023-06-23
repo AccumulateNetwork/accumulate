@@ -33,6 +33,7 @@ var flags struct {
 	LongUnionDiscriminator bool
 	ElidePackageType       bool
 	GoInclude              []string
+	Header                 string
 }
 
 func main() {
@@ -52,6 +53,7 @@ func main() {
 	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
 	cmd.Flags().BoolVar(&flags.ElidePackageType, "elide-package-type", false, "If there is a union type that has the same name as the package, elide it")
 	cmd.Flags().StringSliceVar(&flags.GoInclude, "go-include", nil, "Additional Go packages to include")
+	cmd.Flags().StringVar(&flags.Header, "header", "", "Add a header to each file")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
@@ -74,9 +76,9 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-var moduleInfo = func() struct{ Dir string } {
+var moduleInfo = func() struct{ Dir, Path string } {
 	buf := new(bytes.Buffer)
-	cmd := exec.Command("go", "list", "-m", "-f={{.Dir}}")
+	cmd := exec.Command("go", "list", "-m", "-f={{.Dir}}\u2028{{.Path}}")
 	cmd.Stdout = buf
 	check(cmd.Run())
 
@@ -84,10 +86,15 @@ var moduleInfo = func() struct{ Dir string } {
 	checkf(err, "get working directory")
 
 	for _, s := range strings.Split(buf.String(), "\n") {
-		r, err := filepath.Rel(s, cwd)
+		s = strings.TrimSpace(s)
+		if len(s) == 0 {
+			continue
+		}
+		parts := strings.Split(s, "\u2028")
+		r, err := filepath.Rel(parts[0], cwd)
 		checkf(err, "check module path")
-		if !strings.HasPrefix(r, ".") {
-			return struct{ Dir string }{s}
+		if r == "." || !strings.HasPrefix(r, ".") {
+			return struct{ Dir, Path string }{parts[0], parts[1]}
 		}
 	}
 
@@ -130,6 +137,7 @@ func run(_ *cobra.Command, args []string) {
 
 	if !flags.FilePerType {
 		w := new(bytes.Buffer)
+		w.WriteString(flags.Header)
 		check(Templates.Execute(w, flags.Language, ttypes))
 		check(typegen.WriteFile(flags.Out, w))
 	} else {
@@ -139,6 +147,7 @@ func run(_ *cobra.Command, args []string) {
 		w := new(bytes.Buffer)
 		for _, typ := range ttypes.Types {
 			w.Reset()
+			w.WriteString(flags.Header)
 			err := fileTmpl.Execute(w, typ)
 			check(err)
 			filename := SafeClassName(w.String())
@@ -154,6 +163,7 @@ func run(_ *cobra.Command, args []string) {
 		}
 		for _, typ := range ttypes.Unions {
 			w.Reset()
+			w.WriteString(flags.Header)
 			typ2 := *typ
 			typ2.Type = typ.Type + "_union"
 			typ2.Name = typ.Name + "_union"

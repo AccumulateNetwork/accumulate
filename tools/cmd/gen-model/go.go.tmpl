@@ -17,7 +17,8 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -34,13 +35,13 @@ c.label + " " +
 {{- end -}}
 "{{natural .Name}}"
 {{- if parameterized . -}}
-{{range .GetParameters}} + " " + {{keyToString . (lower .Name)}}{{end}}
+{{range .GetParameters}} + " " + {{keyToString . (print "k." .Name)}}{{end}}
 {{- end}}
 {{- end}}
 
 {{  define "key"}}
 {{- if .GetParent.Root -}}
-record.Key{}
+(*record.Key)(nil)
 {{- else -}}
 c.key
 {{- end -}}
@@ -49,7 +50,7 @@ c.key
 
 {{  define "keyArgs"}}
 {{- if parameterized . -}}
-"{{.Name}}", {{range .GetParameters}}{{lower .Name}}, {{end}}
+"{{.Name}}", {{range .GetParameters}}k.{{.Name}}, {{end}}
 {{- else -}}
 "{{.Name}}"
 {{- end}}
@@ -57,19 +58,19 @@ c.key
 
 {{  define "encoder" -}}
 {{- if .Wrapped -}}
-record.Wrapped(record.{{title .DataType.String}}Wrapper)
+values.Wrapped(values.{{title .DataType.String}}Wrapper)
 {{- else if .Union -}}
-record.Union({{unionMethod . "Unmarshal"}})
+values.Union({{unionMethod . "Unmarshal"}})
 {{- else -}}
-record.Struct[{{stateType . true}}]()
+values.Struct[{{stateType . true}}]()
 {{- end}}
 {{- end}}
 
 {{  define "newValue"}}
 {{- if .IsSet}}
-return record.NewSet(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}},
+return values.NewSet(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}},
 	{{- if wrapped . -}}
-	record.Compare{{title .DataType.String}}
+	values.Compare{{title .DataType.String}}
 	{{- else if .Comparator -}}
 	{{.Comparator}}
 	{{- else -}}
@@ -77,19 +78,19 @@ return record.NewSet(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{tem
 	{{- end -}}
 )
 {{- else if .IsList}}
-return record.NewList(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}})
+return values.NewList(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}})
 {{- else}}
-return record.NewValue(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
+return values.NewValue(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
 {{- end}}
 {{- end}}
 
 {{define "newCounted"}}
 {{- if wrapped .}}
-return record.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, record.WrappedFactory(record.{{title .DataType.String}}Wrapper))
+return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, values.WrappedFactory(values.{{title .DataType.String}}Wrapper))
 {{- else if .Union}}
-return record.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, record.UnionFactory({{unionMethod . "Unmarshal"}}))
+return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, values.UnionFactory({{unionMethod . "Unmarshal"}}))
 {{- else}}
-return record.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, record.Struct[{{stateType . true}}])
+return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, values.Struct[{{stateType . true}}])
 {{- end}}
 {{- end}}
 
@@ -109,7 +110,7 @@ type {{fullName .}} struct {
 	logger logging.OptionalLogger
 	store record.Store
 	{{- if not .Root}}
-	key record.Key
+	key *record.Key
 	label string
 	{{- if .GetParent}}
 	parent *{{fullName .GetParent}}
@@ -123,17 +124,25 @@ type {{fullName .}} struct {
 	{{- end}}
 }
 
+func (c *{{fullName $c}}) Key() *record.Key { return {{if .Root}}nil{{else}}c.key{{end}} }
+
 {{range .Attributes}}
 {{if parameterized .}}
 type {{lower .FullName}}Key struct {
-	{{- range $index, $param := .GetParameters}}
-	{{.Name}} {{keyType $param}}
+	{{- range .GetParameters}}
+	{{.Name}} {{parameterType .}}
+	{{- end}}
+}
+
+type {{lower .FullName}}MapKey struct {
+	{{- range .GetParameters}}
+	{{.Name}} {{keyType .}}
 	{{- end}}
 }
 
 {{$a := .}}
-func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}}, {{end}}) {{lower $a.FullName}}Key {
-	return {{lower $a.FullName}}Key{ {{range .GetParameters}}{{asKey . (lower .Name)}}, {{end}} }
+func (k {{lower .FullName}}Key) ForMap() {{lower .FullName}}MapKey {
+	return {{lower $a.FullName}}MapKey{ {{range .GetParameters}}{{asKey . (print "k." .Name)}}, {{end}} }
 }
 {{end}}
 {{end}}
@@ -142,57 +151,59 @@ func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType
 {{if not .OmitAccessor}}
 func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType . false}} {
 	{{- if parameterized .}}
-	return record.FieldGetOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}),
+	return values.GetOrCreateMap(c, &c.{{lower .Name}}, {{lower .FullName}}Key{ {{range .GetParameters}}{{lower .Name}},{{end}} }, (*{{fullName $c}}).new{{.Name}})
 	{{- else}}
-	return record.FieldGetOrCreate(&c.{{lower .Name}},
+	return values.GetOrCreate(c, &c.{{lower .Name}}, (*{{fullName $c}}).new{{.Name}})
 	{{- end -}}
+}
+{{end}}
 
-	func() {{recordType . true}} {
-		{{- if .Type.IsEntity}}
-		v := new({{fullName .}})
-		v.logger = c.logger
-		v.store = c.{{valueStore .}}
-		v.key = {{template "key" .}}
-		v.parent = c
-		v.label = {{template "valueLabel" .}}
-		return v
-		{{- else if .Type.IsChain}}
-		return database.NewChain(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
-		{{- else if .Type.IsOther}}
-		return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
-		{{- else if .IsCounted}}
-		{{- template "newCounted" .}}
-		{{- else}}
-		{{- template "newValue" .}}
-		{{- end}}
-	})
+{{if not .OmitConstructor}}
+func (c *{{fullName $c}}) new{{.Name}}({{if parameterized .}}k {{lower .FullName}}Key{{end}}) {{recordType . true}} {
+	{{- if .Type.IsEntity}}
+	v := new({{fullName .}})
+	v.logger = c.logger
+	v.store = c.{{valueStore .}}
+	v.key = {{template "key" .}}
+	v.parent = c
+	v.label = {{template "valueLabel" .}}
+	return v
+	{{- else if .Type.IsChain}}
+	return database.NewChain(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+	{{- else if .Type.IsOther}}
+	return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+	{{- else if .IsCounted}}
+	{{- template "newCounted" .}}
+	{{- else}}
+	{{- template "newValue" .}}
+	{{- end}}
 }
 {{end}}
 {{end}}
 
 {{if not .OmitResolve}}
-func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) == 0 {
+func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
 	}
 
-	switch key[0] {
+	switch key.Get(0) {
 	{{- range .Attributes}}
 	case "{{.Name}}":
 		{{- if parameterized .}}
-		if len(key) < {{add 1 (parameterCount .)}} {
+		if key.Len() < {{add 1 (parameterCount .)}} {
 			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
 		}
 		{{- range $index, $param := .GetParameters}}
-		{{lower .Name}}, ok{{.Name}} := key[{{add 1 $index}}].({{parameterType $param}})
+		{{lower .Name}}, ok{{.Name}} := key.Get({{add 1 $index}}).({{parameterType $param}})
 		{{- end}}
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
 			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
 		}
 		v := c.{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}},{{end}})
-		return v, key[{{add 1 (parameterCount .)}}:], nil
+		return v, key.SliceI({{add 1 (parameterCount .)}}), nil
 		{{- else}}
-		return c.{{template "accessor" .}}(), key[1:], nil
+		return c.{{template "accessor" .}}(), key.SliceI(1), nil
 		{{- end}}
 	{{- end}}
 	default:
@@ -214,7 +225,7 @@ func (c *{{fullName .}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 		}
 	}
 	{{- else}}
-	if record.FieldIsDirty(c.{{lower .Name}}) {
+	if values.IsDirty(c.{{lower .Name}}) {
 		return true
 	}
 	{{- end}}
@@ -224,37 +235,6 @@ func (c *{{fullName .}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 }
 
 {{if hasChains .}}
-{{/*if not .Root}}
-func (c *{{fullName .}}) resolveChain(name string) (chain *MerkleManager, ok bool) {
-	{{- range .Attributes}}
-	{{- if and (.Type.IsChain) (not (parameterized .))}}
-	if name == "{{chainName .}}"{
-		return c.{{template "accessor" .}}(), true
-	}
-	{{- end}}
-	{{- end}}
-
-	{{- range .Attributes}}
-	{{- if and (parameterized .) (hasChains .)}}
-	tryResolveChainParam(&chain, &ok, name, "{{chainName .}}(", {{parameterCount .}}, func(params []string, name string) (*MerkleManager, bool) {
-		ok := true
-		{{- range $i, $p := .Parameters}}
-		param{{$p.Name}} := parseChainParam(&ok, params[{{$i}}], record.Parse{{title $p.Type.String}})
-		{{- end}}
-		if !ok {
-			return nil, false
-		}
-
-		return c.{{template "accessor" .}}({{range .Parameters}}param{{.Name}},{{end}}){{if .Type.IsChain}}, true{{else}}.resolveChain(name){{end}}
-	})
-	{{- else if and (not .Type.IsChain) (hasChains .)}}
-	tryResolveChain(&chain, &ok, name, "{{chainName .}}", c.{{template "accessor" .}})
-	{{- end}}
-	{{- end}}
-	return
-}
-{{end}}*/}}
-
 func (c *{{fullName .}}) dirtyChains() []*MerkleManager {
 	if c == nil {
 		return nil
@@ -287,25 +267,33 @@ func (c *{{fullName .}}) dirtyChains() []*MerkleManager {
 }
 {{end}}
 
-func (c *{{fullName .}}) {{if .CustomWalkChanges}}base{{end}}WalkChanges(fn record.WalkFunc) error {
+{{if not .OmitWalk}}
+func (c *{{fullName .}}) {{if .CustomWalk}}base{{end}}Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
 
-	var err error
-	{{- range .Attributes}}
-	{{- if not .Type.IsIndex}}
-	{{- if parameterized .}}
-	for _, v := range c.{{lower .Name}} {
-		record.FieldWalkChanges(&err, v, fn)
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
-	{{- else}}
-	record.FieldWalkChanges(&err, c.{{lower .Name}}, fn)
+
+	{{- range .Attributes}}
+	{{- if .Type.IsIndex}}
+	if (!opts.IgnoreIndices) {
 	{{- end}}
+	{{- if parameterized .}}
+	values.WalkMap(&err, c.{{lower .Name}}, c.new{{.Name}}, {{if .Index}}c.{{.Index}}{{else}}nil{{end}}, opts, fn)
+	{{- else}}
+	values.WalkField(&err, c.{{lower .Name}}, c.new{{.Name}}, opts, fn)
+	{{- end}}
+	{{- if .Type.IsIndex}}
+	}
 	{{- end}}
 	{{- end}}
 	return err
 }
+{{end}}
 
 func (c *{{fullName .}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	if c == nil {
@@ -316,10 +304,10 @@ func (c *{{fullName .}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	{{- range .Attributes}}
 	{{- if parameterized .}}
 	for _, v := range c.{{lower .Name}} {
-		record.FieldCommit(&err, v)
+		values.Commit(&err, v)
 	}
 	{{- else}}
-	record.FieldCommit(&err, c.{{lower .Name}})
+	values.Commit(&err, c.{{lower .Name}})
 	{{- end}}
 	{{- end}}
 

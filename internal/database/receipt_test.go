@@ -18,14 +18,14 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 func GetHash(i int) Hash {
-	return Sha256([]byte(fmt.Sprint(i)))
+	return doSha([]byte(fmt.Sprint(i)))
 }
 
 func TestReceipt(t *testing.T) {
@@ -93,9 +93,9 @@ func PrintReceipt(r *merkle.Receipt) string {
 		r := "L"
 		if v.Right {
 			r = "R"
-			working = Sha256(append(working[:], v.Hash[:]...))
+			working = doSha(append(working[:], v.Hash[:]...))
 		} else {
-			working = Sha256(append(v.Hash[:], working[:]...))
+			working = doSha(append(v.Hash[:], working[:]...))
 		}
 		b.WriteString(fmt.Sprintf(" %10d Apply %s %x working: %x \n", i, r, v.Hash, working))
 	}
@@ -226,14 +226,14 @@ func TestBadgerReceipts(t *testing.T) {
 		t.Skip("Skipping test: running CI: flaky")
 	}
 
-	badger, err := badger.New(filepath.Join(t.TempDir(), "badger.db"), nil)
+	badger, err := badger.New(filepath.Join(t.TempDir(), "badger.db"))
 	require.NoError(t, err)
 	defer badger.Close()
 
-	batch := badger.Begin(true)
+	batch := badger.Begin(nil, true)
 	defer batch.Discard()
 
-	manager := testChain(record.KvStore{Store: batch}, 2)
+	manager := testChain(keyvalue.RecordStore{Store: batch}, 2)
 
 	PopulateDatabase(t, manager, 700)
 
@@ -252,7 +252,7 @@ func TestReceipt_Combine(t *testing.T) {
 		require.NoError(t, m1.AddHash(rh.NextList(), false))
 		head, err := m1.Head().Get()
 		require.NoError(t, err)
-		root1 := head.GetMDRoot()
+		root1 := head.Anchor()
 		require.NoError(t, m2.AddHash(root1, false))
 	}
 	for i := int64(0); i < testCnt; i++ {
@@ -261,14 +261,14 @@ func TestReceipt_Combine(t *testing.T) {
 			anchor, _ := m1.Get(j)
 			r, _ := GetReceipt(m1, element, anchor)
 			state, _ := m1.GetAnyState(j)
-			mdRoot := state.GetMDRoot()
+			mdRoot := state.Anchor()
 
 			require.Truef(t, bytes.Equal(r.Anchor, mdRoot), "m1 MDRoot not right %d %d", i, j)
 			element, _ = m2.Get(i)
 			anchor, _ = m2.Get(j)
 			r, _ = GetReceipt(m2, element, anchor)
 			state, _ = m2.GetAnyState(j)
-			mdRoot = state.GetMDRoot()
+			mdRoot = state.Anchor()
 			require.Truef(t, bytes.Equal(r.Anchor, mdRoot), "m2 MDRoot not right %d %d", i, j)
 		}
 	}

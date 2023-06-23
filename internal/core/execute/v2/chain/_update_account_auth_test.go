@@ -11,7 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -26,17 +28,15 @@ func TestUpdateAccountAuth_Duplicate(t *testing.T) {
 	sim.CreateIdentity(alice)
 	sim.CreateAccount(&protocol.TokenAccount{Url: alice.JoinPath("tokens")})
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("tokens")).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithTimestamp(1).
-		WithBody(&protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{
-			&protocol.AddAccountAuthorityOperation{
-				Authority: alice.JoinPath("book"),
-			},
-		}}).
-		Initiate(protocol.SignatureTypeED25519, aliceKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{
+				&protocol.AddAccountAuthorityOperation{
+					Authority: alice.JoinPath("book"),
+				},
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519))
 
 	x := sim.PartitionFor(alice)
 	st, txn := chain.LoadStateManagerForTest(t, x.Database, env)
@@ -69,19 +69,16 @@ func TestUpdateAccountAuth_Page(t *testing.T) {
 		},
 	})
 
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice.JoinPath("tokens")).
-		WithSigner(alice.JoinPath("book", "1"), 1).
-		WithTimestamp(1).
-		WithBody(&protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{
-			&protocol.AddAccountAuthorityOperation{
-				Authority: alice.JoinPath("book", "1"),
-			},
-		}}).
-		Initiate(protocol.SignatureTypeED25519, aliceKey).
-		WithSigner(bob.JoinPath("book", "1"), 1).
-		Sign(protocol.SignatureTypeED25519, bobKey).
-		Build()
+	env :=
+		MustBuild(t, build.Transaction().
+			For(alice.JoinPath("tokens")).
+			Body(&protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{
+				&protocol.AddAccountAuthorityOperation{
+					Authority: alice.JoinPath("book", "1"),
+				},
+			}}).
+			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey).Type(protocol.SignatureTypeED25519).
+			SignWith(bob.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(bobKey).Type(protocol.SignatureTypeED25519))
 
 	_, err := sim.SubmitAndExecuteBlock(env)
 	require.EqualError(t, err, "invalid authority acc://alice.acme/book/1: a key page is not a valid authority")

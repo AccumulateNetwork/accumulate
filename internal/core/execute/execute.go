@@ -42,7 +42,7 @@ type Executor interface {
 	Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error)
 
 	// Validate validates a set of messages.
-	Validate(messages []messaging.Message, recheck bool) ([]*protocol.TransactionStatus, error)
+	Validate(envelope *messaging.Envelope, recheck bool) ([]*protocol.TransactionStatus, error)
 
 	// Begin begins a Tendermint block.
 	Begin(BlockParams) (Block, error)
@@ -72,7 +72,7 @@ type Options struct {
 // A Dispatcher dispatches synthetic transactions produced by the executor.
 type Dispatcher interface {
 	// Submit adds an envelope to the queue.
-	Submit(ctx context.Context, dest *url.URL, env *messaging.Envelope) error
+	Submit(ctx context.Context, dest *url.URL, envelope *messaging.Envelope) error
 
 	// Send submits the queued transactions.
 	Send(context.Context) <-chan error
@@ -94,7 +94,7 @@ type Block interface {
 	Params() BlockParams
 
 	// Process processes a set of messages.
-	Process([]messaging.Message) ([]*protocol.TransactionStatus, error)
+	Process(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error)
 
 	// Close closes the block and returns the end state of the block.
 	Close() (BlockState, error)
@@ -111,14 +111,14 @@ type BlockState interface {
 	// DidCompleteMajorBlock indicates that this block completed a major block.
 	DidCompleteMajorBlock() (uint64, time.Time, bool)
 
+	// ChangeSet is the database batch.
+	ChangeSet() record.Record
+
 	// Commit commits changes made by this block.
 	Commit() error
 
 	// Discard discards changes made by this block.
 	Discard()
-
-	// WalkChanges walks changes made by this block.
-	WalkChanges(record.WalkFunc) error
 }
 
 func NewDatabaseObserver() database.Observer {

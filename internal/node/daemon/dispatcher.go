@@ -44,6 +44,14 @@ func newDispatcher(network string, router routing.Router, dialer message.Dialer)
 // Submit routes the account URL, constructs a multiaddr, and queues addressed
 // submit requests.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
+	// If there's something wrong with the envelope, it's better for that error
+	// to be logged closer to the source, at the sending side instead of the
+	// receiving side
+	_, err := env.Normalize()
+	if err != nil {
+		return err
+	}
+
 	// Route the account
 	partition, err := d.router.RouteAccount(u)
 	if err != nil {
@@ -56,18 +64,10 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 		return err
 	}
 
-	// Convert the envelope into messages
-	messages, err := env.Normalize()
-	if err != nil {
-		return err
-	}
-
 	// Queue a pre-addressed message
 	d.messages = append(d.messages, &message.Addressed{
 		Address: addr,
-		Message: &message.SubmitRequest{
-			Envelope: &messaging.Envelope{Messages: messages},
-		},
+		Message: &message.SubmitRequest{Envelope: env},
 	})
 	return nil
 }

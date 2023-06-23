@@ -1,7 +1,0 @@
-- name: ChangeSet
-  type: entity
-  root: true
-  attributes:
-  - name: BPT
-    type: other
-    dataType: BPT

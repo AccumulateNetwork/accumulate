@@ -45,6 +45,7 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 		BvnCount:       flagInitDevnet.NumBvns,
 		ValidatorCount: flagInitDevnet.NumValidators,
 		FollowerCount:  flagInitDevnet.NumFollowers,
+		BsnCount:       flagInitDevnet.NumBsnNodes,
 		BasePort:       flagInitDevnet.BasePort,
 	}
 
@@ -56,6 +57,9 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 
 	if flagInitDevnet.Docker {
 		initOpts.HostName = func(bvnNum, nodeNum int) (host string, listen string) {
+			if bvnNum < 0 {
+				return fmt.Sprintf("bsn-%d%s", nodeNum+1, flagInitDevnet.DnsSuffix), "0.0.0.0"
+			}
 			return fmt.Sprintf("node-%d%s", bvnNum*count+nodeNum+1, flagInitDevnet.DnsSuffix), "0.0.0.0"
 		}
 	} else {

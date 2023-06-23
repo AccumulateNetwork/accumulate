@@ -22,19 +22,29 @@ func (t *Transaction) ID() *url.TxID {
 
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
 func (t *Transaction) GetHash() []byte {
-	h, _ := t.GetHash2()
-	return h
+	t.calcHash()
+	return t.hash
 }
 
-func (t *Transaction) GetHash2() ([]byte, bool) {
+// func (t *Transaction) HeaderIs64Bytes() bool {
+// 	t.calcHash()
+// 	return t.header64bytes
+// }
+
+func (t *Transaction) BodyIs64Bytes() bool {
+	t.calcHash()
+	return t.body64bytes
+}
+
+func (t *Transaction) calcHash() {
 	// Already computed?
 	if t.hash != nil {
-		return t.hash, t.is64bytes
+		return
 	}
 
 	if r, ok := t.Body.(*RemoteTransaction); ok {
 		t.hash = r.Hash[:]
-		return r.Hash[:], false
+		return
 	}
 
 	// Marshal the header
@@ -44,19 +54,17 @@ func (t *Transaction) GetHash2() ([]byte, bool) {
 		panic(err)
 	}
 	headerHash := sha256.Sum256(header)
+	t.header64bytes = len(header) == 64
 
 	// Hash the body
 	bodyHash, is64 := t.getBodyHash()
-
-	// Is the header or body 64 bytes?
-	t.is64bytes = is64 || len(header) == 64
+	t.body64bytes = is64
 
 	// Calculate the hash
 	sha := sha256.New()
 	sha.Write(headerHash[:])
 	sha.Write(bodyHash)
 	t.hash = sha.Sum(nil)
-	return t.hash, is64
 }
 
 func (t *Transaction) getBodyHash() ([]byte, bool) {

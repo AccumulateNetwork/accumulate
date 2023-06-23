@@ -114,7 +114,7 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	// Process pending synthetic transactions sent to the DN
 	var deliveries []*Delivery
 	var sequence = map[*Delivery]int{}
-	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(body.RootChainAnchor)
+	synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(body.RootChainAnchor).Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
 	}

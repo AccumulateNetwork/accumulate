@@ -98,9 +98,6 @@ func (s *simService) queryFanout(ctx context.Context, scope *url.URL, query api.
 
 	records := new(api.RecordRange[api.Record])
 	for _, p := range s.partitions {
-		if p.ID == "BVN1" {
-			print("")
-		}
 		r, err := (*nodeService)(p.nodes[0]).Query(ctx, scope, query)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
@@ -197,10 +194,11 @@ func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusO
 		return nil, errors.NotReady
 	}
 	return &api.NetworkStatus{
-		Oracle:  v.Oracle,
-		Network: v.Network,
-		Globals: v.Globals,
-		Routing: v.Routing,
+		Oracle:          v.Oracle,
+		Network:         v.Network,
+		Globals:         v.Globals,
+		Routing:         v.Routing,
+		ExecutorVersion: v.ExecutorVersion,
 	}, nil
 }
 
@@ -247,13 +245,7 @@ func (s *nodeService) Subscribe(ctx context.Context, opts api.SubscribeOptions) 
 }
 
 func (s *nodeService) submit(envelope *messaging.Envelope, pretend bool) ([]*api.Submission, error) {
-	// Convert the envelope to deliveries
-	deliveries, err := envelope.Normalize()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	st, err := s.partition.Submit(deliveries, pretend)
+	st, err := s.partition.Submit(envelope, pretend)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

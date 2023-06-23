@@ -50,9 +50,10 @@ func newStateCache(net *config.Describe, globals *core.GlobalValues, txtype prot
 	return c
 }
 
-func newStatelessCache(net *config.Describe, txtype protocol.TransactionType, txid [32]byte) *stateCache {
+func newStatelessCache(net *config.Describe, globals *core.GlobalValues, txtype protocol.TransactionType, txid [32]byte) *stateCache {
 	c := new(stateCache)
 	c.Describe = net
+	c.Globals = globals
 	c.txType = txtype
 	c.txHash = txid
 	c.operations = c.operations[:0]
@@ -81,7 +82,7 @@ func (c *stateCache) LoadUrl(account *url.URL) (protocol.Account, error) {
 		return state, nil
 	}
 
-	state, err := c.batch.Account(account).GetState()
+	state, err := c.batch.Account(account).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load %v: %w", account, err)
 	}
@@ -157,7 +158,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		if len(account.GetUrl().String()) > protocol.AccountUrlMaxLength {
 			return errors.BadUrlLength.Wrap(fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
 		}
-		_, err = rec.GetState()
+		_, err = rec.Main().Get()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
 			return errors.UnknownError.WithFormat("failed to check for an existing record: %v", err)
@@ -179,7 +180,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		}
 
 		// Update/Create the state
-		err = rec.PutState(account)
+		err = rec.Main().Put(account)
 		if err != nil {
 			return errors.UnknownError.WithFormat("failed to update state of %q: %w", account.GetUrl(), err)
 		}

@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,6 +13,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
+
+// merkle.State
+// A Merkle Dag State is the state kept while building a Merkle Tree.  Except where a Merkle Tree has a clean
+// power of two number of elements as leaf nodes, there will be multiple Sub Merkle Trees that make up a
+// dynamic Merkle Tree. The Merkle State is the list of the roots of these sub Merkle Trees, and the
+// combination of these roots provides a Directed Acyclic Graph (DAG) to all the leaves.
+//
+//	                                                     Merkle State
+//	1  2   3  4   5  6   7  8   9 10  11 12  13 --->         13
+//	 1-2    3-4    5-6    7-8   0-10  11-12     --->         --
+//	    1-2-3-4       5-6-7-8    0-10-11-12     --->     0-10-11-12
+//	          1-2-3-4-5-6-7-8                   --->   1-2-3-4-5-6-7-8
+//
+// Interestingly, the state of building such a Merkle Tree looks just like counting in binary.  And the
+// higher order bits set will correspond to where the binary roots must be kept in a Merkle state.
 
 func (m *State) MarshalBinary() ([]byte, error) {
 	return m.Marshal()
@@ -31,7 +46,7 @@ func (m *State) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 // Equal
-// Compares one MerkleState to another, and returns true if they are the same
+// Compares one State to another, and returns true if they are the same
 func (m *State) Equal(m2 *State) (isEqual bool) {
 	// Any errors indicate at m is not the same as m2, or either m or m2 or both is malformed.
 	defer func() {

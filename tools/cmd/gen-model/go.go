@@ -94,7 +94,7 @@ func fieldType(r typegen.Record) string {
 	if len(r.GetParameters()) == 0 {
 		return recordType(r, true)
 	}
-	return "map[" + typegen.LowerFirstWord(r.FullName()) + "Key]" + recordType(r, true)
+	return "map[" + typegen.LowerFirstWord(r.FullName()) + "MapKey]" + recordType(r, true)
 }
 
 func recordType(r typegen.Record, noInterface bool) string {
@@ -103,19 +103,22 @@ func recordType(r typegen.Record, noInterface bool) string {
 		var typ string
 		switch r.CollectionType() {
 		case typegen.CollectionTypeSet:
-			typ = "record.Set"
+			typ = "values.Set"
 		case typegen.CollectionTypeList:
-			typ = "record.List"
+			typ = "values.List"
 		case typegen.CollectionTypeCounted:
-			typ = "record.Counted"
+			typ = "values.Counted"
 		default:
-			typ = "record.Value"
+			typ = "values.Value"
 		}
 		return fmt.Sprintf("%s[%s]", typ, stateType(r, false))
 	case *typegen.ChainRecord:
 		return "*database.Chain"
 	case *typegen.OtherRecord:
-		return "*" + r.DataType
+		if r.Pointer {
+			return "*" + r.DataType
+		}
+		return r.DataType
 	case *typegen.EntityRecord:
 		if !noInterface && r.Interface {
 			return r.FullName()
@@ -163,9 +166,9 @@ func keyType(p *typegen.Field) string {
 func asKey(p *typegen.Field, varName string) string {
 	switch p.Type.Code {
 	case typegen.TypeCodeBytes:
-		return "record.MapKeyBytes(" + varName + ")"
+		return "values.MapKeyBytes(" + varName + ")"
 	case typegen.TypeCodeUrl:
-		return "record.MapKeyUrl(" + varName + ")"
+		return "values.MapKeyUrl(" + varName + ")"
 	default:
 		return varName
 	}

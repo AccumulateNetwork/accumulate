@@ -97,7 +97,7 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 	// If the issuer is local, check if it exists
 	local := principal.LocalTo(body.TokenUrl)
 	if local {
-		account, err := batch.Account(body.TokenUrl).GetState()
+		account, err := batch.Account(body.TokenUrl).Main().Get()
 		switch {
 		case err == nil:
 			// Ok

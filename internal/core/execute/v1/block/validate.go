@@ -46,11 +46,8 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Reject the transaction if the body is exactly 64 bytes long
-	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
-		_, is64 := delivery.Transaction.GetHash2()
-		if is64 {
-			return nil, errors.BadRequest.WithFormat("cannot process transaction: body is 64 bytes long")
-		}
+	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() && delivery.Transaction.BodyIs64Bytes() {
+		return nil, errors.BadRequest.WithFormat("cannot process transaction: body is 64 bytes long")
 	}
 
 	// Load the transaction
@@ -132,7 +129,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	var signer protocol.Signer
-	err = batch.Account(signerUrl).GetStateAs(&signer)
+	err = batch.Account(signerUrl).Main().GetAs(&signer)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load signer: %w", err)
 	}
@@ -143,7 +140,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Load the principal
-	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
+	principal, err := batch.Account(delivery.Transaction.Header.Principal).Main().Get()
 	switch {
 	case err == nil:
 		// Ok

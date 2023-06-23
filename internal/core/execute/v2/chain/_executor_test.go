@@ -20,10 +20,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -183,7 +183,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	// Verify that the synthetic transaction was recorded
 	batch := exec.DB.Begin(false)
 	defer batch.Discard()
-	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
+	status, err := batch.Transaction(env.GetTxHash()).Status().Get()
 	require.NoError(t, err, "Failed to get the synthetic transaction status")
 	require.NotZero(t, status.Code)
 }
@@ -229,9 +229,9 @@ func TestExecutor_ProcessTransaction(t *testing.T) {
 	batch = exec.DB.Begin(false)
 	defer batch.Discard()
 	txnDb = batch.Transaction(envelope.GetTxHash())
-	_, err = txnDb.GetState()
+	_, err = txnDb.Main().Get()
 	require.NoError(t, err)
-	status, err := txnDb.GetStatus()
+	status, err := txnDb.Status().Get()
 	require.NoError(t, err)
 	require.True(t, status.Delivered)
 	require.Zero(t, status.Code)
@@ -289,9 +289,9 @@ func TestExecutor_DeliverTx(t *testing.T) {
 	batch = exec.DB.Begin(false)
 	defer batch.Discard()
 	txnDb = batch.Transaction(envelope.GetTxHash())
-	_, err = txnDb.GetState()
+	_, err = txnDb.Main().Get()
 	require.NoError(t, err)
-	status, err := txnDb.GetStatus()
+	status, err := txnDb.Status().Get()
 	require.NoError(t, err)
 	require.True(t, status.Delivered)
 	require.Zero(t, status.Code)

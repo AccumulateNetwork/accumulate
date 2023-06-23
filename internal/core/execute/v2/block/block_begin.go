@@ -65,9 +65,9 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 		for err := range errs {
 			switch err := err.(type) {
 			case protocol.TransactionStatusError:
-				x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
+				x.logger.Error("Failed to dispatch transactions", "block", block.Index, "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 			default:
-				x.logger.Error("Failed to dispatch transactions", "error", err, "stack", fmt.Sprintf("%+v\n", err))
+				x.logger.Error("Failed to dispatch transactions", "block", block.Index, "error", err, "stack", fmt.Sprintf("%+v\n", err))
 			}
 		}
 	})
@@ -75,7 +75,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	// Load the ledger state
 	ledger := block.Batch.Account(x.Describe.NodeUrl(protocol.Ledger))
 	var ledgerState *protocol.SystemLedger
-	err = ledger.GetStateAs(&ledgerState)
+	err = ledger.Main().GetAs(&ledgerState)
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
@@ -98,7 +98,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	ledgerState.AcmeBurnt = *big.NewInt(0)
 	ledgerState.Anchor = nil
 
-	err = ledger.PutState(ledgerState)
+	err = ledger.Main().Put(ledgerState)
 	if err != nil {
 		return nil, fmt.Errorf("cannot write ledger: %w", err)
 	}
@@ -132,12 +132,16 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	}
 
 	wd := protocol.SystemWriteData{}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	if x.globals.Active.ExecutorVersion.DoubleHashEntriesEnabled() {
+		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
+	} else {
+		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	}
 	dataAccountUrl := x.Describe.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
 	signerUrl := x.Describe.OperatorsPage()
-	err = batch.Account(signerUrl).GetStateAs(&signer)
+	err = batch.Account(signerUrl).Main().GetAs(&signer)
 	if err != nil {
 		return err
 	}
@@ -147,17 +151,25 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, x, batch.Begin(true), nil, txn, x.logger)
-	defer st.Discard()
-
 	var da *protocol.DataAccount
 	va := batch.Account(dataAccountUrl)
-	err = va.GetStateAs(&da)
+	err = va.Main().GetAs(&da)
 	if err != nil {
 		return err
 	}
 
-	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
+	// Add data index entry
+	err = indexing.Data(batch, dataAccountUrl).Put(wd.Entry.Hash(), txn.GetHash())
+	if err != nil {
+		return fmt.Errorf("failed to add entry to data index of %q: %v", dataAccountUrl, err)
+	}
+
+	// Add TX to main chain
+	var st chain.ProcessTransactionState
+	err = st.ChainUpdates.AddChainEntry(batch, batch.Account(dataAccountUrl).MainChain(), txn.GetHash(), 0, 0)
+	if err != nil {
+		return err
+	}
 
 	err = putMessageWithStatus(batch,
 		&messaging.TransactionMessage{Transaction: txn},
@@ -166,8 +178,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 		return err
 	}
 
-	_, err = st.Commit()
-	return err
+	return nil
 }
 
 // finalizeBlock builds the block anchor and signs and sends synthetic
@@ -175,7 +186,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 func (x *Executor) finalizeBlock(block *Block) error {
 	// Load the ledger state
 	var ledger *protocol.SystemLedger
-	err := block.Batch.Account(x.Describe.Ledger()).GetStateAs(&ledger)
+	err := block.Batch.Account(x.Describe.Ledger()).Main().GetAs(&ledger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
@@ -211,7 +222,7 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 
 	// Load the anchor ledger state
 	var anchorLedger *protocol.AnchorLedger
-	err := block.Batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	err := block.Batch.Account(x.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load anchor ledger: %w", err)
 	}

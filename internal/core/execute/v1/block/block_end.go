@@ -34,12 +34,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(m.Describe.Synthetic()).GetStateAs(&synthLedger)
+	err := block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	var anchorLedger *protocol.AnchorLedger
-	err = block.Batch.Account(m.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	err = block.Batch.Account(m.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
@@ -69,7 +69,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
 	var ledgerState *protocol.SystemLedger
-	err = ledger.GetStateAs(&ledgerState)
+	err = ledger.Main().GetAs(&ledgerState)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
@@ -206,7 +206,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Write the updated ledger
-	err = ledger.PutState(ledgerState)
+	err = ledger.Main().Put(ledgerState)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store system ledger: %w", err)
 	}
@@ -380,9 +380,9 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	for err := range dispatcher.Send(ctx) {
 		switch err := err.(type) {
 		case protocol.TransactionStatusError:
-			x.logger.Error("Failed to dispatch transactions", "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
+			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
 		default:
-			x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+			x.logger.Error("Failed to dispatch transactions", "block", blockIndex, "error", fmt.Sprintf("%+v\n", err))
 		}
 	}
 }
@@ -425,6 +425,11 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 		if resp.Signatures == nil {
 			x.logger.Error("Response to query-synth is missing the signatures", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor)
+			continue
+		}
+		txn, ok := resp.Message.(*messaging.TransactionMessage)
+		if !ok {
+			x.logger.Error("Response to query-synth is not a transaction", "from", partition.Url, "seq-num", seqNum, "is-anchor", anchor, "type", resp.Message.Type())
 			continue
 		}
 
@@ -482,8 +487,8 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		err = dispatcher.Submit(ctx, dest, &messaging.Envelope{
-			Signatures: signatures,
-			Messages:   []messaging.Message{resp.Message},
+			Signatures:  signatures,
+			Transaction: []*protocol.Transaction{txn.Transaction},
 		})
 		if err != nil {
 			x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
@@ -504,7 +509,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 	var sigs []protocol.Signature
 	for _, txid := range pending {
 		h := txid.Hash()
-		status, err := batch.Transaction(h[:]).GetStatus()
+		status, err := batch.Transaction(h[:]).Status().Get()
 		if err != nil {
 			x.logger.Error("Error loading synthetic transaction status", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
 			continue
@@ -641,8 +646,8 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 			continue
 		}
 
-		partition, ok := chain.Key(3).(string)
-		if chain.Key(2) != "AnchorChain" || !ok {
+		partition, ok := chain.Key().Get(3).(string)
+		if chain.Key().Get(2) != "AnchorChain" || !ok {
 			continue
 		}
 

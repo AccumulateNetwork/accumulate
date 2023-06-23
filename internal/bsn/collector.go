@@ -108,17 +108,25 @@ func (c *Collector) willCommitBlock(e execute.WillCommitBlock) error {
 		return errors.InternalError.With("no previous block")
 	}
 
-	err := e.Block.WalkChanges(func(r record.TerminalRecord) error {
-		v, _, err := r.GetValue()
+	err := e.Block.ChangeSet().Walk(record.WalkOptions{
+		Modified:      true,
+		Values:        true,
+		IgnoreIndices: true,
+	}, func(r record.Record) (bool, error) {
+		rv, ok := r.(record.TerminalRecord)
+		if !ok {
+			return false, nil
+		}
+		v, _, err := rv.GetValue()
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return false, errors.UnknownError.Wrap(err)
 		}
 		b, err := v.MarshalBinary()
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return false, errors.UnknownError.Wrap(err)
 		}
 		s.RecordUpdates = append(s.RecordUpdates, &messaging.RecordUpdate{Key: r.Key(), Value: b})
-		return nil
+		return false, nil
 	})
 	return errors.UnknownError.Wrap(err)
 }
@@ -150,11 +158,11 @@ func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
 
 	seen := map[[32]byte]bool{}
 	for _, r := range s.RecordUpdates {
-		if len(r.Key) < 2 {
+		if r.Key.Len() < 2 {
 			continue
 		}
-		typ, ok1 := r.Key[0].(string)
-		url, ok2 := r.Key[1].(*url.URL)
+		typ, ok1 := r.Key.Get(0).(string)
+		url, ok2 := r.Key.Get(1).(*url.URL)
 		if !ok1 || !ok2 || typ != "Account" {
 			continue
 		}
@@ -167,7 +175,7 @@ func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
 		if err != nil {
 			return errors.InternalError.WithFormat("get %v hash: %w", url, err)
 		}
-		s.StateTreeUpdates = append(s.StateTreeUpdates, &messaging.StateTreeUpdate{Key: r.Key[:2], Hash: hash})
+		s.StateTreeUpdates = append(s.StateTreeUpdates, &messaging.StateTreeUpdate{Key: r.Key.SliceJ(2), Hash: hash})
 	}
 
 	s.Sort()

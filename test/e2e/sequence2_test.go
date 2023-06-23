@@ -160,19 +160,21 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 
 	// Drop the next block validator anchor
 	var anchors int
-	sim.SetBlockHook(Directory, func(_ execute.BlockParams, messages []messaging.Message) (_ []messaging.Message, keepHook bool) {
-		for i := len(messages) - 1; i >= 0; i-- {
-			anchor, ok := messages[i].(*messaging.BlockAnchor)
-			if !ok {
-				continue
-			}
-			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
-			if txn.Transaction.Body.Type() == TransactionTypeBlockValidatorAnchor {
-				anchors++
-				messages = append(messages[:i], messages[i+1:]...)
+	sim.SetBlockHook(Directory, func(_ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		for _, env := range envelopes {
+			for i := len(env.Messages) - 1; i >= 0; i-- {
+				anchor, ok := env.Messages[i].(*messaging.BlockAnchor)
+				if !ok {
+					continue
+				}
+				txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
+				if txn.Transaction.Body.Type() == TransactionTypeBlockValidatorAnchor {
+					anchors++
+					env.Messages = append(env.Messages[:i], env.Messages[i+1:]...)
+				}
 			}
 		}
-		return messages, anchors < valCount
+		return envelopes, anchors < valCount
 	})
 
 	sim.StepUntil(True(func(*Harness) bool { return anchors >= valCount }))

@@ -11,21 +11,70 @@ import (
 	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key record.Key, name, label string) *bpt.BPT {
+func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *bpt.BPT {
 	return bpt.New(parent, logger, store, key, label)
 }
 
+type AccountIterator struct {
+	batch   *Batch
+	it      *bpt.Iterator
+	entries []bpt.KeyValuePair
+	pos     int
+	err     error
+}
+
+func (it *AccountIterator) Next() (*Account, bool) {
+	if it.err != nil {
+		return nil, false
+	}
+
+	if it.pos >= len(it.entries) {
+		var ok bool
+		it.pos = 0
+		it.entries, ok = it.it.Next()
+		if !ok || len(it.entries) == 0 {
+			return nil, false
+		}
+	}
+
+	v := it.entries[it.pos]
+	it.pos++
+
+	u, err := it.batch.getAccountUrl(record.NewKey(storage.Key(v.Key)))
+	if err != nil {
+		it.err = errors.UnknownError.WithFormat("resolve key hash: %w", err)
+		return nil, false
+	}
+
+	// Create a new account record but don't add it to the map
+	return it.batch.newAccount(accountKey{u}), true
+}
+
+func (it *AccountIterator) Err() error {
+	if it.err != nil {
+		return it.err
+	}
+	return it.it.Err()
+}
+
+func (b *Batch) IterateAccounts() *AccountIterator {
+	return &AccountIterator{
+		batch: b,
+		it:    b.BPT().Iterate(1000),
+	}
+}
+
 func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
-	return b.BPT().ForEach(func(key storage.Key, hash [32]byte) error {
+	return bpt.ForEach(b.BPT(), func(key storage.Key, hash [32]byte) error {
 		// Create an Account object
-		u, err := b.getAccountUrl(record.Key{key})
+		u, err := b.getAccountUrl(record.NewKey(key))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -35,9 +84,9 @@ func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) e
 }
 
 func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte, error)) error {
-	err := b.BPT().SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
+	err := bpt.SaveSnapshotV1(b.BPT(), file, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
-		u, err := b.getAccountUrl(record.Key{key})
+		u, err := b.getAccountUrl(record.NewKey(key))
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}

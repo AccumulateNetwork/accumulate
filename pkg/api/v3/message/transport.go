@@ -47,6 +47,9 @@ type RoutedTransport struct {
 
 	// Router determines the address a message should be routed to.
 	Router Router
+
+	// Attempts is the number of connection attempts to make.
+	Attempts int
 }
 
 // RoundTrip routes each requests and executes a round-trip call. If there are
@@ -169,9 +172,16 @@ func (c *RoutedTransport) routeRequest(req Message) (multiaddr.Multiaddr, error)
 	var err error
 
 	// Does the message already have an address?
-	addr := AddressOf(req)
-	if addr != nil {
-		goto routed // Skip routing
+	var addr multiaddr.Multiaddr
+	if msg, ok := req.(*Addressed); ok {
+		addr, req = msg.Address, msg.Message
+		sa, _, _, err := extractAddr(addr)
+		if err != nil {
+			return nil, errors.InternalError.WithFormat("parse routed address: %w", err)
+		}
+		if sa != nil {
+			goto routed // Skip routing
+		}
 	}
 
 	// Can we route it?
@@ -180,31 +190,21 @@ func (c *RoutedTransport) routeRequest(req Message) (multiaddr.Multiaddr, error)
 	}
 
 	// Ask the router to route the request
-	addr, err = c.Router.Route(req)
-	if err != nil {
+	if a, err := c.Router.Route(req); err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	} else if addr == nil {
+		addr = a
+	} else {
+		addr = addr.Encapsulate(a)
 	}
 
 routed:
 	// Check if the address specifies a network or p2p node or is /acc-svc/node
-	var complete bool
-	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
-		switch c.Protocol().Code {
-		case multiaddr.P_P2P, api.P_ACC:
-			complete = true
-		case api.P_ACC_SVC:
-			sa := new(api.ServiceAddress)
-			err = sa.UnmarshalBinary(c.RawValue())
-			if err == nil && sa.Type == api.ServiceTypeNode {
-				complete = true
-			}
-		}
-		return !complete
-	})
+	sa, network, peer, err := extractAddr(addr)
 	if err != nil {
 		return nil, errors.InternalError.WithFormat("parse routed address: %w", err)
 	}
-	if complete {
+	if peer != "" || network != "" || sa != nil && sa.Type == api.ServiceTypeNode {
 		return addr, nil
 	}
 
@@ -223,6 +223,27 @@ routed:
 	return net.Encapsulate(addr), nil
 }
 
+func extractAddr(addr multiaddr.Multiaddr) (sa *api.ServiceAddress, network, peer string, err error) {
+	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+		switch c.Protocol().Code {
+		case multiaddr.P_P2P:
+			peer = c.String()
+		case api.P_ACC:
+			network = c.Value()
+		case api.P_ACC_SVC:
+			sa = new(api.ServiceAddress)
+			err = sa.UnmarshalBinary(c.RawValue())
+			return err != nil
+		}
+		return true
+	})
+	if err != nil {
+		return nil, "", "", errors.UnknownError.Wrap(err)
+	}
+
+	return sa, network, peer, nil
+}
+
 // dial dials a given address and calls send with the stream, returning the
 // stream. If the call provides a stream dictionary dial will use a stream from
 // the dictionary if there is one, add the dialed stream if there is not, and
@@ -236,7 +257,13 @@ func (c *RoutedTransport) dial(ctx context.Context, addr multiaddr.Multiaddr, st
 	addrStr := addr.String()
 	multi, isMulti := c.Dialer.(MultiDialer)
 
-	for i := 0; ; i++ {
+	n := c.Attempts
+	if n == 0 {
+		n = 3
+	}
+
+	var i int
+	for i = 0; i < n; i++ {
 		// Check for an existing stream
 		var err error
 		s, ok := streams[addrStr]
@@ -274,7 +301,9 @@ func (c *RoutedTransport) dial(ctx context.Context, addr multiaddr.Multiaddr, st
 
 		// Report the error and try again
 		if !multi.BadDial(ctx, addr, s, err) {
-			return nil, errors.NoPeer.WithFormat("unable to submit request to %v after %d attempts", addrStr, i+1)
+			break
 		}
 	}
+
+	return nil, errors.NoPeer.WithFormat("unable to submit request to %v after %d attempts", addrStr, i+1)
 }

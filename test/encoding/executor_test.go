@@ -64,9 +64,7 @@ func TestExecutorConsistency(t *testing.T) {
 		// Resubmit every user transaction
 		for part, envs := range step.Envelopes {
 			for _, env := range envs {
-				messages, err := env.Normalize()
-				require.NoError(t, err)
-				_, err = sim.SubmitTo(part, messages)
+				_, err = sim.SubmitTo(part, env)
 				require.NoError(t, err)
 			}
 		}
@@ -125,10 +123,7 @@ func (v *snapVisitor) VisitAccount(a *snapshot.Account, i int) error {
 
 	b, err := snapshot.CollectAccount(v.batch.Account(a.Url), true)
 	require.NoError(v, err)
-	if !assert.Equalf(v, a.Copy(), b.Copy(), "Account %v", a.Url) {
-		a.Equal(b)
-		print("")
-	}
+	assert.Equalf(v, a.Copy(), b.Copy(), "Account %v", a.Url)
 
 	return nil
 }

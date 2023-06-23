@@ -105,7 +105,7 @@ func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protoco
 		return auth, nil
 	}
 
-	account, err = batch.Account(url).GetState()
+	account, err = batch.Account(url).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
