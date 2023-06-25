@@ -9,12 +9,12 @@ package main
 import (
 	_ "embed"
 	"fmt"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"strings"
 	"text/template"
 
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var cFuncMap = template.FuncMap{

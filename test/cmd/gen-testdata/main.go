@@ -110,7 +110,7 @@ func transactionTests(txnTest func(*url.URL, TransactionBody) *TC) []*TCG {
 			txnTest(AccountUrl("adi"), &CreateDataAccount{Url: AccountUrl("adi", "data")}),
 		}},
 		{Name: "WriteData", Cases: []*TC{
-			txnTest(AccountUrl("adi"), &WriteData{Entry: &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
+			txnTest(AccountUrl("adi"), &WriteData{Entry: &DoubleHashDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
 		}},
 		{Name: "WriteDataTo", Cases: []*TC{
 			txnTest(AccountUrl("adi"), &WriteDataTo{Recipient: AccountUrl("lite-data-account"), Entry: &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
