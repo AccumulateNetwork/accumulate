@@ -45,10 +45,10 @@ func (UpdateKey) AuthorityIsAccepted(delegate AuthDelegate, batch *database.Batc
 	return false, errors.Unauthorized.WithFormat("%v is not authorized to sign %v for %v", sig.Origin, transaction.Body.Type(), transaction.Header.Principal)
 }
 
-func (x UpdateKey) AuthorityWillVote(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, authority *url.URL) (ready, fallback bool, vote protocol.VoteType, err error) {
+func (x UpdateKey) AuthorityWillVote(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, authority *url.URL) (fallback bool, vote *AuthVote, err error) {
 	// If the authority is a delegate, fallback to the normal logic
 	if !authority.ParentOf(transaction.Header.Principal) {
-		return false, true, 0, nil
+		return true, nil, nil
 	}
 
 	// Load the principal's signatures
@@ -58,24 +58,25 @@ func (x UpdateKey) AuthorityWillVote(delegate AuthDelegate, batch *database.Batc
 		Signatures().
 		Get()
 	if err != nil {
-		return false, false, 0, errors.UnknownError.WithFormat("load %v signers: %w", transaction.ID(), err)
+		return false, nil, errors.UnknownError.WithFormat("load %v signers: %w", transaction.ID(), err)
 	}
 
 	for _, entry := range entries {
 		sig, err := delegate.GetSignatureAs(batch, entry.Hash)
 		if err != nil {
-			return false, false, 0, errors.UnknownError.WithFormat("load %v: %w", transaction.Header.Principal.WithTxID(entry.Hash), err)
+			return false, nil, errors.UnknownError.WithFormat("load %v: %w", transaction.Header.Principal.WithTxID(entry.Hash), err)
 		}
 
 		// Ignore any signatures that are not the initiator
 		if protocol.SignatureDidInitiate(sig, transaction.Header.Initiator[:], nil) {
 			// Initiator received, transaction is ready
-			return true, false, sig.GetVote(), nil
+			v := &AuthVote{Source: sig.GetSigner(), Vote: sig.GetVote()}
+			return false, v, nil
 		}
 	}
 
 	// Not ready
-	return false, false, 0, nil
+	return false, nil, nil
 }
 
 func (x UpdateKey) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction) (ready, fallback bool, err error) {
