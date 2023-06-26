@@ -221,6 +221,12 @@ NetworkLimits:
     - name: IdentityAccounts
       description: is the maximum number of accounts an identity can have (excluding accounts of sub ADIs)
       type: uint
+    - name: PendingMajorBlocks
+      description: is the maximum number of major blocks a transaction can remain pending for
+      type: uint
+    - name: EventsPerBlock
+      description: is the maximum number of scheduled events that will be executed per block
+      type: uint
 
 Rational:
   fields:
