@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,6 +23,13 @@ func FormatBigAmount(amount *big.Int, precision int) string {
 }
 
 func formatAmount(amount string, precision int) string {
+	if precision > 1000 {
+		// If the caller accidentally provides AcmePrecision instead of
+		// AcmePrecisionPower, we would attempt to add 100 million zeros. Since
+		// that does not work very well, panic instead.
+		panic("precision is unreasonably large")
+	}
+
 	// Add leading zeros to ensure the string is at least precision digits long
 	if len(amount) < precision {
 		amount = strings.Repeat("0", precision-len(amount)) + amount
