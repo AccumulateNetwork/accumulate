@@ -50,6 +50,9 @@ const NotAllowed Status = 405
 // Rejected is returned when a transaction is rejected.
 const Rejected Status = 406
 
+// Expired is returned when a transaction has expired.
+const Expired Status = 407
+
 // Conflict means the request failed due to a conflict.
 const Conflict Status = 409
 
@@ -102,7 +105,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Rejected, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved, InvalidRecord:
+	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Rejected, Expired, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType, NoPeer, PeerMisbehaved, InvalidRecord:
 		*v = u
 		return true
 	}
@@ -136,6 +139,8 @@ func (v Status) String() string {
 		return "notAllowed"
 	case Rejected:
 		return "rejected"
+	case Expired:
+		return "expired"
 	case Conflict:
 		return "conflict"
 	case BadSignerVersion:
@@ -197,6 +202,8 @@ func StatusByName(name string) (Status, bool) {
 		return NotAllowed, true
 	case "rejected":
 		return Rejected, true
+	case "expired":
+		return Expired, true
 	case "conflict":
 		return Conflict, true
 	case "badsignerversion":
