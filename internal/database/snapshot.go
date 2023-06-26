@@ -576,10 +576,6 @@ func collectOptions(index *badger.DB, opts *CollectOptions) (func() error, snaps
 
 	wb := index.NewWriteBatch()
 	copts.DidCollect = func(value database.Value, section, offset uint64) error {
-		if !opts.BuildIndex {
-			return nil
-		}
-
 		entry := &recordIndexEntry{
 			Key:     value.Key(),
 			Section: section,
