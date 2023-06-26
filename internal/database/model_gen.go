@@ -1857,7 +1857,7 @@ func (c *MerkleManager) Walk(opts record.WalkOptions, fn record.WalkFunc) error 
 		return errors.UnknownError.Wrap(err)
 	}
 	values.WalkField(&err, c.head, c.newHead, opts, fn)
-	values.WalkMap(&err, c.states, c.newStates, nil, opts, fn)
+	values.WalkMap(&err, c.states, c.newStates, c.getMarkPoints, opts, fn)
 	if !opts.IgnoreIndices {
 		values.WalkMap(&err, c.elementIndex, c.newElementIndex, nil, opts, fn)
 	}

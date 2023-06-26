@@ -52,6 +52,20 @@ func (c *MerkleManager) MarkPower() int64       { return c.markPower }
 func (c *MerkleManager) MarkMask() int64        { return c.markMask }
 func (c *MerkleManager) MarkFreq() int64        { return c.markFreq }
 
+func (c *MerkleManager) getMarkPoints() ([]merkleManagerStatesKey, error) {
+	head, err := c.Head().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load head: %w", err)
+	}
+
+	n := head.Count / c.markFreq
+	keys := make([]merkleManagerStatesKey, 0, n)
+	for i := c.markFreq; i < head.Count; i += c.markFreq {
+		keys = append(keys, merkleManagerStatesKey{Index: uint64(i - 1)})
+	}
+	return keys, nil
+}
+
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
 func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
