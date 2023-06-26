@@ -32,6 +32,28 @@ func (f True) Satisfied(h *Harness) bool { return f(h) }
 
 func (f True) Format(prefix, suffix string) string { return prefix + "(unknown predicate function)" }
 
+func DnHeight(v uint64) dnHeightOnPart {
+	return dnHeightOnPart{v, protocol.Directory}
+}
+
+type dnHeightOnPart struct {
+	height    uint64
+	partition string
+}
+
+func (v dnHeightOnPart) OnPartition(s string) dnHeightOnPart {
+	return dnHeightOnPart{v.height, s}
+}
+
+func (v dnHeightOnPart) Satisfied(h *Harness) bool {
+	ns := h.NetworkStatus(api.NetworkStatusOptions{Partition: v.partition})
+	return ns.DirectoryHeight >= v.height
+}
+
+func (v dnHeightOnPart) Format(prefix, suffix string) string {
+	return prefix + "DN block " + fmt.Sprint(v.height) + " is anchored on " + v.partition
+}
+
 // Txn defines a condition on a transaction.
 func Txn(id *url.TxID) txnCond { return txnCond{msgCond{id: id, message: []string{"transaction"}}} }
 

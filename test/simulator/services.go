@@ -14,7 +14,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -237,17 +236,7 @@ func (s *nodeService) ConsensusStatus(ctx context.Context, opts api.ConsensusSta
 
 // NetworkStatus implements [api.NetworkService].
 func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
-	v, ok := s.globals.Load().(*core.GlobalValues)
-	if !ok {
-		return nil, errors.NotReady
-	}
-	return &api.NetworkStatus{
-		Oracle:          v.Oracle,
-		Network:         v.Network,
-		Globals:         v.Globals,
-		Routing:         v.Routing,
-		ExecutorVersion: v.ExecutorVersion,
-	}, nil
+	return s.netSvc.NetworkStatus(ctx, opts)
 }
 
 // Metrics implements [api.MetricsService].
