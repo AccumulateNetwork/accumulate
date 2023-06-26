@@ -117,8 +117,8 @@ func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *
 		return errors.UnknownError.WithFormat("store transaction: %w", err)
 	}
 
-	// Add the message to the signature chain
-	err = batch.Account(req.TxID.Account()).
+	// Add the message to the authority's signature chain
+	err = batch.Account(req.Authority).
 		Transaction(req.TxID.Hash()).
 		RecordHistory(ctx.message)
 	if err != nil {
