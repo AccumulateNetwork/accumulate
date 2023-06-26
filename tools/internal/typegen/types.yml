@@ -4,6 +4,8 @@ RecordBase:
   fields:
     - name: Name
       type: string
+    - name: Key
+      type: string
     - name: Description
       type: string
     - name: Parent
