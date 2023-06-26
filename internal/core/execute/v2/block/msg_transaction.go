@@ -7,17 +7,23 @@
 package block
 
 import (
+	"bytes"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
 	registerSimpleExec[TransactionMessage](&messageExecutors, messaging.MessageTypeTransaction)
+	registerSimpleExec[ExpiredTransaction](&messageExecutors, internal.MessageTypeExpiredTransaction)
 }
 
 // TransactionMessage records the transaction but does not execute it. Transactions
@@ -32,6 +38,11 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
 	if status.Delivered() {
+		// We need to remove any logical dependence on transaction statuses, due
+		// to the issues they present with pruning. For now, replace error codes
+		// with Delivered.
+		status.Error = nil
+		status.Code = errors.Delivered
 		return status, nil
 	}
 
@@ -363,6 +374,25 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		}
 	}
 
+	err = x.postProcess(batch, ctx, state, status.Delivered())
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Process scheduled events
+	if status.Delivered() {
+		if body, ok := ctx.transaction.Body.(*protocol.DirectoryAnchor); ok {
+			err = x.processDirAnchor(batch, ctx.MessageContext, body)
+			if err != nil {
+				return nil, errors.UnknownError.Wrap(err)
+			}
+		}
+	}
+
+	return status, nil
+}
+
+func (x TransactionMessage) postProcess(batch *database.Batch, ctx *TransactionContext, state *chain.ProcessTransactionState, delivered bool) error {
 	// Calculate refunds
 	var swos []protocol.SynthTxnWithOrigin
 	for _, newTxn := range state.ProducedTxns {
@@ -371,26 +401,27 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		}
 	}
 
+	var err error
 	if len(swos) > 0 {
 		err = ctx.Executor.setSyntheticOrigin(batch, ctx.transaction, swos)
 		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	// Clear votes and payments
-	if status.Delivered() {
+	if delivered {
 		txn := batch.Account(ctx.transaction.Header.Principal).
 			Transaction(ctx.transaction.ID().Hash())
 
 		err = txn.Payments().Put(nil)
 		if err != nil {
-			return nil, err
+			return errors.UnknownError.WithFormat("clear payments: %w", err)
 		}
 
 		err = txn.Votes().Put(nil)
 		if err != nil {
-			return nil, err
+			return errors.UnknownError.WithFormat("clear votes: %w", err)
 		}
 	}
 
@@ -398,10 +429,226 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 		msg := &messaging.TransactionMessage{Transaction: newTxn}
 		err = ctx.didProduce(batch, newTxn.Header.Principal, msg)
 		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 	ctx.additional = append(ctx.additional, state.AdditionalMessages...)
 	ctx.state.Set(ctx.transaction.ID().Hash(), state)
-	return status, nil
+	return nil
+}
+
+func (x TransactionMessage) processDirAnchor(batch *database.Batch, ctx *MessageContext, anchor *protocol.DirectoryAnchor) error {
+	// TODO Move to transaction executor once it has been refactored
+
+	// Process minor block events
+	events := batch.Account(ctx.Executor.Describe.Ledger()).Events()
+	blocks, err := x.getBlocks(events.Minor().Blocks(), anchor.MinorBlockIndex)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Release held authority signatures
+	err = ctx.releaseHeldAuthSigs(batch, blocks)
+	if err != nil {
+		return errors.UnknownError.WithFormat("release held authority signatures: %w", err)
+	}
+
+	// Process major block events
+	if anchor.MajorBlockIndex == 0 {
+		blocks = nil
+	} else {
+		blocks, err = x.getBlocks(events.Major().Blocks(), anchor.MajorBlockIndex)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	// Expire pending transactions
+	err = x.expirePendingTransactions(batch, ctx, blocks)
+	if err != nil {
+		return errors.UnknownError.WithFormat("expire pending transactions: %w", err)
+	}
+
+	return nil
+}
+
+func (TransactionMessage) getBlocks(record values.Set[uint64], height uint64) ([]uint64, error) {
+	blocks, err := record.Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load on-hold minor block list: %w", err)
+	}
+
+	// Find the block in the list
+	i, found := sortutil.Search(blocks, func(b uint64) int { return int(b) - int(height) })
+	if found {
+		i++ // If there is an exact match, we want the index _after_ it
+	}
+	if i == 0 {
+		return nil, nil
+	}
+
+	// Truncate the list
+	err = record.Put(blocks[i:])
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("store on-hold minor block list: %w", err)
+	}
+
+	// Return the truncated blocks
+	return blocks[:i], nil
+}
+
+func (x TransactionMessage) expirePendingTransactions(batch *database.Batch, ctx *MessageContext, blocks []uint64) error {
+	limit := ctx.Executor.globals.Active.Globals.Limits.EventsPerBlock
+	if limit == 0 {
+		limit = 100
+	}
+
+	var backlog []*url.TxID
+	for _, block := range blocks {
+		// Load the list
+		record := batch.Account(ctx.Executor.Describe.Ledger()).
+			Events().
+			Major().
+			Pending(block)
+		ids, err := record.Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load pending transactions: %w", err)
+		}
+
+		// And erase it
+		err = record.Put(nil)
+		if err != nil {
+			return errors.UnknownError.WithFormat("reset pending transactions: %w", err)
+		}
+
+		// Have we or will we exceed the limit?
+		if n := int(limit) - ctx.State.Events; n <= 0 {
+			backlog = append(backlog, ids...)
+			continue
+		} else if n < len(ids) {
+			backlog = append(backlog, ids[n:]...)
+			ids = ids[:n]
+		}
+
+		ctx.State.Events += len(ids)
+
+		for _, id := range ids {
+			ctx.queueAdditional(&internal.ExpiredTransaction{TxID: id})
+		}
+	}
+
+	// If we didn't finish everything, add it to the backlog
+	if len(backlog) == 0 {
+		return nil
+	}
+
+	err := batch.Account(ctx.Executor.Describe.Ledger()).
+		Events().
+		Backlog().
+		Expired().
+		Add(backlog...)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store expired transaction backlog: %w", err)
+	}
+	return nil
+}
+
+func (x *Executor) processEventBacklog(block *Block) error {
+	n := int(x.globals.Active.Globals.Limits.EventsPerBlock)
+	if n == 0 {
+		n = 100
+	}
+	n -= block.State.Events
+	if n <= 0 {
+		return nil
+	}
+
+	// Load the backlog
+	batch := block.Batch
+	record := batch.Account(x.Describe.Ledger()).
+		Events().
+		Backlog().
+		Expired()
+	backlog, err := record.Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load expired transaction backlog: %w", err)
+	}
+	if len(backlog) == 0 {
+		return nil
+	}
+	if n > len(backlog) {
+		n = len(backlog)
+	}
+
+	// Store the rest
+	err = record.Put(backlog[n:])
+	if err != nil {
+		return errors.UnknownError.WithFormat("load expired transaction backlog: %w", err)
+	}
+
+	d := new(bundle)
+	d.Block = block
+	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
+
+	// Process N items
+	msgs := make([]messaging.Message, n)
+	for i, id := range backlog[:n] {
+		msgs[i] = &internal.ExpiredTransaction{TxID: id}
+	}
+
+	// Claim we're on pass 1 so that internal messages are allowed
+	_, err = block.processMessages(msgs, 1)
+	return errors.UnknownError.Wrap(err)
+}
+
+// ExpiredTransaction expires a transaction
+type ExpiredTransaction struct{}
+
+func (ExpiredTransaction) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	return nil, errors.InternalError.With("invalid attempt to validate an internal message")
+}
+
+func (x ExpiredTransaction) Process(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
+	msg, ok := ctx.message.(*internal.ExpiredTransaction)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeExpiredTransaction, ctx.message.Type())
+	}
+
+	// If the transaction has been executed (which erases the credit
+	// payments), skip it
+	isInit, _, err := transactionIsInitiated(batch, msg.TxID)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if !isInit {
+		return nil, nil
+	}
+
+	// Load it
+	var txn *messaging.TransactionMessage
+	err = batch.Message(msg.TxID.Hash()).Main().GetAs(&txn)
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		// This should not happen but returning an error would be bad
+		ctx.Executor.logger.Error("Missing pending transaction", "id", msg.TxID)
+		return nil, nil
+	default:
+
+		return nil, errors.UnknownError.WithFormat("load pending transaction: %w", err)
+	}
+	if ctx.message == nil {
+		ctx.message = msg
+	}
+
+	ctx2 := ctx.txnWith(txn.Transaction)
+	_, state, err := ctx2.recordFailedTransaction(batch, &chain.Delivery{Transaction: txn.Transaction}, errors.Expired)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	ctx.State.MergeTransaction(state)
+
+	err = TransactionMessage{}.postProcess(batch, ctx2, state, true)
+	return nil, errors.UnknownError.Wrap(err)
 }
