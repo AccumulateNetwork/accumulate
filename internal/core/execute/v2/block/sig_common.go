@@ -56,7 +56,7 @@ func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, au
 	// Reset the pending authority signature if there is one
 	if h := s.transaction.Header.HoldUntil; h != nil && h.MinorBlock != 0 {
 		err = batch.Account(s.Executor.Describe.Ledger()).
-			Event().Minor().
+			Events().Minor().
 			Votes(h.MinorBlock).
 			Remove(authSig)
 		if err != nil {
@@ -84,7 +84,7 @@ func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, au
 
 func (s *SignatureContext) recordOnHoldAuthSig(batch *database.Batch, authSig *protocol.AuthoritySignature) error {
 	record := batch.Account(s.Executor.Describe.Ledger()).
-		Event().Minor().
+		Events().Minor().
 		Votes(s.transaction.Header.HoldUntil.MinorBlock)
 
 	other, err := record.Find(authSig)
@@ -133,7 +133,7 @@ func comparePriority(a, b *protocol.AuthoritySignature) int {
 
 func (m *MessageContext) releaseHeldAuthSigs(batch *database.Batch, blocks []uint64) error {
 	record := batch.Account(m.Executor.Describe.Ledger()).
-		Event().Minor()
+		Events().Minor()
 	for _, block := range blocks {
 		// Load the list
 		sigs, err := record.Votes(block).Get()
@@ -142,9 +142,9 @@ func (m *MessageContext) releaseHeldAuthSigs(batch *database.Batch, blocks []uin
 		}
 
 		// And erase it
-		err = record.Votes(block).Put([]*protocol.AuthoritySignature{})
+		err = record.Votes(block).Put(nil)
 		if err != nil {
-			return errors.UnknownError.WithFormat("load on-hold auth sigs for block %d: %w", block, err)
+			return errors.UnknownError.WithFormat("reset on-hold auth sigs for block %d: %w", block, err)
 		}
 
 		// For each

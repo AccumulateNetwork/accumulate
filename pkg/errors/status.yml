@@ -42,6 +42,9 @@ Status:
   Rejected:
     value: 406
     description: is returned when a transaction is rejected
+  Expired:
+    value: 407
+    description: is returned when a transaction has expired
   Conflict:
     value: 409
     description: means the request failed due to a conflict
