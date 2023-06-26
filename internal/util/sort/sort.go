@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,6 +18,7 @@ import (
 // whether cmp == 0 for that index. If there is no such index, Search returns
 // len(l), false.
 func Search[T any](l []T, cmp func(entry T) int) (index int, found bool) {
+	// TODO Use sort.Find?
 	i := sort.Search(len(l), func(i int) bool {
 		return cmp(l[i]) >= 0
 	})
