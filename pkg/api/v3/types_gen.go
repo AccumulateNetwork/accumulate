@@ -279,6 +279,8 @@ type NetworkStatus struct {
 	Routing   *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
 	// ExecutorVersion is the active executor version.
 	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
+	// DirectoryHeight is the height of the directory network.
+	DirectoryHeight uint64 `json:"directoryHeight,omitempty" form:"directoryHeight" query:"directoryHeight" validate:"required"`
 	extraData       []byte
 }
 
@@ -1092,6 +1094,7 @@ func (v *NetworkStatus) Copy() *NetworkStatus {
 		u.Routing = (v.Routing).Copy()
 	}
 	u.ExecutorVersion = v.ExecutorVersion
+	u.DirectoryHeight = v.DirectoryHeight
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2078,6 +2081,9 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 		return false
 	}
 	if !(v.ExecutorVersion == u.ExecutorVersion) {
+		return false
+	}
+	if !(v.DirectoryHeight == u.DirectoryHeight) {
 		return false
 	}
 
@@ -4146,6 +4152,7 @@ var fieldNames_NetworkStatus = []string{
 	3: "Network",
 	4: "Routing",
 	5: "ExecutorVersion",
+	6: "DirectoryHeight",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -4170,6 +4177,9 @@ func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.ExecutorVersion == 0) {
 		writer.WriteEnum(5, v.ExecutorVersion)
+	}
+	if !(v.DirectoryHeight == 0) {
+		writer.WriteUint(6, v.DirectoryHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkStatus)
@@ -4202,6 +4212,11 @@ func (v *NetworkStatus) IsValid() error {
 		errs = append(errs, "field Routing is missing")
 	} else if v.Routing == nil {
 		errs = append(errs, "field Routing is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field DirectoryHeight is missing")
+	} else if v.DirectoryHeight == 0 {
+		errs = append(errs, "field DirectoryHeight is not set")
 	}
 
 	switch len(errs) {
@@ -6204,6 +6219,9 @@ func (v *NetworkStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
 		v.ExecutorVersion = *x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.DirectoryHeight = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkStatus)

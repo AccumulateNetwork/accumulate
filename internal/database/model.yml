@@ -63,6 +63,29 @@
       pointer: true
       emptyIfMissing: true
 
+    - name: Event
+      description: tracks transactions with a block threshold. Should only be used on the system ledger
+      type: entity
+      attributes:
+      - name: Minor
+        type: entity
+        attributes:
+        - name: Blocks
+          type: state
+          dataType: uint
+          collection: set
+        - name: Votes
+          type: state
+          index: getVoteKeys # Indexed by blocks
+          parameters:
+          - name: Block
+            type: uint
+          private: true
+          comparator: compareHeldAuthSig
+          dataType: protocol.AuthoritySignature
+          pointer: true
+          collection: set
+
     - name: Transaction
       type: entity
       index: getTransactionKeys # Indexed by pending (more or less)

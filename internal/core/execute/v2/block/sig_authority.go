@@ -169,7 +169,6 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 
 	// Send the next authority signature if the signer's authority is satisfied
 	return ctx.maybeSendAuthoritySignature(batch, &protocol.AuthoritySignature{
-		Origin:    signer.GetUrl(),
 		Authority: signer.GetAuthority(),
 		Delegator: sig.Delegator[1:],
 	})
