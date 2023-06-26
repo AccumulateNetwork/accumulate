@@ -316,8 +316,8 @@
       "program": "${workspaceFolder}/tools/cmd/snapshot",
       "args": [
         "extract",
-        "${workspaceFolder}/.nodes/rc2/node-1/bvnn/data/accumulate.db",
-        "${workspaceFolder}/snapshot.bpt"
+        "${workspaceFolder}/.nodes/old-testnet.db",
+        "${workspaceFolder}/.nodes/asdf.snap"
       ]
     },
     {
