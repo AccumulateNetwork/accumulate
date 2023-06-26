@@ -7,14 +7,18 @@
 package main
 
 import (
+	"fmt"
+	"net/http"
+	_ "net/http/pprof" //nolint:gosec
 	"os"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -25,100 +29,93 @@ var extractCmd = &cobra.Command{
 	Run:   extractSnapshot,
 }
 
-func init() { cmd.AddCommand(extractCmd) }
+var extractFlag = struct {
+	IncludeLDA bool
+}{}
+
+func init() {
+	cmd.AddCommand(extractCmd)
+	extractCmd.Flags().BoolVar(&extractFlag.IncludeLDA, "include-ldas", false, "Include lite data accounts")
+}
 
 func extractSnapshot(_ *cobra.Command, args []string) {
-	store1, err := badger.New(args[0])
+	// pprof
+	s := new(http.Server)
+	s.Addr = ":8080"
+	s.ReadHeaderTimeout = time.Minute
+	go func() { check(s.ListenAndServe()) }() //nolint:gosec
+
+	db, err := database.OpenBadger(args[0], nil)
 	check(err)
-	stx := store1.Begin(nil, false)
-	defer stx.Discard()
-
-	db1 := database.New(store1, nil)
-	batch1 := db1.Begin(false)
-	defer batch1.Discard()
-
-	var accounts []*url.URL
-	txnHashes := new(snapshot.HashSet)
-	sigHashes := new(snapshot.HashSet)
-
-	check(batch1.ForEachAccount(func(account *database.Account, hash [32]byte) error {
-		acct, err := account.Main().Get()
-		check(err)
-		u := acct.GetUrl()
-
-		// Skip system accounts
-		if protocol.AcmeUrl().LocalTo(u) ||
-			protocol.FaucetUrl.LocalTo(u) {
-			return nil
-		}
-		if _, ok := protocol.ParsePartitionUrl(u); ok {
-			return nil
-		}
-
-		accounts = append(accounts, u)
-		pending, err := account.Pending().Get()
-		checkf(err, "get %v pending", u)
-		for _, txid := range pending {
-			txnHashes.Add(txid.Hash())
-		}
-
-		err = txnHashes.CollectFromChain(account, account.MainChain())
-		checkf(err, "get %v main chain", u)
-
-		err = txnHashes.CollectFromChain(account, account.ScratchChain())
-		checkf(err, "get %v scratch chain", u)
-
-		err = sigHashes.CollectFromChain(account, account.SignatureChain())
-		checkf(err, "get %v signature chain", u)
-
-		return nil
-	}))
-
-	db2 := database.OpenInMemory(nil)
-	batch2 := db2.Begin(true)
-	defer batch2.Discard()
-	for _, hash := range txnHashes.Hashes {
-		hash := hash
-		c, err := snapshot.CollectTransaction(batch1, hash)
-		checkf(err, "collect txn %x", hash)
-		err = c.Restore(new(snapshot.Header), batch2)
-		checkf(err, "restore txn %x", hash)
-		for _, c := range c.SignatureSets {
-			for _, c := range c.Entries {
-				sigHashes.Add(c.SignatureHash)
-			}
-		}
-	}
-	for _, hash := range sigHashes.Hashes {
-		hash := hash
-		c, err := snapshot.CollectSignature(batch1, hash)
-		checkf(err, "collect sig %x", hash)
-		err = c.Restore(new(snapshot.Header), batch2)
-		checkf(err, "restore sig %x", hash)
-	}
-	for _, u := range accounts {
-		acct, err := snapshot.CollectAccount(batch1.Account(u), true)
-		checkf(err, "collect %v", u)
-		err = acct.Restore(batch2)
-		checkf(err, "restore %v", u)
-		for _, c := range acct.Chains {
-			if c.Type != merkle.ChainTypeTransaction {
-				continue // Exclude index and anchor chains
-			}
-			c2, err := acct.RestoreChainHead(batch2, c)
-			checkf(err, "restore %v %s chain", acct.Url, c.Name)
-			err = c.RestoreMarkPointRange(c2.Inner(), 0, len(c.MarkPoints))
-			checkf(err, "restore %v %s chain", acct.Url, c.Name)
-		}
-	}
-	check(batch2.Commit())
 
 	f, err := os.Create(args[1])
 	check(err)
 	defer f.Close()
 
-	batch2 = db2.Begin(true)
-	defer batch2.Discard()
-	_, err = snapshot.Collect(batch2, new(snapshot.Header), f, snapshot.CollectOptions{})
-	check(err)
+	fmt.Println("Collecting...")
+	var metrics database.CollectMetrics
+	check(db.Collect(f, nil, &database.CollectOptions{
+		BuildIndex: true,
+		Metrics:    &metrics,
+		Predicate: func(r record.Record) (bool, error) {
+			if r.Key().Len() == 3 && r.Key().Get(0) == "Account" && r.Key().Get(2) == "Pending" {
+				// Don't retain pending transactions
+				return false, nil
+			}
+
+			switch r := r.(type) {
+			case *bpt.BPT:
+				// Skip the BPT
+				return false, nil
+
+			case *database.Account:
+				h := r.Key().Hash()
+
+				// Skip system accounts
+				_, ok := protocol.ParsePartitionUrl(r.Url())
+				if ok {
+					fmt.Printf("\033[A\rSkipping   [%x] (%d) %v\n", h[:4], metrics.Messages.Count, r.Url())
+					return false, nil
+				}
+
+				// Skip ACME
+				if protocol.AcmeUrl().Equal(r.Url()) {
+					fmt.Printf("\033[A\rSkipping   [%x] (%d) %v\n", h[:4], metrics.Messages.Count, r.Url())
+					return false, nil
+				}
+
+				if !extractFlag.IncludeLDA {
+					// Skip light data accounts
+					acct, err := r.Main().Get()
+					if err != nil {
+						return false, nil
+						// return false, errors.UnknownError.WithFormat("load message: %w", err)
+					}
+					_, ok = acct.(*protocol.LiteDataAccount)
+					if ok {
+						return false, nil
+					}
+				}
+
+				fmt.Printf("\033[A\rCollecting [%x] (%d) %v\n", h[:4], metrics.Messages.Count, r.Url())
+
+			case *database.MerkleManager:
+				// Skip all chains except the main chain
+				if !(r.Type() == merkle.ChainTypeTransaction &&
+					strings.EqualFold(r.Name(), "main")) {
+					return false, nil
+				}
+
+			case *database.Message:
+				// Attempting to read the message and/or status will cause the
+				// batch to cache values. So instead we're rely on the chain
+				// processing to skip anything we don't want.
+				if metrics.Messages.Collecting%1000 == 0 {
+					fmt.Printf("\033[A\rCollecting (%d/%d) %x\n", metrics.Messages.Collecting, metrics.Messages.Count, r.Key().Get(1).([32]byte))
+				}
+			}
+
+			return true, nil
+		},
+	}))
 }
