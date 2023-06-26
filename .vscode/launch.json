@@ -477,6 +477,17 @@
       "args": [
         "${workspaceFolder}/internal/core/execute/v1/block/delegate_test.go"
       ]
+    },
+    {
+      "name": "Check Node",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "args": [
+        "check-node", "localhost"
+      ]
     }
   ]
 }
