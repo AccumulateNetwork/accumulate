@@ -37,6 +37,11 @@ func (b TransactionBuilder) Metadata(metadata []byte) TransactionBuilder {
 	return b
 }
 
+func (b TransactionBuilder) HoldUntil(threshold protocol.BlockThreshold) TransactionBuilder {
+	b.t.Header.HoldUntil = &threshold
+	return b
+}
+
 func (b TransactionBuilder) Body(body protocol.TransactionBody) TransactionBuilder {
 	b.t.Body = body
 	return b
