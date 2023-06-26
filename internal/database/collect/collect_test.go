@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package collect
 
 import (
@@ -10,6 +16,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // tx
@@ -42,9 +49,9 @@ func buildSnapshot(t *testing.T, numberTx int) *Collect {
 		if i%100000 == 0 && i > 0 {
 			fmt.Printf("   Transactions processed %d in %v\n", i, time.Since(start))
 		}
-		testTx.fill(i)            //
-		c.WriteTx(testTx.data[:]) //
-
+		testTx.fill(i)                  //
+		err = c.WriteTx(testTx.data[:]) //
+		E(err, "write tx")
 	} //
 	fmt.Printf("time: %v\n", time.Since(start))
 	fmt.Println("sorting Indexes")
@@ -67,22 +74,26 @@ func Test_hashes(t *testing.T) {
 	c, err := NewCollect("./snapshotX", true)
 	assert.NoError(t, err, "failed to create test file")
 
-	fmt.Printf("starting build of %s hashes\n",humanize.Comma(int64(numberHashes)))
+	fmt.Printf("starting build of %s hashes\n", humanize.Comma(int64(numberHashes)))
 	start := time.Now()
 	cnt1 := 0
 	for i := 0; i < numberHashes/2; i++ {
 		cnt1 += 2        // The way we stuff things in, we get 2 entries per loop, sans duplicates
 		h := rnd1.Hash() // The first two hashes of the sequence into the hash file
-		c.WriteHash(h[:])
+		err = c.WriteHash(h[:])
+		E(err, "write hash")
 		h = rnd1.Hash()
-		c.WriteHash(h[:])
+		err = c.WriteHash(h[:])
+		E(err, "write hash")
 		h = rnd2.Hash() // Now just add the hashes of the sequence one at a time (duplicates)
-		c.WriteHash(h[:])
+		err = c.WriteHash(h[:])
+		E(err, "write hash")
 	}
-	fmt.Printf("collection complete (%v), now sorting:\n",time.Since(start))
+	fmt.Printf("collection complete (%v), now sorting:\n", time.Since(start))
 	start2 := time.Now()
-	c.BuildHashFile() // Deduplicate and sort hashes
-	fmt.Printf("sorting complete (%v), now reading:\n",time.Since(start2))
+	err = c.BuildHashFile() // Deduplicate and sort hashes
+	E(err, "build hash file")
+	fmt.Printf("sorting complete (%v), now reading:\n", time.Since(start2))
 	start3 := time.Now()
 
 	nh, e2 := c.NumberHashes() // Get the number of deduplicated hashes; should match our count
@@ -102,7 +113,7 @@ func Test_hashes(t *testing.T) {
 
 	cnt2 := 0 // Get the same sequence, and make sure that's all we got in the map
 	var rnd3 LXRandom
-	for _, _ = range m {
+	for range m {
 		if v, ok := m[rnd3.Hash()]; !ok {
 			t.Fatalf("%x hash should be in map", v)
 		}
@@ -112,7 +123,7 @@ func Test_hashes(t *testing.T) {
 	assert.Truef(t, cnt2 == cnt1, "Should have same number of elements %d %d", cnt1, cnt2)
 	c.Close()             // Get rid of all tmp files
 	os.Remove(c.Filename) // get rid of the filename
-	fmt.Printf("reading complete (%v), total test time: %v\n",time.Since(start3),time.Since(start))
+	fmt.Printf("reading complete (%v), total test time: %v\n", time.Since(start3), time.Since(start))
 }
 
 // Test_FetchIndex
@@ -124,7 +135,8 @@ func Test_FetchIndex(t *testing.T) {
 	c := buildSnapshot(t, numberTx)
 	c.Close() // Test close and open
 
-	c.Open("./snapshotX")
+	err := c.Open("./snapshotX")
+	require.NoError(t, err)
 	start := time.Now()
 
 	for i := 0; i < numberTx; i++ { //     Go through all the hashes and check against expected values

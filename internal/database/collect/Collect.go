@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package collect
 
 import (
@@ -81,7 +87,8 @@ func NewCollect(outputName string, build bool) (collect *Collect, err error) {
 
 	c.out, err = os.Create(c.Filename)                      // create transactions
 	E(err, "create transactions fail")                      //
-	c.setLength()                                           // write the offset to the index (length of all tx)
+	_, err = c.setLength()                                  // write the offset to the index (length of all tx)
+	E(err, "failed to write offset")                        //
 	os.RemoveAll(c.TmpDirName)                              // Remove any lingering temp directory
 	err = os.Mkdir(c.TmpDirName, os.ModePerm)               // Create a new one
 	E(err, "failed to create tmp directory")                //
