@@ -36,6 +36,7 @@ var goFuncs = template.FuncMap{
 	"chainName":       chainName,
 	"wrapped":         wrapped,
 	"valueStore":      valueStore,
+	"logger":          func() string { return flags.Logger },
 	"chainNameFormat": func(r typegen.Record) string { s, _ := chainNameFormat(r); return s },
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
@@ -138,7 +139,11 @@ func unionMethod(r typegen.ValueRecord, name string) string {
 }
 
 func stateType(r typegen.ValueRecord, forNew bool) string {
-	typ := r.GetDataType().GoType()
+	dt := r.GetDataType()
+	typ := dt.GoType()
+	if dt.Code == typegen.TypeCodeUnknown && dt.Name == "raw" {
+		typ = "[]byte"
+	}
 	if !forNew && r.IsPointer() {
 		typ = "*" + typ
 	}
