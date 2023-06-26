@@ -53,6 +53,17 @@ func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, au
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Reset the pending authority signature if there is one
+	if h := s.transaction.Header.HoldUntil; h != nil && h.MinorBlock != 0 {
+		err = batch.Account(s.Executor.Describe.Ledger()).
+			Event().Minor().
+			Votes(h.MinorBlock).
+			Remove(authSig)
+		if err != nil {
+			return errors.UnknownError.WithFormat("reset held authority signature: %w", err)
+		}
+	}
+
 	// Reset the signing state
 	err = clearActiveSignatures(batch, authSig.Authority, s.transaction.ID())
 	if err != nil {
