@@ -131,7 +131,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
-	c.Accumulate.Snapshots.Enable = true
+	c.Accumulate.Snapshots.Enable = false
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
 	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
