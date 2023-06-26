@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -71,5 +72,48 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 	res.Oracle = values.Oracle
 	res.Routing = values.Routing
 	res.ExecutorVersion = values.ExecutorVersion
+
+	// Data from the database
+	err := s.database.View(func(batch *database.Batch) error {
+		h, err := s.getDnHeight(batch)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load directory height: %w", err)
+		}
+
+		res.DirectoryHeight = h
+		return err
+	})
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	return res, nil
+}
+
+func (s *NetworkService) getDnHeight(batch *database.Batch) (uint64, error) {
+	c := batch.Account(protocol.PartitionUrl(s.partition).JoinPath(protocol.AnchorPool)).MainChain()
+	head, err := c.Head().Get()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load anchor ledger main chain head: %w", err)
+	}
+
+	for i := head.Count - 1; i >= 0; i-- {
+		entry, err := c.Entry(i)
+		if err != nil {
+			return 0, errors.UnknownError.WithFormat("load anchor ledger main chain entry %d (1): %w", i, err)
+		}
+
+		var msg *messaging.TransactionMessage
+		err = batch.Message2(entry).Main().GetAs(&msg)
+		if err != nil {
+			return 0, errors.UnknownError.WithFormat("load anchor ledger main chain entry %d (2): %w", i, err)
+		}
+
+		body, ok := msg.Transaction.Body.(*protocol.DirectoryAnchor)
+		if ok {
+			return body.MinorBlockIndex, nil
+		}
+	}
+
+	return 0, nil
 }

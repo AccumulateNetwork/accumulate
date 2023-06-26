@@ -13,6 +13,12 @@ TransactionHeader:
     - name: Metadata
       type: bytes
       optional: true
+    - name: HoldUntil
+      description: holds the transaction as pending until the threshold is met
+      type: BlockThreshold
+      optional: true
+      pointer: true
+      marshal-as: reference
 
 Transaction:
   fields:
@@ -31,6 +37,12 @@ Transaction:
     - name: body64bytes
       type: bool
       marshal-as: none
+
+BlockThreshold:
+  fields:
+    - name: MinorBlock
+      type: uint
+      optional: true
 
 TransactionStatus:
   fields:
