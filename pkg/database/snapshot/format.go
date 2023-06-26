@@ -20,8 +20,16 @@ type rawWriter = ioutil.SegmentedWriter[SectionType, *SectionType]
 type sectionReader = ioutil.Segment[SectionType, *SectionType]
 type sectionWriter = ioutil.SegmentWriter[SectionType, *SectionType]
 
-// Open opens a snapshot file for reading.
-func Open(file ioutil.SectionReader) (*Reader, error) {
+func GetVersion(file ioutil.SectionReader) (uint64, error) {
+	r, err := open(file)
+	if err != nil {
+		return 0, errors.UnknownError.Wrap(err)
+	}
+
+	return r.Header.Version, nil
+}
+
+func open(file ioutil.SectionReader) (*Reader, error) {
 	// Read the sections
 	r := new(Reader)
 	for sr := ioutil.NewSegmentedReader[SectionType](file); ; {
@@ -54,6 +62,16 @@ func Open(file ioutil.SectionReader) (*Reader, error) {
 	_, err = r.Header.readFrom(sr)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("read header: %w", err)
+	}
+
+	return r, nil
+}
+
+// Open opens a snapshot file for reading.
+func Open(file ioutil.SectionReader) (*Reader, error) {
+	r, err := open(file)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Return an error if the version is wrong
@@ -140,7 +158,6 @@ type Writer struct {
 	wr          *rawWriter
 	wroteHeader bool
 	sections    int
-	index       []RecordIndexEntry
 }
 
 func (w *Writer) WriteHeader(header *Header) error {
