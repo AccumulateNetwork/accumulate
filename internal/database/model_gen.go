@@ -307,6 +307,7 @@ type Account struct {
 	pending                values.Set[*url.TxID]
 	syntheticForAnchor     map[accountSyntheticForAnchorMapKey]values.Set[*url.TxID]
 	directory              values.Set[*url.URL]
+	event                  *AccountEvent
 	transaction            map[accountTransactionMapKey]*AccountTransaction
 	mainChain              *Chain2
 	scratchChain           *Chain2
@@ -409,6 +410,20 @@ func (c *Account) Directory() values.Set[*url.URL] {
 
 func (c *Account) newDirectory() values.Set[*url.URL] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" "+"directory", values.Wrapped(values.UrlWrapper), values.CompareUrl)
+}
+
+func (c *Account) Event() *AccountEvent {
+	return values.GetOrCreate(c, &c.event, (*Account).newEvent)
+}
+
+func (c *Account) newEvent() *AccountEvent {
+	v := new(AccountEvent)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Event")
+	v.parent = c
+	v.label = c.label + " " + "event"
+	return v
 }
 
 func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
@@ -549,6 +564,8 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return v, key.SliceI(2), nil
 	case "Directory":
 		return c.Directory(), key.SliceI(1), nil
+	case "Event":
+		return c.Event(), key.SliceI(1), nil
 	case "Transaction":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account")
@@ -622,6 +639,9 @@ func (c *Account) IsDirty() bool {
 		}
 	}
 	if values.IsDirty(c.directory) {
+		return true
+	}
+	if values.IsDirty(c.event) {
 		return true
 	}
 	for _, v := range c.transaction {
@@ -707,6 +727,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.pending, c.newPending, opts, fn)
 	values.WalkMap(&err, c.syntheticForAnchor, c.newSyntheticForAnchor, nil, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
+	values.WalkField(&err, c.event, c.newEvent, opts, fn)
 	values.WalkMap(&err, c.transaction, c.newTransaction, c.getTransactionKeys, opts, fn)
 	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
@@ -739,6 +760,7 @@ func (c *Account) baseCommit() error {
 		values.Commit(&err, v)
 	}
 	values.Commit(&err, c.directory)
+	values.Commit(&err, c.event)
 	for _, v := range c.transaction {
 		values.Commit(&err, v)
 	}
@@ -757,6 +779,190 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.chains)
 	values.Commit(&err, c.syntheticAnchors)
 	values.Commit(&err, c.data)
+
+	return err
+}
+
+type AccountEvent struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    *record.Key
+	label  string
+	parent *Account
+
+	minor *AccountEventMinor
+}
+
+func (c *AccountEvent) Key() *record.Key { return c.key }
+
+func (c *AccountEvent) Minor() *AccountEventMinor {
+	return values.GetOrCreate(c, &c.minor, (*AccountEvent).newMinor)
+}
+
+func (c *AccountEvent) newMinor() *AccountEventMinor {
+	v := new(AccountEventMinor)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Minor")
+	v.parent = c
+	v.label = c.label + " " + "minor"
+	return v
+}
+
+func (c *AccountEvent) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
+		return nil, nil, errors.InternalError.With("bad key for event")
+	}
+
+	switch key.Get(0) {
+	case "Minor":
+		return c.Minor(), key.SliceI(1), nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for event")
+	}
+}
+
+func (c *AccountEvent) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if values.IsDirty(c.minor) {
+		return true
+	}
+
+	return false
+}
+
+func (c *AccountEvent) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	values.WalkField(&err, c.minor, c.newMinor, opts, fn)
+	return err
+}
+
+func (c *AccountEvent) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	values.Commit(&err, c.minor)
+
+	return err
+}
+
+type AccountEventMinor struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    *record.Key
+	label  string
+	parent *AccountEvent
+
+	blocks values.Set[uint64]
+	votes  map[accountEventMinorVotesMapKey]values.Set[*protocol.AuthoritySignature]
+}
+
+func (c *AccountEventMinor) Key() *record.Key { return c.key }
+
+type accountEventMinorVotesKey struct {
+	Block uint64
+}
+
+type accountEventMinorVotesMapKey struct {
+	Block uint64
+}
+
+func (k accountEventMinorVotesKey) ForMap() accountEventMinorVotesMapKey {
+	return accountEventMinorVotesMapKey{k.Block}
+}
+
+func (c *AccountEventMinor) Blocks() values.Set[uint64] {
+	return values.GetOrCreate(c, &c.blocks, (*AccountEventMinor).newBlocks)
+}
+
+func (c *AccountEventMinor) newBlocks() values.Set[uint64] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Blocks"), c.label+" "+"blocks", values.Wrapped(values.UintWrapper), values.CompareUint)
+}
+
+func (c *AccountEventMinor) getVotes(block uint64) values.Set[*protocol.AuthoritySignature] {
+	return values.GetOrCreateMap(c, &c.votes, accountEventMinorVotesKey{block}, (*AccountEventMinor).newVotes)
+}
+
+func (c *AccountEventMinor) newVotes(k accountEventMinorVotesKey) values.Set[*protocol.AuthoritySignature] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Votes", k.Block), c.label+" "+"votes"+" "+strconv.FormatUint(k.Block, 10), values.Struct[protocol.AuthoritySignature](), compareHeldAuthSig)
+}
+
+func (c *AccountEventMinor) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
+		return nil, nil, errors.InternalError.With("bad key for minor")
+	}
+
+	switch key.Get(0) {
+	case "Blocks":
+		return c.Blocks(), key.SliceI(1), nil
+	case "Votes":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for minor")
+		}
+		block, okBlock := key.Get(1).(uint64)
+		if !okBlock {
+			return nil, nil, errors.InternalError.With("bad key for minor")
+		}
+		v := c.getVotes(block)
+		return v, key.SliceI(2), nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for minor")
+	}
+}
+
+func (c *AccountEventMinor) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if values.IsDirty(c.blocks) {
+		return true
+	}
+	for _, v := range c.votes {
+		if v.IsDirty() {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *AccountEventMinor) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	values.WalkField(&err, c.blocks, c.newBlocks, opts, fn)
+	values.WalkMap(&err, c.votes, c.newVotes, c.getVoteKeys, opts, fn)
+	return err
+}
+
+func (c *AccountEventMinor) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	values.Commit(&err, c.blocks)
+	for _, v := range c.votes {
+		values.Commit(&err, v)
+	}
 
 	return err
 }
