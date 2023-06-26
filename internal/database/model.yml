@@ -292,7 +292,8 @@
     type: state
     dataType: merkle.State
     pointer: true
-    parameters: # Not indexed directly
+    index: getMarkPoints # Indexed by head
+    parameters:
     - name: Index
       type: uint
   - name: ElementIndex
