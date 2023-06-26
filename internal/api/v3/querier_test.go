@@ -37,12 +37,15 @@ func TestQuerier(t *testing.T) {
 
 type QuerierTestSuite struct {
 	suite.Suite
-	sim         *simulator.Simulator
-	faucet      *url.URL
-	alice       *url.URL
-	aliceKey    ed25519.PrivateKey
+	sim    *simulator.Simulator
+	faucet *url.URL
+
+	alice, bob, charlie          *url.URL
+	aliceKey, bobKey, charlieKey ed25519.PrivateKey
+
 	createAlice *TransactionStatus
 	writeData   *TransactionStatus
+	createMulti *TransactionStatus
 }
 
 func (s *QuerierTestSuite) QuerierFor(u *url.URL) api.Querier2 {
@@ -57,6 +60,8 @@ func (s *QuerierTestSuite) QuerierFor(u *url.URL) api.Querier2 {
 }
 
 func (s *QuerierTestSuite) SetupSuite() {
+	var timestamp uint64
+
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.MajorBlockSchedule = "* * * * *"
@@ -76,7 +81,11 @@ func (s *QuerierTestSuite) SetupSuite() {
 	s.faucet = acctesting.AcmeLiteAddressStdPriv(faucetKey)
 
 	s.alice = AccountUrl("alice")
+	s.bob = AccountUrl("bob")
+	s.charlie = AccountUrl("charlie")
 	s.aliceKey = acctesting.GenerateKey(s.alice)
+	s.bobKey = acctesting.GenerateKey(s.bob)
+	s.charlieKey = acctesting.GenerateKey(s.charlie)
 
 	parts := sim.Partitions()
 	for i, p := range parts {
@@ -87,22 +96,26 @@ func (s *QuerierTestSuite) SetupSuite() {
 	}
 	sim.SetRoute(s.alice, parts[0].ID)
 	sim.SetRoute(s.faucet, parts[1].ID)
+	sim.SetRoute(s.bob, parts[1].ID)
+	sim.SetRoute(s.charlie, parts[2].ID)
 
 	MakeLiteTokenAccount(s.T(), sim.DatabaseFor(s.faucet), faucetKey[32:], AcmeUrl())
 	CreditTokens(s.T(), sim.DatabaseFor(s.faucet), s.faucet, big.NewInt(1000*AcmePrecision))
 
+	// Get credits
 	st := sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			AddCredits().To(s.faucet).WithOracle(InitialAcmeOracle).Spend(10).
-			SignWith(s.faucet).Version(1).Timestamp(1).PrivateKey(faucetKey)))
+			SignWith(s.faucet).Version(1).Timestamp(&timestamp).PrivateKey(faucetKey)))
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
+	// Create Alice
 	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			CreateIdentity(s.alice).WithKey(s.aliceKey, SignatureTypeED25519).WithKeyBook(s.alice, "book").
-			SignWith(s.faucet).Version(1).Timestamp(2).PrivateKey(faucetKey)))
+			SignWith(s.faucet).Version(1).Timestamp(&timestamp).PrivateKey(faucetKey)))
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
@@ -111,25 +124,81 @@ func (s *QuerierTestSuite) SetupSuite() {
 	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
 		build.Transaction().For(s.faucet).
 			AddCredits().To(s.alice, "book", "1").WithOracle(InitialAcmeOracle).Spend(10).
-			SignWith(s.faucet).Version(1).Timestamp(3).PrivateKey(faucetKey)))
+			SignWith(s.faucet).Version(1).Timestamp(&timestamp).PrivateKey(faucetKey)))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	// Create alice/data
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
+		build.Transaction().For(s.alice).
+			CreateDataAccount(s.alice, "data").
+			SignWith(s.alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(s.aliceKey)))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+	s.writeData = st
+
+	// Write to alice/data
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
+		build.Transaction().For(s.alice, "data").
+			WriteData().DoubleHash([]byte("foo")).
+			SignWith(s.alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(s.aliceKey)))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds())
+
+	// Create Bob and Charlie
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
+		build.Transaction().For(s.faucet).
+			CreateIdentity(s.bob).WithKey(s.bobKey, SignatureTypeED25519).WithKeyBook(s.bob, "book").
+			SignWith(s.faucet).Version(1).Timestamp(&timestamp).PrivateKey(faucetKey)))
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
 	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
-		build.Transaction().For(s.alice).
-			CreateDataAccount(s.alice, "data").
-			SignWith(s.alice, "book", "1").Version(1).Timestamp(1).PrivateKey(s.aliceKey)))
+		build.Transaction().For(s.faucet).
+			CreateIdentity(s.charlie).WithKey(s.charlieKey, SignatureTypeED25519).WithKeyBook(s.charlie, "book").
+			SignWith(s.faucet).Version(1).Timestamp(&timestamp).PrivateKey(faucetKey)))
 	sim.StepUntil(
-		Txn(st.TxID).Succeeds())
-	s.writeData = st
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
 
 	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
-		build.Transaction().For(s.alice, "data").
-			WriteData().DoubleHash([]byte("foo")).
-			SignWith(s.alice, "book", "1").Version(1).Timestamp(2).PrivateKey(s.aliceKey)))
+		build.Transaction().For(s.faucet).
+			AddCredits().To(s.bob, "book", "1").WithOracle(InitialAcmeOracle).Spend(10).
+			SignWith(s.faucet).Version(1).Timestamp(&timestamp).PrivateKey(faucetKey)))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	st = sim.SubmitTxnSuccessfully(MustBuild(s.T(),
+		build.Transaction().For(s.faucet).
+			AddCredits().To(s.charlie, "book", "1").WithOracle(InitialAcmeOracle).Spend(10).
+			SignWith(s.faucet).Version(1).Timestamp(&timestamp).PrivateKey(faucetKey)))
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	// Create alice/multi
+	env := MustBuild(s.T(),
+		build.Transaction().For(s.alice).
+			CreateDataAccount(s.alice, "mutli").
+			WithAuthority(s.bob, "book").
+			WithAuthority(s.charlie, "book").
+			SignWith(s.alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(s.aliceKey))
+	st = sim.SubmitTxnSuccessfully(env)
+
+	sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTransaction(env.Transaction[0]).
+			Url(s.bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(s.bobKey))
+
+	sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTransaction(env.Transaction[0]).
+			Url(s.charlie, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(s.charlieKey))
+
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
+	s.createMulti = st
 
 	// Ensure a major block
 	sim.StepN(int(time.Minute / time.Second))
@@ -157,7 +226,7 @@ func (s *QuerierTestSuite) TestQueryAccount() {
 	_ = s.NotNil(r.Account) &&
 		s.IsType((*ADI)(nil), r.Account)
 	_ = s.NotNil(r.Directory) &&
-		s.Len(r.Directory.Records, 2) &&
+		s.Len(r.Directory.Records, 3) &&
 		s.True(r.Directory.Records[0].Value.Equal(s.alice.JoinPath("book")))
 }
 
@@ -167,7 +236,7 @@ func (s *QuerierTestSuite) TestQueryAccountChains() {
 	_ = s.Len(r.Records, 4) &&
 		s.Equal("main", r.Records[0].Name) &&
 		s.Equal(merkle.ChainTypeTransaction, r.Records[0].Type) &&
-		s.Equal(2, int(r.Records[0].Count))
+		s.Equal(3, int(r.Records[0].Count))
 }
 
 func (s *QuerierTestSuite) TestQueryTransactionChains() {
@@ -197,7 +266,7 @@ func (s *QuerierTestSuite) TestQueryChain() {
 	s.Require().NoError(err)
 	_ = s.Equal("main", r.Name) &&
 		s.Equal(merkle.ChainTypeTransaction, r.Type) &&
-		s.Equal(2, int(r.Count))
+		s.Equal(3, int(r.Count))
 }
 
 func (s *QuerierTestSuite) TestQueryChainEntry() {
@@ -224,7 +293,7 @@ func (s *QuerierTestSuite) TestQueryChainEntry() {
 func (s *QuerierTestSuite) TestQueryChainEntries() {
 	r, err := s.QuerierFor(s.alice).QueryMainChainEntries(context.Background(), s.alice, &api.ChainQuery{Name: "main", Range: &api.RangeOptions{}})
 	s.Require().NoError(err)
-	s.Require().Len(r.Records, 2)
+	s.Require().Len(r.Records, 3)
 }
 
 func (s *QuerierTestSuite) TestQueryDataEntry() {
@@ -259,7 +328,7 @@ func (s *QuerierTestSuite) TestQueryDataEntries() {
 func (s *QuerierTestSuite) TestQueryDirectory() {
 	r, err := s.QuerierFor(s.alice).QueryDirectory(context.Background(), s.alice, nil)
 	s.Require().NoError(err)
-	s.Require().Len(r.Records, 2)
+	s.Require().Len(r.Records, 3)
 }
 
 func (s *QuerierTestSuite) TestQueryPending() {
@@ -348,4 +417,24 @@ func (s *QuerierTestSuite) TestSearchForTransactionHash() {
 	r, err := s.QuerierFor(s.faucet).SearchForMessage(context.Background(), s.createAlice.TxID.Hash())
 	s.Require().NoError(err)
 	s.Require().Len(r.Records, 1)
+}
+
+func (s *QuerierTestSuite) TestCollateTransaction() {
+	c := &api.Collator{Querier: s.sim.Services(), Network: s.sim.Services()}
+	q := api.Querier2{Querier: c}
+	r, err := q.QueryTransaction(context.Background(), UnknownUrl().WithTxID(s.createMulti.TxID.Hash()), nil)
+	s.Require().NoError(err)
+
+	msgs := map[[32]byte][]messaging.Message{}
+	for _, r := range r.Signatures.Records {
+		var m []messaging.Message
+		for _, r := range r.Signatures.Records {
+			m = append(m, r.Message)
+		}
+		msgs[r.Account.GetUrl().AccountID32()] = m
+	}
+
+	s.Require().NotEmpty(msgs[s.alice.JoinPath("book", "1").AccountID32()], "Expected messages from Alice's page")
+	s.Require().NotEmpty(msgs[s.bob.JoinPath("book", "1").AccountID32()], "Expected messages from Bob's page")
+	s.Require().NotEmpty(msgs[s.charlie.JoinPath("book", "1").AccountID32()], "Expected messages from Charlie's page")
 }
