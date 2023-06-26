@@ -375,9 +375,21 @@
       "cwd": "${workspaceFolder}",
       "args": [
         "heal",
-        "tcp://bvn0-seed.testnet.accumulatenetwork.io:16591",
-        "tcp://bvn1-seed.testnet.accumulatenetwork.io:16591",
-        "tcp://bvn2-seed.testnet.accumulatenetwork.io:16591",
+        "https://kermit.accumulatenetwork.io/v3",
+      ]
+    },
+    {
+      "name": "Heal Synth",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "heal-synth",
+        "mainnet",
+        "mainnet",
       ]
     },
     {

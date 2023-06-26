@@ -14,17 +14,24 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var cmdHealSynth = &cobra.Command{
-	Use:   "heal-synth [server]",
+	Use:   "heal-synth [network] [server]",
 	Short: "Fixup synthetic transactions",
+	Args:  cobra.ExactArgs(2),
 	Run:   healSynth,
 }
 
@@ -33,19 +40,40 @@ func init() {
 }
 
 func healSynth(_ *cobra.Command, args []string) {
-	c, err := client.New(args[0])
+	testing.EnableDebugFeatures()
+	c, err := client.New(args[1])
 	check(err)
 
 	desc, err := c.Describe(context.Background())
 	check(err)
 
+	node, err := p2p.New(p2p.Options{
+		Network:        args[0],
+		BootstrapPeers: api.BootstrapServers,
+	})
+	check(err)
+	defer func() { _ = node.Close() }()
+
+	fmt.Printf("We are %v\n", node.ID())
+
+	router := new(routing.MessageRouter)
+	c2 := &message.Client{
+		Transport: &message.RoutedTransport{
+			Network: args[0],
+			Dialer:  node.DialNetwork(),
+			Router:  router,
+		},
+	}
+	router.Router, err = routing.NewStaticRouter(desc.Values.Routing, nil)
+	check(err)
+
 	synths := map[string]*protocol.SyntheticLedger{}
 	for _, part := range desc.Values.Network.Partitions {
 		// Get synthetic ledger
-		req := new(api.GeneralQuery)
+		req := new(v2.GeneralQuery)
 		req.Url = protocol.PartitionUrl(part.ID).JoinPath(protocol.Synthetic)
 		synth := new(protocol.SyntheticLedger)
-		res := new(api.ChainQueryResponse)
+		res := new(v2.ChainQueryResponse)
 		res.Data = synth
 		err = c.RequestAPIv2(context.Background(), "query", req, res)
 		check(err)
@@ -54,20 +82,71 @@ func healSynth(_ *cobra.Command, args []string) {
 		for _, src := range synth.Sequence {
 			for _, txid := range src.Pending {
 				req.Url = txid.AsUrl()
-				res := new(api.TransactionQueryResponse)
+				res := new(v2.TransactionQueryResponse)
 				err = c.RequestAPIv2(context.Background(), "query", req, res)
 				check(err)
 
-				fmt.Printf("Resubmitting %v\n", txid)
-				xreq := new(api.ExecuteRequest)
+				xreq := new(v2.ExecuteRequest)
 				xreq.Envelope = new(messaging.Envelope)
 				xreq.Envelope.Transaction = []*protocol.Transaction{res.Transaction}
+				var partSig *protocol.PartitionSignature
 				for _, sig := range res.Signatures {
 					sig, ok := sig.(*protocol.PartitionSignature)
 					if ok {
+						partSig = sig
 						xreq.Envelope.Signatures = []protocol.Signature{sig}
 					}
 				}
+
+				pid, err := peer.Decode("12D3KooWDqFDwjHEog1bNbxai2dKSaR1aFvq2LAZ2jivSohgoSc7")
+				check(err)
+
+				// Get a signature
+				r, err := c2.ForPeer(pid).Private().Sequence(context.Background(), partSig.SourceNetwork.JoinPath(protocol.Synthetic), partSig.DestinationNetwork, partSig.SequenceNumber)
+				check(err)
+				for _, sigs := range r.Signatures.Records {
+					for _, sig := range sigs.Signatures.Records {
+						if sig, ok := sig.Message.(*messaging.SignatureMessage); ok {
+							if sig, ok := sig.Signature.(protocol.KeySignature); ok {
+								xreq.Envelope.Signatures = append(xreq.Envelope.Signatures, sig)
+							}
+						}
+					}
+				}
+
+				req.Url = src.Url.JoinPath(protocol.Synthetic).WithFragment(fmt.Sprintf("txn/%x", txid.Hash()))
+				req.Prove = true
+				res2 := new(v2.TransactionQueryResponse)
+				err = c.RequestAPIv2(context.Background(), "query", req, res2)
+				check(err)
+
+				// Fix receipts
+				var note string
+				if !res.Status.GotDirectoryReceipt {
+					anchor := res2.Status.Proof.Anchor
+
+					rreq := new(v2.GeneralQuery)
+					rreq.Url = protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", anchor))
+					rres := new(v2.ChainQueryResponse)
+					err = c.RequestAPIv2(context.Background(), "query", rreq, rres)
+					checkf(err, "get DN receipt for %x", anchor)
+
+					receipt, err := res2.Status.Proof.Combine(&rres.Receipt.Proof)
+					checkf(err, "combine receipts")
+
+					sig := new(protocol.ReceiptSignature)
+					sig.SourceNetwork = protocol.DnUrl()
+					sig.TransactionHash = txid.Hash()
+					sig.Proof = *receipt
+					xreq.Envelope.Signatures = append(xreq.Envelope.Signatures, sig)
+					note = " with DN receipt"
+				}
+
+				fmt.Printf("Resubmitting %v%s\n", txid, note)
+				// b, _ := json.Marshal(xreq.Envelope)
+				// fmt.Printf("%s\n", b)
+				// return
+
 				xres, err := c.ExecuteDirect(context.Background(), xreq)
 				check(err)
 				if xres.Message != "" {
@@ -96,7 +175,7 @@ func healSynth(_ *cobra.Command, args []string) {
 	}
 }
 
-func resubmitByNumber(desc *api.DescriptionResponse, c *client.Client, source, destination string, number uint64, anchor bool) {
+func resubmitByNumber(desc *v2.DescriptionResponse, c *client.Client, source, destination string, number uint64, anchor bool) {
 	// Get a client for the destination partition
 	var d *client.Client
 	for _, p := range desc.Network.Partitions {
@@ -115,7 +194,7 @@ func resubmitByNumber(desc *api.DescriptionResponse, c *client.Client, source, d
 	}
 
 	// Query the synthetic transaction
-	req := new(api.SyntheticTransactionRequest)
+	req := new(v2.SyntheticTransactionRequest)
 	req.Source = protocol.PartitionUrl(source)
 	req.Destination = protocol.PartitionUrl(destination)
 	req.SequenceNumber = number
@@ -125,7 +204,7 @@ func resubmitByNumber(desc *api.DescriptionResponse, c *client.Client, source, d
 
 	// Submit the synthetic transaction directly to the destination partition
 	fmt.Printf("Resubmitting %v\n", res.Txid)
-	xreq := new(api.ExecuteRequest)
+	xreq := new(v2.ExecuteRequest)
 	xreq.Envelope = new(messaging.Envelope)
 	xreq.Envelope.Transaction = []*protocol.Transaction{res.Transaction}
 	xreq.Envelope.Signatures = res.Signatures
