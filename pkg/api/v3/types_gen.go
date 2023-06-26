@@ -280,8 +280,9 @@ type NetworkStatus struct {
 	// ExecutorVersion is the active executor version.
 	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
 	// DirectoryHeight is the height of the directory network.
-	DirectoryHeight uint64 `json:"directoryHeight,omitempty" form:"directoryHeight" query:"directoryHeight" validate:"required"`
-	extraData       []byte
+	DirectoryHeight  uint64 `json:"directoryHeight,omitempty" form:"directoryHeight" query:"directoryHeight" validate:"required"`
+	MajorBlockHeight uint64 `json:"majorBlockHeight,omitempty" form:"majorBlockHeight" query:"majorBlockHeight" validate:"required"`
+	extraData        []byte
 }
 
 type NetworkStatusOptions struct {
@@ -1095,6 +1096,7 @@ func (v *NetworkStatus) Copy() *NetworkStatus {
 	}
 	u.ExecutorVersion = v.ExecutorVersion
 	u.DirectoryHeight = v.DirectoryHeight
+	u.MajorBlockHeight = v.MajorBlockHeight
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2084,6 +2086,9 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 		return false
 	}
 	if !(v.DirectoryHeight == u.DirectoryHeight) {
+		return false
+	}
+	if !(v.MajorBlockHeight == u.MajorBlockHeight) {
 		return false
 	}
 
@@ -4153,6 +4158,7 @@ var fieldNames_NetworkStatus = []string{
 	4: "Routing",
 	5: "ExecutorVersion",
 	6: "DirectoryHeight",
+	7: "MajorBlockHeight",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -4180,6 +4186,9 @@ func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.DirectoryHeight == 0) {
 		writer.WriteUint(6, v.DirectoryHeight)
+	}
+	if !(v.MajorBlockHeight == 0) {
+		writer.WriteUint(7, v.MajorBlockHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkStatus)
@@ -4217,6 +4226,11 @@ func (v *NetworkStatus) IsValid() error {
 		errs = append(errs, "field DirectoryHeight is missing")
 	} else if v.DirectoryHeight == 0 {
 		errs = append(errs, "field DirectoryHeight is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field MajorBlockHeight is missing")
+	} else if v.MajorBlockHeight == 0 {
+		errs = append(errs, "field MajorBlockHeight is not set")
 	}
 
 	switch len(errs) {
@@ -6222,6 +6236,9 @@ func (v *NetworkStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(6); ok {
 		v.DirectoryHeight = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.MajorBlockHeight = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkStatus)

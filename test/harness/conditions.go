@@ -32,6 +32,28 @@ func (f True) Satisfied(h *Harness) bool { return f(h) }
 
 func (f True) Format(prefix, suffix string) string { return prefix + "(unknown predicate function)" }
 
+func MajorBlock(v uint64) majorHeightOnPart {
+	return majorHeightOnPart{v, protocol.Directory}
+}
+
+type majorHeightOnPart struct {
+	height    uint64
+	partition string
+}
+
+func (v majorHeightOnPart) OnPartition(s string) majorHeightOnPart {
+	return majorHeightOnPart{v.height, s}
+}
+
+func (v majorHeightOnPart) Satisfied(h *Harness) bool {
+	ns := h.NetworkStatus(api.NetworkStatusOptions{Partition: v.partition})
+	return ns.MajorBlockHeight >= v.height
+}
+
+func (v majorHeightOnPart) Format(prefix, suffix string) string {
+	return fmt.Sprintf("%s%s reached major block %d%s", prefix, v.partition, v.height, suffix)
+}
+
 func DnHeight(v uint64) dnHeightOnPart {
 	return dnHeightOnPart{v, protocol.Directory}
 }
@@ -51,7 +73,7 @@ func (v dnHeightOnPart) Satisfied(h *Harness) bool {
 }
 
 func (v dnHeightOnPart) Format(prefix, suffix string) string {
-	return prefix + "DN block " + fmt.Sprint(v.height) + " is anchored on " + v.partition
+	return fmt.Sprintf("%sDN block %d is anchored on %s%s", prefix, v.height, v.partition, suffix)
 }
 
 // Txn defines a condition on a transaction.
@@ -522,6 +544,11 @@ func isPending(h *Harness, c *condition, r *msgResult) bool {
 		// Must be pending
 		if r.Status.Code == errors.Pending {
 			return true
+		}
+		if r.Status.Error == nil {
+			h.TB.Logf("transaction is %v\n", r.Status.Code)
+		} else {
+			h.TB.Logf("%+v\n", r.Status.AsError())
 		}
 		h.TB.Fatal(c.messageReplaceEnd("is not pending 🗴\n"))
 	}

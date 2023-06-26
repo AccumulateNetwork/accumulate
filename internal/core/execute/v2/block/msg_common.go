@@ -45,7 +45,7 @@ func (*MessageContext) GetAccountAuthoritySet(batch *database.Batch, account pro
 }
 
 func (*MessageContext) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
-	return transactionIsInitiated(batch, transaction)
+	return transactionIsInitiated(batch, transaction.ID())
 }
 
 func (*MessageContext) SignerCanSign(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
@@ -341,9 +341,9 @@ func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *p
 	return nil
 }
 
-func transactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
-	payments, err := batch.Account(transaction.Header.Principal).
-		Transaction(transaction.ID().Hash()).
+func transactionIsInitiated(batch *database.Batch, id *url.TxID) (bool, *messaging.CreditPayment, error) {
+	payments, err := batch.Account(id.Account()).
+		Transaction(id.Hash()).
 		Payments().
 		Get()
 	if err != nil {

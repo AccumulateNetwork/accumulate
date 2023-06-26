@@ -63,11 +63,12 @@
       pointer: true
       emptyIfMissing: true
 
-    - name: Event
-      description: tracks transactions with a block threshold. Should only be used on the system ledger
+    - name: Events
+      description: tracks scheduled events. Should only be used on the system ledger
       type: entity
       attributes:
       - name: Minor
+        description: tracks events scheduled for a DN minor block
         type: entity
         attributes:
         - name: Blocks
@@ -75,6 +76,7 @@
           dataType: uint
           collection: set
         - name: Votes
+          description: tracks authority votes that are pending due to a block hold
           type: state
           index: getVoteKeys # Indexed by blocks
           parameters:
@@ -85,6 +87,35 @@
           dataType: protocol.AuthoritySignature
           pointer: true
           collection: set
+      - name: Major
+        description: tracks events scheduled for a major block
+        type: entity
+        attributes:
+        - name: Blocks
+          type: state
+          dataType: uint
+          collection: set
+        - name: Pending
+          description: tracks pending transactions that will expire
+          type: state
+          index: getPendingKeys # Indexed by blocks
+          parameters:
+          - name: Block
+            type: uint
+          private: true
+          dataType: txid
+          pointer: true
+          collection: set
+      - name: Backlog
+        description: used to limit the number of events processed per block
+        type: entity
+        attributes:
+        - name: Expired
+          description: tracks pending transactions that have expired
+          type: state
+          dataType: txid
+          pointer: true
+          collection: list
 
     - name: Transaction
       type: entity

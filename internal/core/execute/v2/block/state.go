@@ -7,6 +7,7 @@
 package block
 
 import (
+	"sort"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
@@ -27,6 +28,9 @@ type BlockState struct {
 	ReceivedAnchors    []*chain.ReceivedAnchor
 
 	Anchor *BlockAnchorState
+
+	Pending map[[32]byte]*url.TxID
+	Events  int
 }
 
 // BlockAnchorState is used to construc the anchor for the block.
@@ -55,6 +59,31 @@ func (s *BlockState) Empty() bool {
 		s.Signed == 0 &&
 		s.Produced == 0 &&
 		len(s.ChainUpdates.Entries) == 0
+}
+
+func (s *BlockState) MarkTransactionPending(id *url.TxID) {
+	if s.Pending == nil {
+		s.Pending = map[[32]byte]*url.TxID{}
+	}
+	s.Pending[id.Hash()] = id
+}
+
+func (s *BlockState) MarkTransactionDelivered(id *url.TxID) {
+	if s.Pending == nil {
+		return
+	}
+	delete(s.Pending, id.Hash())
+}
+
+func (s *BlockState) GetPending() []*url.TxID {
+	l := make([]*url.TxID, 0, len(s.Pending))
+	for _, p := range s.Pending {
+		l = append(l, p)
+	}
+	sort.Slice(l, func(i, j int) bool {
+		return l[i].Compare(l[j]) < 0
+	})
+	return l
 }
 
 type ProcessSignatureState struct {
