@@ -75,12 +75,17 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 
 	// Data from the database
 	err := s.database.View(func(batch *database.Batch) error {
-		h, err := s.getDnHeight(batch)
+		var err error
+		res.DirectoryHeight, err = s.getDnHeight(batch)
 		if err != nil {
 			return errors.UnknownError.WithFormat("load directory height: %w", err)
 		}
 
-		res.DirectoryHeight = h
+		res.MajorBlockHeight, err = s.getMajorHeight(batch)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load major block height: %w", err)
+		}
+
 		return err
 	})
 	if err != nil {
@@ -116,4 +121,28 @@ func (s *NetworkService) getDnHeight(batch *database.Batch) (uint64, error) {
 	}
 
 	return 0, nil
+}
+
+func (s *NetworkService) getMajorHeight(batch *database.Batch) (uint64, error) {
+	c := batch.Account(protocol.PartitionUrl(s.partition).JoinPath(protocol.AnchorPool)).MajorBlockChain()
+	head, err := c.Head().Get()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load major block chain head: %w", err)
+	}
+	if head.Count == 0 {
+		return 0, nil
+	}
+
+	hash, err := c.Entry(head.Count - 1)
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load major block chain latest entry: %w", err)
+	}
+
+	entry := new(protocol.IndexEntry)
+	err = entry.UnmarshalBinary(hash)
+	if err != nil {
+		return 0, errors.EncodingError.WithFormat("decode major block chain entry: %w", err)
+	}
+
+	return entry.BlockIndex, nil
 }
