@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -22,6 +22,7 @@ var flags struct {
 	Out      string
 	Language string
 	Exclude  []string
+	Logger   string
 }
 
 func main() {
@@ -35,6 +36,7 @@ func main() {
 	cmd.Flags().StringVar(&flags.Package, "package", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "model_gen.go", "Output file")
 	cmd.Flags().StringSliceVarP(&flags.Exclude, "exclude", "x", nil, "Exclude specific records")
+	cmd.Flags().StringVar(&flags.Logger, "logger", "logging.OptionalLogger", "The logger that is used")
 
 	_ = cmd.Execute()
 }

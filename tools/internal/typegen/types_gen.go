@@ -59,6 +59,7 @@ type OtherRecord struct {
 
 type RecordBase struct {
 	Name            string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Key             string        `json:"key,omitempty" form:"key" query:"key" validate:"required"`
 	Description     string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
 	Parent          *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
 	Private         bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
@@ -92,6 +93,7 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            RecordType                `json:"type"`
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -105,6 +107,10 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	if !(len(v.RecordBase.Name) == 0) {
 
 		u.Name = v.RecordBase.Name
+	}
+	if !(len(v.RecordBase.Key) == 0) {
+
+		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
 
@@ -144,6 +150,7 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            RecordType                              `json:"type"`
 		Name            string                                  `json:"name,omitempty"`
+		Key             string                                  `json:"key,omitempty"`
 		Description     string                                  `json:"description,omitempty"`
 		Parent          *EntityRecord                           `json:"parent,omitempty"`
 		Private         bool                                    `json:"private,omitempty"`
@@ -169,6 +176,10 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	if !(len(v.RecordBase.Name) == 0) {
 
 		u.Name = v.RecordBase.Name
+	}
+	if !(len(v.RecordBase.Key) == 0) {
+
+		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
 
@@ -244,6 +255,7 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            RecordType                `json:"type"`
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -262,6 +274,10 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	if !(len(v.RecordBase.Name) == 0) {
 
 		u.Name = v.RecordBase.Name
+	}
+	if !(len(v.RecordBase.Key) == 0) {
+
+		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
 
@@ -316,6 +332,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            RecordType                `json:"type"`
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -332,6 +349,10 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	if !(len(v.RecordBase.Name) == 0) {
 
 		u.Name = v.RecordBase.Name
+	}
+	if !(len(v.RecordBase.Key) == 0) {
+
+		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
 
@@ -379,6 +400,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 func (v *RecordBase) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -389,6 +411,9 @@ func (v *RecordBase) MarshalJSON() ([]byte, error) {
 	}{}
 	if !(len(v.Name) == 0) {
 		u.Name = v.Name
+	}
+	if !(len(v.Key) == 0) {
+		u.Key = v.Key
 	}
 	if !(len(v.Description) == 0) {
 		u.Description = v.Description
@@ -418,6 +443,7 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            RecordType                `json:"type"`
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -436,6 +462,10 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	if !(len(v.RecordBase.Name) == 0) {
 
 		u.Name = v.RecordBase.Name
+	}
+	if !(len(v.RecordBase.Key) == 0) {
+
+		u.Key = v.RecordBase.Key
 	}
 	if !(len(v.RecordBase.Description) == 0) {
 
@@ -490,6 +520,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            RecordType                `json:"type"`
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -501,6 +532,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
+	u.Key = v.RecordBase.Key
 	u.Description = v.RecordBase.Description
 	u.Parent = v.RecordBase.Parent
 	u.Private = v.RecordBase.Private
@@ -516,6 +548,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.RecordBase.Name = u.Name
+	v.RecordBase.Key = u.Key
 	v.RecordBase.Description = u.Description
 	v.RecordBase.Parent = u.Parent
 	v.RecordBase.Private = u.Private
@@ -531,6 +564,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            RecordType                              `json:"type"`
 		Name            string                                  `json:"name,omitempty"`
+		Key             string                                  `json:"key,omitempty"`
 		Description     string                                  `json:"description,omitempty"`
 		Parent          *EntityRecord                           `json:"parent,omitempty"`
 		Private         bool                                    `json:"private,omitempty"`
@@ -554,6 +588,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
+	u.Key = v.RecordBase.Key
 	u.Description = v.RecordBase.Description
 	u.Parent = v.RecordBase.Parent
 	u.Private = v.RecordBase.Private
@@ -581,6 +616,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.RecordBase.Name = u.Name
+	v.RecordBase.Key = u.Key
 	v.RecordBase.Description = u.Description
 	v.RecordBase.Parent = u.Parent
 	v.RecordBase.Private = u.Private
@@ -613,6 +649,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            RecordType                `json:"type"`
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -629,6 +666,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
+	u.Key = v.RecordBase.Key
 	u.Description = v.RecordBase.Description
 	u.Parent = v.RecordBase.Parent
 	u.Private = v.RecordBase.Private
@@ -649,6 +687,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.RecordBase.Name = u.Name
+	v.RecordBase.Key = u.Key
 	v.RecordBase.Description = u.Description
 	v.RecordBase.Parent = u.Parent
 	v.RecordBase.Private = u.Private
@@ -669,6 +708,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            RecordType                `json:"type"`
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -683,6 +723,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
+	u.Key = v.RecordBase.Key
 	u.Description = v.RecordBase.Description
 	u.Parent = v.RecordBase.Parent
 	u.Private = v.RecordBase.Private
@@ -701,6 +742,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.RecordBase.Name = u.Name
+	v.RecordBase.Key = u.Key
 	v.RecordBase.Description = u.Description
 	v.RecordBase.Parent = u.Parent
 	v.RecordBase.Private = u.Private
@@ -718,6 +760,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 func (v *RecordBase) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -727,6 +770,7 @@ func (v *RecordBase) UnmarshalJSON(data []byte) error {
 		Index           string                    `json:"index,omitempty"`
 	}{}
 	u.Name = v.Name
+	u.Key = v.Key
 	u.Description = v.Description
 	u.Parent = v.Parent
 	u.Private = v.Private
@@ -738,6 +782,7 @@ func (v *RecordBase) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Name = u.Name
+	v.Key = u.Key
 	v.Description = u.Description
 	v.Parent = u.Parent
 	v.Private = u.Private
@@ -752,6 +797,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            RecordType                `json:"type"`
 		Name            string                    `json:"name,omitempty"`
+		Key             string                    `json:"key,omitempty"`
 		Description     string                    `json:"description,omitempty"`
 		Parent          *EntityRecord             `json:"parent,omitempty"`
 		Private         bool                      `json:"private,omitempty"`
@@ -768,6 +814,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
+	u.Key = v.RecordBase.Key
 	u.Description = v.RecordBase.Description
 	u.Parent = v.RecordBase.Parent
 	u.Private = v.RecordBase.Private
@@ -788,6 +835,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.RecordBase.Name = u.Name
+	v.RecordBase.Key = u.Key
 	v.RecordBase.Description = u.Description
 	v.RecordBase.Parent = u.Parent
 	v.RecordBase.Private = u.Private
