@@ -68,7 +68,14 @@ type SignerValidator interface {
 }
 
 type AuthorityValidator interface {
-	AuthorityWillVote(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, authority *url.URL) (ready, fallback bool, vote protocol.VoteType, err error)
+	// AuthorityWillVote checks if the authority is ready to vote. MUST NOT
+	// MODIFY STATE.
+	AuthorityWillVote(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, authority *url.URL) (fallback bool, vote *AuthVote, err error)
+}
+
+type AuthVote struct {
+	Source *url.URL
+	Vote   protocol.VoteType
 }
 
 // PrincipalValidator validates the principal for a specific type of transaction.
@@ -107,11 +114,7 @@ type AuthDelegate interface {
 	// authority's signers is satisfied.
 	AuthorityDidVote(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, protocol.VoteType, error)
 
-	// SignerWillVote verifies the signer is satisfied. For most transactions,
-	// this succeeds if the signer's conditions (thresholds) have been met.
-	SignerWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, signerUrl *url.URL) (bool, protocol.VoteType, error)
-
 	// AuthorityWillVote verifies that an authority signature (aka vote)
 	// approving the transaction has been received from the authority.
-	AuthorityWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, authUrl *url.URL) (bool, protocol.VoteType, error)
+	AuthorityWillVote(batch *database.Batch, block uint64, transaction *protocol.Transaction, authUrl *url.URL) (*AuthVote, error)
 }
