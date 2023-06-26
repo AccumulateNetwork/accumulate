@@ -162,7 +162,7 @@ func TestBlockHold(t *testing.T) {
 		part, err := sim.Router().RouteAccount(alice)
 		require.NoError(t, err)
 
-		record := batch.Account(PartitionUrl(part).JoinPath(Ledger)).Event().Minor()
+		record := batch.Account(PartitionUrl(part).JoinPath(Ledger)).Events().Minor()
 		blocks, err := record.Blocks().Get()
 		require.NoError(t, err)
 		assert.Equal(t, []uint64{100, 200}, blocks)
@@ -201,7 +201,7 @@ func TestBlockHold(t *testing.T) {
 		part, err := sim.Router().RouteAccount(alice)
 		require.NoError(t, err)
 
-		record := batch.Account(PartitionUrl(part).JoinPath(Ledger)).Event().Minor()
+		record := batch.Account(PartitionUrl(part).JoinPath(Ledger)).Events().Minor()
 		blocks, err := record.Blocks().Get()
 		require.NoError(t, err)
 		assert.Equal(t, []uint64{200}, blocks)
@@ -382,4 +382,43 @@ func TestBlockHoldPriority2(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Fails().
 			WithError(errors.Rejected))
+}
+
+func TestRejectSignaturesAfterExecution(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Execute
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey))
+
+	// Transaction completes
+	sim.StepUntil(
+		Txn(st.TxID).Completes())
+
+	// Sign again
+	sig := sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTxID(st.TxID).
+			Url(alice, "book", "1").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey))[1]
+
+	// Authority signature is rejected
+	sim.StepUntil(
+		Sig(sig.TxID).AuthoritySignature().Fails().
+			WithError(errors.NotAllowed).
+			WithMessagef("%v has not been initiated", st.TxID))
 }
