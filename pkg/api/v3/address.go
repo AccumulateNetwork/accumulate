@@ -7,6 +7,8 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -78,21 +80,30 @@ func ParseServiceAddress(s string) (*ServiceAddress, error) {
 		a.Argument = parts[1]
 	}
 
-	// Parse as a known type
-	var ok bool
-	a.Type, ok = ServiceTypeByName(parts[0])
-	if ok {
-		return a, nil
-	}
-
-	// Or as a hex number
-	v, err := strconv.ParseUint(parts[0], 16, 64)
-	if err == nil {
-		a.Type = ServiceType(v)
-		return a, nil
+	var err error
+	a.Type, err = parseServiceType(parts[0])
+	if err != nil {
+		return nil, err
 	}
 
 	return a, nil
+}
+
+func parseServiceType(s string) (ServiceType, error) {
+	// Parse as a known type
+	var ok bool
+	typ, ok := ServiceTypeByName(s)
+	if ok {
+		return typ, nil
+	}
+
+	// Or as a hex number
+	v, err := strconv.ParseUint(s, 16, 64)
+	if err == nil {
+		return ServiceType(v), nil
+	}
+
+	return 0, fmt.Errorf("invalid Service Type %q", s)
 }
 
 // String returns {type}:{partition}, or {type} if the partition is empty.
@@ -238,4 +249,31 @@ func (serviceAddressTranscoder) ValidateBytes(b []byte) error {
 	v := new(ServiceAddress)
 	err := v.UnmarshalBinary(b)
 	return errors.EncodingError.Wrap(err)
+}
+
+func (a *ServiceAddress) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Type     string `json:"type,omitempty"`
+		Argument string `json:"argument,omitempty"`
+	}{
+		Type:     a.Type.String(),
+		Argument: a.Argument,
+	})
+}
+
+func (a *ServiceAddress) UnmarshalJSON(b []byte) error {
+	var v struct {
+		Type     string `json:"type,omitempty"`
+		Argument string `json:"argument,omitempty"`
+	}
+	err := json.Unmarshal(b, &v)
+	if err != nil {
+		return err
+	}
+	a.Type, err = parseServiceType(strings.TrimPrefix(v.Type, "ServiceType:"))
+	if err != nil {
+		return err
+	}
+	a.Argument = v.Argument
+	return nil
 }
