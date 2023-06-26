@@ -80,6 +80,7 @@ func checkNode(_ *cobra.Command, args []string) {
 	}
 	check(pc.Close())
 
+	// Indirect
 	pc, err = p2p.New(p2p.Options{
 		Network:        ni.Network,
 		Key:            key,

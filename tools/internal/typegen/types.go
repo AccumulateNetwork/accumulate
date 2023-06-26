@@ -338,8 +338,6 @@ type Field struct {
 	MarshalAs MarshalAs `yaml:"marshal-as"`
 	// MarshalType specifies that the field should be marshalled as the given type.
 	MarshalAsType TypeCode `yaml:"marshal-as-type"`
-	// JsonConverter specifies a type that should be used to JSON un/marshal the field.
-	JsonConverter string `yaml:"json-converter"`
 	// Repeatable specifies whether the the field is repeatable (represented as a slice).
 	Repeatable bool
 	// Pointer specifies whether the field is a pointer.
