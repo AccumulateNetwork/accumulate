@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -29,6 +30,7 @@ func CompareHash(u, v [32]byte) int  { return bytes.Compare(u[:], v[:]) }
 func CompareTxid(u, v *url.TxID) int { return u.Compare(v) }
 func CompareUrl(u, v *url.URL) int   { return u.Compare(v) }
 func CompareUint(u, v uint64) int    { return int(u) - int(v) }
+func CompareString(u, v string) int  { return strings.Compare(u, v) }
 
 func ParseString(s string) (string, error) { return s, nil }
 
@@ -60,11 +62,35 @@ var UintWrapper = &wrapperFuncs[uint64]{
 	unmarshal: encoding.UnmarshalUint,
 }
 
+// BoolWrapper defines un/marshalling functions for boolean fields.
+var BoolWrapper = &wrapperFuncs[bool]{
+	copy: copyValue[bool],
+	marshal: func(value bool) ([]byte, error) {
+		if value {
+			return []byte{1}, nil
+		}
+		return []byte{0}, nil
+	},
+	unmarshal: func(data []byte) (bool, error) {
+		if len(data) < 1 {
+			return false, encoding.ErrNotEnoughData
+		}
+		return data[0] == 1, nil
+	},
+}
+
 // BytesWrapper defines un/marshalling functions for byte slice fields.
 var BytesWrapper = &wrapperFuncs[[]byte]{
 	copy:      func(v []byte) []byte { u := make([]byte, len(v)); copy(u, v); return u },
 	marshal:   oldMarshal(encoding.MarshalBytes),
 	unmarshal: encoding.UnmarshalBytes,
+}
+
+// RawWrapper defines un/marshalling functions for raw byte slice fields.
+var RawWrapper = &wrapperFuncs[[]byte]{
+	copy:      func(v []byte) []byte { u := make([]byte, len(v)); copy(u, v); return u },
+	marshal:   func(value []byte) ([]byte, error) { return value, nil },
+	unmarshal: func(data []byte) ([]byte, error) { return data, nil },
 }
 
 // HashWrapper defines un/marshalling functions for hash fields.
