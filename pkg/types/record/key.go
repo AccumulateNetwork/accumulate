@@ -105,6 +105,8 @@ func (k *Key) String() string {
 			s[i] = hex.EncodeToString(v)
 		case [32]byte:
 			s[i] = hex.EncodeToString(v[:])
+		case string:
+			s[i] = v
 		default:
 			s[i] = fmt.Sprint(v)
 		}
