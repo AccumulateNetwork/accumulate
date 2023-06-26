@@ -33,6 +33,9 @@ const (
 	// MessageTypePseudoSynthetic wraps produced messages between accounts in
 	// the same domain that would otherwise be synthetic.
 	MessageTypePseudoSynthetic
+
+	// MessageTypeExpiredTransaction expires a pending transaction.
+	MessageTypeExpiredTransaction
 )
 
 // NetworkUpdate is an update to a network account that has been pushed from the
@@ -57,6 +60,12 @@ type PseudoSynthetic struct {
 	Message messaging.Message
 }
 
+// ExpiredTransaction expires a pending transaction.
+type ExpiredTransaction struct {
+	internalMessage
+	TxID *url.TxID
+}
+
 func (m *NetworkUpdate) Type() messaging.MessageType { return MessageTypeNetworkUpdate }
 func (m *NetworkUpdate) ID() *url.TxID               { return m.Account.WithTxID(m.Cause) }
 func (m *NetworkUpdate) CopyAsInterface() any        { return m }
@@ -69,6 +78,11 @@ func (m *PseudoSynthetic) Type() messaging.MessageType { return MessageTypePseud
 func (m *PseudoSynthetic) ID() *url.TxID               { return m.Message.ID() }
 func (m *PseudoSynthetic) CopyAsInterface() any        { return m }
 func (m *PseudoSynthetic) Unwrap() messaging.Message   { return m.Message }
+
+func (m *ExpiredTransaction) Type() messaging.MessageType { return MessageTypeExpiredTransaction }
+func (m *ExpiredTransaction) ID() *url.TxID               { return m.TxID }
+func (m *ExpiredTransaction) CopyAsInterface() any        { return m }
+func (m *ExpiredTransaction) Hash() [32]byte              { return m.TxID.Hash() }
 
 // internalMessage can be embedded in another type to implement an internal
 // [messaging.Message]. The message is internal in that it cannot be marshalled,

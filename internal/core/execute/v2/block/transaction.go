@@ -56,7 +56,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 		// Ok
 	default:
 		err = errors.UnknownError.WithFormat("load principal: %w", err)
-		return x.recordFailedTransaction(batch, delivery, err)
+		return t.recordFailedTransaction(batch, delivery, err)
 	}
 
 	// Check if the transaction is ready to be executed
@@ -66,10 +66,10 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 			// If a synthetic transaction is re-delivered, don't record anything
 			return status, new(chain.ProcessTransactionState), nil
 		}
-		return x.recordFailedTransaction(batch, delivery, err)
+		return t.recordFailedTransaction(batch, delivery, err)
 	}
 	if !ready {
-		return x.recordPendingTransaction(&x.Describe, batch, delivery)
+		return t.recordPendingTransaction(&x.Describe, batch, delivery)
 	}
 
 	// Set up the state manager
@@ -81,7 +81,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	if !ok {
 		// An invalid transaction should not make it to this point
 		err = errors.InternalError.WithFormat("missing executor for %v", delivery.Transaction.Body.Type())
-		return x.recordFailedTransaction(batch, delivery, err)
+		return t.recordFailedTransaction(batch, delivery, err)
 	}
 
 	r2 := x.BlockTimers.Start(executor.Type())
@@ -89,23 +89,23 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	x.BlockTimers.Stop(r2)
 	if err != nil {
 		err = errors.UnknownError.Wrap(err)
-		return x.recordFailedTransaction(batch, delivery, err)
+		return t.recordFailedTransaction(batch, delivery, err)
 	}
 
 	// Do extra processing for special network accounts
 	err = x.processNetworkAccountUpdates(st.GetBatch(), delivery, principal)
 	if err != nil {
-		return x.recordFailedTransaction(batch, delivery, err)
+		return t.recordFailedTransaction(batch, delivery, err)
 	}
 
 	// Commit changes, queue state creates for synthetic transactions
 	state, err := st.Commit()
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)
-		return x.recordFailedTransaction(batch, delivery, err)
+		return t.recordFailedTransaction(batch, delivery, err)
 	}
 
-	return x.recordSuccessfulTransaction(batch, state, delivery, result)
+	return t.recordSuccessfulTransaction(batch, state, delivery, result)
 }
 
 func (t *TransactionContext) transactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
@@ -127,7 +127,7 @@ func (t *TransactionContext) transactionIsReady(batch *database.Batch, delivery 
 
 func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) (bool, error) {
 	x := t.Executor
-	isInit, _, err := transactionIsInitiated(batch, delivery.Transaction)
+	isInit, _, err := transactionIsInitiated(batch, delivery.Transaction.ID())
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
 	}
@@ -368,7 +368,7 @@ func (m *MessageContext) blockThresholdIsMet(batch *database.Batch, transaction 
 
 	// Check the hold index against the latest DN block height
 	if hold.MinorBlock != 0 {
-		dnHeight, err := m.getDnHeight(batch)
+		dnHeight, err := getDnHeight(m.Executor.Describe, batch)
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -380,8 +380,8 @@ func (m *MessageContext) blockThresholdIsMet(batch *database.Batch, transaction 
 	return true, nil
 }
 
-func (m *MessageContext) getDnHeight(batch *database.Batch) (uint64, error) {
-	c := batch.Account(m.Executor.Describe.AnchorPool()).MainChain()
+func getDnHeight(desc config.Describe, batch *database.Batch) (uint64, error) {
+	c := batch.Account(desc.AnchorPool()).MainChain()
 	head, err := c.Head().Get()
 	if err != nil {
 		return 0, errors.UnknownError.WithFormat("load anchor ledger main chain head: %w", err)
@@ -463,7 +463,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	return true, nil
 }
 
-func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Delivery, state *chain.ProcessTransactionState, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
+func recordTransaction(batch *database.Batch, delivery *chain.Delivery, state *chain.ProcessTransactionState, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
 	// Store the transaction state (without signatures)
 	//
 	// TODO This should not always be a UserTransaction
@@ -489,10 +489,13 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	return status, nil
 }
 
-func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *TransactionContext) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+	// Do not mark pending because we only want to do that if the transaction
+	// was just initiated
+
 	// Record the transaction
 	state := new(chain.ProcessTransactionState)
-	status, err := x.recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
+	status, err := recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
 		status.Code = errors.Pending
 	})
 	if err != nil {
@@ -504,7 +507,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 	}
 
 	if delivery.Transaction.Body.Type().IsSynthetic() {
-		x.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "module", "synthetic")
+		x.Executor.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "module", "synthetic")
 		return status, state, nil
 	}
 
@@ -517,9 +520,11 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 	return status, state, nil
 }
 
-func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTransactionState, delivery *chain.Delivery, result protocol.TransactionResult) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *TransactionContext) recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTransactionState, delivery *chain.Delivery, result protocol.TransactionResult) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+	x.State.MarkTransactionDelivered(delivery.Transaction.ID())
+
 	// Record the transaction
-	status, err := x.recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
+	status, err := recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
 		status.Code = errors.Delivered
 		if result == nil {
 			status.Result = new(protocol.EmptyResult)
@@ -566,10 +571,12 @@ func selectTargetChain(account *database.Account, body protocol.TransactionBody)
 	return account.MainChain()
 }
 
-func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chain.Delivery, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, delivery *chain.Delivery, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+	x.State.MarkTransactionDelivered(delivery.Transaction.ID())
+
 	// Record the transaction
 	state := new(chain.ProcessTransactionState)
-	status, err := x.recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
+	status, err := recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
 		status.Set(failure)
 	})
 	if err != nil {
@@ -587,7 +594,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Execute the post-failure hook if the transaction executor defines one
-	if val, ok := getValidator[chain.TransactionExecutorCleanup](x, delivery.Transaction.Body.Type()); ok {
+	if val, ok := getValidator[chain.TransactionExecutorCleanup](x.Executor, delivery.Transaction.Body.Type()); ok {
 		err = val.DidFail(state, delivery.Transaction)
 		if err != nil {
 			return nil, nil, err
@@ -601,7 +608,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Issue a refund to the initial signer
-	isInit, initiator, err := transactionIsInitiated(batch, delivery.Transaction)
+	isInit, initiator, err := transactionIsInitiated(batch, delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, errors.UnknownError.Wrap(err)
 	}
@@ -610,7 +617,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// But only if the paid paid is larger than the max failure paid
-	paid, err := x.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
+	paid, err := x.Executor.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
 	if err != nil {
 		return nil, nil, fmt.Errorf("compute fee: %w", err)
 	}
