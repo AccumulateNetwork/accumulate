@@ -1040,4 +1040,5 @@ func TestProofOverride(t *testing.T) {
 
 	// Verify the burn completes
 	sim.StepUntil(Txn(st.TxID).Completes())
+	sim.StepUntil(Txn(synthId).Succeeds())
 }
