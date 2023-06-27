@@ -1,11 +1,45 @@
 # Changelog
 
-## 1.1
+## 1.1.3
+
+- Fixes a bug that can lead to unresolvable synthetic transactions (#3351, !865)
+
+## 1.1 (.2)
+
+1.1.0 was retracted due to a consensus bug. 1.1.1 was retracted due to user
+error (the wrong commit was tagged).
+
+### Configuration changes
+
+```toml
+##### Required (DNN only) #####
+
+# Add a new section
+[p2p]
+  # Bootstrap peers for connecting to Accumulate's libp2p network
+  bootstrap-peers = [
+    "/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
+  ]
+  # API v3/libp2p listening addresses
+  listen = [
+    "/ip4/0.0.0.0/tcp/16593",
+    "/ip4/0.0.0.0/udp/16593/quic",
+  ]
+
+##### Recommended (DNN and BVNN) #####
+
+# Update the existing section
+[snapshots]
+  # Disable snapshot collection to reduce resource consumption
+  enable = false
+```
 
 ### API
 
-- For certain types, zero-valued fields will be omitted from JSON output instead of being returned as null or zero.
-  - `sendTokens.hash`, `signature.transactionHash`, `tokenIssuer.issued`, `dataAccount.entry`
+- For certain types, zero-valued fields will be omitted from JSON output instead
+  of being returned as null or zero.
+  - `sendTokens.hash`, `signature.transactionHash`, `tokenIssuer.issued`,
+    `dataAccount.entry`
 
 ## 1.0.3
 
