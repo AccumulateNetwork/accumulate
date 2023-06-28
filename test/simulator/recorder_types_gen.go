@@ -49,7 +49,7 @@ type recordHeader struct {
 	fieldsSet []bool
 	Partition *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	Config    *accumulated.NodeInit   `json:"config,omitempty" form:"config" query:"config" validate:"required"`
-	NodeNum   int64                   `json:"nodeNum,omitempty" form:"nodeNum" query:"nodeNum" validate:"required"`
+	NodeID    string                  `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
 	extraData []byte
 }
 
@@ -109,7 +109,7 @@ func (v *recordHeader) Copy() *recordHeader {
 	if v.Config != nil {
 		u.Config = (v.Config).Copy()
 	}
-	u.NodeNum = v.NodeNum
+	u.NodeID = v.NodeID
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -189,7 +189,7 @@ func (v *recordHeader) Equal(u *recordHeader) bool {
 	case !((v.Config).Equal(u.Config)):
 		return false
 	}
-	if !(v.NodeNum == u.NodeNum) {
+	if !(v.NodeID == u.NodeID) {
 		return false
 	}
 
@@ -352,7 +352,7 @@ func (v *recordChange) IsValid() error {
 var fieldNames_recordHeader = []string{
 	1: "Partition",
 	2: "Config",
-	3: "NodeNum",
+	3: "NodeID",
 }
 
 func (v *recordHeader) MarshalBinary() ([]byte, error) {
@@ -369,8 +369,8 @@ func (v *recordHeader) MarshalBinary() ([]byte, error) {
 	if !(v.Config == nil) {
 		writer.WriteValue(2, v.Config.MarshalBinary)
 	}
-	if !(v.NodeNum == 0) {
-		writer.WriteInt(3, v.NodeNum)
+	if !(len(v.NodeID) == 0) {
+		writer.WriteString(3, v.NodeID)
 	}
 
 	_, _, err := writer.Reset(fieldNames_recordHeader)
@@ -395,9 +395,9 @@ func (v *recordHeader) IsValid() error {
 		errs = append(errs, "field Config is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field NodeNum is missing")
-	} else if v.NodeNum == 0 {
-		errs = append(errs, "field NodeNum is not set")
+		errs = append(errs, "field NodeID is missing")
+	} else if len(v.NodeID) == 0 {
+		errs = append(errs, "field NodeID is not set")
 	}
 
 	switch len(errs) {
@@ -498,8 +498,8 @@ func (v *recordHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(accumulated.NodeInit); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Config = x
 	}
-	if x, ok := reader.ReadInt(3); ok {
-		v.NodeNum = x
+	if x, ok := reader.ReadString(3); ok {
+		v.NodeID = x
 	}
 
 	seen, err := reader.Reset(fieldNames_recordHeader)
