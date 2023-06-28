@@ -793,6 +793,7 @@ type AccountEvents struct {
 	minor   *AccountEventsMinor
 	major   *AccountEventsMajor
 	backlog *AccountEventsBacklog
+	bpt     *bpt.BPT
 }
 
 func (c *AccountEvents) Key() *record.Key { return c.key }
@@ -839,6 +840,14 @@ func (c *AccountEvents) newBacklog() *AccountEventsBacklog {
 	return v
 }
 
+func (c *AccountEvents) BPT() *bpt.BPT {
+	return values.GetOrCreate(c, &c.bpt, (*AccountEvents).newBPT)
+}
+
+func (c *AccountEvents) newBPT() *bpt.BPT {
+	return newBPT(c, c.logger.L, c.store, c.key.Append("BPT"), "events-bpt", c.label+" "+"bpt")
+}
+
 func (c *AccountEvents) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for events")
@@ -851,6 +860,8 @@ func (c *AccountEvents) Resolve(key *record.Key) (record.Record, *record.Key, er
 		return c.Major(), key.SliceI(1), nil
 	case "Backlog":
 		return c.Backlog(), key.SliceI(1), nil
+	case "BPT":
+		return c.BPT(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for events")
 	}
@@ -870,6 +881,9 @@ func (c *AccountEvents) IsDirty() bool {
 	if values.IsDirty(c.backlog) {
 		return true
 	}
+	if values.IsDirty(c.bpt) {
+		return true
+	}
 
 	return false
 }
@@ -886,6 +900,7 @@ func (c *AccountEvents) Walk(opts record.WalkOptions, fn record.WalkFunc) error 
 	values.WalkField(&err, c.minor, c.newMinor, opts, fn)
 	values.WalkField(&err, c.major, c.newMajor, opts, fn)
 	values.WalkField(&err, c.backlog, c.newBacklog, opts, fn)
+	values.WalkField(&err, c.bpt, c.newBPT, opts, fn)
 	return err
 }
 
@@ -898,6 +913,7 @@ func (c *AccountEvents) Commit() error {
 	values.Commit(&err, c.minor)
 	values.Commit(&err, c.major)
 	values.Commit(&err, c.backlog)
+	values.Commit(&err, c.bpt)
 
 	return err
 }
@@ -1127,17 +1143,17 @@ type AccountEventsBacklog struct {
 	label  string
 	parent *AccountEvents
 
-	expired values.List[*url.TxID]
+	expired values.Set[*url.TxID]
 }
 
 func (c *AccountEventsBacklog) Key() *record.Key { return c.key }
 
-func (c *AccountEventsBacklog) Expired() values.List[*url.TxID] {
+func (c *AccountEventsBacklog) getExpired() values.Set[*url.TxID] {
 	return values.GetOrCreate(c, &c.expired, (*AccountEventsBacklog).newExpired)
 }
 
-func (c *AccountEventsBacklog) newExpired() values.List[*url.TxID] {
-	return values.NewList(c.logger.L, c.store, c.key.Append("Expired"), c.label+" "+"expired", values.Wrapped(values.TxidWrapper))
+func (c *AccountEventsBacklog) newExpired() values.Set[*url.TxID] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Expired"), c.label+" "+"expired", values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *AccountEventsBacklog) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1147,7 +1163,7 @@ func (c *AccountEventsBacklog) Resolve(key *record.Key) (record.Record, *record.
 
 	switch key.Get(0) {
 	case "Expired":
-		return c.Expired(), key.SliceI(1), nil
+		return c.getExpired(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for backlog")
 	}

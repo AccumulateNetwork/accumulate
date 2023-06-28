@@ -7,6 +7,7 @@
 package internal
 
 import (
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -35,4 +36,73 @@ func TestAccountState(t *testing.T) {
 	h2, err := (&observedAccount{a, batch}).hashState()
 	require.NoError(t, err)
 	require.NotEqual(t, h1.MerkleHash(), h2.MerkleHash())
+}
+
+func TestEvents(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	db.SetObserver(databaseObserver{})
+	ledgerUrl := protocol.DnUrl().JoinPath(protocol.Ledger)
+
+	// Setup
+	batch := db.Begin(true)
+	defer batch.Discard()
+	ledger := new(protocol.SystemLedger)
+	ledger.Url = ledgerUrl
+	ledger.Index = 5
+	require.NoError(t, batch.Account(ledgerUrl).Main().Put(ledger))
+	require.NoError(t, batch.Commit())
+
+	doesChangeBpt := func(msg string, fn func(events *database.AccountEvents)) {
+		t.Helper()
+
+		batch := db.Begin(true)
+		defer batch.Discard()
+
+		before, err := batch.BPT().GetRootHash()
+		require.NoError(t, err)
+
+		account := batch.Account(ledgerUrl)
+		fn(account.Events())
+		require.NoError(t, account.Commit())
+
+		after, err := batch.BPT().GetRootHash()
+		require.NoError(t, err)
+		require.NotEqual(t, hex.EncodeToString(before[:]), hex.EncodeToString(after[:]), msg)
+
+		require.NoError(t, batch.Commit())
+	}
+
+	doesChangeBpt("Expired backlog additions are tracked", func(events *database.AccountEvents) {
+		err := events.Backlog().Expired().Add(url.MustParseTxID("acc://e43be90e349210456662d8b8bdc9cc9e5e46ccb07f2129e7b57a8195e5e916d5@ACME"))
+		require.NoError(t, err)
+	})
+
+	doesChangeBpt("Pending transaction additions are tracked", func(events *database.AccountEvents) {
+		err := events.Major().Pending(1).Add(url.MustParseTxID("acc://e43be90e349210456662d8b8bdc9cc9e5e46ccb07f2129e7b57a8195e5e916d5@ACME"))
+		require.NoError(t, err)
+	})
+
+	doesChangeBpt("Held vote additions are tracked", func(events *database.AccountEvents) {
+		vote := &protocol.AuthoritySignature{
+			Authority: url.MustParse("foo"),
+			TxID:      url.MustParseTxID("acc://e43be90e349210456662d8b8bdc9cc9e5e46ccb07f2129e7b57a8195e5e916d5@ACME"),
+		}
+		err := events.Minor().Votes(1).Add(vote)
+		require.NoError(t, err)
+	})
+
+	doesChangeBpt("Expired backlog removals are tracked", func(events *database.AccountEvents) {
+		err := events.Backlog().Expired().Put(nil)
+		require.NoError(t, err)
+	})
+
+	doesChangeBpt("Pending transaction removals are tracked", func(events *database.AccountEvents) {
+		err := events.Major().Pending(1).Put(nil)
+		require.NoError(t, err)
+	})
+
+	doesChangeBpt("Held vote removals are tracked", func(events *database.AccountEvents) {
+		err := events.Minor().Votes(1).Put(nil)
+		require.NoError(t, err)
+	})
 }
