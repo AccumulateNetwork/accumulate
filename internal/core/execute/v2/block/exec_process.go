@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -120,31 +119,49 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 	var statuses []*protocol.TransactionStatus
 	b := d.Block
 
-	// Do this now for the sake of comparing logs
 	for _, msg := range d.messages {
-		msg, ok := msg.(*messaging.TransactionMessage)
-		if !ok {
-			continue
+		if m, ok := msg.(*internal.PseudoSynthetic); ok {
+			msg = m.Message
+		}
+
+		var typ any = msg.Type()
+		if msg.Type() >= internal.MessageTypeInternal {
+			typ = "internal"
 		}
 
 		fn := b.Executor.logger.Debug
 		kv := []interface{}{
 			"block", b.Index,
-			"type", msg.Transaction.Body.Type(),
-			"txn-hash", logging.AsHex(msg.Transaction.GetHash()).Slice(0, 4),
-			"principal", msg.Transaction.Header.Principal,
+			"type", typ,
+			"id", msg.ID(),
 		}
-		switch msg.Transaction.Body.Type() {
-		case protocol.TransactionTypeDirectoryAnchor,
-			protocol.TransactionTypeBlockValidatorAnchor:
+		if d.pass > 1 {
+			kv = append(kv, "pass", d.pass)
+		}
+
+		switch msg := msg.(type) {
+		case *messaging.TransactionMessage:
+			kv = append(kv, "txn-type", msg.Transaction.Body.Type())
+
+		case *messaging.BlockAnchor:
 			fn = b.Executor.logger.Info
 			kv = append(kv, "module", "anchoring")
+
+		case *messaging.SyntheticMessage:
+			if seq, ok := msg.Message.(*messaging.SequencedMessage); ok {
+				kv = append(kv, "inner-type", seq.Message.ID())
+				kv = append(kv, "source", seq.Source)
+				kv = append(kv, "dest", seq.Destination)
+				kv = append(kv, "seq", seq.Number)
+
+				switch msg := seq.Message.(type) {
+				case *messaging.TransactionMessage:
+					kv = append(kv, "txn-type", msg.Transaction.Body.Type())
+				}
+			}
 		}
-		if d.pass > 0 {
-			fn("Executing additional", kv...)
-		} else {
-			fn("Executing transaction", kv...)
-		}
+
+		fn("Executing message", kv...)
 	}
 
 	// Process each message

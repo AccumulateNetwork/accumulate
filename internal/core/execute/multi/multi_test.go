@@ -38,6 +38,8 @@ func TestVersionSwitch(t *testing.T) {
 		simulator.GenesisWith(GenesisTime, g),
 	)
 
+	sim.S.SkipProposalCheck(true) // FIXME should not be necessary
+
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])

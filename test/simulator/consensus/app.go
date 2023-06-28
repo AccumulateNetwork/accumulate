@@ -7,6 +7,8 @@
 package consensus
 
 import (
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -33,8 +35,10 @@ type InfoResponse struct {
 }
 
 type CheckRequest struct {
+	Context  context.Context
 	Envelope *messaging.Envelope
 	New      bool
+	Pretend  bool
 }
 
 type CheckResponse struct {
@@ -42,11 +46,13 @@ type CheckResponse struct {
 }
 
 type InitRequest struct {
-	Snapshot ioutil2.SectionReader
+	Snapshot   ioutil2.SectionReader
+	Validators []*execute.ValidatorUpdate
 }
 
 type InitResponse struct {
-	Hash []byte
+	Hash       []byte
+	Validators []*execute.ValidatorUpdate
 }
 
 type BeginRequest struct {
@@ -104,7 +110,7 @@ func (a *ExecutorApp) Init(req *InitRequest) (*InitResponse, error) {
 	}
 
 	// Initialize the executor
-	_, err = a.Executor.Init(nil)
+	val, err := a.Executor.Init(req.Validators)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
 	}
@@ -113,7 +119,7 @@ func (a *ExecutorApp) Init(req *InitRequest) (*InitResponse, error) {
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
 	}
-	return &InitResponse{Hash: root[:]}, nil
+	return &InitResponse{Hash: root[:], Validators: val}, nil
 }
 
 func (a *ExecutorApp) Begin(req *BeginRequest) (*BeginResponse, error) {

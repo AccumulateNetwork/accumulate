@@ -48,7 +48,7 @@ func DiffValidators(g, h *GlobalValues, partitionID string) (map[[32]byte]Valida
 			delete(updates, k32)
 		} else {
 			// If the key is only present in new, mark it for addition
-			updates[k32] = 1
+			updates[k32] = ValidatorUpdateAdd
 		}
 	}
 
