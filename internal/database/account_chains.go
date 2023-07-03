@@ -7,7 +7,6 @@
 package database
 
 import (
-	"encoding"
 	"strings"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -150,16 +149,6 @@ func (c *Chain2) IndexOf(hash []byte) (int64, error) {
 // Entry loads the entry in the chain at the given height.
 func (c *Chain2) Entry(height int64) ([]byte, error) {
 	return c.inner.Get(height)
-}
-
-// EntryAs loads and unmarshals the entry in the chain at the given height.
-func (c *Chain2) EntryAs(height int64, value encoding.BinaryUnmarshaler) error {
-	data, err := c.Entry(height)
-	if err != nil {
-		return err
-	}
-
-	return value.UnmarshalBinary(data)
 }
 
 // Get converts the Chain2 to a Chain, updating the account's chains index and
