@@ -21,6 +21,7 @@ type Batch struct {
 	txn      *badger.Txn
 	writable bool
 	prefix   string
+	cache    map[string][]byte
 }
 
 var _ storage.KeyValueTxn = (*Batch)(nil)
@@ -32,7 +33,7 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 func (db *DB) BeginWithPrefix(writable bool, prefix string) storage.KeyValueTxn {
 	b := new(Batch)
 	b.db = db
-	b.txn = db.badgerDB.NewTransaction(writable)
+	b.txn = db.badgerDB.NewTransaction(false)
 	b.writable = writable
 	b.prefix = prefix
 	if db.logger == nil {
@@ -69,8 +70,12 @@ func (b *Batch) Put(key storage.Key, value []byte) error {
 		defer l.Unlock()
 	}
 
+	if b.cache == nil {
+		b.cache = map[string][]byte{}
+	}
 	k := b.makeKey("", key)
-	return b.txn.Set(k, value)
+	b.cache[k] = value
+	return nil
 }
 
 func (b *Batch) PutAll(values map[storage.Key][]byte) error {
@@ -80,11 +85,12 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 		defer l.Unlock()
 	}
 
+	if b.cache == nil {
+		b.cache = map[string][]byte{}
+	}
 	for k, v := range values {
-		err := b.txn.Set(b.makeKey("", k), v)
-		if err != nil {
-			return err
-		}
+		k := b.makeKey("", k)
+		b.cache[k] = v
 	}
 
 	return nil
@@ -97,26 +103,31 @@ func (b *Batch) commit(values map[memory.PrefixedKey][]byte) error {
 		defer l.Unlock()
 	}
 
+	if b.cache == nil {
+		b.cache = map[string][]byte{}
+	}
 	for k, v := range values {
-		err := b.txn.Set(b.makeKey(k.Prefix, k.Key), v)
-		if err != nil {
-			return err
-		}
+		k := b.makeKey(k.Prefix, k.Key)
+		b.cache[k] = v
 	}
 
 	return nil
 }
 
-func (b *Batch) makeKey(prefix string, key storage.Key) []byte {
+func (b *Batch) makeKey(prefix string, key storage.Key) string {
 	k := new(bytes.Buffer)
 	k.Grow(len(b.prefix) + len(prefix) + 32)
 	k.WriteString(b.prefix)
 	k.WriteString(prefix)
 	k.Write(key[:])
-	return k.Bytes()
+	return k.String()
 }
 
 func (b *Batch) Get(key storage.Key) (v []byte, err error) {
+	k := b.makeKey("", key)
+	if v, ok := b.cache[k]; ok {
+		return v, nil
+	}
 	return b.get("", key)
 }
 
@@ -127,7 +138,7 @@ func (b *Batch) get(prefix string, key storage.Key) (v []byte, err error) {
 		defer l.Unlock()
 	}
 
-	item, err := b.txn.Get(b.makeKey(prefix, key))
+	item, err := b.txn.Get([]byte(b.makeKey(prefix, key)))
 	switch {
 	case err == nil:
 		// Ok
@@ -152,8 +163,16 @@ func (b *Batch) Commit() error {
 	} else {
 		defer l.Unlock()
 	}
+	b.txn.Discard()
 
-	return b.txn.Commit()
+	wb := b.db.badgerDB.NewWriteBatch()
+	for k, v := range b.cache {
+		err := wb.Set([]byte(k), v)
+		if err != nil {
+			return err
+		}
+	}
+	return wb.Flush()
 }
 
 func (b *Batch) Discard() {
