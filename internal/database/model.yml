@@ -113,9 +113,15 @@
         - name: Expired
           description: tracks pending transactions that have expired
           type: state
+          private: true
           dataType: txid
           pointer: true
-          collection: list
+          collection: set
+      - name: BPT
+        type: other
+        dataType: bpt.BPT
+        constructor: newBPT
+        pointer: true
 
     - name: Transaction
       type: entity
