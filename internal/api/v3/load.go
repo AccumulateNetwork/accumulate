@@ -308,7 +308,7 @@ func getAccountAuthoritySet(batch *database.Batch, account *url.URL) (*protocol.
 	return getAccountAuthoritySet(batch, url)
 }
 
-func normalizeBlockEntries(batch *database.Batch, ledger *protocol.BlockLedger) ([]*protocol.BlockEntry, error) {
+func normalizeBlockEntries(batch *database.Batch, ledger *protocol.BlockLedger) ([]*protocol.BlockEntry, error) { //nolint:unused
 	// For each account+chain, find the entry with the largest index. This is
 	// necessary because some protocol versions add every chain entry to the
 	// ledger and others only add the last.
