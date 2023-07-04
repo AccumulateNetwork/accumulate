@@ -141,7 +141,6 @@ func New2(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Net
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 		}
-		// fmt.Println("Init", id)
 		err = s.partitions[id].initChain(snapshot)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("init %s: %w", id, err)

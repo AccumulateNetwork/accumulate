@@ -8,8 +8,8 @@ recordHeader:
     type: accumulated.NodeInit
     marshal-as: reference
     pointer: true
-  - name: NodeNum
-    type: int
+  - name: NodeID
+    type: string
 
 recordBlock:
   fields:
