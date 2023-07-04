@@ -43,6 +43,7 @@ type Node struct {
 	database   *database.Database
 	nodeKey    []byte
 	privValKey []byte
+	describe   config.Describe
 
 	consensus *consensus.Node
 
@@ -163,7 +164,7 @@ func (n *Node) initValidator(rec consensus.Recorder) error {
 	})
 
 	// Describe the network, from the node's perspective
-	network := config.Describe{
+	n.describe = config.Describe{
 		NetworkType:  n.partition.Type,
 		PartitionId:  n.partition.ID,
 		LocalAddress: n.init.AdvertizeAddress,
@@ -175,7 +176,7 @@ func (n *Node) initValidator(rec consensus.Recorder) error {
 		Logger:        n.logger,
 		Database:      n,
 		Key:           n.init.PrivValKey,
-		Describe:      network,
+		Describe:      n.describe,
 		Router:        n.simulator.router,
 		EventBus:      n.eventBus,
 		NewDispatcher: n.simulator.newDispatcher,
@@ -202,7 +203,7 @@ func (n *Node) initValidator(rec consensus.Recorder) error {
 	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{
 		Logger:        n.logger,
 		TxMaxWaitTime: time.Hour,
-		Describe:      &network,
+		Describe:      &n.describe,
 		LocalV3:       (*nodeService)(n),
 		Querier:       (*simService)(n.simulator),
 		Submitter:     (*simService)(n.simulator),
@@ -225,7 +226,7 @@ func (n *Node) initValidator(rec consensus.Recorder) error {
 	}
 
 	// Create the consensus node
-	n.consensus = consensus.NewNode(&consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus}, rec)
+	n.consensus = consensus.NewNode(&consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, rec)
 	return nil
 }
 
@@ -281,7 +282,7 @@ func (n *Node) initSummary(rec consensus.Recorder) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	n.consensus = consensus.NewNode(&consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus}, rec)
+	n.consensus = consensus.NewNode(&consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, rec)
 	return nil
 }
 

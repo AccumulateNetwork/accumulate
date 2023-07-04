@@ -30,6 +30,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -323,12 +324,10 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 
 	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
-		batch := x.Database.Begin(true)
-		defer batch.Discard()
-		var snapshot []byte
-		require.NoError(s, json.Unmarshal(genDocs[x.Partition.Id].AppState, &snapshot))
-		require.NoError(tb{s}, x.Executor.RestoreSnapshot(batch, ioutil2.NewBuffer(snapshot)))
-		require.NoError(tb{s}, batch.Commit())
+		var snap []byte
+		require.NoError(s, json.Unmarshal(genDocs[x.Partition.Id].AppState, &snap))
+		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(snap), x.Executor.Logger, &x.Executor.Describe))
+		require.NoError(s, x.Executor.Init(x.Database))
 	}
 }
 

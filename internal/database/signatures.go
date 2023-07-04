@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func compareSignatureSetEntries(a, b *SignatureSetEntry) int {
@@ -47,6 +48,22 @@ func compareVoteEntries(a, b *VoteEntry) int {
 func (a *Account) getTransactionKeys() ([]accountTransactionKey, error) {
 	ids, err := a.Pending().Get()
 	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Get pending from book
+	acct, err := a.Main().Get()
+	switch {
+	case err == nil:
+		if page, ok := acct.(*protocol.KeyPage); ok {
+			ids2, err := a.parent.Account(page.GetAuthority()).Pending().Get()
+			if err != nil {
+				return nil, errors.UnknownError.Wrap(err)
+			}
+			ids = append(ids, ids2...)
+		}
+
+	case !errors.Is(err, errors.NotFound):
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
