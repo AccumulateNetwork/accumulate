@@ -46,7 +46,8 @@ var testRoot = func() [32]byte {
 		_, err := root.insert(&leaf{Key: e[0], Hash: e[1]})
 		must(err)
 	}
-	return root.getHash()
+	h, _ := root.getHash()
+	return h
 }()
 
 // TestInsertDirect inserts values, commits to the key-value store, recreates
