@@ -112,7 +112,7 @@ func (b *BPT) Commit() error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load params: %w", err)
 	}
-	s.RootHash = b.getRoot().getHash()
+	s.RootHash, _ = b.getRoot().getHash()
 	err = b.getState().Put(s)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store params: %w", err)
