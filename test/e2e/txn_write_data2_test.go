@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -185,6 +186,18 @@ func Test64ByteBody(t *testing.T) {
 	txn = new(Transaction)
 	require.NoError(t, txn.UnmarshalBinary(b))
 	require.True(t, txn.BodyIs64Bytes())
+	txn = txn.Copy() // Reset hash
+
+	// Sign
+	sig := new(ED25519Signature)
+	sig.Signer = alice.JoinPath("book", "1")
+	sig.SignerVersion = 1
+	sig.Timestamp = timestamp
+	sig.PublicKey = aliceKey[32:]
+	txn.Header.Initiator = *(*[32]byte)(sig.Metadata().Hash())
+
+	sig.TransactionHash = txn.ID().Hash()
+	SignED25519(sig, aliceKey, txn.Header.Initiator[:], sig.TransactionHash[:])
 
 	// Initialize
 	g := new(core.GlobalValues)
@@ -199,10 +212,9 @@ func Test64ByteBody(t *testing.T) {
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens")})
 
-	bld := build.SignatureForTransaction(txn).
-		Url(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey)
-	bld.Ignore64Byte = true
-	st := sim.SubmitTxn(MustBuild(t, bld))
+	env := &messaging.Envelope{Transaction: []*Transaction{txn}, Signatures: []Signature{sig}}
+	require.Equal(t, env.Transaction[0].ID().Hash(), env.Signatures[0].GetTransactionHash())
+	st := sim.SubmitTxn(env)
 	require.EqualError(t, st.AsError(), "cannot process transaction: body is 64 bytes long")
 }
 
