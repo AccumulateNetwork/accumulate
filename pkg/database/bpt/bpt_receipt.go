@@ -39,7 +39,7 @@ func (b *BPT) collectReceipt(BIdx, bit byte, n *branch, key [32]byte, r *merkle.
 		if value.Key == key {
 			r.Start = append(r.Start[:0], value.Hash[:]...)
 			if other != nil { // If other isn't nil, then add it to the node list of the receipt
-				h := other.getHash()
+				h, _ := other.getHash()
 				r.Entries = append(r.Entries,
 					&merkle.ReceiptEntry{Hash: h[:], Right: !right})
 			}
@@ -68,11 +68,11 @@ func (b *BPT) collectReceipt(BIdx, bit byte, n *branch, key [32]byte, r *merkle.
 
 	if other != nil {
 		// Add the hash to the receipt provided by the entry, and mark it right or not right (right flag)
-		h := other.getHash()
+		h, _ := other.getHash()
 		r.Entries = append(r.Entries, &merkle.ReceiptEntry{Hash: h[:], Right: !right})
 	}
 
-	h := n.getHash()
+	h, _ := n.getHash()
 	return h[:]
 }
 

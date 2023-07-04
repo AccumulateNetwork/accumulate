@@ -62,6 +62,17 @@ func (a *Account) Commit() error {
 		return nil
 	}
 
+	// Prevent any accounts other than the system ledger from modifying events
+	if values.IsDirty(a.events) {
+		u := a.Url()
+		if _, ok := protocol.ParsePartitionUrl(u); !ok {
+			return errors.InternalError.WithFormat("%v is not allowed to have events", u)
+		}
+		if !u.PathEqual(protocol.Ledger) {
+			return errors.InternalError.WithFormat("%v is not allowed to have events", u)
+		}
+	}
+
 	if values.IsDirty(a.main) {
 		acc, err := a.Main().Get()
 		if err != nil {
