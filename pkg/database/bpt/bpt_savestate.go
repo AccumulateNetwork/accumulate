@@ -61,11 +61,8 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 	it := b.Iterate(1000) // Process 100 entries at a time
 	vOffset := uint64(0)  // Offset from the beginning of value section
 	NodeCnt := uint64(0)  // Recalculate number of nodes
-	for {                 //
-		bptVals, ok := it.Next() // Read a thousand values from the BPT (intentionally mask the other variable)
-		if !ok {
-			break
-		}
+	for it.Next() {       //
+		bptVals := it.Value() // Read a thousand values from the BPT (intentionally mask the other variable)
 		NodeCnt += uint64(len(bptVals))
 
 		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)

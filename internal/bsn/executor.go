@@ -97,13 +97,13 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	return p, [32]byte{}, nil
 }
 
-func (x *Executor) Restore(file ioutil2.SectionReader, validators []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
+func (x *Executor) LoadSnapshot(file ioutil2.SectionReader) error {
 	header, rd, err := snapshot.Open(file)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
+		return errors.UnknownError.WithFormat("open snapshot: %w", err)
 	}
 	if header.Version != snapshot.Version1 {
-		return nil, errors.BadRequest.WithFormat("expected version %d, got %d", snapshot.Version1, header.Version)
+		return errors.BadRequest.WithFormat("expected version %d, got %d", snapshot.Version1, header.Version)
 	}
 
 	// Initialize the database
@@ -114,11 +114,11 @@ func (x *Executor) Restore(file ioutil2.SectionReader, validators []*execute.Val
 		Time:  header.Timestamp,
 	})
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("store last block info: %w", err)
+		return errors.UnknownError.WithFormat("store last block info: %w", err)
 	}
 	err = batch.Commit()
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Restore all the partition's snapshots
@@ -129,18 +129,18 @@ func (x *Executor) Restore(file ioutil2.SectionReader, validators []*execute.Val
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, errors.UnknownError.Wrap(err)
+			return errors.UnknownError.Wrap(err)
 		}
 		if s.Type() != snapshot.SectionTypeSnapshot {
 			continue // Ignore non-snapshot sections
 		}
 		rd, err := s.Open()
 		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return errors.UnknownError.Wrap(err)
 		}
 
 		if i >= len(header.PartitionSnapshotIDs) {
-			return nil, errors.BadRequest.With("invalid snapshot: number of sub-snapshots does not match the header")
+			return errors.BadRequest.With("invalid snapshot: number of sub-snapshots does not match the header")
 		}
 
 		id := strings.ToLower(header.PartitionSnapshotIDs[i])
@@ -151,15 +151,19 @@ func (x *Executor) Restore(file ioutil2.SectionReader, validators []*execute.Val
 			PartitionId: id,
 		})
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("restore %s: %w", id, err)
+			return errors.UnknownError.WithFormat("restore %s: %w", id, err)
 		}
 	}
 	if i < len(header.PartitionSnapshotIDs) {
-		return nil, errors.BadRequest.With("invalid snapshot: number of sub-snapshots does not match the header")
+		return errors.BadRequest.With("invalid snapshot: number of sub-snapshots does not match the header")
 	}
 
+	return nil
+}
+
+func (x *Executor) Init(validators []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
 	// Load and publish globals
-	batch = NewChangeSet(x.store, x.logger)
+	batch := NewChangeSet(x.store, x.logger)
 	defer batch.Discard()
 	g, err := x.loadGlobals(protocol.Directory, batch, nil, true)
 	if err != nil {

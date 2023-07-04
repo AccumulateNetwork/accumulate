@@ -15,7 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -58,8 +57,8 @@ func (x *ExecutorV1) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	return b, h, err
 }
 
-func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
-	err = (*block.Executor)(x).RestoreSnapshot(x.Database, snapshot)
+func (x *ExecutorV1) Init(validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
+	err = (*block.Executor)(x).Init(x.Database)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
