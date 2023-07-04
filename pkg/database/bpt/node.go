@@ -28,7 +28,7 @@ type node interface {
 	IsDirty() bool
 
 	// getHash returns the hash of the node, recalculating it if necessary.
-	getHash() [32]byte
+	getHash() ([32]byte, bool)
 
 	// copyWith copies the receiver with the given branch as the parent of the
 	// new copy.
@@ -103,36 +103,36 @@ func (e *branch) newBranch(key [32]byte) (*branch, error) {
 }
 
 // getHash returns an empty hash.
-func (*emptyNode) getHash() [32]byte { return [32]byte{} }
+func (*emptyNode) getHash() ([32]byte, bool) { return [32]byte{}, false }
 
 // getHash returns the leaf's hash.
-func (e *leaf) getHash() [32]byte { return e.Hash }
+func (e *leaf) getHash() ([32]byte, bool) { return e.Hash, true }
 
 // getHash returns the branch's hash, recalculating it if the branch has been
 // changed since the last getHash call.
-func (e *branch) getHash() [32]byte {
+func (e *branch) getHash() ([32]byte, bool) {
 	if e.status != branchUnhashed {
-		return e.Hash
+		return e.Hash, true // Empty branches must be cleaned up before being committed
 	}
 
-	switch { //                                        Sort four conditions:
-	case e.Left.Type() != nodeTypeEmpty && //          If we have both L and R then combine
-		e.Right.Type() != nodeTypeEmpty: //
-		l, r := e.Left.getHash(), e.Right.getHash() // Take the hash of L+R
-		var b [64]byte                              // Use a pre-allocated array to avoid spilling to the heap
-		copy(b[:], l[:])                            //
-		copy(b[32:], r[:])                          //
-		e.Hash = sha256.Sum256(b[:])                //
-	case e.Left.Type() != nodeTypeEmpty: //            The next condition is where we only have L
-		e.Hash = e.Left.getHash() //                   Just use L.  No hash required
-	case e.Right.Type() != nodeTypeEmpty: //           Just have R.  Again, just use R.
-		e.Hash = e.Right.getHash() //                  No Hash Required
-	default: //                                        The fourth condition never happens, and bad if it does.
-		panic("dead nodes should not exist") //        This is a node without a child somewhere up the tree.
+	l, lok := e.Left.getHash()
+	r, rok := e.Right.getHash()
+	switch { //                         Four conditions:
+	case lok && rok: //                 If we have both L and R
+		var b [64]byte //                 Use a pre-allocated array to avoid spilling to the heap
+		copy(b[:], l[:])
+		copy(b[32:], r[:])
+		e.Hash = sha256.Sum256(b[:]) //   Combine
+	case lok: //                        If we have only L
+		e.Hash = l //                     Just use L
+	case rok: //                        If we have only R
+		e.Hash = r //                     Just use R
+	default: //                         If we have nothing
+		e.Hash = [32]byte{} //            Clear the hash
 	}
 
 	e.status = branchUncommitted
-	return e.Hash
+	return e.Hash, lok || rok
 }
 
 // getAt returns a pointer to the left or right branch, depending on the key,
