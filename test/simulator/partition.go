@@ -9,30 +9,27 @@ package simulator
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"sort"
 	"sync"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
-	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 )
 
 type Partition struct {
 	protocol.PartitionInfo
-	sim        *Simulator
-	logger     logging.OptionalLogger
-	nodes      []*Node
-	validators [][32]byte
+	sim    *Simulator
+	logger logging.OptionalLogger
+	nodes  []*Node
 
 	mu         *sync.Mutex
 	mempool    []*messaging.Envelope
@@ -50,11 +47,6 @@ type SubmitHookFunc = func([]messaging.Message) (drop, keepHook bool)
 type BlockHookFunc = func(execute.BlockParams, []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool)
 type NodeBlockHookFunc = func(int, execute.BlockParams, []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool)
 type CommitHookFunc = func(*protocol.PartitionInfo, execute.BlockState)
-
-type validatorUpdate struct {
-	key [32]byte
-	typ core.ValidatorUpdate
-}
 
 func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
 	p := new(Partition)
@@ -295,12 +287,12 @@ func (p *Partition) loadBlockIndex() {
 		return
 	}
 
-	b, _, err := p.nodes[0].executor.LastBlock()
+	res, err := p.nodes[0].consensus.Info(&consensus.InfoRequest{})
 	if err != nil {
 		panic(err)
 	}
-	p.blockIndex = b.Index
-	p.blockTime = b.Time
+	p.blockIndex = res.LastBlock.Index
+	p.blockTime = res.LastBlock.Time
 }
 
 func (p *Partition) execute() error {
@@ -395,41 +387,10 @@ func (p *Partition) execute() error {
 
 	// End block
 	blockState := make([]execute.BlockState, len(p.nodes))
-	endBlock := make([][]*validatorUpdate, len(p.nodes))
 	for i, n := range p.nodes {
-		blockState[i], endBlock[i], err = n.endBlock(blocks[i])
+		blockState[i], err = n.endBlock(blocks[i])
 		if err != nil {
 			return errors.FatalError.WithFormat("execute: %w", err)
-		}
-	}
-	for _, v := range endBlock[1:] {
-		if len(v) != len(endBlock[0]) {
-			return errors.FatalError.WithFormat("consensus failure: end block")
-		}
-		for i, v := range v {
-			if *v != *endBlock[0][i] {
-				return errors.FatalError.WithFormat("consensus failure: end block")
-			}
-		}
-	}
-
-	// Update validators
-	for _, update := range endBlock[0] {
-		switch update.typ {
-		case core.ValidatorUpdateAdd:
-			ptr, new := sortutil.BinaryInsert(&p.validators, func(k [32]byte) int { return bytes.Compare(k[:], update.key[:]) })
-			if new {
-				*ptr = update.key
-			}
-
-		case core.ValidatorUpdateRemove:
-			i, found := sortutil.Search(p.validators, func(k [32]byte) int { return bytes.Compare(k[:], update.key[:]) })
-			if found {
-				sortutil.RemoveAt(&p.validators, i)
-			}
-
-		default:
-			panic(fmt.Errorf("unknown validator update type %v", update.typ))
 		}
 	}
 
