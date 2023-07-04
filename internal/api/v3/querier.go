@@ -538,10 +538,11 @@ func (s *Querier) queryMinorBlock(ctx context.Context, batch *database.Batch, mi
 		return nil, errors.UnknownError.WithFormat("load block ledger: %w", err)
 	}
 
-	allEntries, err := normalizeBlockEntries(batch, ledger)
-	if err != nil {
-		return nil, errors.InternalError.Wrap(err)
-	}
+	// allEntries, err := normalizeBlockEntries(batch, ledger)
+	// if err != nil {
+	// 	return nil, errors.InternalError.Wrap(err)
+	// }
+	allEntries := ledger.Entries
 
 	// Convert entries into records
 	r := new(api.MinorBlockRecord)
