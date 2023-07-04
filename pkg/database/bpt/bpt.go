@@ -44,7 +44,8 @@ func (b *BPT) GetRootHash() ([32]byte, error) {
 	}
 
 	// Return its hash
-	return r.getHash(), nil
+	h, _ := r.getHash()
+	return h, nil
 }
 
 func (b *BPT) newState() values.Value[*parameters] {
