@@ -52,7 +52,41 @@ func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionSt
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	return b.processMessages(messages, 0)
+	// Process the messages
+	results, err := b.processMessages(messages, 0)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// These results are only visible through Tendermint. The recommended way to
+	// check the status of a transaction is through Accumulate's API, which
+	// reads the status from the database. So it's unlikely anyone is reading
+	// these results out of the database. And since different results across
+	// nodes will lead to consensus failure, and error messages are porcelain
+	// (designed for humans, not machines, and tricky to control precisely), we
+	// do not preserve error messages. And because all the other fields are
+	// really internal things, all we are going to preserve is the result and
+	// the code, though if there's an error we will not preserve the specific
+	// error code.
+	//
+	// We could do this within the ABCI, which would make it easy to preserve
+	// the error messages as logs or events. However this change must be
+	// version-dependent - must be activated with executor V2 - and making such
+	// a change in the ABCI would require it to become aware of the executor
+	// version, which it is not currently.
+	cleaned := make([]*protocol.TransactionStatus, len(results))
+	for i, r := range results {
+		cleaned[i] = &protocol.TransactionStatus{
+			TxID:   r.TxID,
+			Result: r.Result,
+		}
+		if r.Code.Success() {
+			cleaned[i].Code = r.Code // Preserve success codes (delivered, pending, etc)
+		} else {
+			cleaned[i].Code = errors.UnknownError // Replace error codes with a generic code
+		}
+	}
+	return cleaned, nil
 }
 
 func (b *Block) processMessages(messages []messaging.Message, pass int) ([]*protocol.TransactionStatus, error) {
