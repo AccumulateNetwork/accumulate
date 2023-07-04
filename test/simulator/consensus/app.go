@@ -9,6 +9,9 @@ package consensus
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -56,7 +59,9 @@ type BeginResponse struct {
 
 type ExecutorApp struct {
 	Executor execute.Executor
+	Database database.Beginner
 	EventBus *events.Bus
+	Describe *config.Describe
 }
 
 func (a *ExecutorApp) Info(*InfoRequest) (*InfoResponse, error) {
@@ -93,7 +98,13 @@ func (a *ExecutorApp) Init(req *InitRequest) (*InitResponse, error) {
 	}
 
 	// Restore the snapshot
-	_, err = a.Executor.Restore(req.Snapshot, nil)
+	err = snapshot.FullRestore(a.Database, req.Snapshot, nil, a.Describe)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
+	}
+
+	// Initialize the executor
+	_, err = a.Executor.Init(nil)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
 	}

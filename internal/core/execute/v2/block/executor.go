@@ -16,9 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -199,15 +197,7 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	return b, h, err
 }
 
-func (x *Executor) Restore(file ioutil2.SectionReader, validators []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
-	batch := x.Database.Begin(true)
-	defer batch.Discard()
-
-	err = snapshot.FullRestore(x.Database, file, x.logger, &x.Describe)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load state: %w", err)
-	}
-
+func (x *Executor) Init(validators []*execute.ValidatorUpdate) (additional []*execute.ValidatorUpdate, err error) {
 	err = x.loadGlobals(x.Database.View)
 	if err != nil {
 		return nil, errors.InternalError.WithFormat("failed to load globals: %w", err)
