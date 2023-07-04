@@ -16,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -126,8 +125,8 @@ func (m *Multi) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	return (*m.active.Load()).LastBlock()
 }
 
-func (m *Multi) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
-	additional, err = (*m.active.Load()).Restore(snapshot, validators)
+func (m *Multi) Init(validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
+	additional, err = (*m.active.Load()).Init(validators)
 	if err != nil || m.version >= m.newVersion {
 		return additional, err
 	}
