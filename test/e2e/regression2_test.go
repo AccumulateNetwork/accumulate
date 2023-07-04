@@ -29,6 +29,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -929,4 +930,119 @@ func TestMessageCompat(t *testing.T) {
 	sim.StepN(10)
 	ledger2 := GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger))
 	require.Equal(t, ledger1.Index, ledger2.Index)
+}
+
+func TestProofOverride(t *testing.T) {
+	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3351
+
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize with executor v1
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Trigger a synthetic transaction
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	// Replace the proof with garbage
+	var synth *messaging.Envelope
+	var synthId *url.TxID
+	h123 := [32]byte{1, 2, 3}
+	sim.SetBlockHookFor(protocol.AcmeUrl(), func(block execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		for _, env := range envelopes {
+			require.Len(t, env.Transaction, 1)
+			if env.Transaction[0].Body.Type() != TransactionTypeSyntheticBurnTokens {
+				continue
+			}
+
+			for _, sig := range env.Signatures {
+				sig, ok := sig.(*ReceiptSignature)
+				if !ok || !sig.SourceNetwork.Equal(DnUrl()) {
+					continue
+				}
+
+				synth = env.Copy()
+				synthId = env.Transaction[0].ID()
+
+				anchor := sha256.Sum256(append(h123[:], sig.Proof.Start...))
+				sig.Proof.End = nil
+				sig.Proof.EndIndex = 0
+				sig.Proof.Anchor = anchor[:]
+				sig.Proof.Entries = []*merkle.ReceiptEntry{{Hash: h123[:]}}
+				return envelopes, false
+			}
+		}
+		return envelopes, true
+	})
+
+	// Wait for the synthetic transaction to be sent
+	sim.StepUntil(True(func(h *Harness) bool { return synth != nil }))
+
+	// Verify the synthetic transaction is pending and the proof is garbage
+	View(t, sim.Database(Directory), func(batch *database.Batch) {
+		status, err := batch.Transaction(synthId.HashSlice()).Status().Get()
+		require.NoError(t, err)
+		require.Equal(t, errors.Pending.String(), status.Code.String())
+
+		require.NotNil(t, status.Proof)
+		require.NotEmpty(t, status.Proof.Entries)
+		require.Equal(t, h123[:], status.Proof.Entries[len(status.Proof.Entries)-1].Hash)
+	})
+
+	// Construct a valid proof
+	h := synthId.Hash()
+	r1 := sim.QueryChainEntry(PartitionUrl("bvn0").JoinPath(Synthetic), &v3.ChainQuery{Name: "main", Entry: h[:], IncludeReceipt: true})
+	require.NotNil(t, r1.Receipt)
+	r2 := sim.SearchForAnchor(DnUrl().JoinPath(AnchorPool), &v3.AnchorSearchQuery{Anchor: r1.Receipt.Anchor, IncludeReceipt: true})
+	require.NotEmpty(t, r2.Records)
+	require.NotEmpty(t, r2.Records[0].Receipt)
+
+	receipt, err := r1.Receipt.Combine(&r2.Records[0].Receipt.Receipt)
+	require.NoError(t, err)
+
+	// Replace the proofs
+	var found bool
+	sigs := synth.Signatures
+	synth.Signatures = nil
+	for _, sig := range sigs {
+		rsig, ok := sig.(*ReceiptSignature)
+		if !ok {
+			synth.Signatures = append(synth.Signatures, sig)
+			continue
+		}
+		if !rsig.SourceNetwork.Equal(DnUrl()) {
+			continue
+		}
+
+		require.False(t, found)
+		found = true
+		rsig.Proof = *receipt
+		synth.Signatures = append(synth.Signatures, rsig)
+	}
+	require.True(t, found)
+
+	// Submit with the fixed proof
+	sts, err := sim.SubmitTo(Directory, synth)
+	require.NoError(t, err)
+	for _, st := range sts {
+		require.NoError(t, st.AsError())
+	}
+
+	// Verify the burn completes
+	sim.StepUntil(Txn(st.TxID).Completes())
+	sim.StepUntil(Txn(synthId).Succeeds())
 }
