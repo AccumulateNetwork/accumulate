@@ -17,6 +17,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/exp/lxrand"
 )
 
 // tx
@@ -25,7 +26,7 @@ type tx struct {
 	hash   [32]byte
 	length int
 	data   [2000]byte
-	r      LXRandom
+	r      lxrand.Sequence
 }
 
 // fill
@@ -69,8 +70,8 @@ func buildSnapshot(t *testing.T, numberTx int) *Collect {
 // Ensures all the hashes we expect are in the file, and no more.
 func Test_hashes(t *testing.T) {
 	numberHashes := 10000
-	var rnd1 LXRandom // Creates a random sequence
-	var rnd2 LXRandom // All instances of LXRandom produce the same sequence
+	var rnd1 lxrand.Sequence // Creates a random sequence
+	var rnd2 lxrand.Sequence // All instances of LXRandom produce the same sequence
 	c, err := NewCollect("./snapshotX", true)
 	assert.NoError(t, err, "failed to create test file")
 
@@ -112,7 +113,7 @@ func Test_hashes(t *testing.T) {
 	}
 
 	cnt2 := 0 // Get the same sequence, and make sure that's all we got in the map
-	var rnd3 LXRandom
+	var rnd3 lxrand.Sequence
 	for range m {
 		if v, ok := m[rnd3.Hash()]; !ok {
 			t.Fatalf("%x hash should be in map", v)
@@ -200,7 +201,7 @@ func Test_FetchBadHash(t *testing.T) {
 	start := time.Now()
 	sum := 0 // Set up for test
 
-	var r LXRandom
+	var r lxrand.Sequence
 	r.SetRandomSequence(2424234, [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 
 	// None of these hashes in this sequence should be in the Snapshot
