@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -31,6 +32,19 @@ type SignatureVisitor interface{ VisitSignature(*Signature, int) error }
 
 // Open reads a snapshot file, returning the header values and a reader.
 func Open(file ioutil2.SectionReader) (*Header, *Reader, error) {
+	v, err := snapshot.GetVersion(file)
+	if err != nil {
+		return nil, nil, errors.UnknownError.Wrap(err)
+	}
+	if v != Version1 {
+		return nil, nil, errors.Conflict.WithFormat("incompatible snapshot version: want %d, got %d", Version1, v)
+	}
+
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, nil, errors.UnknownError.Wrap(err)
+	}
+
 	r := NewReader(file)
 	s, err := r.Next()
 	if err != nil {

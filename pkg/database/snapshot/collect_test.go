@@ -150,11 +150,8 @@ func collect(t testing.TB, db *coredb.Database, file io.WriteSeeker, partition *
 	// Iterate over the BPT and collect accounts
 	var index []snapshot.RecordIndexEntry
 	it := batch.IterateAccounts()
-	for {
-		account, ok := it.Next()
-		if !ok {
-			break
-		}
+	for it.Next() {
+		account := it.Value()
 
 		// Collect the account's records
 		err = records.Collect(account, snapshot.CollectOptions{
