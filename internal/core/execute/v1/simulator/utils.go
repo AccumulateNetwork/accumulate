@@ -15,6 +15,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 )
 
@@ -24,10 +25,8 @@ func InitFromSnapshot(t TB, db database.Beginner, exec *Executor, filename strin
 	f, err := os.Open(filename)
 	require.NoError(tb{t}, err)
 	defer f.Close()
-	batch := db.Begin(true)
-	defer batch.Discard()
-	require.NoError(tb{t}, exec.RestoreSnapshot(batch, f))
-	require.NoError(tb{t}, batch.Commit())
+	require.NoError(tb{t}, snapshot.FullRestore(db, f, exec.Logger, &exec.Describe))
+	require.NoError(tb{t}, exec.Init(db))
 }
 
 func NormalizeEnvelope(t TB, envelope *messaging.Envelope) []*chain.Delivery {
