@@ -21,7 +21,7 @@ type BPT struct {
 	store   record.Store
 	key     *record.Key
 	label   string
-	pending map[[32]byte][32]byte
+	pending map[[32]byte]*mutation
 
 	state values.Value[*parameters]
 	root  *rootRecord
