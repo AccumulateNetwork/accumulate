@@ -6,7 +6,7 @@
   omitWalk: true
   fields:
   - name: pending
-    type: map[[32]byte][32]byte
+    type: map[[32]byte]*mutation
   attributes:
   - name: State
     private: true

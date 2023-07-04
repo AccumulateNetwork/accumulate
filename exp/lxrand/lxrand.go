@@ -4,25 +4,18 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package collect
+package lxrand
 
-import (
-	"encoding/binary"
-	"fmt"
-	"testing"
-	"time"
+import "encoding/binary"
 
-	"github.com/dustin/go-humanize"
-)
-
-type LXRandom struct {
+type Sequence struct {
 	cnt   uint64
 	state uint64
 	seed  [32]byte
 }
 
 // Randomize the state and seed of the LXRandom generator
-func (r *LXRandom) spin() {
+func (r *Sequence) spin() {
 	if r.cnt == 0 { //                  First time this instance has been called, so the init
 		r.state = 0x123456789ABCDEF0 // Give the state a value
 	}
@@ -38,7 +31,7 @@ func (r *LXRandom) spin() {
 // SetState
 // Modifies the state using the given seed and state. Any call to SetState will
 // create a different sequence of random values.
-func (r *LXRandom) SetRandomSequence(state uint64, seed [32]byte) {
+func (r *Sequence) SetRandomSequence(state uint64, seed [32]byte) {
 	r.state = r.state<<19 ^ r.state>>3 ^ state
 	r.seed = seed
 	r.spin() // a zero seed requires a few spins to randomize the state
@@ -48,14 +41,14 @@ func (r *LXRandom) SetRandomSequence(state uint64, seed [32]byte) {
 
 // Hash
 // Return a 32 byte array of random bytes
-func (r *LXRandom) Hash() [32]byte {
+func (r *Sequence) Hash() [32]byte {
 	r.spin()
 	return r.seed
 }
 
 // Int
 // Return a random int
-func (r *LXRandom) Uint() int {
+func (r *Sequence) Uint() int {
 	r.spin()
 	i := int(r.state)
 	if i < 0 {
@@ -66,28 +59,18 @@ func (r *LXRandom) Uint() int {
 
 // Byte
 // Return a random byte
-func (r *LXRandom) Byte() byte {
+func (r *Sequence) Byte() byte {
 	r.spin()
 	return r.seed[0]
 }
 
 // Slice
 // Return a slice of the specified length of random bytes
-func (r *LXRandom) Slice(length int) (slice []byte) {
+func (r *Sequence) Slice(length int) (slice []byte) {
 	slice = make([]byte, length)
 	for i := 0; i < length; i += 32 {
 		r.spin()
 		copy(slice[i%32:], r.seed[:])
 	}
 	return slice
-}
-
-func Test_LXRandom(t *testing.T) {
-	var r LXRandom
-	start := time.Now()
-	calls := 100000
-	for i := 0; i < calls; i++ {
-		r.Hash()
-	}
-	fmt.Printf("Time %10s/s\n", humanize.Comma(int64(float64(calls)/time.Since(start).Seconds())))
 }
