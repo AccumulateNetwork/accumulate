@@ -15,18 +15,14 @@ import (
 	"sort"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
@@ -140,41 +136,10 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		_ = db.Close()
 	}()
 
-	// read private validator
-	pv, err := config.LoadFilePV(
-		d.Config.PrivValidatorKeyFile(),
-		d.Config.PrivValidatorStateFile(),
-	)
+	err = snapshot.FullRestore(db, file, d.Logger, &d.Config.Accumulate.Describe)
 	if err != nil {
-		return fmt.Errorf("failed to load private validator: %v", err)
+		return fmt.Errorf("failed to restore database: %v", err)
 	}
-
-	eventBus := events.NewBus(d.Logger.With("module", "events"))
-	router := routing.NewRouter(eventBus, d.Logger)
-	execOpts := execute.Options{
-		Logger:   d.Logger,
-		Database: db,
-		Key:      pv.Key.PrivKey.Bytes(),
-		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
-		EventBus: eventBus,
-	}
-
-	// On DNs initialize the major block scheduler
-	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
-		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
-	}
-
-	exec, err := execute.NewExecutor(execOpts)
-	if err != nil {
-		return fmt.Errorf("failed to initialize chain executor: %v", err)
-	}
-
-	_, err = exec.Restore(file, nil)
-	if err != nil {
-		return errors.UnknownError.WithFormat("failed to restore snapshot: %w", err)
-	}
-
 	return nil
 }
 

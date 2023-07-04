@@ -23,12 +23,14 @@ import (
 	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	"github.com/tendermint/tendermint/version"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -64,6 +66,7 @@ type AccumulatorOptions struct {
 	Executor execute.Executor
 	EventBus *events.Bus
 	Logger   log.Logger
+	Database database.Beginner
 	Address  crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 }
 
@@ -261,6 +264,17 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 	app.logger.Info("Initializing")
 
+	// Initialize the database
+	var snap []byte
+	err = json.Unmarshal(req.AppStateBytes, &snap)
+	if err != nil {
+		panic(fmt.Errorf("failed to init chain: %+v", err))
+	}
+	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, &app.Accumulate.Describe)
+	if err != nil {
+		panic(fmt.Errorf("failed to init chain: %+v", err))
+	}
+
 	var initVal []*execute.ValidatorUpdate
 	for _, v := range req.Validators {
 		if v.PubKey.GetEd25519() == nil {
@@ -273,13 +287,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		})
 	}
 
-	// Initialize the chain
-	var snapshot []byte
-	err = json.Unmarshal(req.AppStateBytes, &snapshot)
-	if err != nil {
-		panic(fmt.Errorf("failed to init chain: %+v", err))
-	}
-	additional, err := app.Executor.Restore(ioutil2.NewBuffer(snapshot), initVal)
+	additional, err := app.Executor.Init(initVal)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
