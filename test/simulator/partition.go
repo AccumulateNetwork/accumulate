@@ -447,7 +447,7 @@ func (p *Partition) execute() error {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
 	}
-	if commit.isErr() {
+	if !p.sim.IgnoreCommitResults && commit.isErr() {
 		return commit
 	}
 

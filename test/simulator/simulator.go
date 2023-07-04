@@ -53,8 +53,13 @@ type Simulator struct {
 	// DropDispatchedMessages drops all internally dispatched messages.
 	DropDispatchedMessages bool
 
-	// IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx.
+	// IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx
+	// (the results of transactions and signatures).
 	IgnoreDeliverResults bool
+
+	// IgnoreCommitResults ignores inconsistencies in the result of Commit (the
+	// root hash of the BPT).
+	IgnoreCommitResults bool
 
 	// Recordings is a function that returns files to write node recordings to.
 	// TODO Make this an option once #3314 is merged.
