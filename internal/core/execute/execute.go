@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -37,9 +36,10 @@ type Executor interface {
 	// LastBlock returns the height and hash of the last block.
 	LastBlock() (*BlockParams, [32]byte, error)
 
-	// Restore restores the database from a snapshot, validates the initial
-	// validators, and returns any additional validators.
-	Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error)
+	// Init must be called after the database is initialized from the genesis
+	// snapshot. Init validates the initial validators and returns any
+	// additional validators.
+	Init(validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error)
 
 	// Validate validates a set of messages.
 	Validate(envelope *messaging.Envelope, recheck bool) ([]*protocol.TransactionStatus, error)

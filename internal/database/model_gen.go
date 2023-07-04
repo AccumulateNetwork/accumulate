@@ -737,9 +737,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.majorBlockChain, c.newMajorBlockChain, opts, fn)
 	values.WalkMap(&err, c.syntheticSequenceChain, c.newSyntheticSequenceChain, c.getSyntheticSequenceKeys, opts, fn)
 	values.WalkMap(&err, c.anchorChain, c.newAnchorChain, c.getAnchorKeys, opts, fn)
-	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.chains, c.newChains, opts, fn)
-	}
+	values.WalkField(&err, c.chains, c.newChains, opts, fn)
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.syntheticAnchors, c.newSyntheticAnchors, opts, fn)
 	}
