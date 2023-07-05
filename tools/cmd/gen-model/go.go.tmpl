@@ -156,7 +156,7 @@ func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 {{end}}
 
 {{if not .OmitConstructor}}
-func (c *{{fullName $c}}) new{{.Name}}({{if parameterized .}}k {{lower .FullName}}Key{{end}}) {{recordType . true}} {
+func (c *{{fullName $c}}) {{if .CustomValueConstructor}}baseNew{{else}}new{{end}}{{.Name}}({{if parameterized .}}k {{lower .FullName}}Key{{end}}) {{recordType . true}} {
 	{{- if .Type.IsEntity}}
 	v := new({{fullName .}})
 	v.logger = c.logger
