@@ -949,11 +949,11 @@ func (c *AccountEventsMinor) newBlocks() values.Set[uint64] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Blocks"), c.label+" "+"blocks", values.Wrapped(values.UintWrapper), values.CompareUint)
 }
 
-func (c *AccountEventsMinor) getVotes(block uint64) values.Set[*protocol.AuthoritySignature] {
+func (c *AccountEventsMinor) Votes(block uint64) values.Set[*protocol.AuthoritySignature] {
 	return values.GetOrCreateMap(c, &c.votes, accountEventsMinorVotesKey{block}, (*AccountEventsMinor).newVotes)
 }
 
-func (c *AccountEventsMinor) newVotes(k accountEventsMinorVotesKey) values.Set[*protocol.AuthoritySignature] {
+func (c *AccountEventsMinor) baseNewVotes(k accountEventsMinorVotesKey) values.Set[*protocol.AuthoritySignature] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Votes", k.Block), c.label+" "+"votes"+" "+strconv.FormatUint(k.Block, 10), values.Struct[protocol.AuthoritySignature](), compareHeldAuthSig)
 }
 
@@ -973,7 +973,7 @@ func (c *AccountEventsMinor) Resolve(key *record.Key) (record.Record, *record.Ke
 		if !okBlock {
 			return nil, nil, errors.InternalError.With("bad key for minor")
 		}
-		v := c.getVotes(block)
+		v := c.Votes(block)
 		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for minor")
@@ -1058,11 +1058,11 @@ func (c *AccountEventsMajor) newBlocks() values.Set[uint64] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Blocks"), c.label+" "+"blocks", values.Wrapped(values.UintWrapper), values.CompareUint)
 }
 
-func (c *AccountEventsMajor) getPending(block uint64) values.Set[*url.TxID] {
+func (c *AccountEventsMajor) Pending(block uint64) values.Set[*url.TxID] {
 	return values.GetOrCreateMap(c, &c.pending, accountEventsMajorPendingKey{block}, (*AccountEventsMajor).newPending)
 }
 
-func (c *AccountEventsMajor) newPending(k accountEventsMajorPendingKey) values.Set[*url.TxID] {
+func (c *AccountEventsMajor) baseNewPending(k accountEventsMajorPendingKey) values.Set[*url.TxID] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Pending", k.Block), c.label+" "+"pending"+" "+strconv.FormatUint(k.Block, 10), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
@@ -1082,7 +1082,7 @@ func (c *AccountEventsMajor) Resolve(key *record.Key) (record.Record, *record.Ke
 		if !okBlock {
 			return nil, nil, errors.InternalError.With("bad key for major")
 		}
-		v := c.getPending(block)
+		v := c.Pending(block)
 		return v, key.SliceI(2), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for major")
@@ -1146,11 +1146,11 @@ type AccountEventsBacklog struct {
 
 func (c *AccountEventsBacklog) Key() *record.Key { return c.key }
 
-func (c *AccountEventsBacklog) getExpired() values.Set[*url.TxID] {
+func (c *AccountEventsBacklog) Expired() values.Set[*url.TxID] {
 	return values.GetOrCreate(c, &c.expired, (*AccountEventsBacklog).newExpired)
 }
 
-func (c *AccountEventsBacklog) newExpired() values.Set[*url.TxID] {
+func (c *AccountEventsBacklog) baseNewExpired() values.Set[*url.TxID] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("Expired"), c.label+" "+"expired", values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
@@ -1161,7 +1161,7 @@ func (c *AccountEventsBacklog) Resolve(key *record.Key) (record.Record, *record.
 
 	switch key.Get(0) {
 	case "Expired":
-		return c.getExpired(), key.SliceI(1), nil
+		return c.Expired(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for backlog")
 	}
