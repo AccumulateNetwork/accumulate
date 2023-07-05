@@ -34,7 +34,7 @@ func (h *AccountEventsMinor) Votes(block uint64) values.Set[*protocol.AuthorityS
 		getAuthSigKey,
 		(*protocol.AuthoritySignature).Hash,
 	)
-	return &blockEventSet[*protocol.AuthoritySignature]{h, block, e}
+	return &blockEventSet[*protocol.AuthoritySignature]{h, block, *e}
 }
 
 func (h *AccountEventsMajor) Pending(block uint64) values.Set[*url.TxID] {
@@ -44,7 +44,7 @@ func (h *AccountEventsMajor) Pending(block uint64) values.Set[*url.TxID] {
 		getTxIDKey,
 		(*url.TxID).HashSlice,
 	)
-	return &blockEventSet[*url.TxID]{h, block, e}
+	return &blockEventSet[*url.TxID]{h, block, *e}
 }
 
 func (h *AccountEventsBacklog) Expired() values.Set[*url.TxID] {
@@ -80,11 +80,11 @@ func (c *AccountEventsMajor) getPendingKeys() ([]accountEventsMajorPendingKey, e
 type blockEventSet[T any] struct {
 	parent interface{ Blocks() values.Set[uint64] }
 	block  uint64
-	values.Set[T]
+	eventsSet[T]
 }
 
 func (b *blockEventSet[T]) Put(v []T) error {
-	err := b.Set.Put(v)
+	err := b.eventsSet.Put(v)
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func (b *blockEventSet[T]) Put(v []T) error {
 }
 
 func (b *blockEventSet[T]) Add(v ...T) error {
-	err := b.Set.Add(v...)
+	err := b.eventsSet.Add(v...)
 	if err != nil {
 		return err
 	}
@@ -144,6 +144,28 @@ type eventsSet[T any] struct {
 	baseKey *record.Key
 	getKey  func(T) *record.Key
 	getHash func(T) []byte
+}
+
+var _ postRestorer = (*eventsSet[any])(nil)
+
+func (e *eventsSet[T]) postRestore() error {
+	// The the restored values
+	v, err := e.Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Update the BPT
+	for _, v := range v {
+		err = e.bpt.Insert(
+			e.baseKey.AppendKey(e.getKey(v)).Hash(),
+			*(*[32]byte)(e.getHash(v)))
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	return nil
 }
 
 func (e *eventsSet[T]) Put(v []T) error {
