@@ -31,6 +31,42 @@ func (m *Executor) EndBlock(block *Block) error {
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
+	// Clear the pending transaction list of all accounts when v1-halt is
+	// activated. The transactions will not go through the full expiration
+	// process due to the mess that is v1's signing system.
+	//
+	// This cannot be done in a nested batch (and thus in a transaction
+	// executor) because of how IterateAccount retrieves the account's URL.
+	//
+	// This cannot be done in a single pass because the accounts returned by the
+	// iterator are transient - the batch does not retain a reference to the
+	// account and thus does not commit the account.
+	if a, b := m.globals.Active, m.globals.Pending; b.ExecutorVersion > a.ExecutorVersion && b.ExecutorVersion == protocol.ExecutorVersionV1Halt {
+		var hasPending []*url.URL
+		it := block.Batch.IterateAccounts()
+		for it.Next() {
+			account := it.Value()
+			ids, err := account.Pending().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load pending list: %w", err)
+			}
+			if len(ids) > 0 {
+				hasPending = append(hasPending, account.Url())
+			}
+		}
+		err := it.Err()
+		if err != nil {
+			return errors.UnknownError.WithFormat("iterate accounts: %w", err)
+		}
+
+		for _, u := range hasPending {
+			err = block.Batch.Account(u).Pending().Put(nil)
+			if err != nil {
+				return errors.UnknownError.WithFormat("store pending list: %w", err)
+			}
+		}
+	}
+
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
