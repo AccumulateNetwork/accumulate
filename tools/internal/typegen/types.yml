@@ -17,6 +17,8 @@ RecordBase:
       type: bool
     - name: OmitConstructor
       type: bool
+    - name: CustomValueConstructor
+      type: bool
     - name: Parameters
       type: Field
       pointer: true
