@@ -32,6 +32,8 @@ func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
 	case "java", "Java":
 		generateJava(tapi)
+	case "kotlin", "Kotlin":
+		generateKotlin(tapi)
 	default:
 		w := new(bytes.Buffer)
 		check(Go.Execute(w, tapi))
@@ -45,6 +47,13 @@ func generateJava(tapi *TApi) {
 	dir, _ := filepath.Split(flags.Out)
 	filename := strings.Replace(dir, "{{.SubPackage}}", flags.SubPackage, 1) + "/RPCMethod.java" // FIXME
 	check(Java.Execute(w, tapi))
+	check(typegen.WriteFile(filename, w))
+}
+func generateKotlin(tapi *TApi) {
+	w := new(bytes.Buffer)
+	dir, _ := filepath.Split(flags.Out)
+	filename := strings.Replace(dir, "{{.SubPackage}}", flags.SubPackage, 1) + "/RPCMethod.kt" // FIXME
+	check(Kotlin.Execute(w, tapi))
 	check(typegen.WriteFile(filename, w))
 }
 

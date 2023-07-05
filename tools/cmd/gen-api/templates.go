@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	Go   = mustParseTemplate("Go", goSrc)
-	Java = mustParseTemplate("Java", javaSrc)
+	Go     = mustParseTemplate("Go", goSrc)
+	Java   = mustParseTemplate("Java", javaSrc)
+	Kotlin = mustParseTemplate("Kotlin", kotlinSrc)
 )
 
 type TApi struct {

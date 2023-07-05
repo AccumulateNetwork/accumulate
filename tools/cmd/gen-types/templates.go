@@ -313,6 +313,28 @@ func (u *UnionSpec) Enumeration() string {
 	return typegen.TitleCase(u.Type) + "Type"
 }
 
+func (u *UnionSpec) DetermineResponseType() string {
+	unionTypeEnum := u.Enumeration()
+	switch {
+	case unionTypeEnum == "TransactionType" && strings.HasSuffix(u.Name, "Result"):
+		return "TransactionResult"
+	case unionTypeEnum == "TransactionType":
+		return "TransactionBody"
+	case unionTypeEnum == "AccountAuthOperationType":
+		return "AccountAuthOperation"
+	case unionTypeEnum == "DataEntryType":
+		return "DataEntry"
+	case unionTypeEnum == "AccountType":
+		return "Account"
+	case unionTypeEnum == "KeyPageOperationType":
+		return "KeyPageOperation"
+	case unionTypeEnum == "SignatureType":
+		return "Signature"
+	default:
+		return "Marshallable"
+	}
+}
+
 func (f *Field) IsBinary() bool          { return !f.NonBinary }
 func (f *Field) AlternativeName() string { return f.Alternative }
 func (f *Field) IsPointer() bool         { return f.Pointer }

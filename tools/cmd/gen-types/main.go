@@ -19,6 +19,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
+type FileGenerationMode int
+
+const (
+	SingleFile FileGenerationMode = iota
+	FilePerType
+	FilePerUnionType
+)
+
 var flags struct {
 	files typegen.FileReader
 
@@ -27,7 +35,7 @@ var flags struct {
 	Out                    string
 	Language               string
 	Reference              []string
-	FilePerType            bool
+	FileGenMode            FileGenerationMode
 	ExpandEmbedded         bool
 	LongUnionDiscriminator bool
 	ElidePackageType       bool
@@ -47,12 +55,12 @@ func main() {
 	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Subpackage name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
-	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
 	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
 	cmd.Flags().BoolVar(&flags.ElidePackageType, "elide-package-type", false, "If there is a union type that has the same name as the package, elide it")
 	cmd.Flags().StringSliceVar(&flags.GoInclude, "go-include", nil, "Additional Go packages to include")
 	cmd.Flags().StringVar(&flags.Header, "header", "", "Add a header to each file")
 	flags.files.SetFlags(cmd.Flags(), "types")
+	flags.FileGenMode = SingleFile
 
 	_ = cmd.Execute()
 }
@@ -109,9 +117,13 @@ func getPackagePath(dir string) string {
 }
 
 func run(_ *cobra.Command, args []string) {
+
 	switch flags.Language {
 	case "java", "Java":
-		flags.FilePerType = true
+		flags.FileGenMode = FilePerType
+		flags.ExpandEmbedded = true
+	case "kotlin", "Kotlin":
+		flags.FileGenMode = FilePerUnionType
 		flags.ExpandEmbedded = true
 	}
 
@@ -132,12 +144,13 @@ func run(_ *cobra.Command, args []string) {
 		fatalf("missing type reference for %s", strings.Join(missing, ", "))
 	}
 
-	if !flags.FilePerType {
+	switch flags.FileGenMode {
+	case SingleFile:
 		w := new(bytes.Buffer)
 		w.WriteString(flags.Header)
 		check(Templates.Execute(w, flags.Language, ttypes))
 		check(typegen.WriteFile(flags.Out, w))
-	} else {
+	case FilePerType:
 		fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
 		checkf(err, "--out")
 
@@ -157,21 +170,65 @@ func run(_ *cobra.Command, args []string) {
 			check(err)
 			check(typegen.WriteFile(filename, w))
 		}
-		for _, typ := range ttypes.Unions {
+		for _, unionSpec := range ttypes.Unions {
 			w.Reset()
 			w.WriteString(flags.Header)
-			err := fileTmpl.Execute(w, typ)
+			err := fileTmpl.Execute(w, unionSpec)
 			check(err)
 			filename := w.String()
 
 			w.Reset()
-			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, typ})
+			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, unionSpec})
 			if errors.Is(err, typegen.ErrSkip) {
 				continue
 			}
 			check(err)
 			check(typegen.WriteFile(filename, w))
 		}
+	case FilePerUnionType:
+		fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
+		checkf(err, "--out")
+
+		typesWritten := make(map[*Type]bool)
+		w := new(bytes.Buffer)
+		for _, unionSpec := range ttypes.Unions {
+			w.Reset()
+			w.WriteString(flags.Header)
+			err := fileTmpl.Execute(w, unionSpec)
+			check(err)
+			filename := w.String()
+
+			w.Reset()
+			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, unionSpec})
+			if errors.Is(err, typegen.ErrSkip) {
+				continue
+			}
+			check(err)
+			check(typegen.WriteFile(filename, w))
+			for _, mbType := range unionSpec.Members {
+				typesWritten[mbType] = true
+			}
+		}
+		for _, typ := range ttypes.Types {
+			if typesWritten[typ] == true {
+				continue
+			}
+
+			w.Reset()
+			w.WriteString(flags.Header)
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := SafeClassName(w.String())
+
+			w.Reset()
+			err = Templates.Execute(w, flags.Language, &SingleTypeFile{flags.Package, typ})
+			if errors.Is(err, typegen.ErrSkip) {
+				continue
+			}
+			check(err)
+			check(typegen.WriteFile(filename, w))
+		}
+
 	}
 }
 
