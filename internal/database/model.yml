@@ -82,7 +82,7 @@
           parameters:
           - name: Block
             type: uint
-          private: true
+          customValueConstructor: true
           comparator: compareHeldAuthSig
           dataType: protocol.AuthoritySignature
           pointer: true
@@ -102,7 +102,7 @@
           parameters:
           - name: Block
             type: uint
-          private: true
+          customValueConstructor: true
           dataType: txid
           pointer: true
           collection: set
@@ -113,7 +113,7 @@
         - name: Expired
           description: tracks pending transactions that have expired
           type: state
-          private: true
+          customValueConstructor: true
           dataType: txid
           pointer: true
           collection: set
