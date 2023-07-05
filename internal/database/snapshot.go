@@ -299,6 +299,12 @@ type RestoreMetrics struct {
 	}
 }
 
+// postRestorer is used by records that need to execute some logic after being
+// restore.
+type postRestorer interface {
+	postRestore() error
+}
+
 func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) error {
 	if opts == nil {
 		opts = new(RestoreOptions)
@@ -373,6 +379,13 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 			err = v.LoadBytes(entry.Value, true)
 			if err != nil {
 				return errors.UnknownError.WithFormat("restore %v: %w", entry.Key, err)
+			}
+
+			if v, ok := v.(postRestorer); ok {
+				err = v.postRestore()
+				if err != nil {
+					return errors.UnknownError.WithFormat("restore %v: %w", entry.Key, err)
+				}
 			}
 		}
 	}
