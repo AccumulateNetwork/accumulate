@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -161,6 +162,25 @@ func TestCollectAndRestore(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).IsPending())
 
+	// Verify the major blocks index is present
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		part, err := sim.Router().RouteAccount(alice)
+		require.NoError(t, err)
+		record := batch.Account(PartitionUrl(part).JoinPath(Ledger))
+
+		hash, err := record.Events().BPT().GetRootHash()
+		require.NoError(t, err)
+		require.NotZero(t, hash)
+
+		blocks, err := record.
+			Events().
+			Major().
+			Blocks().
+			Get()
+		require.NoError(t, err)
+		assert.NotEmpty(t, blocks)
+	})
+
 	// Collect snapshots
 	snap := map[string][]byte{}
 	for _, p := range sim.Partitions() {
@@ -177,6 +197,25 @@ func TestCollectAndRestore(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.SnapshotMap(snap),
 	)
+
+	// Verify the major blocks index is restored
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		part, err := sim.Router().RouteAccount(alice)
+		require.NoError(t, err)
+		record := batch.Account(PartitionUrl(part).JoinPath(Ledger))
+
+		hash, err := record.Events().BPT().GetRootHash()
+		require.NoError(t, err)
+		require.NotZero(t, hash)
+
+		blocks, err := record.
+			Events().
+			Major().
+			Blocks().
+			Get()
+		require.NoError(t, err)
+		assert.NotEmpty(t, blocks)
+	})
 
 	// Sign the pending transaction
 	st = sim.BuildAndSubmitTxnSuccessfully(
