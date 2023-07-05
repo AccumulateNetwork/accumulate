@@ -58,15 +58,16 @@ type OtherRecord struct {
 }
 
 type RecordBase struct {
-	Name            string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Key             string        `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Description     string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
-	Parent          *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
-	Private         bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
-	OmitAccessor    bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
-	OmitConstructor bool          `json:"omitConstructor,omitempty" form:"omitConstructor" query:"omitConstructor" validate:"required"`
-	Parameters      []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
-	Index           string        `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Name                   string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Key                    string        `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Description            string        `json:"description,omitempty" form:"description" query:"description" validate:"required"`
+	Parent                 *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	Private                bool          `json:"private,omitempty" form:"private" query:"private" validate:"required"`
+	OmitAccessor           bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
+	OmitConstructor        bool          `json:"omitConstructor,omitempty" form:"omitConstructor" query:"omitConstructor" validate:"required"`
+	CustomValueConstructor bool          `json:"customValueConstructor,omitempty" form:"customValueConstructor" query:"customValueConstructor" validate:"required"`
+	Parameters             []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
+	Index                  string        `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 }
 
 type StateRecord struct {
@@ -91,17 +92,18 @@ func (*StateRecord) Type() RecordType { return RecordTypeState }
 
 func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            RecordType                `json:"type"`
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
-		ChainType       string                    `json:"chainType,omitempty"`
+		Type                   RecordType                `json:"type"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
+		ChainType              string                    `json:"chainType,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
@@ -131,6 +133,10 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	if !(!v.RecordBase.OmitConstructor) {
 
 		u.OmitConstructor = v.RecordBase.OmitConstructor
+	}
+	if !(!v.RecordBase.CustomValueConstructor) {
+
+		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
 
@@ -148,29 +154,30 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 
 func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            RecordType                              `json:"type"`
-		Name            string                                  `json:"name,omitempty"`
-		Key             string                                  `json:"key,omitempty"`
-		Description     string                                  `json:"description,omitempty"`
-		Parent          *EntityRecord                           `json:"parent,omitempty"`
-		Private         bool                                    `json:"private,omitempty"`
-		OmitAccessor    bool                                    `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                                    `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field]               `json:"parameters,omitempty"`
-		Index           string                                  `json:"index,omitempty"`
-		Fields          encoding.JsonList[*Field]               `json:"fields,omitempty"`
-		CustomCommit    bool                                    `json:"customCommit,omitempty"`
-		CustomResolve   bool                                    `json:"customResolve,omitempty"`
-		CustomIsDirty   bool                                    `json:"customIsDirty,omitempty"`
-		CustomWalk      bool                                    `json:"customWalk,omitempty"`
-		OmitCommit      bool                                    `json:"omitCommit,omitempty"`
-		OmitResolve     bool                                    `json:"omitResolve,omitempty"`
-		OmitIsDirty     bool                                    `json:"omitIsDirty,omitempty"`
-		OmitWalk        bool                                    `json:"omitWalk,omitempty"`
-		ValueStore      string                                  `json:"valueStore,omitempty"`
-		Root            bool                                    `json:"root,omitempty"`
-		Interface       bool                                    `json:"interface,omitempty"`
-		Attributes      *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type                   RecordType                              `json:"type"`
+		Name                   string                                  `json:"name,omitempty"`
+		Key                    string                                  `json:"key,omitempty"`
+		Description            string                                  `json:"description,omitempty"`
+		Parent                 *EntityRecord                           `json:"parent,omitempty"`
+		Private                bool                                    `json:"private,omitempty"`
+		OmitAccessor           bool                                    `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                                    `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                                    `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field]               `json:"parameters,omitempty"`
+		Index                  string                                  `json:"index,omitempty"`
+		Fields                 encoding.JsonList[*Field]               `json:"fields,omitempty"`
+		CustomCommit           bool                                    `json:"customCommit,omitempty"`
+		CustomResolve          bool                                    `json:"customResolve,omitempty"`
+		CustomIsDirty          bool                                    `json:"customIsDirty,omitempty"`
+		CustomWalk             bool                                    `json:"customWalk,omitempty"`
+		OmitCommit             bool                                    `json:"omitCommit,omitempty"`
+		OmitResolve            bool                                    `json:"omitResolve,omitempty"`
+		OmitIsDirty            bool                                    `json:"omitIsDirty,omitempty"`
+		OmitWalk               bool                                    `json:"omitWalk,omitempty"`
+		ValueStore             string                                  `json:"valueStore,omitempty"`
+		Root                   bool                                    `json:"root,omitempty"`
+		Interface              bool                                    `json:"interface,omitempty"`
+		Attributes             *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
@@ -200,6 +207,10 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	if !(!v.RecordBase.OmitConstructor) {
 
 		u.OmitConstructor = v.RecordBase.OmitConstructor
+	}
+	if !(!v.RecordBase.CustomValueConstructor) {
+
+		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
 
@@ -253,22 +264,23 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 
 func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            RecordType                `json:"type"`
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
-		DataType        FieldType                 `json:"dataType,omitempty"`
-		Pointer         bool                      `json:"pointer,omitempty"`
-		EmptyIfMissing  bool                      `json:"emptyIfMissing,omitempty"`
-		Union           bool                      `json:"union,omitempty"`
-		Collection      CollectionType            `json:"collection,omitempty"`
-		Comparator      string                    `json:"comparator,omitempty"`
+		Type                   RecordType                `json:"type"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
+		DataType               FieldType                 `json:"dataType,omitempty"`
+		Pointer                bool                      `json:"pointer,omitempty"`
+		EmptyIfMissing         bool                      `json:"emptyIfMissing,omitempty"`
+		Union                  bool                      `json:"union,omitempty"`
+		Collection             CollectionType            `json:"collection,omitempty"`
+		Comparator             string                    `json:"comparator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
@@ -298,6 +310,10 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	if !(!v.RecordBase.OmitConstructor) {
 
 		u.OmitConstructor = v.RecordBase.OmitConstructor
+	}
+	if !(!v.RecordBase.CustomValueConstructor) {
+
+		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
 
@@ -330,20 +346,21 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 
 func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            RecordType                `json:"type"`
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
-		DataType        string                    `json:"dataType,omitempty"`
-		Pointer         bool                      `json:"pointer,omitempty"`
-		HasChains       bool                      `json:"hasChains,omitempty"`
-		Constructor     string                    `json:"constructor,omitempty"`
+		Type                   RecordType                `json:"type"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
+		DataType               string                    `json:"dataType,omitempty"`
+		Pointer                bool                      `json:"pointer,omitempty"`
+		HasChains              bool                      `json:"hasChains,omitempty"`
+		Constructor            string                    `json:"constructor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
@@ -373,6 +390,10 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	if !(!v.RecordBase.OmitConstructor) {
 
 		u.OmitConstructor = v.RecordBase.OmitConstructor
+	}
+	if !(!v.RecordBase.CustomValueConstructor) {
+
+		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
 
@@ -399,15 +420,16 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 
 func (v *RecordBase) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
 	}{}
 	if !(len(v.Name) == 0) {
 		u.Name = v.Name
@@ -430,6 +452,9 @@ func (v *RecordBase) MarshalJSON() ([]byte, error) {
 	if !(!v.OmitConstructor) {
 		u.OmitConstructor = v.OmitConstructor
 	}
+	if !(!v.CustomValueConstructor) {
+		u.CustomValueConstructor = v.CustomValueConstructor
+	}
 	if !(len(v.Parameters) == 0) {
 		u.Parameters = v.Parameters
 	}
@@ -441,22 +466,23 @@ func (v *RecordBase) MarshalJSON() ([]byte, error) {
 
 func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            RecordType                `json:"type"`
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
-		DataType        FieldType                 `json:"dataType,omitempty"`
-		Pointer         bool                      `json:"pointer,omitempty"`
-		EmptyIfMissing  bool                      `json:"emptyIfMissing,omitempty"`
-		Union           bool                      `json:"union,omitempty"`
-		Collection      CollectionType            `json:"collection,omitempty"`
-		Comparator      string                    `json:"comparator,omitempty"`
+		Type                   RecordType                `json:"type"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
+		DataType               FieldType                 `json:"dataType,omitempty"`
+		Pointer                bool                      `json:"pointer,omitempty"`
+		EmptyIfMissing         bool                      `json:"emptyIfMissing,omitempty"`
+		Union                  bool                      `json:"union,omitempty"`
+		Collection             CollectionType            `json:"collection,omitempty"`
+		Comparator             string                    `json:"comparator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.RecordBase.Name) == 0) {
@@ -486,6 +512,10 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	if !(!v.RecordBase.OmitConstructor) {
 
 		u.OmitConstructor = v.RecordBase.OmitConstructor
+	}
+	if !(!v.RecordBase.CustomValueConstructor) {
+
+		u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	}
 	if !(len(v.RecordBase.Parameters) == 0) {
 
@@ -518,17 +548,18 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 
 func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            RecordType                `json:"type"`
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
-		ChainType       string                    `json:"chainType,omitempty"`
+		Type                   RecordType                `json:"type"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
+		ChainType              string                    `json:"chainType,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
@@ -538,6 +569,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	u.Private = v.RecordBase.Private
 	u.OmitAccessor = v.RecordBase.OmitAccessor
 	u.OmitConstructor = v.RecordBase.OmitConstructor
+	u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	u.Parameters = v.RecordBase.Parameters
 	u.Index = v.RecordBase.Index
 	u.ChainType = v.ChainType
@@ -554,6 +586,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	v.RecordBase.Private = u.Private
 	v.RecordBase.OmitAccessor = u.OmitAccessor
 	v.RecordBase.OmitConstructor = u.OmitConstructor
+	v.RecordBase.CustomValueConstructor = u.CustomValueConstructor
 	v.RecordBase.Parameters = u.Parameters
 	v.RecordBase.Index = u.Index
 	v.ChainType = u.ChainType
@@ -562,29 +595,30 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 
 func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            RecordType                              `json:"type"`
-		Name            string                                  `json:"name,omitempty"`
-		Key             string                                  `json:"key,omitempty"`
-		Description     string                                  `json:"description,omitempty"`
-		Parent          *EntityRecord                           `json:"parent,omitempty"`
-		Private         bool                                    `json:"private,omitempty"`
-		OmitAccessor    bool                                    `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                                    `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field]               `json:"parameters,omitempty"`
-		Index           string                                  `json:"index,omitempty"`
-		Fields          encoding.JsonList[*Field]               `json:"fields,omitempty"`
-		CustomCommit    bool                                    `json:"customCommit,omitempty"`
-		CustomResolve   bool                                    `json:"customResolve,omitempty"`
-		CustomIsDirty   bool                                    `json:"customIsDirty,omitempty"`
-		CustomWalk      bool                                    `json:"customWalk,omitempty"`
-		OmitCommit      bool                                    `json:"omitCommit,omitempty"`
-		OmitResolve     bool                                    `json:"omitResolve,omitempty"`
-		OmitIsDirty     bool                                    `json:"omitIsDirty,omitempty"`
-		OmitWalk        bool                                    `json:"omitWalk,omitempty"`
-		ValueStore      string                                  `json:"valueStore,omitempty"`
-		Root            bool                                    `json:"root,omitempty"`
-		Interface       bool                                    `json:"interface,omitempty"`
-		Attributes      *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type                   RecordType                              `json:"type"`
+		Name                   string                                  `json:"name,omitempty"`
+		Key                    string                                  `json:"key,omitempty"`
+		Description            string                                  `json:"description,omitempty"`
+		Parent                 *EntityRecord                           `json:"parent,omitempty"`
+		Private                bool                                    `json:"private,omitempty"`
+		OmitAccessor           bool                                    `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                                    `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                                    `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field]               `json:"parameters,omitempty"`
+		Index                  string                                  `json:"index,omitempty"`
+		Fields                 encoding.JsonList[*Field]               `json:"fields,omitempty"`
+		CustomCommit           bool                                    `json:"customCommit,omitempty"`
+		CustomResolve          bool                                    `json:"customResolve,omitempty"`
+		CustomIsDirty          bool                                    `json:"customIsDirty,omitempty"`
+		CustomWalk             bool                                    `json:"customWalk,omitempty"`
+		OmitCommit             bool                                    `json:"omitCommit,omitempty"`
+		OmitResolve            bool                                    `json:"omitResolve,omitempty"`
+		OmitIsDirty            bool                                    `json:"omitIsDirty,omitempty"`
+		OmitWalk               bool                                    `json:"omitWalk,omitempty"`
+		ValueStore             string                                  `json:"valueStore,omitempty"`
+		Root                   bool                                    `json:"root,omitempty"`
+		Interface              bool                                    `json:"interface,omitempty"`
+		Attributes             *encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
@@ -594,6 +628,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u.Private = v.RecordBase.Private
 	u.OmitAccessor = v.RecordBase.OmitAccessor
 	u.OmitConstructor = v.RecordBase.OmitConstructor
+	u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	u.Parameters = v.RecordBase.Parameters
 	u.Index = v.RecordBase.Index
 	u.Fields = v.Fields
@@ -622,6 +657,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	v.RecordBase.Private = u.Private
 	v.RecordBase.OmitAccessor = u.OmitAccessor
 	v.RecordBase.OmitConstructor = u.OmitConstructor
+	v.RecordBase.CustomValueConstructor = u.CustomValueConstructor
 	v.RecordBase.Parameters = u.Parameters
 	v.RecordBase.Index = u.Index
 	v.Fields = u.Fields
@@ -647,22 +683,23 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 
 func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            RecordType                `json:"type"`
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
-		DataType        FieldType                 `json:"dataType,omitempty"`
-		Pointer         bool                      `json:"pointer,omitempty"`
-		EmptyIfMissing  bool                      `json:"emptyIfMissing,omitempty"`
-		Union           bool                      `json:"union,omitempty"`
-		Collection      CollectionType            `json:"collection,omitempty"`
-		Comparator      string                    `json:"comparator,omitempty"`
+		Type                   RecordType                `json:"type"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
+		DataType               FieldType                 `json:"dataType,omitempty"`
+		Pointer                bool                      `json:"pointer,omitempty"`
+		EmptyIfMissing         bool                      `json:"emptyIfMissing,omitempty"`
+		Union                  bool                      `json:"union,omitempty"`
+		Collection             CollectionType            `json:"collection,omitempty"`
+		Comparator             string                    `json:"comparator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
@@ -672,6 +709,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	u.Private = v.RecordBase.Private
 	u.OmitAccessor = v.RecordBase.OmitAccessor
 	u.OmitConstructor = v.RecordBase.OmitConstructor
+	u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	u.Parameters = v.RecordBase.Parameters
 	u.Index = v.RecordBase.Index
 	u.DataType = v.DataType
@@ -693,6 +731,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	v.RecordBase.Private = u.Private
 	v.RecordBase.OmitAccessor = u.OmitAccessor
 	v.RecordBase.OmitConstructor = u.OmitConstructor
+	v.RecordBase.CustomValueConstructor = u.CustomValueConstructor
 	v.RecordBase.Parameters = u.Parameters
 	v.RecordBase.Index = u.Index
 	v.DataType = u.DataType
@@ -706,20 +745,21 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 
 func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            RecordType                `json:"type"`
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
-		DataType        string                    `json:"dataType,omitempty"`
-		Pointer         bool                      `json:"pointer,omitempty"`
-		HasChains       bool                      `json:"hasChains,omitempty"`
-		Constructor     string                    `json:"constructor,omitempty"`
+		Type                   RecordType                `json:"type"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
+		DataType               string                    `json:"dataType,omitempty"`
+		Pointer                bool                      `json:"pointer,omitempty"`
+		HasChains              bool                      `json:"hasChains,omitempty"`
+		Constructor            string                    `json:"constructor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
@@ -729,6 +769,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u.Private = v.RecordBase.Private
 	u.OmitAccessor = v.RecordBase.OmitAccessor
 	u.OmitConstructor = v.RecordBase.OmitConstructor
+	u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	u.Parameters = v.RecordBase.Parameters
 	u.Index = v.RecordBase.Index
 	u.DataType = v.DataType
@@ -748,6 +789,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	v.RecordBase.Private = u.Private
 	v.RecordBase.OmitAccessor = u.OmitAccessor
 	v.RecordBase.OmitConstructor = u.OmitConstructor
+	v.RecordBase.CustomValueConstructor = u.CustomValueConstructor
 	v.RecordBase.Parameters = u.Parameters
 	v.RecordBase.Index = u.Index
 	v.DataType = u.DataType
@@ -759,15 +801,16 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 
 func (v *RecordBase) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.Key = v.Key
@@ -776,6 +819,7 @@ func (v *RecordBase) UnmarshalJSON(data []byte) error {
 	u.Private = v.Private
 	u.OmitAccessor = v.OmitAccessor
 	u.OmitConstructor = v.OmitConstructor
+	u.CustomValueConstructor = v.CustomValueConstructor
 	u.Parameters = v.Parameters
 	u.Index = v.Index
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -788,6 +832,7 @@ func (v *RecordBase) UnmarshalJSON(data []byte) error {
 	v.Private = u.Private
 	v.OmitAccessor = u.OmitAccessor
 	v.OmitConstructor = u.OmitConstructor
+	v.CustomValueConstructor = u.CustomValueConstructor
 	v.Parameters = u.Parameters
 	v.Index = u.Index
 	return nil
@@ -795,22 +840,23 @@ func (v *RecordBase) UnmarshalJSON(data []byte) error {
 
 func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            RecordType                `json:"type"`
-		Name            string                    `json:"name,omitempty"`
-		Key             string                    `json:"key,omitempty"`
-		Description     string                    `json:"description,omitempty"`
-		Parent          *EntityRecord             `json:"parent,omitempty"`
-		Private         bool                      `json:"private,omitempty"`
-		OmitAccessor    bool                      `json:"omitAccessor,omitempty"`
-		OmitConstructor bool                      `json:"omitConstructor,omitempty"`
-		Parameters      encoding.JsonList[*Field] `json:"parameters,omitempty"`
-		Index           string                    `json:"index,omitempty"`
-		DataType        FieldType                 `json:"dataType,omitempty"`
-		Pointer         bool                      `json:"pointer,omitempty"`
-		EmptyIfMissing  bool                      `json:"emptyIfMissing,omitempty"`
-		Union           bool                      `json:"union,omitempty"`
-		Collection      CollectionType            `json:"collection,omitempty"`
-		Comparator      string                    `json:"comparator,omitempty"`
+		Type                   RecordType                `json:"type"`
+		Name                   string                    `json:"name,omitempty"`
+		Key                    string                    `json:"key,omitempty"`
+		Description            string                    `json:"description,omitempty"`
+		Parent                 *EntityRecord             `json:"parent,omitempty"`
+		Private                bool                      `json:"private,omitempty"`
+		OmitAccessor           bool                      `json:"omitAccessor,omitempty"`
+		OmitConstructor        bool                      `json:"omitConstructor,omitempty"`
+		CustomValueConstructor bool                      `json:"customValueConstructor,omitempty"`
+		Parameters             encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		Index                  string                    `json:"index,omitempty"`
+		DataType               FieldType                 `json:"dataType,omitempty"`
+		Pointer                bool                      `json:"pointer,omitempty"`
+		EmptyIfMissing         bool                      `json:"emptyIfMissing,omitempty"`
+		Union                  bool                      `json:"union,omitempty"`
+		Collection             CollectionType            `json:"collection,omitempty"`
+		Comparator             string                    `json:"comparator,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Name = v.RecordBase.Name
@@ -820,6 +866,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	u.Private = v.RecordBase.Private
 	u.OmitAccessor = v.RecordBase.OmitAccessor
 	u.OmitConstructor = v.RecordBase.OmitConstructor
+	u.CustomValueConstructor = v.RecordBase.CustomValueConstructor
 	u.Parameters = v.RecordBase.Parameters
 	u.Index = v.RecordBase.Index
 	u.DataType = v.DataType
@@ -841,6 +888,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	v.RecordBase.Private = u.Private
 	v.RecordBase.OmitAccessor = u.OmitAccessor
 	v.RecordBase.OmitConstructor = u.OmitConstructor
+	v.RecordBase.CustomValueConstructor = u.CustomValueConstructor
 	v.RecordBase.Parameters = u.Parameters
 	v.RecordBase.Index = u.Index
 	v.DataType = u.DataType

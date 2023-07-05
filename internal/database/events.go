@@ -10,6 +10,7 @@ import (
 	"bytes"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -17,40 +18,40 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func newEventsSet[T any](c *AccountEvents, set values.Set[T], getKey func(T) *record.Key, getHash func(T) []byte) *eventsSet[T] {
+func newEventsSet[T any](c *AccountEvents, set eventsSetBase[T], getKey func(T) *record.Key, getHash func(T) []byte) *eventsSet[T] {
 	return &eventsSet[T]{
-		Set:     set,       // The value set
-		bpt:     c.BPT(),   // The events BPT
-		baseKey: set.Key(), // The value set's key
-		getKey:  getKey,    // A function that returns a key for a set element, for the BPT
-		getHash: getHash,   // A function that returns a hash for a set element, for the BPT
+		eventsSetBase: set,       // The value set
+		bpt:           c.BPT(),   // The events BPT
+		baseKey:       set.Key(), // The value set's key
+		getKey:        getKey,    // A function that returns a key for a set element, for the BPT
+		getHash:       getHash,   // A function that returns a hash for a set element, for the BPT
 	}
 }
 
-func (h *AccountEventsMinor) Votes(block uint64) values.Set[*protocol.AuthoritySignature] {
+func (h *AccountEventsMinor) newVotes(params accountEventsMinorVotesKey) values.Set[*protocol.AuthoritySignature] {
 	e := newEventsSet(
 		h.parent,
-		h.getVotes(block),
+		h.baseNewVotes(params).(eventsSetBase[*protocol.AuthoritySignature]),
 		getAuthSigKey,
 		(*protocol.AuthoritySignature).Hash,
 	)
-	return &blockEventSet[*protocol.AuthoritySignature]{h, block, e}
+	return &blockEventSet[*protocol.AuthoritySignature]{h, params.Block, *e}
 }
 
-func (h *AccountEventsMajor) Pending(block uint64) values.Set[*url.TxID] {
+func (h *AccountEventsMajor) newPending(params accountEventsMajorPendingKey) values.Set[*url.TxID] {
 	e := newEventsSet(
 		h.parent,
-		h.getPending(block),
+		h.baseNewPending(params).(eventsSetBase[*url.TxID]),
 		getTxIDKey,
 		(*url.TxID).HashSlice,
 	)
-	return &blockEventSet[*url.TxID]{h, block, e}
+	return &blockEventSet[*url.TxID]{h, params.Block, *e}
 }
 
-func (h *AccountEventsBacklog) Expired() values.Set[*url.TxID] {
+func (h *AccountEventsBacklog) newExpired() values.Set[*url.TxID] {
 	return newEventsSet(
 		h.parent,
-		h.getExpired(),
+		h.baseNewExpired().(eventsSetBase[*url.TxID]),
 		getTxIDKey,
 		(*url.TxID).HashSlice,
 	)
@@ -80,11 +81,13 @@ func (c *AccountEventsMajor) getPendingKeys() ([]accountEventsMajorPendingKey, e
 type blockEventSet[T any] struct {
 	parent interface{ Blocks() values.Set[uint64] }
 	block  uint64
-	values.Set[T]
+	eventsSet[T]
 }
 
+var _ postRestorer = (*blockEventSet[any])(nil)
+
 func (b *blockEventSet[T]) Put(v []T) error {
-	err := b.Set.Put(v)
+	err := b.eventsSet.Put(v)
 	if err != nil {
 		return err
 	}
@@ -98,7 +101,7 @@ func (b *blockEventSet[T]) Put(v []T) error {
 }
 
 func (b *blockEventSet[T]) Add(v ...T) error {
-	err := b.Set.Add(v...)
+	err := b.eventsSet.Add(v...)
 	if err != nil {
 		return err
 	}
@@ -138,12 +141,48 @@ func compareHeldAuthSig(v, u *protocol.AuthoritySignature) int {
 	return bytes.Compare(a[:], b[:])
 }
 
-type eventsSet[T any] struct {
+type eventsSetBase[T any] interface {
 	values.Set[T]
+	database.Value
+}
+
+type eventsSet[T any] struct {
+	eventsSetBase[T]
 	bpt     *bpt.BPT
 	baseKey *record.Key
 	getKey  func(T) *record.Key
 	getHash func(T) []byte
+}
+
+var _ postRestorer = (*eventsSet[any])(nil)
+var _ database.Value = (*eventsSet[any])(nil)
+
+func (e *eventsSet[T]) postRestore() error {
+	// The the restored values
+	v, err := e.Get()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Update the BPT
+	for _, v := range v {
+		err = e.bpt.Insert(
+			e.baseKey.AppendKey(e.getKey(v)).Hash(),
+			*(*[32]byte)(e.getHash(v)))
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	return nil
+}
+
+func (e *eventsSet[T]) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	// Overriding Resolve is necessary to ensure postRestore is called.
+	if key.Len() == 0 {
+		return e, nil, nil
+	}
+	return nil, nil, errors.InternalError.With("bad key for value")
 }
 
 func (e *eventsSet[T]) Put(v []T) error {
@@ -180,7 +219,7 @@ func (e *eventsSet[T]) Put(v []T) error {
 		}
 	}
 
-	return e.Set.Put(v)
+	return e.eventsSetBase.Put(v)
 }
 
 func (e *eventsSet[T]) Add(v ...T) error {
@@ -194,7 +233,7 @@ func (e *eventsSet[T]) Add(v ...T) error {
 		}
 	}
 
-	return e.Set.Add(v...)
+	return e.eventsSetBase.Add(v...)
 }
 
 func (e *eventsSet[T]) Remove(v T) error {
@@ -204,5 +243,5 @@ func (e *eventsSet[T]) Remove(v T) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	return e.Set.Remove(v)
+	return e.eventsSetBase.Remove(v)
 }
