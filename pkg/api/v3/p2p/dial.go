@@ -53,6 +53,11 @@ type dialerTracker interface {
 	markBad(peer.ID)
 }
 
+type fakeTraker struct{}
+
+func (fakeTraker) isBad(peer.ID) bool { return false }
+func (fakeTraker) markBad(peer.ID)    {}
+
 type simpleTracker struct {
 	sync.RWMutex
 	best           int
@@ -93,6 +98,11 @@ func (t *simpleTracker) markBad(p peer.ID) {
 	t.Lock()
 	defer t.Unlock()
 
+	if t.peerErrorCount == nil {
+		t.peerErrorCount = map[peer.ID]int{}
+		t.countOfCount = []int{0}
+	}
+
 	// Increment the peer's error count
 	v := t.peerErrorCount[p]
 	t.peerErrorCount[p] = v + 1
@@ -123,7 +133,13 @@ type stream struct {
 // DialNetwork returns a [message.MultiDialer] that opens a stream to a node
 // that can provides a given service.
 func (n *Node) DialNetwork() message.MultiDialer {
-	return dialer{n, n.peermgr, &simpleTracker{}}
+	var t dialerTracker
+	if n.trackPeers {
+		t = &simpleTracker{}
+	} else {
+		t = fakeTraker{}
+	}
+	return dialer{n, n.peermgr, t}
 }
 
 // Dial dials the given address. The address must include an /acc component and
