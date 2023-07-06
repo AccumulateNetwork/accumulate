@@ -32,6 +32,7 @@ import (
 var listNodesCmd = &cobra.Command{
 	Use:   "list-nodes [seeds]",
 	Short: "List the nodes of the network",
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		_, nodes := walkNetwork(args)
 		printNodes(nodes)
