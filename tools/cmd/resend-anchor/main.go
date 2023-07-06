@@ -62,7 +62,7 @@ func run(_ *cobra.Command, args []string) {
 
 	src := protocol.PartitionUrl(srcDesc.PartitionId)
 	dst := protocol.PartitionUrl(dstDesc.PartitionId)
-	querySynthAndExecute(source, destination, src, dst, seqNum)
+	querySynthAndExecute(source, destination, src, dst, seqNum, true)
 }
 
 func fatalf(format string, args ...interface{}) {
@@ -107,31 +107,41 @@ func querySynth(c *client.Client, txid *url.TxID, src, dst *url.URL, seqNum uint
 	return res.Transaction, res.Signatures
 }
 
-func executeLocal(c *client.Client, dst *url.URL, txn *protocol.Transaction, sigs []protocol.Signature) {
+func execute(c *client.Client, dst *url.URL, txn *protocol.Transaction, sigs []protocol.Signature, local bool) {
 	req := new(api.ExecuteRequest)
 	req.Envelope = new(messaging.Envelope)
 	req.Envelope.Transaction = []*protocol.Transaction{txn}
 	req.Envelope.Signatures = sigs
-	res2, err := c.ExecuteLocal(context.Background(), req)
+
+	b, err := json.Marshal(req.Envelope)
+	checkf(err, "marshal result")
+	fmt.Printf("> %s\n\n", b)
+
+	var res *api.TxResponse
+	if local {
+		res, err = c.ExecuteLocal(context.Background(), req)
+	} else {
+		res, err = c.ExecuteDirect(context.Background(), req)
+	}
 	if warnf(err, "execute anchor %x from directory for %v", txn.GetHash()[:4], dst) {
 		return
 	}
 
-	if res2.Message != "" {
-		fmt.Fprintf(os.Stdout, "Warning: %s\n", res2.Message)
+	if res.Message != "" {
+		fmt.Fprintf(os.Stdout, "Warning: %s\n", res.Message)
 		return
 	}
 
-	b, err := json.Marshal(res2.Result)
+	b, err = json.Marshal(res.Result)
 	checkf(err, "marshal result")
-	fmt.Printf("%s\n\n", b)
+	fmt.Printf("< %s\n\n", b)
 
 	// result := new(protocol.TransactionStatus)
 	// err = json.Unmarshal(b, result)
 	// checkf(err, "unmarshal result")
 }
 
-func querySynthAndExecute(csrc, cdst *client.Client, src, dst *url.URL, seqNum uint64) {
+func querySynthAndExecute(csrc, cdst *client.Client, src, dst *url.URL, seqNum uint64, local bool) {
 	txn, sigs := querySynth(csrc, nil, src, dst, seqNum)
 	if txn == nil {
 		return
@@ -144,5 +154,5 @@ func querySynthAndExecute(csrc, cdst *client.Client, src, dst *url.URL, seqNum u
 		}
 	}
 
-	executeLocal(cdst, dst, txn, sigs)
+	execute(cdst, dst, txn, sigs, local)
 }
