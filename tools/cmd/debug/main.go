@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var cmd = &cobra.Command{
@@ -29,6 +30,14 @@ func fatalf(format string, args ...interface{}) {
 
 func check(err error) {
 	if err != nil {
-		fatalf("%v", err)
+		err = errors.UnknownError.Skip(1).Wrap(err)
+		fatalf("%+v", err)
+	}
+}
+
+func checkf(err error, format string, otherArgs ...interface{}) {
+	if err != nil {
+		err = errors.UnknownError.Skip(1).Wrap(err)
+		fatalf(format+": %+v", append(otherArgs, err)...)
 	}
 }

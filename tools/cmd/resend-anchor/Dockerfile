@@ -1,4 +1,4 @@
-FROM golang:1.19 as build
+FROM golang:1.20 as build
 
 # Build
 WORKDIR /root
@@ -16,4 +16,4 @@ RUN apk add --no-cache bash curl
 COPY --from=build /go/bin/resend-anchor /go/bin/dlv /bin/
 
 ENTRYPOINT ["resend-anchor"]
-CMD ["heal", "--continuous", "tcp://bvn0-seed.testnet.accumulatenetwork.io:16591", "tcp://bvn1-seed.testnet.accumulatenetwork.io:16591", "tcp://bvn2-seed.testnet.accumulatenetwork.io:16591"]
+CMD ["heal", "--help"]
