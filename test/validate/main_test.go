@@ -143,7 +143,7 @@ func TestValidateNetwork(t *testing.T) {
 	}
 
 	harness, node := setupNetClient(t, network, bootstrap...)
-	waitFor(t, node, network, api.ServiceTypeFaucet.Address(), time.Minute)
+	// waitFor(t, node, network, api.ServiceTypeFaucet.Address(), time.Minute)
 
 	s := new(ValidationTestSuite)
 	s.Harness, s.faucetSvc, s.node = harness, node, node
@@ -243,23 +243,28 @@ func (s *ValidationTestSuite) faucet(account *url.URL) *protocol.TransactionStat
 	return sub.Status
 }
 
+var liteSeed = flag.String("test.validate.lite-seed", "Lite", "Seed for the lite account")
+var adiSuffix = flag.String("test.validate.adi-suffix", "", "Suffix to add to ADIs")
+
 func (s *ValidationTestSuite) TestMain() {
 	// Set up lite addresses
-	liteKey := acctesting.GenerateKey("Lite")
+	liteKey := acctesting.GenerateKey(*liteSeed)
 	liteAcme := acctesting.AcmeLiteAddressStdPriv(liteKey)
 	liteId := liteAcme.RootIdentity()
 
+	adi := AccountUrl("test" + *adiSuffix)
+	manager := AccountUrl("manager" + *adiSuffix)
+
 	// Set up the ADI and its keys
-	adi := AccountUrl("test")
-	key10 := acctesting.GenerateKey(1, 0)
-	key20 := acctesting.GenerateKey(2, 0)
-	key21 := acctesting.GenerateKey(2, 1)
-	key22 := acctesting.GenerateKey(2, 2)
-	key23 := acctesting.GenerateKey(2, 3) // Orig
-	key24 := acctesting.GenerateKey(2, 4) // New
-	key30 := acctesting.GenerateKey(3, 0)
-	key31 := acctesting.GenerateKey(3, 1)
-	keymgr := acctesting.GenerateKey("mgr")
+	key10 := acctesting.GenerateKey(adi, 1, 0)
+	key20 := acctesting.GenerateKey(adi, 2, 0)
+	key21 := acctesting.GenerateKey(adi, 2, 1)
+	key22 := acctesting.GenerateKey(adi, 2, 2)
+	key23 := acctesting.GenerateKey(adi, 2, 3) // Orig
+	key24 := acctesting.GenerateKey(adi, 2, 4) // New
+	key30 := acctesting.GenerateKey(adi, 3, 0)
+	key31 := acctesting.GenerateKey(adi, 3, 1)
+	keymgr := acctesting.GenerateKey(manager, 1)
 
 	ns := s.NetworkStatus(api.NetworkStatusOptions{Partition: protocol.Directory})
 	oracle := float64(ns.Oracle.Price) / AcmeOraclePrecision
@@ -738,7 +743,6 @@ func (s *ValidationTestSuite) TestMain() {
 		Txn(st.TxID).Succeeds())
 
 	s.TB.Log("Create another ADI (manager)")
-	manager := AccountUrl("manager")
 	st = s.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(liteAcme).
 			CreateIdentity(manager).WithKey(keymgr, SignatureTypeED25519).WithKeyBook(manager, "book").
