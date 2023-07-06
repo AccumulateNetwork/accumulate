@@ -23,11 +23,9 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.serializer
 
-Serializable(with = {{.Name}}Serializer::class)
+@Serializable(with = {{.Name}}Serializer::class)
 enum class {{.Name}}(override val value: Int, val apiName: String) : IntValueEnum {
 
-
-public enum  implements IntValueEnum {
     {{- range $i, $v := .Values}}{{if gt $i 0}},{{end}}
     {{underscoreUpperCase $v.Name}}({{$v.Value}}, "{{lowerCamel $v.Name}}")
     {{- end}};

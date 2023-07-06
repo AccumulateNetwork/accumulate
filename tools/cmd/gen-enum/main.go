@@ -66,7 +66,7 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 
 func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
-	case "java", "Java":
+	case "java", "Java", "kotlin", "Kotlin":
 		flags.FilePerType = true
 	}
 

@@ -197,9 +197,12 @@ func run(_ *cobra.Command, args []string) {
 			err := fileTmpl.Execute(w, unionSpec)
 			check(err)
 			filename := w.String()
+			parts := strings.Split(filename, ".")
+			parts[0] += "Union"
+			filename = strings.Join(parts, ".")
 
 			w.Reset()
-			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, unionSpec})
+			err = Templates.Execute(w, flags.Language+"-unions", &SingleUnionFile{flags.Package, unionSpec})
 			if errors.Is(err, typegen.ErrSkip) {
 				continue
 			}

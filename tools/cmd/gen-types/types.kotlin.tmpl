@@ -12,12 +12,10 @@ package {{.Package}}.generated.{{.SubPackage}};
 
 import {{.Package}}.protocol.*;
 import {{.Package}}.generated.apiv3.*;
+import {{.Package}}.generated.apiv3.Records.*;
 import {{.Package}}.generated.protocol.*;
-import {{.Package}}.generated.query.*;
-import {{.Package}}.generated.config.*;
-import {{.Package}}.generated.database.*;
-import {{.Package}}.generated.core.*;
-import {{.Package}}.generated.errors.Error;
+import {{.Package}}.generated.protocol.Signatures.*;
+import {{.Package}}.generated.types.*;
 import {{.Package}}.generated.errors.*;
 import {{.Package}}.support.*;
 import {{.Package}}.support.serializers.*;
@@ -26,81 +24,62 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Transient
 
-// Type: {{title .Type}}
-// UnionTypeEnum: {{.Enumeration}}
 
 @Serializable
-sealed class {{title .Type}} : {{.DetermineResponseType}} {
+@SerialName("{{lcName .Name}}")
+class {{.Name}}() : Marshallable {
 
-    abstract val type: TransactionType
+{{- $className := .Name -}}
+{{- range .Fields}}
+{{-   if not .Virtual}}
+{{-   if eq .MarshalAs 1 }}
+    @Transient{{- end}}
+{{-   if eq (resolveType .) "byte[]" }}
+@Serializable(with = HexDeserializer::class){{- end}}
+{{-   if eq (resolveType .) "byte[][]" }}
+@Serializable(with = Hex2DDeserializer::class){{- end}}
+    var {{lcName .Name}}:{{resolveType .}}? = null
 
-{{range .Members}}
-    @Serializable
-    @SerialName("{{lcName .Name}}")
-    class {{.UnionValue}}() : {{title .UnionSpec.Type}}() {
-
-    {{- $unionValue := .UnionValue -}}
-	{{- range .Fields}}
-	{{-   if and (.Virtual) (ne $unionValue "")}}
-	    {{   if eq (lcName .Name) "type"}}
-	    @Required
-        override val {{lcName .Name}}: {{resolveType .}} = {{resolveType .}}.{{underscoreUpperCase $unionValue}}
-	    {{   end}}
-	{{-   end}}
-	{{- end}}
-
-	{{- range .Fields}}
-	{{-   if not .Virtual}}
-	{{-   if eq .MarshalAs 1 }}
-	@Transient{{- end}}
-	{{-   if eq (resolveType .) "byte[]" }}
-	@Serializable(with = HexDeserializer::class){{- end}}
-	{{-   if eq (resolveType .) "byte[][]" }}
-	@Serializable(with = Hex2DDeserializer::class){{- end}}
-	    var {{lcName .Name}}:{{resolveType .}}? = null
-
-        fun {{lcName .Name}}(value: {{resolveType .}}) : {{$unionValue}} {
-            this.{{lcName .Name}} = value
-            return this;
-        }
-
-	{{-     if eq (resolveType .) "Url"}}
-        fun {{lcName .Name}}(value: String) : {{$unionValue}} {
-            this.{{lcName .Name}} = Url.parse(value)
-            return this;
-        }
-	{{-     end}}
-	{{-     if eq (resolveType .) "ByteArray"}}
-        fun {{lcName .Name}}(value: String) : {{$unionValue}} {
-            this.{{lcName .Name}} = value.decodeHex()
-            return this;
-        }
-	{{-     end}}
-	{{-   end}}
-	{{- end}}
-
-
-        override fun marshalBinary(): ByteArray {
-          val marshaller = Marshaller()
-        {{- range .Fields}}
-        {{-   if and .IsBinary .IsMarshalled}}
-        {{-     if .OmitEmpty}}
-        {{-       if .Type.IsKnown}}
-          {{lcName .Name}}?.let{ marshaller.write{{.Type.Title}}({{.Number}}, it) }
-        {{-       else }}
-          {{lcName .Name}}?.let { marshaller.writeValue({{.Number}}, it) }
-        {{-       end}}
-        {{-     else }}
-        {{-       if .Type.IsKnown}}
-          marshaller.write{{.Type.Title}}({{.Number}}, this.{{lcName .Name}})
-        {{-       else }}
-          marshaller.writeValue({{.Number}}, {{lcName .Name}});
-        {{-       end}}
-        {{-     end}}
-        {{-   end}}
-        {{- end}}
-          return marshaller.array();
-        }
+    fun {{lcName .Name}}(value: {{resolveType .}}) : {{$className}} {
+        this.{{lcName .Name}} = value
+        return this;
     }
-{{end}}
+
+{{-     if eq (resolveType .) "AccUrl"}}
+    fun {{lcName .Name}}(value: String) : {{$className}} {
+        this.{{lcName .Name}} = AccUrl.parse(value)
+        return this;
+    }
+{{-     end}}
+{{-     if eq (resolveType .) "ByteArray"}}
+    fun {{lcName .Name}}(value: String) : {{$className}} {
+        this.{{lcName .Name}} = value.decodeHex()
+        return this;
+    }
+{{-     end}}
+{{-   end}}
+{{- end}}
+
+
+    override fun marshalBinary(): ByteArray {
+      val marshaller = Marshaller()
+    {{- range .Fields}}
+    {{-   if and .IsBinary .IsMarshalled}}
+    {{-     if .OmitEmpty}}
+    {{-       if .Type.IsKnown}}
+      {{lcName .Name}}?.let{ marshaller.write{{.Type.Title}}({{.Number}}, it) }
+    {{-       else }}
+      {{lcName .Name}}?.let { marshaller.writeValue({{.Number}}, it) }
+    {{-       end}}
+    {{-     else }}
+    {{-       if .Type.IsKnown}}
+      marshaller.write{{.Type.Title}}({{.Number}}, this.{{lcName .Name}})
+    {{-       else }}
+      marshaller.writeValue({{.Number}}, {{lcName .Name}});
+    {{-       end}}
+    {{-     end}}
+    {{-   end}}
+    {{- end}}
+      return marshaller.array();
+    }
 }

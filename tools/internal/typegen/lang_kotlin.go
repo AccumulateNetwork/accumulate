@@ -34,7 +34,7 @@ func (f FieldType) KotlinType() string {
 	case TypeCodeDuration:
 		return "Duration"
 	case TypeCodeTime:
-		return "kotlinx.datetime.OffsetDateTime"
+		return "kotlinx.datetime.Instant"
 	case TypeCodeAny:
 		return "jsonElement"
 	case TypeCodeBool:

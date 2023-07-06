@@ -46,7 +46,7 @@ public class {{safeClassName .Name}}{{
     else if eq .UnionType "AccountType"}} implements Account {{-
     else if eq .UnionType "KeyPageOperationType"}} implements KeyPageOperation{{-
     else if eq .UnionType "SignatureType"}} implements Signature{{-
-    else }} implements Marhallable{{-
+    else }} implements Marshallable{{-
     end}} {
 
 	{{- range .Fields}}

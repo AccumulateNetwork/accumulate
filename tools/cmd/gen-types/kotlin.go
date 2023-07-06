@@ -17,13 +17,17 @@ import (
 //go:embed types.kotlin.tmpl
 var kotlinSrc string
 
+//go:embed unions.kotlin.tmpl
+var kotlinUnionsSrc string
+
 var _ = Templates.Register(kotlinSrc, "kotlin", kotlinFuncs, "kotlin")
+var _ = Templates.Register(kotlinUnionsSrc, "kotlin-unions", kotlinFuncs)
 
 var kotlinFuncs = template.FuncMap{
 	"resolveType": func(field *Field) string {
 		typ := field.Type.KotlinType()
 		if field.Repeatable {
-			typ += "[]"
+			typ = "Array<" + typ + ">"
 		}
 		return typ
 	},
