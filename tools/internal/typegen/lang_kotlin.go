@@ -32,11 +32,11 @@ func (f FieldType) KotlinType() string {
 	case TypeCodeHash:
 		return "ByteArray"
 	case TypeCodeDuration:
-		return "Duration"
+		return "kotlin.time.Duration"
 	case TypeCodeTime:
 		return "kotlinx.datetime.Instant"
 	case TypeCodeAny:
-		return "jsonElement"
+		return "JsonElement"
 	case TypeCodeBool:
 		return "Boolean"
 	case TypeCodeFloat:

@@ -31,7 +31,8 @@ generate types protocol $PROT/general.yml $PROT/account_auth_operations.yml $PRO
     -x TransactionStatus
 
 TYPES=../../../pkg/types
-generate types types $TYPES/merkle/types.yml $TYPES/network/types.yml
+generate enum types $TYPES/messaging/enums.yml
+generate types types $TYPES/merkle/types.yml $TYPES/network/types.yml $TYPES/messaging/messages.yml
 
 API=../../../pkg/api/v3
 generate enum apiv3 $API/enums.yml
