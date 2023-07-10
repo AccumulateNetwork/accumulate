@@ -35,8 +35,13 @@ var cmdHealSynth = &cobra.Command{
 	Run:   healSynth,
 }
 
+var flagHealSynth = struct {
+	Peer string
+}{}
+
 func init() {
 	cmd.AddCommand(cmdHealSynth)
+	cmdHealSynth.Flags().StringVar(&flagHealSynth.Peer, "peer", "", "Query a specific peer")
 }
 
 func healSynth(_ *cobra.Command, args []string) {
@@ -98,48 +103,31 @@ func healSynth(_ *cobra.Command, args []string) {
 					}
 				}
 
-				pid, err := peer.Decode("12D3KooWDqFDwjHEog1bNbxai2dKSaR1aFvq2LAZ2jivSohgoSc7")
-				check(err)
+				p := c2.Private()
+				if flagHealSynth.Peer != "" {
+					pid, err := peer.Decode(flagHealSynth.Peer)
+					check(err)
+					p = c2.ForPeer(pid).Private()
+				}
 
 				// Get a signature
-				r, err := c2.ForPeer(pid).Private().Sequence(context.Background(), partSig.SourceNetwork.JoinPath(protocol.Synthetic), partSig.DestinationNetwork, partSig.SequenceNumber)
+				r, err := p.Sequence(context.Background(), partSig.SourceNetwork.JoinPath(protocol.Synthetic), partSig.DestinationNetwork, partSig.SequenceNumber)
 				check(err)
+				var note string
 				for _, sigs := range r.Signatures.Records {
 					for _, sig := range sigs.Signatures.Records {
 						if sig, ok := sig.Message.(*messaging.SignatureMessage); ok {
-							if sig, ok := sig.Signature.(protocol.KeySignature); ok {
+							switch sig := sig.Signature.(type) {
+							case protocol.KeySignature:
 								xreq.Envelope.Signatures = append(xreq.Envelope.Signatures, sig)
+							case *protocol.ReceiptSignature:
+								if !res.Status.GotDirectoryReceipt {
+									note = " with DN receipt"
+									xreq.Envelope.Signatures = append(xreq.Envelope.Signatures, sig)
+								}
 							}
 						}
 					}
-				}
-
-				req.Url = src.Url.JoinPath(protocol.Synthetic).WithFragment(fmt.Sprintf("txn/%x", txid.Hash()))
-				req.Prove = true
-				res2 := new(v2.TransactionQueryResponse)
-				err = c.RequestAPIv2(context.Background(), "query", req, res2)
-				check(err)
-
-				// Fix receipts
-				var note string
-				if !res.Status.GotDirectoryReceipt {
-					anchor := res2.Status.Proof.Anchor
-
-					rreq := new(v2.GeneralQuery)
-					rreq.Url = protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", anchor))
-					rres := new(v2.ChainQueryResponse)
-					err = c.RequestAPIv2(context.Background(), "query", rreq, rres)
-					checkf(err, "get DN receipt for %x", anchor)
-
-					receipt, err := res2.Status.Proof.Combine(&rres.Receipt.Proof)
-					checkf(err, "combine receipts")
-
-					sig := new(protocol.ReceiptSignature)
-					sig.SourceNetwork = protocol.DnUrl()
-					sig.TransactionHash = txid.Hash()
-					sig.Proof = *receipt
-					xreq.Envelope.Signatures = append(xreq.Envelope.Signatures, sig)
-					note = " with DN receipt"
 				}
 
 				fmt.Printf("Resubmitting %v%s\n", txid, note)
