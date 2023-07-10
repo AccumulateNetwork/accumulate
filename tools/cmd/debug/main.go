@@ -34,10 +34,3 @@ func check(err error) {
 		fatalf("%+v", err)
 	}
 }
-
-func checkf(err error, format string, otherArgs ...interface{}) {
-	if err != nil {
-		err = errors.UnknownError.Skip(1).Wrap(err)
-		fatalf(format+": %+v", append(otherArgs, err)...)
-	}
-}
