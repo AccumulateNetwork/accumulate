@@ -276,6 +276,12 @@ func (s *Simulator) BlockIndex(partition string) uint64 {
 	return p.blockIndex
 }
 
+func (s *Simulator) BlockTime(partition string) time.Time {
+	p := s.partitions[partition]
+	p.loadBlockIndex()
+	return p.blockTime
+}
+
 func (s *Simulator) BlockIndexFor(account *url.URL) uint64 {
 	partition, err := s.router.RouteAccount(account)
 	if err != nil {
