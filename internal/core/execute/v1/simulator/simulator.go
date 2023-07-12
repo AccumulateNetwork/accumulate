@@ -744,7 +744,8 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			}
 		}
 
-		require.NoError(x, x.Executor.EndBlock(block))
+		_, err = x.Executor.EndBlock(block)
+		require.NoError(x, err)
 
 		// Is the block empty?
 		if !block.State.Empty() {
