@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -27,14 +28,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// EndBlock implements ./Chain
-func (m *Executor) EndBlock(block *Block) error {
+// Close ends the block and returns the block state.
+func (block *Block) Close() (execute.BlockState, error) {
+	m := block.Executor
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
 	err := m.processEventBacklog(block)
 	if err != nil {
-		return errors.UnknownError.WithFormat("process event backlog: %w", err)
+		return nil, errors.UnknownError.WithFormat("process event backlog: %w", err)
 	}
 
 	// Check for missing synthetic transactions. Load the ledger synchronously,
@@ -42,33 +44,38 @@ func (m *Executor) EndBlock(block *Block) error {
 	var synthLedger *protocol.SyntheticLedger
 	err = block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	var anchorLedger *protocol.AnchorLedger
 	err = block.Batch.Account(m.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
-
-	// Update active globals
-	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: &m.globals.Pending,
-			Old: &m.globals.Active,
-		})
-		if err != nil {
-			return errors.UnknownError.WithFormat("publish globals update: %w", err)
-		}
-		m.globals.Active = *m.globals.Pending.Copy()
-	}
 
 	// Determine if an anchor should be sent
 	m.shouldPrepareAnchor(block)
 
 	// Do nothing if the block is empty
 	if block.State.Empty() {
-		return nil
+		return &closedBlock{*block, nil}, nil
+	}
+
+	// Update active globals - **after** checking if the block is empty, because
+	// we definitely don't want to tell the ABCI that the validator set changed
+	// if the block is getting discarded, though that _should_ be impossible
+	var valUp []*execute.ValidatorUpdate
+	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
+		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
+
+		err = m.EventBus.Publish(events.WillChangeGlobals{
+			New: &m.globals.Pending,
+			Old: &m.globals.Active,
+		})
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
+		}
+		m.globals.Active = *m.globals.Pending.Copy()
 	}
 
 	m.logger.Debug("Committing",
@@ -87,7 +94,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		// Get the major block height
 		major, err := getMajorHeight(m.Describe, block.Batch)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
 		// Set the expiration height
@@ -100,14 +107,14 @@ func (m *Executor) EndBlock(block *Block) error {
 		// Record the IDs
 		err = ledger.Events().Major().Pending(major).Add(block.State.GetPending()...)
 		if err != nil {
-			return errors.UnknownError.WithFormat("store pending expirations: %w", err)
+			return nil, errors.UnknownError.WithFormat("store pending expirations: %w", err)
 		}
 	}
 
 	// Load the main chain of the minor root
 	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
-		return errors.UnknownError.WithFormat("load root chain: %w", err)
+		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
 
 	if m.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
@@ -119,7 +126,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		for _, account := range block.Batch.UpdatedAccounts() {
 			chains, err := account.UpdatedChains()
 			if err != nil {
-				return errors.UnknownError.WithFormat("get updated chains of %v: %w", account.Url(), err)
+				return nil, errors.UnknownError.WithFormat("get updated chains of %v: %w", account.Url(), err)
 			}
 
 			// For each modified chain
@@ -180,15 +187,15 @@ func (m *Executor) EndBlock(block *Block) error {
 		account := block.Batch.Account(entry.Account)
 		chain, err := account.ChainByName(entry.Chain)
 		if err != nil {
-			return errors.UnknownError.WithFormat("resolve chain %v of %v: %w", entry.Chain, entry.Account, err)
+			return nil, errors.UnknownError.WithFormat("resolve chain %v of %v: %w", entry.Chain, entry.Account, err)
 		}
 		chain2, err := chain.Get()
 		if err != nil {
-			return errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
+			return nil, errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
 		}
 		hash, err := chain2.Entry(int64(entry.Index))
 		if err != nil {
-			return errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
+			return nil, errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
 		}
 		u.Txns = append(u.Txns, hash)
 
@@ -200,7 +207,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		// Anchor and index the chain
 		u.IndexIndex, u.DidIndex, err = addChainAnchor(rootChain, chain, block.Index)
 		if err != nil {
-			return errors.UnknownError.WithFormat("add anchor to root chain: %w", err)
+			return nil, errors.UnknownError.WithFormat("add anchor to root chain: %w", err)
 		}
 	}
 
@@ -212,7 +219,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	bl.Entries = block.State.ChainUpdates.Entries
 	err = block.Batch.Account(bl.Url).Main().Put(bl)
 	if err != nil {
-		return errors.UnknownError.WithFormat("store block ledger: %w", err)
+		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}
 
 	// Add the synthetic transaction chain to the root chain
@@ -220,7 +227,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	if block.State.Produced > 0 {
 		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -231,7 +238,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		BlockTime:  &block.Time,
 	})
 	if err != nil {
-		return errors.UnknownError.WithFormat("add root index chain entry: %w", err)
+		return nil, errors.UnknownError.WithFormat("add root index chain entry: %w", err)
 	}
 
 	// Update the transaction-chain index
@@ -247,7 +254,7 @@ func (m *Executor) EndBlock(block *Block) error {
 			e.AnchorIndex = rootIndexIndex
 			err = indexing.TransactionChain(block.Batch, hash).Add(e)
 			if err != nil {
-				return errors.UnknownError.WithFormat("store transaction chain index: %w", err)
+				return nil, errors.UnknownError.WithFormat("store transaction chain index: %w", err)
 			}
 		}
 	}
@@ -261,24 +268,24 @@ func (m *Executor) EndBlock(block *Block) error {
 			AnchorIndex: rootIndexIndex,
 		})
 		if err != nil {
-			return errors.UnknownError.WithFormat("store transaction chain index: %w", err)
+			return nil, errors.UnknownError.WithFormat("store transaction chain index: %w", err)
 		}
 	}
 
 	// Update major index chains if it's a major block
 	err = m.updateMajorIndexChains(block, rootIndexIndex)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Check if an anchor needs to be sent
 	err = m.prepareAnchor(block)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
-	return nil
+	return &closedBlock{*block, valUp}, nil
 }
 
 func getMajorHeight(desc config.Describe, batch *database.Batch) (uint64, error) {

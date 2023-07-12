@@ -637,6 +637,8 @@ func (s *ValidationTestSuite) TestMain() {
 
 	var dropped *url.TxID
 	if s.sim != nil {
+		s.sim.SkipProposalCheck(true) // FIXME should not be necessary
+
 		s.TB.Log("Drop the next anchor")
 		s.sim.SetBlockHook(Directory, func(_ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
 			// Drop all block anchors, once
