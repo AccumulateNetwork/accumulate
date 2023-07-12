@@ -37,6 +37,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -763,11 +764,6 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 // reflected in the transaction results, which causes a consensus failure
 // (manually disabled here), but they really should be reflected in the BPT.
 func TestDifferentValidatorSignaturesV1(t *testing.T) {
-	// This test requires that the simulator's dispatch of transactions is
-	// extremely predictable. That appears to no longer be the case so this test
-	// won't work until that has been fixed.
-	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3322")
-
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
@@ -778,7 +774,7 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
-	sim.S.IgnoreDeliverResults = true
+	sim.S.IgnoreDeliverResults(true)
 
 	sim.StepN(10)
 
@@ -799,9 +795,6 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 			} else {
 				other = append(other, env)
 			}
-		}
-		if len(anchors) > 0 {
-			print("")
 		}
 		sort.Slice(anchors, func(i, j int) bool {
 			a, b := anchors[i].Signatures[1].(protocol.KeySignature), anchors[j].Signatures[1].(protocol.KeySignature)
@@ -837,7 +830,7 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
-	sim.S.IgnoreDeliverResults = true
+	sim.S.IgnoreDeliverResults(true)
 
 	sim.StepN(10)
 
@@ -884,7 +877,7 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 		err = sim.S.Step()
 	}
 	require.Error(t, err, "Expected consensus failure within 50 blocks")
-	require.IsType(t, (simulator.CommitConsensusError)(nil), err)
+	require.IsType(t, (consensus.CommitConsensusError)(nil), err)
 }
 
 func TestMessageCompat(t *testing.T) {
