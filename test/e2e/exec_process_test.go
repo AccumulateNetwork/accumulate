@@ -55,7 +55,7 @@ func TestExecutorProcessResults(t *testing.T) {
 	require.Equal(t, 3, int(i))
 
 	// Screwing with the account balance will cause the BPT to differ, so instruct the simulator to ignore that
-	sim.S.IgnoreCommitResults = true
+	sim.S.IgnoreCommitResults(true)
 
 	// Verify the error message (which ends up coming from the first node)
 	sim.StepUntil(
