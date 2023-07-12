@@ -111,6 +111,9 @@ type BlockState interface {
 	// DidCompleteMajorBlock indicates that this block completed a major block.
 	DidCompleteMajorBlock() (uint64, time.Time, bool)
 
+	// DidUpdateValidators indicates that this block updated the validator set.
+	DidUpdateValidators() ([]*ValidatorUpdate, bool)
+
 	// ChangeSet is the database batch.
 	ChangeSet() record.Record
 

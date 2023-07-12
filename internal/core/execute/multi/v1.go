@@ -198,17 +198,24 @@ func (b *BlockV1) Process(envelope *messaging.Envelope) ([]*protocol.Transaction
 
 // Close ends the block and returns the block state.
 func (b *BlockV1) Close() (execute.BlockState, error) {
-	err := b.Executor.EndBlock(b.Block)
-	return (*BlockStateV1)(b), err
+	valUp, err := b.Executor.EndBlock(b.Block)
+	return &BlockStateV1{*b, valUp}, err
 }
 
 // BlockStateV1 translates [execute.BlockState] calls for a v1 executor block.
-type BlockStateV1 BlockV1
+type BlockStateV1 struct {
+	BlockV1
+	valUp []*execute.ValidatorUpdate
+}
 
 func (b *BlockStateV1) Params() execute.BlockParams { return b.Block.BlockMeta }
 
 func (s *BlockStateV1) IsEmpty() bool {
 	return s.Block.State.Empty()
+}
+
+func (s *BlockStateV1) DidUpdateValidators() ([]*execute.ValidatorUpdate, bool) {
+	return s.valUp, len(s.valUp) > 0
 }
 
 func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {

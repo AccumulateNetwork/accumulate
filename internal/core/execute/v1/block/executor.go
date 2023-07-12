@@ -233,7 +233,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		return errors.UnknownError.Wrap(status.Error)
 	}
 
-	err = m.EndBlock(block)
+	_, err = m.EndBlock(block)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
