@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 )
 
 // simService implements API v3.
@@ -220,12 +221,21 @@ func (s *nodeService) Faucet(ctx context.Context, account *url.URL, opts api.Fau
 
 // ConsensusStatus implements [api.ConsensusService].
 func (s *nodeService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	status, err := s.consensus.Status(&consensus.StatusRequest{})
+	if err != nil {
+		return nil, err
+	}
+	info, err := s.consensus.Info(&consensus.InfoRequest{})
+	if err != nil {
+		return nil, err
+	}
 	return &api.ConsensusStatus{
 		Ok: true,
 		LastBlock: &api.LastBlock{
-			Height: int64(s.partition.blockIndex),
-			Time:   s.partition.blockTime,
-			// TODO: chain root, state root
+			Height:    int64(status.BlockIndex),
+			Time:      status.BlockTime,
+			StateRoot: info.LastHash,
+			// TODO: chain root, directory height
 		},
 		NodeKeyHash:      sha256.Sum256(s.nodeKey[32:]),
 		ValidatorKeyHash: sha256.Sum256(s.privValKey[32:]),
