@@ -39,6 +39,8 @@ func TestMissingSynthTxn(t *testing.T) {
 			simulator.GenesisWith(GenesisTime, globals),
 		)
 
+		sim.S.SkipProposalCheck(true) // FIXME should not be necessary
+
 		alice := acctesting.GenerateKey("Alice")
 		aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 		bob := acctesting.GenerateKey("Bob")

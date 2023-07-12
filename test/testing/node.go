@@ -71,8 +71,9 @@ var DefaultLogLevels = config.LogLevel{}.
 	SetModule("restore", "error").
 	// SetModule("accumulate", "debug").
 	// SetModule("executor", "debug").
+	// SetModule("consensus", "info").
 	// SetModule("synthetic", "debug").
-	// SetModule("anchoring", "info").
+	// SetModule("anchoring", "debug").
 	// SetModule("block", "debug").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").

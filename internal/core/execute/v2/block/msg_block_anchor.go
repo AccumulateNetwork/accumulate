@@ -31,12 +31,7 @@ func (x BlockAnchor) Validate(batch *database.Batch, ctx *MessageContext) (*prot
 
 	// Validate the transaction
 	_, err = ctx.callMessageValidator(batch, msg.Anchor)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// TODO Validate the signature (but NOT using the user signature executor)
-	return nil, nil
+	return nil, errors.UnknownError.Wrap(err)
 }
 
 func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {

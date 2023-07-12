@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
@@ -75,27 +74,6 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		return nil, errors.InternalError.WithFormat("unknown partition type %v", p.Type)
 	}
 
-	var rec consensus.Recorder
-	if s.Recordings != nil {
-		// Set up the recorder
-		f, err := s.Recordings(p.ID, node)
-		if err != nil {
-			return nil, errors.InternalError.WithFormat("open record file: %w", err)
-		}
-		r := newRecorder(f)
-		rec = r
-
-		// Record the header
-		err = r.WriteHeader(&recordHeader{
-			Partition: &p.PartitionInfo,
-			Config:    init,
-			NodeID:    fmt.Sprint(node),
-		})
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
 	// This is hacky, but 🤷 I don't see another choice that wouldn't be
 	// significantly less readable
 	if p.Type == protocol.PartitionTypeDirectory && node == 0 {
@@ -106,9 +84,9 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	switch n.partition.Type {
 	case protocol.PartitionTypeDirectory,
 		protocol.PartitionTypeBlockValidator:
-		err = n.initValidator(rec)
+		err = n.initValidator()
 	case protocol.PartitionTypeBlockSummary:
-		err = n.initSummary(rec)
+		err = n.initSummary()
 	default:
 		err = errors.BadRequest.WithFormat("unknown partition type %v", n.partition.Type)
 	}
@@ -124,10 +102,31 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		}
 	}
 
+	if s.Recordings != nil {
+		// Set up the recorder
+		f, err := s.Recordings(p.ID, node)
+		if err != nil {
+			return nil, errors.InternalError.WithFormat("open record file: %w", err)
+		}
+		r := newRecorder(f)
+
+		// Record the header
+		err = r.WriteHeader(&recordHeader{
+			Partition: &p.PartitionInfo,
+			Config:    init,
+			NodeID:    fmt.Sprint(node),
+		})
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		n.consensus.SetRecorder(r)
+	}
+
 	return n, nil
 }
 
-func (n *Node) initValidator(rec consensus.Recorder) error {
+func (n *Node) initValidator() error {
 	store := n.simulator.database(n.partition.ID, n.id, n.logger)
 	n.database = database.New(store, n.logger)
 
@@ -226,7 +225,7 @@ func (n *Node) initValidator(rec consensus.Recorder) error {
 	}
 
 	// Create the consensus node
-	n.consensus = consensus.NewNode(&consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, rec)
+	n.consensus = consensus.NewNode(n.privValKey, &consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, n.partition.gossip, n.logger)
 	return nil
 }
 
@@ -271,7 +270,7 @@ func (n *Node) initCollector() error {
 	return nil
 }
 
-func (n *Node) initSummary(rec consensus.Recorder) error {
+func (n *Node) initSummary() error {
 	exec, err := bsn.NewExecutor(bsn.ExecutorOptions{
 		PartitionID: n.partition.ID,
 		Logger:      n.logger,
@@ -282,7 +281,7 @@ func (n *Node) initSummary(rec consensus.Recorder) error {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	n.consensus = consensus.NewNode(&consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, rec)
+	n.consensus = consensus.NewNode(n.privValKey, &consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, n.partition.gossip, n.logger)
 	return nil
 }
 
@@ -290,39 +289,3 @@ func (n *Node) Begin(writable bool) *database.Batch         { return n.database.
 func (n *Node) Update(fn func(*database.Batch) error) error { return n.database.Update(fn) }
 func (n *Node) View(fn func(*database.Batch) error) error   { return n.database.View(fn) }
 func (n *Node) SetObserver(observer database.Observer)      { n.database.SetObserver(observer) }
-
-func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
-	res, err := n.consensus.Init(&consensus.InitRequest{Snapshot: snapshot})
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return res.Hash, nil
-}
-
-func (n *Node) checkTx(envelope *messaging.Envelope, new bool) ([]*protocol.TransactionStatus, error) {
-	res, err := n.consensus.Check(&consensus.CheckRequest{Envelope: envelope, New: new})
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return res.Results, nil
-}
-
-func (n *Node) beginBlock(params execute.BlockParams) (execute.Block, error) {
-	res, err := n.consensus.Begin(&consensus.BeginRequest{Params: params})
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return res.Block, nil
-}
-
-func (n *Node) deliverTx(block execute.Block, envelopes []*messaging.Envelope) ([]*protocol.TransactionStatus, error) {
-	return n.consensus.Deliver(block, envelopes)
-}
-
-func (n *Node) endBlock(block execute.Block) (execute.BlockState, error) {
-	return n.consensus.EndBlock(block)
-}
-
-func (n *Node) commit(state execute.BlockState) ([]byte, error) {
-	return n.consensus.Commit(state)
-}
