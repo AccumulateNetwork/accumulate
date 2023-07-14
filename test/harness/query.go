@@ -24,6 +24,14 @@ func (h *Harness) NetworkStatus(opts api.NetworkStatusOptions) *api.NetworkStatu
 	return ns
 }
 
+// ConsensusStatus calls the Harness's service, failing if the call returns an
+// error.
+func (h *Harness) ConsensusStatus(opts api.ConsensusStatusOptions) *api.ConsensusStatus {
+	ns, err := h.services.ConsensusStatus(context.Background(), opts)
+	require.NoError(h.TB, err)
+	return ns
+}
+
 // QueryAccountAs calls Harness.QueryAccountAs with a new T and returns that
 // value.
 func QueryAccountAs[T protocol.Account](h *Harness, scope *url.URL) T {
