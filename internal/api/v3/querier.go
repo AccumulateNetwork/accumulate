@@ -7,6 +7,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -97,7 +98,7 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		if query.Name == "" {
 			if txid, err := scope.AsTxID(); err == nil {
 				h := txid.Hash()
-				return s.queryTransactionChains(ctx, batch, batch.Transaction(h[:]), query.IncludeReceipt)
+				return s.queryTransactionChains(ctx, batch, h[:], query.IncludeReceipt)
 			}
 			return s.queryAccountChains(ctx, batch.Account(scope))
 		}
@@ -271,8 +272,8 @@ func (s *Querier) queryAccountChains(ctx context.Context, record *database.Accou
 	return r, nil
 }
 
-func (s *Querier) queryTransactionChains(ctx context.Context, batch *database.Batch, record *database.Transaction, wantReceipt bool) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
-	entries, err := record.Chains().Get()
+func (s *Querier) queryTransactionChains(ctx context.Context, batch *database.Batch, hash []byte, wantReceipt bool) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+	entries, err := batch.Transaction(hash).Chains().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load transaction chains: %w", err)
 	}
@@ -283,9 +284,18 @@ func (s *Querier) queryTransactionChains(ctx context.Context, batch *database.Ba
 			return nil, errors.UnknownError.WithFormat("load %v %s chain: %w", e.Account, e.Chain, err)
 		}
 
-		r, err := s.queryChainEntryByIndex(ctx, batch, c, e.ChainIndex, false, wantReceipt)
+		// We could try to be smart and use e.ChainIndex to find the entry, but
+		// that is the index of an index chain entry (**not** the index of the
+		// transaction's entry on the chain), and on top of that if there were
+		// multiple transactions in the block, the index entry may not point to
+		// this transaction's entry.
+		r, err := s.queryChainEntryByValue(ctx, batch, c, hash, false, wantReceipt)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		if !bytes.Equal(r.Receipt.Start, hash) {
+			return nil, errors.InternalError.With("receipt does not belong to the transaction")
 		}
 
 		r.Account = e.Account
