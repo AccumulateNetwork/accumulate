@@ -254,30 +254,30 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		return nil, errors.InternalError.Wrap(err)
 	}
 
+	// Get the synthetic main chain receipt
+	synthReceipt, entry, err := s.getReceiptForChainEntry(ledger.MainChain(), entry.Source)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Get the latest directory anchor receipt
+	dirReceipt, err := s.getLatestDirectoryReceipt(batch)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Get the receipt in between the other two
+	rootReceipt, err := s.getRootReceipt(batch, entry.Anchor, dirReceipt.Anchor.RootChainIndex)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	receipt, err := merkle.CombineReceipts(synthReceipt, rootReceipt, dirReceipt.RootChainReceipt)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
+	}
+
 	if globals.ExecutorVersion.V2() {
-		// Get the synthetic main chain receipt
-		synthReceipt, entry, err := s.getReceiptForChainEntry(ledger.MainChain(), entry.Source)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		// Get the latest directory anchor receipt
-		dirReceipt, err := s.getLatestDirectoryReceipt(batch)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		// Get the receipt in between the other two
-		rootReceipt, err := s.getRootReceipt(batch, entry.Anchor, dirReceipt.Anchor.RootChainIndex)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		receipt, err := merkle.CombineReceipts(synthReceipt, rootReceipt, dirReceipt.RootChainReceipt)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
-		}
-
 		r.SourceReceipt = receipt
 
 		sigMsg := &messaging.SignatureMessage{
@@ -311,8 +311,8 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 
 		// Add the receipt signature
 		receiptSig := new(protocol.ReceiptSignature)
-		receiptSig.SourceNetwork = status.SourceNetwork
-		receiptSig.Proof = *status.Proof
+		receiptSig.SourceNetwork = protocol.DnUrl()
+		receiptSig.Proof = *receipt
 		receiptSig.TransactionHash = *(*[32]byte)(hash)
 		signatures = append(signatures, receiptSig)
 
