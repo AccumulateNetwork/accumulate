@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 
 	ic "github.com/libp2p/go-libp2p/core/crypto"
@@ -72,7 +73,7 @@ func TestDialAddress(t *testing.T) {
 		"tcp-network-partition": {false, "/tcp/123/acc/foo/acc-svc/query:foo"},
 	}
 
-	dialer := &dialer{host, peers, &simpleTracker{}}
+	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := dialer.Dial(context.Background(), addr(t, c.Addr))
@@ -97,7 +98,7 @@ func TestDialSelfPeer(t *testing.T) {
 	host.EXPECT().selfID().Return(pid)
 	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
-	dialer := &dialer{host, nil, &simpleTracker{}}
+	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo),mutex: new(sync.Mutex)}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
 	require.NoError(t, err)
 	<-done
@@ -113,7 +114,7 @@ func TestDialSelfPartition(t *testing.T) {
 	host := newMockDialerHost(t)
 	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
-	dialer := &dialer{host, nil, &simpleTracker{}}
+	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{},goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo"))
 	require.NoError(t, err)
 	<-done
