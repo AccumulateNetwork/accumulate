@@ -193,6 +193,14 @@ func (m *JrpcMethods) submit(sub api.Submitter, val api.Validator, ctx context.C
 	res := submissionV3(resp...)
 	simpleHash := sha256.Sum256(txData)
 	res.SimpleHash = simpleHash[:]
+
+	// Add signature hashes for V1
+	if len(res.SignatureHashes) == 0 {
+		for _, sig := range env.Signatures {
+			res.SignatureHashes = append(res.SignatureHashes, sig.Hash())
+		}
+	}
+
 	return res
 }
 
