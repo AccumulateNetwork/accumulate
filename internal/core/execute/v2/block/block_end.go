@@ -51,7 +51,17 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 	m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
 
-	// Update active globals
+	// Determine if an anchor should be sent
+	m.shouldPrepareAnchor(block)
+
+	// Do nothing if the block is empty
+	if block.State.Empty() {
+		return nil
+	}
+
+	// Update active globals - **after** checking if the block is empty, because
+	// we definitely don't want to tell the ABCI that the validator set changed
+	// if the block is getting discarded, though that _should_ be impossible
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
 		err = m.EventBus.Publish(events.WillChangeGlobals{
 			New: &m.globals.Pending,
@@ -61,14 +71,6 @@ func (m *Executor) EndBlock(block *Block) error {
 			return errors.UnknownError.WithFormat("publish globals update: %w", err)
 		}
 		m.globals.Active = *m.globals.Pending.Copy()
-	}
-
-	// Determine if an anchor should be sent
-	m.shouldPrepareAnchor(block)
-
-	// Do nothing if the block is empty
-	if block.State.Empty() {
-		return nil
 	}
 
 	m.logger.Debug("Committing",
