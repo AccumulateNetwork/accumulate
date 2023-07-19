@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -88,7 +89,6 @@ func TestDialAddress(t *testing.T) {
 	}
 }
 
-
 func TestDialSelfPeer(t *testing.T) {
 	// Node dial requests that match the node's ID are processed directly
 
@@ -101,7 +101,7 @@ func TestDialSelfPeer(t *testing.T) {
 	host.EXPECT().selfID().Return(pid)
 	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
-	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo),mutex: new(sync.Mutex)}
+	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
 	require.NoError(t, err)
 	<-done
@@ -117,27 +117,27 @@ func TestDialSelfPartition(t *testing.T) {
 	host := newMockDialerHost(t)
 	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
-	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{},goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo"))
 	require.NoError(t, err)
 	<-done
 }
 
-func TestSimpleTracker(t *testing.T) {
-	newPeer := func(seed ...any) peer.ID {
-		h := storage.MakeKey(seed...)
-		std := ed25519.NewKeyFromSeed(h[:])
-		k, _, err := ic.KeyPairFromStdKey(&std)
-		require.NoError(t, err)
-		id, err := peer.IDFromPrivateKey(k)
-		require.NoError(t, err)
-		return id
-	}
+func newPeer(t *testing.T, seed ...any) peer.ID {
+	h := storage.MakeKey(seed...)
+	std := ed25519.NewKeyFromSeed(h[:])
+	k, _, err := ic.KeyPairFromStdKey(&std)
+	require.NoError(t, err)
+	id, err := peer.IDFromPrivateKey(k)
+	require.NoError(t, err)
+	return id
+}
 
+func TestSimpleTracker(t *testing.T) {
 	// Set up 3 peers
-	p1 := newPeer(1)
-	p2 := newPeer(2)
-	p3 := newPeer(3)
+	p1 := newPeer(t, 1)
+	p2 := newPeer(t, 2)
+	p3 := newPeer(t, 3)
 
 	// Test cases
 	type T1 struct {
@@ -177,33 +177,81 @@ func TestSimpleTracker(t *testing.T) {
 }
 
 func TestDialServices(t *testing.T) {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-    services := []*api.ServiceAddress{
-        api.ServiceTypeNode.Address(),
-        api.ServiceTypeConsensus.AddressFor("Directory"),
-        api.ServiceTypeNetwork.AddressFor("Directory"),
-        api.ServiceTypeMetrics.AddressFor("Directory"),
-        api.ServiceTypeQuery.AddressFor("Directory"),
-        api.ServiceTypeEvent.AddressFor("Directory"),
-        api.ServiceTypeSubmit.AddressFor("Directory"),
-        api.ServiceTypeValidate.AddressFor("Directory"),
-    }
+	services := []*api.ServiceAddress{
+		api.ServiceTypeNode.Address(),
+		api.ServiceTypeConsensus.AddressFor("Directory"),
+		api.ServiceTypeNetwork.AddressFor("Directory"),
+		api.ServiceTypeMetrics.AddressFor("Directory"),
+		api.ServiceTypeQuery.AddressFor("Directory"),
+		api.ServiceTypeEvent.AddressFor("Directory"),
+		api.ServiceTypeSubmit.AddressFor("Directory"),
+		api.ServiceTypeValidate.AddressFor("Directory"),
+	}
 
-	host := newMockDialerHost(t)
-	peers := newMockDialerPeers(t)
+	// Create some random peer IDs
+	selfPeerID := newPeer(t, 1)
+	goodPeerID := newPeer(t, 2)
+	badPeerID := newPeer(t, 3)
+
+	// Set up the host mock
+	host := &fakeHost{
+		peerID: selfPeerID,
+		good:   map[string]bool{},
+	}
+	for _, addr := range services {
+		host.good[goodPeerID.String()+"|"+addr.String()] = true
+	}
+
+	// Setup the peers mock
+	peers := funcPeers(func(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
+		ch := make(chan peer.AddrInfo, 2)
+		ch <- peer.AddrInfo{ID: goodPeerID}
+		ch <- peer.AddrInfo{ID: badPeerID}
+		return ch, nil
+	})
+
 	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
 
-	host.On("getOwnService","MainNet","").Return()
-	host.EXPECT().getPeerService(mock.Anything, mock.Anything, mock.Anything).Return()
-
 	start := time.Now()
-    for _, service := range services {
-        addr, err := service.MultiaddrFor("MainNet")
-        require.NoError(t, err)
-        _, err = dialer.Dial(ctx, addr)
-        require.NoError(t, err)
-		fmt.Printf("%40s %v\n",service.String(), time.Since(start))
-    }
+	for _, service := range services {
+		addr, err := service.MultiaddrFor("MainNet")
+		require.NoError(t, err)
+		_, err = dialer.Dial(ctx, addr)
+		require.NoError(t, err)
+		fmt.Printf("%40s %v\n", service.String(), time.Since(start))
+	}
+	for _, service := range services {
+		addr, err := service.MultiaddrFor("MainNet")
+		require.NoError(t, err)
+		require.Len(t, dialer.goodPeers[addr.String()], 1)
+	}
+}
+
+type funcPeers func(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error)
+
+func (f funcPeers) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
+	return f(ctx, ma, limit)
+}
+
+type fakeHost struct {
+	peerID peer.ID
+	good   map[string]bool
+}
+
+func (h *fakeHost) selfID() peer.ID {
+	return h.peerID
+}
+
+func (h *fakeHost) getOwnService(network string, sa *api.ServiceAddress) (*serviceHandler, bool) {
+	return nil, false
+}
+
+func (h *fakeHost) getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error) {
+	if h.good[peer.String()+"|"+service.String()] {
+		return fakeStream{}, nil
+	}
+	return nil, errors.New("bad")
 }
