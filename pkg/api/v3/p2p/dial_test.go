@@ -13,6 +13,7 @@ import (
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -21,6 +22,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 )
 
@@ -85,6 +87,7 @@ func TestDialAddress(t *testing.T) {
 		})
 	}
 }
+
 
 func TestDialSelfPeer(t *testing.T) {
 	// Node dial requests that match the node's ID are processed directly
@@ -171,4 +174,33 @@ func TestSimpleTracker(t *testing.T) {
 			assert.Equal(t, c.Good[p3], !s.isBad(p3), "Is P3 good?")
 		})
 	}
+}
+
+func TestDialServices(t *testing.T) {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    services := []*api.ServiceAddress{
+        api.ServiceTypeNode.Address(),
+        api.ServiceTypeConsensus.AddressFor("Directory"),
+        api.ServiceTypeNetwork.AddressFor("Directory"),
+        api.ServiceTypeMetrics.AddressFor("Directory"),
+        api.ServiceTypeQuery.AddressFor("Directory"),
+        api.ServiceTypeEvent.AddressFor("Directory"),
+        api.ServiceTypeSubmit.AddressFor("Directory"),
+        api.ServiceTypeValidate.AddressFor("Directory"),
+    }
+
+	host := newMockDialerHost(t)
+	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+	host.On("getOwnService","MainNet","").Return()
+
+	start := time.Now()
+    for _, service := range services {
+        addr, err := service.MultiaddrFor("MainNet")
+        require.NoError(t, err)
+        _, err = dialer.Dial(ctx, addr)
+        require.NoError(t, err)
+		fmt.Printf("%40s %v\n",service.String(), time.Since(start))
+    }
 }

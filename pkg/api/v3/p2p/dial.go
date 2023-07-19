@@ -144,7 +144,7 @@ func (n *Node) DialNetwork() message.MultiDialer {
 	return dialer{
 		host:      n,
 		peers:     n.peermgr,
-		tracker:   &simpleTracker{},
+		tracker:   t,
 		goodPeers: make(map[string][]peer.AddrInfo),
 		mutex:     new(sync.Mutex)}
 }
@@ -302,19 +302,15 @@ func (d *dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, n
 	// ============= Note the locking in this range ===== vvvv
 	d.mutex.Lock()
 	pList := d.goodPeers[addr.String()]
-	if len(pList) > 4 {
-		if len(pList) > 0 {
-			if len(pList) > 1 { // Rotate the peers, so as to work through all peers over time.
-				p := pList[0]
-				copy(pList, pList[1:])
-				pList[len(pList)-1] = p
-			}
-			for _, p := range pList {
-				if s = d.attemptDial(ctx, sem, p, sa, addr); s != nil {
-					go func() { <-ctx.Done(); _ = s.conn.Close() }()
-					d.mutex.Unlock()
-					return s, nil
-				}
+	if len(pList) > 2 { // For no peers, or just 1 peer, look to the network
+		p := pList[0]
+		copy(pList, pList[1:])
+		pList[len(pList)-1] = p
+		for _, p := range pList {
+			if s = d.attemptDial(ctx, sem, p, sa, addr); s != nil {
+				go func() { <-ctx.Done(); _ = s.conn.Close() }()
+				d.mutex.Unlock()
+				return s, nil
 			}
 		}
 	}
@@ -425,6 +421,7 @@ func (d *dialer) attemptDial(
 	for i, kp := range peers {
 		if kp.ID == p.ID {
 			copy(peers[:i], peers[i+1:]) // Delete the failing peer;
+			peers = peers[:len(peers)-1]
 			d.goodPeers[addr.String()] = peers
 			break
 		}
