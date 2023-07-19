@@ -192,8 +192,11 @@ func TestDialServices(t *testing.T) {
     }
 
 	host := newMockDialerHost(t)
-	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+	peers := newMockDialerPeers(t)
+	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+
 	host.On("getOwnService","MainNet","").Return()
+	host.EXPECT().getPeerService(mock.Anything, mock.Anything, mock.Anything).Return()
 
 	start := time.Now()
     for _, service := range services {
