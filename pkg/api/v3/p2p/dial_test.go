@@ -193,8 +193,19 @@ func TestDialServices(t *testing.T) {
 
 	// Create some random peer IDs
 	selfPeerID := newPeer(t, 1)
-	goodPeerID := newPeer(t, 2)
-	badPeerID := newPeer(t, 3)
+	var badPeerIDs, goodPeerIDs []peer.ID
+
+	numGoodPeers := 10
+	numBadPeers := 20
+
+	for i := 0; i < numGoodPeers; i++ {
+		peerID := newPeer(t, i+2)
+		goodPeerIDs = append(goodPeerIDs, peerID)
+	}
+	for i := 0; i < numBadPeers; i++ {
+		peerID := newPeer(t, i+10000)
+		badPeerIDs = append(badPeerIDs, peerID)
+	}
 
 	// Set up the host mock
 	host := &fakeHost{
@@ -202,14 +213,23 @@ func TestDialServices(t *testing.T) {
 		good:   map[string]bool{},
 	}
 	for _, addr := range services {
-		host.good[goodPeerID.String()+"|"+addr.String()] = true
+		for _, gpi := range goodPeerIDs {
+			host.good[gpi.String()+"|"+addr.String()] = true
+		}
+		for _, gpi := range badPeerIDs {
+			host.bad[gpi.String()++"|"+addr.String()] = true
+		}
 	}
 
 	// Setup the peers mock
 	peers := funcPeers(func(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
-		ch := make(chan peer.AddrInfo, 2)
-		ch <- peer.AddrInfo{ID: goodPeerID}
-		ch <- peer.AddrInfo{ID: badPeerID}
+		ch := make(chan peer.AddrInfo, 100)
+		for _, p := range goodPeerIDs {
+			ch <- peer.AddrInfo{ID: p}
+		}
+		for _, p := range badPeerIDs {
+			ch <- peer.AddrInfo{ID: p}
+		}
 		return ch, nil
 	})
 
