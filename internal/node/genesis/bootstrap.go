@@ -539,6 +539,7 @@ func (b *bootstrap) unpackSnapshots() error {
 
 		err = b.db.Restore(file, &database.RestoreOptions{
 			BatchRecordLimit: 50_000,
+			SkipHashCheck:    true,
 			Predicate: func(e *snap2.RecordEntry, v record.TerminalRecord) (bool, error) {
 				switch e.Key.Get(0) {
 				case "Transaction", "Message":
