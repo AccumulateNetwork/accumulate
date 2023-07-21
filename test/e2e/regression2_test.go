@@ -21,9 +21,11 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -1045,4 +1047,117 @@ func TestProofOverride(t *testing.T) {
 	// Verify the burn completes
 	sim.StepUntil(Txn(st.TxID).Completes())
 	sim.StepUntil(Txn(synthId).Succeeds())
+}
+
+// TestChainUpdateAnchor verifies that any chain update triggers an anchor.
+//
+// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3370
+func TestChainUpdateAnchor(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	bob := AccountUrl("bob")
+	bobKey := acctesting.GenerateKey(bob)
+
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) {
+		// Set the threshold to 2 and add an empty key spec (since we're not
+		// going to use it)
+		p.AcceptThreshold = 2
+		p.AddKeySpec(&KeySpec{})
+	})
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens")})
+
+	// Do something that produces a credit payment, but don't actually complete
+	// the transaction. Alice is not an authority of Bob's account, but that
+	// doesn't matter since our goal is just to send the credit payment. Also
+	// the test is invalidated if the initial signature request produces a
+	// synthetic message, since that produced message will cause the block to be
+	// anchored.
+
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(bob, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))[1]
+
+	// Step until the signature is processed, but the produced message have not
+	// been processed
+	sim.StepUntil(
+		Sig(st.TxID).Succeeds())
+
+	// Get the list of chains modified, but only for the last block that is
+	// executed
+	var chains []string
+	events.SubscribeSync(sim.S.EventBus("BVN0"), func(e execute.WillCommitBlock) error {
+		chains = nil
+		return e.Block.ChangeSet().Walk(record.WalkOptions{
+			Modified:      true,
+			IgnoreIndices: true,
+		}, func(r record.Record) (skip bool, err error) {
+			if chain, ok := r.(*database.MerkleManager); ok && chain.Type() != ChainTypeIndex {
+				chains = append(chains, chain.Key().String())
+			}
+			return false, nil
+		})
+	})
+
+	// Wait for the credit payment
+	sim.StepUntil(
+		Sig(st.TxID).CreditPayment().Capture(&st).Completes())
+
+	h := st.TxID.Hash()
+	r1 := sim.QueryChainEntry(bob.JoinPath("tokens"), &v3.ChainQuery{
+		Name:           "signature",
+		Entry:          h[:],
+		IncludeReceipt: true,
+	})
+
+	// Verify the credit payment was processed in the last block, otherwise the
+	// subsequent checks are invalid
+	ledger := GetAccount[*SystemLedger](t, sim.DatabaseFor(bob), PartitionUrl("BVN0").JoinPath(Ledger))
+	require.Equal(t, ledger.Index, r1.Receipt.LocalBlock)
+
+	// Verify that nothing happened except the credit payment and signature
+	// request, and verify the second signature request produced by the initial
+	// signature request was executed locally (i.e. did not produce a synthetic
+	// message). This is fragile but necessary to ensure the validity of this
+	// test.
+	require.ElementsMatch(t, []string{
+		// The credit payment and initial signature request are added to the
+		// principal's signature chain
+		"Account.acc://bob.acme/tokens.SignatureChain",
+
+		// The secondary signature request is added to the key book's signature
+		// chain
+		"Account.acc://bob.acme/book.SignatureChain",
+
+		// Those chains are anchored into the root chain
+		"Account.acc://bvn-BVN0.acme/ledger.RootChain",
+
+		// No other chains are modified
+	}, chains)
+
+	// Verify an anchor was produced
+	require.NotNil(t, ledger.Anchor)
+
+	// Execute another block, since anchors are sent in the next block
+	sim.Step()
+
+	var count uint64 = 1
+	var expand = true
+	r2 := sim.QueryMainChainEntries(PartitionUrl("BVN0").JoinPath(AnchorPool), &v3.ChainQuery{Name: "anchor-sequence", Range: &v3.RangeOptions{FromEnd: true, Count: &count, Start: 0, Expand: &expand}})
+	require.Len(t, r2.Records, 1)
+	txn := r2.Records[0].Value.Message.Transaction
+	require.IsType(t, (*BlockValidatorAnchor)(nil), txn.Body)
+	anchor := txn.Body.(*BlockValidatorAnchor)
+
+	// Verify the anchor matches the receipt
+	require.Equal(t, r1.Receipt.LocalBlock, anchor.MinorBlockIndex)
 }
