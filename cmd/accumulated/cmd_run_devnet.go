@@ -19,18 +19,16 @@ import (
 	"sync"
 
 	"github.com/fatih/color"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	tmconfig "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/log"
-	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -288,53 +286,35 @@ func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *s
 		seed = seed.Append(s)
 	}
 	sk := ed25519.NewKeyFromSeed(seed[:])
-	faucet, err := protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
-	check(err)
-
-	// Create the faucet node
-	opts := p2p.Options{
-		Network: daemons[0].Config.Accumulate.Network.Id,
-		Key:     sk,
-	}
-	inode, err := p2p.New(opts)
+	u, err := protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
 	check(err)
 
 	// Directly connect to all the validator nodes
+	var peers []multiaddr.Multiaddr
 	for _, d := range daemons {
-		check(inode.ConnectDirectly(d.P2P_TESTONLY()))
+		peers = append(peers, d.P2P_TESTONLY().Addresses()...)
+		// check(node.ConnectDirectly(d.P2P_TESTONLY()))
 	}
 
-	node, err := p2p.NewClientWith(inode)
-	check(err)
-
-	// Create the faucet service
-	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
-		Logger:    logger.With("module", "faucet"),
-		Account:   faucet,
-		Key:       build.ED25519PrivateKey(sk),
-		Submitter: node,
-		Querier:   node,
-		Events:    node,
-	})
-	check(err)
-
 	// Cleanup
+	ctx, cancel := context.WithCancel(context.Background())
 	done.Add(1)
 	go func() {
 		defer done.Done()
 		<-stop
-		faucetSvc.Stop()
-		check(node.Close())
+		cancel()
 	}()
 
-	// Register it
-	handler, err := message.NewHandler(message.Faucet{Faucet: faucetSvc})
+	// Start the faucet node
+	node, err := faucet.StartLite(ctx, faucet.Options{
+		Key:     sk,
+		Network: daemons[0].Config.Accumulate.Network.Id,
+		Logger:  logger,
+		Peers:   peers,
+	})
 	check(err)
-	if !node.RegisterService(faucetSvc.Type().AddressForUrl(protocol.AcmeUrl()), handler.Handle) {
-		fatalf("failed to register faucet service")
-	}
 
-	fmt.Printf("Started faucet for %v on %v\n", faucet, node.Addresses()[0])
+	fmt.Printf("Started faucet for %v on %v\n", u, node.Addresses()[0])
 }
 
 var nodeIdLen int
