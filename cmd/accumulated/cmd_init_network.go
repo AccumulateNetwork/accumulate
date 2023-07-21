@@ -11,8 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
-	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,9 +19,8 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -193,28 +190,10 @@ func createFaucet(seedStrs []string) []byte {
 	}
 	sk := ed25519.NewKeyFromSeed(seed[:])
 
-	var err error
-	lta := new(protocol.LiteTokenAccount)
-	lta.Url, err = protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
+	u, err := protocol.LiteTokenAddress(sk[32:], "ACME", protocol.SignatureTypeED25519)
 	check(err)
-	lta.TokenUrl = protocol.AcmeUrl()
-	lta.Balance = *big.NewInt(200_000_000 * protocol.AcmePrecision)
-	fmt.Printf("Faucet: %v\n", lta.Url)
-
-	lid := new(protocol.LiteIdentity)
-	lid.Url = lta.Url.RootIdentity()
-	lid.CreditBalance = math.MaxUint64
-
-	db := database.OpenInMemory(nil)
-	db.SetObserver(execute.NewDatabaseObserver())
-	batch := db.Begin(true)
-	defer batch.Discard()
-	for _, a := range []protocol.Account{lta, lid} {
-		check(batch.Account(a.GetUrl()).Main().Put(a))
-	}
-	check(batch.Commit())
-
-	buf := new(ioutil2.Buffer)
-	check(db.Collect(buf, nil, nil))
-	return buf.Bytes()
+	fmt.Printf("Faucet: %v\n", u)
+	b, err := faucet.CreateLite(u)
+	check(err)
+	return b
 }
