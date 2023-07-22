@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -74,6 +75,28 @@ func (v dnHeightOnPart) Satisfied(h *Harness) bool {
 
 func (v dnHeightOnPart) Format(prefix, suffix string) string {
 	return fmt.Sprintf("%sDN block %d is anchored on %s%s", prefix, v.height, v.partition, suffix)
+}
+
+func BlockTime(t time.Time) blockTimeOnPart {
+	return blockTimeOnPart{t, protocol.Directory}
+}
+
+type blockTimeOnPart struct {
+	time      time.Time
+	partition string
+}
+
+func (v blockTimeOnPart) OnPartition(s string) blockTimeOnPart {
+	return blockTimeOnPart{v.time, s}
+}
+
+func (v blockTimeOnPart) Satisfied(h *Harness) bool {
+	cs := h.ConsensusStatus(api.ConsensusStatusOptions{Partition: v.partition})
+	return !cs.LastBlock.Time.Before(v.time)
+}
+
+func (v blockTimeOnPart) Format(prefix, suffix string) string {
+	return fmt.Sprintf("%s%s reached block time %v%s", prefix, v.partition, v.time, suffix)
 }
 
 // Txn defines a condition on a transaction.
