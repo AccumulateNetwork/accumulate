@@ -44,6 +44,7 @@ type Services interface {
 	api.Querier
 	api.Submitter
 	api.NetworkService
+	api.ConsensusService
 }
 
 // EnvelopeBuilder builds an envelope.
@@ -132,7 +133,7 @@ outer:
 func (h *Harness) Verify(conditions ...Condition) {
 	h.TB.Helper()
 	ok := true
-	s := "Condition(s) not satisfied after 50 blocks:"
+	s := "Condition(s) not satisfied:"
 	for _, c := range conditions {
 		if !c.Satisfied(h) {
 			ok = false

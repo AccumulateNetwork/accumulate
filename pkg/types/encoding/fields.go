@@ -328,7 +328,7 @@ func (f UintField[V]) IsEmpty(v V) bool       { return isEmpty(f, v) }
 func (f FloatField[V]) IsEmpty(v V) bool      { return isEmpty(f, v) }
 func (f BoolField[V]) IsEmpty(v V) bool       { return isEmpty(f, v) }
 func (f TimeField[V]) IsEmpty(v V) bool       { return isEmpty(f, v) }
-func (f BytesField[V]) IsEmpty(v V) bool      { return isEmpty(f, v) }
+func (f BytesField[V]) IsEmpty(v V) bool      { return len(*f(v)) == 0 }
 func (f StringField[V]) IsEmpty(v V) bool     { return isEmpty(f, v) }
 func (f DurationField[V]) IsEmpty(v V) bool   { return isEmpty(f, v) }
 func (f BigIntField[V]) IsEmpty(v V) bool     { return f(v).Sign() == 0 }
@@ -355,13 +355,13 @@ func (f IntField[V]) Equal(v, u V) bool        { return *f(v) == *f(u) }
 func (f UintField[V]) Equal(v, u V) bool       { return *f(v) == *f(u) }
 func (f FloatField[V]) Equal(v, u V) bool      { return *f(v) == *f(u) }
 func (f BoolField[V]) Equal(v, u V) bool       { return *f(v) == *f(u) }
-func (f TimeField[V]) Equal(v, u V) bool       { return *f(v) == *f(u) }
+func (f TimeField[V]) Equal(v, u V) bool       { return isEq(*f(v), *f(u)) }
 func (f BytesField[V]) Equal(v, u V) bool      { return bytes.Equal(*f(v), *f(u)) }
 func (f StringField[V]) Equal(v, u V) bool     { return *f(v) == *f(u) }
 func (f DurationField[V]) Equal(v, u V) bool   { return *f(v) == *f(u) }
 func (f BigIntField[V]) Equal(v, u V) bool     { return f(v).Cmp(f(u)) == 0 }
-func (f UrlField[V]) Equal(v, u V) bool        { return *f(v) == *f(u) }
-func (f TxIDField[V]) Equal(v, u V) bool       { return *f(v) == *f(u) }
+func (f UrlField[V]) Equal(v, u V) bool        { return isEq(f(v), f(u)) }
+func (f TxIDField[V]) Equal(v, u V) bool       { return isEq(f(v), f(u)) }
 
 func (f EnumField[V, U, W]) WriteTo(w *Writer, n uint, v V) { w.WriteEnum(n, *f(v)) }
 func (f HashField[V]) WriteTo(w *Writer, n uint, v V)       { w.WriteHash(n, f(v)) }
@@ -484,17 +484,19 @@ func (f BigIntPtrField[V]) CopyTo(dst, src V)     { cpPtr(f, dst, src) }
 func (f UrlPtrField[V]) CopyTo(dst, src V)        { cpPtr(f, dst, src) }
 func (f TxIDPtrField[V]) CopyTo(dst, src V)       { cpPtr(f, dst, src) }
 
-func (f EnumPtrField[V, U, W]) Equal(v, u V) bool { return eqPtr(f, v, u) }
-func (f HashPtrField[V]) Equal(v, u V) bool       { return eqPtr(f, v, u) }
-func (f IntPtrField[V]) Equal(v, u V) bool        { return eqPtr(f, v, u) }
-func (f UintPtrField[V]) Equal(v, u V) bool       { return eqPtr(f, v, u) }
-func (f FloatPtrField[V]) Equal(v, u V) bool      { return eqPtr(f, v, u) }
-func (f BoolPtrField[V]) Equal(v, u V) bool       { return eqPtr(f, v, u) }
-func (f TimePtrField[V]) Equal(v, u V) bool       { return eqPtr(f, v, u) }
-func (f StringPtrField[V]) Equal(v, u V) bool     { return eqPtr(f, v, u) }
-func (f DurationPtrField[V]) Equal(v, u V) bool   { return eqPtr(f, v, u) }
-func (f UrlPtrField[V]) Equal(v, u V) bool        { return eqPtr(f, v, u) }
-func (f TxIDPtrField[V]) Equal(v, u V) bool       { return eqPtr(f, v, u) }
+func (f EnumPtrField[V, U, W]) Equal(v, u V) bool { return eqPtr1(f, v, u) }
+func (f HashPtrField[V]) Equal(v, u V) bool       { return eqPtr1(f, v, u) }
+func (f IntPtrField[V]) Equal(v, u V) bool        { return eqPtr1(f, v, u) }
+func (f UintPtrField[V]) Equal(v, u V) bool       { return eqPtr1(f, v, u) }
+func (f FloatPtrField[V]) Equal(v, u V) bool      { return eqPtr1(f, v, u) }
+func (f BoolPtrField[V]) Equal(v, u V) bool       { return eqPtr1(f, v, u) }
+func (f TimePtrField[V]) Equal(v, u V) bool       { return eqPtr2(f, v, u, isEq[time.Time]) }
+func (f BytesPtrField[V]) Equal(v, u V) bool      { return eqPtr2(f, v, u, bytes.Equal) }
+func (f StringPtrField[V]) Equal(v, u V) bool     { return eqPtr1(f, v, u) }
+func (f DurationPtrField[V]) Equal(v, u V) bool   { return eqPtr1(f, v, u) }
+func (f BigIntPtrField[V]) Equal(v, u V) bool     { return eqPtr3(f, v, u, bigIntEq) }
+func (f UrlPtrField[V]) Equal(v, u V) bool        { return eqPtr3(f, u, v, isEq[*url.URL]) }
+func (f TxIDPtrField[V]) Equal(v, u V) bool       { return eqPtr3(f, u, v, isEq[*url.TxID]) }
 
 func (f EnumPtrField[V, U, W]) WriteTo(w *Writer, n uint, v V) { w.WriteEnum(n, **f(v)) }
 func (f HashPtrField[V]) WriteTo(w *Writer, n uint, v V)       { wrRef(w.WriteHash, n, f, v) }
@@ -614,26 +616,14 @@ func (f DurationPtrField[V]) ReadFrom(r *Reader, n uint, v V) bool {
 	return rdPtr(r.ReadDuration, n, f, v)
 }
 
-func (f BytesPtrField[V]) Equal(v, u V) bool {
-	a, b := f(u), f(v)
-	if *a == *b {
+func bigIntEq(a, b *big.Int) bool {
+	if a == b {
 		return true
 	}
-	if *a == nil || *b == nil {
+	if a == nil || b == nil {
 		return false
 	}
-	return bytes.Equal(**a, **b)
-}
-
-func (f BigIntPtrField[V]) Equal(v, u V) bool {
-	a, b := f(u), f(v)
-	if *a == *b {
-		return true
-	}
-	if *a == nil || *b == nil {
-		return false
-	}
-	return (*a).Cmp(*b) == 0
+	return a.Cmp(b) == 0
 }
 
 func isEmpty[V, U any](f func(V) *U, v V) bool {
@@ -676,7 +666,21 @@ func cpPtr[V, U any](f func(V) **U, dstv, srcv V) {
 	**dst = **src
 }
 
-func eqPtr[U comparable, V any](f func(V) **U, u, v V) bool {
+func isEq[U interface {
+	Equal(U) bool
+	comparable
+}](a, b U) bool {
+	if a == b {
+		return true
+	}
+	var z U
+	if a == z || b == z {
+		return false
+	}
+	return a.Equal(b)
+}
+
+func eqPtr1[U comparable, V any](f func(V) **U, u, v V) bool {
 	a, b := f(u), f(v)
 	if *a == *b {
 		return true
@@ -685,6 +689,28 @@ func eqPtr[U comparable, V any](f func(V) **U, u, v V) bool {
 		return false
 	}
 	return **a == **b
+}
+
+func eqPtr2[U, V any](f func(V) **U, u, v V, isEq func(U, U) bool) bool {
+	a, b := f(u), f(v)
+	if *a == *b {
+		return true
+	}
+	if *a == nil || *b == nil {
+		return false
+	}
+	return isEq(**a, **b)
+}
+
+func eqPtr3[U, V any](f func(V) **U, u, v V, isEq func(*U, *U) bool) bool {
+	a, b := f(u), f(v)
+	if *a == *b {
+		return true
+	}
+	if *a == nil || *b == nil {
+		return false
+	}
+	return isEq(*a, *b)
 }
 
 func wrPtr[V, U any](wr func(uint, U), n uint, f func(V) **U, v V) {
