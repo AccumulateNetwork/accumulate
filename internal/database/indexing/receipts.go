@@ -182,6 +182,9 @@ func ReceiptForChainEntry(net *config.Describe, batch *database.Batch, account *
 }
 
 func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64) (*protocol.IndexEntry, uint64, *merkle.Receipt, error) {
+	if c.Type() == merkle.ChainTypeIndex {
+		return nil, 0, nil, errors.BadRequest.WithFormat("cannot get a receipt for %s: index chains are not anchored", c.Name())
+	}
 	indexChain, err := c.Index().Get()
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("unable to load %s index chain: %w", c.Name(), err)
