@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2 RC1
+
+- Signature processing overhaul
+- Rejections and abstentions
+- Transaction review periods
+- Snapshot v2
+- API improvements
+
 ## 1.1.3
 
 - Fixes a bug that can lead to unresolvable synthetic transactions (#3351, !865)
