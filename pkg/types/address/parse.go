@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -106,11 +106,11 @@ func Parse(s string) (Address, error) {
 func parseLite(s string) (Address, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return nil, errors.BadRequest.With("invalid lite address: %w", err)
+		return nil, errors.BadRequest.WithFormat("invalid lite address: %w", err)
 	}
 	b, err := protocol.ParseLiteAddress(u)
 	if err != nil {
-		return nil, errors.BadRequest.With("invalid lite address: %w", err)
+		return nil, errors.BadRequest.WithFormat("invalid lite address: %w", err)
 	}
 	if len(b) != 20 {
 		return nil, errors.BadRequest.WithFormat("invalid lite address: want 20 bytes (excluding checksum), got %d", len(b))
