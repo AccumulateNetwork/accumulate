@@ -8,6 +8,7 @@ package p2p
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
@@ -306,13 +307,16 @@ func (d *dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, n
 		p := pList[0]
 		copy(pList, pList[1:])
 		pList[len(pList)-1] = p
+		fmt.Println("roll")
 		for _, p := range pList {
+			d.mutex.Unlock()
 			if s = d.attemptDial(ctx, sem, p, sa, addr); s != nil {
 				go func() { <-ctx.Done(); _ = s.conn.Close() }()
-				d.mutex.Unlock()
 				return s, nil
 			}
+			d.mutex.Lock()
 		}
+		d.goodPeers[addr.String()]= pList  // Update our list of peers, even though we shouldn't have to
 	}
 	d.mutex.Unlock()
 	// =============== Every path out this range must unlock! ===== ^^^^
@@ -353,9 +357,11 @@ outer:
 			continue
 		}
 
-		err = c.conn.Close()
-		if err != nil {
-			slog.ErrorCtx(ctx, "Error while closing extra stream", "error", err)
+		if c != nil {
+			err = c.conn.Close()
+			if err != nil {
+				slog.ErrorCtx(ctx, "Error while closing extra stream", "error", err)
+			}
 		}
 	}
 
@@ -364,7 +370,10 @@ outer:
 	}
 
 	// Close the connection when the context is canceled
-	go func() { <-ctx.Done(); _ = s.conn.Close() }()
+	go func() {
+		<-ctx.Done()
+		_ = s.conn.Close()
+	}()
 
 	return s, nil
 }

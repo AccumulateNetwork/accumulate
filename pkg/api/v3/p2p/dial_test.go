@@ -176,7 +176,7 @@ func TestSimpleTracker(t *testing.T) {
 	}
 }
 
-func TestDialServices(t *testing.T) {
+func TestDialServices1(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -195,15 +195,19 @@ func TestDialServices(t *testing.T) {
 	selfPeerID := newPeer(t, 1)
 	var badPeerIDs, goodPeerIDs []peer.ID
 
-	numGoodPeers := 10
-	numBadPeers := 20
+	numGoodPeers := 4
+	numBadPeers := 13
+
+	peerMap := make(map[string]int)
 
 	for i := 0; i < numGoodPeers; i++ {
 		peerID := newPeer(t, i+2)
+		peerMap[peerID.String()] = i + 2
 		goodPeerIDs = append(goodPeerIDs, peerID)
 	}
 	for i := 0; i < numBadPeers; i++ {
 		peerID := newPeer(t, i+10000)
+		peerMap[peerID.String()] = i + 10000
 		badPeerIDs = append(badPeerIDs, peerID)
 	}
 
@@ -215,9 +219,6 @@ func TestDialServices(t *testing.T) {
 	for _, addr := range services {
 		for _, gpi := range goodPeerIDs {
 			host.good[gpi.String()+"|"+addr.String()] = true
-		}
-		for _, gpi := range badPeerIDs {
-			host.bad[gpi.String()++"|"+addr.String()] = true
 		}
 	}
 
@@ -237,16 +238,27 @@ func TestDialServices(t *testing.T) {
 
 	start := time.Now()
 	for _, service := range services {
-		addr, err := service.MultiaddrFor("MainNet")
-		require.NoError(t, err)
-		_, err = dialer.Dial(ctx, addr)
-		require.NoError(t, err)
-		fmt.Printf("%40s %v\n", service.String(), time.Since(start))
+
+		for i := 0; i < numGoodPeers+numBadPeers; i++ {
+			for j := 0; j < 1; j++ {
+				fmt.Printf("loop %d-%d\n", i, j)
+				addr, e1 := service.MultiaddrFor("MainNet")
+				require.NoError(t, e1)
+				Stream, e2 := dialer.Dial(ctx, addr)
+				require.NoError(t, e2)
+				var p int
+				if stream2, ok := Stream.(*stream); ok {
+					p = peerMap[stream2.peer.String()]
+				}
+				fmt.Printf("%10d %40s %v\n", p, service.String(), time.Since(start))
+			}
+		}
 	}
 	for _, service := range services {
 		addr, err := service.MultiaddrFor("MainNet")
 		require.NoError(t, err)
-		require.Len(t, dialer.goodPeers[addr.String()], 1)
+		_ = addr
+		require.Len(t, dialer.goodPeers[addr.String()], 10)
 	}
 }
 
@@ -274,4 +286,120 @@ func (h *fakeHost) getPeerService(ctx context.Context, peer peer.ID, service *ap
 		return fakeStream{}, nil
 	}
 	return nil, errors.New("bad")
+}
+
+func TestDialServices2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	services := []*api.ServiceAddress{
+		api.ServiceTypeNode.Address(),
+		api.ServiceTypeConsensus.AddressFor("Directory"),
+		api.ServiceTypeNetwork.AddressFor("Directory"),
+		api.ServiceTypeMetrics.AddressFor("Directory"),
+		api.ServiceTypeQuery.AddressFor("Directory"),
+		api.ServiceTypeEvent.AddressFor("Directory"),
+		api.ServiceTypeSubmit.AddressFor("Directory"),
+		api.ServiceTypeValidate.AddressFor("Directory"),
+	}
+
+	// Create some random peer IDs
+	selfPeerID := newPeer(t, 1)
+	var badPeerIDs, goodPeerIDs []peer.ID
+
+	numPeers := 20
+
+	peerMap := make(map[string]int) // Tracking our peers by the indexes in this
+
+	for i := 0; i < numPeers; i++ {
+		peerID := newPeer(t, i+2)
+		peerMap[peerID.String()] = i + 2
+		goodPeerIDs = append(goodPeerIDs, peerID)
+	}
+
+	// Set up the host mock
+	host := &fakeHost{
+		peerID: selfPeerID,
+		good:   map[string]bool{},
+	}
+	for _, addr := range services {
+		for _, gpi := range goodPeerIDs {
+			host.good[gpi.String()+"|"+addr.String()] = true
+		}
+	}
+
+	// Setup the peers mock
+	peers := funcPeers(func(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
+		ch := make(chan peer.AddrInfo, 100)
+		for _, p := range goodPeerIDs {
+			ch <- peer.AddrInfo{ID: p}
+		}
+		for _, p := range badPeerIDs {
+			ch <- peer.AddrInfo{ID: p}
+		}
+		return ch, nil
+	})
+
+	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+
+	start := time.Now()
+	service := services[0]
+
+	dialAPeer := func() {
+		addr, e1 := service.MultiaddrFor("MainNet")
+		require.NoError(t, e1)
+		Stream, e2 := dialer.Dial(ctx, addr)
+		require.NoError(t, e2)
+		var p int
+		if stream2, ok := Stream.(*stream); ok {
+			p = peerMap[stream2.peer.String()]
+		}
+		fmt.Printf("%10d %40s %v\n", p, service.String(), time.Since(start))
+	}
+	moveAPeer := func(src, dest []peer.ID) (source, destination []peer.ID, peer peer.ID, sourceLen int) {
+		numSrc := len(src)
+		if numSrc > 0 {
+			peer = src[0]               // peer moved
+			dest = append(dest, src[0]) // Add that peer to our bad peer list
+			src[0] = src[numSrc-1]      // Remove the peer from the good peer list
+			src = src[:numSrc-1]
+			numSrc--
+		}
+		return src, dest, peer, numSrc
+	}
+	invalidateOne := func() int {
+		src, dest, peer, numSrc := moveAPeer(goodPeerIDs, badPeerIDs)
+		goodPeerIDs = src
+		badPeerIDs = dest
+		delete(host.good, peer.String()+"|"+service.String())
+		return numSrc
+	}
+	validateOne := func() int {
+		src, dest, peer, numSrc := moveAPeer(badPeerIDs, goodPeerIDs)
+		badPeerIDs = src
+		goodPeerIDs = dest
+		host.good[peer.String()+"|"+service.String()] = true
+		return numSrc
+	}
+
+	grow := false
+	for i := 0; i < 50; i++ {
+		dialAPeer()
+		if grow {
+			if n := validateOne(); n == 0 {
+				grow = false
+			}
+		} else {
+			if n := invalidateOne(); n == 1 {
+				grow = true
+			}
+		}
+	}
+
+	for _, service := range services {
+		addr, err := service.MultiaddrFor("MainNet")
+		require.NoError(t, err)
+		_ = addr
+		require.Len(t, dialer.goodPeers[addr.String()], 10)
+	}
 }
