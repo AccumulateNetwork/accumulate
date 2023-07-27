@@ -330,7 +330,7 @@ func TestDialServices2(t *testing.T) {
 
 	// Setup the peers mock
 	peers := funcPeers(func(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
-		elements := len(goodPeerIDs)+len(badPeerIDs)
+		elements := len(goodPeerIDs) + len(badPeerIDs)
 		ch := make(chan peer.AddrInfo, elements)
 		for _, p := range goodPeerIDs {
 			ch <- peer.AddrInfo{ID: p}
@@ -374,8 +374,8 @@ func TestDialServices2(t *testing.T) {
 		src, dest, peer, numSrc := moveAPeer(goodPeerIDs, badPeerIDs)
 		goodPeerIDs = src
 		badPeerIDs = dest
-		fmt.Printf("Remove %d\n",peerMap[peer.String()])
-		delete(host.good, peer.String()+"|"+service.String())	
+		fmt.Printf("Remove %d\n", peerMap[peer.String()])
+		delete(host.good, peer.String()+"|"+service.String())
 		return numSrc
 	}
 	validateOne := func() int {
@@ -384,14 +384,14 @@ func TestDialServices2(t *testing.T) {
 		src, dest, peer, numSrc := moveAPeer(badPeerIDs, goodPeerIDs)
 		badPeerIDs = src
 		goodPeerIDs = dest
-		fmt.Printf("Add    %d\n",peerMap[peer.String()])
+		fmt.Printf("Add    %d\n", peerMap[peer.String()])
 		host.good[peer.String()+"|"+service.String()] = true
 		return numSrc
 	}
 
 	grow := false
 	for i := 0; i < 550; i++ {
-		fmt.Println("test ",i+1)
+		fmt.Println("test ", i+1)
 		dialAPeer()
 		if grow {
 			if n := validateOne(); n == 0 {
