@@ -8,7 +8,6 @@ package p2p
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -317,7 +316,6 @@ func (d *dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, n
 		p := pList[0]
 		copy(pList, pList[1:])
 		pList[len(pList)-1] = p
-		fmt.Println("roll")
 		for _, p := range pList {
 			d.mutex.Unlock()
 			if s = d.attemptDial(ctx, sem, p, sa, addr); s != nil {
