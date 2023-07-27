@@ -81,6 +81,10 @@ func (s *simService) Faucet(ctx context.Context, account *url.URL, opts api.Fauc
 
 // ConsensusStatus finds the specified node and returns its ConsensusStatus.
 func (s *simService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	if opts.Partition != "" {
+		n := s.partitions[opts.Partition].nodes[0]
+		return (*nodeService)(n).ConsensusStatus(ctx, opts)
+	}
 	if opts.NodeID == "" {
 		return nil, errors.BadRequest.WithFormat("node ID is missing")
 	}

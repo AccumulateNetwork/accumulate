@@ -419,6 +419,10 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 		return errors.UnknownError.Wrap(it.Err())
 	}
 
+	// If hashes is not empty at this point it means the snapshot's BPT has an
+	// entry that is not present in the newly created BPT, which will cause the
+	// root hash to differ. This likely means some account has not been
+	// restored.
 	for kh := range hashes {
 		u, err := batch.getAccountUrl(record.NewKey(storage.Key(kh)))
 		switch {
