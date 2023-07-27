@@ -195,7 +195,7 @@ func TestDialServices1(t *testing.T) {
 	selfPeerID := newPeer(t, 1)
 	var badPeerIDs, goodPeerIDs []peer.ID
 
-	numGoodPeers := 4
+	numGoodPeers := 10
 	numBadPeers := 13
 
 	peerMap := make(map[string]int)
