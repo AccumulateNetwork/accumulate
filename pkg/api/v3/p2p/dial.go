@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -158,15 +159,24 @@ func (n *Node) DialNetwork() message.MultiDialer {
 // handled locally without requiring any network transport. Otherwise Dial will
 // find an appropriate peer that can service the address. If no peer can be
 // found, Dial will return [errors.NoPeer].
-func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
+func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream message.Stream, err error) {
 	net, peer, sa, err := unpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Retry if fails, as a query to the network might take a bit of time.
+	// Right now, the code gives the network two second.
 	if peer == "" {
-		return d.newNetworkStream(ctx, sa, net)
+		for i := 0; i < 20; i++ {
+			if stream, err = d.newNetworkStream(ctx, sa, net); err == nil {
+				return stream, err
+			}
+			time.Sleep(time.Second / 10)
+		}
+		return stream, err
 	}
+
 	return d.newPeerStream(ctx, sa, peer)
 }
 
@@ -303,7 +313,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, n
 	// ============= Note the locking in this range ===== vvvv
 	d.mutex.Lock()
 	pList := d.goodPeers[addr.String()]
-	if len(pList) > 2 { // For no peers, or just 1 peer, look to the network
+	if len(pList) > 4 { // For no peers, or just 1 peer, look to the network
 		p := pList[0]
 		copy(pList, pList[1:])
 		pList[len(pList)-1] = p
@@ -316,7 +326,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, n
 			}
 			d.mutex.Lock()
 		}
-		d.goodPeers[addr.String()]= pList  // Update our list of peers, even though we shouldn't have to
+		d.goodPeers[addr.String()] = pList // Update our list of peers, even though we shouldn't have to
 	}
 	d.mutex.Unlock()
 	// =============== Every path out this range must unlock! ===== ^^^^
