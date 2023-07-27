@@ -52,12 +52,12 @@ func copyEvent(v event) event {
 	}
 }
 
-// unmarshalEvent un-marshals a event.
+// unmarshalEvent unmarshals a event.
 func unmarshalEvent(data []byte) (event, error) {
 	return unmarshalEventFrom(bytes.NewReader(data))
 }
 
-// unmarshalEventFrom un-marshals a event.
+// unmarshalEventFrom unmarshals a event.
 func unmarshalEventFrom(rd io.Reader) (event, error) {
 	reader := encoding.NewReader(rd)
 
@@ -85,7 +85,7 @@ func unmarshalEventFrom(rd io.Reader) (event, error) {
 	return v, nil
 }
 
-// unmarshalEventJson un-marshals a event.
+// unmarshalEventJson unmarshals a event.
 func unmarshalEventJSON(data []byte) (event, error) {
 	var typ *struct{ Type eventType }
 	err := json.Unmarshal(data, &typ)
@@ -97,15 +97,15 @@ func unmarshalEventJSON(data []byte) (event, error) {
 		return nil, nil
 	}
 
-	aCnt, err := newEvent(typ.Type)
+	acnt, err := newEvent(typ.Type)
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(data, aCnt)
+	err = json.Unmarshal(data, acnt)
 	if err != nil {
 		return nil, err
 	}
 
-	return aCnt, nil
+	return acnt, nil
 }
