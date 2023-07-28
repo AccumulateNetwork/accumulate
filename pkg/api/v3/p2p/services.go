@@ -8,6 +8,7 @@ package p2p
 
 import (
 	"context"
+	"runtime/debug"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -37,6 +38,13 @@ func (n *Node) RegisterService(sa *api.ServiceAddress, handler MessageStreamHand
 	*ptr = &serviceHandler{sa, handler}
 
 	n.host.SetStreamHandler(idRpc(sa), func(s network.Stream) {
+		// Panic protection
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
+			}
+		}()
+
 		defer s.Close()
 		handler(message.NewStream(s))
 	})
