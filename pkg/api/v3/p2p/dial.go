@@ -10,6 +10,7 @@ import (
 	"context"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -23,9 +24,11 @@ import (
 
 // dialer implements [message.MultiDialer].
 type dialer struct {
-	host    dialerHost
-	peers   dialerPeers
-	tracker dialerTracker
+	host      dialerHost
+	peers     dialerPeers
+	tracker   dialerTracker
+	goodPeers map[string][]peer.AddrInfo // string is the ServiceAddress, and known good peers
+	mutex     *sync.Mutex
 }
 
 var _ message.MultiDialer = (*dialer)(nil)
@@ -139,7 +142,12 @@ func (n *Node) DialNetwork() message.MultiDialer {
 	} else {
 		t = fakeTraker{}
 	}
-	return dialer{n, n.peermgr, t}
+	return dialer{
+		host:      n,
+		peers:     n.peermgr,
+		tracker:   t,
+		goodPeers: make(map[string][]peer.AddrInfo),
+		mutex:     new(sync.Mutex)}
 }
 
 // Dial dials the given address. The address must include an /acc component and
@@ -150,15 +158,24 @@ func (n *Node) DialNetwork() message.MultiDialer {
 // handled locally without requiring any network transport. Otherwise Dial will
 // find an appropriate peer that can service the address. If no peer can be
 // found, Dial will return [errors.NoPeer].
-func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
+func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream message.Stream, err error) {
 	net, peer, sa, err := unpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Retry if fails, as a query to the network might take a bit of time.
+	// Right now, the code gives the network two second.
 	if peer == "" {
-		return d.newNetworkStream(ctx, sa, net)
+		for i := 0; i < 20; i++ {
+			if stream, err = d.newNetworkStream(ctx, sa, net); err == nil {
+				return stream, err
+			}
+			time.Sleep(time.Second / 10)
+		}
+		return stream, err
 	}
+
 	return d.newPeerStream(ctx, sa, peer)
 }
 
@@ -225,7 +242,7 @@ func (d dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, s message
 //
 // If the peer ID does not match a peer known by the node, or if the node does
 // not have an address for the given peer, newPeerStream will fail.
-func (d dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer peer.ID) (message.Stream, error) {
+func (d *dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer peer.ID) (message.Stream, error) {
 	// If the peer ID is our ID
 	if d.host.selfID() == peer {
 		// Check if we have the service
@@ -271,7 +288,7 @@ func openStreamFor(ctx context.Context, host dialerHost, peer peer.ID, sa *api.S
 // will try them in order of decreasing priority. If a peer is successfully
 // dialed, its priority is decremented by one so that subsequent dials are
 // routed to a different peer.
-func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, netName string) (message.Stream, error) {
+func (d *dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, netName string) (message.Stream, error) {
 	callCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -289,6 +306,29 @@ func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, ne
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	sem := make(chan struct{}, 4) // Max number of simultaneous requests
+	var s *stream
+
+	// ============= Note the locking in this range ===== vvvv
+	d.mutex.Lock()
+	pList := d.goodPeers[addr.String()]
+	if len(pList) > 4 { // For no peers, or just 1 peer, look to the network
+		p := pList[0]
+		copy(pList, pList[1:])
+		pList[len(pList)-1] = p
+		for _, p := range pList {
+			d.mutex.Unlock()
+			if s = d.attemptDial(ctx, sem, p, sa, addr); s != nil {
+				go func() { <-ctx.Done(); _ = s.conn.Close() }()
+				return s, nil
+			}
+			d.mutex.Lock()
+		}
+		d.goodPeers[addr.String()] = pList // Update our list of peers, even though we shouldn't have to
+	}
+	d.mutex.Unlock()
+	// =============== Every path out this range must unlock! ===== ^^^^
+
 	// Query the DHT for peers that provide the service
 	peers, err := d.peers.getPeers(callCtx, addr, 10)
 	if err != nil {
@@ -296,11 +336,9 @@ func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, ne
 	}
 
 	// Try to connect to peers, concurrently to reduce the impact of timeouts
-	sem := make(chan struct{}, 4) // Max number of simultaneous requests
 	streams := make(chan *stream)
 	wg := new(sync.WaitGroup)
 
-	var s *stream
 outer:
 	for s == nil {
 		select {
@@ -311,7 +349,7 @@ outer:
 
 			// Got a new peer
 			wg.Add(1)
-			go d.attemptDial(ctx, sem, wg, p, sa, streams)
+			go d.wgAttemptDial(ctx, sem, wg, p, sa, addr, streams)
 
 		case s = <-streams:
 			// Got a live connection
@@ -327,9 +365,11 @@ outer:
 			continue
 		}
 
-		err = c.conn.Close()
-		if err != nil {
-			slog.ErrorCtx(ctx, "Error while closing extra stream", "error", err)
+		if c != nil {
+			err = c.conn.Close()
+			if err != nil {
+				slog.ErrorCtx(ctx, "Error while closing extra stream", "error", err)
+			}
 		}
 	}
 
@@ -338,16 +378,37 @@ outer:
 	}
 
 	// Close the connection when the context is canceled
-	go func() { <-ctx.Done(); _ = s.conn.Close() }()
+	go func() {
+		<-ctx.Done()
+		_ = s.conn.Close()
+	}()
 
 	return s, nil
 }
 
-func (d dialer) attemptDial(ctx context.Context, sem chan struct{}, wg *sync.WaitGroup, p peer.AddrInfo, sa *api.ServiceAddress, conn chan<- *stream) {
+func (d *dialer) wgAttemptDial(
+	ctx context.Context,
+	sem chan struct{},
+	wg *sync.WaitGroup,
+	p peer.AddrInfo,
+	sa *api.ServiceAddress,
+	addr multiaddr.Multiaddr,
+	conn chan<- *stream) {
+
 	defer wg.Done()
+	s := d.attemptDial(ctx, sem, p, sa, addr)
+	conn <- s
+}
+
+func (d *dialer) attemptDial(
+	ctx context.Context,
+	sem chan struct{},
+	p peer.AddrInfo,
+	sa *api.ServiceAddress,
+	addr multiaddr.Multiaddr) *stream {
 
 	if d.tracker.isBad(p.ID) {
-		return
+		return nil
 	}
 
 	sem <- struct{}{}
@@ -356,10 +417,31 @@ func (d dialer) attemptDial(ctx context.Context, sem chan struct{}, wg *sync.Wai
 	// Open a stream
 	slog.DebugCtx(ctx, "Dialing peer", "peer", p.ID, "service", sa)
 	s, err := openStreamFor(ctx, d.host, p.ID, sa, false)
+
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+	peers := d.goodPeers[addr.String()]
+
 	if err == nil {
 		slog.DebugCtx(ctx, "Successfully dialed peer", "peer", p.ID, "service", sa)
-		conn <- s
-		return
+		for _, kp := range peers {
+			if kp.ID == p.ID {
+				return s
+			}
+		}
+		peers = append(peers, p)
+		ma := addr.String()
+		d.goodPeers[ma] = peers
+		return s
+	}
+
+	for i, kp := range peers {
+		if kp.ID == p.ID {
+			copy(peers[:i], peers[i+1:]) // Delete the failing peer;
+			peers = peers[:len(peers)-1]
+			d.goodPeers[addr.String()] = peers
+			break
+		}
 	}
 
 	d.tracker.markBad(p.ID)
@@ -371,12 +453,13 @@ func (d dialer) attemptDial(ctx context.Context, sem chan struct{}, wg *sync.Wai
 		errors.Is(err, swarm.ErrDialBackoff),
 		errors.As(err, &timeoutError) && timeoutError.Timeout():
 		// Ignore and try again
-		slog.DebugCtx(ctx, "Unable to dial peer", "peer", p.ID, "service", sa, "error", err)
+		go slog.DebugCtx(ctx, "Unable to dial peer", "peer", p.ID, "service", sa, "error", err)
 
 	default:
 		// Log and try again
-		slog.WarnCtx(ctx, "Unknown error while dialing peer", "peer", p.ID, "service", sa, "error", err)
+		go slog.WarnCtx(ctx, "Unknown error while dialing peer", "peer", p.ID, "service", sa, "error", err)
 	}
+	return nil
 }
 
 // selfDialer always dials the [Node] directly.
