@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"io"
+	"runtime/debug"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -279,7 +280,17 @@ func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, ne
 	service, ok := d.host.getOwnService(netName, sa)
 	if ok {
 		p, q := message.DuplexPipe(ctx)
-		go service.handler(p)
+		go func() {
+			// Panic protection
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
+				}
+			}()
+
+			defer p.Close()
+			service.handler(p)
+		}()
 		return q, nil
 	}
 
