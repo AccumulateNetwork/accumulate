@@ -25,14 +25,11 @@ type Block struct {
 
 func (b *Block) Params() execute.BlockParams { return b.BlockParams }
 
-// Close ends the block and returns the block state.
-func (b *Block) Close() (execute.BlockState, error) {
-	err := b.Executor.EndBlock(b)
-	return (*closedBlock)(b), err
-}
-
 // closedBlock implements [execute.BlockState].
-type closedBlock Block
+type closedBlock struct {
+	Block
+	valUp []*execute.ValidatorUpdate
+}
 
 func (b *closedBlock) Params() execute.BlockParams { return b.BlockParams }
 func (s *closedBlock) ChangeSet() record.Record    { return s.Batch }
@@ -42,6 +39,10 @@ func (s *closedBlock) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 	return s.State.MakeMajorBlock,
 		s.State.MakeMajorBlockTime,
 		s.State.MakeMajorBlock > 0
+}
+
+func (s *closedBlock) DidUpdateValidators() ([]*execute.ValidatorUpdate, bool) {
+	return s.valUp, len(s.valUp) > 0
 }
 
 func (s *closedBlock) Commit() error {

@@ -169,15 +169,19 @@ func GoFieldError(op, name string, args ...string) string {
 }
 
 func goFieldAccessor(field *Field) (string, error) {
-	var ptr1 string
+	var ptr string
 	if field.Pointer {
-		ptr1 = "Ptr"
+		ptr = "Ptr"
 	}
 
 	var typ string
 	switch {
 	case field.Repeatable:
-		typ = "encoding.SliceIndex[*" + field.Type.Name + "]"
+		var ptr string
+		if field.Pointer {
+			ptr = "*"
+		}
+		typ = "encoding.SliceIndex[" + ptr + field.Type.GoType() + "]"
 	case field.Virtual:
 		typ = field.Type.GoType()
 	default:
@@ -185,15 +189,17 @@ func goFieldAccessor(field *Field) (string, error) {
 	}
 
 	switch field.Type.Code {
-	case Hash, Int, Uint, Float, Bool, Time, Bytes, String, Duration, BigInt, Url, TxID:
-		return fmt.Sprintf("encoding.%s%sField[%s]", typegen.TitleCase(field.Type.Code.String()), ptr1, typ), nil
+	case Hash, Int, Uint, Float, Bool, Time, Bytes, String, Duration, BigInt, Url:
+		return fmt.Sprintf("encoding.%s%sField[%s]", typegen.TitleCase(field.Type.Code.String()), ptr, typ), nil
+	case TxID:
+		return fmt.Sprintf("encoding.TxID%sField[%s]", ptr, typ), nil
 	}
 
 	switch field.MarshalAs {
 	case Reference:
-		return fmt.Sprintf("encoding.Struct%sField[%s, *%s, %[3]s]", ptr1, typ, GoResolveType(field, true, true)), nil
+		return fmt.Sprintf("encoding.Struct%sField[%s, *%s, %[3]s]", ptr, typ, GoResolveType(field, true, true)), nil
 	case Enum:
-		return fmt.Sprintf("encoding.Enum%sField[%s, *%s, %[3]s]", ptr1, typ, GoResolveType(field, true, true)), nil
+		return fmt.Sprintf("encoding.Enum%sField[%s, *%s, %[3]s]", ptr, typ, GoResolveType(field, true, true)), nil
 	}
 
 	return "nil", nil

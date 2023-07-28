@@ -69,6 +69,11 @@ NetworkStatus:
       type: protocol.ExecutorVersion
       marshal-as: enum
       optional: true
+    - name: DirectoryHeight
+      description: is the height of the directory network
+      type: uint
+    - name: MajorBlockHeight
+      type: uint
 
 Metrics:
   fields:

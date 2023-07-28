@@ -316,8 +316,8 @@
       "program": "${workspaceFolder}/tools/cmd/snapshot",
       "args": [
         "extract",
-        "${workspaceFolder}/.nodes/rc2/node-1/bvnn/data/accumulate.db",
-        "${workspaceFolder}/snapshot.bpt"
+        "${workspaceFolder}/.nodes/old-testnet.db",
+        "${workspaceFolder}/.nodes/asdf.snap"
       ]
     },
     {
@@ -375,9 +375,21 @@
       "cwd": "${workspaceFolder}",
       "args": [
         "heal",
-        "tcp://bvn0-seed.testnet.accumulatenetwork.io:16591",
-        "tcp://bvn1-seed.testnet.accumulatenetwork.io:16591",
-        "tcp://bvn2-seed.testnet.accumulatenetwork.io:16591",
+        "https://kermit.accumulatenetwork.io/v3",
+      ]
+    },
+    {
+      "name": "Heal Synth",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "heal-synth",
+        "mainnet",
+        "mainnet",
       ]
     },
     {
@@ -476,6 +488,17 @@
       "program": "${workspaceFolder}/tools/cmd/recode",
       "args": [
         "${workspaceFolder}/internal/core/execute/v1/block/delegate_test.go"
+      ]
+    },
+    {
+      "name": "Check Node",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "args": [
+        "check-node", "localhost"
       ]
     }
   ]

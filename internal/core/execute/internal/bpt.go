@@ -48,14 +48,27 @@ func (a *observedAccount) hashState() (hash.Hasher, error) {
 }
 
 func (a *observedAccount) hashSecondaryState() (hash.Hasher, error) {
-	var err error
 	var hasher hash.Hasher
+
+	// Add the directory list
+	var err error
+	var dirHasher hash.Hasher
 	for _, u := range loadState(&err, false, a.Directory().Get) {
-		hasher.AddUrl(u)
+		dirHasher.AddUrl(u)
 	}
-	// Hash the hash to allow for future expansion
-	dirHash := hasher.MerkleHash()
-	return hash.Hasher{dirHash}, err
+	hasher.AddValue(dirHasher)
+
+	// Add scheduled events
+	u := a.Url()
+	if _, ok := protocol.ParsePartitionUrl(u); ok && u.PathEqual(protocol.Ledger) {
+		// For backwards compatibility, don't add the hash if the BPT is empty
+		hash := loadState(&err, false, a.Events().BPT().GetRootHash)
+		if hash != [32]byte{} {
+			hasher.AddHash2(hash)
+		}
+	}
+
+	return hasher, err
 }
 
 // hashChains returns a merkle hash of the DAG root of every chain in

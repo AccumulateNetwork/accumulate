@@ -16,9 +16,11 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -26,35 +28,36 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// EndBlock implements ./Chain
-func (m *Executor) EndBlock(block *Block) error {
+// Close ends the block and returns the block state.
+func (block *Block) Close() (execute.BlockState, error) {
+	m := block.Executor
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
+
+	err := m.processEventBacklog(block)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("process event backlog: %w", err)
+	}
 
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
+	err = block.Batch.Account(m.Describe.Synthetic()).Main().GetAs(&synthLedger)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	var anchorLedger *protocol.AnchorLedger
 	err = block.Batch.Account(m.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
+		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
 
-	// Update active globals
-	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: &m.globals.Pending,
-			Old: &m.globals.Active,
-		})
-		if err != nil {
-			return errors.UnknownError.WithFormat("publish globals update: %w", err)
-		}
-		m.globals.Active = *m.globals.Pending.Copy()
+	// List all of the chains that have been modified. shouldPrepareAnchor
+	// relies on this list so this must be done first.
+	err = m.enumerateModifiedChains(block)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Determine if an anchor should be sent
@@ -62,7 +65,24 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	// Do nothing if the block is empty
 	if block.State.Empty() {
-		return nil
+		return &closedBlock{*block, nil}, nil
+	}
+
+	// Update active globals - **after** checking if the block is empty, because
+	// we definitely don't want to tell the ABCI that the validator set changed
+	// if the block is getting discarded, though that _should_ be impossible
+	var valUp []*execute.ValidatorUpdate
+	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
+		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
+
+		err = m.EventBus.Publish(events.WillChangeGlobals{
+			New: &m.globals.Pending,
+			Old: &m.globals.Active,
+		})
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
+		}
+		m.globals.Active = *m.globals.Pending.Copy()
 	}
 
 	m.logger.Debug("Committing",
@@ -74,57 +94,34 @@ func (m *Executor) EndBlock(block *Block) error {
 		"produced", block.State.Produced)
 	t := time.Now()
 
-	// Load the main chain of the minor root
+	// Record pending transactions
 	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
-	rootChain, err := ledger.RootChain().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load root chain: %w", err)
-	}
-
-	if m.globals.Active.ExecutorVersion.SignatureAnchoringEnabled() {
-		// Overwrite the state's chain update list with one derived directly
-		// from the database
-		block.State.ChainUpdates.Entries = nil
-
-		// For each modified account
-		for _, account := range block.Batch.UpdatedAccounts() {
-			chains, err := account.UpdatedChains()
-			if err != nil {
-				return errors.UnknownError.WithFormat("get updated chains of %v: %w", account.Url(), err)
-			}
-
-			// For each modified chain
-			for _, e := range chains {
-				// Anchoring the synthetic transaction ledger causes sadness and
-				// despair (it breaks things but I don't know why)
-				_, ok := protocol.ParsePartitionUrl(e.Account)
-				if ok && e.Account.PathEqual(protocol.Synthetic) {
-					continue
-				}
-
-				// Add a block entry
-				block.State.ChainUpdates.Entries = append(block.State.ChainUpdates.Entries, e)
-			}
+	if len(block.State.Pending) > 0 {
+		// Get the major block height
+		major, err := getMajorHeight(m.Describe, block.Batch)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
-		// [database.Batch.UpdatedAccounts] iterates over a map and thus returns
-		// the accounts in a random order. Since randomness and distributed
-		// consensus do not mix, the entries are sorted to ensure a consistent
-		// ordering.
-		//
-		// Modified chains are anchored into the root chain later in this
-		// function. This combined with the fact that the entries are sorted
-		// here means that the anchors in the root chain and entries in the
-		// block ledger will be recorded in a well-defined sort order.
-		//
-		// Another side effect of sorting is that information about the ordering
-		// of transactions is lost. That could be viewed as a problem; however,
-		// we intend on parallelizing transaction processing in the future.
-		// Declaring that the protocol does not preserve transaction ordering
-		// will make it easier to parallelize transaction processing.
-		e := block.State.ChainUpdates.Entries
-		sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
+		// Set the expiration height
+		if m.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
+			major += 14 // default to 2 weeks
+		} else {
+			major += m.globals.Active.Globals.Limits.PendingMajorBlocks
+		}
+
+		// Record the IDs
+		err = ledger.Events().Major().Pending(major).Add(block.State.GetPending()...)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("store pending expirations: %w", err)
+		}
+	}
+
+	// Load the main chain of the minor root
+	rootChain, err := ledger.RootChain().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
 
 	// Process chain updates
@@ -152,15 +149,15 @@ func (m *Executor) EndBlock(block *Block) error {
 		account := block.Batch.Account(entry.Account)
 		chain, err := account.ChainByName(entry.Chain)
 		if err != nil {
-			return errors.UnknownError.WithFormat("resolve chain %v of %v: %w", entry.Chain, entry.Account, err)
+			return nil, errors.UnknownError.WithFormat("resolve chain %v of %v: %w", entry.Chain, entry.Account, err)
 		}
 		chain2, err := chain.Get()
 		if err != nil {
-			return errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
+			return nil, errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
 		}
 		hash, err := chain2.Entry(int64(entry.Index))
 		if err != nil {
-			return errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
+			return nil, errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
 		}
 		u.Txns = append(u.Txns, hash)
 
@@ -172,7 +169,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		// Anchor and index the chain
 		u.IndexIndex, u.DidIndex, err = addChainAnchor(rootChain, chain, block.Index)
 		if err != nil {
-			return errors.UnknownError.WithFormat("add anchor to root chain: %w", err)
+			return nil, errors.UnknownError.WithFormat("add anchor to root chain: %w", err)
 		}
 	}
 
@@ -184,7 +181,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	bl.Entries = block.State.ChainUpdates.Entries
 	err = block.Batch.Account(bl.Url).Main().Put(bl)
 	if err != nil {
-		return errors.UnknownError.WithFormat("store block ledger: %w", err)
+		return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}
 
 	// Add the synthetic transaction chain to the root chain
@@ -192,7 +189,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	if block.State.Produced > 0 {
 		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -203,7 +200,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		BlockTime:  &block.Time,
 	})
 	if err != nil {
-		return errors.UnknownError.WithFormat("add root index chain entry: %w", err)
+		return nil, errors.UnknownError.WithFormat("add root index chain entry: %w", err)
 	}
 
 	// Update the transaction-chain index
@@ -219,7 +216,7 @@ func (m *Executor) EndBlock(block *Block) error {
 			e.AnchorIndex = rootIndexIndex
 			err = indexing.TransactionChain(block.Batch, hash).Add(e)
 			if err != nil {
-				return errors.UnknownError.WithFormat("store transaction chain index: %w", err)
+				return nil, errors.UnknownError.WithFormat("store transaction chain index: %w", err)
 			}
 		}
 	}
@@ -233,24 +230,48 @@ func (m *Executor) EndBlock(block *Block) error {
 			AnchorIndex: rootIndexIndex,
 		})
 		if err != nil {
-			return errors.UnknownError.WithFormat("store transaction chain index: %w", err)
+			return nil, errors.UnknownError.WithFormat("store transaction chain index: %w", err)
 		}
 	}
 
 	// Update major index chains if it's a major block
 	err = m.updateMajorIndexChains(block, rootIndexIndex)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Check if an anchor needs to be sent
 	err = m.prepareAnchor(block)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
-	return nil
+	return &closedBlock{*block, valUp}, nil
+}
+
+func getMajorHeight(desc config.Describe, batch *database.Batch) (uint64, error) {
+	c := batch.Account(desc.AnchorPool()).MajorBlockChain()
+	head, err := c.Head().Get()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load major block chain head: %w", err)
+	}
+	if head.Count == 0 {
+		return 0, nil
+	}
+
+	hash, err := c.Entry(head.Count - 1)
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load major block chain latest entry: %w", err)
+	}
+
+	entry := new(protocol.IndexEntry)
+	err = entry.UnmarshalBinary(hash)
+	if err != nil {
+		return 0, errors.EncodingError.WithFormat("decode major block chain entry: %w", err)
+	}
+
+	return entry.BlockIndex, nil
 }
 
 // anchorSynthChain anchors the synthetic transaction chain.
@@ -644,4 +665,49 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 	anchor.AcmeBurnt = ledger.AcmeBurnt
 	return anchor, nil
+}
+
+func (x *Executor) enumerateModifiedChains(block *Block) error {
+	block.State.ChainUpdates.Entries = nil
+
+	// For each modified account
+	for _, account := range block.Batch.UpdatedAccounts() {
+		chains, err := account.UpdatedChains()
+		if err != nil {
+			return errors.UnknownError.WithFormat("get updated chains of %v: %w", account.Url(), err)
+		}
+
+		// For each modified chain
+		for _, e := range chains {
+			// Anchoring the synthetic transaction ledger causes sadness and
+			// despair (it breaks things but I don't know why)
+			_, ok := protocol.ParsePartitionUrl(e.Account)
+			if ok && e.Account.PathEqual(protocol.Synthetic) {
+				continue
+			}
+
+			// Add a block entry
+			block.State.ChainUpdates.Entries = append(block.State.ChainUpdates.Entries, e)
+		}
+	}
+
+	// [database.Batch.UpdatedAccounts] iterates over a map and thus returns
+	// the accounts in a random order. Since randomness and distributed
+	// consensus do not mix, the entries are sorted to ensure a consistent
+	// ordering.
+	//
+	// Modified chains are anchored into the root chain later in this
+	// function. This combined with the fact that the entries are sorted
+	// here means that the anchors in the root chain and entries in the
+	// block ledger will be recorded in a well-defined sort order.
+	//
+	// Another side effect of sorting is that information about the ordering
+	// of transactions is lost. That could be viewed as a problem; however,
+	// we intend on parallelizing transaction processing in the future.
+	// Declaring that the protocol does not preserve transaction ordering
+	// will make it easier to parallelize transaction processing.
+	e := block.State.ChainUpdates.Entries
+	sort.Slice(e, func(i, j int) bool { return e[i].Compare(e[j]) < 0 })
+
+	return nil
 }

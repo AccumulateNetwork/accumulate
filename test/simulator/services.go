@@ -9,16 +9,18 @@ package simulator
 import (
 	"context"
 	"crypto/sha256"
+	"math/big"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 )
 
 // simService implements API v3.
@@ -28,11 +30,61 @@ type simService Simulator
 func (s *simService) Private() private.Sequencer { return s }
 
 func (s *simService) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
-	return nil, errors.NotAllowed.With("not implemented")
+	err := (*Simulator)(s).DatabaseFor(account).Update(func(batch *database.Batch) error {
+		var acct protocol.AccountWithTokens
+		err := batch.Account(account).Main().GetAs(&acct)
+		switch {
+		case err == nil:
+			if !acct.GetTokenUrl().Equal(protocol.AcmeUrl()) {
+				return errors.BadRequest.WithFormat("%v is not an ACME account", account)
+			}
+
+			acct.CreditTokens(big.NewInt(10 * protocol.AcmePrecision))
+			return nil
+
+		case !errors.Is(err, errors.NotFound):
+			return err
+		}
+
+		_, tok, _ := protocol.ParseLiteTokenAddress(account)
+		if tok == nil {
+			return err
+		}
+		if !tok.Equal(protocol.AcmeUrl()) {
+			return errors.BadRequest.WithFormat("%v is not an ACME account", account)
+		}
+
+		lid := new(protocol.LiteIdentity)
+		lid.Url = account.RootIdentity()
+		err = batch.Account(lid.Url).Main().Put(lid)
+		if err != nil {
+			return err
+		}
+
+		lta := new(protocol.LiteTokenAccount)
+		lta.Url = account
+		lta.Balance = *big.NewInt(10 * protocol.AcmePrecision)
+		lta.TokenUrl = protocol.AcmeUrl()
+		return batch.Account(lta.Url).Main().Put(lta)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &api.Submission{
+		Status: &protocol.TransactionStatus{
+			Code: errors.Delivered,
+			TxID: account.WithTxID([32]byte{1}),
+		},
+		Success: true,
+	}, nil
 }
 
 // ConsensusStatus finds the specified node and returns its ConsensusStatus.
 func (s *simService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	if opts.Partition != "" {
+		n := s.partitions[opts.Partition].nodes[0]
+		return (*nodeService)(n).ConsensusStatus(ctx, opts)
+	}
 	if opts.NodeID == "" {
 		return nil, errors.BadRequest.WithFormat("node ID is missing")
 	}
@@ -173,12 +225,21 @@ func (s *nodeService) Faucet(ctx context.Context, account *url.URL, opts api.Fau
 
 // ConsensusStatus implements [api.ConsensusService].
 func (s *nodeService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	status, err := s.consensus.Status(&consensus.StatusRequest{})
+	if err != nil {
+		return nil, err
+	}
+	info, err := s.consensus.Info(&consensus.InfoRequest{})
+	if err != nil {
+		return nil, err
+	}
 	return &api.ConsensusStatus{
 		Ok: true,
 		LastBlock: &api.LastBlock{
-			Height: int64(s.partition.blockIndex),
-			Time:   s.partition.blockTime,
-			// TODO: chain root, state root
+			Height:    int64(status.BlockIndex),
+			Time:      status.BlockTime,
+			StateRoot: info.LastHash,
+			// TODO: chain root, directory height
 		},
 		NodeKeyHash:      sha256.Sum256(s.nodeKey[32:]),
 		ValidatorKeyHash: sha256.Sum256(s.privValKey[32:]),
@@ -189,17 +250,7 @@ func (s *nodeService) ConsensusStatus(ctx context.Context, opts api.ConsensusSta
 
 // NetworkStatus implements [api.NetworkService].
 func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
-	v, ok := s.globals.Load().(*core.GlobalValues)
-	if !ok {
-		return nil, errors.NotReady
-	}
-	return &api.NetworkStatus{
-		Oracle:          v.Oracle,
-		Network:         v.Network,
-		Globals:         v.Globals,
-		Routing:         v.Routing,
-		ExecutorVersion: v.ExecutorVersion,
-	}, nil
+	return s.netSvc.NetworkStatus(ctx, opts)
 }
 
 // Metrics implements [api.MetricsService].

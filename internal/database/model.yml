@@ -63,6 +63,66 @@
       pointer: true
       emptyIfMissing: true
 
+    - name: Events
+      description: tracks scheduled events. Should only be used on the system ledger
+      type: entity
+      attributes:
+      - name: Minor
+        description: tracks events scheduled for a DN minor block
+        type: entity
+        attributes:
+        - name: Blocks
+          type: state
+          dataType: uint
+          collection: set
+        - name: Votes
+          description: tracks authority votes that are pending due to a block hold
+          type: state
+          index: getVoteKeys # Indexed by blocks
+          parameters:
+          - name: Block
+            type: uint
+          customValueConstructor: true
+          comparator: compareHeldAuthSig
+          dataType: protocol.AuthoritySignature
+          pointer: true
+          collection: set
+      - name: Major
+        description: tracks events scheduled for a major block
+        type: entity
+        attributes:
+        - name: Blocks
+          type: state
+          dataType: uint
+          collection: set
+        - name: Pending
+          description: tracks pending transactions that will expire
+          type: state
+          index: getPendingKeys # Indexed by blocks
+          parameters:
+          - name: Block
+            type: uint
+          customValueConstructor: true
+          dataType: txid
+          pointer: true
+          collection: set
+      - name: Backlog
+        description: used to limit the number of events processed per block
+        type: entity
+        attributes:
+        - name: Expired
+          description: tracks pending transactions that have expired
+          type: state
+          customValueConstructor: true
+          dataType: txid
+          pointer: true
+          collection: set
+      - name: BPT
+        type: other
+        dataType: bpt.BPT
+        constructor: newBPT
+        pointer: true
+
     - name: Transaction
       type: entity
       index: getTransactionKeys # Indexed by pending (more or less)
@@ -164,7 +224,9 @@
 
     # Indices
     - name: Chains
-      type: index
+      # This should be an index but because of a bug in the BPT calculations it
+      # needs to be preserved a snapshot
+      type: state
       dataType: protocol.ChainMetadata
       pointer: true
       collection: set
@@ -292,7 +354,8 @@
     type: state
     dataType: merkle.State
     pointer: true
-    parameters: # Not indexed directly
+    index: getMarkPoints # Indexed by head
+    parameters:
     - name: Index
       type: uint
   - name: ElementIndex

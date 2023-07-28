@@ -7,11 +7,13 @@
 package snapshot_test
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -146,16 +148,24 @@ func collect(t testing.TB, db *coredb.Database, file io.WriteSeeker, partition *
 	require.NoError(t, err)
 
 	// Iterate over the BPT and collect accounts
+	var index []snapshot.RecordIndexEntry
 	it := batch.IterateAccounts()
-	for {
-		account, ok := it.Next()
-		if !ok {
-			break
-		}
+	for it.Next() {
+		account := it.Value()
 
 		// Collect the account's records
-		err = records.Collect(account, database.WalkOptions{
-			IgnoreIndices: true,
+		err = records.Collect(account, snapshot.CollectOptions{
+			Walk: database.WalkOptions{
+				IgnoreIndices: true,
+			},
+			DidCollect: func(value database.Value, section, offset uint64) error {
+				index = append(index, snapshot.RecordIndexEntry{
+					Key:     value.Key().Hash(),
+					Section: int(section),
+					Offset:  offset,
+				})
+				return nil
+			},
 		})
 		require.NoError(t, err)
 	}
@@ -164,8 +174,19 @@ func collect(t testing.TB, db *coredb.Database, file io.WriteSeeker, partition *
 	err = records.Close()
 	require.NoError(t, err)
 
-	err = w.WriteIndex()
+	x, err := w.OpenIndex()
 	require.NoError(t, err)
+
+	sort.Slice(index, func(i, j int) bool {
+		a, b := index[i], index[j]
+		return bytes.Compare(a.Key[:], b.Key[:]) < 0
+	})
+
+	for _, e := range index {
+		err = x.Write(e)
+		require.NoError(t, err)
+	}
+	require.NoError(t, x.Close())
 }
 
 type fakeChangeSet struct{ keyvalue.Store }

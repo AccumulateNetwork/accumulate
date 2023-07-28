@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -41,8 +40,6 @@ type bundle struct {
 
 // Process processes a message bundle.
 func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
-	var statuses []*protocol.TransactionStatus
-
 	messages, err := envelope.Normalize()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -54,47 +51,121 @@ func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionSt
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Process the messages
+	results, err := b.processMessages(messages, 0)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// These results are only visible through Tendermint. The recommended way to
+	// check the status of a transaction is through Accumulate's API, which
+	// reads the status from the database. So it's unlikely anyone is reading
+	// these results out of the database. And since different results across
+	// nodes will lead to consensus failure, and error messages are porcelain
+	// (designed for humans, not machines, and tricky to control precisely), we
+	// do not preserve error messages. And because all the other fields are
+	// really internal things, all we are going to preserve is the result and
+	// the code, though if there's an error we will not preserve the specific
+	// error code.
+	//
+	// We could do this within the ABCI, which would make it easy to preserve
+	// the error messages as logs or events. However this change must be
+	// version-dependent - must be activated with executor V2 - and making such
+	// a change in the ABCI would require it to become aware of the executor
+	// version, which it is not currently.
+	cleaned := make([]*protocol.TransactionStatus, len(results))
+	for i, r := range results {
+		cleaned[i] = &protocol.TransactionStatus{
+			TxID:   r.TxID,
+			Result: r.Result,
+		}
+		if r.Code.Success() {
+			cleaned[i].Code = r.Code // Preserve success codes (delivered, pending, etc)
+		} else {
+			cleaned[i].Code = errors.UnknownError // Replace error codes with a generic code
+		}
+	}
+	return cleaned, nil
+}
+
+func (b *Block) processMessages(messages []messaging.Message, pass int) ([]*protocol.TransactionStatus, error) {
+	var statuses []*protocol.TransactionStatus
+
 	// Do not check for unsigned transactions when processing additional
 	// messages
-	var pass int
-additional:
+	for ; len(messages) > 0; pass++ {
+		// Set up the bundle
+		d := new(bundle)
+		d.Block = b
+		d.pass = pass
+		d.messages = messages
+		d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
-	// Do this now for the sake of comparing logs
-	for _, msg := range messages {
-		msg, ok := msg.(*messaging.TransactionMessage)
-		if !ok {
-			continue
+		s, err := d.process()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		statuses = append(statuses, s...)
+
+		// Process additional transactions. It would be simpler to do this
+		// recursively, but it's possible that could cause a stack overflow.
+		messages = d.additional
+	}
+
+	return statuses, nil
+}
+
+func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
+	var statuses []*protocol.TransactionStatus
+	b := d.Block
+
+	for _, msg := range d.messages {
+		if m, ok := msg.(*internal.PseudoSynthetic); ok {
+			msg = m.Message
+		}
+
+		var typ any = msg.Type()
+		if msg.Type() >= internal.MessageTypeInternal {
+			typ = "internal"
 		}
 
 		fn := b.Executor.logger.Debug
 		kv := []interface{}{
 			"block", b.Index,
-			"type", msg.Transaction.Body.Type(),
-			"txn-hash", logging.AsHex(msg.Transaction.GetHash()).Slice(0, 4),
-			"principal", msg.Transaction.Header.Principal,
+			"type", typ,
+			"id", msg.ID(),
 		}
-		switch msg.Transaction.Body.Type() {
-		case protocol.TransactionTypeDirectoryAnchor,
-			protocol.TransactionTypeBlockValidatorAnchor:
+		if d.pass > 1 {
+			kv = append(kv, "pass", d.pass)
+		}
+
+		switch msg := msg.(type) {
+		case *messaging.TransactionMessage:
+			kv = append(kv, "txn-type", msg.Transaction.Body.Type())
+
+		case *messaging.BlockAnchor:
 			fn = b.Executor.logger.Info
 			kv = append(kv, "module", "anchoring")
+
+		case *messaging.SyntheticMessage:
+			if seq, ok := msg.Message.(*messaging.SequencedMessage); ok {
+				kv = append(kv, "inner-type", seq.Message.ID())
+				kv = append(kv, "source", seq.Source)
+				kv = append(kv, "dest", seq.Destination)
+				kv = append(kv, "seq", seq.Number)
+
+				switch msg := seq.Message.(type) {
+				case *messaging.TransactionMessage:
+					kv = append(kv, "txn-type", msg.Transaction.Body.Type())
+				}
+			}
 		}
-		if pass > 0 {
-			fn("Executing additional", kv...)
-		} else {
-			fn("Executing transaction", kv...)
-		}
+
+		fn("Executing message", kv...)
 	}
 
-	// Set up the bundle
-	d := new(bundle)
-	d.Block = b
-	d.pass = pass
-	d.messages = messages
-	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
-
 	// Process each message
-	for _, msg := range messages {
+	for _, msg := range d.messages {
 		ctx := &MessageContext{bundle: d, message: msg}
 		st, err := d.callMessageExecutor(b.Batch, ctx)
 		if err != nil {
@@ -128,7 +199,7 @@ additional:
 	}
 
 	// Process synthetic transactions generated by the validator
-	err = b.Executor.produceSynthetic(b.Batch, d.produced, b.Index)
+	err := b.Executor.produceSynthetic(b.Batch, d.produced, b.Index)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -140,15 +211,6 @@ additional:
 	})
 
 	b.State.Produced += len(d.produced)
-
-	// Process additional transactions. It would be simpler to do this
-	// recursively, but it's possible that could cause a stack overflow.
-	if len(d.additional) > 0 {
-		pass++
-		messages = d.additional
-		goto additional
-	}
-
 	return statuses, nil
 }
 

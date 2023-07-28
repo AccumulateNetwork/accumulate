@@ -32,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"golang.org/x/sync/errgroup"
 )
@@ -52,9 +53,6 @@ type Simulator struct {
 
 	// DropDispatchedMessages drops all internally dispatched messages.
 	DropDispatchedMessages bool
-
-	// IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx.
-	IgnoreDeliverResults bool
 
 	// Recordings is a function that returns files to write node recordings to.
 	// TODO Make this an option once #3314 is merged.
@@ -136,7 +134,6 @@ func New2(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Net
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 		}
-		// fmt.Println("Init", id)
 		err = s.partitions[id].initChain(snapshot)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("init %s: %w", id, err)
@@ -260,6 +257,30 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 	}
 }
 
+func (s *Simulator) SkipProposalCheck(v bool) {
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			n.consensus.SkipProposalCheck = v
+		}
+	}
+}
+
+func (s *Simulator) IgnoreDeliverResults(v bool) {
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			n.consensus.IgnoreDeliverResults = v
+		}
+	}
+}
+
+func (s *Simulator) IgnoreCommitResults(v bool) {
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			n.consensus.IgnoreCommitResults = v
+		}
+	}
+}
+
 func (s *Simulator) Router() *Router { return s.router }
 
 func (s *Simulator) EventBus(partition string) *events.Bus {
@@ -267,9 +288,11 @@ func (s *Simulator) EventBus(partition string) *events.Bus {
 }
 
 func (s *Simulator) BlockIndex(partition string) uint64 {
-	p := s.partitions[partition]
-	p.loadBlockIndex()
-	return p.blockIndex
+	res, err := s.partitions[partition].nodes[0].consensus.Status(&consensus.StatusRequest{})
+	if err != nil {
+		panic(err)
+	}
+	return res.BlockIndex
 }
 
 func (s *Simulator) BlockIndexFor(account *url.URL) uint64 {
@@ -342,18 +365,6 @@ func (s *Simulator) SetNodeBlockHookFor(account *url.URL, fn NodeBlockHookFunc) 
 
 func (s *Simulator) SetNodeBlockHook(partition string, fn NodeBlockHookFunc) {
 	s.partitions[partition].SetNodeBlockHook(fn)
-}
-
-func (s *Simulator) SetCommitHookFor(account *url.URL, fn CommitHookFunc) {
-	partition, err := s.router.RouteAccount(account)
-	if err != nil {
-		panic(err)
-	}
-	s.partitions[partition].SetCommitHook(fn)
-}
-
-func (s *Simulator) SetCommitHook(partition string, fn CommitHookFunc) {
-	s.partitions[partition].SetCommitHook(fn)
 }
 
 func (s *Simulator) Submit(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {

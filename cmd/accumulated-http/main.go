@@ -110,10 +110,11 @@ func run(_ *cobra.Command, args []string) {
 	Check(err)
 
 	node, err := p2p.New(p2p.Options{
-		Key:            loadOrGenerateKey(),
-		Network:        args[0],
-		Listen:         flag.P2pListen,
-		BootstrapPeers: flag.Peers,
+		Key:               loadOrGenerateKey(),
+		Network:           args[0],
+		Listen:            flag.P2pListen,
+		BootstrapPeers:    flag.Peers,
+		EnablePeerTracker: true,
 	})
 	Check(err)
 	defer func() { _ = node.Close() }()

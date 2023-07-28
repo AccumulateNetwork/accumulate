@@ -18,10 +18,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -235,7 +233,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		return errors.UnknownError.Wrap(status.Error)
 	}
 
-	err = m.EndBlock(block)
+	_, err = m.EndBlock(block)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -256,13 +254,8 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	}
 }
 
-func (m *Executor) RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader) error {
-	err := snapshot.FullRestore(db, file, m.logger, &m.Describe)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load state: %w", err)
-	}
-
-	err = m.loadGlobals(db.View)
+func (m *Executor) Init(db database.Beginner) error {
+	err := m.loadGlobals(db.View)
 	if err != nil {
 		return errors.InternalError.WithFormat("failed to load globals: %w", err)
 	}

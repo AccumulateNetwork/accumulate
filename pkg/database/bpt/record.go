@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -36,19 +37,21 @@ func (b *BPT) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 // commitUpdatesDirect directly pushes pending updates into the previous batch,
 // as long as the previous layer _is_ a batch and there are no other changes.
 func (b *BPT) commitUpdatesDirect() (bool, error) {
-	// We can't push the updates directly if any state has been updated
-	if b.baseIsDirty() {
-		return false, nil
-	}
+	var r database.Record
+	switch store := b.store.(type) {
+	case interface{ Unwrap() database.Record }:
+		// Store is a record - batch is nested
+		r = store.Unwrap()
 
-	// Is the store a record?
-	rs, ok := b.store.(interface{ Unwrap() database.Record })
-	if !ok {
+	case interface{ Unwrap() keyvalue.Store }:
+		// Store is a database - batch is *not* nested
 		return false, nil
+
+	default:
+		return false, errors.InternalError.WithFormat("cannot determine how the BPT should be committed")
 	}
 
 	var err error
-	r := rs.Unwrap()
 	for key := b.key; key.Len() > 0; {
 		r, key, err = r.Resolve(key)
 		if err != nil {
@@ -64,15 +67,19 @@ func (b *BPT) commitUpdatesDirect() (bool, error) {
 
 	// Push the updates
 	for k, v := range b.pending {
-		err = c.Insert(k, v)
+		if v.committed {
+			continue
+		}
+		v.committed = true
+
+		if v.delete {
+			err = c.Delete(k)
+		} else {
+			err = c.Insert(k, v.value)
+		}
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
-	}
-
-	// Optimized by the compiler
-	for k := range b.pending {
-		delete(b.pending, k)
 	}
 
 	return true, nil
@@ -105,7 +112,7 @@ func (b *BPT) Commit() error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load params: %w", err)
 	}
-	s.RootHash = b.getRoot().getHash()
+	s.RootHash, _ = b.getRoot().getHash()
 	err = b.getState().Put(s)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store params: %w", err)
@@ -115,8 +122,8 @@ func (b *BPT) Commit() error {
 	return b.baseCommit()
 }
 
-// nodeRecord is a wrapper for [node] that implements [record.Record].
-type nodeRecord struct{ value node }
+// nodeRecord is a wrapper for [branch] that implements [record.Record].
+type nodeRecord struct{ value *branch }
 
 // Assert [nodeRecord] is a value reader and writer.
 var _ database.Value = nodeRecord{}
@@ -150,7 +157,20 @@ func (e nodeRecord) GetValue() (encoding.BinaryValue, int, error) {
 
 // LoadValue implements [record.ValueWriter].
 func (e nodeRecord) LoadValue(value record.ValueReader, put bool) error {
-	// Get the value
+	if put {
+		return errors.FatalError.With("attempted to LoadValue(put = true) into a BPT node")
+	}
+
+	// Check the destination
+	dst := e.value
+	if dst.Left != nil {
+		return errors.FatalError.With("attempted to LoadValue into a populated branch")
+	}
+	if dst.IsDirty() {
+		return errors.FatalError.With("attempted to LoadValue into a dirty branch")
+	}
+
+	// Get the source value
 	v, _, err := value.GetValue()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -161,18 +181,17 @@ func (e nodeRecord) LoadValue(value record.ValueReader, put bool) error {
 	if !ok {
 		return errors.InternalError.WithFormat("invalid value: want %T, got %T", nodeValue{}, value)
 	}
+	src := u.value
 
-	// The node must be a branch
-	f, ok := u.value.(*branch)
-	if !ok {
-		return errors.InternalError.WithFormat("invalid entry: want %v, got %v", nodeTypeBranch, u.value.Type())
-	}
-
-	// Merge the branch into this node
-	_, err = e.value.merge(f, put)
+	// Load the parameters
+	s, err := dst.bpt.getState().Get()
 	if err != nil {
-		return errors.UnknownError.WithFormat("load node: %w", err)
+		return errors.UnknownError.WithFormat("load params: %w", err)
 	}
+
+	// Copy the branch into this node
+	dst.Left = src.Left.copyWith(s, dst)
+	dst.Right = src.Right.copyWith(s, dst)
 	return nil
 }
 
@@ -183,38 +202,33 @@ func (e nodeRecord) LoadBytes(data []byte, put bool) error {
 		return errors.FatalError.With("not supported")
 	}
 
-	// The receiver must be a branch
-	f, ok := e.value.(*branch)
-	if !ok {
-		return errors.InternalError.WithFormat("invalid entry: want %v, got %v", nodeTypeBranch, e.value.Type())
-	}
-
 	// Load the BPT's parameters
-	s, err := f.bpt.getState().Get()
+	s, err := e.value.bpt.getState().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load BPT params: %w", err)
 	}
 
 	// The branch must be on a boundary
-	if f.Height&s.Mask != 0 {
+	dst := e.value
+	if dst.Height&s.Mask != 0 {
 		return errors.FatalError.WithFormat("attempted to load a non-border node from disk")
 	}
 
 	// Read the left and right
 	rd := bytes.NewBuffer(data)
-	f.Left, err = readNode(rd, f)
+	dst.Left, err = readNode(rd, dst)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	f.Right, err = readNode(rd, f)
+	dst.Right, err = readNode(rd, dst)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 	return nil
 }
 
-// nodeValue is a wrapper for [node] that implements [encoding.BinaryValue].
-type nodeValue struct{ value node }
+// nodeValue is a wrapper for [*branch] that implements [encoding.BinaryValue].
+type nodeValue struct{ value *branch }
 
 // CopyAsInterface panics.
 func (e nodeValue) CopyAsInterface() any { panic(errShim()) }
@@ -227,27 +241,21 @@ func (e nodeValue) UnmarshalBinary(data []byte) error { panic(errShim()) }
 
 // MarshalBinary implements [encoding.BinaryValue].
 func (e nodeValue) MarshalBinary() (data []byte, err error) {
-	// The node must be a branch
-	f, ok := e.value.(*branch)
-	if !ok {
-		return nil, errors.InternalError.WithFormat("attempted to store a %v", e.value.Type())
-	}
-
 	// Load the BPT's parameters
-	s, err := f.bpt.getState().Get()
+	s, err := e.value.bpt.getState().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load params: %w", err)
 	}
 
 	// The branch must be on a boundary
-	if f.Height&s.Mask != 0 {
+	if e.value.Height&s.Mask != 0 {
 		return nil, errors.InternalError.WithFormat("attempted to store a non-border branch")
 	}
 
 	// Write the left and right
 	buf := new(bytes.Buffer)
-	writeBlock(&err, buf, f.Left, s.Mask)
-	writeBlock(&err, buf, f.Right, s.Mask)
+	writeBlock(&err, buf, e.value.Left, s.Mask)
+	writeBlock(&err, buf, e.value.Right, s.Mask)
 	return buf.Bytes(), errors.UnknownError.Wrap(err)
 }
 

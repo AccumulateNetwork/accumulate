@@ -27,23 +27,6 @@ func New(parent database.Record, logger log.Logger, store database.Store, key *d
 	return b
 }
 
-// executePending pushes pending updates into the tree.
-func (b *BPT) executePending() error {
-	// Push the updates
-	for k, v := range b.pending {
-		_, err := b.getRoot().merge(&leaf{Key: k, Hash: v}, true)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-
-	// Optimized by the compiler
-	for k := range b.pending {
-		delete(b.pending, k)
-	}
-	return nil
-}
-
 // GetRootHash returns the root hash of the BPT, loading nodes, executing
 // pending updates, and recalculating hashes if necessary.
 func (b *BPT) GetRootHash() ([32]byte, error) {
@@ -61,7 +44,8 @@ func (b *BPT) GetRootHash() ([32]byte, error) {
 	}
 
 	// Return its hash
-	return r.getHash(), nil
+	h, _ := r.getHash()
+	return h, nil
 }
 
 func (b *BPT) newState() values.Value[*parameters] {
@@ -156,20 +140,13 @@ func (b *BPT) newRoot() *rootRecord {
 	return &rootRecord{e}
 }
 
-// Insert updates or inserts a hash for the given key. Insert may defer the
-// actual update.
-func (b *BPT) Insert(key, hash [32]byte) error {
-	if b.pending == nil {
-		b.pending = map[[32]byte][32]byte{}
-	}
-	b.pending[key] = hash
-	return nil
-}
-
 // Get retrieves the latest hash associated with the given key.
 func (b *BPT) Get(key [32]byte) ([32]byte, error) {
 	if v, ok := b.pending[key]; ok {
-		return v, nil
+		if v.delete {
+			return [32]byte{}, errors.NotFound
+		}
+		return v.value, nil
 	}
 
 	e, err := b.getRoot().getLeaf(key)

@@ -8,7 +8,10 @@ package database
 
 import (
 	"io"
+	"os"
+	"strings"
 
+	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -17,12 +20,26 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+const collectIndexTxnPrefix = "txn."
+const collectIndexRecordPrefix = "rec."
+
 type CollectOptions struct {
-	PreserveAll bool
+	BuildIndex bool
+	Predicate  func(database.Record) (bool, error)
+
+	Metrics *CollectMetrics
+}
+
+type CollectMetrics struct {
+	Messages struct {
+		Count      int
+		Collecting int
+	}
 }
 
 func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
@@ -48,21 +65,37 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Open a temporary badger DB for indexing hashes
+	dir, err := os.MkdirTemp("", "accumulate-collect-snapshot-*.db")
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	defer func(dir string) {
+		_ = os.RemoveAll(dir)
+	}(dir)
+
+	index, err := badger.Open(badger.DefaultOptions(dir))
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	defer func() {
+		_ = index.Close()
+	}()
+
 	// Collect accounts
-	messages := new(hashSet)
-	err = db.collectAccounts(w, messages, opts)
+	err = db.collectAccounts(w, index, opts)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Collect messages
-	err = db.collectMessages(w, messages.Hashes, opts)
+	err = db.collectMessages(w, index, opts)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Write the record index
-	err = w.WriteIndex()
+	err = writeSnapshotIndex(w, index, opts)
 	if err != nil {
 		return errors.UnknownError.WithFormat("write index: %w", err)
 	}
@@ -71,27 +104,27 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 }
 
 func (db *Database) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, opts *CollectOptions) error {
-	// Load the ledger
-	batch := db.Begin(false)
-	defer batch.Discard()
-
-	var ledger *protocol.SystemLedger
-	err := batch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load system ledger: %w", err)
-	}
+	header := new(snapshot.Header)
 
 	// Load the BPT root hash
-	rootHash, err := batch.BPT().GetRootHash()
+	batch := db.Begin(false)
+	defer batch.Discard()
+	var err error
+	header.RootHash, err = batch.BPT().GetRootHash()
 	if err != nil {
 		return errors.UnknownError.WithFormat("get root hash: %w", err)
 	}
 
+	// Load the ledger
+	if partition != nil {
+		err = batch.Account(partition.JoinPath(protocol.Ledger)).Main().GetAs(&header.SystemLedger)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load system ledger: %w", err)
+		}
+	}
+
 	// Write the header
-	err = w.WriteHeader(&snapshot.Header{
-		RootHash:     rootHash,
-		SystemLedger: ledger,
-	})
+	err = w.WriteHeader(header)
 	if err != nil {
 		return errors.UnknownError.WithFormat("write header: %w", err)
 	}
@@ -99,7 +132,7 @@ func (db *Database) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, 
 	return nil
 }
 
-func (db *Database) collectAccounts(w *snapshot.Writer, messages *hashSet, opts *CollectOptions) error {
+func (db *Database) collectAccounts(w *snapshot.Writer, index *badger.DB, opts *CollectOptions) error {
 	// Open a records section
 	records, err := w.OpenRecords()
 	if err != nil {
@@ -110,22 +143,29 @@ func (db *Database) collectAccounts(w *snapshot.Writer, messages *hashSet, opts 
 	batch := db.Begin(false)
 	defer batch.Discard()
 	it := batch.IterateAccounts()
-	for {
-		account, ok := it.Next()
-		if !ok {
-			break
+	close, copts := collectOptions(index, opts)
+	for it.Next() {
+		account := it.Value()
+
+		// Check if the caller wants to skip this account
+		if opts.Predicate != nil {
+			ok, err := opts.Predicate(account)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if !ok {
+				continue
+			}
 		}
 
 		// Collect the account's records
-		err = records.Collect(account, database.WalkOptions{
-			IgnoreIndices: true,
-		})
+		err = records.Collect(account, copts)
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect %v: %w", account.Url(), err)
 		}
 
 		// Collect message hashes from all the message chains
-		err = collectMessageHashes(account, messages)
+		err = collectMessageHashes(account, index, opts)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -134,36 +174,69 @@ func (db *Database) collectAccounts(w *snapshot.Writer, messages *hashSet, opts 
 		return errors.UnknownError.Wrap(it.Err())
 	}
 
+	err = close()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
 	err = records.Close()
 	return errors.UnknownError.Wrap(err)
 }
 
-func (db *Database) collectMessages(w *snapshot.Writer, messages [][32]byte, opts *CollectOptions) error {
+func (db *Database) collectMessages(w *snapshot.Writer, index *badger.DB, opts *CollectOptions) error {
 	// Open a records section
 	records, err := w.OpenRecords()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	indexTxn := index.NewTransaction(false)
+	defer indexTxn.Discard()
+	it := indexTxn.NewIterator(badger.IteratorOptions{
+		Prefix: []byte(collectIndexTxnPrefix),
+	})
+	defer it.Close()
+
 	batch := db.Begin(false)
 	defer batch.Discard()
-	for _, hash := range messages {
+
+	close, copts := collectOptions(index, opts)
+
+	for it.Rewind(); it.Valid(); it.Next() {
+		hash := *(*[32]byte)(it.Item().Key()[len(collectIndexTxnPrefix):])
+		if opts.Metrics != nil {
+			opts.Metrics.Messages.Collecting++
+		}
+
+		// Check if the caller wants to skip this message
+		message := batch.newMessage(messageKey{Hash: hash})
+		if opts.Predicate != nil {
+			ok, err := opts.Predicate(message)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if !ok {
+				continue
+			}
+		}
+
 		// Collect the message's records
-		err = records.Collect(batch.newMessage(messageKey{Hash: hash}), database.WalkOptions{
-			IgnoreIndices: true,
-		})
+		err = records.Collect(message, copts)
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect %x: %w", hash, err)
 		}
 
 		// Collect the transaction status (which is the only part of the
 		// transaction entity that is still used by exec v2)
-		err = records.Collect(batch.newTransaction(transactionKey{Hash: hash}).newStatus(), database.WalkOptions{
-			IgnoreIndices: true,
-		})
+		err = records.Collect(batch.newTransaction(transactionKey{Hash: hash}).newStatus(), copts)
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect %x status: %w", hash, err)
 		}
+	}
+
+	err = close()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = records.Close()
@@ -171,22 +244,29 @@ func (db *Database) collectMessages(w *snapshot.Writer, messages [][32]byte, opt
 }
 
 func (db *Database) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
+	batch := db.Begin(false)
+	defer batch.Discard()
+
+	// Check if the caller wants to skip the BPT
+	if opts.Predicate != nil {
+		ok, err := opts.Predicate(batch.BPT())
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if !ok {
+			return nil
+		}
+	}
+
 	wr, err := w.OpenRaw(snapshot.SectionTypeBPT)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Iterate over the BPT and collect hashes
-	batch := db.Begin(false)
-	defer batch.Discard()
 	it := batch.BPT().Iterate(1000)
-	for {
-		entries, ok := it.Next()
-		if !ok {
-			break
-		}
-
-		for _, entry := range entries {
+	for it.Next() {
+		for _, entry := range it.Value() {
 			_, err = wr.Write(entry.Key[:])
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
@@ -207,11 +287,29 @@ func (db *Database) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 
 type RestoreOptions struct {
 	BatchRecordLimit int
+	SkipHashCheck    bool
+	Predicate        func(*snapshot.RecordEntry, database.Value) (bool, error)
+
+	Metrics *RestoreMetrics
+}
+
+type RestoreMetrics struct {
+	Records struct {
+		Restoring int
+	}
+}
+
+// postRestorer is used by records that need to execute some logic after being
+// restore.
+type postRestorer interface {
+	postRestore() error
 }
 
 func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) error {
 	if opts == nil {
 		opts = new(RestoreOptions)
+	}
+	if opts.BatchRecordLimit == 0 {
 		opts.BatchRecordLimit = 50_000
 	}
 
@@ -220,7 +318,7 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 		return errors.UnknownError.WithFormat("open snapshot: %w", err)
 	}
 
-	hashes, err := readBptSnapshot(rd)
+	hashes, err := readBptSnapshot(rd, opts)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load hashes: %w", err)
 	}
@@ -264,9 +362,30 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 				return errors.UnknownError.WithFormat("resolve %v: %w", entry.Key, err)
 			}
 
+			if opts.Metrics != nil {
+				opts.Metrics.Records.Restoring = count
+			}
+
+			if opts.Predicate != nil {
+				ok, err := opts.Predicate(entry, v)
+				if err != nil {
+					return errors.UnknownError.Wrap(err)
+				}
+				if !ok {
+					continue
+				}
+			}
+
 			err = v.LoadBytes(entry.Value, true)
 			if err != nil {
 				return errors.UnknownError.WithFormat("restore %v: %w", entry.Key, err)
+			}
+
+			if v, ok := v.(postRestorer); ok {
+				err = v.postRestore()
+				if err != nil {
+					return errors.UnknownError.WithFormat("restore %v: %w", entry.Key, err)
+				}
 			}
 		}
 	}
@@ -276,16 +395,15 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 		return errors.UnknownError.WithFormat("commit changes: %w", err)
 	}
 
+	if opts.SkipHashCheck {
+		return nil
+	}
+
 	// We can't check an account's hash until its records are written
 	batch = db.Begin(false)
-	for it := batch.IterateAccounts(); ; {
-		account, ok := it.Next()
-		if !ok {
-			if it.Err() != nil {
-				return errors.UnknownError.Wrap(it.Err())
-			}
-			break
-		}
+	it := batch.IterateAccounts()
+	for it.Next() {
+		account := it.Value()
 
 		hash, err := account.Hash()
 		if err != nil {
@@ -297,7 +415,14 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 		}
 		delete(hashes, kh)
 	}
+	if it.Err() != nil {
+		return errors.UnknownError.Wrap(it.Err())
+	}
 
+	// If hashes is not empty at this point it means the snapshot's BPT has an
+	// entry that is not present in the newly created BPT, which will cause the
+	// root hash to differ. This likely means some account has not been
+	// restored.
 	for kh := range hashes {
 		u, err := batch.getAccountUrl(record.NewKey(storage.Key(kh)))
 		switch {
@@ -322,7 +447,11 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 	return nil
 }
 
-func readBptSnapshot(snap *snapshot.Reader) (map[[32]byte][32]byte, error) {
+func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte][32]byte, error) {
+	if opts.SkipHashCheck {
+		return nil, nil
+	}
+
 	hashes := map[[32]byte][32]byte{}
 	var bpt *ioutil.Segment[snapshot.SectionType, *snapshot.SectionType]
 	for _, s := range snap.Sections {
@@ -355,27 +484,8 @@ func readBptSnapshot(snap *snapshot.Reader) (map[[32]byte][32]byte, error) {
 	}
 }
 
-type hashSet struct {
-	seen   map[[32]byte]bool
-	Hashes [][32]byte
-}
-
-func (s *hashSet) Has(h [32]byte) bool {
-	return s.seen[h]
-}
-
-func (s *hashSet) Add(h [32]byte) {
-	if s.seen == nil {
-		s.seen = map[[32]byte]bool{}
-	}
-	if s.seen[h] {
-		return
-	}
-	s.seen[h] = true
-	s.Hashes = append(s.Hashes, h)
-}
-
-func collectMessageHashes(a *Account, hashes *hashSet) error {
+func collectMessageHashes(a *Account, index *badger.DB, opts *CollectOptions) error {
+	wb := index.NewWriteBatch()
 	chains, err := a.Chains().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load chains index: %w", err)
@@ -385,9 +495,28 @@ func collectMessageHashes(a *Account, hashes *hashSet) error {
 			continue
 		}
 
+		isSig := strings.EqualFold(chain.Name, "signature")
 		c, err := a.ChainByName(chain.Name)
 		if err != nil {
 			return errors.InvalidRecord.Wrap(err)
+		}
+
+		// Check if the caller wants to skip this chain
+		if opts.Predicate != nil {
+			ok, err := opts.Predicate(c)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if !ok {
+				continue
+			}
+			ok, err = opts.Predicate(c.Inner())
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			if !ok {
+				continue
+			}
 		}
 
 		head, err := c.Head().Get()
@@ -403,8 +532,106 @@ func collectMessageHashes(a *Account, hashes *hashSet) error {
 			return errors.UnknownError.WithFormat("load %s chain entries: %w", c.Name(), err)
 		}
 		for _, h := range entries {
-			hashes.Add(*(*[32]byte)(h))
+			err = wb.Set(append([]byte(collectIndexTxnPrefix), h...), []byte{})
+			if err != nil {
+				return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+			}
+
+			if !isSig {
+				continue
+			}
+
+			msg, err := a.parent.newMessage(messageKey{*(*[32]byte)(h)}).Main().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load %s chain entry: %w", c.Name(), err)
+			}
+			if msg, ok := msg.(messaging.MessageForTransaction); ok {
+				h := msg.GetTxID().Hash()
+				err = wb.Set(append([]byte(collectIndexTxnPrefix), h[:]...), []byte{})
+				if err != nil {
+					return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
+				}
+			}
+		}
+		if opts.Metrics != nil {
+			opts.Metrics.Messages.Count += len(entries)
 		}
 	}
-	return nil
+
+	err = wb.Flush()
+	return errors.UnknownError.Wrap(err)
+}
+
+func writeSnapshotIndex(w *snapshot.Writer, index *badger.DB, opts *CollectOptions) error {
+	if !opts.BuildIndex {
+		return nil
+	}
+
+	x, err := w.OpenIndex()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	indexTxn := index.NewTransaction(false)
+	defer indexTxn.Discard()
+	it := indexTxn.NewIterator(badger.IteratorOptions{
+		Prefix: []byte(collectIndexRecordPrefix),
+	})
+	defer it.Close()
+
+	for it.Rewind(); it.Valid(); it.Next() {
+		err := it.Item().Value(func(val []byte) error {
+			e := new(recordIndexEntry)
+			err := e.UnmarshalBinary(val)
+			if err != nil {
+				return errors.EncodingError.WithFormat("decode record index entry: %w", err)
+			}
+			err = x.Write(snapshot.RecordIndexEntry{
+				Key:     e.Key.Hash(),
+				Section: int(e.Section),
+				Offset:  e.Offset,
+			})
+			return errors.UnknownError.Wrap(err)
+		})
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	err = x.Close()
+	return errors.UnknownError.Wrap(err)
+}
+
+func collectOptions(index *badger.DB, opts *CollectOptions) (func() error, snapshot.CollectOptions) {
+	copts := snapshot.CollectOptions{
+		Walk: database.WalkOptions{
+			IgnoreIndices: true,
+		},
+		Predicate: opts.Predicate,
+	}
+
+	if !opts.BuildIndex {
+		return func() error { return nil }, copts
+	}
+
+	wb := index.NewWriteBatch()
+	copts.DidCollect = func(value database.Value, section, offset uint64) error {
+		entry := &recordIndexEntry{
+			Key:     value.Key(),
+			Section: section,
+			Offset:  offset,
+		}
+		b, err := entry.MarshalBinary()
+		if err != nil {
+			return errors.EncodingError.WithFormat("encode record index entry: %w", err)
+		}
+		h := value.Key().Hash()
+		err = wb.Set(append([]byte(collectIndexRecordPrefix), h[:]...), b)
+		if err != nil {
+			return errors.InternalError.WithFormat("write record index entry: %w", err)
+		}
+		return nil
+	}
+
+	return wb.Flush, copts
 }

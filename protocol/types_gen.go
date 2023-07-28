@@ -193,6 +193,12 @@ type BlockLedger struct {
 	extraData []byte
 }
 
+type BlockThreshold struct {
+	fieldsSet  []bool
+	MinorBlock uint64 `json:"minorBlock,omitempty" form:"minorBlock" query:"minorBlock"`
+	extraData  []byte
+}
+
 type BlockValidatorAnchor struct {
 	fieldsSet []bool
 	PartitionAnchor
@@ -564,7 +570,11 @@ type NetworkLimits struct {
 	PageEntries uint64 `json:"pageEntries,omitempty" form:"pageEntries" query:"pageEntries" validate:"required"`
 	// IdentityAccounts is the maximum number of accounts an identity can have (excluding accounts of sub ADIs).
 	IdentityAccounts uint64 `json:"identityAccounts,omitempty" form:"identityAccounts" query:"identityAccounts" validate:"required"`
-	extraData        []byte
+	// PendingMajorBlocks is the maximum number of major blocks a transaction can remain pending for.
+	PendingMajorBlocks uint64 `json:"pendingMajorBlocks,omitempty" form:"pendingMajorBlocks" query:"pendingMajorBlocks" validate:"required"`
+	// EventsPerBlock is the maximum number of scheduled events that will be executed per block.
+	EventsPerBlock uint64 `json:"eventsPerBlock,omitempty" form:"eventsPerBlock" query:"eventsPerBlock" validate:"required"`
+	extraData      []byte
 }
 
 type Object struct {
@@ -901,6 +911,8 @@ type TransactionHeader struct {
 	Initiator [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	Memo      string   `json:"memo,omitempty" form:"memo" query:"memo"`
 	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	// HoldUntil holds the transaction as pending until the threshold is met.
+	HoldUntil *BlockThreshold `json:"holdUntil,omitempty" form:"holdUntil" query:"holdUntil"`
 	extraData []byte
 }
 
@@ -1570,6 +1582,20 @@ func (v *BlockLedger) Copy() *BlockLedger {
 }
 
 func (v *BlockLedger) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockThreshold) Copy() *BlockThreshold {
+	u := new(BlockThreshold)
+
+	u.MinorBlock = v.MinorBlock
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockThreshold) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 	u := new(BlockValidatorAnchor)
@@ -2365,6 +2391,8 @@ func (v *NetworkLimits) Copy() *NetworkLimits {
 	u.BookPages = v.BookPages
 	u.PageEntries = v.PageEntries
 	u.IdentityAccounts = v.IdentityAccounts
+	u.PendingMajorBlocks = v.PendingMajorBlocks
+	u.EventsPerBlock = v.EventsPerBlock
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3081,6 +3109,9 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	u.Initiator = v.Initiator
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesCopy(v.Metadata)
+	if v.HoldUntil != nil {
+		u.HoldUntil = (v.HoldUntil).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3790,6 +3821,14 @@ func (v *BlockLedger) Equal(u *BlockLedger) bool {
 		if !((v.Entries[i]).Equal(u.Entries[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *BlockThreshold) Equal(u *BlockThreshold) bool {
+	if !(v.MinorBlock == u.MinorBlock) {
+		return false
 	}
 
 	return true
@@ -4606,6 +4645,12 @@ func (v *NetworkLimits) Equal(u *NetworkLimits) bool {
 	if !(v.IdentityAccounts == u.IdentityAccounts) {
 		return false
 	}
+	if !(v.PendingMajorBlocks == u.PendingMajorBlocks) {
+		return false
+	}
+	if !(v.EventsPerBlock == u.EventsPerBlock) {
+		return false
+	}
 
 	return true
 }
@@ -5327,6 +5372,14 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Metadata, u.Metadata)) {
+		return false
+	}
+	switch {
+	case v.HoldUntil == u.HoldUntil:
+		// equal
+	case v.HoldUntil == nil || u.HoldUntil == nil:
+		return false
+	case !((v.HoldUntil).Equal(u.HoldUntil)):
 		return false
 	}
 
@@ -6820,6 +6873,43 @@ func (v *BlockLedger) IsValid() error {
 	} else if len(v.Entries) == 0 {
 		errs = append(errs, "field Entries is not set")
 	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockThreshold = []string{
+	1: "MinorBlock",
+}
+
+func (v *BlockThreshold) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.MinorBlock == 0) {
+		writer.WriteUint(1, v.MinorBlock)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockThreshold)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockThreshold) IsValid() error {
+	var errs []string
 
 	switch len(errs) {
 	case 0:
@@ -9298,6 +9388,8 @@ var fieldNames_NetworkLimits = []string{
 	3: "BookPages",
 	4: "PageEntries",
 	5: "IdentityAccounts",
+	6: "PendingMajorBlocks",
+	7: "EventsPerBlock",
 }
 
 func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
@@ -9322,6 +9414,12 @@ func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.IdentityAccounts == 0) {
 		writer.WriteUint(5, v.IdentityAccounts)
+	}
+	if !(v.PendingMajorBlocks == 0) {
+		writer.WriteUint(6, v.PendingMajorBlocks)
+	}
+	if !(v.EventsPerBlock == 0) {
+		writer.WriteUint(7, v.EventsPerBlock)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkLimits)
@@ -9359,6 +9457,16 @@ func (v *NetworkLimits) IsValid() error {
 		errs = append(errs, "field IdentityAccounts is missing")
 	} else if v.IdentityAccounts == 0 {
 		errs = append(errs, "field IdentityAccounts is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field PendingMajorBlocks is missing")
+	} else if v.PendingMajorBlocks == 0 {
+		errs = append(errs, "field PendingMajorBlocks is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field EventsPerBlock is missing")
+	} else if v.EventsPerBlock == 0 {
+		errs = append(errs, "field EventsPerBlock is not set")
 	}
 
 	switch len(errs) {
@@ -11641,6 +11749,7 @@ var fieldNames_TransactionHeader = []string{
 	2: "Initiator",
 	3: "Memo",
 	4: "Metadata",
+	5: "HoldUntil",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -11662,6 +11771,9 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Metadata) == 0) {
 		writer.WriteBytes(4, v.Metadata)
+	}
+	if !(v.HoldUntil == nil) {
+		writer.WriteValue(5, v.HoldUntil.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -13381,6 +13493,29 @@ func (v *BlockLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *BlockThreshold) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockThreshold) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.MinorBlock = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockThreshold)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BlockValidatorAnchor) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -14960,6 +15095,12 @@ func (v *NetworkLimits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(5); ok {
 		v.IdentityAccounts = x
 	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.PendingMajorBlocks = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.EventsPerBlock = x
+	}
 
 	seen, err := reader.Reset(fieldNames_NetworkLimits)
 	if err != nil {
@@ -16400,6 +16541,9 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadBytes(4); ok {
 		v.Metadata = x
+	}
+	if x := new(BlockThreshold); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+		v.HoldUntil = x
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
@@ -18850,10 +18994,11 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Principal *url.URL `json:"principal,omitempty"`
-		Initiator string   `json:"initiator,omitempty"`
-		Memo      string   `json:"memo,omitempty"`
-		Metadata  *string  `json:"metadata,omitempty"`
+		Principal *url.URL        `json:"principal,omitempty"`
+		Initiator string          `json:"initiator,omitempty"`
+		Memo      string          `json:"memo,omitempty"`
+		Metadata  *string         `json:"metadata,omitempty"`
+		HoldUntil *BlockThreshold `json:"holdUntil,omitempty"`
 	}{}
 	if !(v.Principal == nil) {
 		u.Principal = v.Principal
@@ -18866,6 +19011,9 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Metadata) == 0) {
 		u.Metadata = encoding.BytesToJSON(v.Metadata)
+	}
+	if !(v.HoldUntil == nil) {
+		u.HoldUntil = v.HoldUntil
 	}
 	return json.Marshal(&u)
 }
@@ -21390,15 +21538,17 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Principal *url.URL `json:"principal,omitempty"`
-		Initiator string   `json:"initiator,omitempty"`
-		Memo      string   `json:"memo,omitempty"`
-		Metadata  *string  `json:"metadata,omitempty"`
+		Principal *url.URL        `json:"principal,omitempty"`
+		Initiator string          `json:"initiator,omitempty"`
+		Memo      string          `json:"memo,omitempty"`
+		Metadata  *string         `json:"metadata,omitempty"`
+		HoldUntil *BlockThreshold `json:"holdUntil,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
+	u.HoldUntil = v.HoldUntil
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -21414,6 +21564,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Metadata = x
 	}
+	v.HoldUntil = u.HoldUntil
 	return nil
 }
 

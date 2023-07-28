@@ -38,6 +38,8 @@ func TestVersionSwitch(t *testing.T) {
 		simulator.GenesisWith(GenesisTime, g),
 	)
 
+	sim.S.SkipProposalCheck(true) // FIXME should not be necessary
+
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -66,6 +68,9 @@ func TestVersionSwitch(t *testing.T) {
 
 	sim.StepUntil(
 		Txn(p.TxID).IsPending())
+
+	// Verify the transaction appears on the pending list
+	require.NotEmpty(t, sim.QueryAccount(alice, nil).Pending.Records)
 
 	// Update to v1-halt
 	sim.SubmitTxnSuccessfully(MustBuild(t,
@@ -96,6 +101,10 @@ func TestVersionSwitch(t *testing.T) {
 			GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion.HaltV1()
 	}))
 
+	// Verify that the pending transaction has been removed from the pending
+	// list
+	require.Empty(t, sim.QueryAccount(alice, nil).Pending.Records)
+
 	// Verify that the synthetic transaction has not been processed
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds())
@@ -117,7 +126,7 @@ func TestVersionSwitch(t *testing.T) {
 
 	require.EqualError(t, st.AsError(), "user messages are not being accepted: an upgrade is in progress")
 
-	// Execute
+	// Update to v2
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV2).

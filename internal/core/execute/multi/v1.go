@@ -15,7 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -58,8 +57,8 @@ func (x *ExecutorV1) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	return b, h, err
 }
 
-func (x *ExecutorV1) Restore(snapshot ioutil2.SectionReader, validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
-	err = (*block.Executor)(x).RestoreSnapshot(x.Database, snapshot)
+func (x *ExecutorV1) Init(validators []*ValidatorUpdate) (additional []*ValidatorUpdate, err error) {
+	err = (*block.Executor)(x).Init(x.Database)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -199,17 +198,24 @@ func (b *BlockV1) Process(envelope *messaging.Envelope) ([]*protocol.Transaction
 
 // Close ends the block and returns the block state.
 func (b *BlockV1) Close() (execute.BlockState, error) {
-	err := b.Executor.EndBlock(b.Block)
-	return (*BlockStateV1)(b), err
+	valUp, err := b.Executor.EndBlock(b.Block)
+	return &BlockStateV1{*b, valUp}, err
 }
 
 // BlockStateV1 translates [execute.BlockState] calls for a v1 executor block.
-type BlockStateV1 BlockV1
+type BlockStateV1 struct {
+	BlockV1
+	valUp []*execute.ValidatorUpdate
+}
 
 func (b *BlockStateV1) Params() execute.BlockParams { return b.Block.BlockMeta }
 
 func (s *BlockStateV1) IsEmpty() bool {
 	return s.Block.State.Empty()
+}
+
+func (s *BlockStateV1) DidUpdateValidators() ([]*execute.ValidatorUpdate, bool) {
+	return s.valUp, len(s.valUp) > 0
 }
 
 func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {

@@ -31,12 +31,7 @@ func (x BlockAnchor) Validate(batch *database.Batch, ctx *MessageContext) (*prot
 
 	// Validate the transaction
 	_, err = ctx.callMessageValidator(batch, msg.Anchor)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// TODO Validate the signature (but NOT using the user signature executor)
-	return nil, nil
+	return nil, errors.UnknownError.Wrap(err)
 }
 
 func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
@@ -90,19 +85,15 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *MessageContext, msg *me
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-
-	if ready {
-		// Process the transaction
-		_, err = ctx.callMessageExecutor(batch, seq)
-	} else {
+	if !ready {
 		// Mark the message as pending
 		_, err = ctx.recordPending(batch, ctx, seq.Message)
-	}
-	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	return nil
+	// Process the transaction
+	_, err = ctx.callMessageExecutor(batch, seq)
+	return errors.UnknownError.Wrap(err)
 }
 
 // check checks if the message is garbage or not.

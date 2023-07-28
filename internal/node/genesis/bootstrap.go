@@ -20,16 +20,20 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	snap2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
@@ -84,10 +88,17 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		omitHistory: map[[32]byte]bool{},
 		partition:   config.NetworkUrl{URL: protocol.PartitionUrl(opts.PartitionId)},
 	}
+	b.db.SetObserver(execute.NewDatabaseObserver())
 
 	// Create the router
 	var err error
 	b.router, err = routing.NewStaticRouter(gg.Routing, b.Logger)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Unpack snapshots
+	err = b.unpackSnapshots()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -167,8 +178,9 @@ type bootstrap struct {
 	dataRecords []DataRecord
 	router      routing.Router
 
-	acmeIssued  *big.Int
-	omitHistory map[[32]byte]bool
+	accountsFromSnapshots []*url.URL
+	acmeIssued            *big.Int
+	omitHistory           map[[32]byte]bool
 }
 
 type DataRecord struct {
@@ -215,7 +227,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	}
 
 	// Create accounts
-	err = b.importSnapshots(st)
+	err = b.addGenesisToSnapshotAccounts(st)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -414,11 +426,13 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 	return nil
 }
 
-func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
+func (b *bootstrap) unpackSnapshots() error {
 	// Nothing is routed to the DN, but the DN needs to know how much ACME has
 	// been issued so this still needs to be run for the DN
 
+	// Restore accounts
 	var accounts []*url.URL
+	seen := map[[32]byte]bool{}
 	for _, open := range b.Snapshots {
 		file, err := open()
 		if err != nil {
@@ -428,27 +442,131 @@ func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
 			defer c.Close()
 		}
 
-		v := new(snapshotVisitor)
-		v.acmeIssued = b.acmeIssued
-		v.omitHistory = b.omitHistory
-		v.AlwaysOmitHistory = !b.IncludeHistoryFromSnapshots
-		v.v = snapshot.NewRestoreVisitor(st.GetBatch(), b.Logger)
-		v.logger.L = b.Logger
-		v.v.DisableWriteBatching = true
-		v.router = b.router
-		v.partition = b.PartitionId
-		err = snapshot.Visit(file, v)
+		err = b.db.Restore(file, &database.RestoreOptions{
+			BatchRecordLimit: 50_000,
+			SkipHashCheck:    true,
+			Predicate: func(e *snap2.RecordEntry, v record.TerminalRecord) (bool, error) {
+				switch e.Key.Get(0) {
+				case "Account":
+					// Skip the faucet
+					u := e.Key.Get(1).(*url.URL)
+					if protocol.FaucetUrl.Equal(u) {
+						return false, nil
+					}
+
+					// Track ACME issued
+					if e.Key.Len() == 3 && e.Key.Get(2) == "Main" {
+						acct, _ := protocol.UnmarshalAccount(e.Value)
+						if acct, ok := acct.(protocol.AccountWithTokens); ok && protocol.AcmeUrl().Equal(acct.GetTokenUrl()) {
+							b.acmeIssued.Add(b.acmeIssued, acct.TokenBalance())
+						}
+					}
+
+					// Is this record for an account that belongs to this
+					// partition?
+					partition, err := b.router.RouteAccount(u)
+					if err != nil {
+						return false, errors.InternalError.WithFormat("route %v: %w", u, err)
+					}
+					if !strings.EqualFold(partition, b.PartitionId) {
+						return false, nil
+					}
+
+					if !seen[u.AccountID32()] {
+						accounts = append(accounts, u)
+						seen[u.AccountID32()] = true
+					}
+					return true, nil
+
+				default:
+					// Ignore everything else on this pass
+					return false, nil
+				}
+			},
+		})
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
-		accounts = append(accounts, v.urls...)
 	}
 
+	// Find relevant chain entries
+	hashes := map[[32]byte]bool{}
+	batch := b.db.Begin(false)
+	defer batch.Discard()
+	for _, u := range accounts {
+		a := batch.Account(u)
+		chains, err := a.Chains().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load chains index: %w", err)
+		}
+		for _, chain := range chains {
+			if chain.Type != merkle.ChainTypeTransaction {
+				continue
+			}
+
+			c, err := a.ChainByName(chain.Name)
+			if err != nil {
+				return errors.InvalidRecord.Wrap(err)
+			}
+
+			head, err := c.Head().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load %v %s chain head: %w", u, c.Name(), err)
+			}
+			if head.Count == 0 {
+				return nil
+			}
+
+			entries, err := c.Inner().GetRange(0, head.Count)
+			if err != nil {
+				return errors.UnknownError.WithFormat("load %v %s chain entries: %w", u, c.Name(), err)
+			}
+			for _, h := range entries {
+				hashes[*(*[32]byte)(h)] = true
+			}
+		}
+	}
+
+	// Restore messages
+	for _, open := range b.Snapshots {
+		file, err := open()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if c, ok := file.(io.Closer); ok {
+			defer c.Close()
+		}
+
+		err = b.db.Restore(file, &database.RestoreOptions{
+			BatchRecordLimit: 50_000,
+			SkipHashCheck:    true,
+			Predicate: func(e *snap2.RecordEntry, v record.TerminalRecord) (bool, error) {
+				switch e.Key.Get(0) {
+				case "Transaction", "Message":
+					h := e.Key.Get(1).([32]byte)
+					return hashes[h], nil
+
+				default:
+					// Ignore everything else on this pass
+					return false, nil
+				}
+			},
+		})
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
+	b.accountsFromSnapshots = accounts
+	return nil
+}
+
+func (b *bootstrap) addGenesisToSnapshotAccounts(st *chain.StateManager) error {
 	// Add Genesis to the accounts' main chain. This also anchors the imported
 	// transactions. This *must* be done outside of ImportFactomSnapshot.
 	// Attempting this within the callback leads to a mismatch between the
 	// account state and the hash in the snapshot.
-	for _, account := range accounts {
+	for _, account := range b.accountsFromSnapshots {
 		chain := st.GetBatch().Account(account).MainChain()
 		err := st.State.ChainUpdates.AddChainEntry(st.GetBatch(), chain, st.GetHash(), 0, 0)
 		if err != nil {

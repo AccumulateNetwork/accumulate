@@ -28,14 +28,11 @@ type node interface {
 	IsDirty() bool
 
 	// getHash returns the hash of the node, recalculating it if necessary.
-	getHash() [32]byte
+	getHash() ([32]byte, bool)
 
 	// copyWith copies the receiver with the given branch as the parent of the
 	// new copy.
-	copyWith(e *branch, put bool) node
-
-	// merge merges the given node into the receiver.
-	merge(e node, put bool) (node, error)
+	copyWith(*parameters, *branch) node
 
 	// writeTo marshals the node and writes it to the writer.
 	writeTo(io.Writer) error
@@ -106,36 +103,36 @@ func (e *branch) newBranch(key [32]byte) (*branch, error) {
 }
 
 // getHash returns an empty hash.
-func (*emptyNode) getHash() [32]byte { return [32]byte{} }
+func (*emptyNode) getHash() ([32]byte, bool) { return [32]byte{}, false }
 
 // getHash returns the leaf's hash.
-func (e *leaf) getHash() [32]byte { return e.Hash }
+func (e *leaf) getHash() ([32]byte, bool) { return e.Hash, true }
 
 // getHash returns the branch's hash, recalculating it if the branch has been
 // changed since the last getHash call.
-func (e *branch) getHash() [32]byte {
+func (e *branch) getHash() ([32]byte, bool) {
 	if e.status != branchUnhashed {
-		return e.Hash
+		return e.Hash, true // Empty branches must be cleaned up before being committed
 	}
 
-	switch { //                                        Sort four conditions:
-	case e.Left.Type() != nodeTypeEmpty && //          If we have both L and R then combine
-		e.Right.Type() != nodeTypeEmpty: //
-		l, r := e.Left.getHash(), e.Right.getHash() // Take the hash of L+R
-		var b [64]byte                              // Use a pre-allocated array to avoid spilling to the heap
-		copy(b[:], l[:])                            //
-		copy(b[32:], r[:])                          //
-		e.Hash = sha256.Sum256(b[:])                //
-	case e.Left.Type() != nodeTypeEmpty: //            The next condition is where we only have L
-		e.Hash = e.Left.getHash() //                   Just use L.  No hash required
-	case e.Right.Type() != nodeTypeEmpty: //           Just have R.  Again, just use R.
-		e.Hash = e.Right.getHash() //                  No Hash Required
-	default: //                                        The fourth condition never happens, and bad if it does.
-		panic("dead nodes should not exist") //        This is a node without a child somewhere up the tree.
+	l, lok := e.Left.getHash()
+	r, rok := e.Right.getHash()
+	switch { //                         Four conditions:
+	case lok && rok: //                 If we have both L and R
+		var b [64]byte //                 Use a pre-allocated array to avoid spilling to the heap
+		copy(b[:], l[:])
+		copy(b[32:], r[:])
+		e.Hash = sha256.Sum256(b[:]) //   Combine
+	case lok: //                        If we have only L
+		e.Hash = l //                     Just use L
+	case rok: //                        If we have only R
+		e.Hash = r //                     Just use R
+	default: //                         If we have nothing
+		e.Hash = [32]byte{} //            Clear the hash
 	}
 
 	e.status = branchUncommitted
-	return e.Hash
+	return e.Hash, lok || rok
 }
 
 // getAt returns a pointer to the left or right branch, depending on the key,
@@ -174,28 +171,29 @@ func (e *branch) load() error {
 		e.Hash = s.RootHash
 	}
 
-	// Set the branches to empty entries. If the block is not found, the
-	// branches are empty. If the block is found, this tells merge to replace
-	// the branches.
-	e.Left = &emptyNode{parent: e}
-	e.Right = &emptyNode{parent: e}
 	err := e.bpt.store.GetValue(e.bpt.key.Append(e.Key), nodeRecord{e})
-	if err != nil && !errors.Is(err, errors.NotFound) {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, errors.NotFound):
+		e.Left = &emptyNode{parent: e}
+		e.Right = &emptyNode{parent: e}
+	default:
 		return errors.UnknownError.Wrap(err)
 	}
 	return nil
 }
 
 // copyWith returns a new empty node with parent set to the given branch.
-func (e *emptyNode) copyWith(p *branch, put bool) node {
+func (e *emptyNode) copyWith(s *parameters, p *branch) node {
 	return &emptyNode{parent: p}
 }
 
 // copyWith returns a copy of the branch with parent set to the given branch.
 // copyWith copies recursively if put is true.
-func (e *branch) copyWith(p *branch, put bool) node {
+func (e *branch) copyWith(s *parameters, p *branch) node {
 	f := &branch{
-		// Inherit from the parent
+		// Inherit from the new parent
 		bpt:    p.bpt,
 		parent: p,
 
@@ -205,161 +203,22 @@ func (e *branch) copyWith(p *branch, put bool) node {
 		Key:    e.Key,
 		Hash:   e.Hash,
 	}
-	if put && e.Left != nil {
-		f.Left = e.Left.copyWith(f, put)
-		f.Right = e.Right.copyWith(f, put)
+
+	// If the branch is at a boundary, don't recurse
+	if e.Height&s.Mask == 0 {
+		return f
 	}
+
+	f.Left = e.Left.copyWith(s, f)
+	f.Right = e.Right.copyWith(s, f)
 	return f
 }
 
 // copyWith returns a copy of the leaf node with parent set to the given branch.
 // If the receiver's parent is nil, copyWith returns it instead after setting
 // its parent.
-func (e *leaf) copyWith(p *branch, put bool) node {
-	// Optimization for Insert
-	if e.parent == nil {
-		e.parent = p
-		return e
-	}
-
+func (e *leaf) copyWith(s *parameters, p *branch) node {
 	f := *e
 	f.parent = p
 	return &f
-}
-
-// merge replaces the receiver with a copy of the given node.
-func (e *emptyNode) merge(f node, put bool) (node, error) {
-	return f.copyWith(e.parent, put), nil
-}
-
-// merge merges the given node into the the receiver. If F is an empty node,
-// merge does nothing and returns nil. If F is a branch, merge returns a new
-// branch constructed from the receiver and F. Otherwise (F is a leaf), merge
-// updates the receiver if F's hash is different or does nothing and returns
-// nil.
-func (e *leaf) merge(f node, put bool) (node, error) {
-	// If the key and hash match, there's no change. If the key matches and the
-	// hash is new, update the hash and return the value to indicate it has been
-	// updated. If the key does not match, the value must be split.
-	parent := e.parent
-	switch f := f.(type) {
-	case *emptyNode:
-		// Nothing to do
-		return nil, nil
-
-	case *leaf:
-		if e.Key != f.Key {
-			// Make this node an orphan to avoid an allocation when copyWith is
-			// called
-			e.parent = nil
-
-			// Split
-			break
-		}
-		if e.Hash == f.Hash {
-			// No change
-			return nil, nil
-		}
-
-		// Update the hash
-		e.Hash = f.Hash
-		return e, nil
-
-	default:
-		// Split
-	}
-
-	// Create a new branch
-	br, err := parent.newBranch(e.Key)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	// Merge E and F into the branch
-	_, err = br.merge(f, put)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	_, err = br.merge(e, put)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	// Replace the leaf with the branch
-	return br, nil
-}
-
-// merge merges the given node into the receiver. If F is an empty node, merge
-// does nothing and returns nil. If F is a leaf, merge merges it into the
-// appropriate side of the branch. If F is a branch, merge merges left into left
-// and right into right.
-func (e *branch) merge(f node, put bool) (node, error) {
-	switch f := f.(type) {
-	case *emptyNode:
-		// Nothing to do
-		return nil, nil
-
-	case *leaf:
-		// Merge the leaf with one of our branches
-		g, err := e.getAt(f.Key)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-		new, err := (*g).merge(f, put)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-		if new == nil {
-			// Nothing changed
-			return nil, nil
-		}
-
-		*g = new
-
-	case *branch:
-		// Verify both branches are at the same height
-		if e.Height != f.Height {
-			return nil, errors.InternalError.WithFormat("cannot merge %v nodes: height does not match", e.Type())
-		}
-		if e.Key != f.Key {
-			return nil, errors.InternalError.WithFormat("cannot merge %v nodes: key does not match", e.Type())
-		}
-
-		// Merge the left
-		var didUpdate bool
-		if e.Left.getHash() != f.Left.getHash() {
-			new, err := e.Left.merge(f.Left, put)
-			if err != nil {
-				return nil, errors.UnknownError.Wrap(err)
-			}
-			if new != nil {
-				didUpdate = true
-				e.Left = new
-			}
-		}
-
-		// Merge the right
-		if e.Right.getHash() != f.Right.getHash() {
-			new, err := e.Right.merge(f.Right, put)
-			if err != nil {
-				return nil, errors.UnknownError.Wrap(err)
-			}
-			if new != nil {
-				didUpdate = true
-				e.Right = new
-			}
-		}
-
-		if !didUpdate {
-			return nil, nil
-		}
-
-	default:
-		return nil, errors.InternalError.WithFormat("unknown node type %v", f.Type())
-	}
-
-	// If we're putting and something changed, set the status
-	if put {
-		e.status = branchUnhashed
-	}
-	return e, nil
 }

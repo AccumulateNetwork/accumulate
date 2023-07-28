@@ -74,7 +74,7 @@ func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (_ *p
 	// Process the message and the transaction
 	pay, txn, err := x.check(batch, ctx)
 	if err == nil {
-		err = x.record(batch, ctx, pay)
+		err = x.process(batch, ctx, pay)
 	}
 
 	// Record the message and its status
@@ -90,12 +90,24 @@ func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (_ *p
 	return status, errors.UnknownError.Wrap(err)
 }
 
-func (CreditPayment) record(batch *database.Batch, ctx *MessageContext, pay *messaging.CreditPayment) error {
+func (CreditPayment) process(batch *database.Batch, ctx *MessageContext, pay *messaging.CreditPayment) error {
+	// Record the payment
 	txn := batch.Account(pay.TxID.Account()).Transaction(pay.TxID.Hash())
 	err := txn.RecordHistory(ctx.message)
 	if err != nil {
 		return errors.UnknownError.WithFormat("record history: %w", err)
 	}
 
-	return txn.Payments().Add(pay.Hash())
+	err = txn.Payments().Add(pay.Hash())
+	if err != nil {
+		return errors.UnknownError.WithFormat("record payment: %w", err)
+	}
+
+	// If the transaction is being initiated, mark it as pending. This only
+	// persists if the transaction remains pending through the end of the block.
+	if pay.Initiator {
+		ctx.State.MarkTransactionPending(pay.TxID)
+	}
+
+	return nil
 }

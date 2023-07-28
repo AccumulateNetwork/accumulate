@@ -14,13 +14,8 @@ import (
 // ForEach calls the callback for each BPT entry.
 func ForEach(b *BPT, fn func(key record.KeyHash, hash [32]byte) error) error {
 	it := b.Iterate(1000)
-	for {
-		bptVals, ok := it.Next()
-		if !ok {
-			break
-		}
-
-		for _, v := range bptVals {
+	for it.Next() {
+		for _, v := range it.Value() {
 			err := fn(v.Key, v.Value)
 			if err != nil {
 				return err
@@ -35,6 +30,7 @@ type Iterator struct {
 	bpt    *BPT
 	place  [32]byte
 	values []KeyValuePair
+	last   []KeyValuePair
 	err    error
 }
 
@@ -59,22 +55,25 @@ func (b *BPT) Iterate(window int) *Iterator {
 	return it
 }
 
+func (it *Iterator) Value() []KeyValuePair { return it.last }
+
 // Next returns the next N results. Next returns false if there are no more
 // results or if an error occurs. The caller must return Err after Next returns
 // false to check for an error.
-func (it *Iterator) Next() ([]KeyValuePair, bool) {
+func (it *Iterator) Next() bool {
 	if it.err != nil {
-		return nil, false
+		return false
 	}
 
 	next, vals, err := it.bpt.getRange(it.place, it.values)
 	if err != nil {
 		it.err = errors.UnknownError.Wrap(err)
-		return nil, false
+		return false
 	}
 
 	it.place = next
-	return vals, len(vals) > 0
+	it.last = vals
+	return len(vals) > 0
 }
 
 // Err returns the error if one has occurred.

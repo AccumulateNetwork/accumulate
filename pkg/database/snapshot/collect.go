@@ -7,9 +7,7 @@
 package snapshot
 
 import (
-	"bytes"
 	"io"
-	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -17,7 +15,6 @@ import (
 
 func (w *Writer) OpenRecords() (*Collector, error) {
 	c := new(Collector)
-	c.snapshot = w
 	c.number = w.sections
 
 	var err error
@@ -28,49 +25,41 @@ func (w *Writer) OpenRecords() (*Collector, error) {
 	return c, nil
 }
 
-func (w *Writer) WriteIndex() error {
-	wr, err := w.OpenRaw(SectionTypeRecordIndex)
-	if err != nil {
-		return errors.UnknownError.WithFormat("open record index section: %w", err)
-	}
-
-	index := w.index
-	w.index = w.index[:0]
-
-	// The index must be sorted
-	sort.Slice(index, func(i, j int) bool {
-		a, b := index[i], index[j]
-		return bytes.Compare(a.Key[:], b.Key[:]) < 0
-	})
-
-	for _, x := range index {
-		err = x.writeTo(wr)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-	}
-
-	err = wr.Close()
-	return errors.UnknownError.Wrap(err)
+type Collector struct {
+	wr     *sectionWriter
+	number int
 }
 
-type Collector struct {
-	snapshot *Writer
-	wr       *sectionWriter
-	number   int
+type CollectOptions struct {
+	Walk       database.WalkOptions
+	Predicate  func(database.Record) (bool, error)
+	DidCollect func(value database.Value, section, offset uint64) error
 }
 
 func (c *Collector) Close() error {
 	return c.wr.Close()
 }
 
-func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error {
-	opts.Values = true
-	return r.Walk(opts, func(r database.Record) (skip bool, err error) {
+func (c *Collector) Collect(r database.Record, opts CollectOptions) error {
+	if opts.Predicate == nil {
+		opts.Walk.Values = true
+	}
+
+	return r.Walk(opts.Walk, func(r database.Record) (skip bool, err error) {
+		if opts.Predicate != nil {
+			ok, err := opts.Predicate(r)
+			if err != nil {
+				return false, errors.UnknownError.Wrap(err)
+			}
+			if !ok {
+				return true, nil
+			}
+		}
+
 		// Load the value
 		v, ok := r.(database.Value)
 		if !ok {
-			return false, errors.Conflict.WithFormat("asked for values but got %T", r)
+			return false, nil
 		}
 
 		u, _, err := v.GetValue()
@@ -102,11 +91,13 @@ func (c *Collector) Collect(r database.Record, opts database.WalkOptions) error 
 			return false, errors.InternalError.WithFormat("write record: %w", err)
 		}
 
-		c.snapshot.index = append(c.snapshot.index, RecordIndexEntry{
-			Key:     v.Key().Hash(),
-			Section: c.number,
-			Offset:  uint64(offset),
-		})
+		if opts.DidCollect != nil {
+			err = opts.DidCollect(v, uint64(c.number), uint64(offset))
+			if err != nil {
+				return false, errors.UnknownError.Wrap(err)
+			}
+		}
+
 		return false, nil
 	})
 }

@@ -21,14 +21,17 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -36,6 +39,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -762,11 +766,6 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 // reflected in the transaction results, which causes a consensus failure
 // (manually disabled here), but they really should be reflected in the BPT.
 func TestDifferentValidatorSignaturesV1(t *testing.T) {
-	// This test requires that the simulator's dispatch of transactions is
-	// extremely predictable. That appears to no longer be the case so this test
-	// won't work until that has been fixed.
-	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3322")
-
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
@@ -777,7 +776,7 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
-	sim.S.IgnoreDeliverResults = true
+	sim.S.IgnoreDeliverResults(true)
 
 	sim.StepN(10)
 
@@ -798,9 +797,6 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 			} else {
 				other = append(other, env)
 			}
-		}
-		if len(anchors) > 0 {
-			print("")
 		}
 		sort.Slice(anchors, func(i, j int) bool {
 			a, b := anchors[i].Signatures[1].(protocol.KeySignature), anchors[j].Signatures[1].(protocol.KeySignature)
@@ -836,7 +832,7 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
-	sim.S.IgnoreDeliverResults = true
+	sim.S.IgnoreDeliverResults(true)
 
 	sim.StepN(10)
 
@@ -883,7 +879,7 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 		err = sim.S.Step()
 	}
 	require.Error(t, err, "Expected consensus failure within 50 blocks")
-	require.IsType(t, (simulator.CommitConsensusError)(nil), err)
+	require.IsType(t, (consensus.CommitConsensusError)(nil), err)
 }
 
 func TestMessageCompat(t *testing.T) {
@@ -929,4 +925,232 @@ func TestMessageCompat(t *testing.T) {
 	sim.StepN(10)
 	ledger2 := GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger))
 	require.Equal(t, ledger1.Index, ledger2.Index)
+}
+
+func TestProofOverride(t *testing.T) {
+	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3351
+
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize with executor v1
+	g := new(core.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionV1
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+
+	// Trigger a synthetic transaction
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	// Replace the proof with garbage
+	var synth *messaging.Envelope
+	var synthId *url.TxID
+	h123 := [32]byte{1, 2, 3}
+	sim.SetBlockHookFor(protocol.AcmeUrl(), func(block execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		for _, env := range envelopes {
+			require.Len(t, env.Transaction, 1)
+			if env.Transaction[0].Body.Type() != TransactionTypeSyntheticBurnTokens {
+				continue
+			}
+
+			for _, sig := range env.Signatures {
+				sig, ok := sig.(*ReceiptSignature)
+				if !ok || !sig.SourceNetwork.Equal(DnUrl()) {
+					continue
+				}
+
+				synth = env.Copy()
+				synthId = env.Transaction[0].ID()
+
+				anchor := sha256.Sum256(append(h123[:], sig.Proof.Start...))
+				sig.Proof.End = nil
+				sig.Proof.EndIndex = 0
+				sig.Proof.Anchor = anchor[:]
+				sig.Proof.Entries = []*merkle.ReceiptEntry{{Hash: h123[:]}}
+				return envelopes, false
+			}
+		}
+		return envelopes, true
+	})
+
+	// Wait for the synthetic transaction to be sent
+	sim.StepUntil(True(func(h *Harness) bool { return synth != nil }))
+
+	// Verify the synthetic transaction is pending and the proof is garbage
+	View(t, sim.Database(Directory), func(batch *database.Batch) {
+		status, err := batch.Transaction(synthId.HashSlice()).Status().Get()
+		require.NoError(t, err)
+		require.Equal(t, errors.Pending.String(), status.Code.String())
+
+		require.NotNil(t, status.Proof)
+		require.NotEmpty(t, status.Proof.Entries)
+		require.Equal(t, h123[:], status.Proof.Entries[len(status.Proof.Entries)-1].Hash)
+	})
+
+	// Construct a valid proof
+	h := synthId.Hash()
+	r1 := sim.QueryChainEntry(PartitionUrl("bvn0").JoinPath(Synthetic), &v3.ChainQuery{Name: "main", Entry: h[:], IncludeReceipt: true})
+	require.NotNil(t, r1.Receipt)
+	r2 := sim.SearchForAnchor(DnUrl().JoinPath(AnchorPool), &v3.AnchorSearchQuery{Anchor: r1.Receipt.Anchor, IncludeReceipt: true})
+	require.NotEmpty(t, r2.Records)
+	require.NotEmpty(t, r2.Records[0].Receipt)
+
+	receipt, err := r1.Receipt.Combine(&r2.Records[0].Receipt.Receipt)
+	require.NoError(t, err)
+
+	// Replace the proofs
+	var found bool
+	sigs := synth.Signatures
+	synth.Signatures = nil
+	for _, sig := range sigs {
+		rsig, ok := sig.(*ReceiptSignature)
+		if !ok {
+			synth.Signatures = append(synth.Signatures, sig)
+			continue
+		}
+		if !rsig.SourceNetwork.Equal(DnUrl()) {
+			continue
+		}
+
+		require.False(t, found)
+		found = true
+		rsig.Proof = *receipt
+		synth.Signatures = append(synth.Signatures, rsig)
+	}
+	require.True(t, found)
+
+	// Submit with the fixed proof
+	sts, err := sim.SubmitTo(Directory, synth)
+	require.NoError(t, err)
+	for _, st := range sts {
+		require.NoError(t, st.AsError())
+	}
+
+	// Verify the burn completes
+	sim.StepUntil(Txn(st.TxID).Completes())
+	sim.StepUntil(Txn(synthId).Succeeds())
+}
+
+// TestChainUpdateAnchor verifies that any chain update triggers an anchor.
+//
+// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3370
+func TestChainUpdateAnchor(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	bob := AccountUrl("bob")
+	bobKey := acctesting.GenerateKey(bob)
+
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) {
+		// Set the threshold to 2 and add an empty key spec (since we're not
+		// going to use it)
+		p.AcceptThreshold = 2
+		p.AddKeySpec(&KeySpec{})
+	})
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens")})
+
+	// Do something that produces a credit payment, but don't actually complete
+	// the transaction. Alice is not an authority of Bob's account, but that
+	// doesn't matter since our goal is just to send the credit payment. Also
+	// the test is invalidated if the initial signature request produces a
+	// synthetic message, since that produced message will cause the block to be
+	// anchored.
+
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(bob, "tokens").
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))[1]
+
+	// Step until the signature is processed, but the produced message have not
+	// been processed
+	sim.StepUntil(
+		Sig(st.TxID).Succeeds())
+
+	// Get the list of chains modified, but only for the last block that is
+	// executed
+	var chains []string
+	events.SubscribeSync(sim.S.EventBus("BVN0"), func(e execute.WillCommitBlock) error {
+		chains = nil
+		return e.Block.ChangeSet().Walk(record.WalkOptions{
+			Modified:      true,
+			IgnoreIndices: true,
+		}, func(r record.Record) (skip bool, err error) {
+			if chain, ok := r.(*database.MerkleManager); ok && chain.Type() != ChainTypeIndex {
+				chains = append(chains, chain.Key().String())
+			}
+			return false, nil
+		})
+	})
+
+	// Wait for the credit payment
+	sim.StepUntil(
+		Sig(st.TxID).CreditPayment().Capture(&st).Completes())
+
+	h := st.TxID.Hash()
+	r1 := sim.QueryChainEntry(bob.JoinPath("tokens"), &v3.ChainQuery{
+		Name:           "signature",
+		Entry:          h[:],
+		IncludeReceipt: true,
+	})
+
+	// Verify the credit payment was processed in the last block, otherwise the
+	// subsequent checks are invalid
+	ledger := GetAccount[*SystemLedger](t, sim.DatabaseFor(bob), PartitionUrl("BVN0").JoinPath(Ledger))
+	require.Equal(t, ledger.Index, r1.Receipt.LocalBlock)
+
+	// Verify that nothing happened except the credit payment and signature
+	// request, and verify the second signature request produced by the initial
+	// signature request was executed locally (i.e. did not produce a synthetic
+	// message). This is fragile but necessary to ensure the validity of this
+	// test.
+	require.ElementsMatch(t, []string{
+		// The credit payment and initial signature request are added to the
+		// principal's signature chain
+		"Account.acc://bob.acme/tokens.SignatureChain",
+
+		// The secondary signature request is added to the key book's signature
+		// chain
+		"Account.acc://bob.acme/book.SignatureChain",
+
+		// Those chains are anchored into the root chain
+		"Account.acc://bvn-BVN0.acme/ledger.RootChain",
+
+		// No other chains are modified
+	}, chains)
+
+	// Verify an anchor was produced
+	require.NotNil(t, ledger.Anchor)
+
+	// Execute another block, since anchors are sent in the next block
+	sim.Step()
+
+	var count uint64 = 1
+	var expand = true
+	r2 := sim.QueryMainChainEntries(PartitionUrl("BVN0").JoinPath(AnchorPool), &v3.ChainQuery{Name: "anchor-sequence", Range: &v3.RangeOptions{FromEnd: true, Count: &count, Start: 0, Expand: &expand}})
+	require.Len(t, r2.Records, 1)
+	txn := r2.Records[0].Value.Message.Transaction
+	require.IsType(t, (*BlockValidatorAnchor)(nil), txn.Body)
+	anchor := txn.Body.(*BlockValidatorAnchor)
+
+	// Verify the anchor matches the receipt
+	require.Equal(t, r1.Receipt.LocalBlock, anchor.MinorBlockIndex)
 }

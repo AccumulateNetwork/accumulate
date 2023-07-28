@@ -4,6 +4,8 @@ RecordBase:
   fields:
     - name: Name
       type: string
+    - name: Key
+      type: string
     - name: Description
       type: string
     - name: Parent
@@ -14,6 +16,8 @@ RecordBase:
     - name: OmitAccessor
       type: bool
     - name: OmitConstructor
+      type: bool
+    - name: CustomValueConstructor
       type: bool
     - name: Parameters
       type: Field

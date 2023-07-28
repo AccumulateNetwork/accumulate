@@ -53,7 +53,7 @@ func (r *recorder) WriteHeader(h *recordHeader) error {
 	return nil
 }
 
-func (r *recorder) WriteSnapshot(snapshot ioutil.SectionReader) error {
+func (r *recorder) DidInit(snapshot ioutil.SectionReader) error {
 	_, err := snapshot.Seek(0, io.SeekStart)
 	if err != nil {
 		return errors.UnknownError.WithFormat("seek start: %w", err)
@@ -73,7 +73,7 @@ func (r *recorder) WriteSnapshot(snapshot ioutil.SectionReader) error {
 	return nil
 }
 
-func (r *recorder) WriteBlock(state execute.BlockState, submissions []*messaging.Envelope) error {
+func (r *recorder) DidExecuteBlock(state execute.BlockState, submissions []*messaging.Envelope) error {
 	ci, err := json.Marshal(state.Params().CommitInfo)
 	if err != nil {
 		return errors.EncodingError.WithFormat("encode commit info: %w", err)
@@ -163,7 +163,7 @@ func DumpRecording(rd ioutil.SectionReader) error {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("  Partition %s (%v) node %d\n", h.Partition.ID, h.Partition.Type, h.NodeNum)
+			fmt.Printf("  Partition %s (%v) node %v\n", h.Partition.ID, h.Partition.Type, h.NodeID)
 
 		case recordSectionTypeBlock:
 			b := new(recordBlock)

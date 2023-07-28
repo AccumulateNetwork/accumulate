@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	v2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -67,7 +68,32 @@ func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl)
 
 // FullRestore restores the snapshot and rebuilds indices.
 func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger, network *config.Describe) error {
-	err := Restore(db, file, logger)
+	v, err := v2.GetVersion(file)
+	if err != nil {
+		return errors.UnknownError.WithFormat("check snapshot version: %w", err)
+	}
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	switch v {
+	case Version1:
+		// Ok
+
+	case v2.Version2:
+		db, ok := db.(*database.Database)
+		if !ok {
+			return errors.BadRequest.With("executor does not support v2 snapshots")
+		}
+		err = db.Restore(file, nil)
+		return errors.UnknownError.Wrap(err)
+
+	default:
+		return errors.BadRequest.WithFormat("invalid snapshot version %d", v)
+	}
+
+	err = Restore(db, file, logger)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

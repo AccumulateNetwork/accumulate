@@ -28,23 +28,49 @@ func (s *SignatureContext) Type() protocol.SignatureType { return s.signature.Ty
 // authority signature. Sending an authority signature also clears the active
 // signature set.
 func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, authSig *protocol.AuthoritySignature) error {
-	ok, vote, err := s.authorityWillVote(batch, authSig.Authority)
+	// Check if the authority is ready to vote
+	vote, err := s.authorityWillVote(batch, authSig.Authority)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if vote == nil {
+		return nil
+	}
+
+	authSig.Origin = vote.Source
+	authSig.Vote = vote.Vote
+	authSig.TxID = s.transaction.ID()
+	authSig.Cause = s.message.ID()
+
+	// Check if the block threshold has been met
+	ok, err := s.blockThresholdIsMet(batch, s.transaction)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 	if !ok {
-		return nil
+		// Record the pending authority signature
+		err = s.recordOnHoldAuthSig(batch, authSig)
+		return errors.UnknownError.Wrap(err)
 	}
 
-	err = clearActiveSignatures(batch, s, authSig.Authority)
+	// Reset the pending authority signature if there is one
+	if h := s.transaction.Header.HoldUntil; h != nil && h.MinorBlock != 0 {
+		err = batch.Account(s.Executor.Describe.Ledger()).
+			Events().Minor().
+			Votes(h.MinorBlock).
+			Remove(authSig)
+		if err != nil {
+			return errors.UnknownError.WithFormat("reset held authority signature: %w", err)
+		}
+	}
+
+	// Reset the signing state
+	err = clearActiveSignatures(batch, authSig.Authority, s.transaction.ID())
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	authSig.Vote = vote
-	authSig.TxID = s.transaction.ID()
-	authSig.Cause = s.message.ID()
-
+	// Produce the authority signature
 	err = s.didProduce(
 		batch,
 		authSig.RoutingLocation(),
@@ -54,6 +80,96 @@ func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, au
 		},
 	)
 	return errors.UnknownError.Wrap(err)
+}
+
+func (s *SignatureContext) recordOnHoldAuthSig(batch *database.Batch, authSig *protocol.AuthoritySignature) error {
+	record := batch.Account(s.Executor.Describe.Ledger()).
+		Events().Minor().
+		Votes(s.transaction.Header.HoldUntil.MinorBlock)
+
+	other, err := record.Find(authSig)
+	switch {
+	case err == nil:
+		// Found an existing signature. If the origin of the new signature is
+		// lower priority (higher page number) than the previous signature,
+		// discard it.
+		if comparePriority(authSig, other) > 0 {
+			return nil
+		}
+
+	case errors.Is(err, errors.NotFound):
+		// No existing signature so write this one
+
+	default:
+		return errors.UnknownError.WithFormat("load previous on-hold auth sig: %w", err)
+	}
+
+	err = record.Add(authSig)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store on-hold auth sig: %w", err)
+	}
+	return nil
+}
+
+// comparePriority compares the priority of the signers of two authority
+// signatures. comparePriority returns zero if the authority signatures do not
+// match expectations, such as the origin not being a key page.
+func comparePriority(a, b *protocol.AuthoritySignature) int {
+	if !a.Authority.Equal(b.Authority) {
+		return 0
+	}
+
+	book, aPage, ok := protocol.ParseKeyPageUrl(a.Origin)
+	if !ok || !a.Authority.Equal(book) {
+		return 0
+	}
+	book, bPage, ok := protocol.ParseKeyPageUrl(b.Origin)
+	if !ok || !b.Authority.Equal(book) {
+		return 0
+	}
+
+	return int(aPage) - int(bPage)
+}
+
+func (m *MessageContext) releaseHeldAuthSigs(batch *database.Batch, blocks []uint64) error {
+	record := batch.Account(m.Executor.Describe.Ledger()).
+		Events().Minor()
+	for _, block := range blocks {
+		// Load the list
+		sigs, err := record.Votes(block).Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load on-hold auth sigs for block %d: %w", block, err)
+		}
+
+		// And erase it
+		err = record.Votes(block).Put(nil)
+		if err != nil {
+			return errors.UnknownError.WithFormat("reset on-hold auth sigs for block %d: %w", block, err)
+		}
+
+		// For each
+		for _, sig := range sigs {
+			// Reset the signing state
+			err = clearActiveSignatures(batch, sig.Authority, sig.TxID)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+
+			// Produce the authority signature
+			err = m.didProduce(
+				batch,
+				sig.RoutingLocation(),
+				&messaging.SignatureMessage{
+					Signature: sig,
+					TxID:      sig.TxID,
+				},
+			)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+		}
+	}
+	return nil
 }
 
 // getSigner gets the signature's signer, resolving a LTA to a LID.
@@ -81,21 +197,21 @@ func (s *SignatureContext) getAuthority() *url.URL {
 	}
 }
 
-func (s *SignatureContext) authorityWillVote(batch *database.Batch, authority *url.URL) (bool, protocol.VoteType, error) {
+func (s *SignatureContext) authorityWillVote(batch *database.Batch, authority *url.URL) (*chain.AuthVote, error) {
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.AuthorityValidator](s.Executor, s.transaction.Body.Type())
 	if ok {
-		ready, fallback, vote, err := val.AuthorityWillVote(s, batch, s.transaction, authority)
+		fallback, vote, err := val.AuthorityWillVote(s, batch, s.transaction, authority)
 		if err != nil {
-			return false, 0, errors.UnknownError.Wrap(err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 		if !fallback {
-			return ready, vote, nil
+			return vote, nil
 		}
 	}
 
-	ok, vote, err := s.AuthorityWillVote(batch, s.Block.Index, s.transaction, authority)
-	return ok, vote, errors.UnknownError.Wrap(err)
+	vote, err := s.AuthorityWillVote(batch, s.Block.Index, s.transaction, authority)
+	return vote, errors.UnknownError.Wrap(err)
 }
 
 func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.Signer, entry *database.SignatureSetEntry) error {
@@ -152,9 +268,9 @@ func addSignature(batch *database.Batch, ctx *SignatureContext, signer protocol.
 	return nil
 }
 
-func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext, authUrl *url.URL) error {
+func clearActiveSignatures(batch *database.Batch, authUrl *url.URL, txid *url.TxID) error {
 	// Remove the transaction from the pending list
-	err := batch.Account(authUrl).Pending().Remove(ctx.transaction.ID())
+	err := batch.Account(authUrl).Pending().Remove(txid)
 	if err != nil {
 		return errors.UnknownError.WithFormat("update the pending list: %w", err)
 	}
@@ -170,7 +286,7 @@ func clearActiveSignatures(batch *database.Batch, ctx *SignatureContext, authUrl
 	for _, signer := range authority.GetSigners() {
 		err := batch.
 			Account(signer).
-			Transaction(ctx.transaction.ID().Hash()).
+			Transaction(txid.Hash()).
 			Signatures().
 			Put(nil)
 		if err != nil {

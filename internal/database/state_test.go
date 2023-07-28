@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -131,4 +132,18 @@ func TestVersion(t *testing.T) {
 	set(sub, b, 6)
 	require.NoError(t, sub.Commit())
 	require.NoError(t, batch.Commit())
+}
+
+func TestNonLedgerEvents(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
+
+	// Try to add events to a random account
+	batch := db.Begin(true)
+	defer batch.Discard()
+	foo := batch.Account(url.MustParse("foo"))
+	require.NoError(t, foo.Events().Minor().Blocks().Add(1))
+
+	err := foo.Commit()
+	require.EqualError(t, err, "acc://foo is not allowed to have events")
 }

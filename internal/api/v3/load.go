@@ -236,7 +236,12 @@ func loadTransactionSignaturesV2(batch *database.Batch, r *api.MessageRecord[mes
 		}
 
 		account, err := batch.Account(s).Main().Get()
-		if err != nil && !errors.Is(err, errors.NotFound) {
+		switch {
+		case err == nil:
+			// Ok
+		case errors.Is(err, errors.NotFound):
+			account = &protocol.UnknownAccount{Url: s}
+		default:
 			return errors.UnknownError.WithFormat("load %v: %w", s, err)
 		}
 
@@ -303,7 +308,7 @@ func getAccountAuthoritySet(batch *database.Batch, account *url.URL) (*protocol.
 	return getAccountAuthoritySet(batch, url)
 }
 
-func normalizeBlockEntries(batch *database.Batch, ledger *protocol.BlockLedger) ([]*protocol.BlockEntry, error) {
+func normalizeBlockEntries(batch *database.Batch, ledger *protocol.BlockLedger) ([]*protocol.BlockEntry, error) { //nolint:unused
 	// For each account+chain, find the entry with the largest index. This is
 	// necessary because some protocol versions add every chain entry to the
 	// ledger and others only add the last.

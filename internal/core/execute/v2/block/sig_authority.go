@@ -115,6 +115,15 @@ func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureC
 		return errors.UnknownError.With("load previous vote: %w", err)
 	}
 
+	// Verify the transaction has been initiated
+	isInit, _, err := transactionIsInitiated(batch, ctx.transaction.ID())
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if !isInit {
+		return errors.NotAllowed.WithFormat("%v has not been initiated", ctx.transaction.ID())
+	}
+
 	// Verify the signer is authorized to sign for the principal
 	err = ctx.signerIsAuthorized(batch, sig)
 	if err != nil {
@@ -169,7 +178,6 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 
 	// Send the next authority signature if the signer's authority is satisfied
 	return ctx.maybeSendAuthoritySignature(batch, &protocol.AuthoritySignature{
-		Origin:    signer.GetUrl(),
 		Authority: signer.GetAuthority(),
 		Delegator: sig.Delegator[1:],
 	})

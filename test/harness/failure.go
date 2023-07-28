@@ -7,6 +7,8 @@
 package harness
 
 import (
+	"fmt"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -46,6 +48,12 @@ func (c *failCond) WithError(target error) *failCond {
 }
 
 func (c *failCond) WithMessage(message string) *failCond {
+	c.withMessage = &message
+	return c
+}
+
+func (c *failCond) WithMessagef(format string, args ...any) *failCond {
+	message := fmt.Sprintf(format, args...)
 	c.withMessage = &message
 	return c
 }

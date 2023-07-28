@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -31,6 +32,72 @@ type True func(*Harness) bool
 func (f True) Satisfied(h *Harness) bool { return f(h) }
 
 func (f True) Format(prefix, suffix string) string { return prefix + "(unknown predicate function)" }
+
+func MajorBlock(v uint64) majorHeightOnPart {
+	return majorHeightOnPart{v, protocol.Directory}
+}
+
+type majorHeightOnPart struct {
+	height    uint64
+	partition string
+}
+
+func (v majorHeightOnPart) OnPartition(s string) majorHeightOnPart {
+	return majorHeightOnPart{v.height, s}
+}
+
+func (v majorHeightOnPart) Satisfied(h *Harness) bool {
+	ns := h.NetworkStatus(api.NetworkStatusOptions{Partition: v.partition})
+	return ns.MajorBlockHeight >= v.height
+}
+
+func (v majorHeightOnPart) Format(prefix, suffix string) string {
+	return fmt.Sprintf("%s%s reached major block %d%s", prefix, v.partition, v.height, suffix)
+}
+
+func DnHeight(v uint64) dnHeightOnPart {
+	return dnHeightOnPart{v, protocol.Directory}
+}
+
+type dnHeightOnPart struct {
+	height    uint64
+	partition string
+}
+
+func (v dnHeightOnPart) OnPartition(s string) dnHeightOnPart {
+	return dnHeightOnPart{v.height, s}
+}
+
+func (v dnHeightOnPart) Satisfied(h *Harness) bool {
+	ns := h.NetworkStatus(api.NetworkStatusOptions{Partition: v.partition})
+	return ns.DirectoryHeight >= v.height
+}
+
+func (v dnHeightOnPart) Format(prefix, suffix string) string {
+	return fmt.Sprintf("%sDN block %d is anchored on %s%s", prefix, v.height, v.partition, suffix)
+}
+
+func BlockTime(t time.Time) blockTimeOnPart {
+	return blockTimeOnPart{t, protocol.Directory}
+}
+
+type blockTimeOnPart struct {
+	time      time.Time
+	partition string
+}
+
+func (v blockTimeOnPart) OnPartition(s string) blockTimeOnPart {
+	return blockTimeOnPart{v.time, s}
+}
+
+func (v blockTimeOnPart) Satisfied(h *Harness) bool {
+	cs := h.ConsensusStatus(api.ConsensusStatusOptions{Partition: v.partition})
+	return !cs.LastBlock.Time.Before(v.time)
+}
+
+func (v blockTimeOnPart) Format(prefix, suffix string) string {
+	return fmt.Sprintf("%s%s reached block time %v%s", prefix, v.partition, v.time, suffix)
+}
 
 // Txn defines a condition on a transaction.
 func Txn(id *url.TxID) txnCond { return txnCond{msgCond{id: id, message: []string{"transaction"}}} }
@@ -500,6 +567,11 @@ func isPending(h *Harness, c *condition, r *msgResult) bool {
 		// Must be pending
 		if r.Status.Code == errors.Pending {
 			return true
+		}
+		if r.Status.Error == nil {
+			h.TB.Logf("transaction is %v\n", r.Status.Code)
+		} else {
+			h.TB.Logf("%+v\n", r.Status.AsError())
 		}
 		h.TB.Fatal(c.messageReplaceEnd("is not pending 🗴\n"))
 	}

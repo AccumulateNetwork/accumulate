@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -200,6 +201,14 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			status.GotDirectoryReceipt = true
 		}
 
+		// If the provided proof is complete, replace the existing proof
+		if ok, err := x.proofIsComplete(batch, delivery.Transaction, &signature.Proof); err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		} else if ok {
+			status.Proof = &signature.Proof
+			break
+		}
+
 		// Capture the initial receipt
 		if status.Proof == nil {
 			if !bytes.Equal(delivery.Transaction.GetHash(), signature.Proof.Start) {
@@ -367,6 +376,30 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	return signer, nil
+}
+
+func (x *Executor) proofIsComplete(batch *database.Batch, txn *protocol.Transaction, proof *merkle.Receipt) (bool, error) {
+	// Does the proof start with the transaction hash?
+	if !bytes.Equal(txn.GetHash(), proof.Start) {
+		return false, nil
+	}
+
+	// Load the anchor chain
+	anchorChain, err := batch.Account(x.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("load %s intermediate anchor chain: %w", protocol.Directory, err)
+	}
+
+	// Does the proof end with a proven anchor?
+	_, err = anchorChain.HeightOf(proof.Anchor)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errors.NotFound):
+		return false, nil
+	default:
+		return false, errors.UnknownError.WithFormat("get height of entry %X of %s intermediate anchor chain: %w", proof.Anchor[:4], protocol.Directory, err)
+	}
 }
 
 // validateInitialSignature verifies that the signature is a valid initial

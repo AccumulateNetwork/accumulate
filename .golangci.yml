@@ -53,10 +53,11 @@ issues:
   - { source: func \(m \*Executor\) EndBlock,            linters: [maintidx]}
   - { source: func \(x \*Executor\) executeEnvelope,     linters: [maintidx]}
   - { source: func \(x \*Executor\) processSignature,    linters: [maintidx]}
-  - { source: func \(d \*Daemon\) Start,                 linters: [maintidx]}
   - { source: func \(m \*JrpcMethods\) Query,            linters: [maintidx]}
   - { source: func TestTransactionIsReady,               linters: [maintidx]}
   - { source: func \(s \*ValidationTestSuite\) TestMain, linters: [maintidx]}
+  - { source: func \(n \*Node\) execute,                 linters: [maintidx]}
+  - { source: func \(block \*Block\) Close,              linters: [maintidx]}
 
 linters-settings:
   goheader:
