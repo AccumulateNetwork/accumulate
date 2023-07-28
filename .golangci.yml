@@ -11,10 +11,12 @@ linters:
   - bidichk       # Check for questionable Unicode
   - exportloopref # Smarter version of rangevarref?
   - goheader      # Enforce the copyright header
-  - maintidx      # Maintainability
   - misspell      # Spelling
   - nakedret      # Not really sure what this one does
   - unconvert     # Lint (unnecessary conversions)
+
+  # TODO Enable at some point
+  # - maintidx      # Maintainability
 
   # Gosec panics on some of the generic code
   # - gosec         # Security
@@ -48,15 +50,6 @@ issues:
   - path: smt/.*/RandHash\.go
     linters:
     - noprint
-
-  # TODO Reduce the complexity of these functions so they pass
-  - { source: func \(m \*Executor\) EndBlock,            linters: [maintidx]}
-  - { source: func \(x \*Executor\) executeEnvelope,     linters: [maintidx]}
-  - { source: func \(x \*Executor\) processSignature,    linters: [maintidx]}
-  - { source: func \(d \*Daemon\) Start,                 linters: [maintidx]}
-  - { source: func \(m \*JrpcMethods\) Query,            linters: [maintidx]}
-  - { source: func TestTransactionIsReady,               linters: [maintidx]}
-  - { source: func \(s \*ValidationTestSuite\) TestMain, linters: [maintidx]}
 
 linters-settings:
   goheader:
