@@ -77,8 +77,8 @@ func run(cmd *cobra.Command, args []string) {
 
 	if len(args) > 1 {
 		lts := &sdktest.TestSuite{
-			Transactions: transactionTests(txnLedgerTestVectors),
-			Accounts:     accountTests(txnLedgerTestVectors),
+			Transactions: transactionTests(txnUnsignedEnvelopeTestVectors),
+			Accounts:     accountTests(txnUnsignedEnvelopeTestVectors),
 		}
 		check(lts.Store(args[1]))
 	}
@@ -232,9 +232,11 @@ func txnTest(originUrl *url.URL, body TransactionBody) *TC {
 	return sdktest.NewTxnTest(env)
 }
 
-func txnLedgerTestVectors(originUrl *url.URL, body TransactionBody) *TC {
+// txnUnsignedEnvelopeTestVectors creates an unsigned envelope which is used to create envelope test
+// vectors for use by external signers such as the Ledger hardware wallet
+func txnUnsignedEnvelopeTestVectors(originUrl *url.URL, body TransactionBody) *TC {
 	signer := new(signing.Builder)
-	lts := LedgerSignerTester{}
+	lts := EmptySigner{}
 	lts.PubKey = key.Public().(ed25519.PublicKey)
 
 	signer.Signer = &lts
@@ -256,7 +258,7 @@ func txnLedgerTestVectors(originUrl *url.URL, body TransactionBody) *TC {
 	}
 
 	sig, err := signer.Initiate(txn)
-	if err != nil && !errors.Is(err, UseHardwareError) {
+	if err != nil && !errors.Is(err, UseRealSigner) {
 		panic(err)
 	}
 
