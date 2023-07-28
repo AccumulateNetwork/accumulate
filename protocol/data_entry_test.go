@@ -16,7 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func _TestDataEntry(t *testing.T) {
+func TestDataEntry(t *testing.T) {
 	de := AccumulateDataEntry{}
 
 	de.Data = append(de.Data, []byte("test data entry"))
@@ -65,7 +65,7 @@ func _TestDataEntry(t *testing.T) {
 	}
 }
 
-func _TestDataEntryEmpty(t *testing.T) {
+func TestDataEntryEmpty(t *testing.T) {
 	de := new(AccumulateDataEntry)
 	de.Data = [][]byte{nil, []byte("foo")}
 
