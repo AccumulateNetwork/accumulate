@@ -8,6 +8,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -182,26 +183,26 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		return nil, errors.UnknownError.WithFormat("destination is not a partition")
 	}
 	ledger := batch.Account(s.partition.Synthetic())
-	chain, err := ledger.SyntheticSequenceChain(partition).Get()
+	sequenceChain, err := ledger.SyntheticSequenceChain(partition).Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
 	}
 
 	// Load the Nth sequence chain entry
-	entry := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(num)-1, entry)
+	sequenceEntry := new(protocol.IndexEntry)
+	err = sequenceChain.EntryAs(int64(num)-1, sequenceEntry)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain entry %d: %w", num-1, err)
 	}
 
 	// Load the corresponding main chain entry
-	chain, err = ledger.MainChain().Get()
+	mainChain, err := ledger.MainChain().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load synthetic main chain: %w", err)
 	}
-	hash, err := chain.Entry(int64(entry.Source))
+	hash, err := mainChain.Entry(int64(sequenceEntry.Source))
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", entry.Source, err)
+		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", sequenceEntry.Source, err)
 	}
 
 	r := new(api.MessageRecord[messaging.Message])
@@ -255,26 +256,69 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	}
 
 	// Get the synthetic main chain receipt
-	synthReceipt, entry, err := s.getReceiptForChainEntry(ledger.MainChain(), entry.Source)
+	synthReceipt, mainAnchorEntry, err := s.getReceiptForChainEntry(ledger.MainChain(), sequenceEntry.Source)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Get the latest directory anchor receipt
-	dirReceipt, err := s.getLatestDirectoryReceipt(batch)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
+	var receipt *merkle.Receipt
+	if strings.EqualFold(s.partitionID, protocol.Directory) {
+		// We're on the DN, get the latest sent anchor
+		anchorSequenceChain := batch.Account(s.partition.AnchorPool()).AnchorSequenceChain()
+		head, err := anchorSequenceChain.Head().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor sequence chain head: %w", err)
+		}
+		if head.Count == 0 {
+			return nil, errors.NotFound.With("anchor sequence chain is empty")
+		}
 
-	// Get the receipt in between the other two
-	rootReceipt, err := s.getRootReceipt(batch, entry.Anchor, dirReceipt.Anchor.RootChainIndex)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
+		hash, err := anchorSequenceChain.Entry(head.Count - 1)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", head.Count-1, err)
+		}
 
-	receipt, err := merkle.CombineReceipts(synthReceipt, rootReceipt, dirReceipt.RootChainReceipt)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
+		var msg messaging.MessageWithTransaction
+		err = batch.Message2(hash).Main().GetAs(&msg)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor #%d: %w", head.Count-1, err)
+		}
+
+		anchor, ok := msg.GetTransaction().Body.(*protocol.DirectoryAnchor)
+		if !ok {
+			return nil, errors.InternalError.WithFormat("invalid anchor sequence chain entry %d: want %v, got %v", head.Count-1, protocol.TransactionTypeDirectoryAnchor, msg.GetTransaction().Body.Type())
+		}
+
+		// Get the receipt in between the other two
+		rootReceipt, err := s.getRootReceipt(batch, mainAnchorEntry.Anchor, anchor.RootChainIndex)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		// Build the complete receipt
+		receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
+		}
+
+	} else {
+		// We're on a BVN, get the latest directory anchor receipt
+		dirReceipt, err := s.getLatestDirectoryReceipt(batch)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		// Get the receipt in between the other two
+		rootReceipt, err := s.getRootReceipt(batch, mainAnchorEntry.Anchor, dirReceipt.Anchor.RootChainIndex)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		// Build the complete receipt
+		receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt, dirReceipt.RootChainReceipt)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
+		}
 	}
 
 	if globals.ExecutorVersion.V2() {
