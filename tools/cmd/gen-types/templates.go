@@ -342,6 +342,7 @@ func (f *Field) EffectiveMarshalType() typegen.TypeCode {
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"lcName":              typegen.LowerFirstWord,
 	"upper":               strings.ToUpper,
+	"lower":               strings.ToLower,
 	"underscoreUpperCase": typegen.UnderscoreUpperCase,
 	"title":               typegen.TitleCase,
 	"map":                 typegen.MakeMap,
