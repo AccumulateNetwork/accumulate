@@ -219,13 +219,6 @@ type SingleUnionFile struct {
 
 func (f *SingleUnionFile) IsUnion() bool { return true }
 
-//
-//func (f *SingleUnionFile) UnionType() string { return f.Type }
-//
-//func (f *SingleUnionFile) Embeddings() []string { return []string{} }
-//
-//func (f *SingleUnionFile) IsBinary() bool { return true }
-
 type UnionSpec struct {
 	Package    string
 	Name       string

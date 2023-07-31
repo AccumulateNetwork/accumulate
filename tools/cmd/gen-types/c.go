@@ -295,11 +295,6 @@ func CAreEqual(field *Field, varName, otherName string) (string, error) {
 		expr = "%s.Equal(%s, %s)"
 	case typegen.TypeCodeFloat, typegen.TypeCodeBool, typegen.TypeCodeDuration, typegen.TypeCodeTime:
 		expr = "%s /*%s*/ == %s"
-	//case "bytes", "rawJson":
-	//	expr = "memcmp(%s, %s)==0"
-	//case "bigint":
-	//case "slice", "chainSet":
-	//	expr = "%s.data.len == %s.data.len"
 	default:
 		switch {
 		case field.AsReference():
@@ -364,13 +359,6 @@ func CBinarySize(field *Field, varName string) (string, error) {
 		return w.String(), nil
 	}
 
-	//fmt.Fprintf(w, "\tfor _, v := range %s {\n", varName)
-	//str, err := CBinarySize(field.Slice, "v")
-	//if err != nil {
-	//	return "", err
-	//}
-	//w.WriteString(str)
-	//fmt.Fprintf(w, "\t}\n\n")
 	return w.String(), nil
 }
 
@@ -497,83 +485,6 @@ func CBinaryUnmarshalValue(field *Field, readerName, varName string) (string, er
 	return "\tfor { ok := " + expr + "; if !ok { break } }", nil
 }
 
-//
-//func CBinaryUnmarshalValue(field *Field, varName, errName string, errArgs ...string) (string, error) {
-//	typ := field.Type
-//	w := new(strings.Builder)
-//
-//	var expr, size, init, sliceName string
-//	var inPlace bool
-//	switch typ.Name {
-//	case "rawJson":
-//		typ = typegen."bytes"
-//		fallthrough
-//	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-//		expr, size = CMethodName(typ, "UnmarshalBinary")+"(data)", CMethodName(typ, "BinarySize")+"(%s)"
-//	case "bigint", "chain":
-//		expr, size = CMethodName(typ, "UnmarshalBinary")+"(data)", CMethodName(typ, "BinarySize")+"(&%s)"
-//	case "slice":
-//		sliceName, varName = varName, "len"+field.Name
-//		fmt.Fprintf(w, "var %s uint64\n", varName)
-//		expr, size = "encoding.UvarintUnmarshalBinary(data)", "encoding.UvarintBinarySize(%s)"
-//	default:
-//		switch {
-//		case field.AsReference:
-//			if field.IsPointer {
-//				init = "%s = new(" + CResolveType(field, true) + ")"
-//			}
-//			expr, size, inPlace = varName+".UnmarshalBinary(data)", "%s.BinarySize()", true
-//		case field.AsValue:
-//			expr, size, inPlace = varName+".UnmarshalBinary(data)", "%s.BinarySize()", true
-//		default:
-//			return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, CResolveType(field, false))
-//		}
-//
-//		if field.UnmarshalWith != "" {
-//			expr, inPlace = field.UnmarshalWith+"(data)", false
-//		}
-//	}
-//
-//	if init != "" {
-//		fmt.Fprintf(w, "\t%s\n", fmt.Sprintf(init, varName))
-//	}
-//
-//	size = fmt.Sprintf(size, varName)
-//	err := CFieldError("decoding", errName, errArgs...)
-//	if inPlace {
-//		fmt.Fprintf(w, "\tif err := %s; err != nil { return %s }\n", expr, err)
-//	} else if typ == "bigint" {
-//		fmt.Fprintf(w, "\tif x, err := %s; err != nil { return %s } else { %s.Set(x) }\n", expr, err, varName)
-//	} else {
-//		fmt.Fprintf(w, "\tif x, err := %s; err != nil { return %s } else { %s = x }\n", expr, err, varName)
-//	}
-//	fmt.Fprintf(w, "\tdata = data[%s:]\n\n", size)
-//
-//	if typ != "slice" {
-//		return w.String(), nil
-//	}
-//
-//	fmt.Fprintf(w, "\t%s = make(%s, %s)\n", sliceName, CResolveType(field, false), varName)
-//	fmt.Fprintf(w, "\tfor i := range %s {\n", sliceName)
-//	if field.Slice.IsPointer {
-//		fmt.Fprintf(w, "\t\tvar x %s\n", CResolveType(field.Slice, false))
-//		str, err := CBinaryUnmarshalValue(field.Slice, "x", errName+"[%d]", "i")
-//		if err != nil {
-//			return "", err
-//		}
-//		w.WriteString(str)
-//		fmt.Fprintf(w, "\t\t%s[i] = x", sliceName)
-//	} else {
-//		str, err := CBinaryUnmarshalValue(field.Slice, sliceName+"[i]", errName+"[%d]", "i")
-//		if err != nil {
-//			return "", err
-//		}
-//		w.WriteString(str)
-//	}
-//	fmt.Fprintf(w, "\t}\n\n")
-//	return w.String(), nil
-//}
-
 func CValueToJson(field *Field, tgtName, srcName string) string {
 	w := new(strings.Builder)
 	switch field.Type.Name {
@@ -584,15 +495,7 @@ func CValueToJson(field *Field, tgtName, srcName string) string {
 		fmt.Fprintf(w, "\t%s = %s(&%s)", tgtName, CMethodName(field.Type.Name, "ToJSON"), srcName)
 		return w.String()
 	case "slice":
-		//if GoJsonType(field.Slice) == "" {
-		//	break
-		//}
-		fmt.Fprintf(w, "\t\"FIXME\"\n")
-		//
-		//fmt.Fprintf(w, "\t%s = make([]%s, len(%s))\n", tgtName, CJsonType(field.Slice), srcName)
-		//fmt.Fprintf(w, "\tfor i, x := range %s {\n", srcName)
-		//w.WriteString(CValueToJson(field.Slice, tgtName+"[i]", "x"))
-		//fmt.Fprintf(w, "\t}")
+		fmt.Fprintf(w, "\t\"slice unsupported\"\n")
 		return w.String()
 	}
 
@@ -616,15 +519,7 @@ func CValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...s
 		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = *x\n\t}", CMethodName(field.Type.Name, "FromJSON"), srcName, err, tgtName)
 		return w.String()
 	case "slice":
-		//if CJsonType(field.Slice) == "" {
-		//	break
-		//}
-
-		//fmt.Fprintf(w, "\t%s = make([]%s, len(%s))\n", tgtName, CResolveType(field.Slice, false), srcName)
-		//fmt.Fprintf(w, "\tfor i, x := range %s {\n", srcName)
-		//w.WriteString(CValueFromJson(field.Slice, tgtName+"[i]", "x", errName+"[%d]", "i"))
-		//fmt.Fprintf(w, "\t}")
-		fmt.Fprintf(w, "\t\"FIXME\"\n")
+		fmt.Fprintf(w, "\t\"slice unsupported\"\n")
 
 		return w.String()
 	}
