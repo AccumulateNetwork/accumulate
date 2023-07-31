@@ -1,19 +1,19 @@
 #!/bin/bash
 
-set -eu
-set -x
+set -e
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <out-dir>"
     exit 1
 fi
 
-mkdir $1
+mkdir -p $1
 declare outDir="$( cd -- "$1" &> /dev/null && pwd )"
 
-# Make sure we're within the java directory
+# Make sure we're within the C directory
 cd $( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 function generate {
+    echo "generate ${@:1:3}"
     TOOL=../../../tools/cmd/gen-$1
     mkdir -p $outDir/include/accumulate/$3
     FLAGS="--language $2-header --package io.accumulatenetwork.sdk --subpackage $3"
