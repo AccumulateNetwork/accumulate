@@ -28,29 +28,6 @@ PROT=../../../protocol
 SMT=../../../internal/database/smt/managed
 generate enum c protocol $PROT/enums.yml # $SMT/enums.yml
 generate types c protocol  $PROT/account_auth_operations.yml $PROT/accounts.yml $PROT/general.yml $PROT/system.yml $PROT/key_page_operations.yml $PROT/query.yml $PROT/signatures.yml  $PROT/synthetic_transactions.yml $PROT/transaction.yml $PROT/transaction_results.yml $PROT/user_transactions.yml  -x TransactionStatus -x SystemLedger  -x TransactionResultSet
-#    -x TransactionStatus
-
-
-
-#MAN=../../../smt/managed
-#generate enum c managed $MAN/enums.yml
-#generate types c managed $MAN/types.yml
-
-#API=../../../internal/api/v2
-#generate types apiv2 $API/types.yml
-#generate api apiv2 $API/methods.yml
-
-#QRY=../../../internal/api/v2/query
-#generate enum query $QRY/enums.yml
-#generate types query $QRY/requests.yml
-#generate types query $QRY/responses.yml
-
-#CFG=../../../config
-#generate enum c config $CFG/enums.yml
-#generate types c config $CFG/types.yml
-
-#CORE=../../../internal/core
-#generate types c core $CORE/types.yml
 
 ERR=../../../pkg/errors
 generate enum c errors $ERR/status.yml
