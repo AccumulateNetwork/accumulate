@@ -19,7 +19,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.15.0
 	github.com/go-playground/validator/v10 v10.9.0
-	github.com/golang/mock v1.6.0
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/golangci/golangci-lint v1.52.2
 	github.com/kardianos/service v1.2.0
 	github.com/pelletier/go-toml v1.9.5
