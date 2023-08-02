@@ -54,10 +54,10 @@ func TestAPIv2Consistency(t *testing.T) {
 
 	// Start the simulator (do not specify a snapshot option)
 	sim, err := simulator.New(
-		acctesting.NewTestLogger(t),
-		simulator.WithDatabase(func(partition string, node int, logger log.Logger) keyvalue.Beginner {
+		simulator.WithLogger(acctesting.NewTestLogger(t)),
+		simulator.WithDatabase(func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
 			mem := memory.New(nil)
-			require.NoError(t, json.Unmarshal(testData.State[partition], mem)) //nolint:staticcheck // FIXME
+			require.NoError(t, json.Unmarshal(testData.State[partition.ID], mem)) //nolint:staticcheck // FIXME
 			return mem
 		}),
 		simulator.WithNetwork(testData.Network),

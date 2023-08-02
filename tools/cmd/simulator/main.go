@@ -115,8 +115,11 @@ func run(*cobra.Command, []string) {
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	check(err)
 
-	opts = append(opts, simulator.WithNetwork(net))
-	sim, err := simulator.New(logger, opts...)
+	opts = append(opts,
+		simulator.WithNetwork(net),
+		simulator.WithLogger(logger),
+	)
+	sim, err := simulator.New(opts...)
 	check(err)
 
 	if flag.Step == "on-wait" {

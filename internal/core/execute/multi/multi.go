@@ -29,6 +29,7 @@ type Block = execute.Block
 type BlockParams = execute.BlockParams
 type BlockState = execute.BlockState
 type Options = execute.Options
+type DescribeShim = execute.DescribeShim
 type ValidatorUpdate = execute.ValidatorUpdate
 
 // NewExecutor creates a new executor.

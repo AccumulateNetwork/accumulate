@@ -79,12 +79,14 @@ func (s *Simulator) Init(opts ...simulator.Option) {
 	if s.opts.OpenDB != nil {
 		opts = append(opts, simulator.WithDatabase(s.opts.OpenDB))
 	}
-	opts = append(opts, simulator.SimpleNetwork(s.TB.Name(), s.opts.BvnCount, 1))
-	opts = append(opts, simulator.WithRecordings(harness.Recordings(s.TB)))
+	opts = append(opts,
+		simulator.SimpleNetwork(s.TB.Name(), s.opts.BvnCount, 1),
+		simulator.WithRecordings(harness.Recordings(s.TB)),
+		simulator.WithLogger(acctesting.NewTestLogger(s.TB)),
+	)
 
 	var err error
-	logger := acctesting.NewTestLogger(s.TB)
-	s.S, err = simulator.New(logger, opts...)
+	s.S, err = simulator.New(opts...)
 	require.NoError(s.TB, err)
 	s.H = harness.NewSimWith(s.TB, s.S)
 }

@@ -136,7 +136,7 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		_ = db.Close()
 	}()
 
-	err = snapshot.FullRestore(db, file, d.Logger, &d.Config.Accumulate.Describe)
+	err = snapshot.FullRestore(db, file, d.Logger, d.Config.Accumulate.Describe.PartitionUrl())
 	if err != nil {
 		return fmt.Errorf("failed to restore database: %v", err)
 	}

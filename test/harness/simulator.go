@@ -32,8 +32,11 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 // NewSim creates a simulator with the given database, network initialization,
 // and snapshot function and calls NewSimWith.
 func NewSim(tb testing.TB, opts ...simulator.Option) *Sim {
-	opts = append(opts, simulator.WithRecordings(Recordings(tb)))
-	s, err := simulator.New(acctesting.NewTestLogger(tb), opts...)
+	opts = append(opts,
+		simulator.WithRecordings(Recordings(tb)),
+		simulator.WithLogger(acctesting.NewTestLogger(tb)),
+	)
+	s, err := simulator.New(opts...)
 	require.NoError(tb, err)
 	return NewSimWith(tb, s)
 }

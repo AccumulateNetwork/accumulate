@@ -11,8 +11,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -73,7 +73,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, errors.BadRequest.WithFormat("token URL is missing")
 	}
 
-	err = verifyCreateTokenAccountProof(st.Describe, st.batch, tx.Transaction.Header.Principal, body)
+	err = verifyCreateTokenAccountProof(st.DescribeShim, st.batch, tx.Transaction.Header.Principal, body)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -93,7 +93,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	return nil, nil
 }
 
-func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, principal *url.URL, body *protocol.CreateTokenAccount) error {
+func verifyCreateTokenAccountProof(net execute.DescribeShim, batch *database.Batch, principal *url.URL, body *protocol.CreateTokenAccount) error {
 	// If the issuer is local, check if it exists
 	local := principal.LocalTo(body.TokenUrl)
 	if local {

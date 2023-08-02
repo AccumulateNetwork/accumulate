@@ -184,7 +184,7 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 	// Set up the simulator and harness
 	logger := acctesting.NewTestLogger(t)
 	sim, err := simulator.New(
-		logger,
+		simulator.WithLogger(logger),
 		simulator.MemoryDatabase,
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),

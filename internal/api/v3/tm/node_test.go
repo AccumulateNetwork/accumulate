@@ -28,7 +28,7 @@ func TestConsensusStatus(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
 	net := simulator.NewSimpleNetwork(t.Name(), 1, 1)
 	sim, err := simulator.New(
-		logger,
+		simulator.WithLogger(logger),
 		simulator.MemoryDatabase,
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
