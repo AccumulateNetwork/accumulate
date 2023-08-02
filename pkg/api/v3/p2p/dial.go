@@ -236,13 +236,27 @@ func (d dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer 
 		}
 
 		// Create a pipe and handle it
-		p, q := message.DuplexPipe(ctx)
-		go s.handler(p)
-		return q, nil
+		return handleLocally(ctx, s), nil
 	}
 
 	// Open a new stream
 	return openStreamFor(ctx, d.host, peer, sa, true)
+}
+
+func handleLocally(ctx context.Context, service *serviceHandler) message.Stream {
+	p, q := message.DuplexPipe(ctx)
+	go func() {
+		// Panic protection
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
+			}
+		}()
+
+		defer p.Close()
+		service.handler(p)
+	}()
+	return q
 }
 
 func openStreamFor(ctx context.Context, host dialerHost, peer peer.ID, sa *api.ServiceAddress, close bool) (*stream, error) {
@@ -279,19 +293,7 @@ func (d dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, ne
 	// Check if we participate in this partition
 	service, ok := d.host.getOwnService(netName, sa)
 	if ok {
-		p, q := message.DuplexPipe(ctx)
-		go func() {
-			// Panic protection
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
-				}
-			}()
-
-			defer p.Close()
-			service.handler(p)
-		}()
-		return q, nil
+		return handleLocally(ctx, service), nil
 	}
 
 	// Construct an address for the service
@@ -415,9 +417,7 @@ func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (messag
 	}
 
 	// Create a pipe and handle it
-	p, q := message.DuplexPipe(ctx)
-	go s.handler(p)
-	return q, nil
+	return handleLocally(ctx, s), nil
 }
 
 func (s *stream) Read() (message.Message, error) {
