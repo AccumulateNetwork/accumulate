@@ -11,10 +11,11 @@ import (
 	"sync/atomic"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -191,6 +192,36 @@ func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	return v, nil
+}
+
+func keyIsAccountUrl(key *record.Key) bool {
+	if key.Len() != 2 {
+		return false
+	}
+
+	_, ok0 := key.Get(0).(record.KeyHash)
+	s, ok1 := key.Get(1).(string)
+	return ok0 && ok1 && s == "Url"
+}
+
+func (b *Batch) Resolve(key *record.Key) (database.Record, *record.Key, error) {
+	// Calling getAccountUrl leads to calling Resolve with `<key hash>.Url`.
+	// Since the default resolver does not know how to handle that, detect that
+	// pattern and handle it here.
+
+	if !keyIsAccountUrl(key) {
+		return b.baseResolve(key)
+	}
+
+	v := values.NewValue(
+		b.logger.L,
+		b.store,
+		key,
+		fmt.Sprintf("account %v URL", key),
+		false,
+		values.Wrapped(values.UrlWrapper),
+	)
+	return v, key.SliceI(2), nil
 }
 
 // UpdatedAccounts returns every account updated in this database batch.
