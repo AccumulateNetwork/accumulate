@@ -117,6 +117,13 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	txn.Header.Principal = dst.JoinPath(protocol.AnchorPool)
 	txn.Body = msg.GetTransaction().Body
 
+	// If this is an anchor from the DN to the DN, we need to clear
+	// MakeMajorBlock just like begin block does
+	dirAnchor, ok := txn.Body.(*protocol.DirectoryAnchor)
+	if ok && strings.EqualFold(s.partitionID, protocol.Directory) {
+		dirAnchor.MakeMajorBlock = 0
+	}
+
 	var signatures []protocol.Signature
 	r := new(api.MessageRecord[messaging.Message])
 	if globals.ExecutorVersion.V2() {
