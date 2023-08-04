@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2 RC1
+## 1.2
 
 - Signature processing overhaul
 - Rejections and abstentions
