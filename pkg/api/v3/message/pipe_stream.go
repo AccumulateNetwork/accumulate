@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -31,9 +31,17 @@ type pipedir[T any] struct {
 }
 
 // newPipeDir constructs a new pipedir.
-func newPipeDir[T any](ch T, ctx context.Context) pipedir[T] {
-	ctx, cancel := context.WithCancel(ctx)
+func newPipeDir[T any](ch T, ctx context.Context, cancel context.CancelFunc) pipedir[T] {
 	return pipedir[T]{ch, ctx, context.Background(), cancel, func() {}}
+}
+
+// newPipeDirPair constructs a new pipedir pair.
+func newPipeDirPair[T any](ctx context.Context) (pipedir[chan<- T], pipedir[<-chan T]) {
+	ch := make(chan T)
+	ctx, cancel := context.WithCancel(ctx)
+	rd := newPipeDir[<-chan T](ch, ctx, cancel)
+	wr := newPipeDir[chan<- T](ch, ctx, cancel)
+	return wr, rd
 }
 
 // Pipe allocates a simplex [Message] [Stream] backed by an unbuffered channel.
@@ -53,11 +61,9 @@ func PipeOf[T any, PT valuePtr[T]](ctx context.Context) *pipe[PT] {
 
 // newSimplex allocates a simplex pipe.
 func newSimplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error)) *pipe[T] {
-	ch := make(chan []byte)
 	p := new(pipe[T])
 	p.unmarshal = unmarshal
-	p.rd = newPipeDir[<-chan []byte](ch, ctx)
-	p.wr = newPipeDir[chan<- []byte](ch, ctx)
+	p.wr, p.rd = newPipeDirPair[[]byte](ctx)
 	return p
 }
 
@@ -81,17 +87,8 @@ func DuplexPipeOf[T any, PT valuePtr[T]](ctx context.Context) (p, q *pipe[PT]) {
 func newDuplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error)) (p, q *pipe[T]) {
 	p, q = new(pipe[T]), new(pipe[T])
 	p.unmarshal, q.unmarshal = unmarshal, unmarshal
-
-	// p → q
-	pq := make(chan []byte)
-	p.wr = newPipeDir[chan<- []byte](pq, ctx)
-	q.rd = newPipeDir[<-chan []byte](pq, ctx)
-
-	// p → q
-	qp := make(chan []byte)
-	q.wr = newPipeDir[chan<- []byte](qp, ctx)
-	p.rd = newPipeDir[<-chan []byte](qp, ctx)
-
+	p.wr, q.rd = newPipeDirPair[[]byte](ctx) // p → q
+	q.wr, p.rd = newPipeDirPair[[]byte](ctx) // q → p
 	return p, q
 }
 
