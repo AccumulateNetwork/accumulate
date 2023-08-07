@@ -9,7 +9,6 @@ package message
 import (
 	"context"
 	"io"
-	"runtime/debug"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -41,13 +40,6 @@ func NewHandler(services ...Service) (*Handler, error) {
 
 // Handle handles a message stream. Handle is safe to call from a goroutine.
 func (h *Handler) Handle(s Stream) {
-	// Panic protection
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
-		}
-	}()
-
 	// Gotta have that context 👌
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
