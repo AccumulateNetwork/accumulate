@@ -368,7 +368,7 @@
       "cwd": "${workspaceFolder}",
       "args": [
         "heal",
-        "https://kermit.accumulatenetwork.io/v3",
+        "https://mainnet.accumulatenetwork.io/v3",
       ]
     },
     {
