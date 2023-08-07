@@ -6,7 +6,7 @@
   "configurations": [
     // Simulate
     {
-      "name": "Simulate (v2, in-memory)",
+      "name": "Simulate (in-memory)",
       "presentation": { "group": "10-Simulate" },
       "type": "go",
       "request": "launch",
@@ -14,12 +14,14 @@
       "program": "${workspaceFolder}/tools/cmd/simulator",
       "buildFlags": "-tags=testnet",
       "args": [
-        "--globals={\"executorVersion\": \"v1-doubleHashEntries\"}",
+        // "--globals={\"executorVersion\": \"v1-doubleHashEntries\"}",
         "--step=10ms",
+        "--port=26656",
+        "--log=error;sim=info;executor=debug",
       ],
     },
     {
-      "name": "Simulate (v2, badger)",
+      "name": "Simulate (badger)",
       "presentation": { "group": "10-Simulate" },
       "type": "go",
       "request": "launch",
@@ -28,15 +30,6 @@
       "args": [
         "--database=${workspaceFolder}/.nodes/sim"
       ],
-    },
-    {
-      "name": "Simulate (v1)",
-      "presentation": { "group": "10-Simulate" },
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/cmd/accumulated",
-      "args": ["run", "sim"]
     },
 
     // Run
