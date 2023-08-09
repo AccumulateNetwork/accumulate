@@ -39,14 +39,14 @@ int read{{.Interface}}(Unmarshaler *m, {{.Interface}} *v) {
         b = new{{.Name}}(m, v);
         CHECK_ERROR_CODE(b)
 
-		b = read{{.Type.Name}}(m, v->_{{.Name}});
-		CHECK_ERROR_CODE(b)
+        b = read{{.Type.Name}}(m, v->_{{.Name}});
+        CHECK_ERROR_CODE(b)
 
-		n += b;
-		break;
+        n += b;
+        break;
 	{{- end}}
 	default:
-	    n = ErrorNotImplemented;
+            n = ErrorNotImplemented;
     }
     return n;
 }
