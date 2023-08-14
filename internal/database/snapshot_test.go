@@ -181,6 +181,9 @@ func TestCollectAndRestore(t *testing.T) {
 		assert.NotEmpty(t, blocks)
 	})
 
+	// Give it time to settle
+	sim.StepN(50)
+
 	// Collect snapshots
 	snap := map[string][]byte{}
 	for _, p := range sim.Partitions() {
