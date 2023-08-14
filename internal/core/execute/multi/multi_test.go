@@ -36,9 +36,8 @@ func TestVersionSwitch(t *testing.T) {
 		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1), // TODO Change to 3 after fixing anchor healing
 		simulator.GenesisWith(GenesisTime, g),
+		simulator.SkipProposalCheck, // FIXME should not be necessary
 	)
-
-	sim.S.SkipProposalCheck(true) // FIXME should not be necessary
 
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
