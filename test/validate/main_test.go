@@ -58,7 +58,7 @@ func TestValidate(t *testing.T) {
 func TestValidateAPI(t *testing.T) {
 	acctesting.SkipCI(t, "Not sufficiently reliable yet")
 
-	net := simulator.LocalNetwork(t.Name(), 3, 1, net.ParseIP("127.0.1.1"), 12345)
+	net := simulator.NewLocalNetwork(t.Name(), 3, 1, net.ParseIP("127.0.1.1"), 12345)
 
 	// Set up the simulator
 	s := new(ValidationTestSuite)
@@ -176,7 +176,7 @@ func (s *ValidationTestSuite) SetupSuite() {
 		return
 	}
 
-	s.sim, s.faucetSvc = setupSim(s.T(), simulator.SimpleNetwork(s.T().Name(), 3, 1))
+	s.sim, s.faucetSvc = setupSim(s.T(), simulator.NewSimpleNetwork(s.T().Name(), 3, 1))
 	s.Harness = New(s.T(), s.sim.Services(), s.sim)
 }
 
@@ -186,8 +186,12 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 	sim, err := simulator.New(
 		logger,
 		simulator.MemoryDatabase,
-		net,
+		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
+
+		// FIXME should not be necessary, but it is for the block hook that
+		// drops an anchor
+		simulator.SkipProposalCheck,
 	)
 	require.NoError(t, err)
 
@@ -637,8 +641,6 @@ func (s *ValidationTestSuite) TestMain() {
 
 	var dropped *url.TxID
 	if s.sim != nil {
-		s.sim.SkipProposalCheck(true) // FIXME should not be necessary
-
 		s.TB.Log("Drop the next anchor")
 		s.sim.SetBlockHook(Directory, func(_ execute.BlockParams, envelopes []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
 			// Drop all block anchors, once

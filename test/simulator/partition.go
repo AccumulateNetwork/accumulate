@@ -49,14 +49,14 @@ func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
 	return p
 }
 
-func newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
+func (o *Options) newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 	p := newPartition(s, protocol.PartitionInfo{
 		ID:   init.Id,
 		Type: protocol.PartitionTypeBlockValidator,
 	})
 
 	for _, node := range init.Nodes {
-		n, err := newNode(s, p, len(p.nodes), node)
+		n, err := o.newNode(s, p, len(p.nodes), node)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -65,15 +65,15 @@ func newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 	return p, nil
 }
 
-func newDn(s *Simulator, init *accumulated.NetworkInit) (*Partition, error) {
+func (o *Options) newDn(s *Simulator) (*Partition, error) {
 	p := newPartition(s, protocol.PartitionInfo{
 		ID:   protocol.Directory,
 		Type: protocol.PartitionTypeDirectory,
 	})
 
-	for _, init := range init.Bvns {
+	for _, init := range o.network.Bvns {
 		for _, init := range init.Nodes {
-			n, err := newNode(s, p, len(p.nodes), init)
+			n, err := o.newNode(s, p, len(p.nodes), init)
 			if err != nil {
 				return nil, errors.UnknownError.Wrap(err)
 			}
@@ -83,14 +83,14 @@ func newDn(s *Simulator, init *accumulated.NetworkInit) (*Partition, error) {
 	return p, nil
 }
 
-func newBsn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
+func (o *Options) newBsn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 	p := newPartition(s, protocol.PartitionInfo{
 		ID:   init.Id,
 		Type: protocol.PartitionTypeBlockSummary,
 	})
 
 	for _, node := range init.Nodes {
-		n, err := newNode(s, p, len(p.nodes), node)
+		n, err := o.newNode(s, p, len(p.nodes), node)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -99,11 +99,11 @@ func newBsn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 	return p, nil
 }
 
-func (p *Partition) View(fn func(*database.Batch) error) error { return p.nodes[0].View(fn) }
+func (p *Partition) View(fn func(*database.Batch) error) error { return p.nodes[0].database.View(fn) }
 
 func (p *Partition) Update(fn func(*database.Batch) error) error {
 	for i, n := range p.nodes {
-		err := n.Update(fn)
+		err := n.database.Update(fn)
 		if err != nil {
 			if i > 0 {
 				panic("update succeeded on one node and failed on another")
@@ -118,17 +118,17 @@ func (p *Partition) Update(fn func(*database.Batch) error) error {
 // more than one node.
 func (p *Partition) Begin(writable bool) *database.Batch {
 	if !writable {
-		return p.nodes[0].Begin(false)
+		return p.nodes[0].database.Begin(false)
 	}
 	if len(p.nodes) > 1 {
 		panic("cannot create a writeable batch when running with multiple nodes")
 	}
-	return p.nodes[0].Begin(true)
+	return p.nodes[0].database.Begin(true)
 }
 
 func (p *Partition) SetObserver(observer database.Observer) {
 	for _, n := range p.nodes {
-		n.SetObserver(observer)
+		n.database.SetObserver(observer)
 	}
 }
 

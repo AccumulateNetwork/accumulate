@@ -52,19 +52,18 @@ func TestAPIv2Consistency(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, json.NewDecoder(r).Decode(&testData))
 
-	// Start the simulator
+	// Start the simulator (do not specify a snapshot option)
 	sim, err := simulator.New(
 		acctesting.NewTestLogger(t),
-		func(partition string, node int, logger log.Logger) keyvalue.Beginner {
+		simulator.WithDatabase(func(partition string, node int, logger log.Logger) keyvalue.Beginner {
 			mem := memory.New(nil)
 			require.NoError(t, json.Unmarshal(testData.State[partition], mem)) //nolint:staticcheck // FIXME
 			return mem
-		},
-		testData.Network,
-		simulator.EmptySnapshots,
+		}),
+		simulator.WithNetwork(testData.Network),
+		simulator.Deterministic,
 	)
 	require.NoError(t, err)
-	sim.Deterministic = true
 
 	// Validate RPC calls
 	for i, c := range testData.Cases {

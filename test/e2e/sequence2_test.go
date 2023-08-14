@@ -37,9 +37,8 @@ func TestMissingSynthTxn(t *testing.T) {
 			simulator.MemoryDatabase,
 			simulator.SimpleNetwork(t.Name(), 3, 3),
 			simulator.GenesisWith(GenesisTime, globals),
+			simulator.SkipProposalCheck, // FIXME should not be necessary
 		)
-
-		sim.S.SkipProposalCheck(true) // FIXME should not be necessary
 
 		alice := acctesting.GenerateKey("Alice")
 		aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
