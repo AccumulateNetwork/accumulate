@@ -72,16 +72,16 @@ func main() { _ = cmd.Execute() }
 func run(*cobra.Command, []string) {
 	jsonrpc2.DebugMethodFunc = true
 
-	var db simulator.OpenDatabaseFunc
+	var opts []simulator.Option
 	if flag.Database == "memory" {
-		db = simulator.MemoryDatabase
+		opts = append(opts, simulator.MemoryDatabase)
 	} else {
-		db = simulator.BadgerDatabaseFromDirectory(flag.Database, func(err error) { checkf(err, "--database") })
+		opts = append(opts, simulator.BadgerDatabaseFromDirectory(flag.Database, func(err error) { checkf(err, "--database") }))
 	}
 
 	var net *accumulated.NetworkInit
 	if flag.Network == "simple" {
-		net = simulator.SimpleNetwork("Simulator", flag.BvnCount, flag.ValCount)
+		net = simulator.NewSimpleNetwork("Simulator", flag.BvnCount, flag.ValCount)
 		for i, bvn := range net.Bvns {
 			for j, node := range bvn.Nodes {
 				node.AdvertizeAddress = fmt.Sprintf("127.0.1.%d", 1+i*flag.ValCount+j)
@@ -102,11 +102,10 @@ func run(*cobra.Command, []string) {
 		checkf(json.Unmarshal([]byte(flag.Globals), values), "--globals")
 	}
 
-	var snapshot simulator.SnapshotFunc
 	if flag.Snapshot == "" {
-		snapshot = simulator.GenesisWith(time.Now(), values)
+		opts = append(opts, simulator.GenesisWith(time.Now(), values))
 	} else {
-		snapshot = simulator.SnapshotFromDirectory(flag.Snapshot)
+		opts = append(opts, simulator.SnapshotFromDirectory(flag.Snapshot))
 	}
 
 	logw, err := logging.NewConsoleWriter("plain")
@@ -116,7 +115,8 @@ func run(*cobra.Command, []string) {
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	check(err)
 
-	sim, err := simulator.New(logger, db, net, snapshot)
+	opts = append(opts, simulator.WithNetwork(net))
+	sim, err := simulator.New(logger, opts...)
 	check(err)
 
 	if flag.Step == "on-wait" {

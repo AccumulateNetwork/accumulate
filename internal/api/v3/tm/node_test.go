@@ -26,11 +26,11 @@ import (
 
 func TestConsensusStatus(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
-	net := simulator.SimpleNetwork(t.Name(), 1, 1)
+	net := simulator.NewSimpleNetwork(t.Name(), 1, 1)
 	sim, err := simulator.New(
 		logger,
 		simulator.MemoryDatabase,
-		net,
+		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
 	)
 	require.NoError(t, err)
