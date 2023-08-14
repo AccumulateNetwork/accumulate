@@ -9,7 +9,6 @@ package simulator
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -25,8 +24,6 @@ type Router struct {
 	tree       *routing.RouteTree
 	logger     logging.OptionalLogger
 	partitions map[string]*Partition
-	lastUsed   map[string]int
-	lastUsedMu *sync.Mutex
 	overrides  map[[32]byte]string
 }
 
@@ -44,8 +41,6 @@ func newRouter(logger log.Logger, partitions map[string]*Partition) *Router {
 	r := new(Router)
 	r.logger.Set(logger, "module", "router")
 	r.partitions = partitions
-	r.lastUsed = map[string]int{}
-	r.lastUsedMu = new(sync.Mutex)
 	r.overrides = map[[32]byte]string{}
 	return r
 }
@@ -86,22 +81,6 @@ func (r *Router) RouteAccount(account *url.URL) (string, error) {
 
 func (r *Router) Route(envs ...*messaging.Envelope) (string, error) {
 	return routing.RouteEnvelopes(r.RouteAccount, envs...)
-}
-
-func (r *Router) RequestAPIv2(ctx context.Context, partition, method string, params, result interface{}) error {
-	p, ok := r.partitions[partition]
-	if !ok {
-		return errors.BadRequest.WithFormat("%s is not a partition", partition)
-	}
-
-	// Round robin
-	r.lastUsedMu.Lock()
-	last := r.lastUsed[partition]
-	r.lastUsed[partition] = (last + 1) % len(p.nodes)
-	c := p.nodes[last].clientV2
-	r.lastUsedMu.Unlock()
-
-	return c.RequestAPIv2(ctx, method, params, result)
 }
 
 func (r *Router) Submit(ctx context.Context, partition string, envelope *messaging.Envelope, pretend, async bool) (*ResponseSubmit, error) {

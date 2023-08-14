@@ -32,10 +32,10 @@ func init() {
 
 func TestSequencer(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
-	net := simulator.SimpleNetwork(t.Name(), 2, 1)
+	net := simulator.NewSimpleNetwork(t.Name(), 2, 1)
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
-		net,
+		simulator.WithNetwork(net),
 		simulator.GenesisWith(GenesisTime, new(core.GlobalValues)), // Use v1
 	)
 
