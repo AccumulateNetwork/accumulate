@@ -31,20 +31,21 @@ import (
 )
 
 // Services returns the simulator's API v3 implementation.
-func (s *Simulator) Services() *simService { return (*simService)(s) }
+func (s *Simulator) Services() *message.Client { return s.services.Client }
 
 func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
+	svc := n.simulator.Services()
 	return apiv2.NewJrpc(apiv2.Options{
 		Logger:        n.logger,
 		TxMaxWaitTime: time.Hour,
 		Describe:      &n.describe,
-		LocalV3:       (*nodeService)(n),
-		Querier:       (*simService)(n.simulator),
-		Submitter:     (*simService)(n.simulator),
-		Network:       (*simService)(n.simulator),
-		Faucet:        (*simService)(n.simulator),
-		Validator:     (*simService)(n.simulator),
-		Sequencer:     (*simService)(n.simulator),
+		LocalV3:       svc.ForPeer(n.peerID),
+		Querier:       svc,
+		Submitter:     svc,
+		Network:       svc,
+		Faucet:        svc,
+		Validator:     svc,
+		Sequencer:     svc.Private(),
 	})
 }
 
@@ -122,7 +123,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 	var nodes []*p2p.Node
 	for _, part := range s.partitions {
 		for _, node := range part.nodes {
-			err := node.listenAndServeHTTP(ctx, opts, s.Services())
+			err := node.listenAndServeHTTP(ctx, opts)
 			if err != nil {
 				return err
 			}
@@ -137,7 +138,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 	return nil
 }
 
-func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, services *simService) error {
+func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error {
 	if !opts.ListenHTTPv2 &&
 		!opts.ListenHTTPv3 &&
 		!opts.ListenWSv3 {
@@ -156,14 +157,15 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	}
 
 	var v3 http.Handler
+	network := n.simulator.services
 	if opts.ListenHTTPv3 {
 		jrpc, err := jsonrpc.NewHandler(
-			jsonrpc.ConsensusService{ConsensusService: (*nodeService)(n)},
-			jsonrpc.NetworkService{NetworkService: services},
-			jsonrpc.MetricsService{MetricsService: services},
-			jsonrpc.Querier{Querier: services},
-			jsonrpc.Submitter{Submitter: services},
-			jsonrpc.Validator{Validator: services},
+			jsonrpc.ConsensusService{ConsensusService: n},
+			jsonrpc.NetworkService{NetworkService: network},
+			jsonrpc.MetricsService{MetricsService: network},
+			jsonrpc.Querier{Querier: network},
+			jsonrpc.Submitter{Submitter: network},
+			jsonrpc.Validator{Validator: network},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize API v3: %w", err)
@@ -173,13 +175,13 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 
 	if opts.ListenWSv3 {
 		ws, err := websocket.NewHandler(
-			message.ConsensusService{ConsensusService: (*nodeService)(n)},
-			message.NetworkService{NetworkService: services},
-			message.MetricsService{MetricsService: services},
-			message.Querier{Querier: services},
-			message.Submitter{Submitter: services},
-			message.Validator{Validator: services},
-			message.EventService{EventService: services},
+			message.ConsensusService{ConsensusService: n},
+			message.NetworkService{NetworkService: network},
+			message.MetricsService{MetricsService: network},
+			message.Querier{Querier: network},
+			message.Submitter{Submitter: network},
+			message.Validator{Validator: network},
+			message.EventService{EventService: network},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize websocket API: %w", err)
@@ -250,20 +252,6 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	addr1 := n.init.Listen().Scheme("tcp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
 	addr2 := n.init.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
 
-	h, err := message.NewHandler(
-		&message.ConsensusService{ConsensusService: (*nodeService)(n)},
-		&message.MetricsService{MetricsService: (*nodeService)(n)},
-		&message.NetworkService{NetworkService: (*nodeService)(n)},
-		&message.Querier{Querier: (*nodeService)(n)},
-		&message.Submitter{Submitter: (*nodeService)(n)},
-		&message.Validator{Validator: (*nodeService)(n)},
-		&message.EventService{EventService: (*nodeService)(n)},
-		&message.Sequencer{Sequencer: n.seqSvc},
-	)
-	if err != nil {
-		return err
-	}
-
 	p2p, err := p2p.New(p2p.Options{
 		Network:       n.simulator.opts.network.Id,
 		Listen:        []multiaddr.Multiaddr{addr1, addr2},
@@ -286,14 +274,14 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	}
 	*nodes = append(*nodes, p2p)
 
-	p2p.RegisterService(api.ServiceTypeConsensus.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeMetrics.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeNetwork.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeQuery.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeSubmit.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeValidate.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeEvent.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(private.ServiceTypeSequencer.AddressFor(n.partition.ID), h.Handle)
+	p2p.RegisterService(api.ServiceTypeConsensus.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeMetrics.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeNetwork.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeQuery.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeSubmit.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeValidate.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeEvent.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(private.ServiceTypeSequencer.AddressFor(n.partition.ID), n.services.Handle)
 
 	n.logger.Info("Node P2P up", "addresses", p2p.Addresses())
 	return nil
