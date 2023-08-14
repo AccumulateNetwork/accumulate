@@ -26,6 +26,7 @@ var flags struct {
 	SubPackage             string
 	Out                    string
 	Language               string
+	LanguageUnion          string
 	Reference              []string
 	FilePerType            bool
 	ExpandEmbedded         bool
@@ -43,6 +44,7 @@ func main() {
 	}
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
+	cmd.Flags().StringVarP(&flags.LanguageUnion, "language-union", "u", "go-union", "Output language or template file for a union")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Subpackage name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
@@ -110,9 +112,10 @@ func getPackagePath(dir string) string {
 
 func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
-	case "java", "Java":
+	case "java", "Java", "c-source", "c-header":
 		flags.FilePerType = true
 		flags.ExpandEmbedded = true
+		flags.LanguageUnion = flags.Language + "-union"
 	}
 
 	types := read(args, true)
@@ -148,6 +151,7 @@ func run(_ *cobra.Command, args []string) {
 			err := fileTmpl.Execute(w, typ)
 			check(err)
 			filename := SafeClassName(w.String())
+			fmt.Printf("types filename: %s\n", filename)
 
 			w.Reset()
 			err = Templates.Execute(w, flags.Language, &SingleTypeFile{flags.Package, typ})
@@ -160,12 +164,16 @@ func run(_ *cobra.Command, args []string) {
 		for _, typ := range ttypes.Unions {
 			w.Reset()
 			w.WriteString(flags.Header)
-			err := fileTmpl.Execute(w, typ)
+			typ2 := *typ
+			typ2.Type = typ.Type + "_union"
+			typ2.Name = typ.Name + "_union"
+			err := fileTmpl.Execute(w, typ2)
 			check(err)
-			filename := w.String()
-
+			filename := SafeClassName(w.String())
 			w.Reset()
-			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, typ})
+
+			fmt.Printf("union filename: %s\n", filename)
+			err = Templates.Execute(w, flags.LanguageUnion, &SingleUnionFile{flags.Package, typ})
 			if errors.Is(err, typegen.ErrSkip) {
 				continue
 			}
