@@ -8,10 +8,8 @@ package simulator
 
 import (
 	"fmt"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
@@ -24,12 +22,10 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 type Node struct {
@@ -39,22 +35,20 @@ type Node struct {
 	partition  *Partition
 	logger     logging.OptionalLogger
 	eventBus   *events.Bus
-	database   *database.Database
 	nodeKey    []byte
 	privValKey []byte
 	describe   config.Describe
 
 	consensus *consensus.Node
 
-	apiV2    *apiv2.JrpcMethods
-	clientV2 *client.Client
+	database *database.Database
 	querySvc api.Querier
 	eventSvc api.EventService
 	netSvc   api.NetworkService
 	seqSvc   private.Sequencer
 }
 
-func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (*Node, error) {
+func (o *Options) newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (*Node, error) {
 	n := new(Node)
 	n.id = node
 	n.init = init
@@ -84,9 +78,9 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	switch n.partition.Type {
 	case protocol.PartitionTypeDirectory,
 		protocol.PartitionTypeBlockValidator:
-		err = n.initValidator()
+		err = n.initValidator(o)
 	case protocol.PartitionTypeBlockSummary:
-		err = n.initSummary()
+		err = n.initSummary(o)
 	default:
 		err = errors.BadRequest.WithFormat("unknown partition type %v", n.partition.Type)
 	}
@@ -95,16 +89,16 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	}
 
 	// Collect and submit block summaries
-	if s.init.Bsn != nil && n.partition.Type != protocol.PartitionTypeBlockSummary {
+	if s.opts.network.Bsn != nil && n.partition.Type != protocol.PartitionTypeBlockSummary {
 		err := n.initCollector()
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
-	if s.Recordings != nil {
+	if s.opts.recordings != nil {
 		// Set up the recorder
-		f, err := s.Recordings(p.ID, node)
+		f, err := s.opts.recordings(p.ID, node)
 		if err != nil {
 			return nil, errors.InternalError.WithFormat("open record file: %w", err)
 		}
@@ -126,14 +120,14 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	return n, nil
 }
 
-func (n *Node) initValidator() error {
-	store := n.simulator.database(n.partition.ID, n.id, n.logger)
+func (n *Node) initValidator(o *Options) error {
+	store := o.database(n.partition.ID, n.id, n.logger)
 	n.database = database.New(store, n.logger)
 
 	// Create a Querier service
 	n.querySvc = apiimpl.NewQuerier(apiimpl.QuerierParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
-		Database:  n,
+		Database:  n.database,
 		Partition: n.partition.ID,
 	})
 
@@ -156,7 +150,7 @@ func (n *Node) initValidator() error {
 	// Create a Sequencer service
 	n.seqSvc = apiimpl.NewSequencer(apiimpl.SequencerParams{
 		Logger:       n.logger.With("module", "acc-rpc"),
-		Database:     n,
+		Database:     n.database,
 		EventBus:     n.eventBus,
 		Partition:    n.partition.ID,
 		ValidatorKey: n.privValKey,
@@ -173,7 +167,7 @@ func (n *Node) initValidator() error {
 	// Set up the executor options
 	execOpts := block.ExecutorOptions{
 		Logger:        n.logger,
-		Database:      n,
+		Database:      n.database,
 		Key:           n.init.PrivValKey,
 		Describe:      n.describe,
 		Router:        n.simulator.router,
@@ -197,35 +191,18 @@ func (n *Node) initValidator() error {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(n.eventBus)
 	}
 
-	// Set up the API
-	var err error
-	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{
-		Logger:        n.logger,
-		TxMaxWaitTime: time.Hour,
-		Describe:      &n.describe,
-		LocalV3:       (*nodeService)(n),
-		Querier:       (*simService)(n.simulator),
-		Submitter:     (*simService)(n.simulator),
-		Network:       (*simService)(n.simulator),
-		Faucet:        (*simService)(n.simulator),
-		Validator:     (*simService)(n.simulator),
-		Sequencer:     (*simService)(n.simulator),
-	})
+	// Create an executor
+	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-
-	// Create an API client
-	n.clientV2 = testing.DirectJrpcClient(n.apiV2)
-
-	// Create the executor
-	exec, err := execute.NewExecutor(execOpts)
+	app, err := o.application(n, exec)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Create the consensus node
-	n.consensus = consensus.NewNode(n.privValKey, &consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, n.partition.gossip, n.logger)
+	n.consensus = n.newConsensusNode(o, app)
 	return nil
 }
 
@@ -233,7 +210,7 @@ func (n *Node) initCollector() error {
 	// Collect block summaries
 	_, err := bsn.StartCollector(bsn.CollectorOptions{
 		Partition: n.partition.ID,
-		Database:  n,
+		Database:  n.database,
 		Events:    n.eventBus,
 	})
 	if err != nil {
@@ -255,7 +232,7 @@ func (n *Node) initCollector() error {
 		msg.Anchor = e.Summary
 		msg.Signature = env.Signatures[0].(protocol.KeySignature)
 
-		st, err := n.simulator.SubmitTo(n.simulator.init.Bsn.Id, &messaging.Envelope{Messages: []messaging.Message{msg}})
+		st, err := n.simulator.SubmitTo(n.simulator.opts.network.Bsn.Id, &messaging.Envelope{Messages: []messaging.Message{msg}})
 		if err != nil {
 			n.logger.Error("Failed to submit block summary envelope", "error", err)
 			return
@@ -270,22 +247,30 @@ func (n *Node) initCollector() error {
 	return nil
 }
 
-func (n *Node) initSummary() error {
+func (n *Node) initSummary(o *Options) error {
 	exec, err := bsn.NewExecutor(bsn.ExecutorOptions{
 		PartitionID: n.partition.ID,
 		Logger:      n.logger,
-		Store:       n.simulator.database(n.partition.ID, n.id, n.logger),
+		Store:       o.database(n.partition.ID, n.id, n.logger),
 		EventBus:    n.eventBus,
 	})
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	n.consensus = consensus.NewNode(n.privValKey, &consensus.ExecutorApp{Executor: exec, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, n.partition.gossip, n.logger)
+	app, err := o.application(n, exec)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	n.consensus = n.newConsensusNode(o, app)
 	return nil
 }
 
-func (n *Node) Begin(writable bool) *database.Batch         { return n.database.Begin(writable) }
-func (n *Node) Update(fn func(*database.Batch) error) error { return n.database.Update(fn) }
-func (n *Node) View(fn func(*database.Batch) error) error   { return n.database.View(fn) }
-func (n *Node) SetObserver(observer database.Observer)      { n.database.SetObserver(observer) }
+func (n *Node) newConsensusNode(o *Options, app consensus.App) *consensus.Node {
+	cn := consensus.NewNode(n.privValKey, app, n.partition.gossip, n.logger)
+	cn.SkipProposalCheck = o.skipProposalCheck
+	cn.IgnoreDeliverResults = o.ignoreDeliverResults
+	cn.IgnoreCommitResults = o.ignoreCommitResults
+	return cn
+}

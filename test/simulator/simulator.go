@@ -7,83 +7,69 @@
 package simulator
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
-	"net"
-	"os"
-	"path/filepath"
 	"runtime"
-	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
-	tmtypes "github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"golang.org/x/sync/errgroup"
 )
 
 type Simulator struct {
 	logger     logging.OptionalLogger
-	init       *accumulated.NetworkInit
-	database   OpenDatabaseFunc
 	partitions map[string]*Partition
 	router     *Router
 	netcfg     *config.Network
+	opts       *Options
 
 	blockErrGroup *errgroup.Group
-
-	// Deterministic attempts to run the simulator in a fully deterministic,
-	// repeatable way.
-	Deterministic bool
-
-	// DropDispatchedMessages drops all internally dispatched messages.
-	DropDispatchedMessages bool
-
-	// Recordings is a function that returns files to write node recordings to.
-	// TODO Make this an option once #3314 is merged.
-	Recordings RecordingFunc
 }
 
-type OpenDatabaseFunc func(partition string, node int, logger log.Logger) keyvalue.Beginner
-type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
-type RecordingFunc func(partition string, node int) (io.WriteSeeker, error)
+func New(logger log.Logger, opts ...Option) (*Simulator, error) {
+	o := &Options{
+		network: NewSimpleNetwork("Sim", 3, 3),
+		database: func(_ string, _ int, logger log.Logger) keyvalue.Beginner {
+			return memory.New(nil)
+		},
+		snapshot: func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
+			return new(ioutil2.Buffer), nil
+		},
+		application: func(n *Node, e execute.Executor) (consensus.App, error) {
+			return &consensus.ExecutorApp{Executor: e, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, nil
+		},
+	}
+	for _, opt := range opts {
+		err := opt(o)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
 
-func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
-	return New2(logger, database, network, snapshot, nil)
-}
-
-// New2 is a hack to avoid changing everything - this needs to be handled with
-// options.
-func New2(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc, recordings RecordingFunc) (*Simulator, error) {
 	s := new(Simulator)
+	s.opts = o
 	s.logger.Set(logger, "module", "sim")
-	s.init = network
-	s.database = database
-	s.partitions = make(map[string]*Partition, len(network.Bvns)+1)
+	s.partitions = make(map[string]*Partition, len(o.network.Bvns)+1)
 	s.router = newRouter(logger, s.partitions)
-	s.Recordings = recordings
 
 	s.netcfg = new(config.Network)
-	s.netcfg.Id = network.Id
-	s.netcfg.Partitions = make([]config.Partition, len(network.Bvns)+1)
+	s.netcfg.Id = o.network.Id
+	s.netcfg.Partitions = make([]config.Partition, len(o.network.Bvns)+1)
 	s.netcfg.Partitions[0].Id = protocol.Directory
 	s.netcfg.Partitions[0].Type = protocol.PartitionTypeDirectory
-	for i, bvn := range network.Bvns {
+	for i, bvn := range o.network.Bvns {
 		s.netcfg.Partitions[i+1].Id = bvn.Id
 		s.netcfg.Partitions[i+1].Type = protocol.PartitionTypeBlockValidator
 		s.netcfg.Partitions[i+1].Nodes = make([]config.Node, len(bvn.Nodes))
@@ -102,35 +88,35 @@ func New2(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Net
 	}
 
 	var err error
-	s.partitions[protocol.Directory], err = newDn(s, network)
+	s.partitions[protocol.Directory], err = o.newDn(s)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	for _, bvn := range network.Bvns {
-		s.partitions[bvn.Id], err = newBvn(s, bvn)
+	for _, bvn := range o.network.Bvns {
+		s.partitions[bvn.Id], err = o.newBvn(s, bvn)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
-	if network.Bsn != nil {
-		s.partitions[network.Bsn.Id], err = newBsn(s, network.Bsn)
+	if o.network.Bsn != nil {
+		s.partitions[o.network.Bsn.Id], err = o.newBsn(s, o.network.Bsn)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
 	ids := []string{protocol.Directory}
-	for _, b := range network.Bvns {
+	for _, b := range o.network.Bvns {
 		ids = append(ids, b.Id)
 	}
-	if network.Bsn != nil {
-		ids = append(ids, network.Bsn.Id)
+	if o.network.Bsn != nil {
+		ids = append(ids, o.network.Bsn.Id)
 	}
 
 	for _, id := range ids {
-		snapshot, err := snapshot(id, s.init, s.logger)
+		snapshot, err := o.snapshot(id, s.opts.network, s.logger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 		}
@@ -143,142 +129,8 @@ func New2(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Net
 	return s, nil
 }
 
-func MemoryDatabase(string, int, log.Logger) keyvalue.Beginner {
-	return memory.New(nil)
-}
-
-func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc {
-	return func(partition string, node int, _ log.Logger) keyvalue.Beginner {
-		err := os.MkdirAll(dir, 0700)
-		if err != nil {
-			onErr(err)
-			panic(err)
-		}
-
-		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)))
-		if err != nil {
-			onErr(err)
-			panic(err)
-		}
-
-		return db
-	}
-}
-
-// SimpleNetwork creates a basic network with the given name, number of BVNs,
-// and number of nodes per BVN.
-func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkInit {
-	net := new(accumulated.NetworkInit)
-	net.Id = name
-	for i := 0; i < bvnCount; i++ {
-		bvnInit := new(accumulated.BvnInit)
-		bvnInit.Id = fmt.Sprintf("BVN%d", i)
-		for j := 0; j < nodeCount; j++ {
-			bvnInit.Nodes = append(bvnInit.Nodes, &accumulated.NodeInit{
-				DnnType:    config.Validator,
-				BvnnType:   config.Validator,
-				PrivValKey: testing.GenerateKey(name, bvnInit.Id, j, "val"),
-				DnNodeKey:  testing.GenerateKey(name, bvnInit.Id, j, "dn"),
-				BvnNodeKey: testing.GenerateKey(name, bvnInit.Id, j, "bvn"),
-			})
-		}
-		net.Bvns = append(net.Bvns, bvnInit)
-	}
-	return net
-}
-
-// LocalNetwork returns a SimpleNetwork with sequential IPs starting from the
-// base IP with the given base port.
-func LocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePort uint64) *accumulated.NetworkInit {
-	net := SimpleNetwork(name, bvnCount, nodeCount)
-	for _, bvn := range net.Bvns {
-		for _, node := range bvn.Nodes {
-			node.AdvertizeAddress = baseIP.String()
-			node.BasePort = basePort
-			baseIP[len(baseIP)-1]++
-		}
-	}
-	return net
-}
-
 func (s *Simulator) SetRoute(account *url.URL, partition string) {
 	s.router.SetRoute(account, partition)
-}
-
-func SnapshotFromDirectory(dir string) SnapshotFunc {
-	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
-		return os.Open(filepath.Join(dir, fmt.Sprintf("%s.snapshot", partition)))
-	}
-}
-
-func SnapshotMap(snapshots map[string][]byte) SnapshotFunc {
-	return func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
-		return ioutil2.NewBuffer(snapshots[partition]), nil
-	}
-}
-
-func EmptySnapshots(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
-	return new(ioutil2.Buffer), nil
-}
-
-func Genesis(time time.Time) SnapshotFunc {
-	// By default run tests with the new executor version
-	return GenesisWithVersion(time, protocol.ExecutorVersionLatest)
-}
-
-func GenesisWithVersion(time time.Time, version protocol.ExecutorVersion) SnapshotFunc {
-	values := new(core.GlobalValues)
-	values.ExecutorVersion = version
-	return GenesisWith(time, values)
-}
-
-func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
-	if values == nil {
-		values = new(core.GlobalValues)
-	}
-
-	var genDocs map[string]*tmtypes.GenesisDoc
-	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
-		var err error
-		if genDocs == nil {
-			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil, nil)
-			if err != nil {
-				return nil, errors.UnknownError.WithFormat("build genesis docs: %w", err)
-			}
-		}
-
-		var snapshot []byte
-		err = json.Unmarshal(genDocs[partition].AppState, &snapshot)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		return ioutil2.NewBuffer(snapshot), nil
-	}
-}
-
-func (s *Simulator) SkipProposalCheck(v bool) {
-	for _, p := range s.partitions {
-		for _, n := range p.nodes {
-			n.consensus.SkipProposalCheck = v
-		}
-	}
-}
-
-func (s *Simulator) IgnoreDeliverResults(v bool) {
-	for _, p := range s.partitions {
-		for _, n := range p.nodes {
-			n.consensus.IgnoreDeliverResults = v
-		}
-	}
-}
-
-func (s *Simulator) IgnoreCommitResults(v bool) {
-	for _, p := range s.partitions {
-		for _, n := range p.nodes {
-			n.consensus.IgnoreCommitResults = v
-		}
-	}
 }
 
 func (s *Simulator) Router() *Router { return s.router }
@@ -307,9 +159,9 @@ func (s *Simulator) BlockIndexFor(account *url.URL) uint64 {
 func (s *Simulator) Step() error {
 	s.blockErrGroup = new(errgroup.Group)
 
-	if s.Deterministic {
+	if s.opts.deterministic {
 		err := s.partitions[protocol.Directory].execute()
-		for _, bvn := range s.init.Bvns {
+		for _, bvn := range s.opts.network.Bvns {
 			if e := s.partitions[bvn.Id].execute(); e != nil {
 				err = e
 			}
