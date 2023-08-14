@@ -8,6 +8,8 @@ package api
 
 import (
 	"context"
+	stdurl "net/url"
+	"strings"
 
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -33,6 +35,34 @@ var BootstrapServers = func() []multiaddr.Multiaddr {
 	}
 	return addrs
 }()
+
+var WellKnownNetworks = map[string]string{
+	"mainnet": "https://mainnet.accumulatenetwork.io",
+	"kermit":  "https://kermit.accumulatenetwork.io",
+	"fozzie":  "https://fozzie.accumulatenetwork.io",
+
+	"testnet": "https://kermit.accumulatenetwork.io",
+	"local":   "http://127.0.1.1:26660",
+}
+
+func ResolveWellKnownEndpoint(name string) string {
+	addr, ok := WellKnownNetworks[strings.ToLower(name)]
+	if !ok {
+		addr = name
+	}
+
+	u, err := stdurl.Parse(addr)
+	if err != nil {
+		return addr
+	}
+	switch u.Path {
+	case "":
+		addr += "/v3"
+	case "/":
+		addr += "v3"
+	}
+	return addr
+}
 
 // ServiceType is used to identify services.
 type ServiceType uint64

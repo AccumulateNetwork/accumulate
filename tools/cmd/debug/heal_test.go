@@ -71,3 +71,54 @@ func TestHealSynth(t *testing.T) {
 		}
 	}
 }
+
+func TestHealQueryAnchor(t *testing.T) {
+	t.Skip("Manual")
+
+	node, err := p2p.New(p2p.Options{
+		Network:        "MainNet",
+		BootstrapPeers: api.BootstrapServers,
+	})
+	require.NoError(t, err)
+	defer func() { _ = node.Close() }()
+
+	fmt.Printf("We are %v\n", node.ID())
+
+	fmt.Println("Waiting for a live network service")
+	svcAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor("MainNet")
+	require.NoError(t, err)
+	require.NoError(t, node.WaitForService(context.Background(), svcAddr))
+
+	router := new(routing.MessageRouter)
+	client := &message.Client{
+		Transport: &message.RoutedTransport{
+			Network: "MainNet",
+			Dialer:  node.DialNetwork(),
+			Router:  router,
+		},
+	}
+	ns, err := client.NetworkStatus(context.Background(), api.NetworkStatusOptions{})
+	require.NoError(t, err)
+	router.Router, err = routing.NewStaticRouter(ns.Routing, nil)
+	require.NoError(t, err)
+
+	peer, err := peer.Decode("12D3KooWAgrBYpWEXRViTnToNmpCoC3dvHdmR6m1FmyKjDn1NYpj")
+	require.NoError(t, err)
+
+	x, err := client.ForPeer(peer).NodeInfo(context.Background(), api.NodeInfoOptions{PeerID: peer})
+	require.NoError(t, err)
+	fmt.Println(x.PeerID)
+
+	r, err := client.ForPeer(peer).Private().Sequence(context.Background(), protocol.DnUrl().JoinPath(protocol.AnchorPool), protocol.PartitionUrl("Apollo"), 68957)
+	require.NoError(t, err)
+	b, err := json.Marshal(r.Message)
+	require.NoError(t, err)
+	fmt.Println(string(b))
+	for _, set := range r.Signatures.Records {
+		for _, sig := range set.Signatures.Records {
+			b, err = json.Marshal(sig)
+			require.NoError(t, err)
+			fmt.Println(string(b))
+		}
+	}
+}

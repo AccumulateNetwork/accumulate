@@ -14,6 +14,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+var (
+	outputJSON     bool
+	healContinuous bool
+	cachedScan     string
+)
+
 var cmd = &cobra.Command{
 	Use:   "debug",
 	Short: "Accumulate debug utilities",
@@ -32,5 +38,11 @@ func check(err error) {
 	if err != nil {
 		err = errors.UnknownError.Skip(1).Wrap(err)
 		fatalf("%+v", err)
+	}
+}
+
+func checkf(err error, format string, otherArgs ...interface{}) {
+	if err != nil {
+		fatalf(format+": %v", append(otherArgs, err)...)
 	}
 }

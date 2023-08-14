@@ -28,8 +28,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
+var cmdHeal = &cobra.Command{
+	Use: "heal",
+}
+
 var cmdHealSynth = &cobra.Command{
-	Use:   "heal-synth [network] [server]",
+	Use:   "synth [network] [server]",
 	Short: "Fixup synthetic transactions",
 	Args:  cobra.ExactArgs(2),
 	Run:   healSynth,
@@ -40,7 +44,8 @@ var flagHealSynth = struct {
 }{}
 
 func init() {
-	cmd.AddCommand(cmdHealSynth)
+	cmd.AddCommand(cmdHeal)
+	cmdHeal.AddCommand(cmdHealSynth)
 	cmdHealSynth.Flags().StringVar(&flagHealSynth.Peer, "peer", "", "Query a specific peer")
 }
 
