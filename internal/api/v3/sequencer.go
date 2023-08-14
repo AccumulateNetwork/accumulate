@@ -120,7 +120,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 	// If this is an anchor from the DN to the DN, we need to clear
 	// MakeMajorBlock just like begin block does
 	dirAnchor, ok := txn.Body.(*protocol.DirectoryAnchor)
-	if ok && strings.EqualFold(s.partitionID, protocol.Directory) {
+	if ok && protocol.DnUrl().Equal(dst) {
 		dirAnchor.MakeMajorBlock = 0
 	}
 
