@@ -26,16 +26,20 @@ type Handler struct {
 func NewHandler(services ...Service) (*Handler, error) {
 	h := new(Handler)
 	h.methods = serviceMethodMap{}
+	err := h.Register(services...)
+	return h, err
+}
+
+func (h *Handler) Register(services ...Service) error {
 	for _, service := range services {
 		for typ, method := range service.methods() {
 			if _, ok := h.methods[typ]; ok {
-				return nil, errors.Conflict.WithFormat("double registered method %v", typ)
+				return errors.Conflict.WithFormat("double registered method %v", typ)
 			}
 			h.methods[typ] = method
 		}
 	}
-
-	return h, nil
+	return nil
 }
 
 // Handle handles a message stream. Handle is safe to call from a goroutine.

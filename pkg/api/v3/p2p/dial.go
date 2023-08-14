@@ -160,7 +160,7 @@ func (n *Node) DialNetwork() message.MultiDialer {
 // find an appropriate peer that can service the address. If no peer can be
 // found, Dial will return [errors.NoPeer].
 func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream message.Stream, err error) {
-	net, peer, sa, err := unpackAddress(addr)
+	net, peer, sa, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -178,56 +178,6 @@ func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream mess
 	}
 
 	return d.newPeerStream(ctx, sa, peer)
-}
-
-// unpackAddress unpacks a multiaddr into its components. The address must
-// include an /acc-svc component and may include a /p2p component or an /acc
-// component. unpackAddress will return an error if the address includes any
-// other components.
-func unpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *api.ServiceAddress, error) {
-	// Scan the address for /acc, /acc-svc, and /p2p components
-	var cNetwork, cService, cPeer *multiaddr.Component
-	var bad bool
-	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
-		switch c.Protocol().Code {
-		case api.P_ACC:
-			cNetwork = &c
-		case api.P_ACC_SVC:
-			cService = &c
-		case multiaddr.P_P2P:
-			cPeer = &c
-		default:
-			bad = true
-		}
-		return true
-	})
-
-	// The address must contain a /acc-svc component and must not contain any
-	// unexpected components
-	if bad || cService == nil {
-		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
-	}
-
-	// Parse the /acc-svc component
-	sa := new(api.ServiceAddress)
-	err := sa.UnmarshalBinary(cService.RawValue())
-	if err != nil {
-		return "", "", nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
-	} else if sa.Type == api.ServiceTypeUnknown {
-		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
-	}
-
-	var peerID peer.ID
-	if cPeer != nil {
-		peerID = peer.ID(cPeer.RawValue())
-	}
-
-	var net string
-	if cNetwork != nil {
-		net = string(cNetwork.RawValue())
-	}
-
-	return net, peerID, sa, nil
 }
 
 // BadDial notifies the dialer that a transport error was encountered while
@@ -484,7 +434,7 @@ func (n *Node) DialSelf() message.Dialer { return (*selfDialer)(n) }
 // Dial returns a stream for the current node.
 func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
 	// Parse the address
-	_, peer, sa, err := unpackAddress(addr)
+	_, peer, sa, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
