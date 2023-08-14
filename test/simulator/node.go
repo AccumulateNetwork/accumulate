@@ -7,8 +7,12 @@
 package simulator
 
 import (
+	"context"
+	"crypto/sha256"
 	"fmt"
 
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
@@ -21,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -37,15 +42,13 @@ type Node struct {
 	eventBus   *events.Bus
 	nodeKey    []byte
 	privValKey []byte
+	peerID     peer.ID
 	describe   config.Describe
 
 	consensus *consensus.Node
 
 	database *database.Database
-	querySvc api.Querier
-	eventSvc api.EventService
-	netSvc   api.NetworkService
-	seqSvc   private.Sequencer
+	services *message.Handler
 }
 
 func (o *Options) newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (*Node, error) {
@@ -54,6 +57,7 @@ func (o *Options) newNode(s *Simulator, p *Partition, node int, init *accumulate
 	n.init = init
 	n.simulator = s
 	n.partition = p
+	n.services, _ = message.NewHandler()
 	n.logger.Set(p.logger, "node", node)
 	n.eventBus = events.NewBus(n.logger)
 	n.privValKey = init.PrivValKey
@@ -68,13 +72,32 @@ func (o *Options) newNode(s *Simulator, p *Partition, node int, init *accumulate
 		return nil, errors.InternalError.WithFormat("unknown partition type %v", p.Type)
 	}
 
+	// Set up services
+	sk, err := crypto.UnmarshalEd25519PrivateKey(n.nodeKey)
+	if err != nil {
+		return nil, err
+	}
+	n.peerID, err = peer.IDFromPrivateKey(sk)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = n.services.Register(
+		message.ConsensusService{ConsensusService: n},
+		message.Submitter{Submitter: n},
+		message.Validator{Validator: n},
+	)
+
+	n.simulator.services.RegisterService(n.peerID, api.ServiceTypeConsensus.AddressFor(n.partition.ID), n.services.Handle)
+	n.simulator.services.RegisterService(n.peerID, api.ServiceTypeSubmit.AddressFor(n.partition.ID), n.services.Handle)
+	n.simulator.services.RegisterService(n.peerID, api.ServiceTypeValidate.AddressFor(n.partition.ID), n.services.Handle)
+
 	// This is hacky, but 🤷 I don't see another choice that wouldn't be
 	// significantly less readable
 	if p.Type == protocol.PartitionTypeDirectory && node == 0 {
 		events.SubscribeSync(n.eventBus, s.router.willChangeGlobals)
 	}
 
-	var err error
 	switch n.partition.Type {
 	case protocol.PartitionTypeDirectory,
 		protocol.PartitionTypeBlockValidator:
@@ -125,14 +148,14 @@ func (n *Node) initValidator(o *Options) error {
 	n.database = database.New(store, n.logger)
 
 	// Create a Querier service
-	n.querySvc = apiimpl.NewQuerier(apiimpl.QuerierParams{
+	querySvc := apiimpl.NewQuerier(apiimpl.QuerierParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
 		Database:  n.database,
 		Partition: n.partition.ID,
 	})
 
 	// Create an Event service
-	n.eventSvc = apiimpl.NewEventService(apiimpl.EventServiceParams{
+	eventSvc := apiimpl.NewEventService(apiimpl.EventServiceParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
 		Database:  n.database,
 		Partition: n.partition.ID,
@@ -140,7 +163,7 @@ func (n *Node) initValidator(o *Options) error {
 	})
 
 	// Create a Network service
-	n.netSvc = apiimpl.NewNetworkService(apiimpl.NetworkServiceParams{
+	netSvc := apiimpl.NewNetworkService(apiimpl.NetworkServiceParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
 		Database:  n.database,
 		Partition: n.partition.ID,
@@ -148,13 +171,25 @@ func (n *Node) initValidator(o *Options) error {
 	})
 
 	// Create a Sequencer service
-	n.seqSvc = apiimpl.NewSequencer(apiimpl.SequencerParams{
+	seqSvc := apiimpl.NewSequencer(apiimpl.SequencerParams{
 		Logger:       n.logger.With("module", "acc-rpc"),
 		Database:     n.database,
 		EventBus:     n.eventBus,
 		Partition:    n.partition.ID,
 		ValidatorKey: n.privValKey,
 	})
+
+	// Register the services
+	_ = n.services.Register(
+		message.Querier{Querier: querySvc},
+		message.EventService{EventService: eventSvc},
+		message.NetworkService{NetworkService: netSvc},
+		&message.Sequencer{Sequencer: seqSvc},
+	)
+	n.simulator.services.RegisterService(n.peerID, api.ServiceTypeQuery.AddressFor(n.partition.ID), n.services.Handle)
+	n.simulator.services.RegisterService(n.peerID, api.ServiceTypeEvent.AddressFor(n.partition.ID), n.services.Handle)
+	n.simulator.services.RegisterService(n.peerID, api.ServiceTypeNetwork.AddressFor(n.partition.ID), n.services.Handle)
+	n.simulator.services.RegisterService(n.peerID, private.ServiceTypeSequencer.AddressFor(n.partition.ID), n.services.Handle)
 
 	// Describe the network, from the node's perspective
 	n.describe = config.Describe{
@@ -173,7 +208,7 @@ func (n *Node) initValidator(o *Options) error {
 		Router:        n.simulator.router,
 		EventBus:      n.eventBus,
 		NewDispatcher: n.simulator.newDispatcher,
-		Sequencer:     n.simulator.Services(),
+		Sequencer:     n.simulator.Services().Private(),
 		Querier:       n.simulator.Services(),
 	}
 
@@ -273,4 +308,56 @@ func (n *Node) newConsensusNode(o *Options, app consensus.App) *consensus.Node {
 	cn.IgnoreDeliverResults = o.ignoreDeliverResults
 	cn.IgnoreCommitResults = o.ignoreCommitResults
 	return cn
+}
+
+// ConsensusStatus implements [api.ConsensusService].
+func (n *Node) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+	status, err := n.consensus.Status(&consensus.StatusRequest{})
+	if err != nil {
+		return nil, err
+	}
+	info, err := n.consensus.Info(&consensus.InfoRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return &api.ConsensusStatus{
+		Ok: true,
+		LastBlock: &api.LastBlock{
+			Height:    int64(status.BlockIndex),
+			Time:      status.BlockTime,
+			StateRoot: info.LastHash,
+			// TODO: chain root, directory height
+		},
+		NodeKeyHash:      sha256.Sum256(n.nodeKey[32:]),
+		ValidatorKeyHash: sha256.Sum256(n.privValKey[32:]),
+		PartitionID:      n.partition.ID,
+		PartitionType:    n.partition.Type,
+	}, nil
+}
+func (n *Node) Submit(ctx context.Context, envelope *messaging.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	return n.submit(envelope, false)
+}
+
+func (n *Node) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+	return n.submit(envelope, true)
+}
+
+func (n *Node) submit(envelope *messaging.Envelope, pretend bool) ([]*api.Submission, error) {
+	st, err := n.partition.Submit(envelope, pretend)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	subs := make([]*api.Submission, len(st))
+	for i, st := range st {
+		// Create an api.Submission
+		subs[i] = new(api.Submission)
+		subs[i].Status = st
+		subs[i].Success = st.Code.Success()
+		if st.Error != nil {
+			subs[i].Message = st.Error.Message
+		}
+	}
+
+	return subs, nil
 }
