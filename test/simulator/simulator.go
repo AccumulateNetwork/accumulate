@@ -18,6 +18,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -25,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/services"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,6 +37,7 @@ type Simulator struct {
 	router     *Router
 	netcfg     *config.Network
 	opts       *Options
+	services   *services.Network
 
 	blockErrGroup *errgroup.Group
 }
@@ -63,6 +67,10 @@ func New(logger log.Logger, opts ...Option) (*Simulator, error) {
 	s.logger.Set(logger, "module", "sim")
 	s.partitions = make(map[string]*Partition, len(o.network.Bvns)+1)
 	s.router = newRouter(logger, s.partitions)
+	s.services = services.NewNetwork(s.router)
+
+	handler, _ := message.NewHandler(message.Faucet{Faucet: (*simFaucet)(s)})
+	s.services.RegisterService("", api.ServiceTypeFaucet.AddressForUrl(protocol.AcmeUrl()), handler.Handle)
 
 	s.netcfg = new(config.Network)
 	s.netcfg.Id = o.network.Id

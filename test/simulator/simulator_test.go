@@ -170,6 +170,27 @@ func buildAndSubmit(t testing.TB, ctx context.Context, svc api.Submitter, bld En
 	return subs[0].Status
 }
 
+func TestSimulatorFaucet(t *testing.T) {
+	lite := acctesting.GenerateKey(t.Name(), "Lite")
+	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	// Execute
+	sub, err := sim.S.Services().Faucet(context.Background(), liteUrl, api.FaucetOptions{})
+	require.NoError(t, err)
+	require.True(t, sub.Success)
+
+	// Verify
+	account := GetAccount[*LiteTokenAccount](t, sim.DatabaseFor(liteUrl), liteUrl)
+	require.NotZero(t, account.Balance.Int64())
+}
+
 var flagRecording = flag.String("test.dump-recording", "", "Recording to dump")
 
 func TestDumpRecording(t *testing.T) {
