@@ -59,12 +59,17 @@ func checkNode(_ *cobra.Command, args []string) {
 	// Direct
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	check(err)
-	peerAddr, err := multiaddr.NewMultiaddr("/dns/" + args[0] + "/tcp/16593/p2p/" + ni.PeerID.String())
+	peerAddrTCP, err := multiaddr.NewMultiaddr("/dns/" + args[0] + "/tcp/16593/p2p/" + ni.PeerID.String())
+	check(err)
+	peerAddrUDP, err := multiaddr.NewMultiaddr("/dns/" + args[0] + "/udp/16593/quic/p2p/" + ni.PeerID.String())
 	check(err)
 	pc, err := p2p.New(p2p.Options{
-		Network:        ni.Network,
-		Key:            key,
-		BootstrapPeers: []multiaddr.Multiaddr{peerAddr},
+		Network: ni.Network,
+		Key:     key,
+		BootstrapPeers: []multiaddr.Multiaddr{
+			peerAddrTCP,
+			peerAddrUDP,
+		},
 	})
 	check(err)
 	time.Sleep(time.Second)
