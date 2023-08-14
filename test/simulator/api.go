@@ -11,10 +11,12 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
@@ -24,15 +26,35 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 	testhttp "gitlab.com/accumulatenetwork/accumulate/test/util/http"
 )
 
 // Services returns the simulator's API v3 implementation.
 func (s *Simulator) Services() *simService { return (*simService)(s) }
 
+func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
+	return apiv2.NewJrpc(apiv2.Options{
+		Logger:        n.logger,
+		TxMaxWaitTime: time.Hour,
+		Describe:      &n.describe,
+		LocalV3:       (*nodeService)(n),
+		Querier:       (*simService)(n.simulator),
+		Submitter:     (*simService)(n.simulator),
+		Network:       (*simService)(n.simulator),
+		Faucet:        (*simService)(n.simulator),
+		Validator:     (*simService)(n.simulator),
+		Sequencer:     (*simService)(n.simulator),
+	})
+}
+
 // ClientV2 returns an API V2 client for the given partition.
 func (s *Simulator) ClientV2(part string) *client.Client {
-	return s.partitions[part].nodes[0].clientV2
+	api, err := s.partitions[part].nodes[0].newApiV2()
+	if err != nil {
+		panic(err)
+	}
+	return testing.DirectJrpcClient(api)
 }
 
 // NewDirectClientWithHook creates a direct HTTP client and applies the given
@@ -43,8 +65,12 @@ func (s *Simulator) NewDirectClientWithHook(hook func(http.Handler) http.Handler
 		panic(err)
 	}
 
-	h := s.partitions[protocol.Directory].nodes[0].apiV2.NewMux()
-	c.Client.Client = *testhttp.DirectHttpClient(hook(h))
+	api, err := s.partitions[protocol.Directory].nodes[0].newApiV2()
+	if err != nil {
+		panic(err)
+	}
+
+	c.Client.Client = *testhttp.DirectHttpClient(hook(api.NewMux()))
 	return c
 }
 
@@ -82,7 +108,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 	}
 
 	// The simulator network configuration must specify a listening address
-	if s.init.Bvns[0].Nodes[0].Listen().String() == "" {
+	if s.opts.network.Bvns[0].Nodes[0].Listen().String() == "" {
 		return errors.BadRequest.With("no address to listen on")
 	}
 
@@ -120,7 +146,11 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 
 	var mux *http.ServeMux
 	if opts.ListenHTTPv2 {
-		mux = n.apiV2.NewMux()
+		api, err := n.newApiV2()
+		if err != nil {
+			return err
+		}
+		mux = api.NewMux()
 	} else {
 		mux = new(http.ServeMux)
 	}
@@ -235,7 +265,7 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	}
 
 	p2p, err := p2p.New(p2p.Options{
-		Network:       n.simulator.init.Id,
+		Network:       n.simulator.opts.network.Id,
 		Listen:        []multiaddr.Multiaddr{addr1, addr2},
 		Key:           n.nodeKey,
 		DiscoveryMode: dht.ModeServer,
