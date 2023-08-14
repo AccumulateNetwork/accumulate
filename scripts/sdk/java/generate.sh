@@ -1,14 +1,13 @@
 #!/bin/bash
 
-set -eu
-set -x
+set -e
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <out-dir>"
     exit 1
 fi
 
-mkdir $1
+mkdir -p $1
 declare outDir="$( cd -- "$1" &> /dev/null && pwd )"
 
 # Make sure we're within the java directory
@@ -16,6 +15,7 @@ cd $( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 
 function generate {
+    echo "generate ${@:1:2}"
     TOOL=../../../tools/cmd/gen-$1
     mkdir -p $outDir/$2
     FLAGS="--language java --package io.accumulatenetwork.sdk --subpackage $2 --out $outDir/{{.SubPackage}}/{{.Name}}.java"
