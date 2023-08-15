@@ -121,42 +121,42 @@ func (c *indexDB) newTransaction(k indexDBTransactionKey) *indexDBTransaction {
 
 func (c *indexDB) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for index db")
+		return nil, nil, errors.InternalError.With("bad key for index db (1)")
 	}
 
 	switch key.Get(0) {
 	case "Account":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for index db")
+			return nil, nil, errors.InternalError.With("bad key for index db (2)")
 		}
 		url, okUrl := key.Get(1).(*url.URL)
 		if !okUrl {
-			return nil, nil, errors.InternalError.With("bad key for index db")
+			return nil, nil, errors.InternalError.With("bad key for index db (3)")
 		}
 		v := c.Account(url)
 		return v, key.SliceI(2), nil
 	case "Partition":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for index db")
+			return nil, nil, errors.InternalError.With("bad key for index db (4)")
 		}
 		url, okUrl := key.Get(1).(*url.URL)
 		if !okUrl {
-			return nil, nil, errors.InternalError.With("bad key for index db")
+			return nil, nil, errors.InternalError.With("bad key for index db (5)")
 		}
 		v := c.Partition(url)
 		return v, key.SliceI(2), nil
 	case "Transaction":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for index db")
+			return nil, nil, errors.InternalError.With("bad key for index db (6)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for index db")
+			return nil, nil, errors.InternalError.With("bad key for index db (7)")
 		}
 		v := c.Transaction(hash)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for index db")
+		return nil, nil, errors.InternalError.With("bad key for index db (8)")
 	}
 }
 
@@ -283,7 +283,7 @@ func (c *indexDBAccount) newChain(k indexDBAccountChainKey) *indexDBAccountChain
 
 func (c *indexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for account")
+		return nil, nil, errors.InternalError.With("bad key for account (1)")
 	}
 
 	switch key.Get(0) {
@@ -293,16 +293,16 @@ func (c *indexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, e
 		return c.DidLoadTransaction(), key.SliceI(1), nil
 	case "Chain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (2)")
 		}
 		name, okName := key.Get(1).(string)
 		if !okName {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (3)")
 		}
 		v := c.Chain(name)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account")
+		return nil, nil, errors.InternalError.With("bad key for account (4)")
 	}
 }
 
@@ -383,14 +383,14 @@ func (c *indexDBAccountChain) newIndex() values.List[*protocol.IndexEntry] {
 
 func (c *indexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for chain")
+		return nil, nil, errors.InternalError.With("bad key for chain (1)")
 	}
 
 	switch key.Get(0) {
 	case "Index":
 		return c.Index(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for chain")
+		return nil, nil, errors.InternalError.With("bad key for chain (2)")
 	}
 }
 
@@ -459,14 +459,14 @@ func (c *indexDBPartition) newAnchors() values.List[*AnchorMetadata] {
 
 func (c *indexDBPartition) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for partition")
+		return nil, nil, errors.InternalError.With("bad key for partition (1)")
 	}
 
 	switch key.Get(0) {
 	case "Anchors":
 		return c.Anchors(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for partition")
+		return nil, nil, errors.InternalError.With("bad key for partition (2)")
 	}
 }
 
@@ -533,14 +533,14 @@ func (c *indexDBTransaction) newExecuted() values.Value[*EventMetadata] {
 
 func (c *indexDBTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for transaction")
+		return nil, nil, errors.InternalError.With("bad key for transaction (1)")
 	}
 
 	switch key.Get(0) {
 	case "Executed":
 		return c.Executed(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for transaction")
+		return nil, nil, errors.InternalError.With("bad key for transaction (2)")
 	}
 }
 

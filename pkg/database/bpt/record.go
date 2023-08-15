@@ -190,8 +190,8 @@ func (e nodeRecord) LoadValue(value record.ValueReader, put bool) error {
 	}
 
 	// Copy the branch into this node
-	dst.Left = src.Left.copyWith(s, dst)
-	dst.Right = src.Right.copyWith(s, dst)
+	dst.Left = src.Left.copyWith(s, dst, true)
+	dst.Right = src.Right.copyWith(s, dst, true)
 	return nil
 }
 
