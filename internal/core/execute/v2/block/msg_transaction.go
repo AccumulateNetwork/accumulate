@@ -76,7 +76,7 @@ func (x TransactionMessage) Validate(batch *database.Batch, ctx *MessageContext)
 		return nil, nil
 	}
 
-	st := chain.NewStatelessManager(&ctx.Executor.Describe, ctx.GetActiveGlobals(), txn.Transaction, ctx.Executor.logger.With("operation", "Validate"))
+	st := chain.NewStatelessManager(ctx.Executor.Describe, ctx.GetActiveGlobals(), txn.Transaction, ctx.Executor.logger.With("operation", "Validate"))
 	st.Pretend = true
 
 	r, err := exec.Validate(st, &chain.Delivery{Transaction: txn.Transaction})

@@ -47,7 +47,7 @@ func TestExecutorConsistency(t *testing.T) {
 
 	// Start the simulator
 	sim, err := simulator.New(
-		acctesting.NewTestLogger(t),
+		simulator.WithLogger(acctesting.NewTestLogger(t)),
 		simulator.MemoryDatabase,
 		simulator.WithNetwork(testData.Network),
 		simulator.SnapshotMap(testData.Genesis),
