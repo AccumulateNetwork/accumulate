@@ -335,11 +335,14 @@ func (d *Daemon) startApp() (types.Application, error) {
 		Logger:    d.Logger,
 		Database:  d.db,
 		Key:       d.Key().Bytes(),
-		Describe:  d.Config.Accumulate.Describe,
 		Router:    d.router,
 		EventBus:  d.eventBus,
 		Sequencer: client.Private(),
 		Querier:   client,
+		Describe: execute.DescribeShim{
+			NetworkType: d.Config.Accumulate.Describe.NetworkType,
+			PartitionId: d.Config.Accumulate.Describe.PartitionId,
+		},
 		NewDispatcher: func() execute.Dispatcher {
 			return newDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
 		},

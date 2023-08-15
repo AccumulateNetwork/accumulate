@@ -48,8 +48,8 @@ func TestSimulator(t *testing.T) {
 	}
 
 	var bsnStore *memory.Database
-	openDb := func(partition string, node int, logger log.Logger) keyvalue.Beginner {
-		if partition == net.Bsn.Id && node == 0 {
+	openDb := func(partition *PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		if partition.ID == net.Bsn.Id && node == 0 {
 			bsnStore = memory.New(nil)
 			return bsnStore
 		}

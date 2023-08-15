@@ -17,6 +17,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
@@ -34,11 +35,10 @@ import (
 func (s *Simulator) Services() *message.Client { return s.services.Client }
 
 func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
-	svc := n.simulator.Services()
+	svc := n.partition.sim.services
 	return apiv2.NewJrpc(apiv2.Options{
 		Logger:        n.logger,
 		TxMaxWaitTime: time.Hour,
-		Describe:      &n.describe,
 		LocalV3:       svc.ForPeer(n.peerID),
 		Querier:       svc,
 		Submitter:     svc,
@@ -46,6 +46,10 @@ func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
 		Faucet:        svc,
 		Validator:     svc,
 		Sequencer:     svc.Private(),
+		Describe: &config.Describe{
+			NetworkType: n.partition.Type,
+			PartitionId: n.partition.ID,
+		},
 	})
 }
 
@@ -109,7 +113,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 	}
 
 	// The simulator network configuration must specify a listening address
-	if s.opts.network.Bvns[0].Nodes[0].Listen().String() == "" {
+	if s.partitions[protocol.Directory].nodes[0].network.Listen().String() == "" {
 		return errors.BadRequest.With("no address to listen on")
 	}
 
@@ -157,7 +161,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 	}
 
 	var v3 http.Handler
-	network := n.simulator.services
+	network := n.partition.sim.services
 	if opts.ListenHTTPv3 {
 		jrpc, err := jsonrpc.NewHandler(
 			jsonrpc.ConsensusService{ConsensusService: n},
@@ -217,7 +221,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 	}
 
 	// Determine the listening address
-	addr := n.init.Listen().PartitionType(n.partition.Type).AccumulateAPI().String()
+	addr := n.network.Listen().PartitionType(n.partition.Type).AccumulateAPI().String()
 
 	// Start the listener
 	ln, err := net.Listen("tcp", addr)
@@ -249,11 +253,11 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 		return nil
 	}
 
-	addr1 := n.init.Listen().Scheme("tcp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
-	addr2 := n.init.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
+	addr1 := n.network.Listen().Scheme("tcp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
+	addr2 := n.network.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
 
 	p2p, err := p2p.New(p2p.Options{
-		Network:       n.simulator.opts.network.Id,
+		Network:       "Simulator",
 		Listen:        []multiaddr.Multiaddr{addr1, addr2},
 		Key:           n.nodeKey,
 		DiscoveryMode: dht.ModeServer,

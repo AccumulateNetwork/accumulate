@@ -326,7 +326,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	for _, x := range s.Executors {
 		var snap []byte
 		require.NoError(s, json.Unmarshal(genDocs[x.Partition.Id].AppState, &snap))
-		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(snap), x.Executor.Logger, &x.Executor.Describe))
+		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(snap), x.Executor.Logger, x.Executor.Describe.PartitionUrl()))
 		require.NoError(s, x.Executor.Init(x.Database))
 	}
 }
@@ -592,7 +592,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		Logger:        logger,
 		Database:      x,
 		Key:           init.PrivValKey,
-		Describe:      network,
+		Describe:      execute.DescribeShim{NetworkType: network.NetworkType, PartitionId: network.PartitionId},
 		Router:        sim.Router(),
 		EventBus:      eventBus,
 		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: sim, envelopes: map[string][]*messaging.Envelope{}} },
