@@ -32,7 +32,7 @@ type node interface {
 
 	// copyWith copies the receiver with the given branch as the parent of the
 	// new copy.
-	copyWith(*parameters, *branch) node
+	copyWith(_ *parameters, _ *branch, clean bool) node
 
 	// writeTo marshals the node and writes it to the writer.
 	writeTo(io.Writer) error
@@ -162,6 +162,10 @@ func (e *branch) load() error {
 		return nil
 	}
 
+	if e.IsDirty() {
+		return errors.InternalError.With("invalid state - node is dirty but has not been loaded")
+	}
+
 	// If this is the root node, get the hash from the parameters
 	if e.Height == 0 {
 		s, err := e.bpt.getState().Get()
@@ -185,13 +189,16 @@ func (e *branch) load() error {
 }
 
 // copyWith returns a new empty node with parent set to the given branch.
-func (e *emptyNode) copyWith(s *parameters, p *branch) node {
+func (e *emptyNode) copyWith(s *parameters, p *branch, clean bool) node {
 	return &emptyNode{parent: p}
 }
 
 // copyWith returns a copy of the branch with parent set to the given branch.
 // copyWith copies recursively if put is true.
-func (e *branch) copyWith(s *parameters, p *branch) node {
+func (e *branch) copyWith(s *parameters, p *branch, clean bool) node {
+	// Ensure the hash is up to date
+	e.getHash()
+
 	f := &branch{
 		// Inherit from the new parent
 		bpt:    p.bpt,
@@ -204,20 +211,26 @@ func (e *branch) copyWith(s *parameters, p *branch) node {
 		Hash:   e.Hash,
 	}
 
+	if clean {
+		// We're copying from the previous layer so this branch should be
+		// considered clean
+		f.status = branchClean
+	}
+
 	// If the branch is at a boundary, don't recurse
 	if e.Height&s.Mask == 0 {
 		return f
 	}
 
-	f.Left = e.Left.copyWith(s, f)
-	f.Right = e.Right.copyWith(s, f)
+	f.Left = e.Left.copyWith(s, f, clean)
+	f.Right = e.Right.copyWith(s, f, clean)
 	return f
 }
 
 // copyWith returns a copy of the leaf node with parent set to the given branch.
 // If the receiver's parent is nil, copyWith returns it instead after setting
 // its parent.
-func (e *leaf) copyWith(s *parameters, p *branch) node {
+func (e *leaf) copyWith(s *parameters, p *branch, clean bool) node {
 	f := *e
 	f.parent = p
 	return &f

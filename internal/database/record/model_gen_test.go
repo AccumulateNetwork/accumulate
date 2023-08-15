@@ -71,24 +71,24 @@ func (c *changeSet) newChangeLog() values.Counted[string] {
 
 func (c *changeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for change set")
+		return nil, nil, errors.InternalError.With("bad key for change set (1)")
 	}
 
 	switch key.Get(0) {
 	case "Entity":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for change set")
+			return nil, nil, errors.InternalError.With("bad key for change set (2)")
 		}
 		name, okName := key.Get(1).(string)
 		if !okName {
-			return nil, nil, errors.InternalError.With("bad key for change set")
+			return nil, nil, errors.InternalError.With("bad key for change set (3)")
 		}
 		v := c.Entity(name)
 		return v, key.SliceI(2), nil
 	case "ChangeLog":
 		return c.ChangeLog(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for change set")
+		return nil, nil, errors.InternalError.With("bad key for change set (4)")
 	}
 }
 
@@ -194,7 +194,7 @@ func (c *entity) newCountableUnion() values.Counted[protocol.Account] {
 
 func (c *entity) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for entity")
+		return nil, nil, errors.InternalError.With("bad key for entity (1)")
 	}
 
 	switch key.Get(0) {
@@ -207,7 +207,7 @@ func (c *entity) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "CountableUnion":
 		return c.CountableUnion(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for entity")
+		return nil, nil, errors.InternalError.With("bad key for entity (2)")
 	}
 }
 
@@ -355,7 +355,7 @@ func (c *TemplateTest) newUnionList() values.Counted[UnionType] {
 
 func (c *TemplateTest) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for template test")
+		return nil, nil, errors.InternalError.With("bad key for template test (1)")
 	}
 
 	switch key.Get(0) {
@@ -378,7 +378,7 @@ func (c *TemplateTest) Resolve(key *record.Key) (record.Record, *record.Key, err
 	case "UnionList":
 		return c.UnionList(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for template test")
+		return nil, nil, errors.InternalError.With("bad key for template test (2)")
 	}
 }
 
