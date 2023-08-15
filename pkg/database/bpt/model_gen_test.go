@@ -36,14 +36,14 @@ func (c *ChangeSet) newBPT() *BPT {
 
 func (c *ChangeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for change set")
+		return nil, nil, errors.InternalError.With("bad key for change set (1)")
 	}
 
 	switch key.Get(0) {
 	case "BPT":
 		return c.BPT(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for change set")
+		return nil, nil, errors.InternalError.With("bad key for change set (2)")
 	}
 }
 

@@ -9,8 +9,9 @@ package bsn
 import (
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -110,7 +111,22 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 	switch {
 	case err == nil:
 		// Ok
+		ctx.executor.logger.Info("Processed block summary",
+			"source", msg.Partition,
+			"block", msg.Index,
+			"previous-block", msg.PreviousBlock,
+			"hash", logging.AsHex(msg.StateTreeHash).Slice(0, 4),
+			"updates", len(msg.RecordUpdates))
+
 	case errors.Code(err).IsClientError():
+		ctx.executor.logger.Info("Processing block summary failed",
+			"error", err,
+			"source", msg.Partition,
+			"block", msg.Index,
+			"previous-block", msg.PreviousBlock,
+			"hash", logging.AsHex(msg.StateTreeHash).Slice(0, 4),
+			"updates", len(msg.RecordUpdates))
+
 		ctx.recordErrorStatus(err)
 		return nil
 	default:
@@ -144,50 +160,16 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 	return nil
 }
 
-func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messaging.BlockSummary) (err error) {
-	// This is hacky because the main database's BPT support fits badly into the
-	// data model. The data model collects pending BPT updates in a map; when a
-	// sub-batch is committed, it's BPT updates are pushed to its parent. Only
-	// the root batch actually updates the BPT, and that is done directly
-	// through the key-value store. Thus we have to create a root batch and
-	// commit it, but without actually changing the database.
-
-	ctx.executor.logger.Info("Processing block summary",
-		"source", msg.Partition,
-		"block", msg.Index,
-		"previous-block", msg.PreviousBlock,
-		"hash", logging.AsHex(msg.StateTreeHash).Slice(0, 4),
-		"updates", len(msg.RecordUpdates))
-
-	storeTxn := batch.kvstore.Begin(nil, true)
-	defer func() { commitOrDiscard(storeTxn, &err) }()
-
-	batch = NewChangeSet(storeTxn, ctx.executor.logger)
-	defer batch.Discard()
+func (x BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messaging.BlockSummary) (err error) {
+	batch = batch.Begin()
+	defer func() { commitOrDiscard(batch, &err) }()
 	part := batch.Partition(msg.Partition)
 
 	// Execute all the record updates
-	for _, v := range msg.RecordUpdates {
-		w, err := values.Resolve[record.ValueWriter](part, v.Key)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store record update: %w", err)
-		}
-		err = w.LoadBytes(v.Value, true)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store record update: %w", err)
-		}
-	}
-
-	// Commit the batch
-	err = batch.Commit()
+	err = x.executeUpdates(part, msg)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-
-	// Create a new batch
-	batch = NewChangeSet(storeTxn, ctx.executor.logger)
-	defer batch.Discard()
-	part = batch.Partition(msg.Partition)
 
 	// Verify the root hash is the same
 	hash, err := part.BPT().GetRootHash()
@@ -208,5 +190,23 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 		return errors.UnknownError.WithFormat("invalid summary: index does not match: summary says %d but ledger says %d", msg.Index, ledger.Index)
 	}
 
+	return nil
+}
+
+func (BlockSummary) executeUpdates(batch *coredb.Batch, msg *messaging.BlockSummary) (err error) {
+	// Use a child batch and commit to force the BPT to update
+	batch = batch.Begin(true)
+	defer func() { commitOrDiscard(batch, &err) }()
+
+	for _, v := range msg.RecordUpdates {
+		w, err := values.Resolve[database.Value](batch, v.Key)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store record update: %w", err)
+		}
+		err = w.LoadBytes(v.Value, true)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store record update: %w", err)
+		}
+	}
 	return nil
 }
