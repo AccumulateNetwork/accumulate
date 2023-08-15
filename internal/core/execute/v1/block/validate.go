@@ -154,7 +154,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(x.Describe, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 	st.Pretend = true
 
@@ -208,7 +208,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		}
 
 		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
-		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
+		err = verifyPartitionSignature(x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
 		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
