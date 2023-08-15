@@ -12,14 +12,9 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -28,32 +23,29 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/services"
-	"golang.org/x/sync/errgroup"
 )
 
 type Simulator struct {
-	logger     logging.OptionalLogger
-	partitions map[string]*Partition
-	router     *Router
-	netcfg     *config.Network
-	opts       *Options
-	services   *services.Network
-
-	blockErrGroup *errgroup.Group
+	deterministic bool
+	logger        log.Logger
+	router        *Router
+	services      *services.Network
+	tasks         *taskQueue
+	partIDs       []string
+	partitions    map[string]*Partition
 }
 
-func New(logger log.Logger, opts ...Option) (*Simulator, error) {
-	o := &Options{
+func New(opts ...Option) (*Simulator, error) {
+	// Process options
+	o := &simFactory{
 		network: NewSimpleNetwork("Sim", 3, 3),
-		database: func(_ string, _ int, logger log.Logger) keyvalue.Beginner {
+		storeOpt: func(_ *protocol.PartitionInfo, _ int, logger log.Logger) keyvalue.Beginner {
 			return memory.New(nil)
 		},
 		snapshot: func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
 			return new(ioutil2.Buffer), nil
 		},
-		application: func(n *Node, e execute.Executor) (consensus.App, error) {
-			return &consensus.ExecutorApp{Executor: e, EventBus: n.eventBus, Database: n.database, Describe: &n.describe}, nil
-		},
+		abci: noABCI,
 	}
 	for _, opt := range opts {
 		err := opt(o)
@@ -62,69 +54,12 @@ func New(logger log.Logger, opts ...Option) (*Simulator, error) {
 		}
 	}
 
-	s := new(Simulator)
-	s.opts = o
-	s.logger.Set(logger, "module", "sim")
-	s.partitions = make(map[string]*Partition, len(o.network.Bvns)+1)
-	s.router = newRouter(logger, s.partitions)
-	s.services = services.NewNetwork(s.router)
+	// Build the simulator
+	s := o.Build()
 
-	handler, _ := message.NewHandler(message.Faucet{Faucet: (*simFaucet)(s)})
-	s.services.RegisterService("", api.ServiceTypeFaucet.AddressForUrl(protocol.AcmeUrl()), handler.Handle)
-
-	s.netcfg = new(config.Network)
-	s.netcfg.Id = o.network.Id
-	s.netcfg.Partitions = make([]config.Partition, len(o.network.Bvns)+1)
-	s.netcfg.Partitions[0].Id = protocol.Directory
-	s.netcfg.Partitions[0].Type = protocol.PartitionTypeDirectory
-	for i, bvn := range o.network.Bvns {
-		s.netcfg.Partitions[i+1].Id = bvn.Id
-		s.netcfg.Partitions[i+1].Type = protocol.PartitionTypeBlockValidator
-		s.netcfg.Partitions[i+1].Nodes = make([]config.Node, len(bvn.Nodes))
-		for j, node := range bvn.Nodes {
-			s.netcfg.Partitions[i+1].Nodes[j].Address = node.AdvertizeAddress
-			s.netcfg.Partitions[i+1].Nodes[j].Type = node.BvnnType
-
-			dnn := config.Node{Address: node.AdvertizeAddress, Type: node.DnnType}
-			s.netcfg.Partitions[0].Nodes = append(s.netcfg.Partitions[0].Nodes, dnn)
-
-			if node.BasePort != 0 {
-				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Advertize().Scheme("http").BlockValidator().String()
-				s.netcfg.Partitions[0].Nodes[j].Address = node.Advertize().Scheme("http").Directory().String()
-			}
-		}
-	}
-
-	var err error
-	s.partitions[protocol.Directory], err = o.newDn(s)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	for _, bvn := range o.network.Bvns {
-		s.partitions[bvn.Id], err = o.newBvn(s, bvn)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
-	if o.network.Bsn != nil {
-		s.partitions[o.network.Bsn.Id], err = o.newBsn(s, o.network.Bsn)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-	}
-
-	ids := []string{protocol.Directory}
-	for _, b := range o.network.Bvns {
-		ids = append(ids, b.Id)
-	}
-	if o.network.Bsn != nil {
-		ids = append(ids, o.network.Bsn.Id)
-	}
-
-	for _, id := range ids {
-		snapshot, err := o.snapshot(id, s.opts.network, s.logger)
+	// Initialize the network
+	for _, id := range s.partIDs {
+		snapshot, err := o.snapshot(id, o.network, s.logger)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 		}
@@ -165,12 +100,10 @@ func (s *Simulator) BlockIndexFor(account *url.URL) uint64 {
 
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
-	s.blockErrGroup = new(errgroup.Group)
-
-	if s.opts.deterministic {
-		err := s.partitions[protocol.Directory].execute()
-		for _, bvn := range s.opts.network.Bvns {
-			if e := s.partitions[bvn.Id].execute(); e != nil {
+	if s.deterministic {
+		var err error
+		for _, id := range s.partIDs {
+			if e := s.partitions[id].execute(); e != nil {
 				err = e
 			}
 		}
@@ -178,12 +111,12 @@ func (s *Simulator) Step() error {
 	} else {
 		for _, p := range s.partitions {
 			p := p // Don't capture loop variables
-			s.blockErrGroup.Go(p.execute)
+			s.tasks.Go(p.execute)
 		}
 	}
 
 	// Wait for execution to complete
-	err := s.blockErrGroup.Wait()
+	err := s.tasks.Flush()
 
 	// Give any parallel processes a chance to run
 	runtime.Gosched()

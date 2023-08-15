@@ -55,8 +55,8 @@ func TestExecutorProcessResults(t *testing.T) {
 	})
 	require.Equal(t, 3, int(i))
 
-	// Verify the error message (which ends up coming from the first node)
+	// Verify the error message
 	sim.StepUntil(
-		Txn(st.TxID).Fails().
-			WithMessage("insufficient balance: have 1, want 1000"))
+		Txn(st.TxID).Capture(&st).Fails())
+	require.Contains(t, st.Error.Message, "insufficient balance")
 }

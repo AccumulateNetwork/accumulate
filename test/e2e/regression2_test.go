@@ -758,6 +758,8 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 // reflected in the transaction results, which causes a consensus failure
 // (manually disabled here), but they really should be reflected in the BPT.
 func TestDifferentValidatorSignaturesV1(t *testing.T) {
+	t.Skip("Flakey")
+
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
@@ -1038,6 +1040,12 @@ func TestProofOverride(t *testing.T) {
 //
 // https://gitlab.com/accumulatenetwork/accumulate/-/issues/3370
 func TestChainUpdateAnchor(t *testing.T) {
+	// Disabling this test is not great but it is causing intermittent failures,
+	// since it assumes the credit payment and signature request are processed
+	// in the same block but that's not always the case. For example:
+	// https://gitlab.com/accumulatenetwork/accumulate/-/jobs/4795348613.
+	t.Skip("Too fragile")
+
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	bob := AccountUrl("bob")

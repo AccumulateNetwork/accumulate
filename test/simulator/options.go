@@ -18,7 +18,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -26,93 +25,78 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-type Options struct {
-	network     *accumulated.NetworkInit
-	database    OpenDatabaseFunc
-	snapshot    SnapshotFunc
-	application func(node *Node, exec execute.Executor) (consensus.App, error)
-	recordings  RecordingFunc
+type Option func(*simFactory) error
 
-	dropDispatchedMessages bool
-	skipProposalCheck      bool
-	ignoreDeliverResults   bool
-	ignoreCommitResults    bool
-	deterministic          bool
-}
-
-type Option func(opts *Options) error
-
-type OpenDatabaseFunc = func(partition string, node int, logger log.Logger) keyvalue.Beginner
+type OpenDatabaseFunc = func(partition *protocol.PartitionInfo, node int, logger log.Logger) keyvalue.Beginner
 type SnapshotFunc = func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
 type RecordingFunc = func(partition string, node int) (io.WriteSeeker, error)
 
+func WithLogger(logger log.Logger) Option {
+	return func(f *simFactory) error {
+		f.logger = logger
+		return nil
+	}
+}
+
 // Deterministic attempts to run the simulator in a fully deterministic,
 // repeatable way.
-func Deterministic(opts *Options) error {
+func Deterministic(opts *simFactory) error {
 	opts.deterministic = true
 	return nil
 }
 
 // DropDispatchedMessages drops all internally dispatched messages.
-func DropDispatchedMessages(opts *Options) error {
+func DropDispatchedMessages(opts *simFactory) error {
 	opts.dropDispatchedMessages = true
 	return nil
 }
 
 // SkipProposalCheck skips checking if each non-leader node agrees with the
 // leader's proposed block.
-func SkipProposalCheck(opts *Options) error {
+func SkipProposalCheck(opts *simFactory) error {
 	opts.skipProposalCheck = true
 	return nil
 }
 
 // IgnoreDeliverResults ignores inconsistencies in the result of DeliverTx.
-func IgnoreDeliverResults(opts *Options) error {
+func IgnoreDeliverResults(opts *simFactory) error {
 	opts.ignoreDeliverResults = true
 	return nil
 }
 
 // IgnoreCommitResults ignores inconsistencies in the result of Commit.
-func IgnoreCommitResults(opts *Options) error {
+func IgnoreCommitResults(opts *simFactory) error {
 	opts.ignoreCommitResults = true
 	return nil
 }
 
 func WithNetwork(net *accumulated.NetworkInit) Option {
-	return func(opts *Options) error {
+	return func(opts *simFactory) error {
 		opts.network = net
 		return nil
 	}
 }
 
 func WithDatabase(fn OpenDatabaseFunc) Option {
-	return func(opts *Options) error {
-		opts.database = fn
+	return func(opts *simFactory) error {
+		opts.storeOpt = fn
 		return nil
 	}
 }
 
 func WithSnapshot(fn SnapshotFunc) Option {
-	return func(opts *Options) error {
+	return func(opts *simFactory) error {
 		opts.snapshot = fn
-		return nil
-	}
-}
-
-func WithApplication(fn func(*Node, execute.Executor) (consensus.App, error)) Option {
-	return func(opts *Options) error {
-		opts.application = fn
 		return nil
 	}
 }
 
 // WithRecordings takes a function that returns files to write node recordings to.
 func WithRecordings(fn RecordingFunc) Option {
-	return func(opts *Options) error {
+	return func(opts *simFactory) error {
 		opts.recordings = fn
 		return nil
 	}
@@ -163,17 +147,17 @@ func NewLocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePo
 }
 
 // TODO Deprecated: This is a no-op
-func MemoryDatabase(*Options) error { return nil }
+func MemoryDatabase(*simFactory) error { return nil }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) Option {
-	return WithDatabase(func(partition string, node int, _ log.Logger) keyvalue.Beginner {
+	return WithDatabase(func(partition *protocol.PartitionInfo, node int, _ log.Logger) keyvalue.Beginner {
 		err := os.MkdirAll(dir, 0700)
 		if err != nil {
 			onErr(err)
 			panic(err)
 		}
 
-		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)))
+		db, err := badger.New(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition.ID, node)))
 		if err != nil {
 			onErr(err)
 			panic(err)
