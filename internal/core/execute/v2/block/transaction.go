@@ -9,12 +9,12 @@ package block
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -69,11 +69,11 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 		return t.recordFailedTransaction(batch, delivery, err)
 	}
 	if !ready {
-		return t.recordPendingTransaction(&x.Describe, batch, delivery)
+		return t.recordPendingTransaction(x.Describe, batch, delivery)
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, t, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+	st := chain.NewStateManager(x.Describe, &x.globals.Active, t, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	defer st.Discard()
 
 	// Execute the transaction
@@ -380,7 +380,7 @@ func (m *MessageContext) blockThresholdIsMet(batch *database.Batch, transaction 
 	return true, nil
 }
 
-func getDnHeight(desc config.Describe, batch *database.Batch) (uint64, error) {
+func getDnHeight(desc execute.DescribeShim, batch *database.Batch) (uint64, error) {
 	c := batch.Account(desc.AnchorPool()).MainChain()
 	head, err := c.Head().Get()
 	if err != nil {
@@ -489,7 +489,7 @@ func recordTransaction(batch *database.Batch, delivery *chain.Delivery, state *c
 	return status, nil
 }
 
-func (x *TransactionContext) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *TransactionContext) recordPendingTransaction(net execute.DescribeShim, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Do not mark pending because we only want to do that if the transaction
 	// was just initiated
 

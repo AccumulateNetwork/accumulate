@@ -11,9 +11,9 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -52,7 +52,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	switch signature := signature.(type) {
 	case *protocol.PartitionSignature:
 		signer = core.AnchorSigner(&x.globals.Active, x.Describe.PartitionId)
-		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
+		err = verifyPartitionSignature(x.Describe, batch, delivery.Transaction, signature, md)
 		if err != nil {
 			return nil, err
 		}
@@ -740,7 +740,7 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	return signer, nil
 }
 
-func verifyPartitionSignature(net *config.Describe, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.PartitionSignature, md sigExecMetadata) error {
+func verifyPartitionSignature(net execute.DescribeShim, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.PartitionSignature, md sigExecMetadata) error {
 	if md.Nested() {
 		return errors.BadRequest.With("partition signatures cannot be nested within another signature")
 	}

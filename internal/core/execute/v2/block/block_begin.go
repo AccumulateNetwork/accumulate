@@ -289,7 +289,7 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 		}
 
 		// DN -> BVN
-		for _, bvn := range x.Describe.Network.GetBvnNames() {
+		for _, bvn := range x.globals.Active.BvnNames() {
 			err = x.sendBlockAnchor(block, anchor, sequenceNumber, bvn)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
@@ -524,7 +524,7 @@ func (x *Executor) sendBlockAnchor(block *Block, anchor protocol.AnchorBody, seq
 	// will still be running v1
 	destPartUrl := protocol.PartitionUrl(destPart)
 	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && didUpdateToV2(anchor) && !strings.EqualFold(destPart, protocol.Directory) {
-		env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, block.Batch, anchor, sequenceNumber, destPartUrl)
+		env, err := shared.PrepareBlockAnchor(x.Describe, x.globals.Active.Network, x.Key, block.Batch, anchor, sequenceNumber, destPartUrl)
 		if err != nil {
 			return errors.InternalError.Wrap(err)
 		}

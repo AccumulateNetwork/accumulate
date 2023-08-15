@@ -11,9 +11,9 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -26,7 +26,7 @@ type StateManager struct {
 	OriginUrl *url.URL
 }
 
-func LoadStateManager(net *config.Describe, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
+func LoadStateManager(net execute.DescribeShim, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
 	if !transaction.Body.Type().IsUser() {
 		// Don't check the signer
 		return NewStateManager(net, globals, batch, principal, transaction, logger), nil
@@ -60,7 +60,7 @@ func LoadStateManager(net *config.Describe, globals *core.GlobalValues, batch *d
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(net *config.Describe, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(net execute.DescribeShim, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal

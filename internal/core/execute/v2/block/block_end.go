@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -250,7 +249,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	return &closedBlock{*block, valUp}, nil
 }
 
-func getMajorHeight(desc config.Describe, batch *database.Batch) (uint64, error) {
+func getMajorHeight(desc execute.DescribeShim, batch *database.Batch) (uint64, error) {
 	c := batch.Account(desc.AnchorPool()).MajorBlockChain()
 	head, err := c.Head().Get()
 	if err != nil {
@@ -563,7 +562,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			return nil
 		}
 
-		bvns := x.Describe.Network.GetBvnNames()
+		bvns := x.globals.Active.BvnNames()
 		ledger.MajorBlockIndex++
 		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))

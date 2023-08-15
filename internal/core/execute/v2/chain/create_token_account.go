@@ -11,8 +11,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -131,7 +131,7 @@ func (x CreateTokenAccount) Execute(st *StateManager, tx *Delivery) (protocol.Tr
 		return nil, err
 	}
 
-	err = verifyCreateTokenAccountProof(st.Describe, st.batch, tx.Transaction.Header.Principal, body)
+	err = verifyCreateTokenAccountProof(st.DescribeShim, st.batch, tx.Transaction.Header.Principal, body)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -151,7 +151,7 @@ func (x CreateTokenAccount) Execute(st *StateManager, tx *Delivery) (protocol.Tr
 	return nil, nil
 }
 
-func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, principal *url.URL, body *protocol.CreateTokenAccount) error {
+func verifyCreateTokenAccountProof(net execute.DescribeShim, batch *database.Batch, principal *url.URL, body *protocol.CreateTokenAccount) error {
 	// If the issuer is local, check if it exists
 	local := principal.LocalTo(body.TokenUrl)
 	if local {

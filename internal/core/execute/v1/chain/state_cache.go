@@ -10,11 +10,11 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -23,7 +23,7 @@ import (
 )
 
 type stateCache struct {
-	*config.Describe
+	execute.DescribeShim
 	logger logging.OptionalLogger
 	txType protocol.TransactionType
 	txHash [32]byte
@@ -37,9 +37,9 @@ type stateCache struct {
 	Pretend bool
 }
 
-func newStateCache(net *config.Describe, globals *core.GlobalValues, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
+func newStateCache(net execute.DescribeShim, globals *core.GlobalValues, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
 	c := new(stateCache)
-	c.Describe = net
+	c.DescribeShim = net
 	c.Globals = globals
 	c.txType = txtype
 	c.txHash = txid
