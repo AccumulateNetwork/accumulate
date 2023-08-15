@@ -9,34 +9,45 @@ package simulator
 import (
 	"context"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/services"
 )
+
+// fakeDispatcher drops everything
+type fakeDispatcher struct{}
+
+func (fakeDispatcher) Submit(ctx context.Context, dest *url.URL, envelope *messaging.Envelope) error {
+	// Drop it
+	return nil
+}
+
+func (fakeDispatcher) Send(context.Context) <-chan error {
+	// Nothing to do
+	ch := make(chan error)
+	close(ch)
+	return ch
+}
 
 // dispatcher implements [block.Dispatcher] for the simulator.
 //
 // dispatcher maintains a separate bundle (slice) of messages for each call to
 // Submit to make it easier to write tests that drop certain messages.
 type dispatcher struct {
-	sim       *Simulator
+	client    *services.Network
+	router    routing.Router
 	envelopes map[string][]*messaging.Envelope
-}
-
-func (s *Simulator) newDispatcher() execute.Dispatcher {
-	return &dispatcher{sim: s, envelopes: map[string][]*messaging.Envelope{}}
 }
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // Submit routes the envelope and adds it to the queue for a partition.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
-	if d.sim.opts.dropDispatchedMessages {
-		return nil
-	}
-
-	partition, err := d.sim.router.RouteAccount(u)
+	partition, err := d.router.RouteAccount(u)
 	if err != nil {
 		return err
 	}
@@ -64,23 +75,25 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		defer close(errs)
 
 		for part, envelopes := range envelopes {
-			for _, envelopes := range envelopes {
-				st, err := d.sim.SubmitTo(part, envelopes)
+			for _, envelope := range envelopes {
+				addr := api.ServiceTypeSubmit.AddressFor(part).Multiaddr()
+				st, err := d.client.ForAddress(addr).Submit(ctx, envelope, api.SubmitOptions{})
 				if err != nil {
 					errs <- err
 					continue
 				}
 				for _, st := range st {
-					if st.Error == nil {
+					if st.Success {
 						continue
 					}
-					if !st.Failed() {
+					if st.Status == nil && st.Status.Error == nil {
+						errs <- errors.UnknownError.With(st.Message)
 						continue
 					}
-					if st.Code == errors.NotAllowed && st.Error.Message == "dropped" {
+					if st.Status.Code == errors.NotAllowed && st.Status.Error.Message == "dropped" {
 						continue
 					}
-					errs <- st.AsError()
+					errs <- st.Status.AsError()
 				}
 			}
 		}

@@ -7,8 +7,8 @@
 package shared
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -72,7 +72,7 @@ func SignTransaction(network *protocol.NetworkDefinition, nodeKey []byte, batch 
 	return keySig, nil
 }
 
-func PrepareBlockAnchor(network *config.Describe, netdef *protocol.NetworkDefinition, nodeKey []byte, batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*messaging.Envelope, error) {
+func PrepareBlockAnchor(network execute.DescribeShim, netdef *protocol.NetworkDefinition, nodeKey []byte, batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*messaging.Envelope, error) {
 	// TODO Exporting this is not great
 
 	txn := new(protocol.Transaction)

@@ -357,7 +357,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig.SourceNetwork = m.Describe.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
 		sig.Proof = *receipt
-		_, err = block.Batch.Transaction(txn.GetHash()).AddSystemSignature(&m.Describe, sig)
+		_, err = block.Batch.Transaction(txn.GetHash()).AddSystemSignature(m.Describe.PartitionUrl(), sig)
 		if err != nil {
 			return errors.UnknownError.WithFormat("store signature: %w", err)
 		}
@@ -720,7 +720,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			return nil
 		}
 
-		bvns := x.Describe.Network.GetBvnNames()
+		bvns := x.globals.Active.BvnNames()
 		ledger.MajorBlockIndex++
 		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
