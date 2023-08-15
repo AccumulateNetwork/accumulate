@@ -69,8 +69,8 @@ func TestStateRelaunch(t *testing.T) {
 		stores[fmt.Sprintf("%s-%d", Directory, i)] = memory.New(nil)
 		stores[fmt.Sprintf("BVN%d-0", i)] = memory.New(nil)
 	}
-	openDb := func(partition string, node int, logger log.Logger) keyvalue.Beginner {
-		return stores[fmt.Sprintf("%s-%d", partition, node)]
+	openDb := func(partition *PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		return stores[fmt.Sprintf("%s-%d", partition.ID, node)]
 	}
 
 	// [1] Setup
