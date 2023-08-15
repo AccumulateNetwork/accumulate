@@ -160,10 +160,10 @@ func (e *branch) delete(key [32]byte) (updated bool, err error) {
 			// Can't collapse if either branch is a branch
 		case lt == nodeTypeEmpty:
 			// Collapse to the right
-			*f = g.Right.copyWith(nil, e) // nil is safe because the receiver can't be a branch
+			*f = g.Right.copyWith(nil, e, false) // nil is safe because the receiver can't be a branch
 		case rt == nodeTypeEmpty:
 			// Collapse to the left
-			*f = g.Left.copyWith(nil, e)
+			*f = g.Left.copyWith(nil, e, false)
 		}
 
 		e.status = branchUnhashed
