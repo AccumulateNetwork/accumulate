@@ -19,24 +19,24 @@ type RecordStore struct {
 func (s RecordStore) Unwrap() database.Record { return s.Record }
 
 // GetValue implements record.Store.
-func (s RecordStore) GetValue(key *database.Key, value database.Value) error {
-	v, err := Resolve[database.Value](s.Record, key)
+func (s RecordStore) GetValue(key *database.Key, dst database.Value) error {
+	src, err := Resolve[database.Value](s.Record, key)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	err = value.LoadValue(v, false)
+	err = dst.LoadValue(src, false)
 	return errors.UnknownError.Wrap(err)
 }
 
 // PutValue implements database.Store.
-func (s RecordStore) PutValue(key *database.Key, value database.Value) error {
-	v, err := Resolve[database.Value](s.Record, key)
+func (s RecordStore) PutValue(key *database.Key, src database.Value) error {
+	dst, err := Resolve[database.Value](s.Record, key)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	err = v.LoadValue(value, true)
+	err = dst.LoadValue(src, true)
 	return errors.UnknownError.Wrap(err)
 }
 
