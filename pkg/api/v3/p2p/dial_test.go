@@ -9,17 +9,17 @@ package p2p
 import (
 	"context"
 	"crypto/ed25519"
-	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	ic "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/net/swarm"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -76,7 +76,7 @@ func TestDialAddress(t *testing.T) {
 		"tcp-network-partition": {false, "/tcp/123/acc/foo/acc-svc/query:foo"},
 	}
 
-	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := dialer.Dial(context.Background(), addr(t, c.Addr))
@@ -101,7 +101,7 @@ func TestDialSelfPeer(t *testing.T) {
 	host.EXPECT().selfID().Return(pid)
 	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
-	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
 	require.NoError(t, err)
 	<-done
@@ -117,7 +117,7 @@ func TestDialSelfPartition(t *testing.T) {
 	host := newMockDialerHost(t)
 	host.EXPECT().getOwnService(mock.Anything, mock.Anything).Return(&serviceHandler{handler: handler.Execute}, true)
 
-	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+	dialer := &dialer{host: host, peers: nil, tracker: &simpleTracker{}}
 	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/acc-svc/query:foo"))
 	require.NoError(t, err)
 	<-done
@@ -131,49 +131,6 @@ func newPeer(t *testing.T, seed ...any) peer.ID {
 	id, err := peer.IDFromPrivateKey(k)
 	require.NoError(t, err)
 	return id
-}
-
-func TestSimpleTracker(t *testing.T) {
-	// Set up 3 peers
-	p1 := newPeer(t, 1)
-	p2 := newPeer(t, 2)
-	p3 := newPeer(t, 3)
-
-	// Test cases
-	type T1 struct {
-		Peer  peer.ID
-		Count int
-	}
-	cases := []struct {
-		Bad  []T1
-		Good map[peer.ID]bool
-	}{
-		// If P1 is bad twice and P2 is bad once, P3 should be the only good peer
-		{Bad: []T1{{p1, 2}, {p2, 1}}, Good: map[peer.ID]bool{p3: true}},
-
-		// If all peers are marked bad the same number of times, they should all be good
-		{Bad: []T1{{p1, 1}, {p2, 1}, {p3, 1}}, Good: map[peer.ID]bool{p1: true, p2: true, p3: true}},
-	}
-
-	for i, c := range cases {
-		t.Run(fmt.Sprintf("Case %d", i), func(t *testing.T) {
-			// Make sure the tracker knows about all of the peers
-			s := new(simpleTracker)
-			s.isBad(p1)
-			s.isBad(p2)
-			s.isBad(p3)
-
-			for _, b := range c.Bad {
-				for i := 0; i < b.Count; i++ {
-					s.markBad(b.Peer)
-				}
-			}
-
-			assert.Equal(t, c.Good[p1], !s.isBad(p1), "Is P1 good?")
-			assert.Equal(t, c.Good[p2], !s.isBad(p2), "Is P2 good?")
-			assert.Equal(t, c.Good[p3], !s.isBad(p3), "Is P3 good?")
-		})
-	}
 }
 
 func TestDialServices1(t *testing.T) {
@@ -223,49 +180,58 @@ func TestDialServices1(t *testing.T) {
 	}
 
 	// Setup the peers mock
-	peers := funcPeers(func(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
-		ch := make(chan peer.AddrInfo, 100)
+	peers := staticPeers(func(ctx context.Context, ma multiaddr.Multiaddr) []peer.AddrInfo {
+		var all []peer.AddrInfo
 		for _, p := range goodPeerIDs {
-			ch <- peer.AddrInfo{ID: p}
+			all = append(all, peer.AddrInfo{ID: p})
 		}
 		for _, p := range badPeerIDs {
-			ch <- peer.AddrInfo{ID: p}
+			all = append(all, peer.AddrInfo{ID: p})
 		}
-		return ch, nil
+		return all
 	})
 
-	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+	tracker := new(simpleTracker)
+	dialer := &dialer{host: host, peers: peers, tracker: tracker}
 
 	start := time.Now()
+	wg := new(sync.WaitGroup)
 	for _, service := range services {
-
 		for i := 0; i < numGoodPeers+numBadPeers; i++ {
 			for j := 0; j < 1; j++ {
 				fmt.Printf("loop %d-%d\n", i, j)
-				addr, e1 := service.MultiaddrFor("MainNet")
-				require.NoError(t, e1)
-				Stream, e2 := dialer.Dial(ctx, addr)
-				require.NoError(t, e2)
-				var p int
-				if stream2, ok := Stream.(*stream); ok {
-					p = peerMap[stream2.peer.String()]
-				}
+				s, err := dialer.newNetworkStream(ctx, service, "MainNet", wg)
+				require.NoError(t, err)
+				p := peerMap[s.(*stream).peer.String()]
 				fmt.Printf("%10d %40s %v\n", p, service.String(), time.Since(start))
+				runtime.Gosched()
 			}
 		}
 	}
+
+	// Wait for async operations to finish
+	wg.Wait()
+
 	for _, service := range services {
 		addr, err := service.MultiaddrFor("MainNet")
 		require.NoError(t, err)
-		_ = addr
-		require.Len(t, dialer.goodPeers[addr.String()], 10)
+		require.Len(t, tracker.good[addr.String()].All(), 10)
 	}
 }
 
-type funcPeers func(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error)
+type staticPeers func(ctx context.Context, ma multiaddr.Multiaddr) []peer.AddrInfo
 
-func (f funcPeers) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
-	return f(ctx, ma, limit)
+func (f staticPeers) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
+	list := f(ctx, ma)
+	if len(list) > limit {
+		list = list[:limit]
+	}
+	ch := make(chan peer.AddrInfo, len(list))
+	for _, x := range list {
+		ch <- x
+	}
+	close(ch)
+	return ch, nil
 }
 
 type fakeHost struct {
@@ -285,7 +251,8 @@ func (h *fakeHost) getPeerService(ctx context.Context, peer peer.ID, service *ap
 	if h.good[peer.String()+"|"+service.String()] {
 		return fakeStream{}, nil
 	}
-	return nil, errors.New("bad")
+	// The specific error doesn't matter but this one won't get logged
+	return nil, swarm.ErrDialBackoff
 }
 
 func TestDialServices2(t *testing.T) {
@@ -329,19 +296,18 @@ func TestDialServices2(t *testing.T) {
 	}
 
 	// Setup the peers mock
-	peers := funcPeers(func(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
-		elements := len(goodPeerIDs) + len(badPeerIDs)
-		ch := make(chan peer.AddrInfo, elements)
+	peers := staticPeers(func(ctx context.Context, ma multiaddr.Multiaddr) []peer.AddrInfo {
+		var all []peer.AddrInfo
 		for _, p := range goodPeerIDs {
-			ch <- peer.AddrInfo{ID: p}
+			all = append(all, peer.AddrInfo{ID: p})
 		}
 		for _, p := range badPeerIDs {
-			ch <- peer.AddrInfo{ID: p}
+			all = append(all, peer.AddrInfo{ID: p})
 		}
-		return ch, nil
+		return all
 	})
 
-	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}, goodPeers: make(map[string][]peer.AddrInfo), mutex: new(sync.Mutex)}
+	dialer := &dialer{host: host, peers: peers, tracker: &simpleTracker{}}
 
 	start := time.Now()
 	service := services[0]
@@ -351,10 +317,7 @@ func TestDialServices2(t *testing.T) {
 		require.NoError(t, e1)
 		Stream, e2 := dialer.Dial(ctx, addr)
 		require.NoError(t, e2)
-		var p int
-		if stream2, ok := Stream.(*stream); ok {
-			p = peerMap[stream2.peer.String()]
-		}
+		p := peerMap[Stream.(*stream).peer.String()]
 		fmt.Printf("%10d %40s %v\n", p, service.String(), time.Since(start))
 	}
 	moveAPeer := func(src, dest []peer.ID) (source, destination []peer.ID, peer peer.ID, sourceLen int) {
@@ -369,8 +332,6 @@ func TestDialServices2(t *testing.T) {
 		return src, dest, peer, numSrc
 	}
 	invalidateOne := func() int {
-		dialer.mutex.Lock()
-		defer dialer.mutex.Unlock()
 		src, dest, peer, numSrc := moveAPeer(goodPeerIDs, badPeerIDs)
 		goodPeerIDs = src
 		badPeerIDs = dest
@@ -379,8 +340,6 @@ func TestDialServices2(t *testing.T) {
 		return numSrc
 	}
 	validateOne := func() int {
-		dialer.mutex.Lock()
-		defer dialer.mutex.Unlock()
 		src, dest, peer, numSrc := moveAPeer(badPeerIDs, goodPeerIDs)
 		badPeerIDs = src
 		goodPeerIDs = dest

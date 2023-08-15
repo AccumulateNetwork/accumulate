@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,9 +16,12 @@ var goSrc string
 
 var _ = Templates.Register(goSrc, "go", template.FuncMap{
 	"valueName": func(v *TypeValue) string {
-		if flags.ShortNames {
+		if v.Name != "" {
 			return v.Name
 		}
-		return v.Type.Name + v.Name
+		if flags.ShortNames {
+			return v.Key
+		}
+		return v.Type.Name + v.Key
 	},
 }, "Go")

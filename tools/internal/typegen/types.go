@@ -384,6 +384,7 @@ type Enum map[string]*EnumValue
 // EnumValue is a particular value of an enumeration.
 type EnumValue struct {
 	Value       interface{}
+	Name        string
 	Description string
 	Label       string
 	Aliases     []string

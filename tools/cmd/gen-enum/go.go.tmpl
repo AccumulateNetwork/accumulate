@@ -50,7 +50,7 @@ func (v {{.Name}}) String() string {
 	{{- $typ := .Name}}
 	{{- range .Values}}
 	case {{valueName .}}:
-		return "{{if .Label}}{{.Label}}{{else}}{{lowerCamel .Name}}{{end}}"
+		return "{{if .Label}}{{.Label}}{{else}}{{lowerCamel .Key}}{{end}}"
 	{{- end}}
 	}
 	{{- if .Registry}}
@@ -80,7 +80,7 @@ func {{.Name}}ByName(name string) ({{.Name}}, bool) {
 	{{- $typ := .Name}}
 	{{- range .Values}}
 	{{- $typ := (valueName .)}}
-	case "{{lower .Name}}":
+	case "{{lower .Key}}":
 		return {{$typ}}, true
 	{{- if .Label}}
 	case "{{lower .Label}}":
