@@ -461,6 +461,21 @@
       ],
     },
     {
+      // https://rr-project.org/
+      "name": "Replay an RR trace",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "replay",
+      "program": "${workspaceFolder}/internal/bsn",
+      "backend": "rr",
+      "traceDirPath": "${env:HOME}/.local/share/rr/bsn.test-1",
+      "args": [
+        "-test.run",
+        "Sim"
+      ]
+    },
+    {
       "name": "Database explorer",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
