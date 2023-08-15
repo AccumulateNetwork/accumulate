@@ -22,6 +22,14 @@ func init() {
 	Templates.Register(goSrc, "go", goFuncs, "Go")
 }
 
+type Counter int
+
+func (c *Counter) Next() int {
+	v := *c
+	*c++
+	return int(v)
+}
+
 var goFuncs = template.FuncMap{
 	"fullName":        fullName,
 	"hasChains":       hasChains,
@@ -41,6 +49,7 @@ var goFuncs = template.FuncMap{
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
+	"counter":         func(start int) *Counter { return (*Counter)(&start) },
 	"error": func(format string, args ...any) (string, error) {
 		return "", fmt.Errorf(format, args...)
 	},

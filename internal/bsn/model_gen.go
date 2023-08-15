@@ -112,7 +112,7 @@ func (c *ChangeSet) newPending(k pendingKey) *Pending {
 
 func (c *ChangeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for change set")
+		return nil, nil, errors.InternalError.With("bad key for change set (1)")
 	}
 
 	switch key.Get(0) {
@@ -120,36 +120,36 @@ func (c *ChangeSet) Resolve(key *record.Key) (record.Record, *record.Key, error)
 		return c.LastBlock(), key.SliceI(1), nil
 	case "Summary":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for change set")
+			return nil, nil, errors.InternalError.With("bad key for change set (2)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for change set")
+			return nil, nil, errors.InternalError.With("bad key for change set (3)")
 		}
 		v := c.Summary(hash)
 		return v, key.SliceI(2), nil
 	case "Pending":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for change set")
+			return nil, nil, errors.InternalError.With("bad key for change set (4)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for change set")
+			return nil, nil, errors.InternalError.With("bad key for change set (5)")
 		}
 		v := c.Pending(partition)
 		return v, key.SliceI(2), nil
 	case "Partition":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for change set")
+			return nil, nil, errors.InternalError.With("bad key for change set (6)")
 		}
 		id, okID := key.Get(1).(string)
 		if !okID {
-			return nil, nil, errors.InternalError.With("bad key for change set")
+			return nil, nil, errors.InternalError.With("bad key for change set (7)")
 		}
 		v := c.Partition(id)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for change set")
+		return nil, nil, errors.InternalError.With("bad key for change set (8)")
 	}
 }
 
@@ -247,7 +247,7 @@ func (c *Summary) newSignatures() values.Set[protocol.KeySignature] {
 
 func (c *Summary) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for summary")
+		return nil, nil, errors.InternalError.With("bad key for summary (1)")
 	}
 
 	switch key.Get(0) {
@@ -256,7 +256,7 @@ func (c *Summary) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Signatures":
 		return c.Signatures(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for summary")
+		return nil, nil, errors.InternalError.With("bad key for summary (2)")
 	}
 }
 
@@ -335,22 +335,22 @@ func (c *Pending) newOnBlock(k pendingOnBlockKey) values.Value[[32]byte] {
 
 func (c *Pending) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for pending")
+		return nil, nil, errors.InternalError.With("bad key for pending (1)")
 	}
 
 	switch key.Get(0) {
 	case "OnBlock":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for pending")
+			return nil, nil, errors.InternalError.With("bad key for pending (2)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for pending")
+			return nil, nil, errors.InternalError.With("bad key for pending (3)")
 		}
 		v := c.OnBlock(index)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for pending")
+		return nil, nil, errors.InternalError.With("bad key for pending (4)")
 	}
 }
 

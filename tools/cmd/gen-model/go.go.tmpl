@@ -179,9 +179,10 @@ func (c *{{fullName $c}}) {{if .CustomValueConstructor}}baseNew{{else}}new{{end}
 {{end}}
 
 {{if not .OmitResolve}}
+{{ $cnt := counter 1 }}
 func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
+		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}} ({{ $cnt.Next }})")
 	}
 
 	switch key.Get(0) {
@@ -189,13 +190,13 @@ func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key *record.Key
 	case {{if .Key}}"{{.Key}}"{{else}}"{{.Name}}"{{end}}:
 		{{- if parameterized .}}
 		if key.Len() < {{add 1 (parameterCount .)}} {
-			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
+			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}} ({{ $cnt.Next }})")
 		}
 		{{- range $index, $param := .GetParameters}}
 		{{lower .Name}}, ok{{.Name}} := key.Get({{add 1 $index}}).({{parameterType $param}})
 		{{- end}}
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
-			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
+			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}} ({{ $cnt.Next }})")
 		}
 		v := c.{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}},{{end}})
 		return v, key.SliceI({{add 1 (parameterCount .)}}), nil
@@ -204,7 +205,7 @@ func (c *{{fullName .}}) {{if .CustomResolve}}base{{end}}Resolve(key *record.Key
 		{{- end}}
 	{{- end}}
 	default:
-		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
+		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}} ({{ $cnt.Next }})")
 	}
 }
 {{end}}
