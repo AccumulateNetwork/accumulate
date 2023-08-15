@@ -15,19 +15,17 @@ import (
 )
 
 func (s *Simulator) SignWithNode(partition string, i int) nodeSigner {
-	return nodeSigner{s.partitions[partition].nodes[i]}
+	return nodeSigner(s.partitions[partition].nodes[i].network.PrivValKey)
 }
 
-type nodeSigner struct {
-	*Node
-}
+type nodeSigner []byte
 
 var _ signing.Signer = nodeSigner{}
 
-func (n nodeSigner) Key() []byte { return n.init.PrivValKey }
+func (n nodeSigner) Key() []byte { return n }
 
 func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
-	k := n.init.PrivValKey
+	k := n
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.PublicKey = k[32:]
@@ -58,7 +56,7 @@ func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
 }
 
 func (n nodeSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) error {
-	k := n.init.PrivValKey
+	k := n
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		protocol.SignLegacyED25519(sig, k, sigMdHash, message)

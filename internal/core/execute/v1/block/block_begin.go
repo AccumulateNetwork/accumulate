@@ -136,7 +136,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), nil, txn, x.logger)
+	st := chain.NewStateManager(x.Describe, &x.globals.Active, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -258,7 +258,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		}
 
 		// DN -> BVN
-		for _, bvn := range x.Describe.Network.GetBvnNames() {
+		for _, bvn := range x.globals.Active.BvnNames() {
 			err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, bvn)
 			if err != nil {
 				return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
@@ -480,7 +480,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 
 func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destPartUrl := protocol.PartitionUrl(destPart)
-	env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
+	env, err := shared.PrepareBlockAnchor(x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
 	if err != nil {
 		return errors.InternalError.Wrap(err)
 	}

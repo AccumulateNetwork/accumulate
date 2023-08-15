@@ -9,12 +9,9 @@ package consensus
 import (
 	"context"
 
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -46,7 +43,7 @@ type CheckResponse struct {
 }
 
 type InitRequest struct {
-	Snapshot   ioutil2.SectionReader
+	Snapshot   ioutil.SectionReader
 	Validators []*execute.ValidatorUpdate
 }
 
@@ -65,10 +62,11 @@ type BeginResponse struct {
 
 type ExecutorApp struct {
 	Executor execute.Executor
-	Database database.Beginner
+	Restore  RestoreFunc
 	EventBus *events.Bus
-	Describe *config.Describe
 }
+
+type RestoreFunc func(ioutil.SectionReader) error
 
 func (a *ExecutorApp) Info(*InfoRequest) (*InfoResponse, error) {
 	last, hash, err := a.Executor.LastBlock()
@@ -104,7 +102,8 @@ func (a *ExecutorApp) Init(req *InitRequest) (*InitResponse, error) {
 	}
 
 	// Restore the snapshot
-	err = snapshot.FullRestore(a.Database, req.Snapshot, nil, a.Describe)
+	err = a.Restore(req.Snapshot)
+	// err = snapshot.FullRestore(a.Database, req.Snapshot, nil, a.Describe.PartitionUrl())
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
 	}
