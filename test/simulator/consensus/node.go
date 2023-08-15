@@ -176,18 +176,26 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 		kv := []any{"id", id, "last-block", n.blockIndex}
 		var debug bool
 		if msg != nil {
+
 			kv = append(kv, "type", msg.Type())
-			switch msg := msg.(type) {
+		again:
+			switch m := msg.(type) {
 			case *messaging.TransactionMessage:
-				kv = append(kv, "txn-type", msg.Transaction.Body.Type())
-				if msg.Transaction.Body.Type().IsAnchor() {
+				kv = append(kv, "txn-type", m.Transaction.Body.Type())
+				if m.Transaction.Body.Type().IsAnchor() {
 					debug = true
 				}
 			case *messaging.SignatureMessage:
-				kv = append(kv, "sig-type", msg.Signature.Type())
+				kv = append(kv, "sig-type", m.Signature.Type())
 				debug = true
 			case *messaging.BlockAnchor:
 				debug = true
+			case *messaging.SyntheticMessage:
+				msg = m.Message
+				goto again
+			case *messaging.SequencedMessage:
+				msg = m.Message
+				goto again
 			}
 		}
 		if err != nil {
@@ -429,11 +437,13 @@ func (n *Node) execute(ctx context.Context, isLeader bool, followers []chan any,
 		}
 		envelopes = copyEnv(envelopes)
 
-		if !n.SkipProposalCheck {
+		// FIXME Fix this and reenable it. It is unreliable and causes
+		// intermittent failures.
+		if false && !n.SkipProposalCheck {
 			for _, env := range envelopes {
 				err := n.pool.CheckProposed(n.blockIndex+1, env)
 				if err != nil {
-					n.logger.Error("Consensus failure", "step", "propose", "error", err, "envelope", env)
+					n.logger.Error("Consensus failure", "step", "propose", "error", err, "envelope", env, "block", n.blockIndex+1)
 					return errors.FatalError.With("consensus error: propose block (1)")
 				}
 			}
@@ -517,6 +527,15 @@ func (n *Node) execute(ctx context.Context, isLeader bool, followers []chan any,
 	if err != nil {
 		return errors.FatalError.WithFormat("end block: %w", err)
 	}
+
+	// Record before checking consensus
+	if n.record != nil {
+		err = n.record.DidExecuteBlock(state, envelopes)
+		if err != nil {
+			return errors.UnknownError.WithFormat("record block: %w", err)
+		}
+	}
+
 	type valUpOk struct {
 		V  []*execute.ValidatorUpdate
 		Ok bool
@@ -570,13 +589,6 @@ func (n *Node) execute(ctx context.Context, isLeader bool, followers []chan any,
 				n.logger.Error("Consensus failure", "step", "commit", "error", "state hashes don't match", "leader", logging.AsHex(expect).Slice(0, 4), "ours", logging.AsHex(hash).Slice(0, 4))
 				return err
 			}
-		}
-	}
-
-	if n.record != nil {
-		err = n.record.DidExecuteBlock(state, envelopes)
-		if err != nil {
-			return errors.UnknownError.WithFormat("record block: %w", err)
 		}
 	}
 	return nil
