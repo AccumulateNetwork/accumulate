@@ -38,7 +38,7 @@ func VerifyUserSignatureV1(sig UserSignature, message []byte) bool {
 		sig = sig.(*ETHSignatureV1)
 	}
 
-	VerifyUserSignature(sig, message)
+	return VerifyUserSignature(sig, message)
 }
 
 // VerifyUserSignature verifies that the user signature signs the given message.
