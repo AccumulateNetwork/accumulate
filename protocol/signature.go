@@ -26,6 +26,21 @@ import (
 
 var ErrCannotInitiate = errors.BadRequest.With("signature cannot initiate a transaction: values are missing")
 
+type ETHSignatureV1 struct {
+	ETHSignature
+}
+
+// VerifyUserSignatureV1 verifies that the user signature signs the given message using version 1 logic
+func VerifyUserSignatureV1(sig UserSignature, message []byte) bool {
+
+	if sig.Type() == SignatureTypeETH {
+		//recast ETHSignature type to use V1 signature format
+		sig = sig.(*ETHSignatureV1)
+	}
+
+	VerifyUserSignature(sig, message)
+}
+
 // VerifyUserSignature verifies that the user signature signs the given message.
 func VerifyUserSignature(sig UserSignature, message []byte) bool {
 	if sig.Verify(sig.Metadata().Hash(), message) {
@@ -722,10 +737,10 @@ func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte) bool {
 }
 
 /*
- * ETH Signature
+ * ETH Signature in Distinguished Encoding Rules (DER) format
  */
 
-func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) error {
+func SignEthAsDer(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err error) {
 	if sigMdHash == nil {
 		sigMdHash = sig.Metadata().Hash()
 	}
@@ -740,6 +755,28 @@ func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) error {
 	}
 	sig.Signature = sign.Serialize()
 	return nil
+}
+
+/*
+ * ETH Signature
+ */
+
+func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err error) {
+	if sigMdHash == nil {
+		sigMdHash = sig.Metadata().Hash()
+	}
+	data := sigMdHash
+	data = append(data, txnHash...)
+	hash := sha256.Sum256(data)
+
+	priv, err := crypto.ToECDSA(privateKey)
+	if err != nil {
+		return err
+	}
+
+	sig.PublicKey = crypto.FromECDSAPub(&priv.PublicKey)
+	sig.Signature, err = crypto.Sign(hash[:], priv)
+	return err
 }
 
 // GetSigner returns Signer.
@@ -796,15 +833,16 @@ func (s *ETHSignature) GetVote() VoteType {
 	return s.Vote
 }
 
-// Verify returns true if this signature is a valid SECP256K1 signature of the
-// hash.
-func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
+// Verify deprecated: returns true if this signature is a valid RSV signature of the hash.
+func (e *ETHSignatureV1) Verify(sigMdHash, txnHash []byte) bool {
 	if sigMdHash == nil {
 		sigMdHash = e.Metadata().Hash()
 	}
 	data := sigMdHash
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
+
+	//process signature as DER format
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
 		return false
@@ -814,6 +852,18 @@ func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
 		return false
 	}
 	return sig.Verify(hash[:], pbkey)
+}
+
+// Verify returns true if this signature is a valid RSV signature of the hash, with V2 we drop support for DER format
+func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
+	if sigMdHash == nil {
+		sigMdHash = e.Metadata().Hash()
+	}
+	data := sigMdHash
+	data = append(data, txnHash...)
+	hash := sha256.Sum256(data)
+
+	return crypto.VerifySignature(e.PublicKey, hash[:], e.Signature)
 }
 
 /*

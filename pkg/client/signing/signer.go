@@ -68,7 +68,8 @@ func (k PrivateKey) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 		return protocol.SignBTCLegacy(sig, k, sigMdHash, message)
 
 	case *protocol.ETHSignature:
-		return protocol.SignETH(sig, k, sigMdHash, message)
+		//TODO: after RSV rule activation change this to SignEth(...) and deprecate SighEthAsDer
+		return protocol.SignEthAsDer(sig, k, sigMdHash, message)
 
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)
