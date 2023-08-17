@@ -833,7 +833,7 @@ func (s *ETHSignature) GetVote() VoteType {
 	return s.Vote
 }
 
-// Verify deprecated: returns true if this signature is a valid RSV signature of the hash.
+// Deprecated: Verify returns true if this signature is a valid signature in DER format of the hash.
 func (e *ETHSignatureV1) Verify(sigMdHash, txnHash []byte) bool {
 	if sigMdHash == nil {
 		sigMdHash = e.Metadata().Hash()
