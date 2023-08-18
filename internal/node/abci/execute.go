@@ -40,6 +40,11 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		logger.Info("Failed to execute messages", "tx", logging.AsHex(hash), "error", err)
 		return nil, nil, nil, errors.UnknownError.Wrap(err)
 	}
+	for _, r := range results {
+		if r.Result == nil {
+			r.Result = new(protocol.EmptyResult)
+		}
+	}
 
 	// If the results can't be marshaled, provide no results but do not fail the
 	// batch
