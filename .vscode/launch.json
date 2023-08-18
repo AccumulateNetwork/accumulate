@@ -140,7 +140,8 @@
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/accumulated-http",
       "args": [
-        "TestNet",
+        "Kermit",
+        "--debug",
         "--http-listen=/ip4/0.0.0.0/tcp/26660",
         "--peer=/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
       ]
@@ -499,14 +500,14 @@
       ]
     },
     {
-      "name": "Check Node",
+      "name": "Verify envelope",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/debug",
       "args": [
-        "check-node", "localhost"
+        "verify", "{\"signatures\": [{\"type\": \"eth\",\"publicKey\": \"0469bdf2f442628a7ab77364810dae36bfad5c4c47a03790558f0e03cdf36ca9e00ac9e32ee9b2ef3ccc2d8ec58e27e30d937586ea12eade9cbd9916ab169011fd\",\"signature\": \"30440220aa01f3c7176a766859c9682fbf608e11227f8894ec2097b63b4d4a370ee710f00220496a2280a477f0bdfa8a0cc58c5dcbe3ecfef8b7f6cca677990be9c1b578c7db\",\"signer\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e/ACME\",\"signerVersion\": 1,\"timestamp\": 1692301326529,\"transactionHash\": \"50ae244d7057ba000594d8b95b44cd1419c546f2adc2118a8799786dc6b6bb91\"}],\"transaction\": [{\"header\": {\"principal\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e/ACME\",\"initiator\": \"5572129dbb0ec164c327ef36c2783767a14eda2dee08d5ff6170928b4673d4cb\"},\"body\": {\"type\": \"addCredits\",\"recipient\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e\",\"amount\": \"10000\",\"oracle\": 50000000}}]}"
       ]
     }
   ]
