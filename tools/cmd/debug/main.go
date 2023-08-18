@@ -18,6 +18,7 @@ var (
 	outputJSON     bool
 	healContinuous bool
 	cachedScan     string
+	verbose        bool
 )
 
 var cmd = &cobra.Command{

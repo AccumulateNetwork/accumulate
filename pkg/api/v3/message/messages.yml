@@ -109,6 +109,7 @@ FindServiceResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+      keep-empty: true
 
 ConsensusStatusResponse:
   union: { type: message }
@@ -149,6 +150,7 @@ SubmitResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+      keep-empty: true
 
 ValidateResponse:
   union: { type: message }
@@ -158,6 +160,7 @@ ValidateResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+      keep-empty: true
 
 FaucetResponse:
   union: { type: message }
@@ -178,3 +181,4 @@ EventMessage:
       type: api.Event
       marshal-as: union
       repeatable: true
+      keep-empty: true

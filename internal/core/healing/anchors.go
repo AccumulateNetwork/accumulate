@@ -21,7 +21,7 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *NetworkInfo, srcUrl, dstUrl *url.URL, seqNum uint64, res *api.MessageRecord[*messaging.TransactionMessage]) error {
+func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *NetworkInfo, srcUrl, dstUrl *url.URL, seqNum uint64, theAnchorTxn *protocol.Transaction, sigSets []*api.SignatureSetRecord) error {
 	srcId, ok := protocol.ParsePartitionUrl(srcUrl)
 	if !ok {
 		panic("not a partition: " + srcUrl.String())
@@ -33,9 +33,9 @@ func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *
 	// }
 
 	// Mark which validators have signed
-	slog.InfoCtx(ctx, "Healing anchor", "txid", res.ID)
+	slog.InfoCtx(ctx, "Healing anchor", "txid", theAnchorTxn.ID())
 	signed := map[[32]byte]bool{}
-	for _, sigs := range res.Signatures.Records {
+	for _, sigs := range sigSets {
 		for _, sig := range sigs.Signatures.Records {
 			msg, ok := sig.Message.(*messaging.BlockAnchor)
 			if !ok {
@@ -59,12 +59,16 @@ func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *
 		return nil
 	}
 
-	theAnchorTxn := res.Message.Transaction
-	env := new(messaging.Envelope)
-	env.Transaction = []*protocol.Transaction{theAnchorTxn}
+	seq := &messaging.SequencedMessage{
+		Message:     &messaging.TransactionMessage{Transaction: theAnchorTxn},
+		Source:      srcUrl,
+		Destination: dstUrl,
+		Number:      seqNum,
+	}
 
 	// Get a signature from each node that hasn't signed
 	var gotPartSig bool
+	var signatures []protocol.Signature
 	for peer, info := range net.Peers[strings.ToLower(srcId)] {
 		if signed[info.Key] {
 			continue
@@ -89,16 +93,6 @@ func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *
 			slog.ErrorCtx(ctx, "Node gave us an anchor with a different hash", "id", info,
 				"expected", hex.EncodeToString(theAnchorTxn.GetHash()),
 				"got", hex.EncodeToString(myTxn.Transaction.GetHash()))
-			// if b, err := json.Marshal(theAnchorTxn); err != nil {
-			// 	panic(err)
-			// } else {
-			// 	fmt.Fprintf(os.Stderr, "Want: %s\n", b)
-			// }
-			// if b, err := json.Marshal(myTxn.Transaction); err != nil {
-			// 	panic(err)
-			// } else {
-			// 	fmt.Fprintf(os.Stderr, "Got:  %s\n", b)
-			// }
 			continue
 		}
 
@@ -110,39 +104,68 @@ func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *
 					continue
 				}
 
-				switch sig := msg.Signature.(type) {
-				case *protocol.PartitionSignature:
-					// We only want one partition signature
-					if gotPartSig {
+				if net.Status.ExecutorVersion.V2() {
+					sig, ok := msg.Signature.(protocol.KeySignature)
+					if !ok {
+						slog.ErrorCtx(ctx, "Node gave us a signature that is not a key signature", "id", info, "type", sig.Type())
 						continue
 					}
-					gotPartSig = true
 
-				case protocol.UserSignature:
 					// Filter out bad signatures
-					if !sig.Verify(nil, theAnchorTxn.GetHash()) {
+					h := seq.Hash()
+					if !sig.Verify(nil, h[:]) {
 						slog.ErrorCtx(ctx, "Node gave us an invalid signature", "id", info)
 						continue
 					}
 
-				default:
-					slog.ErrorCtx(ctx, "Node gave us a signature that is not a user signature", "id", info, "type", sig.Type())
-					continue
+				} else {
+					switch sig := msg.Signature.(type) {
+					case *protocol.PartitionSignature:
+						// We only want one partition signature
+						if gotPartSig {
+							continue
+						}
+						gotPartSig = true
+
+					case protocol.UserSignature:
+						// Filter out bad signatures
+						if !sig.Verify(nil, theAnchorTxn.GetHash()) {
+							slog.ErrorCtx(ctx, "Node gave us an invalid signature", "id", info)
+							continue
+						}
+
+					default:
+						slog.ErrorCtx(ctx, "Node gave us a signature that is not a user signature", "id", info, "type", sig.Type())
+						continue
+					}
 				}
 
-				env.Signatures = append(env.Signatures, msg.Signature)
+				signatures = append(signatures, msg.Signature)
 			}
 		}
 	}
 
 	// We should always have a partition signature, so there's only something to
 	// sent if we have more than 1 signature
-	if len(env.Signatures) <= 1 {
+	if gotPartSig && len(signatures) <= 1 || !gotPartSig && len(signatures) == 0 {
 		slog.InfoCtx(ctx, "Nothing to send")
 		return nil
 	}
 
-	slog.InfoCtx(ctx, "Submitting signatures", "count", len(env.Signatures))
+	slog.InfoCtx(ctx, "Submitting signatures", "count", len(signatures))
+	env := new(messaging.Envelope)
+	if net.Status.ExecutorVersion.V2() {
+		for _, sig := range signatures {
+			env.Messages = append(env.Messages, &messaging.BlockAnchor{
+				Signature: sig.(protocol.KeySignature),
+				Anchor:    seq,
+			})
+		}
+	} else {
+		env.Transaction = []*protocol.Transaction{theAnchorTxn}
+		env.Signatures = signatures
+	}
+
 	// addr := api.ServiceTypeSubmit.AddressFor(dstId).Multiaddr()
 	sub, err := C1.Submit(ctx, env, api.SubmitOptions{})
 	if err != nil {

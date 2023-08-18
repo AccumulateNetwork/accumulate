@@ -111,9 +111,11 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 		return nil, err
 	}
 
-	var results []*api.FindServiceResult
+	results := []*api.FindServiceResult{}
 	for peer := range ch {
 		results = append(results, &api.FindServiceResult{PeerID: peer.ID})
 	}
+
+	// Return an empty array, not nil, because JSON-RPC handles that better
 	return results, nil
 }

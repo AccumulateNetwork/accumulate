@@ -62,7 +62,9 @@ var flag = struct {
 	LetsEncrypt []string
 	TlsCert     string
 	TlsKey      string
-}{}
+}{
+	Peers: api.BootstrapServers,
+}
 
 func init() {
 	cmd.Flags().StringVar(&flag.Key, "key", "", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
@@ -77,8 +79,6 @@ func init() {
 	cmd.Flags().StringVar(&flag.TlsCert, "tls-cert", "", "Certificate used for HTTPS")
 	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
-
-	_ = cmd.MarkFlagRequired("peer")
 }
 
 func run(_ *cobra.Command, args []string) {
