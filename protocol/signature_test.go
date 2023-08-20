@@ -106,9 +106,6 @@ func TestETHSignature(t *testing.T) {
 	require.Equal(t, VerifyUserSignature(secp, hash[:]), true)
 
 	t.Logf("Signature: %x", secp.Signature)
-	//pubKeyRecover, err := eth.SigToPub(hash[:], secp.Signature)
-	//require.NoError(t, err)
-	//require.True(t, pubKeyRecover.Equal(privKey.Public()), "public key does not match recovered")
 }
 
 func TestBTCaddress(t *testing.T) {
