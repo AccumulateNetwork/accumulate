@@ -26,7 +26,7 @@ import (
 
 var ErrCannotInitiate = errors.BadRequest.With("signature cannot initiate a transaction: values are missing")
 
-type eTHSignatureV1 struct {
+type ethSignatureV1 struct {
 	*ETHSignature
 }
 
@@ -34,7 +34,7 @@ type eTHSignatureV1 struct {
 func VerifyUserSignatureV1(sig UserSignature, message []byte) bool {
 	if sig.Type() == SignatureTypeETH {
 		//recast ETHSignature type to use V1 signature format
-		sig = &eTHSignatureV1{sig.(*ETHSignature)}
+		sig = &ethSignatureV1{sig.(*ETHSignature)}
 	}
 
 	return VerifyUserSignature(sig, message)
@@ -787,7 +787,7 @@ func (s *ETHSignature) GetVote() VoteType {
 }
 
 // Deprecated: Verify returns true if this signature is a valid signature in DER format of the hash.
-func (e *eTHSignatureV1) Verify(sigMdHash, txnHash []byte) bool {
+func (e *ethSignatureV1) Verify(sigMdHash, txnHash []byte) bool {
 	//process signature as DER format
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
