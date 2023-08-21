@@ -8,8 +8,7 @@ gemnasium-dependency_scanning:
   rules:
   - if: $CI_PIPELINE_SOURCE
 
-# temporarilly disable the license scanning since it is no longer supported in gitlab 16.
-.license_scanning:
+license_scanning:
   rules:
   - if: $CI_PIPELINE_SOURCE
 
