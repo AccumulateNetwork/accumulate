@@ -13,9 +13,9 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/tools/dbrepair",
-      "cwd": "${workspaceFolder}/tools/dbrepair",
-      "args": [],
+      "program": "${workspaceFolder}/tools/cmd/dbrepair",
+      "cwd": "${workspaceFolder}",
+      "args": ["buildTestDBs","1000", "good","bad"],
     },
     // Simulate
     {

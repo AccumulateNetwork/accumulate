@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	badger "github.com/dgraph-io/badger/v3"
@@ -12,7 +15,7 @@ import (
 )
 
 var cmdDbRepair = &cobra.Command{
-	Use:   "dbRepair",
+	Use:   "dbrepair",
 	Short: "utilities to repair bad databases using a good database",
 }
 
@@ -23,11 +26,16 @@ var cmdBuildSummary = &cobra.Command{
 	Run:   buildSummary,
 }
 
+var cmdBuildTestDBs = &cobra.Command{
+	Use:   "buildTestDBs [number of entries] [good database] [bad database]",
+	Short: "Number of entries must be greater than 100, should be greater than 5000",
+	Args:  cobra.ExactArgs(3),
+	Run:   buildTestDBs,
+}
+
 func init() {
-	cmd.AddCommand(cmdDbRepair)
-	cmdDbRepair.AddCommand(
-		cmdBuildSummary,
-	)
+	cmd.AddCommand(cmdBuildSummary)
+	cmd.AddCommand(cmdBuildTestDBs)
 }
 
 func buildSummary(_ *cobra.Command, args []string) {
@@ -89,4 +97,127 @@ func buildSummary(_ *cobra.Command, args []string) {
 
 	fmt.Printf("\nValidating %d keys took %v\n", len(keys), time.Since(start))
 
+}
+
+// YesNoPrompt asks yes/no questions using the label.
+func YesNoPrompt(label string) bool {
+	choices := "Y/N"
+
+	r := bufio.NewReader(os.Stdin)
+	var s string
+
+	for {
+		fmt.Fprintf(os.Stderr, "%s (%s) ", label, choices)
+		s, _ = r.ReadString('\n')
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return false
+		}
+		s = strings.ToLower(s)
+		if s == "y" || s == "yes" {
+			return true
+		}
+		if s == "n" || s == "no" {
+			return false
+		}
+	}
+}
+
+func buildTestDBs(_ *cobra.Command, args []string) {
+	numEntries, err := strconv.Atoi(args[0])
+	check(err)
+	if numEntries < 100 {
+		fatalf("entries must be greater than 100")
+	}
+	GoodDBName := args[1]
+	BadDBName := args[2]
+
+	if YesNoPrompt(
+		fmt.Sprintf("Delete all files in folders [%s] and [%s]?",
+			GoodDBName, BadDBName)) {
+		os.Remove(GoodDBName)
+		os.Remove(BadDBName)
+	}
+
+	gDB, err := badger.Open(badger.DefaultOptions(GoodDBName))
+	if err != nil {
+		fmt.Printf("error opening db %v\n", err)
+		return
+	}
+	defer func() {
+		if err := gDB.Close(); err != nil {
+			fmt.Printf("error closing db %v\n", err)
+		}
+	}()
+
+	bDB, err := badger.Open(badger.DefaultOptions(GoodDBName))
+	if err != nil {
+		fmt.Printf("error opening db %v\n", err)
+		return
+	}
+	defer func() {
+		if err := bDB.Close(); err != nil {
+			fmt.Printf("error closing db %v\n", err)
+		}
+	}()
+
+	var rh, mrh RandHash                      // rh adds the good key vale pairs
+	mrh.SetSeed([]byte{1, 4, 67, 8, 3, 5, 7}) // mrh with a different seed, adds bad data
+
+	start := time.Now()
+
+	for i := 0; i < numEntries/100; i++ {
+		key := rh.Next()
+		value := rh.GetRandBuff(rh.GetIntN(128) + 128)
+
+		// Write the Good entry
+		err := gDB.Update(func(txn *badger.Txn) error {
+			for i := 0; i < 100; i++ {
+				err := txn.Set(key, value)
+				check(err)
+			}
+			return nil
+		})
+		check(err)
+
+		for i := 0; i < 100; i++ {
+
+			op := 0 // Match the good db
+			pick := func(t bool, value int) int {
+				if t {
+					return value
+				}
+				return op
+			}
+			op = pick(i%3027 == 0, 1) // Modify a key value pair
+			op = pick(i%1003 == 0, 2) // Add a key value pair
+			op = pick(i%2013 == 0, 3) // Delete a key value pair
+
+			// Write bad entries
+
+			err = bDB.Update(func(txn *badger.Txn) error {
+				switch op {
+				case 0:
+					err := txn.Set(key, value) //        Normal
+					check(err)
+				case 1:
+					value[0]++
+					err := txn.Set(key, value) //        Modify a key value pair
+					check(err)
+				case 2:
+					err := txn.Set(mrh.Next(), value) // Add a key value pair
+					check(err)
+					err = txn.Set(key, value)
+					check(err)
+				case 3: //                              Delete a key value pair
+				}
+				return nil
+			})
+			check(err)
+
+			if i%10000 == 0 {
+				fmt.Printf("\n%d %v\n", i, time.Since(start))
+			}
+		}
+	}
 }
