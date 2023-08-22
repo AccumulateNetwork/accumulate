@@ -252,11 +252,11 @@ func equalResults(t *testing.T, a, b *coretypes.ResultBlockResults) {
 			t.Log("different Codespace for", i)
 			t.Fail()
 		}
-		// if t.Failed() {
-		// 	printTxResult(t, "A", a)
-		// 	printTxResult(t, "B", b)
-		// 	// t.FailNow()
-		// }
+		if t.Failed() {
+			printTxResult(t, "A", a)
+			printTxResult(t, "B", b)
+			// t.FailNow()
+		}
 	}
 }
 
@@ -319,17 +319,3 @@ func printTxResult(t *testing.T, prefix string, r *abci.ResponseDeliverTx) {
 		fmt.Printf("  %s %s\n", prefix, b)
 	}
 }
-
-// TxID      *url.TxID         `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
-// Code      errors2.Status    `json:"code,omitempty" form:"code" query:"code" validate:"required"`
-// Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
-// Result    TransactionResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
-// Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
-// Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
-// Signers []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
-// SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
-// DestinationNetwork *url.URL `json:"destinationNetwork,omitempty" form:"destinationNetwork" query:"destinationNetwork" validate:"required"`
-// SequenceNumber uint64 `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
-// GotDirectoryReceipt bool `json:"gotDirectoryReceipt,omitempty" form:"gotDirectoryReceipt" query:"gotDirectoryReceipt" validate:"required"`
-// Proof *merkle.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
-// AnchorSigners [][]byte `json:"anchorSigners,omitempty" form:"anchorSigners" query:"anchorSigners" validate:"required"`
