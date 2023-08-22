@@ -137,8 +137,8 @@ func runBuildTestDBs(_ *cobra.Command, args []string) {
 	if YesNoPrompt(
 		fmt.Sprintf("Delete all files in folders [%s] and [%s]?",
 			GoodDBName, BadDBName)) {
-		check(os.Remove(GoodDBName))
-		check(os.Remove(BadDBName))
+		check(os.RemoveAll(GoodDBName))
+		check(os.RemoveAll(BadDBName))
 	}
 
 	buildTestDBs(numEntries, GoodDBName, BadDBName)
@@ -217,10 +217,11 @@ func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 
 		percent := i * 100 / numEntries
 		if percent > lastPercent {
-			fmt.Printf("%2d\n", percent)
+			fmt.Printf(" %2d%%\n\033[F", percent)
 			lastPercent = percent
 		}
 
 	}
+	fmt.Println("100%")
 	fmt.Printf("\nFINAL: #keys: %d time: %v size: %d\n", numEntries, time.Since(start), total)
 }
