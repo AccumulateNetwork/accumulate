@@ -21,11 +21,11 @@ export namespace {{.Name}} {
   }
 
   export function byName(name: string): {{.Name}} {
-    switch (name) {
+    switch (name.toLowerCase()) {
       {{- $typ := .Name}}
       {{- range .Values}}
       {{- $typ := (print $typ "." .Name)}}
-      case "{{lower .Name}}":
+      case "{{if .Label}}{{lower .Label}}{{else}}{{lower .Name}}{{end}}":
         return {{$typ}}
       {{- range .Aliases}}
       case "{{.}}":
@@ -43,7 +43,7 @@ export namespace {{.Name}} {
       {{- range .Values}}
       {{- $typ := (print $typ "." .Name)}}
       case {{$typ}}:
-        return "{{lowerCamel .Name}}"
+        return "{{if .Label}}{{.Label}}{{else}}{{lowerCamel .Name}}{{end}}"
       {{- end}}
       default:
         throw new Error(`Unknown {{.Name}} ${v}`);

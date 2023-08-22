@@ -106,7 +106,7 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 	exec, err := newExecutor(
 		ExecutorOptions{
 			Database: db,
-			Describe: *network,
+			Describe: execute.DescribeShim{NetworkType: network.NetworkType, PartitionId: network.PartitionId},
 			Logger:   logger,
 			Router:   router,
 			EventBus: events.NewBus(logger),

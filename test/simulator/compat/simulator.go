@@ -72,17 +72,21 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 	if opts.LogLevels == "" {
 		opts.LogLevels = acctesting.DefaultLogLevels
 	}
-	if opts.OpenDB == nil {
-		opts.OpenDB = simulator.MemoryDatabase
-	}
 	sim.opts = opts
 }
 
-func (s *Simulator) Init(from simulator.SnapshotFunc) {
+func (s *Simulator) Init(opts ...simulator.Option) {
+	if s.opts.OpenDB != nil {
+		opts = append(opts, simulator.WithDatabase(s.opts.OpenDB))
+	}
+	opts = append(opts,
+		simulator.SimpleNetwork(s.TB.Name(), s.opts.BvnCount, 1),
+		simulator.WithRecordings(harness.Recordings(s.TB)),
+		simulator.WithLogger(acctesting.NewTestLogger(s.TB)),
+	)
+
 	var err error
-	logger := acctesting.NewTestLogger(s.TB)
-	net := simulator.SimpleNetwork(s.TB.Name(), s.opts.BvnCount, 1)
-	s.S, err = simulator.New2(logger, s.opts.OpenDB, net, from, harness.Recordings(s.TB))
+	s.S, err = simulator.New(opts...)
 	require.NoError(s.TB, err)
 	s.H = harness.NewSimWith(s.TB, s.S)
 }
@@ -96,7 +100,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 }
 
 func (s *Simulator) InitFromSnapshot(filename func(string) string) {
-	s.Init(simulator.SnapshotFunc(func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
+	s.Init(simulator.WithSnapshot(func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
 		return os.Open(filename(partition))
 	}))
 }

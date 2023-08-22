@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	newsim "gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -68,8 +69,8 @@ func TestStateRelaunch(t *testing.T) {
 		stores[fmt.Sprintf("%s-%d", Directory, i)] = memory.New(nil)
 		stores[fmt.Sprintf("BVN%d-0", i)] = memory.New(nil)
 	}
-	openDb := func(partition string, node int, logger log.Logger) keyvalue.Beginner {
-		return stores[fmt.Sprintf("%s-%d", partition, node)]
+	openDb := func(partition *PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		return stores[fmt.Sprintf("%s-%d", partition.ID, node)]
 	}
 
 	// [1] Setup
@@ -96,9 +97,9 @@ func TestStateRelaunch(t *testing.T) {
 
 	// [2] Reload (do not init)
 	s2 := simulator.NewWith(t, simulator.SimulatorOptions{BvnCount: bvnCount, OpenDB: openDb})
-	s2.Init(func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
+	s2.Init(newsim.WithSnapshot(func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
 		return new(ioutil2.Buffer), nil // Empty, must init from db
-	})
+	}))
 
 	// [2] Check the DN root hash
 	var root2 []byte

@@ -14,11 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cmdDbRepair = &cobra.Command{
-	Use:   "dbrepair",
-	Short: "utilities to repair bad databases using a good database",
-}
-
 var cmdBuildSummary = &cobra.Command{
 	Use:   "buildSummary [badger database] [summary file]",
 	Short: "Build a Summary file using a good database",
@@ -39,8 +34,8 @@ func init() {
 }
 
 func buildSummary(_ *cobra.Command, args []string) {
-	dbName := args[1]
-	dbSummary := args[2]
+	dbName := args[0]
+	dbSummary := args[1]
 
 	// Open the Badger database that is the good one.
 	db, err := badger.Open(badger.DefaultOptions(dbName))
@@ -48,17 +43,22 @@ func buildSummary(_ *cobra.Command, args []string) {
 
 	defer func() {
 		if err := db.Close(); err != nil {
-			fmt.Printf("error closing db %v\n", err)
+			fmt.Printf("error closing db %v", err)
 		}
 	}()
 
 	summary, err := os.Create(dbSummary)
 	check(err)
+	defer func() {
+		if err := summary.Close(); err != nil {
+			fmt.Printf("error closing %v", dbSummary)
+		}
+	}()
 
 	start := time.Now()
 
 	keys := make(map[uint64]bool)
-
+cnt := 0
 	// Run through the keys in the fastest way in order to collect
 	// all the key value pairs, hash them (keys too, in case any keys are not hashes)
 	// Every entry in the database is reduced to a 64 byte key and a 64 byte value.
@@ -80,11 +80,12 @@ func buildSummary(_ *cobra.Command, args []string) {
 			err = item.Value(func(val []byte) error {
 				vh := sha256.Sum256(val)
 				if _, err := summary.Write(kh[:8]); err != nil {
-					return err
+					check(err)
 				}
 				if _, err := summary.Write(vh[:8]); err != nil {
-					return err
+					check(err)
 				}
+				cnt++
 				return nil
 			})
 			check(err)
@@ -93,9 +94,7 @@ func buildSummary(_ *cobra.Command, args []string) {
 	})
 	check(err)
 
-	fmt.Printf("\nBuilding Summary file with %d keys took %v\n", len(keys), time.Since(start))
-
-	fmt.Printf("\nValidating %d keys took %v\n", len(keys), time.Since(start))
+	fmt.Printf("\nBuilding Summary file with %d %d keys took %v\n", cnt, len(keys), time.Since(start))
 
 }
 
@@ -150,7 +149,7 @@ func buildTestDBs(_ *cobra.Command, args []string) {
 		}
 	}()
 
-	bDB, err := badger.Open(badger.DefaultOptions(GoodDBName))
+	bDB, err := badger.Open(badger.DefaultOptions(BadDBName))
 	if err != nil {
 		fmt.Printf("error opening db %v\n", err)
 		return
@@ -161,63 +160,74 @@ func buildTestDBs(_ *cobra.Command, args []string) {
 		}
 	}()
 
-	var rh, mrh RandHash                      // rh adds the good key vale pairs
+	var rh1, mrh RandHash                     // rh adds the good key vale pairs
 	mrh.SetSeed([]byte{1, 4, 67, 8, 3, 5, 7}) // mrh with a different seed, adds bad data
 
 	start := time.Now()
+	var total int
 
-	for i := 0; i < numEntries/100; i++ {
-		key := rh.Next()
-		value := rh.GetRandBuff(rh.GetIntN(128) + 128)
+	var lastPercent int
 
-		// Write the Good entry
+	fmt.Printf("\nGenerating databases with about %d entries:\n", numEntries)
+
+	for i := 0; i < numEntries; i++ {
+		key := rh1.Next()
+		size := rh1.GetIntN(512) + 128
+		total += size
+		value := rh1.GetRandBuff(size)
+
+		// Write the good entries
 		err := gDB.Update(func(txn *badger.Txn) error {
-			for i := 0; i < 100; i++ {
-				err := txn.Set(key, value)
-				check(err)
-			}
+			err := txn.Set(key, value)
+			check(err)
 			return nil
 		})
 		check(err)
 
-		for i := 0; i < 100; i++ {
+		// Write the bad entries
 
-			op := 0 // Match the good db
-			pick := func(t bool, value int) int {
-				if t {
-					return value
-				}
-				return op
+		op := 0 // Match the good db
+		pick := func(t bool, value int) int {
+			if t {
+				return value
 			}
-			op = pick(i%3027 == 0, 1) // Modify a key value pair
-			op = pick(i%1003 == 0, 2) // Add a key value pair
-			op = pick(i%2013 == 0, 3) // Delete a key value pair
+			return op
+		}
+		op = pick(i%3027 == 0, 1) // Modify a key value pair
+		op = pick(i%1003 == 0, 2) // Add a key value pair
+		op = pick(i%2013 == 0, 3) // Delete a key value pair
 
-			// Write bad entries
+		// Write bad entries
 
+		err = bDB.Update(func(txn *badger.Txn) error {
+			switch op {
+			case 0:
+				err := txn.Set(key, value) //        Normal
+				check(err)
+			case 1:
+				value[0]++
+				err := txn.Set(key, value) //        Modify a key value pair
+				check(err)
+			case 3: //                              Delete a key value pair
+			}
+			return nil
+		})
+		check(err)
+		if op == 2 {
 			err = bDB.Update(func(txn *badger.Txn) error {
-				switch op {
-				case 0:
-					err := txn.Set(key, value) //        Normal
-					check(err)
-				case 1:
-					value[0]++
-					err := txn.Set(key, value) //        Modify a key value pair
-					check(err)
-				case 2:
-					err := txn.Set(mrh.Next(), value) // Add a key value pair
-					check(err)
-					err = txn.Set(key, value)
-					check(err)
-				case 3: //                              Delete a key value pair
-				}
+				err := txn.Set(key, value) //        Normal
+				check(err)
 				return nil
 			})
 			check(err)
-
-			if i%10000 == 0 {
-				fmt.Printf("\n%d %v\n", i, time.Since(start))
-			}
 		}
+
+		percent := i * 100 * 100 / numEntries
+		if percent > lastPercent {
+			fmt.Printf("%2d ", percent)
+			lastPercent = percent
+		}
+
 	}
+	fmt.Printf("\nFINAL: #keys: %d time: %v size: %d\n", numEntries, time.Since(start), total)
 }

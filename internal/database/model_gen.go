@@ -156,9 +156,9 @@ func (c *Batch) newSystemData(k systemDataKey) *SystemData {
 	return v
 }
 
-func (c *Batch) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+func (c *Batch) baseResolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for batch")
+		return nil, nil, errors.InternalError.With("bad key for batch (1)")
 	}
 
 	switch key.Get(0) {
@@ -166,46 +166,46 @@ func (c *Batch) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.BPT(), key.SliceI(1), nil
 	case "Account":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch (2)")
 		}
 		url, okUrl := key.Get(1).(*url.URL)
 		if !okUrl {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch (3)")
 		}
 		v := c.getAccount(url)
 		return v, key.SliceI(2), nil
 	case "Message":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch (4)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch (5)")
 		}
 		v := c.Message(hash)
 		return v, key.SliceI(2), nil
 	case "Transaction":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch (6)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch (7)")
 		}
 		v := c.getTransaction(hash)
 		return v, key.SliceI(2), nil
 	case "SystemData":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch (8)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for batch")
+			return nil, nil, errors.InternalError.With("bad key for batch (9)")
 		}
 		v := c.SystemData(partition)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for batch")
+		return nil, nil, errors.InternalError.With("bad key for batch (10)")
 	}
 }
 
@@ -542,7 +542,7 @@ func (c *Account) newData() *AccountData {
 
 func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for account")
+		return nil, nil, errors.InternalError.With("bad key for account (1)")
 	}
 
 	switch key.Get(0) {
@@ -554,11 +554,11 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.Pending(), key.SliceI(1), nil
 	case "SyntheticForAnchor":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (2)")
 		}
 		anchor, okAnchor := key.Get(1).([32]byte)
 		if !okAnchor {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (3)")
 		}
 		v := c.SyntheticForAnchor(anchor)
 		return v, key.SliceI(2), nil
@@ -568,11 +568,11 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.Events(), key.SliceI(1), nil
 	case "Transaction":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (4)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (5)")
 		}
 		v := c.Transaction(hash)
 		return v, key.SliceI(2), nil
@@ -590,21 +590,21 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (6)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (7)")
 		}
 		v := c.getSyntheticSequenceChain(partition)
 		return v, key.SliceI(2), nil
 	case "AnchorChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (8)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account")
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -615,7 +615,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account")
+		return nil, nil, errors.InternalError.With("bad key for account (10)")
 	}
 }
 
@@ -848,7 +848,7 @@ func (c *AccountEvents) newBPT() *bpt.BPT {
 
 func (c *AccountEvents) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for events")
+		return nil, nil, errors.InternalError.With("bad key for events (1)")
 	}
 
 	switch key.Get(0) {
@@ -861,7 +861,7 @@ func (c *AccountEvents) Resolve(key *record.Key) (record.Record, *record.Key, er
 	case "BPT":
 		return c.BPT(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for events")
+		return nil, nil, errors.InternalError.With("bad key for events (2)")
 	}
 }
 
@@ -959,7 +959,7 @@ func (c *AccountEventsMinor) baseNewVotes(k accountEventsMinorVotesKey) values.S
 
 func (c *AccountEventsMinor) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for minor")
+		return nil, nil, errors.InternalError.With("bad key for minor (1)")
 	}
 
 	switch key.Get(0) {
@@ -967,16 +967,16 @@ func (c *AccountEventsMinor) Resolve(key *record.Key) (record.Record, *record.Ke
 		return c.Blocks(), key.SliceI(1), nil
 	case "Votes":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for minor")
+			return nil, nil, errors.InternalError.With("bad key for minor (2)")
 		}
 		block, okBlock := key.Get(1).(uint64)
 		if !okBlock {
-			return nil, nil, errors.InternalError.With("bad key for minor")
+			return nil, nil, errors.InternalError.With("bad key for minor (3)")
 		}
 		v := c.Votes(block)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for minor")
+		return nil, nil, errors.InternalError.With("bad key for minor (4)")
 	}
 }
 
@@ -1068,7 +1068,7 @@ func (c *AccountEventsMajor) baseNewPending(k accountEventsMajorPendingKey) valu
 
 func (c *AccountEventsMajor) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for major")
+		return nil, nil, errors.InternalError.With("bad key for major (1)")
 	}
 
 	switch key.Get(0) {
@@ -1076,16 +1076,16 @@ func (c *AccountEventsMajor) Resolve(key *record.Key) (record.Record, *record.Ke
 		return c.Blocks(), key.SliceI(1), nil
 	case "Pending":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for major")
+			return nil, nil, errors.InternalError.With("bad key for major (2)")
 		}
 		block, okBlock := key.Get(1).(uint64)
 		if !okBlock {
-			return nil, nil, errors.InternalError.With("bad key for major")
+			return nil, nil, errors.InternalError.With("bad key for major (3)")
 		}
 		v := c.Pending(block)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for major")
+		return nil, nil, errors.InternalError.With("bad key for major (4)")
 	}
 }
 
@@ -1156,14 +1156,14 @@ func (c *AccountEventsBacklog) baseNewExpired() values.Set[*url.TxID] {
 
 func (c *AccountEventsBacklog) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for backlog")
+		return nil, nil, errors.InternalError.With("bad key for backlog (1)")
 	}
 
 	switch key.Get(0) {
 	case "Expired":
 		return c.Expired(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for backlog")
+		return nil, nil, errors.InternalError.With("bad key for backlog (2)")
 	}
 }
 
@@ -1261,7 +1261,7 @@ func (c *AccountTransaction) newHistory() values.Set[uint64] {
 
 func (c *AccountTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for transaction")
+		return nil, nil, errors.InternalError.With("bad key for transaction (1)")
 	}
 
 	switch key.Get(0) {
@@ -1276,7 +1276,7 @@ func (c *AccountTransaction) Resolve(key *record.Key) (record.Record, *record.Ke
 	case "History":
 		return c.History(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for transaction")
+		return nil, nil, errors.InternalError.With("bad key for transaction (2)")
 	}
 }
 
@@ -1369,7 +1369,7 @@ func (c *AccountAnchorChain) newBPT() *Chain2 {
 
 func (c *AccountAnchorChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for anchor chain")
+		return nil, nil, errors.InternalError.With("bad key for anchor chain (1)")
 	}
 
 	switch key.Get(0) {
@@ -1378,7 +1378,7 @@ func (c *AccountAnchorChain) Resolve(key *record.Key) (record.Record, *record.Ke
 	case "BPT":
 		return c.BPT(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for anchor chain")
+		return nil, nil, errors.InternalError.With("bad key for anchor chain (2)")
 	}
 }
 
@@ -1479,7 +1479,7 @@ func (c *AccountData) newTransaction(k accountDataTransactionKey) values.Value[[
 
 func (c *AccountData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for data")
+		return nil, nil, errors.InternalError.With("bad key for data (1)")
 	}
 
 	switch key.Get(0) {
@@ -1487,16 +1487,16 @@ func (c *AccountData) Resolve(key *record.Key) (record.Record, *record.Key, erro
 		return c.Entry(), key.SliceI(1), nil
 	case "Transaction":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for data")
+			return nil, nil, errors.InternalError.With("bad key for data (2)")
 		}
 		entryHash, okEntryHash := key.Get(1).([32]byte)
 		if !okEntryHash {
-			return nil, nil, errors.InternalError.With("bad key for data")
+			return nil, nil, errors.InternalError.With("bad key for data (3)")
 		}
 		v := c.Transaction(entryHash)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for data")
+		return nil, nil, errors.InternalError.With("bad key for data (4)")
 	}
 }
 
@@ -1598,7 +1598,7 @@ func (c *Message) newSigners() values.Set[*url.URL] {
 
 func (c *Message) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for message")
+		return nil, nil, errors.InternalError.With("bad key for message (1)")
 	}
 
 	switch key.Get(0) {
@@ -1611,7 +1611,7 @@ func (c *Message) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Signers":
 		return c.Signers(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for message")
+		return nil, nil, errors.InternalError.With("bad key for message (2)")
 	}
 }
 
@@ -1742,7 +1742,7 @@ func (c *Transaction) newChains() values.Set[*TransactionChainEntry] {
 
 func (c *Transaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for transaction")
+		return nil, nil, errors.InternalError.With("bad key for transaction (1)")
 	}
 
 	switch key.Get(0) {
@@ -1754,18 +1754,18 @@ func (c *Transaction) Resolve(key *record.Key) (record.Record, *record.Key, erro
 		return c.Produced(), key.SliceI(1), nil
 	case "Signatures":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for transaction")
+			return nil, nil, errors.InternalError.With("bad key for transaction (2)")
 		}
 		signer, okSigner := key.Get(1).(*url.URL)
 		if !okSigner {
-			return nil, nil, errors.InternalError.With("bad key for transaction")
+			return nil, nil, errors.InternalError.With("bad key for transaction (3)")
 		}
 		v := c.getSignatures(signer)
 		return v, key.SliceI(2), nil
 	case "Chains":
 		return c.Chains(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for transaction")
+		return nil, nil, errors.InternalError.With("bad key for transaction (4)")
 	}
 }
 
@@ -1865,22 +1865,22 @@ func (c *SystemData) newSyntheticIndexIndex(k systemDataSyntheticIndexIndexKey) 
 
 func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for system data")
+		return nil, nil, errors.InternalError.With("bad key for system data (1)")
 	}
 
 	switch key.Get(0) {
 	case "SyntheticIndexIndex":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for system data")
+			return nil, nil, errors.InternalError.With("bad key for system data (2)")
 		}
 		block, okBlock := key.Get(1).(uint64)
 		if !okBlock {
-			return nil, nil, errors.InternalError.With("bad key for system data")
+			return nil, nil, errors.InternalError.With("bad key for system data (3)")
 		}
 		v := c.SyntheticIndexIndex(block)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for system data")
+		return nil, nil, errors.InternalError.With("bad key for system data (4)")
 	}
 }
 
@@ -2015,7 +2015,7 @@ func (c *MerkleManager) newElement(k merkleManagerElementKey) values.Value[[]byt
 
 func (c *MerkleManager) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		return nil, nil, errors.InternalError.With("bad key for merkle manager (1)")
 	}
 
 	switch key.Get(0) {
@@ -2023,36 +2023,36 @@ func (c *MerkleManager) Resolve(key *record.Key) (record.Record, *record.Key, er
 		return c.Head(), key.SliceI(1), nil
 	case "States":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+			return nil, nil, errors.InternalError.With("bad key for merkle manager (2)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+			return nil, nil, errors.InternalError.With("bad key for merkle manager (3)")
 		}
 		v := c.States(index)
 		return v, key.SliceI(2), nil
 	case "ElementIndex":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+			return nil, nil, errors.InternalError.With("bad key for merkle manager (4)")
 		}
 		hash, okHash := key.Get(1).([]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+			return nil, nil, errors.InternalError.With("bad key for merkle manager (5)")
 		}
 		v := c.ElementIndex(hash)
 		return v, key.SliceI(2), nil
 	case "Element":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+			return nil, nil, errors.InternalError.With("bad key for merkle manager (6)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+			return nil, nil, errors.InternalError.With("bad key for merkle manager (7)")
 		}
 		v := c.Element(index)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		return nil, nil, errors.InternalError.With("bad key for merkle manager (8)")
 	}
 }
 

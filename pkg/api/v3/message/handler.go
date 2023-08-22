@@ -9,7 +9,6 @@ package message
 import (
 	"context"
 	"io"
-	"runtime/debug"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -27,27 +26,24 @@ type Handler struct {
 func NewHandler(services ...Service) (*Handler, error) {
 	h := new(Handler)
 	h.methods = serviceMethodMap{}
+	err := h.Register(services...)
+	return h, err
+}
+
+func (h *Handler) Register(services ...Service) error {
 	for _, service := range services {
 		for typ, method := range service.methods() {
 			if _, ok := h.methods[typ]; ok {
-				return nil, errors.Conflict.WithFormat("double registered method %v", typ)
+				return errors.Conflict.WithFormat("double registered method %v", typ)
 			}
 			h.methods[typ] = method
 		}
 	}
-
-	return h, nil
+	return nil
 }
 
 // Handle handles a message stream. Handle is safe to call from a goroutine.
 func (h *Handler) Handle(s Stream) {
-	// Panic protection
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
-		}
-	}()
-
 	// Gotta have that context 👌
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

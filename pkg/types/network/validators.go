@@ -9,9 +9,12 @@ package network
 import (
 	"math"
 	"strings"
+
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type globalValueMemos struct {
+	bvns      []string
 	threshold map[string]uint64
 	active    map[string]int
 }
@@ -19,6 +22,13 @@ type globalValueMemos struct {
 func (g *GlobalValues) memoizeValidators() {
 	if g.memoize.active != nil {
 		return
+	}
+
+	var bvns []string
+	for _, p := range g.Network.Partitions {
+		if p.Type == protocol.PartitionTypeBlockValidator {
+			bvns = append(bvns, p.ID)
+		}
 	}
 
 	active := make(map[string]int, len(g.Network.Partitions))
@@ -35,8 +45,14 @@ func (g *GlobalValues) memoizeValidators() {
 		threshold[partition] = g.Globals.ValidatorAcceptThreshold.Threshold(active)
 	}
 
+	g.memoize.bvns = bvns
 	g.memoize.active = active
 	g.memoize.threshold = threshold
+}
+
+func (g *GlobalValues) BvnNames() []string {
+	g.memoizeValidators()
+	return g.memoize.bvns
 }
 
 func (g *GlobalValues) ValidatorThreshold(partition string) uint64 {

@@ -17,7 +17,7 @@ import (
 // for the (possibly empty) remainder; Search returns the first ≥ 0 index and
 // whether cmp == 0 for that index. If there is no such index, Search returns
 // len(l), false.
-func Search[T any](l []T, cmp func(entry T) int) (index int, found bool) {
+func Search[T any, S ~[]T](l S, cmp func(entry T) int) (index int, found bool) {
 	// TODO Use sort.Find?
 	i := sort.Search(len(l), func(i int) bool {
 		return cmp(l[i]) >= 0
@@ -33,7 +33,7 @@ func Search[T any](l []T, cmp func(entry T) int) (index int, found bool) {
 // cmp(l[i]) ≥ 0. If i ≥ len(l), an empty entry is appended. Otherwise an empty
 // entry is inserted at i unless cmp == 0. BinaryInsert returns l, the address
 // of l[i], and whether a new entry was added.
-func BinaryInsert[T any](l *[]T, cmp func(entry T) int) (entry *T, added bool) {
+func BinaryInsert[T any, S ~[]T](l *S, cmp func(entry T) int) (entry *T, added bool) {
 	i, found := Search(*l, cmp)
 	if found {
 		// Entry found

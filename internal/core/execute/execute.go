@@ -21,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -60,7 +59,7 @@ type Options struct {
 	Database               database.Beginner                  //
 	Key                    ed25519.PrivateKey                 // Private validator key
 	Router                 routing.Router                     //
-	Describe               config.Describe                    // Network description
+	Describe               DescribeShim                       // Network description
 	EventBus               *events.Bus                        //
 	MajorBlockScheduler    blockscheduler.MajorBlockScheduler //
 	BackgroundTaskLauncher func(func())                       // Background task launcher

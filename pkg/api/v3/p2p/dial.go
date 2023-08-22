@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"io"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -159,7 +160,7 @@ func (n *Node) DialNetwork() message.MultiDialer {
 // find an appropriate peer that can service the address. If no peer can be
 // found, Dial will return [errors.NoPeer].
 func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream message.Stream, err error) {
-	net, peer, sa, err := unpackAddress(addr)
+	net, peer, sa, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -177,56 +178,6 @@ func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream mess
 	}
 
 	return d.newPeerStream(ctx, sa, peer)
-}
-
-// unpackAddress unpacks a multiaddr into its components. The address must
-// include an /acc-svc component and may include a /p2p component or an /acc
-// component. unpackAddress will return an error if the address includes any
-// other components.
-func unpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *api.ServiceAddress, error) {
-	// Scan the address for /acc, /acc-svc, and /p2p components
-	var cNetwork, cService, cPeer *multiaddr.Component
-	var bad bool
-	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
-		switch c.Protocol().Code {
-		case api.P_ACC:
-			cNetwork = &c
-		case api.P_ACC_SVC:
-			cService = &c
-		case multiaddr.P_P2P:
-			cPeer = &c
-		default:
-			bad = true
-		}
-		return true
-	})
-
-	// The address must contain a /acc-svc component and must not contain any
-	// unexpected components
-	if bad || cService == nil {
-		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
-	}
-
-	// Parse the /acc-svc component
-	sa := new(api.ServiceAddress)
-	err := sa.UnmarshalBinary(cService.RawValue())
-	if err != nil {
-		return "", "", nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
-	} else if sa.Type == api.ServiceTypeUnknown {
-		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
-	}
-
-	var peerID peer.ID
-	if cPeer != nil {
-		peerID = peer.ID(cPeer.RawValue())
-	}
-
-	var net string
-	if cNetwork != nil {
-		net = string(cNetwork.RawValue())
-	}
-
-	return net, peerID, sa, nil
 }
 
 // BadDial notifies the dialer that a transport error was encountered while
@@ -252,13 +203,27 @@ func (d *dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer
 		}
 
 		// Create a pipe and handle it
-		p, q := message.DuplexPipe(ctx)
-		go s.handler(p)
-		return q, nil
+		return handleLocally(ctx, s), nil
 	}
 
 	// Open a new stream
 	return openStreamFor(ctx, d.host, peer, sa, true)
+}
+
+func handleLocally(ctx context.Context, service *serviceHandler) message.Stream {
+	p, q := message.DuplexPipe(ctx)
+	go func() {
+		// Panic protection
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
+			}
+		}()
+
+		defer p.Close()
+		service.handler(p)
+	}()
+	return q
 }
 
 func openStreamFor(ctx context.Context, host dialerHost, peer peer.ID, sa *api.ServiceAddress, close bool) (*stream, error) {
@@ -295,9 +260,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, sa *api.ServiceAddress, n
 	// Check if we participate in this partition
 	service, ok := d.host.getOwnService(netName, sa)
 	if ok {
-		p, q := message.DuplexPipe(ctx)
-		go service.handler(p)
-		return q, nil
+		return handleLocally(ctx, service), nil
 	}
 
 	// Construct an address for the service
@@ -471,7 +434,7 @@ func (n *Node) DialSelf() message.Dialer { return (*selfDialer)(n) }
 // Dial returns a stream for the current node.
 func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
 	// Parse the address
-	_, peer, sa, err := unpackAddress(addr)
+	_, peer, sa, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -487,9 +450,7 @@ func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (messag
 	}
 
 	// Create a pipe and handle it
-	p, q := message.DuplexPipe(ctx)
-	go s.handler(p)
-	return q, nil
+	return handleLocally(ctx, s), nil
 }
 
 func (s *stream) Read() (message.Message, error) {

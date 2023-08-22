@@ -9,11 +9,11 @@ package block
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -61,7 +61,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 	if !ready {
-		return x.recordPendingTransaction(&x.Describe, batch, delivery)
+		return x.recordPendingTransaction(x.Describe, batch, delivery)
 	}
 
 	if delivery.Transaction.Body.Type().IsSynthetic() {
@@ -75,9 +75,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Set up the state manager
 	var st *chain.StateManager
 	if x.isGenesis {
-		st = chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+		st = chain.NewStateManager(x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	} else {
-		st, err = chain.LoadStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
+		st, err = chain.LoadStateManager(x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
 		if err != nil {
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
@@ -453,7 +453,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	return status, nil
 }
 
-func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) recordPendingTransaction(net execute.DescribeShim, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	state := new(chain.ProcessTransactionState)
 	status, err := x.recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {

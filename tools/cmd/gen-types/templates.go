@@ -14,6 +14,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/gobeam/stringy"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
@@ -209,7 +210,7 @@ type SingleTypeFile struct {
 	*Type
 }
 
-func (f *SingleTypeFile) IsUnion() bool { return false }
+func (f *SingleTypeFile) IsUnion() bool { return f.Union.Type != "" }
 
 type SingleUnionFile struct {
 	Package string
@@ -334,10 +335,16 @@ func (f *Field) EffectiveMarshalType() typegen.TypeCode {
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"lcName":              typegen.LowerFirstWord,
 	"upper":               strings.ToUpper,
+	"lower":               strings.ToLower,
 	"underscoreUpperCase": typegen.UnderscoreUpperCase,
 	"title":               typegen.TitleCase,
 	"map":                 typegen.MakeMap,
 	"natural":             typegen.Natural,
 	"hasSuffix":           strings.HasSuffix,
 	"debug":               fmt.Printf,
+	"snake": func(s string) string {
+		str := stringy.New(s)
+		snakeStr := str.SnakeCase()
+		return snakeStr.ToLower()
+	},
 })

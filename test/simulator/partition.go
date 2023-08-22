@@ -13,10 +13,9 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/tendermint/tendermint/libs/log"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -26,12 +25,11 @@ import (
 
 type Partition struct {
 	protocol.PartitionInfo
-	sim    *Simulator
-	logger logging.OptionalLogger
-	gossip *consensus.Gossip
-	nodes  []*Node
-
+	sim        *Simulator
+	logger     log.Logger
+	gossip     *consensus.Gossip
 	mu         *sync.Mutex
+	nodes      []*Node
 	submitHook SubmitHookFunc
 }
 
@@ -39,71 +37,11 @@ type SubmitHookFunc = func([]messaging.Message) (drop, keepHook bool)
 type BlockHookFunc = func(execute.BlockParams, []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool)
 type NodeBlockHookFunc = func(int, execute.BlockParams, []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool)
 
-func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
-	p := new(Partition)
-	p.PartitionInfo = partition
-	p.sim = s
-	p.gossip = new(consensus.Gossip)
-	p.logger.Set(s.logger, "partition", partition.ID)
-	p.mu = new(sync.Mutex)
-	return p
-}
-
-func newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
-	p := newPartition(s, protocol.PartitionInfo{
-		ID:   init.Id,
-		Type: protocol.PartitionTypeBlockValidator,
-	})
-
-	for _, node := range init.Nodes {
-		n, err := newNode(s, p, len(p.nodes), node)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-		p.nodes = append(p.nodes, n)
-	}
-	return p, nil
-}
-
-func newDn(s *Simulator, init *accumulated.NetworkInit) (*Partition, error) {
-	p := newPartition(s, protocol.PartitionInfo{
-		ID:   protocol.Directory,
-		Type: protocol.PartitionTypeDirectory,
-	})
-
-	for _, init := range init.Bvns {
-		for _, init := range init.Nodes {
-			n, err := newNode(s, p, len(p.nodes), init)
-			if err != nil {
-				return nil, errors.UnknownError.Wrap(err)
-			}
-			p.nodes = append(p.nodes, n)
-		}
-	}
-	return p, nil
-}
-
-func newBsn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
-	p := newPartition(s, protocol.PartitionInfo{
-		ID:   init.Id,
-		Type: protocol.PartitionTypeBlockSummary,
-	})
-
-	for _, node := range init.Nodes {
-		n, err := newNode(s, p, len(p.nodes), node)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-		p.nodes = append(p.nodes, n)
-	}
-	return p, nil
-}
-
-func (p *Partition) View(fn func(*database.Batch) error) error { return p.nodes[0].View(fn) }
+func (p *Partition) View(fn func(*database.Batch) error) error { return p.nodes[0].database.View(fn) }
 
 func (p *Partition) Update(fn func(*database.Batch) error) error {
 	for i, n := range p.nodes {
-		err := n.Update(fn)
+		err := n.database.Update(fn)
 		if err != nil {
 			if i > 0 {
 				panic("update succeeded on one node and failed on another")
@@ -118,17 +56,17 @@ func (p *Partition) Update(fn func(*database.Batch) error) error {
 // more than one node.
 func (p *Partition) Begin(writable bool) *database.Batch {
 	if !writable {
-		return p.nodes[0].Begin(false)
+		return p.nodes[0].database.Begin(false)
 	}
 	if len(p.nodes) > 1 {
 		panic("cannot create a writeable batch when running with multiple nodes")
 	}
-	return p.nodes[0].Begin(true)
+	return p.nodes[0].database.Begin(true)
 }
 
 func (p *Partition) SetObserver(observer database.Observer) {
 	for _, n := range p.nodes {
-		n.SetObserver(observer)
+		n.database.SetObserver(observer)
 	}
 }
 
@@ -165,7 +103,7 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	for _, n := range p.nodes {
 		val = append(val, &execute.ValidatorUpdate{
 			Type:      protocol.SignatureTypeED25519,
-			PublicKey: n.privValKey[32:],
+			PublicKey: n.network.PrivValKey[32:],
 			Power:     1,
 		})
 	}

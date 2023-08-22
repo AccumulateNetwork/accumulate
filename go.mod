@@ -19,7 +19,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.15.0
 	github.com/go-playground/validator/v10 v10.9.0
-	github.com/golang/mock v1.6.0
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/golangci/golangci-lint v1.52.2
 	github.com/kardianos/service v1.2.0
 	github.com/pelletier/go-toml v1.9.5
@@ -51,6 +51,7 @@ require (
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/ghodss/yaml v1.0.0
+	github.com/gobeam/stringy v0.0.6
 	github.com/libp2p/go-libp2p v0.25.1
 	github.com/libp2p/go-libp2p-kad-dht v0.21.1
 	github.com/libp2p/go-libp2p-pubsub v0.9.1

@@ -8,8 +8,11 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -111,7 +114,20 @@ heal:
 	}
 }
 
-func getPeers(C2 *jsonrpc.Client, ctx context.Context) map[string]map[peer.ID][32]byte {
+type PeerInfo struct {
+	api.ConsensusStatus
+	Key      [32]byte
+	Operator *url.URL
+}
+
+func (p *PeerInfo) String() string {
+	if p.Operator != nil {
+		return fmt.Sprintf("%v (%x)", p.Operator, p.Key)
+	}
+	return hex.EncodeToString(p.Key[:])
+}
+
+func getPeers(C2 *jsonrpc.Client, ctx context.Context) map[string]map[peer.ID]*PeerInfo {
 	apiNode, err := C2.NodeInfo(ctx, api.NodeInfoOptions{})
 	checkf(err, "query node info")
 
@@ -123,9 +139,9 @@ func getPeers(C2 *jsonrpc.Client, ctx context.Context) map[string]map[peer.ID][3
 		hash2key[val.PublicKeyHash] = *(*[32]byte)(val.PublicKey)
 	}
 
-	peers := map[string]map[peer.ID][32]byte{}
+	peers := map[string]map[peer.ID]*PeerInfo{}
 	for _, part := range status.Network.Partitions {
-		peers[part.ID] = map[peer.ID][32]byte{}
+		peers[part.ID] = map[peer.ID]*PeerInfo{}
 
 		fmt.Printf("Getting peers for %s\n", part.ID)
 		find := api.FindServiceOptions{
@@ -147,8 +163,16 @@ func getPeers(C2 *jsonrpc.Client, ctx context.Context) map[string]map[peer.ID][3
 			if !ok {
 				continue // Not a validator
 			}
+			pi := &PeerInfo{
+				ConsensusStatus: *info,
+				Key:             key,
+			}
+			peers[part.ID][peer.PeerID] = pi
 
-			peers[part.ID][peer.PeerID] = key
+			_, val, ok := status.Network.ValidatorByHash(info.ValidatorKeyHash[:])
+			if ok {
+				pi.Operator = val.Operator
+			}
 		}
 	}
 	return peers
@@ -213,7 +237,7 @@ func getAccount[T protocol.Account](C api.Querier, ctx context.Context, u *url.U
 	return v
 }
 
-func healAnchor(C *message.Client, C2 *jsonrpc.Client, ctx context.Context, srcUrl, dstUrl *url.URL, txid *url.TxID, seqNum uint64, peers map[peer.ID][32]byte) {
+func healAnchor(C *message.Client, C2 *jsonrpc.Client, ctx context.Context, srcUrl, dstUrl *url.URL, txid *url.TxID, seqNum uint64, peers map[peer.ID]*PeerInfo) {
 	fmt.Printf("Healing anchor %v\n", txid)
 
 	dstId, ok := protocol.ParsePartitionUrl(dstUrl)
@@ -237,13 +261,15 @@ func healAnchor(C *message.Client, C2 *jsonrpc.Client, ctx context.Context, srcU
 		}
 	}
 
+	theAnchorTxn := res.Message.Transaction
 	env := new(messaging.Envelope)
-	env.Transaction = []*protocol.Transaction{res.Message.Transaction}
+	env.Transaction = []*protocol.Transaction{theAnchorTxn}
 
 	// Get a signature from each node that hasn't signed
 	var bad []peer.ID
-	for peer, key := range peers {
-		if signed[key] {
+	var gotPartSig bool
+	for peer, info := range peers {
+		if signed[info.Key] {
 			continue
 		}
 
@@ -258,12 +284,59 @@ func healAnchor(C *message.Client, C2 *jsonrpc.Client, ctx context.Context, srcU
 			continue
 		}
 
+		myTxn, ok := res.Message.(*messaging.TransactionMessage)
+		if !ok {
+			err := fmt.Errorf("expected %v, got %v", messaging.MessageTypeTransaction, res.Message.Type())
+			warnf(err, "%v gave us an anchor that is not a transaction", info)
+			continue
+		}
+		if !myTxn.Transaction.Equal(theAnchorTxn) {
+			err := fmt.Errorf("expected %x, got %x", theAnchorTxn.GetHash(), myTxn.Transaction.GetHash())
+			warnf(err, "%v gave us an anchor that doesn't match what we expect", info)
+			if b, err := json.Marshal(theAnchorTxn); err != nil {
+				check(err)
+			} else {
+				fmt.Fprintf(os.Stderr, "Want: %s\n", b)
+			}
+			if b, err := json.Marshal(myTxn.Transaction); err != nil {
+				check(err)
+			} else {
+				fmt.Fprintf(os.Stderr, "Got:  %s\n", b)
+			}
+			continue
+		}
+
 		for _, sigs := range res.Signatures.Records {
 			for _, sig := range sigs.Signatures.Records {
 				msg, ok := sig.Message.(*messaging.SignatureMessage)
 				if !ok {
+					err := fmt.Errorf("expected %v, got %v", messaging.MessageTypeSignature, sig.Message.Type())
+					warnf(err, "%v gave us a signature that is not a signature", info)
 					continue
 				}
+
+				switch sig := msg.Signature.(type) {
+				case *protocol.PartitionSignature:
+					// We only want one partition signature
+					if gotPartSig {
+						continue
+					}
+					gotPartSig = true
+
+				case protocol.UserSignature:
+					// Filter out bad signatures
+					if !sig.Verify(nil, theAnchorTxn.GetHash()) {
+						err := fmt.Errorf("invalid signature")
+						warnf(err, "%v gave us an invalid signature", info)
+						continue
+					}
+
+				default:
+					err := fmt.Errorf("expected user signature, got %v", sig.Type())
+					warnf(err, "%v gave us a signature that is not a signature", info)
+					continue
+				}
+
 				env.Signatures = append(env.Signatures, msg.Signature)
 			}
 		}
@@ -274,7 +347,9 @@ func healAnchor(C *message.Client, C2 *jsonrpc.Client, ctx context.Context, srcU
 		delete(peers, peer)
 	}
 
-	if len(env.Signatures) == 0 {
+	// We should always have a partition signature, so there's only something to
+	// sent if we have more than 1 signature
+	if len(env.Signatures) == 1 {
 		fmt.Println("Nothing to send")
 		return
 	}

@@ -2,6 +2,7 @@
   type: entity
   root: true
   customCommit: true
+  customResolve: true
   fields:
   - name: done
     type: bool

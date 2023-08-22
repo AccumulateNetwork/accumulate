@@ -47,15 +47,13 @@ func TestExecutorConsistency(t *testing.T) {
 
 	// Start the simulator
 	sim, err := simulator.New(
-		acctesting.NewTestLogger(t),
+		simulator.WithLogger(acctesting.NewTestLogger(t)),
 		simulator.MemoryDatabase,
-		testData.Network,
+		simulator.WithNetwork(testData.Network),
 		simulator.SnapshotMap(testData.Genesis),
+		simulator.DropDispatchedMessages,
 	)
 	require.NoError(t, err)
-
-	// Drop everything
-	sim.DropDispatchedMessages = true
 
 	// Step the simulator in step with the gold file
 	for _, step := range testData.Steps {

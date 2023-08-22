@@ -59,7 +59,7 @@ func NewTxnTest(env *messaging.Envelope) *TestCase {
 		panic(err)
 	}
 
-	jsonb, err := json.Marshal(env)
+	jsonb, err := env.MarshalJSON()
 	if err != nil {
 		panic(err)
 	}

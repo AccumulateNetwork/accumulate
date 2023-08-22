@@ -81,7 +81,7 @@ func (s *Validation2TestSuite) getOracle() float64 {
 
 // SetupSuite is run once.
 func (s *Validation2TestSuite) SetupSuite() {
-	s.sim, s.faucetSvc = setupSim(s.T(), simulator.SimpleNetwork(s.T().Name(), 3, 1))
+	s.sim, s.faucetSvc = setupSim(s.T(), simulator.NewSimpleNetwork(s.T().Name(), 3, 1))
 	s.Harness = New(s.T(), s.sim.Services(), s.sim)
 }
 
