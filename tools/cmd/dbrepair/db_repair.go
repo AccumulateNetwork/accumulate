@@ -18,14 +18,14 @@ var cmdBuildSummary = &cobra.Command{
 	Use:   "buildSummary [badger database] [summary file]",
 	Short: "Build a Summary file using a good database",
 	Args:  cobra.ExactArgs(2),
-	Run:   buildSummary,
+	Run:   runBuildSummary,
 }
 
 var cmdBuildTestDBs = &cobra.Command{
 	Use:   "buildTestDBs [number of entries] [good database] [bad database]",
 	Short: "Number of entries must be greater than 100, should be greater than 5000",
 	Args:  cobra.ExactArgs(3),
-	Run:   buildTestDBs,
+	Run:   runBuildTestDBs,
 }
 
 func init() {
@@ -33,12 +33,15 @@ func init() {
 	cmd.AddCommand(cmdBuildTestDBs)
 }
 
-func buildSummary(_ *cobra.Command, args []string) {
+func runBuildSummary(_ *cobra.Command, args []string) {
 	dbName := args[0]
 	dbSummary := args[1]
+	buildSummary(dbName, dbSummary)
+}
 
+func buildSummary(dbName, dbSummary string) {
 	// Open the Badger database that is the good one.
-	db, err := badger.Open(badger.DefaultOptions(dbName))
+	db, err := badger.Open(badger.DefaultOptions(dbName).WithLoggingLevel(badger.ERROR))
 	check(err)
 
 	defer func() {
@@ -58,7 +61,7 @@ func buildSummary(_ *cobra.Command, args []string) {
 	start := time.Now()
 
 	keys := make(map[uint64]bool)
-cnt := 0
+	cnt := 0
 	// Run through the keys in the fastest way in order to collect
 	// all the key value pairs, hash them (keys too, in case any keys are not hashes)
 	// Every entry in the database is reduced to a 64 byte key and a 64 byte value.
@@ -122,7 +125,7 @@ func YesNoPrompt(label string) bool {
 	}
 }
 
-func buildTestDBs(_ *cobra.Command, args []string) {
+func runBuildTestDBs(_ *cobra.Command, args []string) {
 	numEntries, err := strconv.Atoi(args[0])
 	check(err)
 	if numEntries < 100 {
@@ -134,31 +137,21 @@ func buildTestDBs(_ *cobra.Command, args []string) {
 	if YesNoPrompt(
 		fmt.Sprintf("Delete all files in folders [%s] and [%s]?",
 			GoodDBName, BadDBName)) {
-		os.Remove(GoodDBName)
-		os.Remove(BadDBName)
+		check(os.Remove(GoodDBName))
+		check(os.Remove(BadDBName))
 	}
 
-	gDB, err := badger.Open(badger.DefaultOptions(GoodDBName))
-	if err != nil {
-		fmt.Printf("error opening db %v\n", err)
-		return
-	}
-	defer func() {
-		if err := gDB.Close(); err != nil {
-			fmt.Printf("error closing db %v\n", err)
-		}
-	}()
+	buildTestDBs(numEntries, GoodDBName, BadDBName)
+}
 
-	bDB, err := badger.Open(badger.DefaultOptions(BadDBName))
-	if err != nil {
-		fmt.Printf("error opening db %v\n", err)
-		return
-	}
-	defer func() {
-		if err := bDB.Close(); err != nil {
-			fmt.Printf("error closing db %v\n", err)
-		}
-	}()
+func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
+	gDB, err := badger.Open(badger.DefaultOptions(GoodDBName).WithLoggingLevel(badger.ERROR))
+	checkf(err, "opening db %v", GoodDBName)
+	defer func() { checkf(gDB.Close(), "closing db %v", GoodDBName) }()
+
+	bDB, err := badger.Open(badger.DefaultOptions(BadDBName).WithLoggingLevel(badger.ERROR))
+	checkf(err, "opening db %v", BadDBName)
+	defer func() { checkf(gDB.Close(), "closing db %v", BadDBName) }()
 
 	var rh1, mrh RandHash                     // rh adds the good key vale pairs
 	mrh.SetSeed([]byte{1, 4, 67, 8, 3, 5, 7}) // mrh with a different seed, adds bad data
@@ -222,9 +215,9 @@ func buildTestDBs(_ *cobra.Command, args []string) {
 			check(err)
 		}
 
-		percent := i * 100 * 100 / numEntries
+		percent := i * 100 / numEntries
 		if percent > lastPercent {
-			fmt.Printf("%2d ", percent)
+			fmt.Printf("%2d\n", percent)
 			lastPercent = percent
 		}
 

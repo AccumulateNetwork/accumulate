@@ -34,3 +34,9 @@ func check(err error) {
 		fatalf("%+v", err)
 	}
 }
+
+func checkf(err error, format string, otherArgs ...interface{}) {
+	if err != nil {
+		fatalf(format+": %v", append(otherArgs, err)...)
+	}
+}
