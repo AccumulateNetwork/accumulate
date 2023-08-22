@@ -8,7 +8,6 @@ package common
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"testing"
 )
@@ -54,14 +53,6 @@ func (n *RandHash) GetRandBuff(size int) (buff []byte) {
 		}
 
 	}
-}
-
-// GetIntN
-// Return an int between 0 and N
-func (n *RandHash) GetIntN(N int ) int {
-	next := n.Next()
-	r := int(binary.BigEndian.Uint64(next)%uint64(N))
-	return r
 }
 
 // GetAElement

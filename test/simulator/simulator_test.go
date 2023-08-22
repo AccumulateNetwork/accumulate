@@ -40,15 +40,9 @@ func TestSimulator(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
-		simulator.LocalNetwork(t.Name(), 3, 3, net.ParseIP("127.0.1.1"), 12345),
+		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
-
-	err := sim.S.ListenAndServe(context.Background(), simulator.ListenOptions{
-		ListenP2Pv3: true,
-		ServeError:  func(err error) { require.NoError(t, err) },
-	})
-	require.NoError(t, err)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
