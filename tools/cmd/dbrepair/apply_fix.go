@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -53,15 +54,14 @@ func applyFix(fixFile, badDB string) {
 	}
 
 	// Apply the fixes
+	txn := db.NewTransaction(true)
 
 	// Keys to be deleted
 	NumAdded := read8()
 	for i := uint64(0); i < NumAdded; i++ {
 		read32()
-		txn := db.NewTransaction(true)
 		err := txn.Delete(buff[:32])
-		checkf(err,"failed to delete")
-		txn.Commit()
+		checkf(err, "failed to delete")
 	}
 
 	var keyBuff [1024]byte
@@ -71,9 +71,11 @@ func applyFix(fixFile, badDB string) {
 		read(keyBuff[:keyLen])
 		valueLen := read8()
 		read(buff[:valueLen])
-		txn := db.NewTransaction(true)
 		err := txn.Set(keyBuff[:keyLen], buff[:valueLen])
 		checkf(err, "failed to update a value in the database")
-		txn.Commit()
 	}
+
+	fmt.Printf("\nModified: %d Deleted: %d\n", NumModified, NumAdded)
+
+	check(txn.Commit())
 }

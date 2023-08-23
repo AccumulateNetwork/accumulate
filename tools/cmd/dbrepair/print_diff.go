@@ -67,32 +67,9 @@ func printDiff(diffFile, goodDB string) {
 	}
 
 	// Build a map of key hash prefixes to keys from the good DB
-	Hash2Key := make(map[[8]byte][]byte)
-
 	db, close := OpenDB(goodDB)
 	defer close()
-	err = db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // <= What this does is go through the keys in the db
-		it := txn.NewIterator(opts) //    in whatever order is best for badger for speed
-		defer it.Close()
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			keyBuff := [32]byte{}
-			copy(keyBuff[:], item.Key())
-			kh := sha256.Sum256(keyBuff[:]) //   hash, then this takes care of that case.
-			key := [8]byte{}
-			if _, exists := Hash2Key[key]; exists {
-				return fmt.Errorf("collision on %08x", key)
-			}
-			copy(key[:], kh[:8])
-			Hash2Key[key] = keyBuff[:]
-		}
-		return nil
-	})
-	checkf(err, "failed to collect all keys from %s", goodDB)
-	fmt.Printf("\nkeys in db: %d\n", len(Hash2Key))
-	fmt.Printf("\nModified: %d Added: %d\n", len(ModifiedKeys), len(AddedKeys))
+	Hash2Key := buildHash2Key(db)
 
 	fmt.Printf("%d Keys to delete:\n", len(AddedKeys))
 	for _, k := range AddedKeys { // list all the keys added to the bad db
@@ -100,10 +77,11 @@ func printDiff(diffFile, goodDB string) {
 	}
 
 	fmt.Printf("%d Keys to modify:\n", len(ModifiedKeys))
-	var kBuff [8]byte
 	for _, k := range ModifiedKeys { // list all the keys added to the bad db
-		copy(kBuff[:], k[:])
-		key := Hash2Key[kBuff]
+		key, ok := Hash2Key[k]
+		if !ok {
+			fatalf("missing")
+		}
 		fmt.Printf("   %x ", key)
 
 		err := db.View(func(txn *badger.Txn) error { // Get the value and write it
@@ -113,6 +91,8 @@ func printDiff(diffFile, goodDB string) {
 				vLen := len(val)
 				if vLen > 40 {
 					fmt.Printf("%x ... len %d\n", val[:40], vLen)
+				} else {
+					fmt.Printf("%x\n", val)
 				}
 				return nil
 			})
@@ -122,4 +102,37 @@ func printDiff(diffFile, goodDB string) {
 		checkf(err, "Modified keys")
 	}
 
+}
+
+func buildHash2Key(db *badger.DB) map[[8]byte][]byte {
+	Hash2Key := make(map[[8]byte][]byte)
+
+	var cnt int
+	err := db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // <= What this does is go through the keys in the db
+		it := txn.NewIterator(opts) //    in whatever order is best for badger for speed
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			k := *(*[32]byte)(item.Key())
+			kh := sha256.Sum256(k[:])
+			key := *(*[8]byte)(kh[:])
+			if _, exists := Hash2Key[key]; exists {
+				return fmt.Errorf("collision on %08x", key)
+			}
+			Hash2Key[key] = k[:]
+
+			cnt++
+			if cnt%100000 == 0 {
+				print(".")
+			}
+		}
+		return nil
+	})
+	println()
+	checkf(err, "failed to collect all keys")
+	fmt.Printf("\nkeys in db: %d\n", len(Hash2Key))
+
+	return Hash2Key
 }

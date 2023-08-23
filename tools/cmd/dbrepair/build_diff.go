@@ -79,21 +79,18 @@ func buildDiff(summary, badDB, diffFile string) {
 				print(".")
 			}
 			item := it.Item()
-			k := [32]byte{}
-			copy(k[:], item.Key())              //   Get the key and hash it.  IF the key isn't a
+			k := *(*[32]byte)(item.Key())       //   Get the key and hash it.  IF the key isn't a
 			kh := sha256.Sum256(k[:])           //   hash, then this takes care of that case.
 			kb := [8]byte{}                     //   Get the first 8 bytes of the key hash
 			copy(kb[:], kh[:8])                 //	    in an independent byte array
 			if _, exists := keys[kb]; !exists { //   delete keys not in the summary
 				addedKeys = append(addedKeys, k[:])
-				cntMod++
+				cntDel++
 				continue
 			}
 			err = item.Value(func(val []byte) error {
 				vh := sha256.Sum256(val)
-				vb := [8]byte{}
-				copy(vb[:], vh[:8])
-				if keys[kb] != vb {
+				if keys[kb] != *(*[8]byte)(vh[:]) {
 					modifiedKeys = append(modifiedKeys, kb[:]) // Revert keys that exist but value is changed
 					cntMod++
 				}
@@ -104,16 +101,15 @@ func buildDiff(summary, badDB, diffFile string) {
 		}
 		return nil
 	})
-	checkf(err, "View of keys failed")
-	cntDel += len(keys)
 	println()
+	checkf(err, "View of keys failed")
 
 	for kh := range keys {
 		kb := [8]byte{}
 		copy(kb[:], kh[:])
 		modifiedKeys = append(modifiedKeys, kb[:]) // All the keys we did not find had to be added back
 	}
-	fmt.Printf("\nModified: %d Added: %d\n", cntMod, cntDel)
+	fmt.Printf("\nModified: %d Added: %d Deleted: %d\n", cntMod, cntDel, len(keys))
 
 	var buff [32]byte
 	f, err := os.Create(diffFile)

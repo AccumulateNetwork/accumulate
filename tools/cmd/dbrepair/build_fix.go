@@ -1,9 +1,7 @@
 package main
 
 import (
-	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 	"os"
 
 	"github.com/dgraph-io/badger"
@@ -89,32 +87,9 @@ func buildFix(diffFile, goodDB, fixFile string) {
 	}
 
 	// Build a map of key hash prefixes to keys from the good DB
-	Hash2Key := make(map[[8]byte][]byte)
-
 	db, close := OpenDB(goodDB)
 	defer close()
-	err = db.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false // <= What this does is go through the keys in the db
-		it := txn.NewIterator(opts) //    in whatever order is best for badger for speed
-		defer it.Close()
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			keyBuff := [32]byte{}
-			copy(keyBuff[:], item.Key())
-			kh := sha256.Sum256(keyBuff[:]) //   hash, then this takes care of that case.
-			key := [8]byte{}
-			if _, exists := Hash2Key[key]; exists {
-				return fmt.Errorf("collision on %08x", key)
-			}
-			copy(key[:], kh[:8])
-			Hash2Key[key] = keyBuff[:]
-		}
-		return nil
-	})
-	checkf(err, "failed to collect all keys from %s", goodDB)
-	fmt.Printf("\nkeys in db: %d\n", len(Hash2Key))
-	fmt.Printf("\nModified: %d Added: %d\n", len(ModifiedKeys), len(AddedKeys))
+	Hash2Key := buildHash2Key(db)
 
 	f, err = os.Create(fixFile)
 	checkf(err, "could not create the fixFile %s", fixFile)
@@ -145,7 +120,10 @@ func buildFix(diffFile, goodDB, fixFile string) {
 	var kBuff [8]byte
 	for _, k := range ModifiedKeys { // list all the keys added to the bad db
 		copy(kBuff[:], k[:])
-		key := Hash2Key[kBuff]
+		key, ok := Hash2Key[kBuff]
+		if !ok {
+			fatalf("missing")
+		}
 		write8(uint64(len(key))) //                     Write the key length
 		write(key)               //                     Write the key
 

@@ -7,10 +7,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -31,6 +33,7 @@ func init() {
 	cmdDbPatch.AddCommand(
 		cmdDbPatchApply,
 		cmdDbPatchGenFix,
+		cmdDbPatchDumpForCompare,
 	)
 }
 
@@ -46,12 +49,74 @@ var cmdDbPatchApply = &cobra.Command{
 	Run:   applyDbPatch,
 }
 
+var cmdDbPatchDumpForCompare = &cobra.Command{
+	Use:    "dump-for-compare [patch file]",
+	Short:  "Dump a patch file in the same format as dbrepair",
+	Hidden: true,
+	Args:   cobra.ExactArgs(1),
+	Run:    dumpPatch,
+}
+
 var cmdDbPatchGenFix = &cobra.Command{
 	Use:    "generate-fix-2023-08-17 [good database]",
 	Short:  "Generate the patch for the 2023-08-17 stall",
 	Hidden: true,
 	Args:   cobra.ExactArgs(1),
 	Run:    genStallFixPatch,
+}
+
+func dumpPatch(_ *cobra.Command, args []string) {
+	// Open the patch
+	f, err := os.Open(args[0])
+	check(err)
+	defer f.Close()
+
+	// Unmarshal it
+	var patch *DbPatch
+	dec := json.NewDecoder(f)
+	dec.DisallowUnknownFields()
+	check(dec.Decode(&patch))
+
+	var AddedKeys, ModifiedKeys [][32]byte
+	values := map[[32]byte][]byte{}
+	for _, op := range patch.Operations {
+		switch op := op.(type) {
+		case *PutDbPatchOp:
+			ModifiedKeys = append(ModifiedKeys, op.Key.Hash())
+			values[op.Key.Hash()] = op.Value
+		case *DeleteDbPatchOp:
+			AddedKeys = append(AddedKeys, op.Key.Hash())
+		default:
+			fatalf("unknown operation type %v", op.Type())
+		}
+	}
+
+	sort.Slice(AddedKeys, func(i, j int) bool {
+		return bytes.Compare(AddedKeys[i][:], AddedKeys[j][:]) < 0
+	})
+	sort.Slice(ModifiedKeys, func(i, j int) bool {
+		return bytes.Compare(ModifiedKeys[i][:], ModifiedKeys[j][:]) < 0
+	})
+
+	fmt.Printf("%d Keys to delete:\n", len(AddedKeys))
+	for _, k := range AddedKeys { // list all the keys added to the bad db
+		fmt.Printf("   %x\n", k)
+	}
+
+	fmt.Printf("%d Keys to modify:\n", len(ModifiedKeys))
+	for _, k := range ModifiedKeys {
+		v, ok := values[k]
+		if !ok {
+			fatalf("missing")
+		}
+		fmt.Printf("   %x ", k)
+		vLen := len(v)
+		if vLen > 40 {
+			fmt.Printf("%x ... len %d\n", v[:40], vLen)
+		} else {
+			fmt.Printf("%x\n", v)
+		}
+	}
 }
 
 func applyDbPatch(_ *cobra.Command, args []string) {
