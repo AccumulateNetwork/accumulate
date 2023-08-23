@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -16,7 +15,7 @@ func runApplyFix(_ *cobra.Command, args []string) {
 
 // Apply the fix file to a database
 func applyFix(fixFile, badDB string) {
-	fmt.Println("\n Apply Fix")
+	boldCyan.Println("\n Apply Fix")
 
 	f, err := os.Open(fixFile)
 	checkf(err, "buildFix failed to open %s", fixFile)
@@ -61,7 +60,7 @@ func applyFix(fixFile, badDB string) {
 		read32()
 		txn := db.NewTransaction(true)
 		err := txn.Delete(buff[:32])
-		checkf(err,"failed to delete")
+		checkf(err, "failed to delete")
 	}
 
 	var keyBuff [1024]byte

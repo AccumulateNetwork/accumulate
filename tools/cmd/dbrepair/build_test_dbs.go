@@ -62,7 +62,7 @@ func OpenDB(dbName string) (*badger.DB, func()) {
 }
 
 func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
-	fmt.Println("\n Build Test DBs")
+	boldCyan.Println("\n Build Test DBs")
 	gDB, gClose := OpenDB(GoodDBName)
 	defer gClose()
 

@@ -8,8 +8,11 @@ import (
 	"time"
 
 	badger "github.com/dgraph-io/badger/v3"
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
+
+var boldCyan = color.New(color.FgCyan, color.Bold)
 
 func runBuildSummary(_ *cobra.Command, args []string) {
 	dbName := args[0]
@@ -18,7 +21,7 @@ func runBuildSummary(_ *cobra.Command, args []string) {
 }
 
 func buildSummary(dbName, dbSummary string) {
-	fmt.Println("\n Build Summary")
+	boldCyan.Println("\n Build Summary")
 
 	// Open the Badger database that is the good one.
 	db, err := badger.Open(badger.DefaultOptions(dbName).WithLoggingLevel(badger.ERROR))

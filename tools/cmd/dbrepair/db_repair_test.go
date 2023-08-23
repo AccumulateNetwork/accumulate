@@ -8,21 +8,23 @@ import (
 	"testing"
 
 	badger "github.com/dgraph-io/badger/v3"
+	"github.com/fatih/color"
 )
 
 func TestDbRepair(t *testing.T) {
+	color.NoColor = false
 	dir := t.TempDir()
 	goodDB := filepath.Join(dir, "good.db")
 	badDB := filepath.Join(dir, "bad.db")
-	summaryF := filepath.Join(dir,"summary.dat")
-	diffF := filepath.Join(dir,"diff.dat")
-	fixF := filepath.Join(dir,"fix.dat")
-	buildTestDBs(2e4, goodDB,badDB)
+	summaryF := filepath.Join(dir, "summary.dat")
+	diffF := filepath.Join(dir, "diff.dat")
+	fixF := filepath.Join(dir, "fix.dat")
+	buildTestDBs(2e4, goodDB, badDB)
 	buildSummary(goodDB, summaryF)
-	buildDiff(summaryF,badDB,diffF)
-	buildFix(diffF,goodDB,fixF)
-	applyFix(fixF,badDB)
-	buildDiff(summaryF,badDB,diffF)
+	buildDiff(summaryF, badDB, diffF)
+	buildFix(diffF, goodDB, fixF)
+	applyFix(fixF, badDB)
+	buildDiff(summaryF, badDB, diffF)
 }
 
 // Sanity check of what we are doing with databases
@@ -30,9 +32,9 @@ func TestCompareDB(t *testing.T) {
 	dir := t.TempDir()
 	goodDB := filepath.Join(dir, "good.db")
 	badDB := filepath.Join(dir, "bad.db")
-	summaryF := filepath.Join(dir,"summary.dat")
+	summaryF := filepath.Join(dir, "summary.dat")
 
-	buildTestDBs(2e4, goodDB,badDB)
+	buildTestDBs(2e4, goodDB, badDB)
 	buildSummary(goodDB, summaryF)
 
 	gDB, gClose := OpenDB(goodDB)
@@ -69,7 +71,7 @@ func TestCompareDB(t *testing.T) {
 	good := readAll(gDB)
 	bad := readAll(bDB)
 
-	fmt.Printf("Comparing good %d with bad %d\n",len(good),len(bad))
+	fmt.Printf("Comparing good %d with bad %d\n", len(good), len(bad))
 
 	var cntMod, cntDel, cntAdd int
 
