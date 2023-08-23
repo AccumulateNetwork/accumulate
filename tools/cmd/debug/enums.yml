@@ -1,0 +1,5 @@
+DbPatchOpType:
+  Put:
+    value: 1
+  Delete:
+    value: 2
