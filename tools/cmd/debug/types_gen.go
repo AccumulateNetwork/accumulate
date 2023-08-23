@@ -24,8 +24,15 @@ import (
 
 type DbPatch struct {
 	fieldsSet  []bool
-	Operations []DbPatchOp `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+	Operations []DbPatchOp    `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+	Result     *DbPatchResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 	extraData  []byte
+}
+
+type DbPatchResult struct {
+	fieldsSet []bool
+	StateHash [32]byte `json:"stateHash,omitempty" form:"stateHash" query:"stateHash" validate:"required"`
+	extraData []byte
 }
 
 type DeleteDbPatchOp struct {
@@ -54,6 +61,9 @@ func (v *DbPatch) Copy() *DbPatch {
 			u.Operations[i] = CopyDbPatchOp(v)
 		}
 	}
+	if v.Result != nil {
+		u.Result = (v.Result).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -63,6 +73,20 @@ func (v *DbPatch) Copy() *DbPatch {
 }
 
 func (v *DbPatch) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DbPatchResult) Copy() *DbPatchResult {
+	u := new(DbPatchResult)
+
+	u.StateHash = v.StateHash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *DbPatchResult) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *DeleteDbPatchOp) Copy() *DeleteDbPatchOp {
 	u := new(DeleteDbPatchOp)
@@ -106,6 +130,22 @@ func (v *DbPatch) Equal(u *DbPatch) bool {
 			return false
 		}
 	}
+	switch {
+	case v.Result == u.Result:
+		// equal
+	case v.Result == nil || u.Result == nil:
+		return false
+	case !((v.Result).Equal(u.Result)):
+		return false
+	}
+
+	return true
+}
+
+func (v *DbPatchResult) Equal(u *DbPatchResult) bool {
+	if !(v.StateHash == u.StateHash) {
+		return false
+	}
 
 	return true
 }
@@ -141,6 +181,7 @@ func (v *PutDbPatchOp) Equal(u *PutDbPatchOp) bool {
 
 var fieldNames_DbPatch = []string{
 	1: "Operations",
+	2: "Result",
 }
 
 func (v *DbPatch) MarshalBinary() ([]byte, error) {
@@ -155,6 +196,9 @@ func (v *DbPatch) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Operations {
 			writer.WriteValue(1, v.MarshalBinary)
 		}
+	}
+	if !(v.Result == nil) {
+		writer.WriteValue(2, v.Result.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DbPatch)
@@ -172,6 +216,54 @@ func (v *DbPatch) IsValid() error {
 		errs = append(errs, "field Operations is missing")
 	} else if len(v.Operations) == 0 {
 		errs = append(errs, "field Operations is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Result is missing")
+	} else if v.Result == nil {
+		errs = append(errs, "field Result is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_DbPatchResult = []string{
+	1: "StateHash",
+}
+
+func (v *DbPatchResult) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.StateHash == ([32]byte{})) {
+		writer.WriteHash(1, &v.StateHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DbPatchResult)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *DbPatchResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field StateHash is missing")
+	} else if v.StateHash == ([32]byte{}) {
+		errs = append(errs, "field StateHash is not set")
 	}
 
 	switch len(errs) {
@@ -308,8 +400,34 @@ func (v *DbPatch) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x := new(DbPatchResult); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Result = x
+	}
 
 	seen, err := reader.Reset(fieldNames_DbPatch)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *DbPatchResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DbPatchResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadHash(1); ok {
+		v.StateHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_DbPatchResult)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -397,9 +515,23 @@ func (v *PutDbPatchOp) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 func (v *DbPatch) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Operations *encoding.JsonUnmarshalListWith[DbPatchOp] `json:"operations,omitempty"`
+		Result     *DbPatchResult                             `json:"result,omitempty"`
 	}{}
 	if !(len(v.Operations) == 0) {
 		u.Operations = &encoding.JsonUnmarshalListWith[DbPatchOp]{Value: v.Operations, Func: UnmarshalDbPatchOpJSON}
+	}
+	if !(v.Result == nil) {
+		u.Result = v.Result
+	}
+	return json.Marshal(&u)
+}
+
+func (v *DbPatchResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		StateHash string `json:"stateHash,omitempty"`
+	}{}
+	if !(v.StateHash == ([32]byte{})) {
+		u.StateHash = encoding.ChainToJSON(v.StateHash)
 	}
 	return json.Marshal(&u)
 }
@@ -435,8 +567,10 @@ func (v *PutDbPatchOp) MarshalJSON() ([]byte, error) {
 func (v *DbPatch) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Operations *encoding.JsonUnmarshalListWith[DbPatchOp] `json:"operations,omitempty"`
+		Result     *DbPatchResult                             `json:"result,omitempty"`
 	}{}
 	u.Operations = &encoding.JsonUnmarshalListWith[DbPatchOp]{Value: v.Operations, Func: UnmarshalDbPatchOpJSON}
+	u.Result = v.Result
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -445,6 +579,23 @@ func (v *DbPatch) UnmarshalJSON(data []byte) error {
 		for i, x := range u.Operations.Value {
 			v.Operations[i] = x
 		}
+	}
+	v.Result = u.Result
+	return nil
+}
+
+func (v *DbPatchResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		StateHash string `json:"stateHash,omitempty"`
+	}{}
+	u.StateHash = encoding.ChainToJSON(v.StateHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.StateHash); err != nil {
+		return fmt.Errorf("error decoding StateHash: %w", err)
+	} else {
+		v.StateHash = x
 	}
 	return nil
 }

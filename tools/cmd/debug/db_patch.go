@@ -9,9 +9,12 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -72,6 +75,15 @@ func applyDbPatch(_ *cobra.Command, args []string) {
 	cs := db.Begin(nil, true)
 	check(patch.Apply(cs))
 	check(cs.Commit())
+
+	// Validate it
+	batch := coredb.New(db, nil).Begin(false)
+	stateHash, err := batch.BPT().GetRootHash()
+	check(err)
+	if stateHash != patch.Result.StateHash {
+		fatalf("state hash does not match: want %x, got %x", patch.Result.StateHash, stateHash)
+	}
+	fmt.Fprintln(os.Stderr, color.GreenString("Database restored to %x", patch.Result.StateHash))
 }
 
 func genStallFixPatch(_ *cobra.Command, args []string) {
@@ -81,12 +93,12 @@ func genStallFixPatch(_ *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Build the patch
-	batch := db.Begin(nil, false)
-	defer batch.Discard()
+	cs := db.Begin(nil, false)
+	defer cs.Discard()
 
 	patch := new(DbPatch)
 	for _, k := range stall2023_08_17keys() {
-		v, err := batch.Get(k)
+		v, err := cs.Get(k)
 		switch {
 		case err == nil:
 			// Key existed previously - overwrite it
@@ -100,6 +112,13 @@ func genStallFixPatch(_ *cobra.Command, args []string) {
 			check(err)
 		}
 	}
+
+	// Get the result
+	batch := coredb.New(cs, nil).Begin(false)
+	defer batch.Discard()
+	patch.Result = new(DbPatchResult)
+	patch.Result.StateHash, err = batch.BPT().GetRootHash()
+	check(err)
 
 	// Dump it
 	check(json.NewEncoder(os.Stdout).Encode(patch))
@@ -116,11 +135,60 @@ func (p *DbPatch) Apply(cs keyvalue.ChangeSet) error {
 }
 
 func (op *PutDbPatchOp) Apply(cs keyvalue.ChangeSet) error {
-	return cs.Put(op.Key, op.Value)
+	// Put the value
+	err := cs.Put(op.Key, op.Value)
+	if err != nil {
+		return err
+	}
+
+	// Is it an account?
+	if op.Key.Len() < 2 || op.Key.Get(0) != "Account" {
+		return nil
+	}
+	u, ok := op.Key.Get(1).(*url.URL)
+	if !ok {
+		return nil
+	}
+
+	// Make the account look dirty
+	batch := coredb.New(cs, nil).Begin(true)
+	defer batch.Discard()
+	batch.SetObserver(execute.NewDatabaseObserver())
+
+	err = batch.Account(u).MarkDirty()
+	if err != nil {
+		return err
+	}
+
+	// Update the BPT
+	return batch.Commit()
 }
 
 func (op *DeleteDbPatchOp) Apply(cs keyvalue.ChangeSet) error {
-	return cs.Delete(op.Key)
+	err := cs.Delete(op.Key)
+	if err != nil && errors.Is(err, errors.NotFound) {
+		// Ignore not found
+		return err
+	}
+
+	// Is it an account? Is it the main state?
+	if op.Key.Len() != 3 || op.Key.Get(0) != "Account" {
+		return nil
+	}
+	u, ok := op.Key.Get(1).(*url.URL)
+	if !ok || op.Key.Get(2) != "Main" {
+		return nil
+	}
+
+	// Delete it's BPT entry
+	batch := coredb.New(cs, nil).Begin(true)
+	defer batch.Discard()
+	err = batch.BPT().Delete(record.NewKey("Account", u).Hash())
+	if err != nil {
+		return err
+	}
+
+	return batch.Commit()
 }
 
 // WARNING These conversions require detailed knowledge of the database

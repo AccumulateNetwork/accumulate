@@ -897,5 +897,8 @@
 		{ "type": "delete", "key": [{"string": "Transaction"}, {"hash": "86bdccc1d36fe891202e25dee0bfd40a47eb0e34f1cb8b59efc3b5c04a94d1d2"}, {"string": "Status"}]},
 		{ "type": "delete", "key": [{"string": "Transaction"}, {"hash": "f0e4a6af7ed5d6fe8e677634ae348eab73b725b06720e4fae126378e750c0173"}, {"string": "Status"}]},
 		{ "type": "delete", "key": [{"string": "Transaction"}, {"hash": "4b1f250622309b6ee8e51766b03aef158cf034d227fe40d5feedb2f0fe309a82"}, {"string": "Status"}]}
-	]
+	],
+    "result": {
+        "stateHash": "725ea39d9539a38eecb7ba83388d46a47c443a3829f685af6cc0fbcc1c8733e2"
+    }
 }

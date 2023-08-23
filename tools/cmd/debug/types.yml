@@ -4,6 +4,15 @@ DbPatch:
       type: DbPatchOp
       marshal-as: union
       repeatable: true
+    - name: Result
+      type: DbPatchResult
+      marshal-as: reference
+      pointer: true
+
+DbPatchResult:
+  fields:
+    - name: StateHash
+      type: hash
 
 PutDbPatchOp:
   union: { type: dbPatchOp }
