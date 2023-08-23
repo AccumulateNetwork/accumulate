@@ -75,7 +75,6 @@ func buildDiff(summary, badDB, diffFile string) {
 			copy(kb[:], kh[:8])                 //	    in an independent byte array
 			if _, exists := keys[kb]; !exists { //   delete keys not in the summary
 				addedKeys = append(addedKeys, k[:])
-				fmt.Printf("added key %x\n",k)
 				cntMod++
 				continue
 			}
@@ -126,7 +125,6 @@ func buildDiff(summary, badDB, diffFile string) {
 	}
 	wrt64int(len(modifiedKeys))       //   Number of keys to revert
 	for _, uk := range modifiedKeys { //   8 bytes of key hashes
-		fmt.Printf("key: %x\n",uk)
 		f.Write(uk)
 	}
 }

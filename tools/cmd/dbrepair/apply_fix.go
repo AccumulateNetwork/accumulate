@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	badger "github.com/dgraph-io/badger/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -60,13 +59,9 @@ func applyFix(fixFile, badDB string) {
 	NumAdded := read8()
 	for i := uint64(0); i < NumAdded; i++ {
 		read32()
-		err := db.View(func(txn *badger.Txn) error { // Get the value and write it
-			if err := txn.Delete(buff[:32]); err != nil {
-				return fmt.Errorf("failed to delete a key %x", buff[:32])
-			}
-			return nil
-		})
-		checkf(err, "failed to delete a key")
+		txn := db.NewTransaction(true)
+		err := txn.Delete(buff[:32])
+		checkf(err,"failed to delete")
 	}
 
 	var keyBuff [1024]byte
@@ -76,13 +71,8 @@ func applyFix(fixFile, badDB string) {
 		read(keyBuff[:keyLen])
 		valueLen := read8()
 		read(buff[:valueLen])
-		err := db.View(func(txn *badger.Txn) error { // Get the value and write it
-			err := txn.Set(keyBuff[:keyLen], buff[:valueLen])
-			if err != nil {
-				return err
-			}
-			return nil
-		})
+		txn := db.NewTransaction(true)
+		err := txn.Set(keyBuff[:keyLen], buff[:valueLen])
 		checkf(err, "failed to update a value in the database")
 	}
 }

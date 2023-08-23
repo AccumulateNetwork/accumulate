@@ -22,6 +22,7 @@ func TestDbRepair(t *testing.T) {
 	buildDiff(summaryF,badDB,diffF)
 	buildFix(diffF,goodDB,fixF)
 	applyFix(fixF,badDB)
+	buildDiff(summaryF,badDB,diffF)
 }
 
 // Sanity check of what we are doing with databases

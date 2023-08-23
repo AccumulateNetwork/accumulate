@@ -122,7 +122,7 @@ func buildFix(diffFile, goodDB, fixFile string) {
 
 	write8 := func(v uint64) {
 		binary.BigEndian.PutUint64(bBuff[:], v)
-		i, err := f.Write(buff[:8])
+		i, err := f.Write(bBuff[:8])
 		checkf(err, "failed a write to fix file %s", fixFile)
 		if i != 8 {
 			fatalf("failed to write the 8 bytes to %s", fixFile)
@@ -146,7 +146,6 @@ func buildFix(diffFile, goodDB, fixFile string) {
 	for _, k := range ModifiedKeys { // list all the keys added to the bad db
 		copy(kBuff[:], k[:])
 		key := Hash2Key[kBuff]
-		fmt.Printf("k:  %x key: %x\n", k, key)
 		write8(uint64(len(key))) //                     Write the key length
 		write(key)               //                     Write the key
 
