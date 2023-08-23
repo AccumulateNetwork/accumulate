@@ -62,6 +62,7 @@ func applyFix(fixFile, badDB string) {
 		txn := db.NewTransaction(true)
 		err := txn.Delete(buff[:32])
 		checkf(err,"failed to delete")
+		txn.Commit()
 	}
 
 	var keyBuff [1024]byte
@@ -74,5 +75,6 @@ func applyFix(fixFile, badDB string) {
 		txn := db.NewTransaction(true)
 		err := txn.Set(keyBuff[:keyLen], buff[:valueLen])
 		checkf(err, "failed to update a value in the database")
+		txn.Commit()
 	}
 }

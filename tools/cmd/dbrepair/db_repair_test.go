@@ -17,12 +17,14 @@ func TestDbRepair(t *testing.T) {
 	summaryF := filepath.Join(dir,"summary.dat")
 	diffF := filepath.Join(dir,"diff.dat")
 	fixF := filepath.Join(dir,"fix.dat")
-	buildTestDBs(2e4, goodDB,badDB)
+	buildTestDBs(1e4, goodDB,badDB)
 	buildSummary(goodDB, summaryF)
 	buildDiff(summaryF,badDB,diffF)
+	printDiff(diffF,goodDB)
 	buildFix(diffF,goodDB,fixF)
 	applyFix(fixF,badDB)
 	buildDiff(summaryF,badDB,diffF)
+	printDiff(diffF,goodDB)
 }
 
 // Sanity check of what we are doing with databases
