@@ -93,3 +93,5 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 		fatalf(format+": %v", append(otherArgs, err)...)
 	}
 }
+
+func check2(_ any, err error) { check(err) }

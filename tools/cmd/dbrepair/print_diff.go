@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -85,7 +91,7 @@ func printDiff(diffFile, goodDB string) {
 		fmt.Printf("   %x ", key)
 
 		err := db.View(func(txn *badger.Txn) error { // Get the value and write it
-			item, err := txn.Get([]byte(key))
+			item, err := txn.Get(key)
 			checkf(err, "key/value failed to produce the value")
 			err = item.Value(func(val []byte) error {
 				vLen := len(val)

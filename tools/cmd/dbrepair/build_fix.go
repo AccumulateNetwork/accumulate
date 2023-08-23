@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -119,6 +125,7 @@ func buildFix(diffFile, goodDB, fixFile string) {
 	write8(uint64(len(ModifiedKeys)))
 	var kBuff [8]byte
 	for _, k := range ModifiedKeys { // list all the keys added to the bad db
+		k := k
 		copy(kBuff[:], k[:])
 		key, ok := Hash2Key[kBuff]
 		if !ok {
@@ -128,7 +135,7 @@ func buildFix(diffFile, goodDB, fixFile string) {
 		write(key)               //                     Write the key
 
 		err := db.View(func(txn *badger.Txn) error { // Get the value and write it
-			item, err := txn.Get([]byte(key))
+			item, err := txn.Get(key)
 			checkf(err, "key/value failed to produce the value")
 			err = item.Value(func(val []byte) error {
 				write8(uint64(len(val))) //             Write the value length

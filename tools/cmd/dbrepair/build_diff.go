@@ -1,3 +1,9 @@
+// Copyright 2023 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -105,6 +111,7 @@ func buildDiff(summary, badDB, diffFile string) {
 	checkf(err, "View of keys failed")
 
 	for kh := range keys {
+		kh := kh
 		kb := [8]byte{}
 		copy(kb[:], kh[:])
 		modifiedKeys = append(modifiedKeys, kb[:]) // All the keys we did not find had to be added back
@@ -116,7 +123,7 @@ func buildDiff(summary, badDB, diffFile string) {
 	defer func() { _ = f.Close() }()
 
 	wrt64 := func(v uint64) {
-		binary.BigEndian.PutUint64(buff[:], uint64(v))
+		binary.BigEndian.PutUint64(buff[:], v)
 		_, err := f.Write(buff[:8])
 		check(err)
 	}
@@ -126,13 +133,13 @@ func buildDiff(summary, badDB, diffFile string) {
 
 	wrt64int(len(addedKeys))       //   Number of keys to delete
 	for _, dk := range addedKeys { //   32 bytes each
-		f.Write(dk)
+		check2(f.Write(dk))
 		if len(dk) != 32 {
 			fatalf("Key is not a hash")
 		}
 	}
 	wrt64int(len(modifiedKeys))       //   Number of keys to revert
 	for _, uk := range modifiedKeys { //   8 bytes of key hashes
-		f.Write(uk)
+		check2(f.Write(uk))
 	}
 }
