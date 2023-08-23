@@ -51,8 +51,8 @@ github.com/Abirdcfly/dupword v0.0.11 h1:z6v8rMETchZXUIuHxYNmlUAuKuB21PeaSymTed16
 github.com/Abirdcfly/dupword v0.0.11/go.mod h1:wH8mVGuf3CP5fsBTkfWwwwKTjDnVVCxtU8d8rgeVYXA=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040 h1:YR9b2mCxikJzdAfLjhRKgED1+21TyAs0KF5lOQ80h18=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040/go.mod h1:IZ754L8YfDkLr74Dr8tGexsOq6n9hkfM3tvULzBTBn4=
-github.com/AccumulateNetwork/tendermint v0.34.15-0.20221019224404-7f7149107231 h1:33gFZ2eg+rQlce/TA43RhqTAt/dmZJKIJy4HqnWBmWU=
-github.com/AccumulateNetwork/tendermint v0.34.15-0.20221019224404-7f7149107231/go.mod h1:z0MZllXL+s0PgIMMpf2P0PrMttQufQio3kUjY2zebeo=
+github.com/AccumulateNetwork/tendermint v0.34.15-0.20230516230833-3ed461dbff03 h1:F4NlJ4KA2zM3Zp1E9bQXSmiphsS7n3+xzy+kLKSQ2tU=
+github.com/AccumulateNetwork/tendermint v0.34.15-0.20230516230833-3ed461dbff03/go.mod h1:z0MZllXL+s0PgIMMpf2P0PrMttQufQio3kUjY2zebeo=
 github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96 h1:cTp8I5+VIoKjsnZuH8vjyaysT/ses3EvZeaV/1UkF2M=
 github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
 github.com/Antonboom/errname v0.1.9 h1:BZDX4r3l4TBZxZ2o2LNrlGxSHran4d1u4veZdoORTT4=

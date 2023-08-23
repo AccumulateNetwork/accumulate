@@ -7,7 +7,9 @@ ENV CGO_ENABLED 0
 ARG TAGS=production,mainnet
 RUN make -B TAGS=$TAGS
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
+RUN go install github.com/tendermint/tendermint/cmd/tendermint
 RUN go build ./tools/cmd/snapshot
+RUN go build ./tools/cmd/debug
 RUN go build ./cmd/accumulated-bootstrap
 
 FROM alpine:3
@@ -20,7 +22,7 @@ WORKDIR /scripts
 COPY scripts .
 
 # Copy binaries
-COPY --from=build /root/accumulated /root/snapshot /root/accumulated-bootstrap /go/bin/dlv /bin/
+COPY --from=build /root/accumulated /root/snapshot /root/debug /root/accumulated-bootstrap /go/bin/tendermint /go/bin/dlv /bin/
 
 # Set health check
 HEALTHCHECK CMD curl --fail --silent http://localhost:26660/status || exit 1
