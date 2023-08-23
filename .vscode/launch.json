@@ -6,7 +6,7 @@
   "configurations": [
     // Badger DB align
     {
-      "name": "AA Build Test DBs",
+      "name": "Build Test DBs",
       "presentation": {
         "group": "00_DB_Repair"
       },
@@ -14,13 +14,20 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/dbrepair",
-      "dlvFlags": ["--check-go-version=false"],
+      "dlvFlags": [
+        "--check-go-version=false"
+      ],
       "cwd": "${workspaceFolder}",
-      "args": ["buildTestDBs","10000", "good","bad"],
+      "args": [
+        "buildTestDBs",
+        "10000",
+        "good",
+        "bad"
+      ],
     },
     // Build Summary file
     {
-      "name": "AA Build Summary file",
+      "name": "Build Summary file",
       "presentation": {
         "group": "00_DB_Repair"
       },
@@ -28,15 +35,64 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/dbrepair",
-      "dlvFlags": ["--check-go-version=false"],
+      "dlvFlags": [
+        "--check-go-version=false"
+      ],
       "cwd": "${workspaceFolder}",
-      "args": ["buildSummary","good", "summary.dat"],
+      "args": [
+        "buildSummary",
+        "good",
+        "summary.dat"
+      ],
     },
-
+    // Build Diff file
+    {
+      "name": "Build Diff file",
+      "presentation": {
+        "group": "00_DB_Repair"
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/dbrepair",
+      "dlvFlags": [
+        "--check-go-version=false"
+      ],
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "buildDiff",
+        "summary.dat",
+        "bad",
+        "diff.dat"
+      ],
+    },
+      // Build Fix file
+      {
+        "name": "Build Fix file",
+        "presentation": {
+          "group": "00_DB_Repair"
+        },
+        "type": "go",
+        "request": "launch",
+        "mode": "auto",
+        "program": "${workspaceFolder}/tools/cmd/dbrepair",
+        "dlvFlags": [
+          "--check-go-version=false"
+        ],
+        "cwd": "${workspaceFolder}",
+        "args": [
+          "buildFix",
+          "diff.dat",
+          "good",
+          "fix.dat"
+        ],
+      },
     // Simulate
     {
       "name": "Simulate (in-memory)",
-      "presentation": { "group": "10-Simulate" },
+      "presentation": {
+        "group": "10-Simulate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -51,7 +107,9 @@
     },
     {
       "name": "Simulate (badger)",
-      "presentation": { "group": "10-Simulate" },
+      "presentation": {
+        "group": "10-Simulate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -60,11 +118,12 @@
         "--database=${workspaceFolder}/.nodes/sim"
       ],
     },
-
     // Run
     {
       "name": "Init (devnet)",
-      "presentation": { "group": "20-Run" },
+      "presentation": {
+        "group": "20-Run"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -84,7 +143,9 @@
     },
     {
       "name": "Run (devnet)",
-      "presentation": { "group": "20-Run" },
+      "presentation": {
+        "group": "20-Run"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -99,7 +160,9 @@
     },
     {
       "name": "Init and Run (devnet)",
-      "presentation": { "group": "20-Run" },
+      "presentation": {
+        "group": "20-Run"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -117,13 +180,16 @@
     },
     {
       "name": "Init (dual)",
-      "presentation": { "group": "20-Run" },
+      "presentation": {
+        "group": "20-Run"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/accumulated",
       "args": [
-        "init", "dual",
+        "init",
+        "dual",
         "-w=${workspaceFolder}/.nodes/node-1",
         "tcp://bvn1-seed.testnet.accumulatenetwork.io:16691",
         "-l=tcp://127.0.2.1",
@@ -133,7 +199,9 @@
     },
     {
       "name": "Run (dual)",
-      "presentation": { "group": "20-Run" },
+      "presentation": {
+        "group": "20-Run"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -147,7 +215,9 @@
     },
     {
       "name": "Run (single)",
-      "presentation": { "group": "20-Run" },
+      "presentation": {
+        "group": "20-Run"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -159,11 +229,12 @@
         // "-w=${workspaceFolder}/.nodes/bsn-1/bsnn",
       ]
     },
-
     // Services
     {
       "name": "API (testnet)",
-      "presentation": { "group": "30-Services" },
+      "presentation": {
+        "group": "30-Services"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -175,11 +246,12 @@
         "--peer=/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
       ]
     },
-
     // Validate
     {
       "name": "Validate: Playbooks (sim v1)",
-      "presentation": { "group": "80-Validate" },
+      "presentation": {
+        "group": "80-Validate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -194,14 +266,18 @@
     },
     {
       "name": "Validate: Playbooks (devnet)",
-      "presentation": { "group": "80-Validate" },
+      "presentation": {
+        "group": "80-Validate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/test/cmd/devnet",
       "cwd": "${workspaceFolder}",
       "args": [
-        "-X", "-v=1,-b=1,--reset", "play",
+        "-X",
+        "-v=1,-b=1,--reset",
+        "play",
         "${workspaceFolder}/playbooks/validate/01-lite-token.play",
         "${workspaceFolder}/playbooks/validate/02-identity.play",
         "${workspaceFolder}/playbooks/validate/03-lite-data.play",
@@ -211,7 +287,9 @@
     },
     {
       "name": "Validate: Script (devnet)",
-      "presentation": { "group": "80-Validate" },
+      "presentation": {
+        "group": "80-Validate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -223,43 +301,56 @@
     },
     {
       "name": "Validate: Go test (devnet)",
-      "presentation": { "group": "80-Validate" },
+      "presentation": {
+        "group": "80-Validate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "test",
       "program": "${workspaceFolder}/test/validate",
       "args": [
         "-test.v",
-        "-test.validate.network", "${workspaceFolder}/.nodes/node-1/dnn",
-        "-test.run", "TestValidateNetwork",
+        "-test.validate.network",
+        "${workspaceFolder}/.nodes/node-1/dnn",
+        "-test.run",
+        "TestValidateNetwork",
       ]
     },
-
-
     // Generator
     {
       "name": "Generate Types",
-      "presentation": { "group": "90-Generate" },
+      "presentation": {
+        "group": "90-Generate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/tools/cmd/gen-types",
       "cwd": "${workspaceFolder}/internal/core",
-      "args": ["types.yml"]
+      "args": [
+        "types.yml"
+      ]
     },
     {
       "name": "Generate Model",
-      "presentation": { "group": "90-Generate" },
+      "presentation": {
+        "group": "90-Generate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/tools/cmd/gen-model",
       "cwd": "${workspaceFolder}/internal/database",
-      "args": ["--package=database", "model.yml"]
+      "args": [
+        "--package=database",
+        "model.yml"
+      ]
     },
     {
       "name": "Generate Protocol Types",
-      "presentation": { "group": "90-Generate" },
+      "presentation": {
+        "group": "90-Generate"
+      },
       "type": "go",
       "request": "launch",
       "mode": "debug",
@@ -281,19 +372,24 @@
     },
     {
       "name": "Generate Test Data",
-      "presentation": { "group": "90-Generate", },
+      "presentation": {
+        "group": "90-Generate",
+      },
       "type": "go",
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/test/cmd/gen-testdata",
       "cwd": "${workspaceFolder}",
-      "args": ["${workspaceFolder}/.testdata/sdk.json"]
+      "args": [
+        "${workspaceFolder}/.testdata/sdk.json"
+      ]
     },
-
     // Snapshots
     {
       "name": "Dump snapshot",
-      "presentation": { "group": "91-Snapshot", },
+      "presentation": {
+        "group": "91-Snapshot",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -306,7 +402,9 @@
     },
     {
       "name": "Fix snapshot",
-      "presentation": { "group": "91-Snapshot", },
+      "presentation": {
+        "group": "91-Snapshot",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -319,7 +417,9 @@
     },
     {
       "name": "Merge snapshots",
-      "presentation": { "group": "91-Snapshot", },
+      "presentation": {
+        "group": "91-Snapshot",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -332,7 +432,9 @@
     },
     {
       "name": "Extract snapshot",
-      "presentation": { "group": "91-Snapshot", },
+      "presentation": {
+        "group": "91-Snapshot",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -345,7 +447,9 @@
     },
     {
       "name": "Convert Factom entries (objects -> txns)",
-      "presentation": { "group": "91-Snapshot", },
+      "presentation": {
+        "group": "91-Snapshot",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -359,7 +463,9 @@
     },
     {
       "name": "Convert Factom chains (txns -> LDAs)",
-      "presentation": { "group": "91-Snapshot", },
+      "presentation": {
+        "group": "91-Snapshot",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -373,7 +479,9 @@
     },
     {
       "name": "Export genesis",
-      "presentation": { "group": "91-Snapshot", },
+      "presentation": {
+        "group": "91-Snapshot",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -386,11 +494,12 @@
         "--factom-ldas=${workspaceFolder}/.nodes/import/factom-lda.snapshot",
       ]
     },
-
     // Miscellaneous
     {
       "name": "Heal Anchors",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -403,7 +512,9 @@
     },
     {
       "name": "Heal Synth",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -417,7 +528,9 @@
     },
     {
       "name": "Debug sequence",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -430,23 +543,30 @@
     },
     {
       "name": "Lint",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/golangci-lint",
       "cwd": "${workspaceFolder}",
-      "args": ["run"]
+      "args": [
+        "run"
+      ]
     },
     {
       "name": "Debug routing",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/debug",
       "args": [
-        "account", "route",
+        "account",
+        "route",
         "https://testnet.accumulatenetwork.io/v2",
         "acc://defidevs"
       ]
@@ -457,7 +577,9 @@
       // Launch delve:                 `dlv attach 1 --headless --listen=:2345 --accept-multiclient --api-version=2`
       // Forward the port (if remote): `ssh ${USER}@${SERVER} -NL localhost:2345:localhost:2345`
       // Then run this debug config
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "attach",
       "mode": "remote",
@@ -474,7 +596,6 @@
         //   "to": "/root/",
         //   "from": "${workspaceFolder}",
         // },
-
         // Trimmed paths
         {
           "to": "gitlab.com/accumulatenetwork/accumulate/",
@@ -493,7 +614,9 @@
     {
       // https://rr-project.org/
       "name": "Replay an RR trace",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "replay",
@@ -507,7 +630,9 @@
     },
     {
       "name": "Database explorer",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -519,7 +644,9 @@
     },
     {
       "name": "Recode",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -530,13 +657,16 @@
     },
     {
       "name": "Verify envelope",
-      "presentation": { "group": "99-Miscellaneous", },
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/debug",
       "args": [
-        "verify", "{\"signatures\": [{\"type\": \"eth\",\"publicKey\": \"0469bdf2f442628a7ab77364810dae36bfad5c4c47a03790558f0e03cdf36ca9e00ac9e32ee9b2ef3ccc2d8ec58e27e30d937586ea12eade9cbd9916ab169011fd\",\"signature\": \"30440220aa01f3c7176a766859c9682fbf608e11227f8894ec2097b63b4d4a370ee710f00220496a2280a477f0bdfa8a0cc58c5dcbe3ecfef8b7f6cca677990be9c1b578c7db\",\"signer\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e/ACME\",\"signerVersion\": 1,\"timestamp\": 1692301326529,\"transactionHash\": \"50ae244d7057ba000594d8b95b44cd1419c546f2adc2118a8799786dc6b6bb91\"}],\"transaction\": [{\"header\": {\"principal\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e/ACME\",\"initiator\": \"5572129dbb0ec164c327ef36c2783767a14eda2dee08d5ff6170928b4673d4cb\"},\"body\": {\"type\": \"addCredits\",\"recipient\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e\",\"amount\": \"10000\",\"oracle\": 50000000}}]}"
+        "verify",
+        "{\"signatures\": [{\"type\": \"eth\",\"publicKey\": \"0469bdf2f442628a7ab77364810dae36bfad5c4c47a03790558f0e03cdf36ca9e00ac9e32ee9b2ef3ccc2d8ec58e27e30d937586ea12eade9cbd9916ab169011fd\",\"signature\": \"30440220aa01f3c7176a766859c9682fbf608e11227f8894ec2097b63b4d4a370ee710f00220496a2280a477f0bdfa8a0cc58c5dcbe3ecfef8b7f6cca677990be9c1b578c7db\",\"signer\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e/ACME\",\"signerVersion\": 1,\"timestamp\": 1692301326529,\"transactionHash\": \"50ae244d7057ba000594d8b95b44cd1419c546f2adc2118a8799786dc6b6bb91\"}],\"transaction\": [{\"header\": {\"principal\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e/ACME\",\"initiator\": \"5572129dbb0ec164c327ef36c2783767a14eda2dee08d5ff6170928b4673d4cb\"},\"body\": {\"type\": \"addCredits\",\"recipient\": \"acc://20021b633ee9b168259af8fd6a903022724f09466ec1684e\",\"amount\": \"10000\",\"oracle\": 50000000}}]}"
       ]
     }
   ]
