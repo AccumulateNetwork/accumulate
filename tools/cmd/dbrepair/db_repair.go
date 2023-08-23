@@ -24,9 +24,10 @@ var cmdBuildDiff = &cobra.Command{
 	Args:  cobra.ExactArgs(3),
 	Run:   runBuildDiff,
 }
+
 var cmdPrintDiff = &cobra.Command{
-	Use:   "printDiff [diff file] [bad database] [diff File]",
-	Short: "Given the summary data and the bad database, build a diff File to make the bad database good",
+	Use:   "printDiff [diff file] [good database] [diff File]",
+	Short: "Given the summary data and the good database, print the diff file",
 	Args:  cobra.ExactArgs(2),
 	Run:   runPrintDiff,
 }

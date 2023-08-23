@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +41,7 @@ func runBuildFix(_ *cobra.Command, args []string) {
 //	       value                      - L bytes
 //	     }
 func buildFix(diffFile, goodDB, fixFile string) {
-	fmt.Println("\n Build Fix")
+	boldCyan.Println("\n Build Fix")
 
 	var AddedKeys [][]byte     // List of keys added to the bad state
 	var ModifiedKeys [][8]byte // Map of keys and values modified from the good state
@@ -101,7 +101,7 @@ func buildFix(diffFile, goodDB, fixFile string) {
 		for it.Rewind(); it.Valid(); it.Next() {
 			item := it.Item()
 			keyBuff := [32]byte{}
-			copy(keyBuff[:],item.Key())
+			copy(keyBuff[:], item.Key())
 			kh := sha256.Sum256(keyBuff[:]) //   hash, then this takes care of that case.
 			key := [8]byte{}
 			if _, exists := Hash2Key[key]; exists {

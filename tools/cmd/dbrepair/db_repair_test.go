@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger"
 	"github.com/fatih/color"
 )
 
@@ -16,17 +16,17 @@ func TestDbRepair(t *testing.T) {
 	dir := t.TempDir()
 	goodDB := filepath.Join(dir, "good.db")
 	badDB := filepath.Join(dir, "bad.db")
-	summaryF := filepath.Join(dir,"summary.dat")
-	diffF := filepath.Join(dir,"diff.dat")
-	fixF := filepath.Join(dir,"fix.dat")
-	buildTestDBs(1e4, goodDB,badDB)
+	summaryF := filepath.Join(dir, "summary.dat")
+	diffF := filepath.Join(dir, "diff.dat")
+	fixF := filepath.Join(dir, "fix.dat")
+	buildTestDBs(1e4, goodDB, badDB)
 	buildSummary(goodDB, summaryF)
-	buildDiff(summaryF,badDB,diffF)
-	printDiff(diffF,goodDB)
-	buildFix(diffF,goodDB,fixF)
-	applyFix(fixF,badDB)
-	buildDiff(summaryF,badDB,diffF)
-	printDiff(diffF,goodDB)
+	buildDiff(summaryF, badDB, diffF)
+	printDiff(diffF, goodDB)
+	buildFix(diffF, goodDB, fixF)
+	applyFix(fixF, badDB)
+	buildDiff(summaryF, badDB, diffF)
+	printDiff(diffF, goodDB)
 }
 
 // Sanity check of what we are doing with databases

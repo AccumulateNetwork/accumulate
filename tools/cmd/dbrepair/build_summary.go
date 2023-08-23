@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -24,7 +24,7 @@ func buildSummary(dbName, dbSummary string) {
 	boldCyan.Println("\n Build Summary")
 
 	// Open the Badger database that is the good one.
-	db, err := badger.Open(badger.DefaultOptions(dbName).WithLoggingLevel(badger.ERROR))
+	db, err := badger.Open(badger.DefaultOptions(dbName))
 	check(err)
 	defer func() { checkf(db.Close(), "error closing database") }()
 
@@ -63,6 +63,9 @@ func buildSummary(dbName, dbSummary string) {
 					checkf(err, "writing value hash")
 				}
 				cnt++
+				if cnt%100000 == 0 {
+					print(".")
+				}
 				return nil
 			})
 			checkf(err, "on read of value")

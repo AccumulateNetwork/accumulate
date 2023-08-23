@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
 )
 
@@ -56,7 +56,7 @@ func runBuildTestDBs(_ *cobra.Command, args []string) {
 }
 
 func OpenDB(dbName string) (*badger.DB, func()) {
-	db, err := badger.Open(badger.DefaultOptions(dbName).WithLoggingLevel(badger.ERROR))
+	db, err := badger.Open(badger.DefaultOptions(dbName))
 	checkf(err, "opening db %v", dbName)
 	return db, func() { checkf(db.Close(), "closing db %v", dbName) }
 }

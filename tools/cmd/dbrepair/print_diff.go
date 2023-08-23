@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
 )
 
@@ -19,9 +19,7 @@ func runPrintDiff(_ *cobra.Command, args []string) {
 // print a Diff file
 // Use a goodDB to pull the actual addresses
 func printDiff(diffFile, goodDB string) {
-	fmt.Println("\n PrintDiff")
-
-	fmt.Println("\n Build Fix")
+	boldCyan.Println("\n PrintDiff")
 
 	var AddedKeys [][]byte     // List of keys added to the bad state
 	var ModifiedKeys [][8]byte // Map of keys and values modified from the good state
@@ -98,23 +96,23 @@ func printDiff(diffFile, goodDB string) {
 
 	fmt.Printf("%d Keys to delete:\n", len(AddedKeys))
 	for _, k := range AddedKeys { // list all the keys added to the bad db
-		fmt.Printf("   %x\n",k)
+		fmt.Printf("   %x\n", k)
 	}
 
-	fmt.Printf("%d Keys to modify:\n",len(ModifiedKeys))
+	fmt.Printf("%d Keys to modify:\n", len(ModifiedKeys))
 	var kBuff [8]byte
 	for _, k := range ModifiedKeys { // list all the keys added to the bad db
 		copy(kBuff[:], k[:])
 		key := Hash2Key[kBuff]
-		fmt.Printf("   %x ",key)
-		
+		fmt.Printf("   %x ", key)
+
 		err := db.View(func(txn *badger.Txn) error { // Get the value and write it
 			item, err := txn.Get([]byte(key))
 			checkf(err, "key/value failed to produce the value")
 			err = item.Value(func(val []byte) error {
 				vLen := len(val)
 				if vLen > 40 {
-					fmt.Printf("%x ... len %d\n",val[:40],vLen)
+					fmt.Printf("%x ... len %d\n", val[:40], vLen)
 				}
 				return nil
 			})

@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	badger "github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
 )
 
@@ -40,6 +40,7 @@ func buildDiff(summary, badDB, diffFile string) {
 	s, err := os.Open(summary)
 	checkf(err, "summary file failed to open: %v", err)
 	defer func() { err := s.Close(); checkf(err, "summary file failed to close: %v", err) }()
+	var cnt int
 	for {
 		kh := [8]byte{} // 8 bytes of the key hash
 		vh := [8]byte{} // 8 bytes of the value hash
@@ -50,7 +51,13 @@ func buildDiff(summary, badDB, diffFile string) {
 		_, err = s.Read(vh[:])
 		check(err)
 		keys[kh] = vh
+
+		cnt++
+		if cnt%100000 == 0 {
+			print(".")
+		}
 	}
+	println()
 
 	// Collect the differences
 	var addedKeys [][]byte    // Slice of keys to delete from the bad db
@@ -67,6 +74,10 @@ func buildDiff(summary, badDB, diffFile string) {
 		it := txn.NewIterator(opts) //    in whatever order is best for badger for speed
 		defer it.Close()
 		for it.Rewind(); it.Valid(); it.Next() {
+			cnt++
+			if cnt%100000 == 0 {
+				print(".")
+			}
 			item := it.Item()
 			k := [32]byte{}
 			copy(k[:], item.Key())              //   Get the key and hash it.  IF the key isn't a
@@ -95,6 +106,7 @@ func buildDiff(summary, badDB, diffFile string) {
 	})
 	checkf(err, "View of keys failed")
 	cntDel += len(keys)
+	println()
 
 	for kh := range keys {
 		kb := [8]byte{}
