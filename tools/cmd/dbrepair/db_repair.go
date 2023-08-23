@@ -12,14 +12,20 @@ var cmdBuildTestDBs = &cobra.Command{
 }
 
 var cmdBuildSummary = &cobra.Command{
-	Use:   "buildSummary [badger database] [summary file]",
-	Short: "Build a Summary file using a good database",
+	Use:   "buildSummary [good database] [summary file]",
+	Short: "Build a Summary file of the keys and values in a good database",
 	Args:  cobra.ExactArgs(2),
 	Run:   runBuildSummary,
 }
 
 var cmdBuildDiff = &cobra.Command{
-	Use:   "buildDiff [summary.dat] [bad database] [diff File]",
+	Use:   "buildDiff [summary file] [bad database] [diff File]",
+	Short: "Given the summary data and the bad database, build a diff File to make the bad database good",
+	Args:  cobra.ExactArgs(3),
+	Run:   runBuildDiff,
+}
+var cmdPrintDiff = &cobra.Command{
+	Use:   "printDiff [diff file] [bad database] [diff File]",
 	Short: "Given the summary data and the bad database, build a diff File to make the bad database good",
 	Args:  cobra.ExactArgs(3),
 	Run:   runBuildDiff,
