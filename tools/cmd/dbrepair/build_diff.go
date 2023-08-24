@@ -68,7 +68,7 @@ func buildDiff(summary, badDB, diffFile string) {
 	// Collect the differences
 	var addedKeys [][]byte    // Slice of keys to delete from the bad db
 	var modifiedKeys [][]byte // Slice of keys to update from the bad db
-	var cntDel, cntMod int
+	var cntDel int
 
 	// Open the Badger database that is the good one.
 	db, close := OpenDB(badDB)
@@ -98,7 +98,6 @@ func buildDiff(summary, badDB, diffFile string) {
 				vh := sha256.Sum256(val)
 				if keys[kb] != *(*[8]byte)(vh[:]) {
 					modifiedKeys = append(modifiedKeys, kb[:]) // Revert keys that exist but value is changed
-					cntMod++
 				}
 				return nil
 			})
@@ -116,7 +115,7 @@ func buildDiff(summary, badDB, diffFile string) {
 		copy(kb[:], kh[:])
 		modifiedKeys = append(modifiedKeys, kb[:]) // All the keys we did not find had to be added back
 	}
-	fmt.Printf("\nModified: %d Added: %d Deleted: %d\n", cntMod, cntDel, len(keys))
+	fmt.Printf("\nModified: %d Added: %d \n", len(modifiedKeys),len(addedKeys))
 
 	var buff [32]byte
 	f, err := os.Create(diffFile)

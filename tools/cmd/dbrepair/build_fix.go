@@ -7,7 +7,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"os"
 
 	"github.com/dgraph-io/badger"
@@ -54,39 +53,21 @@ func buildFix(diffFile, goodDB, fixFile string) {
 	f, err := os.Open(diffFile)
 	checkf(err, "buildFix failed to open %s", diffFile)
 
-	// Read an 8 byte, uint64 value and return it.
-	// As a side effect, the first 8 bytes of buff hold the value
-	read8 := func() uint64 {
-		r, err := f.Read(buff[:8]) // Read 64 bits
-		checkf(err, "failed to read count")
-		if r != 8 {
-			fatalf("failed to read a full 64 bit value")
-		}
-		return binary.BigEndian.Uint64(buff[:8])
-	}
-
-	read32 := func() {
-		r, err := f.Read(buff[:32]) // Read 32
-		checkf(err, "failed to read address")
-		if r != 32 {
-			fatalf("failed to read a full 64 bit value")
-		}
-	}
 	// Load up the Diff file
 
 	// Keys to be deleted
-	NumAdded := read8()
+	NumAdded := read8(f, buff[:])
 	for i := uint64(0); i < NumAdded; i++ {
-		read32()
+		read32(f, buff[:])
 		key := [32]byte{}
 		copy(key[:], buff[:])
 		AddedKeys = append(AddedKeys, key[:])
 	}
 
 	// Keys modified by the bad state
-	NumModified := read8()
+	NumModified := read8(f, buff[:])
 	for i := uint64(0); i < NumModified; i++ {
-		read8()
+		read8(f, buff[:])
 		key := [8]byte{}
 		copy(key[:], buff[:])
 		ModifiedKeys = append(ModifiedKeys, key)
@@ -99,30 +80,13 @@ func buildFix(diffFile, goodDB, fixFile string) {
 
 	f, err = os.Create(fixFile)
 	checkf(err, "could not create the fixFile %s", fixFile)
-	var bBuff [1024 * 1024]byte // A fixed buffer far larger than any entry
 
-	write8 := func(v uint64) {
-		binary.BigEndian.PutUint64(bBuff[:], v)
-		i, err := f.Write(bBuff[:8])
-		checkf(err, "failed a write to fix file %s", fixFile)
-		if i != 8 {
-			fatalf("failed to write the 8 bytes to %s", fixFile)
-		}
-	}
-	write := func(d []byte) {
-		i, err := f.Write(d)
-		checkf(err, "failed a write to fix file %s", fixFile)
-		if i != len(d) {
-			fatalf("failed to make a complete write of %d. wrote %d", len(d), i)
-		}
-	}
-
-	write8(uint64(len(AddedKeys)))
+	write8(f, uint64(len(AddedKeys)))
 	for _, k := range AddedKeys { // list all the keys added to the bad db
-		write(k)
+		write(f, k)
 	}
 
-	write8(uint64(len(ModifiedKeys)))
+	write8(f, uint64(len(ModifiedKeys)))
 	var kBuff [8]byte
 	for _, k := range ModifiedKeys { // list all the keys added to the bad db
 		k := k
@@ -131,15 +95,15 @@ func buildFix(diffFile, goodDB, fixFile string) {
 		if !ok {
 			fatalf("missing")
 		}
-		write8(uint64(len(key))) //                     Write the key length
-		write(key)               //                     Write the key
+		write8(f, uint64(len(key))) //                     Write the key length
+		write(f, key)               //                     Write the key
 
 		err := db.View(func(txn *badger.Txn) error { // Get the value and write it
 			item, err := txn.Get(key)
 			checkf(err, "key/value failed to produce the value")
 			err = item.Value(func(val []byte) error {
-				write8(uint64(len(val))) //             Write the value length
-				write(val)               //             Write the value
+				write8(f, uint64(len(val))) //             Write the value length
+				write(f, val)               //             Write the value
 				return nil
 			})
 			checkf(err, "in view")

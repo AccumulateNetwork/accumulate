@@ -61,12 +61,6 @@ func runBuildTestDBs(_ *cobra.Command, args []string) {
 	buildTestDBs(numEntries, GoodDBName, BadDBName)
 }
 
-func OpenDB(dbName string) (*badger.DB, func()) {
-	db, err := badger.Open(badger.DefaultOptions(dbName))
-	checkf(err, "opening db %v", dbName)
-	return db, func() { checkf(db.Close(), "closing db %v", dbName) }
-}
-
 func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 	boldCyan.Println("\n Build Test DBs")
 	gDB, gClose := OpenDB(GoodDBName)

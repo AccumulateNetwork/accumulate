@@ -7,9 +7,11 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 
+	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -95,3 +97,57 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 }
 
 func check2(_ any, err error) { check(err) }
+
+func OpenDB(dbName string) (*badger.DB, func()) {
+	db, err := badger.Open(badger.DefaultOptions(dbName))
+	checkf(err, "opening db %v", dbName)
+	return db, func() { checkf(db.Close(), "closing db %v", dbName) }
+}
+
+// Read an 8 byte, uint64 value and return it.
+// As a side effect, the first 8 bytes of buff hold the value
+func read8(f *os.File, buff []byte) uint64 {
+	r, err := f.Read(buff[:8]) // Read 64 bits
+	checkf(err, "failed to read count")
+	if r != 8 {
+		fatalf("failed to read a full 64 bit value")
+	}
+	return binary.BigEndian.Uint64(buff[:8])
+}
+
+// Read 32 bytes into a given buffer
+func read32(f *os.File, buff []byte) {
+	r, err := f.Read(buff[:32]) // Read 32
+	checkf(err, "failed to read address")
+	if r != 32 {
+		fatalf("failed to read a full 64 bit value")
+	}
+}
+
+func read (f *os.File, buff []byte) {
+	r, err := f.Read(buff) // Read 32
+	checkf(err, "failed to read value")
+	if r != len(buff) {
+		fatalf("failed to read the full value")
+	}
+}
+
+
+func write8 (f *os.File, v uint64) {
+	var buff[8]byte
+	binary.BigEndian.PutUint64(buff[:], v)
+	i, err := f.Write(buff[:])
+	checkf(err, "failed a write to fix file %s", f.Name())
+	if i != 8 {
+		fatalf("failed to write the 8 bytes to %s", f.Name())
+	}
+}
+
+func write (f *os.File, buff []byte) {
+	i, err := f.Write(buff)
+	checkf(err, "failed a write to fix file %s", f.Name())
+	if i != len(buff) {
+		fatalf("failed to make a complete write of %d. wrote %d", len(buff), i)
+	}
+}
+
