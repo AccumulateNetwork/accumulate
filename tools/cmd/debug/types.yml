@@ -1,0 +1,33 @@
+DbPatch:
+  fields:
+    - name: Operations
+      type: DbPatchOp
+      marshal-as: union
+      repeatable: true
+    - name: Result
+      type: DbPatchResult
+      marshal-as: reference
+      pointer: true
+
+DbPatchResult:
+  fields:
+    - name: StateHash
+      type: hash
+
+PutDbPatchOp:
+  union: { type: dbPatchOp }
+  fields:
+    - name: Key
+      type: record.Key
+      pointer: true
+      marshal-as: reference
+    - name: Value
+      type: bytes
+
+DeleteDbPatchOp:
+  union: { type: dbPatchOp }
+  fields:
+    - name: Key
+      type: record.Key
+      pointer: true
+      marshal-as: reference
