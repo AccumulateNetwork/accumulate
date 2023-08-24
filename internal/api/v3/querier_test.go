@@ -344,7 +344,7 @@ func (s *QuerierTestSuite) TestQueryMinorBlock() {
 }
 
 func (s *QuerierTestSuite) TestQueryDirectoryMinorBlock() {
-	s.T().Skip("Flakey")
+	s.T().Skip("Flaky")
 	r, err := s.QuerierFor(DnUrl()).QueryMinorBlock(context.Background(), DnUrl(), &api.BlockQuery{Minor: uintp(4)})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(r.Anchored.Records)
