@@ -4,10 +4,11 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package common
+package main
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"testing"
 )
@@ -24,15 +25,8 @@ type RandHash struct {
 // GetRandInt64
 // Really returns a 63 bit number, as the return value is always positive.
 func (n *RandHash) GetRandInt64() int64 {
-	next := n.Next()
-	return ((((((((int64(next[0])&0x7F)<<8)+ // And with 0x7F to clear high bit
-		int64(next[1]))<<8+
-		int64(next[2]))<<8+
-		int64(next[3]))<<8+
-		int64(next[4]))<<8+
-		int64(next[5]))<<8+
-		int64(next[6]))<<8 +
-		int64(next[7])
+	next := n.Next()                                 // Get the next hash, and use the top 63 bits
+	return int64(binary.BigEndian.Uint64(next) >> 1) // for our in64. (shift of unsigned clears top bit)
 }
 
 // GetRandBuff
@@ -53,6 +47,14 @@ func (n *RandHash) GetRandBuff(size int) (buff []byte) {
 		}
 
 	}
+}
+
+// GetIntN
+// Return an int between 0 and N
+func (n *RandHash) GetIntN(N int) int {
+	next := n.Next()
+	r := int(binary.BigEndian.Uint64(next) % uint64(N))
+	return r
 }
 
 // GetAElement
