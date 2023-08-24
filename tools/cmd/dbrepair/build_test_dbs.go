@@ -7,40 +7,14 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
 )
-
-// YesNoPrompt asks yes/no questions using the label.
-func YesNoPrompt(label string) bool {
-	choices := "Y/N"
-
-	r := bufio.NewReader(os.Stdin)
-	var s string
-
-	for {
-		fmt.Fprintf(os.Stderr, "%s (%s) ", label, choices)
-		s, _ = r.ReadString('\n')
-		s = strings.TrimSpace(s)
-		if s == "" {
-			return false
-		}
-		s = strings.ToLower(s)
-		if s == "y" || s == "yes" {
-			return true
-		}
-		if s == "n" || s == "no" {
-			return false
-		}
-	}
-}
 
 func runBuildTestDBs(_ *cobra.Command, args []string) {
 	numEntries, err := strconv.Atoi(args[0])
@@ -51,12 +25,8 @@ func runBuildTestDBs(_ *cobra.Command, args []string) {
 	GoodDBName := args[1]
 	BadDBName := args[2]
 
-	if true || YesNoPrompt(
-		fmt.Sprintf("Delete all files in folders [%s] and [%s]?",
-			GoodDBName, BadDBName)) {
-		check(os.RemoveAll(GoodDBName))
-		check(os.RemoveAll(BadDBName))
-	}
+	check(os.RemoveAll(GoodDBName))
+	check(os.RemoveAll(BadDBName))
 
 	buildTestDBs(numEntries, GoodDBName, BadDBName)
 }
@@ -103,8 +73,8 @@ func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 			return op
 		}
 		op = pick(i%1027 == 0, 1) // Modify a key value pair
-		op = pick(i%713 == 0, 2) // Delete a key value pair
-		op = pick(i%303 == 0, 3) // Add a key value pair
+		op = pick(i%713 == 0, 2)  // Delete a key value pair
+		op = pick(i%303 == 0, 3)  // Add a key value pair
 
 		// Write bad entries
 
@@ -148,5 +118,5 @@ func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 	fmt.Printf("\nFINAL: #keys: %d time: %v size: %d\n", numEntries, time.Since(start), total)
 	fmt.Printf("\nThe test modified %d keys, deleted %d keys, and added %d keys.\n", cntMod, cntDel, cntAdd)
 	fmt.Printf("\nAs far as a fix is concerned, the bad DB has:\n")
-	fmt.Printf("Modified: %d Added: %d",cntMod+cntDel,cntAdd)
+	fmt.Printf("Modified: %d Added: %d", cntMod+cntDel, cntAdd)
 }

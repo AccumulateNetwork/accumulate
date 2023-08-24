@@ -68,8 +68,7 @@ func buildDiff(summary, badDB, diffFile string) {
 	// Collect the differences
 	var addedKeys [][]byte    // Slice of keys to delete from the bad db
 	var modifiedKeys [][]byte // Slice of keys to update from the bad db
-	var cntDel int
-
+	
 	// Open the Badger database that is the good one.
 	db, close := OpenDB(badDB)
 	defer close()
@@ -91,7 +90,6 @@ func buildDiff(summary, badDB, diffFile string) {
 			copy(kb[:], kh[:8])                 //	    in an independent byte array
 			if _, exists := keys[kb]; !exists { //   delete keys not in the summary
 				addedKeys = append(addedKeys, k[:])
-				cntDel++
 				continue
 			}
 			err = item.Value(func(val []byte) error {
