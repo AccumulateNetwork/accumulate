@@ -36,6 +36,7 @@ func TestDbRepair(t *testing.T) {
 	printDiff(diffF, goodDB)          // What is the diff you say? We can print!
 	buildFix(diffF, goodDB, fixF)     // Send the diff back to the good node to build a fix
 	applyFix(fixF, badDB)             // Send the fix to the bad node and apply it
+	applyFix(fixF, badDB)             // Does it fail if you apply twice?
 	buildDiff(summaryF, badDB, diffF) // Send the summary to bad node to check the fix
 	printDiff(diffF, goodDB)          // Send the new diff back to good node to ensure all is good!
 
