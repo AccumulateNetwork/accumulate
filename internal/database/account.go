@@ -57,6 +57,11 @@ func (r *Account) Url() *url.URL {
 	return r.key.Get(1).(*url.URL)
 }
 
+// MarkDirty artificially marks the account as dirty.
+func (r *Account) MarkDirty() error {
+	return r.getUrl().Put(r.Url())
+}
+
 func (a *Account) Commit() error {
 	if !a.IsDirty() {
 		return nil
