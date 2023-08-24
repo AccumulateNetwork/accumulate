@@ -1,14 +1,9 @@
 include:
 - template: Jobs/Dependency-Scanning.gitlab-ci.yml
-- template: Jobs/License-Scanning.gitlab-ci.yml
 - template: Jobs/SAST.gitlab-ci.yml
 - template: Jobs/Secret-Detection.gitlab-ci.yml
 
 gemnasium-dependency_scanning:
-  rules:
-  - if: $CI_PIPELINE_SOURCE
-
-license_scanning:
   rules:
   - if: $CI_PIPELINE_SOURCE
 
