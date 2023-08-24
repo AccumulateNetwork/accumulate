@@ -7,7 +7,7 @@ retract (
 
 go 1.19
 
-replace github.com/tendermint/tendermint v0.37.0-rc1 => github.com/AccumulateNetwork/tendermint v0.34.15-0.20221019224404-7f7149107231
+replace github.com/tendermint/tendermint v0.37.0-rc1 => github.com/AccumulateNetwork/tendermint v0.34.15-0.20230516230833-3ed461dbff03
 
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
@@ -104,6 +104,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20221203041831-ce31453925ec // indirect
 	github.com/google/uuid v1.3.0 // indirect
@@ -216,7 +217,7 @@ require (
 	github.com/daixiang0/gci v0.10.1 // indirect
 	github.com/denis-tingaikin/go-header v0.4.3 // indirect
 	github.com/dgraph-io/badger/v2 v2.2007.2 // indirect
-	github.com/dgraph-io/ristretto v0.0.4-0.20210122082011-bb5d392ed82d // indirect
+	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/dnephin/pflag v1.0.7 // indirect
 	github.com/esimonov/ifshort v1.0.4 // indirect
