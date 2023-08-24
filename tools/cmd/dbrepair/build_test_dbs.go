@@ -61,12 +61,6 @@ func runBuildTestDBs(_ *cobra.Command, args []string) {
 	buildTestDBs(numEntries, GoodDBName, BadDBName)
 }
 
-func OpenDB(dbName string) (*badger.DB, func()) {
-	db, err := badger.Open(badger.DefaultOptions(dbName))
-	checkf(err, "opening db %v", dbName)
-	return db, func() { checkf(db.Close(), "closing db %v", dbName) }
-}
-
 func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 	boldCyan.Println("\n Build Test DBs")
 	gDB, gClose := OpenDB(GoodDBName)
@@ -108,9 +102,9 @@ func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 			}
 			return op
 		}
-		op = pick(i%3027 == 0, 1) // Modify a key value pair
-		op = pick(i%2013 == 0, 2) // Delete a key value pair
-		op = pick(i%1003 == 0, 3) // Add a key value pair
+		op = pick(i%1027 == 0, 1) // Modify a key value pair
+		op = pick(i%713 == 0, 2) // Delete a key value pair
+		op = pick(i%303 == 0, 3) // Add a key value pair
 
 		// Write bad entries
 
@@ -152,5 +146,7 @@ func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 	}
 	fmt.Println(" 100%")
 	fmt.Printf("\nFINAL: #keys: %d time: %v size: %d\n", numEntries, time.Since(start), total)
-	fmt.Printf("\nModified: %d  Deleted: %d Added: %d\n", cntMod, cntDel, cntAdd)
+	fmt.Printf("\nThe test modified %d keys, deleted %d keys, and added %d keys.\n", cntMod, cntDel, cntAdd)
+	fmt.Printf("\nAs far as a fix is concerned, the bad DB has:\n")
+	fmt.Printf("Modified: %d Added: %d",cntMod+cntDel,cntAdd)
 }

@@ -7,7 +7,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"os"
 
@@ -32,56 +31,32 @@ func applyFix(fixFile, badDB string) {
 	defer close()
 
 	var buff [1024 * 1024]byte // A big buffer
-	// Read an 8 byte, uint64 value and return it.
-	// As a side effect, the first 8 bytes of buff hold the value
-	read8 := func() uint64 {
-		r, err := f.Read(buff[:8]) // Read 64 bits
-		checkf(err, "failed to read count")
-		if r != 8 {
-			fatalf("failed to read a full 8 bytes")
-		}
-		return binary.BigEndian.Uint64(buff[:8])
-	}
-
-	read32 := func() {
-		r, err := f.Read(buff[:32]) // Read 32
-		checkf(err, "failed to read address")
-		if r != 32 {
-			fatalf("failed to read a full address")
-		}
-	}
-
-	read := func(buff []byte) {
-		r, err := f.Read(buff) // Read 32
-		checkf(err, "failed to read value")
-		if r != len(buff) {
-			fatalf("failed to read the full value")
-		}
-	}
 
 	// Apply the fixes
-	txn := db.NewTransaction(true)
 
 	// Keys to be deleted
-	NumAdded := read8()
+	NumAdded := read8(f,buff[:])
 	for i := uint64(0); i < NumAdded; i++ {
-		read32()
+		read32(f,buff[:])
+		txn := db.NewTransaction(true)
 		err := txn.Delete(buff[:32])
 		checkf(err, "failed to delete")
-	}
+		check(txn.Commit())
+		}	
 
 	var keyBuff [1024]byte
-	NumModified := read8()
+	NumModified := read8(f,buff[:])
 	for i := uint64(0); i < NumModified; i++ {
-		keyLen := read8()
-		read(keyBuff[:keyLen])
-		valueLen := read8()
-		read(buff[:valueLen])
+		keyLen := read8(f,buff[:])
+		read(f, keyBuff[:keyLen])
+		valueLen := read8(f,buff[:])
+		read(f, buff[:valueLen])
+		txn := db.NewTransaction(true)
 		err := txn.Set(keyBuff[:keyLen], buff[:valueLen])
 		checkf(err, "failed to update a value in the database")
+		check(txn.Commit())		
 	}
 
 	fmt.Printf("\nModified: %d Deleted: %d\n", NumModified, NumAdded)
-
-	check(txn.Commit())
 }
+

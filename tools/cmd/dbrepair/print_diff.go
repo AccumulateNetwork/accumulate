@@ -8,7 +8,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"os"
 
@@ -34,39 +33,19 @@ func printDiff(diffFile, goodDB string) {
 	f, err := os.Open(diffFile)
 	checkf(err, "buildFix failed to open %s", diffFile)
 
-	// Read an 8 byte, uint64 value and return it.
-	// As a side effect, the first 8 bytes of buff hold the value
-	read8 := func() uint64 {
-		r, err := f.Read(buff[:8]) // Read 64 bits
-		checkf(err, "failed to read count")
-		if r != 8 {
-			fatalf("failed to read a full 64 bit value")
-		}
-		return binary.BigEndian.Uint64(buff[:8])
-	}
-
-	read32 := func() {
-		r, err := f.Read(buff[:32]) // Read 32
-		checkf(err, "failed to read address")
-		if r != 32 {
-			fatalf("failed to read a full 64 bit value")
-		}
-	}
-	// Load up the Diff file
-
-	// Keys to be deleted
-	NumAdded := read8()
+	// Read Keys to be deleted
+	NumAdded := read8(f,buff[:])
 	for i := uint64(0); i < NumAdded; i++ {
-		read32()
+		read32(f,buff[:])
 		key := [32]byte{}
 		copy(key[:], buff[:])
 		AddedKeys = append(AddedKeys, key[:])
 	}
 
-	// Keys modified by the bad state
-	NumModified := read8()
+	// Read Keys modified by the bad state
+	NumModified := read8(f,buff[:])
 	for i := uint64(0); i < NumModified; i++ {
-		read8()
+		read8(f, buff[:])
 		key := [8]byte{}
 		copy(key[:], buff[:])
 		ModifiedKeys = append(ModifiedKeys, key)
@@ -77,12 +56,9 @@ func printDiff(diffFile, goodDB string) {
 	defer close()
 	Hash2Key := buildHash2Key(db)
 
-	fmt.Printf("%d Keys to delete:\n", len(AddedKeys))
-	for _, k := range AddedKeys { // list all the keys added to the bad db
-		fmt.Printf("   %x\n", k)
-	}
+	fmt.Printf("Found: modify %d Delete %d\n\n",len(ModifiedKeys),len(AddedKeys))
 
-	fmt.Printf("%d Keys to modify:\n", len(ModifiedKeys))
+	fmt.Println("Modified Keys:")
 	for _, k := range ModifiedKeys { // list all the keys added to the bad db
 		key, ok := Hash2Key[k]
 		if !ok {
@@ -107,6 +83,12 @@ func printDiff(diffFile, goodDB string) {
 		})
 		checkf(err, "Modified keys")
 	}
+
+	fmt.Println("Added Keys (to be deleted):")
+	for _, k := range AddedKeys { // list all the keys added to the bad db
+		fmt.Printf("   %x\n", k)
+	}
+
 
 }
 
