@@ -28,7 +28,7 @@ go build:
     reports:
       junit: report.xml
 
-go test 1/2:
+go test:
   # Main tests
   extends: .go test
   variables:
@@ -36,10 +36,20 @@ go test 1/2:
     GOLANGCI_LINT_CACHE: ''
   artifacts:
     paths:
+      - trace
       - failures/*
   script:
+  - apt update -y && apt install -y rr sudo
+  - sudo sysctl -w kernel.perf_event_paranoid=1
+  - apt install -y linux-perf
+  - perf stat -e br_inst_retired.conditional true || true
+  - perf stat -e br_inst_retired.cond true || true
+  - perf stat -e ex_ret_cond true || true
+  - perf list
+  - go get ./...
+  - go build ./tools/cmd/go-test-rr
   - export RECORD_FAILURE="${PWD}/failures"
-  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname --raw-command -- ./go-test-rr
 
 .go test 2/2:
   # Full devnet validation test

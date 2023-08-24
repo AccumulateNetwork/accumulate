@@ -15,6 +15,7 @@ import (
 
 	"github.com/dgraph-io/badger"
 	"github.com/fatih/color"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestDbRepair(t *testing.T) {
@@ -47,6 +48,8 @@ func TestDbRepair(t *testing.T) {
 
 // Sanity check of what we are doing with databases
 func TestCompareDB(t *testing.T) {
+	acctesting.SkipCI(t, "Slow")
+
 	dir := t.TempDir()
 	goodDB := filepath.Join(dir, "good.db")
 	badDB := filepath.Join(dir, "bad.db")
