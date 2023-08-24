@@ -15,6 +15,7 @@ import (
 
 	"github.com/dgraph-io/badger"
 	"github.com/fatih/color"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDbRepair(t *testing.T) {
@@ -30,15 +31,19 @@ func TestDbRepair(t *testing.T) {
 	// Note this documents what we want to do.  Of course, the
 	// test actually skips sending files back and forth between good
 	// nodes and bad nodes.
-	buildTestDBs(5e3, goodDB, badDB)  // Build Test DBs
-	buildSummary(goodDB, summaryF)    // First go to node with good db and build a summary
-	buildDiff(summaryF, badDB, diffF) // Send the summary to the bad node and create a diff
-	printDiff(diffF, goodDB)          // What is the diff you say? We can print!
-	buildFix(diffF, goodDB, fixF)     // Send the diff back to the good node to build a fix
-	applyFix(fixF, badDB)             // Send the fix to the bad node and apply it
-	applyFix(fixF, badDB)             // Does it fail if you apply twice?
-	buildDiff(summaryF, badDB, diffF) // Send the summary to bad node to check the fix
-	printDiff(diffF, goodDB)          // Send the new diff back to good node to ensure all is good!
+	buildTestDBs(5e3, goodDB, badDB)                                                      // Build Test DBs
+	buildSummary(goodDB, summaryF)                                                        // First go to node with good db and build a summary
+	buildDiff(summaryF, badDB, diffF)                                                     // Send the summary to the bad node and create a diff
+	added, modified := printDiff(diffF, goodDB)                                           // What is the diff you say? We can print!
+	assert.NotEqual(t, added, 0, "Expected no added key/values after applying Fix")       //     Tests should have stuff to fix
+	assert.NotEqual(t, modified, 0, "Expected no modified key/values after applying Fix") //     Tests should have stuff to fix
+	buildFix(diffF, goodDB, fixF)                                                         // Send the diff back to the good node to build a fix
+	applyFix(fixF, badDB)                                                                 // Send the fix to the bad node and apply it
+	printFix(fixF)                                                                        // Print the Fix File
+	buildDiff(summaryF, badDB, diffF)                                                     // Send the summary to bad node to check the fix
+	added, modified = printDiff(diffF, goodDB)                                            // Send the new diff back to good node to ensure all is good!
+	assert.Equal(t, added, 0, "Expected no added key/values after applying Fix")          //     All changes should be fixed
+	assert.Equal(t, modified, 0, "Expected no modified key/values after applying Fix")    //     All changes should be fixed
 
 	// Note:  If we have the summaryF on the bad node, we can check for correctness without sending
 	// the diff file back to the good node, but we can't produce addresses for nodes to delete.

@@ -23,7 +23,7 @@ func runPrintDiff(_ *cobra.Command, args []string) {
 
 // print a Diff file
 // Use a goodDB to pull the actual addresses
-func printDiff(diffFile, goodDB string) {
+func printDiff(diffFile, goodDB string) (modified, added int) {
 	boldCyan.Println("\n PrintDiff")
 
 	var AddedKeys [][]byte     // List of keys added to the bad state
@@ -88,6 +88,8 @@ func printDiff(diffFile, goodDB string) {
 	for _, k := range AddedKeys { // list all the keys added to the bad db
 		fmt.Printf("   %x\n", k)
 	}
+
+	return len(ModifiedKeys), len(AddedKeys)
 }
 
 func buildHash2Key(db *badger.DB) map[[8]byte][]byte {
