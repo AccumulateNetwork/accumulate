@@ -35,28 +35,27 @@ func applyFix(fixFile, badDB string) {
 	// Apply the fixes
 
 	// Keys to be deleted
-	NumAdded := read8(f,buff[:])
+	NumAdded := read8(f, buff[:])
 	for i := uint64(0); i < NumAdded; i++ {
-		read32(f,buff[:])
+		read32(f, buff[:])
 		txn := db.NewTransaction(true)
 		err := txn.Delete(buff[:32])
 		checkf(err, "failed to delete")
 		check(txn.Commit())
-		}	
+	}
 
 	var keyBuff [1024]byte
-	NumModified := read8(f,buff[:])
+	NumModified := read8(f, buff[:])
 	for i := uint64(0); i < NumModified; i++ {
-		keyLen := read8(f,buff[:])
+		keyLen := read8(f, buff[:])
 		read(f, keyBuff[:keyLen])
-		valueLen := read8(f,buff[:])
+		valueLen := read8(f, buff[:])
 		read(f, buff[:valueLen])
 		txn := db.NewTransaction(true)
 		err := txn.Set(keyBuff[:keyLen], buff[:valueLen])
 		checkf(err, "failed to update a value in the database")
-		check(txn.Commit())		
+		check(txn.Commit())
 	}
 
 	fmt.Printf("\nModified: %d Deleted: %d\n", NumModified, NumAdded)
 }
-

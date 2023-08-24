@@ -124,7 +124,7 @@ func read32(f *os.File, buff []byte) {
 	}
 }
 
-func read (f *os.File, buff []byte) {
+func read(f *os.File, buff []byte) {
 	r, err := f.Read(buff) // Read 32
 	checkf(err, "failed to read value")
 	if r != len(buff) {
@@ -132,9 +132,8 @@ func read (f *os.File, buff []byte) {
 	}
 }
 
-
-func write8 (f *os.File, v uint64) {
-	var buff[8]byte
+func write8(f *os.File, v uint64) {
+	var buff [8]byte
 	binary.BigEndian.PutUint64(buff[:], v)
 	i, err := f.Write(buff[:])
 	checkf(err, "failed a write to fix file %s", f.Name())
@@ -143,11 +142,10 @@ func write8 (f *os.File, v uint64) {
 	}
 }
 
-func write (f *os.File, buff []byte) {
+func write(f *os.File, buff []byte) {
 	i, err := f.Write(buff)
 	checkf(err, "failed a write to fix file %s", f.Name())
 	if i != len(buff) {
 		fatalf("failed to make a complete write of %d. wrote %d", len(buff), i)
 	}
 }
-

@@ -34,16 +34,16 @@ func printDiff(diffFile, goodDB string) {
 	checkf(err, "buildFix failed to open %s", diffFile)
 
 	// Read Keys to be deleted
-	NumAdded := read8(f,buff[:])
+	NumAdded := read8(f, buff[:])
 	for i := uint64(0); i < NumAdded; i++ {
-		read32(f,buff[:])
+		read32(f, buff[:])
 		key := [32]byte{}
 		copy(key[:], buff[:])
 		AddedKeys = append(AddedKeys, key[:])
 	}
 
 	// Read Keys modified by the bad state
-	NumModified := read8(f,buff[:])
+	NumModified := read8(f, buff[:])
 	for i := uint64(0); i < NumModified; i++ {
 		read8(f, buff[:])
 		key := [8]byte{}
@@ -56,7 +56,7 @@ func printDiff(diffFile, goodDB string) {
 	defer close()
 	Hash2Key := buildHash2Key(db)
 
-	fmt.Printf("Found: modify %d Delete %d\n\n",len(ModifiedKeys),len(AddedKeys))
+	fmt.Printf("Found: modify %d Delete %d\n\n", len(ModifiedKeys), len(AddedKeys))
 
 	fmt.Println("Modified Keys:")
 	for _, k := range ModifiedKeys { // list all the keys added to the bad db
@@ -88,8 +88,6 @@ func printDiff(diffFile, goodDB string) {
 	for _, k := range AddedKeys { // list all the keys added to the bad db
 		fmt.Printf("   %x\n", k)
 	}
-
-
 }
 
 func buildHash2Key(db *badger.DB) map[[8]byte][]byte {

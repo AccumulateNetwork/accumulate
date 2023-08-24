@@ -115,7 +115,7 @@ func buildDiff(summary, badDB, diffFile string) {
 		copy(kb[:], kh[:])
 		modifiedKeys = append(modifiedKeys, kb[:]) // All the keys we did not find had to be added back
 	}
-	fmt.Printf("\nModified: %d Added: %d \n", len(modifiedKeys),len(addedKeys))
+	fmt.Printf("\nModified: %d Added: %d \n", len(modifiedKeys), len(addedKeys))
 
 	var buff [32]byte
 	f, err := os.Create(diffFile)
