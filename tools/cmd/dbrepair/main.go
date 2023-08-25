@@ -9,6 +9,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/dgraph-io/badger"
@@ -107,7 +108,7 @@ func OpenDB(dbName string) (*badger.DB, func()) {
 // Read an 8 byte, uint64 value and return it.
 // As a side effect, the first 8 bytes of buff hold the value
 func read8(f *os.File, buff []byte) uint64 {
-	r, err := f.Read(buff[:8]) // Read 64 bits
+	r, err := io.ReadFull(f, buff[:8]) // Read 64 bits
 	checkf(err, "failed to read count")
 	if r != 8 {
 		fatalf("failed to read a full 64 bit value")
@@ -117,7 +118,7 @@ func read8(f *os.File, buff []byte) uint64 {
 
 // Read 32 bytes into a given buffer
 func read32(f *os.File, buff []byte) {
-	r, err := f.Read(buff[:32]) // Read 32
+	r, err := io.ReadFull(f, buff[:32]) // Read 32
 	checkf(err, "failed to read address")
 	if r != 32 {
 		fatalf("failed to read a full 64 bit value")
@@ -125,7 +126,7 @@ func read32(f *os.File, buff []byte) {
 }
 
 func read(f *os.File, buff []byte) {
-	r, err := f.Read(buff) // Read 32
+	r, err := io.ReadFull(f, buff) // Read 32
 	checkf(err, "failed to read value")
 	if r != len(buff) {
 		fatalf("failed to read the full value")
