@@ -44,6 +44,10 @@ func (s *closedBlock) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 		s.State.MakeMajorBlock > 0
 }
 
+func (s *closedBlock) Hash() ([32]byte, error) {
+	return s.Batch.BPT().GetRootHash()
+}
+
 func (s *closedBlock) Commit() error {
 	if s.IsEmpty() {
 		s.Discard()

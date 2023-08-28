@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,11 +10,11 @@ import (
 	"context"
 	"errors"
 
-	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/client/local"
-	core "github.com/tendermint/tendermint/rpc/core/types"
-	tm "github.com/tendermint/tendermint/types"
+	"github.com/cometbft/cometbft/libs/bytes"
+	"github.com/cometbft/cometbft/rpc/client"
+	"github.com/cometbft/cometbft/rpc/client/local"
+	core "github.com/cometbft/cometbft/rpc/core/types"
+	tm "github.com/cometbft/cometbft/types"
 )
 
 var ErrNotInitialized = errors.New("not initialized")
