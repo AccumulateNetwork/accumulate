@@ -13,13 +13,13 @@ import (
 	"fmt"
 	"testing"
 
+	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/rpc/client/http"
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/rpc/client/http"
-	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -299,7 +299,7 @@ func cmp3(t *testing.T, a, b any, i, j int, field string) {
 	}
 }
 
-func printTxResult(t *testing.T, prefix string, r *abci.ResponseDeliverTx) {
+func printTxResult(t *testing.T, prefix string, r *abci.ExecTxResult) {
 	// fmt.Printf("Code:\t%v\n", r.Code)
 	// // fmt.Printf("Data:\t%v\n", r.Data)
 	// fmt.Printf("Log:\t%v\n", r.Log)

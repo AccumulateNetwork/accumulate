@@ -11,8 +11,8 @@ import (
 	"crypto/ed25519"
 	"time"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/log"
+	abcitypes "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
@@ -113,6 +113,9 @@ type BlockState interface {
 
 	// ChangeSet is the database batch.
 	ChangeSet() record.Record
+
+	// Hash returns the block hash.
+	Hash() ([32]byte, error)
 
 	// Commit commits changes made by this block.
 	Commit() error
