@@ -7,10 +7,11 @@
 package abci
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
-	abci "github.com/tendermint/tendermint/abci/types"
+	abci "github.com/cometbft/cometbft/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -51,9 +52,9 @@ func ListSnapshots(cfg *config.Config) ([]*snapshot.Header, error) {
 	return snapshots, nil
 }
 
-func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.ResponseListSnapshots {
+func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
 	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3356
-	return abci.ResponseListSnapshots{}
+	return &abci.ResponseListSnapshots{}, nil
 
 	// entries, err := ListSnapshots(app.Config)
 	// if err != nil {
@@ -75,9 +76,9 @@ func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.Respon
 }
 
 // LoadSnapshotChunk queries the node for the body of a snapshot.
-func (app *Accumulator) LoadSnapshotChunk(req abci.RequestLoadSnapshotChunk) abci.ResponseLoadSnapshotChunk {
+func (app *Accumulator) LoadSnapshotChunk(_ context.Context, req *abci.RequestLoadSnapshotChunk) (*abci.ResponseLoadSnapshotChunk, error) {
 	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3356
-	return abci.ResponseLoadSnapshotChunk{}
+	return &abci.ResponseLoadSnapshotChunk{}, nil
 
 	// if req.Format != snapshot.Version1 || req.Chunk != 0 {
 	// 	app.logger.Error("Invalid snapshot request", "height", req.Height, "format", req.Format, "chunk", req.Chunk)
@@ -102,9 +103,9 @@ func (app *Accumulator) LoadSnapshotChunk(req abci.RequestLoadSnapshotChunk) abc
 }
 
 // OfferSnapshot offers a snapshot to the node.
-func (app *Accumulator) OfferSnapshot(req abci.RequestOfferSnapshot) abci.ResponseOfferSnapshot {
+func (app *Accumulator) OfferSnapshot(_ context.Context, req *abci.RequestOfferSnapshot) (*abci.ResponseOfferSnapshot, error) {
 	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3356
-	return abci.ResponseOfferSnapshot{}
+	return &abci.ResponseOfferSnapshot{}, nil
 
 	// if req.Snapshot == nil {
 	// 	return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}
@@ -120,9 +121,9 @@ func (app *Accumulator) OfferSnapshot(req abci.RequestOfferSnapshot) abci.Respon
 }
 
 // ApplySnapshotChunk applies a snapshot to the node.
-func (app *Accumulator) ApplySnapshotChunk(req abci.RequestApplySnapshotChunk) abci.ResponseApplySnapshotChunk {
+func (app *Accumulator) ApplySnapshotChunk(_ context.Context, req *abci.RequestApplySnapshotChunk) (*abci.ResponseApplySnapshotChunk, error) {
 	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3356
-	return abci.ResponseApplySnapshotChunk{}
+	return &abci.ResponseApplySnapshotChunk{}, nil
 
 	// if req.Index != 0 {
 	// 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_REJECT_SNAPSHOT}
