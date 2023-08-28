@@ -150,7 +150,8 @@ func (b AddressBuilder) String() string {
 	if b.partition != 0 {
 		port := b.node.BasePort + uint64(b.service)
 		switch b.partition {
-		case protocol.PartitionTypeDirectory:
+		case protocol.PartitionTypeDirectory,
+			protocol.PartitionTypeBootstrap:
 			port += config.PortOffsetDirectory
 		case protocol.PartitionTypeBlockValidator:
 			port += config.PortOffsetBlockValidator
@@ -172,6 +173,8 @@ func (b AddressBuilder) String() string {
 			sk = b.node.BvnNodeKey
 		case protocol.PartitionTypeBlockSummary:
 			sk = b.node.BsnNodeKey
+		case protocol.PartitionTypeBootstrap:
+			sk = b.node.PrivValKey
 		default:
 			panic("invalid partition type")
 		}
@@ -198,7 +201,8 @@ func (b AddressBuilder) Multiaddr() multiaddr.Multiaddr {
 	if b.scheme != "" {
 		port := b.node.BasePort + uint64(b.service)
 		switch b.partition {
-		case protocol.PartitionTypeDirectory:
+		case protocol.PartitionTypeDirectory,
+			protocol.PartitionTypeBootstrap:
 			port += config.PortOffsetDirectory
 		case protocol.PartitionTypeBlockValidator:
 			port += config.PortOffsetBlockValidator
@@ -223,6 +227,8 @@ func (b AddressBuilder) Multiaddr() multiaddr.Multiaddr {
 			sk = b.node.BvnNodeKey
 		case protocol.PartitionTypeBlockSummary:
 			sk = b.node.BsnNodeKey
+		case protocol.PartitionTypeBootstrap:
+			sk = b.node.PrivValKey
 		default:
 			panic("invalid partition type")
 		}

@@ -25,6 +25,25 @@ type DevnetOptions struct {
 func NewDevnet(opts DevnetOptions) *NetworkInit {
 	netInit := new(NetworkInit)
 	netInit.Id = "DevNet"
+
+	bootstrap := new(NodeInit)
+	netInit.Bootstrap = bootstrap
+	bootstrap.BasePort = uint64(opts.BasePort)
+
+	if opts.GenerateKeys != nil {
+		key, _, _, _ := opts.GenerateKeys()
+		bootstrap.PrivValKey = key
+		bootstrap.DnNodeKey = key
+		bootstrap.BvnNodeKey = key
+		bootstrap.BsnNodeKey = key
+	}
+
+	if opts.HostName != nil {
+		host, listen := opts.HostName(-1, -1)
+		bootstrap.AdvertizeAddress = host
+		bootstrap.ListenAddress = listen
+	}
+
 	count := opts.ValidatorCount + opts.FollowerCount
 	for i := 0; i < opts.BvnCount; i++ {
 		bvnInit := new(BvnInit)

@@ -297,6 +297,10 @@ func Load(dir string) (*Config, error) {
 	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
 }
 
+func LoadAcc(dir string) (*Accumulate, error) {
+	return loadAccumulate(dir, filepath.Join(dir, accConfigFile))
+}
+
 func loadFile(dir, tmFile, accFile string) (*Config, error) {
 	tm, err := loadTendermint(dir, tmFile)
 	if err != nil {
@@ -318,14 +322,18 @@ func Store(config *Config) (err error) {
 		r := recover()
 		if e, ok := r.(error); ok {
 			err = e
-		} else {
+		} else if r != nil {
 			err = fmt.Errorf("panicked: %v", r)
 		}
 	}()
 
 	tm.WriteConfigFile(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
 
-	return writeTomlFile(config.Accumulate, filepath.Join(config.RootDir, configDir, accConfigFile))
+	return StoreAcc(config, filepath.Join(config.RootDir, configDir))
+}
+
+func StoreAcc(config *Config, dir string) error {
+	return writeTomlFile(config.Accumulate, filepath.Join(dir, accConfigFile))
 }
 
 func writeTomlFile(v any, file string) error {
