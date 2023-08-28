@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
+	tmconfig "github.com/cometbft/cometbft/config"
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
-	tmconfig "github.com/tendermint/tendermint/config"
 )
 
 type ServiceLogger struct {

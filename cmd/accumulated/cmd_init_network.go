@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"

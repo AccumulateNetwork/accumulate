@@ -216,7 +216,11 @@ func unpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *api.ServiceAddre
 // BadDial notifies the dialer that a transport error was encountered while
 // processing the stream.
 func (d dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, s message.Stream, err error) bool {
-	d.tracker.markBad(s.(*stream).peer)
+	ss, ok := s.(*stream)
+	if !ok {
+		return false
+	}
+	d.tracker.markBad(ss.peer)
 	return true
 }
 
