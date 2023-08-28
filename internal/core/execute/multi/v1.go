@@ -217,6 +217,10 @@ func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 		s.Block.State.MakeMajorBlock > 0
 }
 
+func (s *BlockStateV1) Hash() ([32]byte, error) {
+	return s.Block.Batch.BPT().GetRootHash()
+}
+
 func (s *BlockStateV1) Commit() error {
 	if s.IsEmpty() {
 		s.Discard()

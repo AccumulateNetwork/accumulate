@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"testing"
 
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
