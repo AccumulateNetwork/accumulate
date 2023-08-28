@@ -181,6 +181,17 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 			checkf(err, "write BSNN files")
 		}
 	}
+
+	if netInit.Bootstrap != nil {
+		i := len(netInit.Bvns)
+		if netInit.Bsn != nil {
+			i++
+		}
+		configs[i][0][0].SetRoot(filepath.Join(flagMain.WorkDir, "bootstrap"))
+
+		err = accumulated.WriteNodeFiles(configs[i][0][0], nil, netInit.Bootstrap.PrivValKey, nil)
+		checkf(err, "write bootstrap files")
+	}
 }
 
 func createFaucet(seedStrs []string) []byte {
