@@ -18,12 +18,12 @@ import (
 	"strings"
 	"sync"
 
+	tmconfig "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/fatih/color"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	tmconfig "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -277,7 +277,7 @@ func getNodeDirs(dir string) (vals, bsns []int) {
 		*nodes = append(*nodes, int(node))
 	}
 
-	return
+	return vals, bsns, bootstrap
 }
 
 func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *sync.WaitGroup, stop chan struct{}) {
