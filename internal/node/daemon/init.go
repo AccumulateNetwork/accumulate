@@ -120,9 +120,9 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 			dnn.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
 			bvnn.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
 
-			if network.Id == "DevNet" {
-				p2pPeers := network.Peers(node).AccumulateP2P().WithKey().
-					Do(AddressBuilder.Directory, AddressBuilder.BlockValidator).
+			if network.Bootstrap != nil {
+				p2pPeers := AddressSliceBuilder{network.Bootstrap.Peer()}.
+					AccumulateP2P().WithKey().PartitionType(protocol.PartitionTypeBootstrap).
 					Do(func(b AddressBuilder) AddressBuilder { return b.Scheme("tcp") }, func(b AddressBuilder) AddressBuilder { return b.Scheme("udp") }).
 					Multiaddr()
 				dnn.Accumulate.P2P.BootstrapPeers = p2pPeers
@@ -171,6 +171,17 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 		}
 		allConfigs = append(allConfigs, bsnConfigs)
 		netConfig.Partitions = append(netConfig.Partitions, bsnConfig)
+	}
+
+	if network.Bootstrap != nil {
+		cfg := config.Default(network.Id, protocol.PartitionTypeBootstrap, 0, "")
+		ConfigureNodePorts(network.Bootstrap, cfg, protocol.PartitionTypeDirectory)
+		cfg.Accumulate.P2P.BootstrapPeers = nil
+		cfg.Accumulate.AnalysisLog = config.AnalysisLog{}
+		cfg.Accumulate.Snapshots = config.Snapshots{}
+		cfg.Storage = nil
+
+		allConfigs = append(allConfigs, [][]*config.Config{{cfg}})
 	}
 
 	for _, configs := range allConfigs {
@@ -365,6 +376,27 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 			_ = os.RemoveAll(cfg.RootDir)
 		}
 	}()
+
+	// Bootstrap node
+	if cfg.Accumulate.NetworkType == protocol.PartitionTypeBootstrap {
+		cfg.NodeKey = "node_key.json"
+
+		err = os.MkdirAll(cfg.RootDir, nodeDirPerm)
+		if err != nil {
+			return fmt.Errorf("failed to create config dir: %v", err)
+		}
+
+		err = config.StoreAcc(cfg, cfg.RootDir)
+		if err != nil {
+			return fmt.Errorf("failed to write config files: %w", err)
+		}
+
+		err = loadOrCreateNodeKey(cfg, nodeKey)
+		if err != nil {
+			return fmt.Errorf("failed to write node key: %w", err)
+		}
+		return nil
+	}
 
 	// Create directories
 	err = os.MkdirAll(filepath.Join(cfg.RootDir, "config"), nodeDirPerm)
