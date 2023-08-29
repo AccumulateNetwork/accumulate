@@ -131,6 +131,9 @@ const ExecutorVersionV1Halt ExecutorVersion = 4
 // ExecutorVersionV2 is the second version of the executor system.
 const ExecutorVersionV2 ExecutorVersion = 5
 
+// ExecutorVersionV2SignatureEthereum verifies ethereum signatures in the RSV format.
+const ExecutorVersionV2SignatureEthereum ExecutorVersion = 6
+
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -774,7 +777,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2SignatureEthereum:
 		*v = u
 		return true
 	}
@@ -794,6 +797,8 @@ func (v ExecutorVersion) String() string {
 		return "v1-halt"
 	case ExecutorVersionV2:
 		return "v2"
+	case ExecutorVersionV2SignatureEthereum:
+		return "v2SignatureEthereum"
 	}
 	return fmt.Sprintf("ExecutorVersion:%d", v)
 }
@@ -817,6 +822,8 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV1Halt, true
 	case "v2":
 		return ExecutorVersionV2, true
+	case "v2signatureethereum":
+		return ExecutorVersionV2SignatureEthereum, true
 	}
 	return 0, false
 }

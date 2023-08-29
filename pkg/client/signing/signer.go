@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -68,7 +68,8 @@ func (k PrivateKey) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 		return protocol.SignBTCLegacy(sig, k, sigMdHash, message)
 
 	case *protocol.ETHSignature:
-		return protocol.SignETH(sig, k, sigMdHash, message)
+		//TODO: after RSV rule activation change this to SignEth(...) and deprecate SighEthAsDer
+		return protocol.SignEthAsDer(sig, k, sigMdHash, message)
 
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)

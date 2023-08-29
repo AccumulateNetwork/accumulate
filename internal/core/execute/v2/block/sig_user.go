@@ -93,8 +93,14 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 		return errors.BadRequest.WithFormat("signature submitted to %v instead of %v", ctx.Executor.Describe.PartitionId, partition)
 	}
 
+	verifySignature := protocol.VerifyUserSignature
+	if !ctx.Executor.globals.Active.ExecutorVersion.V2SignatureEthereumEnabled() {
+		//if ethereum RSV based verification is not enabled, then revert to old methods
+		verifySignature = protocol.VerifyUserSignatureV1
+	}
+
 	// Verify the signature signs the transaction
-	if !protocol.VerifyUserSignature(sig, ctx.transaction.GetHash()) {
+	if !verifySignature(sig, ctx.transaction.GetHash()) {
 		return errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
