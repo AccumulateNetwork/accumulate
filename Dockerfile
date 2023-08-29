@@ -7,7 +7,7 @@ ENV CGO_ENABLED 0
 ARG TAGS=production,mainnet
 RUN make -B TAGS=$TAGS
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
-RUN go install github.com/tendermint/tendermint/cmd/tendermint
+RUN go install github.com/cometbft/cometbft/cmd/tendermint
 RUN go build ./tools/cmd/snapshot
 RUN go build ./tools/cmd/dbrepair
 RUN go build ./tools/cmd/debug
