@@ -141,7 +141,6 @@ func TestInitWithOtherKeys(t *testing.T) {
 
 			// Initialize
 			sim := NewSim(t,
-				simulator.MemoryDatabase,
 				simulator.SimpleNetwork(t.Name(), 1, 1),
 				simulator.Genesis(GenesisTime),
 			)

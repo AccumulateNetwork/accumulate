@@ -73,9 +73,7 @@ func run(*cobra.Command, []string) {
 	jsonrpc2.DebugMethodFunc = true
 
 	var opts []simulator.Option
-	if flag.Database == "memory" {
-		opts = append(opts, simulator.MemoryDatabase)
-	} else {
+	if flag.Database != "memory" {
 		opts = append(opts, simulator.BadgerDatabaseFromDirectory(flag.Database, func(err error) { checkf(err, "--database") }))
 	}
 

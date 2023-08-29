@@ -28,7 +28,6 @@ func TestUpdateKey(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -65,7 +64,6 @@ func TestUpdateKey_MultisigDelegate(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -110,7 +108,6 @@ func TestUpdateKey_HasDelegate(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -146,7 +143,6 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -183,7 +179,6 @@ func TestUpdateKey_TwoDelegates(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)

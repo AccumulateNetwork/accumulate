@@ -29,7 +29,6 @@ func TestAnchorThreshold(t *testing.T) {
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
 	)

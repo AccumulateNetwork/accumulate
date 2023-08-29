@@ -155,7 +155,6 @@ func (s *ValidationTestSuite) TestMain() {
 	net := simulator.SimpleNetwork("Gold/1.0.0", 3, 1)
 	gsim, err := simulator.New(
 		logging.NewTestLogger(s.T(), "plain", "error", false),
-		simulator.MemoryDatabase,
 		net,
 		simulator.Genesis(GenesisTime),
 	)
@@ -194,7 +193,6 @@ func (s *ValidationTestSuite) TestMain() {
 	// Set up the simulator and harness
 	sim, err := simulator.New(
 		logging.NewTestLogger(s.T(), "plain", "error", false),
-		simulator.MemoryDatabase,
 		net,
 		simulator.SnapshotMap(testData.Genesis),
 	)

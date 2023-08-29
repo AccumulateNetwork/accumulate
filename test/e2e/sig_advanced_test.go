@@ -61,7 +61,6 @@ func TestAdvancedSigning(t *testing.T) {
 
 			// Initialize
 			sim := NewSim(t,
-				simulator.MemoryDatabase,
 				simulator.SimpleNetwork(t.Name(), 1, 1),
 				simulator.Genesis(GenesisTime),
 			)
@@ -121,7 +120,6 @@ func TestBlockHold(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -226,7 +224,6 @@ func TestBlockHoldPriority(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -323,7 +320,6 @@ func TestBlockHoldPriority2(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -391,7 +387,6 @@ func TestRejectSignaturesAfterExecution(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)

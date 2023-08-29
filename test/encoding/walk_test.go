@@ -44,7 +44,6 @@ func TestWalkAndReplay(t *testing.T) {
 	// Use the simulator to create genesis documents
 	net := simulator.SimpleNetwork(t.Name(), 3, 1)
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		net,
 		simulator.Genesis(GenesisTime),
 	)
@@ -70,7 +69,6 @@ func TestWalkAndReplay(t *testing.T) {
 
 	// Set up the simulator and harness
 	sim = NewSim(t,
-		simulator.MemoryDatabase,
 		net,
 		simulator.SnapshotMap(genesis),
 	)
