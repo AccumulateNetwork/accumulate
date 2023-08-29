@@ -82,5 +82,10 @@ check-height bvnn bvn-$bvn.acme/ledger $bvnHeight
 check-hash dnn $dnHash
 check-hash bvnn $bvnHash
 
-echo accumulated reset consensus "$node/dnn"
-echo accumulated reset consensus "$node/bvnn"
+accumulated reset consensus "$node/dnn"
+accumulated reset consensus "$node/bvnn"
+
+echo
+echo
+echo "Success!"
+echo
