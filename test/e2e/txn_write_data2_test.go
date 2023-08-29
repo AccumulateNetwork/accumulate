@@ -34,7 +34,6 @@ func TestDoubleHashEntries(t *testing.T) {
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -203,7 +202,6 @@ func Test64ByteBody(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -263,7 +261,6 @@ func Test65ByteBody(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -298,7 +295,6 @@ func Test64ByteHeader(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)

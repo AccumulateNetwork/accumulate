@@ -185,7 +185,6 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 	logger := acctesting.NewTestLogger(t)
 	sim, err := simulator.New(
 		simulator.WithLogger(logger),
-		simulator.MemoryDatabase,
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
 
