@@ -41,7 +41,6 @@ func TestCreateKeyPage_LimitBookPages(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -72,7 +71,6 @@ func TestCreateKeyPage_LimitPageEntries(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -103,7 +101,6 @@ func TestUpdateKeyPage_LimitPageEntries(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -136,7 +133,6 @@ func TestUpdateAccountAuth_LimitAccountAuthorities(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -172,7 +168,6 @@ func TestWriteData_LimitDataEntryParts(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -206,7 +201,6 @@ func TestCreateIdentity_LimitIdentityAccounts(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -236,7 +230,6 @@ func TestCreateIdentity_Directory(t *testing.T) {
 
 		// Initialize
 		sim := NewSim(t,
-			simulator.MemoryDatabase,
 			simulator.SimpleNetwork(t.Name(), 3, 3),
 			simulator.Genesis(GenesisTime),
 		)
@@ -269,7 +262,6 @@ func TestCreateIdentity_Directory(t *testing.T) {
 
 		// Initialize
 		sim := NewSim(t,
-			simulator.MemoryDatabase,
 			simulator.SimpleNetwork(t.Name(), 3, 3),
 			simulator.Genesis(GenesisTime),
 		)
@@ -309,7 +301,6 @@ func TestCreateTokenAccount_LimitIdentityAccounts(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -340,7 +331,6 @@ func TestCreateDataAccount_LimitIdentityAccounts(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -371,7 +361,6 @@ func TestCreateToken_LimitIdentityAccounts(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -402,7 +391,6 @@ func TestCreateKeyBook_LimitIdentityAccounts(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, globals),
 	)

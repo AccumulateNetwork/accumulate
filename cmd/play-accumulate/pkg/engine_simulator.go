@@ -45,7 +45,6 @@ func (s *Session) UseSimulator(bvnCount int) {
 
 	sim, err := simulator.New(
 		simulator.WithLogger(logger),
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork("Play", bvnCount, 1),
 		simulator.Genesis(time.Now()),
 	)

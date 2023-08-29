@@ -35,7 +35,6 @@ func TestDoubleDelegated(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2),
 	)
@@ -83,7 +82,6 @@ func TestSingleDelegated(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2),
 	)
@@ -170,7 +168,6 @@ func TestMultiLevelDelegation(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2),
 	)
@@ -229,7 +226,6 @@ func TestDelegationPath(t *testing.T) {
 	davidKey3 := acctesting.GenerateKey(david, 3)
 
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)

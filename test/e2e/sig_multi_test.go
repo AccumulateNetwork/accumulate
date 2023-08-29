@@ -33,7 +33,6 @@ func TestSimpleMultisig(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -84,7 +83,6 @@ func TestOtherAuthority(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -158,7 +156,6 @@ func TestMultiAuthority(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -218,7 +215,6 @@ func TestBadAuthDisabledLogicV1(t *testing.T) {
 	// Initialize
 	g := &network.GlobalValues{ExecutorVersion: ExecutorVersionV1DoubleHashEntries}
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -261,7 +257,6 @@ func TestBadAuthDisabledLogicV2(t *testing.T) {
 	// Initialize
 	g := &network.GlobalValues{ExecutorVersion: ExecutorVersionLatest}
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, g),
 	)
