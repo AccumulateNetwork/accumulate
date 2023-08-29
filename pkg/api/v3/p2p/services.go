@@ -105,6 +105,27 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 			addr = addr.Encapsulate(c)
 		}
 	}
+	if addr == nil {
+		return nil, errors.BadRequest.With("no network or service specified")
+	}
+
+	if opts.Known {
+		// Find known peers
+		var results []*api.FindServiceResult
+		for _, peer := range n.tracker.allGood(ctx, addr) {
+			results = append(results, &api.FindServiceResult{
+				PeerID: peer,
+				Status: api.PeerStatusIsKnownGood,
+			})
+		}
+		for _, peer := range n.tracker.allBad(ctx, addr) {
+			results = append(results, &api.FindServiceResult{
+				PeerID: peer,
+				Status: api.PeerStatusIsKnownBad,
+			})
+		}
+		return results, nil
+	}
 
 	ch, err := n.peermgr.getPeers(ctx, addr, 100)
 	if err != nil {
@@ -113,7 +134,10 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 
 	var results []*api.FindServiceResult
 	for peer := range ch {
-		results = append(results, &api.FindServiceResult{PeerID: peer.ID})
+		results = append(results, &api.FindServiceResult{
+			PeerID: peer.ID,
+			Status: n.tracker.status(ctx, peer.ID, addr),
+		})
 	}
 	return results, nil
 }
