@@ -17,19 +17,18 @@ if ! [ -d "$node" ]; then
   exit 1
 fi
 
+mkdir /tmpbin
+export PATH="/tmpbin:$PATH"
+
 function download {
   name=$1
   sha=$2
-
-  if which $name 2> /dev/null; then
-    return
-  fi
 
   echo "Downloading $name binary"
   curl -LJ -o $name https://gitlab.com/accumulatenetwork/accumulate/-/raw/main/scripts/bin/v1.2.5/$name-linux-amd64
   echo "$sha $name" | sha256sum -c
   chmod +x $name
-  mv $name /bin/$name
+  mv $name /tmpbin/$name
 }
 
 download debug 3838acfe99321b0fbb8c8b148e70785bbf5440d9c9b7a113c680ef7aed5fe50b

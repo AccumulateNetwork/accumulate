@@ -10,13 +10,14 @@ if ! [ -d "$node" ]; then
   exit 1
 fi
 
-if ! which debug 2> /dev/null; then
-  echo "Downloading debug binary"
-  curl -LJ -o debug https://gitlab.com/accumulatenetwork/accumulate/-/raw/main/scripts/bin/v1.2.5/debug-linux-amd64
-  echo "3838acfe99321b0fbb8c8b148e70785bbf5440d9c9b7a113c680ef7aed5fe50b debug" | sha256sum -c
-  chmod +x debug
-  mv debug /bin/debug
-fi
+mkdir /tmpbin
+export PATH="/tmpbin:$PATH"
+
+echo "Downloading debug binary"
+curl -LJ -o debug https://gitlab.com/accumulatenetwork/accumulate/-/raw/main/scripts/bin/v1.2.5/debug-linux-amd64
+echo "3838acfe99321b0fbb8c8b148e70785bbf5440d9c9b7a113c680ef7aed5fe50b debug" | sha256sum -c
+chmod +x debug
+mv debug /tmpbin/debug
 
 # Find the `partition-id = "..."` line and extract the BVN name (and make it lower case)
 bvn=$(sed -nre 's/^\s+partition-id\s+=\s+"(\w+)"$/\1/p' "$node/bvnn/config/accumulate.toml" | tr '[:upper:]' '[:lower:]')
