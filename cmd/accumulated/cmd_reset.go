@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/types"
@@ -108,20 +109,29 @@ func resetConsensus(_ *cobra.Command, args []string) {
 		var metrics coredb.CollectMetrics
 		buf := new(ioutil.Buffer)
 
+		tick := time.NewTicker(time.Second / 2)
+		defer tick.Stop()
+
 		fmt.Println("Collecting...")
 		err = db.Collect(buf, partUrl, &coredb.CollectOptions{
 			// BuildIndex: true,
 			Metrics: &metrics,
 			Predicate: func(r database.Record) (bool, error) {
 				// The sole purpose of this function is to print progress
-				switch r := r.(type) {
-				case *coredb.Account:
-					h := r.Key().Hash()
-					fmt.Printf("\033[A\rCollecting [%x] (%d) %v\n", h[:4], metrics.Messages.Count, r.Url())
-				case *coredb.Message:
-					if metrics.Messages.Collecting%1000 == 0 {
-						fmt.Printf("\033[A\rCollecting (%d/%d) %x\n", metrics.Messages.Collecting, metrics.Messages.Count, r.Key().Get(1).([32]byte))
-					}
+				select {
+				case <-tick.C:
+				default:
+					return true, nil
+				}
+
+				switch r.Key().Get(0) {
+				case "Account":
+					k := r.Key().SliceJ(2)
+					h := k.Hash()
+					fmt.Printf("\033[A\r\033[KCollecting [%x] (%d) %v\n", h[:4], metrics.Messages.Count, k.Get(1))
+
+				case "Message", "Transaction":
+					fmt.Printf("\033[A\r\033[KCollecting (%d/%d) %x\n", metrics.Messages.Collecting, metrics.Messages.Count, r.Key().Get(1).([32]byte))
 				}
 
 				// Retain everything
