@@ -37,7 +37,6 @@ func TestRepairIndices(t *testing.T) {
 	globals.ExecutorVersion = ExecutorVersionLatest
 	network := simulator.SimpleNetwork(t.Name(), 1, 1)
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		network,
 		simulator.GenesisWith(GenesisTime, globals),
 	)
@@ -92,7 +91,6 @@ func TestRepairIndices(t *testing.T) {
 
 	// Renitialize
 	sim = NewSim(t,
-		simulator.MemoryDatabase,
 		network,
 		simulator.SnapshotMap(snapshots),
 	)
