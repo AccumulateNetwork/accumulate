@@ -46,6 +46,9 @@ type RecordType uint64
 // EventType is the type of an [Event].
 type EventType uint64
 
+// KnownPeerStatus is the status of a known peer.
+type KnownPeerStatus int64
+
 // Query is an API query.
 type Query interface {
 	encoding.UnionValue

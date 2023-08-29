@@ -23,6 +23,15 @@ const EventTypeBlock EventType = 2
 // EventTypeGlobals .
 const EventTypeGlobals EventType = 3
 
+// PeerStatusIsUnknown .
+const PeerStatusIsUnknown KnownPeerStatus = 0
+
+// PeerStatusIsKnownGood .
+const PeerStatusIsKnownGood KnownPeerStatus = 1
+
+// PeerStatusIsKnownBad .
+const PeerStatusIsKnownBad KnownPeerStatus = 2
+
 // QueryTypeDefault .
 const QueryTypeDefault QueryType = 0
 
@@ -179,6 +188,67 @@ func (v *EventType) UnmarshalJSON(data []byte) error {
 	*v, ok = EventTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Event Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Known Peer Status
+func (v KnownPeerStatus) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *KnownPeerStatus) SetEnumValue(id uint64) bool {
+	u := KnownPeerStatus(id)
+	switch u {
+	case PeerStatusIsUnknown, PeerStatusIsKnownGood, PeerStatusIsKnownBad:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Known Peer Status.
+func (v KnownPeerStatus) String() string {
+	switch v {
+	case PeerStatusIsUnknown:
+		return "unknown"
+	case PeerStatusIsKnownGood:
+		return "good"
+	case PeerStatusIsKnownBad:
+		return "bad"
+	}
+	return fmt.Sprintf("KnownPeerStatus:%d", v)
+}
+
+// KnownPeerStatusByName returns the named Known Peer Status.
+func KnownPeerStatusByName(name string) (KnownPeerStatus, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return PeerStatusIsUnknown, true
+	case "good":
+		return PeerStatusIsKnownGood, true
+	case "bad":
+		return PeerStatusIsKnownBad, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Known Peer Status to JSON as a string.
+func (v KnownPeerStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Known Peer Status from JSON as a string.
+func (v *KnownPeerStatus) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = KnownPeerStatusByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Known Peer Status %q", s)
 	}
 	return nil
 }
