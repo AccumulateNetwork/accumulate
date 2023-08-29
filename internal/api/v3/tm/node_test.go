@@ -29,7 +29,6 @@ func TestConsensusStatus(t *testing.T) {
 	net := simulator.NewSimpleNetwork(t.Name(), 1, 1)
 	sim, err := simulator.New(
 		simulator.WithLogger(logger),
-		simulator.MemoryDatabase,
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
 	)
