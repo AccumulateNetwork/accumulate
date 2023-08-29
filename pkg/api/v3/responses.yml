@@ -18,6 +18,9 @@ FindServiceResult:
       type: p2p.PeerID
       marshal-as: union
       zero-value: '""'
+    - name: Status
+      type: KnownPeerStatus
+      marshal-as: enum
 
 ConsensusStatus:
   fields:

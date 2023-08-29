@@ -45,12 +45,12 @@ var BootstrapNodes = func() []multiaddr.Multiaddr {
 // Node implements peer-to-peer routing of API v3 messages over via binary
 // message transport.
 type Node struct {
-	context    context.Context
-	cancel     context.CancelFunc
-	peermgr    *peerManager
-	host       host.Host
-	trackPeers bool
-	services   []*serviceHandler
+	context  context.Context
+	cancel   context.CancelFunc
+	peermgr  *peerManager
+	host     host.Host
+	tracker  peerTracker
+	services []*serviceHandler
 }
 
 // Options are options for creating a [Node].
@@ -87,7 +87,12 @@ func New(opts Options) (_ *Node, err error) {
 	// Initialize basic fields
 	n := new(Node)
 	n.context, n.cancel = context.WithCancel(context.Background())
-	n.trackPeers = opts.EnablePeerTracker
+
+	if opts.EnablePeerTracker {
+		n.tracker = new(simpleTracker)
+	} else {
+		n.tracker = fakeTracker{}
+	}
 
 	// Cancel on fail
 	defer func() {
