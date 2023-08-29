@@ -33,7 +33,7 @@ function download {
 }
 
 download debug 3838acfe99321b0fbb8c8b148e70785bbf5440d9c9b7a113c680ef7aed5fe50b
-download accumulated fa3e25f3ad5553102af4630f52396172ba906ad1b738a81e06e5d51ffdd81482
+download accumulated a021da83ba133f3bdbc646c9a4d3f6a25083d6f055e1f0b4025c31b44833b2e3
 
 # Find the `partition-id = "..."` line and extract the BVN name (and make it lower case)
 bvn=$(sed -nre 's/^\s+partition-id\s+=\s+"(\w+)"$/\1/p' "$node/bvnn/config/accumulate.toml" | tr '[:upper:]' '[:lower:]')
@@ -44,7 +44,7 @@ dnHash=dc623c43ce73defbb99099f8aeea29e2fe7f35d7a4cd87f254a88358b7d8f02f
 case $bvn in
   apollo)
     bvnHeight=16812756
-    bvnHash=8F16BF3E7608515C47A9CF2115541BEC6162570FB53F007622DD2611314DE9B2
+    bvnHash=2a4798da31ca73478ecef3b60a519d58f51950e9ea0bf2c73180dba8b7554703
     ;;
   yutu)
     bvnHeight=16085527
@@ -52,7 +52,7 @@ case $bvn in
     ;;
   chandrayaan)
     bvnHeight=12227202
-    bvnHash=3D36B58BF3639EF6FFA18BCCF1BD67F430E9BF0DA54226020085C0DE9C70D5D6
+    bvnHash=0b4e7360977c03656103ce0bdf511cb66b016f8ceb3c16f10921b9520fb26ec7
     ;;
   *)
     die "Error: $bvn is not a known BVN"
