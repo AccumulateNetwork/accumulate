@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"

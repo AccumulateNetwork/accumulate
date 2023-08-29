@@ -10,11 +10,11 @@ import (
 	"net"
 	"strconv"
 
+	"github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -150,7 +150,8 @@ func (b AddressBuilder) String() string {
 	if b.partition != 0 {
 		port := b.node.BasePort + uint64(b.service)
 		switch b.partition {
-		case protocol.PartitionTypeDirectory:
+		case protocol.PartitionTypeDirectory,
+			protocol.PartitionTypeBootstrap:
 			port += config.PortOffsetDirectory
 		case protocol.PartitionTypeBlockValidator:
 			port += config.PortOffsetBlockValidator
@@ -172,6 +173,8 @@ func (b AddressBuilder) String() string {
 			sk = b.node.BvnNodeKey
 		case protocol.PartitionTypeBlockSummary:
 			sk = b.node.BsnNodeKey
+		case protocol.PartitionTypeBootstrap:
+			sk = b.node.PrivValKey
 		default:
 			panic("invalid partition type")
 		}
@@ -198,7 +201,8 @@ func (b AddressBuilder) Multiaddr() multiaddr.Multiaddr {
 	if b.scheme != "" {
 		port := b.node.BasePort + uint64(b.service)
 		switch b.partition {
-		case protocol.PartitionTypeDirectory:
+		case protocol.PartitionTypeDirectory,
+			protocol.PartitionTypeBootstrap:
 			port += config.PortOffsetDirectory
 		case protocol.PartitionTypeBlockValidator:
 			port += config.PortOffsetBlockValidator
@@ -223,6 +227,8 @@ func (b AddressBuilder) Multiaddr() multiaddr.Multiaddr {
 			sk = b.node.BvnNodeKey
 		case protocol.PartitionTypeBlockSummary:
 			sk = b.node.BsnNodeKey
+		case protocol.PartitionTypeBootstrap:
+			sk = b.node.PrivValKey
 		default:
 			panic("invalid partition type")
 		}
