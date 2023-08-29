@@ -34,7 +34,6 @@ func TestMissingSynthTxn(t *testing.T) {
 		globals := new(core.GlobalValues)
 		globals.ExecutorVersion = version
 		sim := NewSim(t,
-			simulator.MemoryDatabase,
 			simulator.SimpleNetwork(t.Name(), 3, 3),
 			simulator.GenesisWith(GenesisTime, globals),
 			simulator.SkipProposalCheck, // FIXME should not be necessary
@@ -92,7 +91,6 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 	// Initialize
 	const bvnCount, valCount = 1, 1 // Anchor healing doesn't work with more than one validator
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
 	)
@@ -143,7 +141,6 @@ func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
 	// Initialize
 	const bvnCount, valCount = 3, 3
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
 	)

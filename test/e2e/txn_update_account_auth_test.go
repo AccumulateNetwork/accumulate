@@ -32,7 +32,6 @@ func TestUpdateAccountAuth_SignatureRequest(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -71,7 +70,6 @@ func TestUpdateAccountAuth(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -108,7 +106,6 @@ func TestUpdateAccountAuth(t *testing.T) {
 func TestUpdateAccountAuth2(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
