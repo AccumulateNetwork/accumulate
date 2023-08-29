@@ -33,7 +33,6 @@ func TestVersionSwitch(t *testing.T) {
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1), // TODO Change to 3 after fixing anchor healing
 		simulator.GenesisWith(GenesisTime, g),
 		simulator.SkipProposalCheck, // FIXME should not be necessary
