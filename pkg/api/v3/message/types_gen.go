@@ -3182,6 +3182,7 @@ func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
 		Type    Type                `json:"type"`
 		Network string              `json:"network,omitempty"`
 		Service *api.ServiceAddress `json:"service,omitempty"`
+		Known   bool                `json:"known,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.FindServiceOptions.Network) == 0) {
@@ -3191,6 +3192,10 @@ func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
 	if !(v.FindServiceOptions.Service == nil) {
 
 		u.Service = v.FindServiceOptions.Service
+	}
+	if !(!v.FindServiceOptions.Known) {
+
+		u.Known = v.FindServiceOptions.Known
 	}
 	return json.Marshal(&u)
 }
@@ -3580,10 +3585,12 @@ func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 		Type    Type                `json:"type"`
 		Network string              `json:"network,omitempty"`
 		Service *api.ServiceAddress `json:"service,omitempty"`
+		Known   bool                `json:"known,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Network = v.FindServiceOptions.Network
 	u.Service = v.FindServiceOptions.Service
+	u.Known = v.FindServiceOptions.Known
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3592,6 +3599,7 @@ func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.FindServiceOptions.Network = u.Network
 	v.FindServiceOptions.Service = u.Service
+	v.FindServiceOptions.Known = u.Known
 	return nil
 }
 
