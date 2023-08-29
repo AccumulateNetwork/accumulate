@@ -32,3 +32,8 @@ func (v ExecutorVersion) HaltV1() bool {
 func (v ExecutorVersion) V2() bool {
 	return v >= ExecutorVersionV2
 }
+
+// V2SignatureRSV check if the version is at least signature RSV
+func (v ExecutorVersion) V2SignatureEthereumEnabled() bool {
+	return v >= ExecutorVersionV2SignatureEthereum
+}
