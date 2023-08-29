@@ -21,6 +21,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
 	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
+	"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -221,16 +222,46 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 	block, hash, err := app.Executor.LastBlock()
 	switch {
 	case err == nil:
-		app.ready = true
 		res.LastBlockHeight = int64(block.Index)
 		res.LastBlockAppHash = hash[:]
 
 	case errors.Is(err, errors.NotFound):
-		// Ok
+		return res
 
 	default:
 		panic(fmt.Errorf("failed to load last block info: %w", err))
 	}
+
+	if app.ready {
+		return res
+	}
+
+	// Check the genesis document
+	genDoc, err := types.GenesisDocFromFile(app.Config.GenesisFile())
+	if err != nil {
+		panic(err)
+	}
+
+	// This field is the height of the first block after genesis, so
+	// decrementing it makes it the height of genesis
+	genDoc.InitialHeight -= 1
+
+	if genDoc.InitialHeight < res.LastBlockHeight {
+		app.ready = true
+		return res
+	}
+	if genDoc.InitialHeight > res.LastBlockHeight {
+		panic(fmt.Errorf("database state is older than genesis"))
+	}
+
+	if !bytes.Equal(genDoc.AppHash, res.LastBlockAppHash) {
+		panic(fmt.Errorf("database state does not match genesis"))
+	}
+
+	// If we're at genesis but the database is already populated, pretend like
+	// the database is empty to make Tendermint happy
+	res.LastBlockAppHash = nil
+	res.LastBlockHeight = 0
 	return res
 }
 
