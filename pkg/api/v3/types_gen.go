@@ -173,12 +173,15 @@ type FindServiceOptions struct {
 	fieldsSet []bool
 	Network   string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Service   *ServiceAddress `json:"service,omitempty" form:"service" query:"service" validate:"required"`
+	// Known restricts the results to known peers.
+	Known     bool `json:"known,omitempty" form:"known" query:"known"`
 	extraData []byte
 }
 
 type FindServiceResult struct {
 	fieldsSet []bool
-	PeerID    p2p.PeerID `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
+	PeerID    p2p.PeerID      `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
+	Status    KnownPeerStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	extraData []byte
 }
 
@@ -819,6 +822,7 @@ func (v *FindServiceOptions) Copy() *FindServiceOptions {
 	if v.Service != nil {
 		u.Service = (v.Service).Copy()
 	}
+	u.Known = v.Known
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -835,6 +839,7 @@ func (v *FindServiceResult) Copy() *FindServiceResult {
 	if v.PeerID != "" {
 		u.PeerID = p2p.CopyPeerID(v.PeerID)
 	}
+	u.Status = v.Status
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1786,12 +1791,18 @@ func (v *FindServiceOptions) Equal(u *FindServiceOptions) bool {
 	case !((v.Service).Equal(u.Service)):
 		return false
 	}
+	if !(v.Known == u.Known) {
+		return false
+	}
 
 	return true
 }
 
 func (v *FindServiceResult) Equal(u *FindServiceResult) bool {
 	if !(p2p.EqualPeerID(v.PeerID, u.PeerID)) {
+		return false
+	}
+	if !(v.Status == u.Status) {
 		return false
 	}
 
@@ -3365,6 +3376,7 @@ func (v *FaucetOptions) IsValid() error {
 var fieldNames_FindServiceOptions = []string{
 	1: "Network",
 	2: "Service",
+	3: "Known",
 }
 
 func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
@@ -3380,6 +3392,9 @@ func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Service == nil) {
 		writer.WriteValue(2, v.Service.MarshalBinary)
+	}
+	if !(!v.Known) {
+		writer.WriteBool(3, v.Known)
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceOptions)
@@ -3416,6 +3431,7 @@ func (v *FindServiceOptions) IsValid() error {
 
 var fieldNames_FindServiceResult = []string{
 	1: "PeerID",
+	2: "Status",
 }
 
 func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
@@ -3428,6 +3444,9 @@ func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
 
 	if !(v.PeerID == ("")) {
 		writer.WriteValue(1, v.PeerID.MarshalBinary)
+	}
+	if !(v.Status == 0) {
+		writer.WriteEnum(2, v.Status)
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceResult)
@@ -3445,6 +3464,11 @@ func (v *FindServiceResult) IsValid() error {
 		errs = append(errs, "field PeerID is missing")
 	} else if v.PeerID == ("") {
 		errs = append(errs, "field PeerID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Status is missing")
+	} else if v.Status == 0 {
+		errs = append(errs, "field Status is not set")
 	}
 
 	switch len(errs) {
@@ -5769,6 +5793,9 @@ func (v *FindServiceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(ServiceAddress); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Service = x
 	}
+	if x, ok := reader.ReadBool(3); ok {
+		v.Known = x
+	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceOptions)
 	if err != nil {
@@ -5796,6 +5823,9 @@ func (v *FindServiceResult) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
+	if x := new(KnownPeerStatus); reader.ReadEnum(2, x) {
+		v.Status = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceResult)
 	if err != nil {
@@ -7111,9 +7141,13 @@ func (v *ErrorEvent) MarshalJSON() ([]byte, error) {
 func (v *FindServiceResult) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Status KnownPeerStatus                         `json:"status,omitempty"`
 	}{}
 	if !(v.PeerID == ("")) {
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.Status == 0) {
+		u.Status = v.Status
 	}
 	return json.Marshal(&u)
 }
@@ -7872,8 +7906,10 @@ func (v *ErrorEvent) UnmarshalJSON(data []byte) error {
 func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		Status KnownPeerStatus                         `json:"status,omitempty"`
 	}{}
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	u.Status = v.Status
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -7881,6 +7917,7 @@ func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 		v.PeerID = u.PeerID.Value
 	}
 
+	v.Status = u.Status
 	return nil
 }
 

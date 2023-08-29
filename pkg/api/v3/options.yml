@@ -33,6 +33,10 @@ FindServiceOptions:
       type: ServiceAddress
       marshal-as: reference
       pointer: true
+    - name: Known
+      description: restricts the results to known peers
+      type: boolean
+      optional: true
 
 ConsensusStatusOptions:
   fields:
