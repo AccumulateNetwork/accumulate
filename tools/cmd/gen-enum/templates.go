@@ -38,7 +38,7 @@ type Type struct {
 }
 
 type TypeValue struct {
-	Name string
+	Key  string
 	Type *Type
 	typegen.EnumValue
 }
@@ -71,7 +71,7 @@ func convert(types map[string]typegen.Enum, pkgName, subPkgName string) *Types {
 			tval := new(TypeValue)
 			tval.Type = ttyp
 			ttyp.Values = append(ttyp.Values, tval)
-			tval.Name = name
+			tval.Key = name
 			tval.EnumValue = *val
 		}
 		sort.Slice(ttyp.Values, func(i, j int) bool {
