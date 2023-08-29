@@ -146,7 +146,9 @@ func NewLocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePo
 	return net
 }
 
-// TODO Deprecated: This is a no-op
+// MemoryDatabase configures the simulator to use in-memory databases.
+//
+// Deprecated: This is a no-op
 func MemoryDatabase(*simFactory) error { return nil }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) Option {
@@ -217,4 +219,9 @@ func genesis(time time.Time, values *core.GlobalValues) SnapshotFunc {
 
 		return ioutil2.NewBuffer(snapshot), nil
 	}
+}
+
+func UseABCI(opts *simFactory) error {
+	opts.abci = withABCI
+	return nil
 }
