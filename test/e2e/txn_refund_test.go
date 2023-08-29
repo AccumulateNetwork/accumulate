@@ -29,7 +29,6 @@ func TestRefund(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -57,7 +56,6 @@ func TestRefundCycle(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -107,7 +105,6 @@ func TestRefundFailedUserTransaction_Local(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -147,7 +144,6 @@ func TestRefundFailedUserTransaction_Remote(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)

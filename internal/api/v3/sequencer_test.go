@@ -34,7 +34,6 @@ func TestSequencer(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
 	net := simulator.NewSimpleNetwork(t.Name(), 2, 1)
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.WithNetwork(net),
 		simulator.GenesisWith(GenesisTime, new(core.GlobalValues)), // Use v1
 	)
