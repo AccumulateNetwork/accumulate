@@ -14,6 +14,7 @@ import (
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
+	eth "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -65,23 +66,46 @@ func TestBTCLegacySignature(t *testing.T) {
 
 func TestETHSignature(t *testing.T) {
 
-	privKey, err := hex.DecodeString("1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529")
-	require.NoError(t, err)
+	privKeyHex := "1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529"
+
 	message := "ACME will rule DEFI"
 	hash := sha256.Sum256([]byte(message))
 	secp := new(ETHSignature)
 
-	privkey, pbkey := btc.PrivKeyFromBytes(btc.S256(), privKey)
+	privKey, err := eth.HexToECDSA(privKeyHex)
+	require.NoError(t, err)
+	secp.PublicKey = eth.FromECDSAPub(&privKey.PublicKey)
+	require.NoError(t, SignEthAsDer(secp, eth.FromECDSA(privKey), nil, hash[:]))
 
-	secp.PublicKey = pbkey.SerializeUncompressed()
+	t.Logf("Eth as Der public key  %x", secp.PublicKey)
+	t.Logf("Eth as Der signature   %x", secp.Signature)
+	t.Logf("Eth ad Der Hash        %x", hash[:])
+
+	//should fail
+	require.Equal(t, VerifyUserSignature(secp, hash[:]), false)
+	//should pass
+	require.Equal(t, VerifyUserSignatureV1(secp, hash[:]), true)
+
+	//public key should still match
+	keyComp, err := eth.UnmarshalPubkey(secp.PublicKey)
 
 	require.NoError(t, err)
+	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
 
-	require.NoError(t, SignETH(secp, privkey.Serialize(), nil, hash[:]))
-	res := secp.Verify(nil, hash[:])
+	//version 2 signature test
+	secp = new(ETHSignature)
+	secp.PublicKey = eth.FromECDSAPub(&privKey.PublicKey)
+	require.NoError(t, SignETH(secp, eth.FromECDSA(privKey), nil, hash[:]))
 
-	require.Equal(t, res, true)
+	t.Logf("Eth as VRS public key %x", secp.PublicKey)
+	t.Logf("Eth as VRS signature  %x", secp.Signature)
+	t.Logf("Eth ad VRS Hash       %x", hash[:])
+	//should fail
+	require.Equal(t, VerifyUserSignatureV1(secp, hash[:]), false)
+	//should pass
+	require.Equal(t, VerifyUserSignature(secp, hash[:]), true)
 
+	t.Logf("Signature: %x", secp.Signature)
 }
 
 func TestBTCaddress(t *testing.T) {
