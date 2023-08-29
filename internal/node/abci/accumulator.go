@@ -17,12 +17,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/libs/log"
-	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
-	"github.com/tendermint/tendermint/types"
-	"github.com/tendermint/tendermint/version"
+	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/libs/log"
+	protocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
+	"github.com/cometbft/cometbft/types"
+	"github.com/cometbft/cometbft/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -119,7 +119,7 @@ func (app *Accumulator) fatal(err error) {
 
 // recover will recover from a panic. If a panic occurs, it is passed to fatal
 // and code is set to CodeDidPanic (unless the pointer is nil).
-func (app *Accumulator) recover(code *uint32) {
+func (app *Accumulator) recover() {
 	r := recover()
 	if r == nil {
 		return
@@ -132,10 +132,6 @@ func (app *Accumulator) recover(code *uint32) {
 		err = fmt.Errorf("panicked: %v", r)
 	}
 	app.fatal(err)
-
-	if code != nil {
-		*code = uint32(protocol.ErrorCodeDidPanic)
-	}
 }
 
 // willChangeGlobals is called when the global values are about to change.
@@ -184,9 +180,9 @@ func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
 	return nil
 }
 
-// Info implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
-	defer app.recover(nil)
+// Info implements github.com/cometbft/cometbft/abci/types.Application.
+func (app *Accumulator) Info(context.Context, *abci.RequestInfo) (*abci.ResponseInfo, error) {
+	defer app.recover()
 
 	if app.Accumulate.AnalysisLog.Enabled {
 		app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
@@ -213,7 +209,7 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 		app.logger.Error("Failed to marshal ABCI info", "error", err)
 	}
 
-	res := abci.ResponseInfo{
+	res := &abci.ResponseInfo{
 		Data:       string(data),
 		Version:    version.ABCIVersion,
 		AppVersion: Version,
@@ -226,20 +222,20 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 		res.LastBlockAppHash = hash[:]
 
 	case errors.Is(err, errors.NotFound):
-		return res
+		return res, nil
 
 	default:
-		panic(fmt.Errorf("failed to load last block info: %w", err))
+		return nil, err
 	}
 
 	if app.ready {
-		return res
+		return res, nil
 	}
 
 	// Check the genesis document
 	genDoc, err := types.GenesisDocFromFile(app.Config.GenesisFile())
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// This field is the height of the first block after genesis, so
@@ -248,49 +244,49 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 
 	if genDoc.InitialHeight < res.LastBlockHeight {
 		app.ready = true
-		return res
+		return res, nil
 	}
 	if genDoc.InitialHeight > res.LastBlockHeight {
-		panic(fmt.Errorf("database state is older than genesis"))
+		return nil, errors.FatalError.With("database state is older than genesis")
 	}
 
 	if !bytes.Equal(genDoc.AppHash, res.LastBlockAppHash) {
-		panic(fmt.Errorf("database state does not match genesis"))
+		return nil, errors.FatalError.With("database state does not match genesis")
 	}
 
 	// If we're at genesis but the database is already populated, pretend like
 	// the database is empty to make Tendermint happy
 	res.LastBlockAppHash = nil
 	res.LastBlockHeight = 0
-	return res
+	return res, nil
 }
 
-// Query implements github.com/tendermint/tendermint/abci/types.Application.
+// Query implements github.com/cometbft/cometbft/abci/types.Application.
 //
 // Exposed as Tendermint RPC /abci_query.
-func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
+func (app *Accumulator) Query(_ context.Context, reqQuery *abci.RequestQuery) (*abci.ResponseQuery, error) {
 	switch reqQuery.Path {
 	case "/up":
-		return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeOK), Info: "Up"}
+		return &abci.ResponseQuery{Code: uint32(protocol.ErrorCodeOK), Info: "Up"}, nil
 	}
 
-	return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeFailed)}
+	return &abci.ResponseQuery{Code: uint32(protocol.ErrorCodeFailed)}, nil
 }
 
-// InitChain implements github.com/tendermint/tendermint/abci/types.Application.
+// InitChain implements github.com/cometbft/cometbft/abci/types.Application.
 //
 // Called when a chain is created.
-func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
+func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain) (*abci.ResponseInitChain, error) {
 	// Check if initialization is required
 	_, root, err := app.Executor.LastBlock()
 	switch {
 	case err == nil:
 		app.ready = true
-		return abci.ResponseInitChain{AppHash: root[:]}
+		return &abci.ResponseInitChain{AppHash: root[:]}, nil
 	case errors.Is(err, errors.NotFound):
 		// Ok
 	default:
-		panic(fmt.Errorf("failed to load state hash: %v", err))
+		return nil, fmt.Errorf("failed to load state hash: %v", err)
 	}
 
 	app.logger.Info("Initializing")
@@ -299,17 +295,17 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	var snap []byte
 	err = json.Unmarshal(req.AppStateBytes, &snap)
 	if err != nil {
-		panic(fmt.Errorf("failed to init chain: %+v", err))
+		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}
 	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, &app.Accumulate.Describe)
 	if err != nil {
-		panic(fmt.Errorf("failed to init chain: %+v", err))
+		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}
 
 	var initVal []*execute.ValidatorUpdate
 	for _, v := range req.Validators {
 		if v.PubKey.GetEd25519() == nil {
-			panic("unsupported validator key type")
+			return nil, fmt.Errorf("unsupported validator key type")
 		}
 		initVal = append(initVal, &execute.ValidatorUpdate{
 			Type:      protocol.SignatureTypeED25519,
@@ -320,7 +316,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 	additional, err := app.Executor.Init(initVal)
 	if err != nil {
-		panic(fmt.Errorf("failed to init chain: %+v", err))
+		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}
 
 	// Notify the world of the committed block
@@ -330,7 +326,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		Time:  req.Time,
 	})
 	if err != nil {
-		panic(fmt.Errorf("failed to publish block notification: %v", err))
+		return nil, fmt.Errorf("failed to publish block notification: %v", err)
 	}
 
 	var updates []abci.ValidatorUpdate
@@ -344,26 +340,81 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	// Get the app state hash
 	_, root, err = app.Executor.LastBlock()
 	if err != nil {
-		panic(fmt.Errorf("failed to load state hash: %v", err))
+		return nil, fmt.Errorf("failed to load state hash: %v", err)
 	}
 
 	app.ready = true
-	return abci.ResponseInitChain{AppHash: root[:], Validators: updates}
+	return &abci.ResponseInitChain{AppHash: root[:], Validators: updates}, nil
 }
 
-// BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
-	defer app.recover(nil)
+func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+	defer app.recover()
 
+	// Is the node borked?
+	if app.didPanic {
+		return nil, errors.FatalError.With("panicked")
+	}
+
+	// Begin Block
+	err := app.beginBlock(RequestBeginBlock{
+		Header:              req,
+		LastCommitInfo:      req.DecidedLastCommit,
+		ByzantineValidators: req.Misbehavior,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Deliver Tx
+	res := new(abci.ResponseFinalizeBlock)
+	for _, tx := range req.Txs {
+		r := app.deliverTx(tx)
+		res.TxResults = append(res.TxResults, &r)
+	}
+
+	// End Block
+	end, err := app.endBlock()
+	if err != nil {
+		return nil, err
+	}
+	res.ValidatorUpdates = end.ValidatorUpdates
+
+	// If the block is empty, discard it
+	if app.blockState.IsEmpty() {
+		app.discardBlock()
+
+		// Get the old root
+		_, root, err := app.Executor.LastBlock()
+		if err != nil {
+			return nil, err
+		}
+		res.AppHash = root[:]
+
+	} else {
+		// Get the new root
+		root, err := app.blockState.Hash()
+		if err != nil {
+			return nil, err
+		}
+		res.AppHash = root[:]
+	}
+
+	return res, nil
+}
+
+type RequestBeginBlock struct {
+	Header              *abci.RequestFinalizeBlock
+	LastCommitInfo      abci.CommitInfo
+	ByzantineValidators []abci.Misbehavior
+}
+
+func (app *Accumulator) beginBlock(req RequestBeginBlock) error {
 	ctx, span := app.Tracer.Start(context.Background(), "Block")
 	span.SetAttributes(attribute.Int64("height", req.Header.Height))
 	app.blockSpan = span
 
 	_, span = app.Tracer.Start(ctx, "BeginBlock")
 	defer span.End()
-
-	var ret abci.ResponseBeginBlock
-
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	isLeader := bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
 
@@ -377,42 +428,34 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 		Evidence:   req.ByzantineValidators,
 	})
 	if err != nil {
-		app.fatal(err)
-		return ret
+		return err
 	}
 
 	app.timer = time.Now()
 
 	app.txct = 0
-
-	return ret
+	return nil
 }
 
-// CheckTx implements github.com/tendermint/tendermint/abci/types.Application.
+// CheckTx implements github.com/cometbft/cometbft/abci/types.Application.
 //
 // Verifies the transaction is sane.
-func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
-	defer app.recover(&rct.Code)
+func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rct *abci.ResponseCheckTx, err error) {
+	defer app.recover()
 
 	_, span := app.Tracer.Start(context.Background(), "CheckTx")
 	defer span.End()
 
 	// Is the node borked?
 	if app.didPanic {
-		return abci.ResponseCheckTx{
-			Code: uint32(protocol.ErrorCodeDidPanic),
-			Log:  "Node state is invalid",
-		}
+		return nil, errors.FatalError.With("panicked")
 	}
 
 	// For some reason, if an uninitialized node is configured to sync to a
 	// snapshot, Tendermint may call CheckTx before it calls InitChain or
 	// ApplySnapshot
 	if !app.ready {
-		return abci.ResponseCheckTx{
-			Code: uint32(protocol.ErrorCodeUnknownError),
-			Log:  "Node is not ready",
-		}
+		return nil, errors.NotReady.With("not ready")
 	}
 
 	messages, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), func(envelope *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
@@ -424,13 +467,13 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		res.Info = string(b)
 		res.Log = string(b)
 		res.Code = uint32(protocol.ErrorCodeFailed)
-		return res
+		return &res, nil
 	}
 
 	var resp abci.ResponseCheckTx
 	resp.Data = respData
 
-	const maxPriority = (1 << 32) - 1
+	// const maxPriority = (1 << 32) - 1
 
 	txns := map[[32]byte]*protocol.Transaction{}
 	seq := map[[32]byte]uint64{}
@@ -454,17 +497,20 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			continue
 		}
 
-		var priority int64
-		if txn.Body.Type().IsSystem() {
-			priority = maxPriority
-		} else if txn.Body.Type().IsSynthetic() {
-			// Set the priority based on the sequence number to try to keep them in order
-			seq := seq[result.TxID.Hash()]
-			priority = maxPriority - 1 - int64(seq)
-		}
-		if resp.Priority < priority {
-			resp.Priority = priority
-		}
+		// TODO Prioritization must be done with ABCI++
+
+		// var priority int64
+		// if txn.Body.Type().IsSystem() {
+		// 	priority = maxPriority
+		// } else if txn.Body.Type().IsSynthetic() {
+		// 	// Set the priority based on the sequence number to try to keep them in order
+		// 	seq := seq[result.TxID.Hash()]
+		// 	priority = maxPriority - 1 - int64(seq)
+		// }
+		// if resp.Priority < priority {
+		// 	resp.Priority = priority
+		// }
+
 		if result.Error == nil {
 			continue
 		}
@@ -485,30 +531,20 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 	}
 
-	return resp
+	return &resp, nil
 }
 
-// DeliverTx implements github.com/tendermint/tendermint/abci/types.Application.
+// DeliverTx implements github.com/cometbft/cometbft/abci/types.Application.
 //
 // Verifies the transaction is valid.
-func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
-	defer app.recover(&rdt.Code)
-
+func (app *Accumulator) deliverTx(tx []byte) (rdt abci.ExecTxResult) {
 	_, span := app.Tracer.Start(app.block.Params().Context, "DeliverTx")
 	defer span.End()
 
-	// Is the node borked?
-	if app.didPanic {
-		return abci.ResponseDeliverTx{
-			Code: uint32(protocol.ErrorCodeDidPanic),
-			Info: "Node state is invalid",
-		}
-	}
-
-	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), app.block.Process, req.Tx)
+	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), app.block.Process, tx)
 	if err != nil {
 		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
-		var res abci.ResponseDeliverTx
+		var res abci.ExecTxResult
 		res.Info = string(b)
 		res.Log = string(b)
 		res.Code = uint32(protocol.ErrorCodeFailed)
@@ -517,12 +553,16 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 	// Deliver never fails, unless the batch cannot be decoded
 	app.txct += int64(len(envelopes))
-	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK), Data: respData}
+	return abci.ExecTxResult{Code: uint32(protocol.ErrorCodeOK), Data: respData}
 }
 
-// EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
-	defer app.recover(nil)
+type ResponseEndBlock struct {
+	ValidatorUpdates []abci.ValidatorUpdate
+}
+
+// EndBlock implements github.com/cometbft/cometbft/abci/types.Application.
+func (app *Accumulator) endBlock() (ResponseEndBlock, error) {
+	defer app.recover()
 
 	_, span := app.Tracer.Start(app.block.Params().Context, "EndBlock")
 	defer span.End()
@@ -530,91 +570,87 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 	var err error
 	app.blockState, err = app.block.Close()
 	if err != nil {
-		app.fatal(err)
-		return abci.ResponseEndBlock{}
+		return ResponseEndBlock{}, err
 	}
 
 	if app.blockState.IsEmpty() {
-		return abci.ResponseEndBlock{}
+		return ResponseEndBlock{}, nil
 	}
 
-	var resp abci.ResponseEndBlock
+	var resp ResponseEndBlock
 	resp.ValidatorUpdates = app.pendingUpdates
 	app.pendingUpdates = nil
-	return resp
+	return resp, nil
 }
 
-// Commit implements github.com/tendermint/tendermint/abci/types.Application.
+func (app *Accumulator) discardBlock() {
+	timeSinceAppStart := time.Since(app.startTime).Seconds()
+	ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
+	if ds != nil {
+		blockTime := time.Since(app.timer).Seconds()
+		aveBlockTime := 0.0
+		estTps := 0.0
+		if app.txct != 0 {
+			aveBlockTime = blockTime / float64(app.txct)
+			estTps = 1.0 / aveBlockTime
+		}
+		ds.Save("height", app.block.Params().Index, 10, true)
+		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
+		ds.Save("block_time", blockTime, 6, false)
+		ds.Save("ave_block_time", aveBlockTime, 10, false)
+		ds.Save("est_tps", estTps, 10, false)
+		ds.Save("txct", app.txct, 10, false)
+		app.blockSpan.SetAttributes(
+			attribute.Float64("time_since_app_start", timeSinceAppStart),
+			attribute.Float64("block_time", blockTime),
+			attribute.Float64("ave_block_time", aveBlockTime),
+			attribute.Float64("est_tps", estTps),
+			attribute.Int64("txct", app.txct),
+		)
+	}
+
+	ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
+	if ds != nil {
+		ds.Save("height", app.block.Params().Index, 10, true)
+		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
+		app.Executor.StoreBlockTimers(ds)
+	}
+
+	go app.Accumulate.AnalysisLog.Flush()
+
+	// Discard changes
+	app.blockState.Discard()
+
+	duration := time.Since(app.timer)
+	app.logger.Debug("Committed empty block", "duration", duration.String())
+}
+
+// Commit implements github.com/cometbft/cometbft/abci/types.Application.
 //
 // Commits the transaction block to the chains.
-func (app *Accumulator) Commit() abci.ResponseCommit {
-	defer app.recover(nil)
+func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abci.ResponseCommit, error) {
+	defer app.recover()
 	defer func() { app.block, app.blockState = nil, nil }()
 	defer app.blockSpan.End()
+
+	// Is the block empty?
+	if app.blockState.IsEmpty() {
+		return &abci.ResponseCommit{}, nil
+	}
 
 	_, span := app.Tracer.Start(app.block.Params().Context, "Commit")
 	defer span.End()
 
-	tick := time.Now()
-	// Is the block empty?
-	if app.blockState.IsEmpty() {
-		timeSinceAppStart := time.Since(app.startTime).Seconds()
-		ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
-		if ds != nil {
-			blockTime := time.Since(app.timer).Seconds()
-			aveBlockTime := 0.0
-			estTps := 0.0
-			if app.txct != 0 {
-				aveBlockTime = blockTime / float64(app.txct)
-				estTps = 1.0 / aveBlockTime
-			}
-			ds.Save("height", app.block.Params().Index, 10, true)
-			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-			ds.Save("block_time", blockTime, 6, false)
-			ds.Save("ave_block_time", aveBlockTime, 10, false)
-			ds.Save("est_tps", estTps, 10, false)
-			ds.Save("txct", app.txct, 10, false)
-			app.blockSpan.SetAttributes(
-				attribute.Float64("time_since_app_start", timeSinceAppStart),
-				attribute.Float64("block_time", blockTime),
-				attribute.Float64("ave_block_time", aveBlockTime),
-				attribute.Float64("est_tps", estTps),
-				attribute.Int64("txct", app.txct),
-			)
-		}
-
-		ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
-		if ds != nil {
-			ds.Save("height", app.block.Params().Index, 10, true)
-			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
-			app.Executor.StoreBlockTimers(ds)
-		}
-
-		go app.Accumulate.AnalysisLog.Flush()
-
-		// Discard changes
-		app.blockState.Discard()
-
-		// Get the old root
-		_, root, err := app.Executor.LastBlock()
-		if err != nil {
-			panic(err)
-		}
-
-		duration := time.Since(app.timer)
-		app.logger.Debug("Committed empty block", "duration", duration.String())
-		return abci.ResponseCommit{Data: root[:]}
-	}
-
 	// Commit the batch
+	tick := time.Now()
+
 	err := app.blockState.Commit()
 
 	commitTime := time.Since(tick).Seconds()
 	tick = time.Now()
 
 	if err != nil {
-		app.fatal(err)
-		return abci.ResponseCommit{}
+		return nil, err
 	}
 
 	// Notify the world of the committed block
@@ -625,8 +661,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		Major: major,
 	})
 	if err != nil {
-		app.fatal(err)
-		return abci.ResponseCommit{}
+		return nil, err
 	}
 
 	publishEventTime := time.Since(tick).Seconds()
@@ -635,10 +670,8 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	var resp abci.ResponseCommit
 	_, hash, err := app.Executor.LastBlock()
 	if err != nil {
-		app.fatal(err)
-		return abci.ResponseCommit{}
+		return nil, err
 	}
-	resp.Data = hash[:]
 
 	// Keep this disabled until we have real snapshot support through Tendermint
 	if false {
@@ -686,5 +719,5 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	go app.Accumulate.AnalysisLog.Flush()
 	duration := time.Since(app.timer)
 	app.logger.Debug("Committed", "minor", app.block.Params().Index, "hash", logging.AsHex(hash).Slice(0, 4), "major", major, "duration", duration, "count", app.txct)
-	return resp
+	return &resp, nil
 }

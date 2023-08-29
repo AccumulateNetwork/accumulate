@@ -11,8 +11,8 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 
+	"github.com/cometbft/cometbft/abci/types"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
