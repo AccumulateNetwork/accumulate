@@ -9,8 +9,8 @@ package testing
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/rpc/client"
-	core "github.com/tendermint/tendermint/rpc/core/types"
+	"github.com/cometbft/cometbft/rpc/client"
+	core "github.com/cometbft/cometbft/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"

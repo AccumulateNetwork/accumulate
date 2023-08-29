@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,11 +9,11 @@ package node
 import (
 	"context"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/node"
-	"github.com/tendermint/tendermint/privval"
-	coretypes "github.com/tendermint/tendermint/rpc/core/types"
-	corerpc "github.com/tendermint/tendermint/rpc/jsonrpc/client"
+	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/node"
+	"github.com/cometbft/cometbft/privval"
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
+	corerpc "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 

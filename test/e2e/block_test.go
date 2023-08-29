@@ -12,9 +12,9 @@ import (
 	"math/big"
 	"testing"
 
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	oldsim "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
