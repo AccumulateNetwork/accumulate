@@ -36,7 +36,6 @@ type FakeNode struct {
 
 func NewFakeNode(t testing.TB, errorHandler func(err error)) *FakeNode {
 	sim := harness.NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -56,7 +55,6 @@ func NewFakeNode(t testing.TB, errorHandler func(err error)) *FakeNode {
 
 func NewFakeNodeV1(t testing.TB, errorHandler func(err error)) *FakeNode {
 	sim := harness.NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: protocol.ExecutorVersionV1}),
 	)

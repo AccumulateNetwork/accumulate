@@ -47,7 +47,6 @@ func (s *NetworkServiceTestSuite) SetupSuite() {
 	var err error
 	s.sim, err = simulator.New(
 		simulator.WithLogger(acctesting.NewTestLogger(s.T())),
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(s.T().Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)

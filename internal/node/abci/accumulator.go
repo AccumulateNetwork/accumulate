@@ -83,7 +83,9 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 
 	events.SubscribeSync(opts.EventBus, app.willChangeGlobals)
 
-	app.Accumulate.AnalysisLog.Init(app.RootDir, app.Accumulate.PartitionId)
+	if app.Accumulate.AnalysisLog.Enabled {
+		app.Accumulate.AnalysisLog.Init(app.RootDir, app.Accumulate.PartitionId)
+	}
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
 		atomic.StoreUint64(&app.lastSnapshot, e.MinorIndex)
@@ -94,6 +96,13 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 }
 
 var _ abci.Application = (*Accumulator)(nil)
+
+func (app *Accumulator) CurrentBlock() execute.Block           { return app.block }
+func (app *Accumulator) CurrentBlockState() execute.BlockState { return app.blockState }
+
+func (app *Accumulator) LastBlock() (*execute.BlockParams, [32]byte, error) {
+	return app.Executor.LastBlock()
+}
 
 // FOR TESTING ONLY
 func (app *Accumulator) OnFatal(f func(error)) {
