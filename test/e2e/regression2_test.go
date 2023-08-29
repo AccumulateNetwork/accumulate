@@ -46,7 +46,6 @@ func TestBadOperatorPageUpdate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -75,7 +74,6 @@ func TestBadOracleUpdate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -116,7 +114,6 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -171,7 +168,6 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 func TestSendDirectToWrongPartition(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -225,7 +221,6 @@ func TestAnchoring(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -292,7 +287,6 @@ func TestSignatureChainAnchoring(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, values),
 	)
@@ -388,7 +382,6 @@ func TestProtocolVersionReactivation(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, values),
 	)
@@ -411,7 +404,6 @@ func TestUpdateKeyWithDelegate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -454,7 +446,6 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *messaging.Envelope) {
 		// Initialize with V1+sig
 		sim := NewSim(t,
-			simulator.MemoryDatabase,
 			simulator.SimpleNetwork(t.Name(), 3, 1),
 			simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: v}),
 		)
@@ -615,7 +606,6 @@ func TestSignerOverwritten(t *testing.T) {
 
 	// Initialize with V1+sig
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: ExecutorVersionV1SignatureAnchoring}),
 	)
@@ -661,7 +651,6 @@ func TestMissingPrincipal(t *testing.T) {
 
 	// Initialize with V1+sig
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -695,7 +684,6 @@ func TestOldExec(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -731,7 +719,6 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	g.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -766,7 +753,6 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
 		simulator.IgnoreDeliverResults,
@@ -822,7 +808,6 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV2
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
 		simulator.IgnoreDeliverResults,
@@ -886,9 +871,9 @@ func TestMessageCompat(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
+		simulator.UseABCI,
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -931,7 +916,6 @@ func TestProofOverride(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -1052,7 +1036,6 @@ func TestChainUpdateAnchor(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)

@@ -126,7 +126,6 @@ func TestCollectAndRestore(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -196,7 +195,6 @@ func TestCollectAndRestore(t *testing.T) {
 
 	// Restart the simulator
 	sim = NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.SnapshotMap(snap),
 	)
