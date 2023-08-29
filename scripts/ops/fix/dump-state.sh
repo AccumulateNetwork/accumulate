@@ -13,7 +13,7 @@ fi
 if ! which debug 2> /dev/null; then
   echo "Downloading debug binary"
   curl -LJ -o debug https://gitlab.com/accumulatenetwork/accman/-/raw/binaries/bin/v1.2.5/debug-linux-amd64
-  echo "abf40ba16df1f5806084eecbcff18b2e4c557c8400b5705d85bdcc45cf3d04ac debug" | sha256sum -c
+  echo "92a20f6129e9db5fee58f707b5b2fb72690b86f62607fd1576464fec449dcbf8 debug" | sha256sum -c
   chmod +x debug
   mv debug /bin/debug
 fi
