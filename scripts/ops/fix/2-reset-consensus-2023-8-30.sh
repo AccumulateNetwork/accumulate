@@ -20,17 +20,17 @@ fi
 # Find the `partition-id = "..."` line and extract the BVN name (and make it lower case)
 bvn=$(sed -nre 's/^\s+partition-id\s+=\s+"(\w+)"$/\1/p' "$node/bvnn/config/accumulate.toml" | tr '[:upper:]' '[:lower:]')
 
-dnHeight=12614506
+dnHeight=12614507
 
 case $bvn in
   apollo)
-    bvnHeight=16812756
+    bvnHeight=16812757
     ;;
   yutu)
-    bvnHeight=16085527
+    bvnHeight=16085528
     ;;
   chandrayaan)
-    bvnHeight=12227202
+    bvnHeight=12227203
     ;;
   *)
     die "Error: $bvn is not a known BVN"
