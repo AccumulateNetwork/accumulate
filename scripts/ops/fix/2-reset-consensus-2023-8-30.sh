@@ -41,7 +41,7 @@ function check-height {
   dir=$1
   want=$2
   got="$(cut -d, -f3 <"$node/$dir/config/genesis.json" | sed -nre 's/^\s*"initial_height":\s*"([0-9]+)"/\1/p')"
-  if [ "$got" = "$want" ]; then
+  if [ "$got" != "$want" ]; then
     die "Error: $dir genesis height does not match: want $want, got $got"
   fi
 }
