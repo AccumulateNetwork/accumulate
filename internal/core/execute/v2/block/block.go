@@ -45,7 +45,7 @@ func (s *closedBlock) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 }
 
 func (s *closedBlock) Hash() ([32]byte, error) {
-	return s.Batch.BPT().GetRootHash()
+	return s.Batch.GetBptRootHash()
 }
 
 func (s *closedBlock) Commit() error {
