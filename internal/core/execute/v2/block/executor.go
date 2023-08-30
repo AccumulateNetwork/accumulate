@@ -193,7 +193,7 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	b.Index = entry.BlockIndex
 	b.Time = *entry.BlockTime
 
-	h, err := batch.BPT().GetRootHash()
+	h, err := batch.GetBptRootHash()
 	return b, h, err
 }
 

@@ -74,7 +74,7 @@ var repl = newCmd(
 			Use:  "root",
 			Args: cobra.ExactArgs(0),
 			RunE: db(func(cmd *cobra.Command, batch *database.Batch, args []string) error {
-				hash, err := batch.BPT().GetRootHash()
+				hash, err := batch.GetBptRootHash()
 				if err != nil {
 					return err
 				}
