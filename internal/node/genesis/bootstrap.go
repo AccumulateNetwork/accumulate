@@ -160,7 +160,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	h, err := batch.BPT().GetRootHash()
+	h, err := batch.GetBptRootHash()
 	return h[:], err
 }
 
