@@ -496,6 +496,22 @@
     },
     // Miscellaneous
     {
+      "name": "Debug du jour",
+      "presentation": {
+        "group": "99-Miscellaneous",
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "args": [
+        "comet",
+        "download-genesis",
+        "http://206.189.97.165:16592",
+        "${env:HOME}/Desktop/apollo-genesis.json"
+      ]
+    },
+    {
       "name": "Heal Anchors",
       "presentation": {
         "group": "99-Miscellaneous",
@@ -553,22 +569,6 @@
       "cwd": "${workspaceFolder}",
       "args": [
         "run"
-      ]
-    },
-    {
-      "name": "Debug routing",
-      "presentation": {
-        "group": "99-Miscellaneous",
-      },
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/debug",
-      "args": [
-        "account",
-        "route",
-        "https://testnet.accumulatenetwork.io/v2",
-        "acc://defidevs"
       ]
     },
     {
