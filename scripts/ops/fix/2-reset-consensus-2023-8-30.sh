@@ -42,7 +42,7 @@ function check-height {
   want=$2
   got="$(cut -d, -f3 <"$node/$dir/config/genesis.json" | sed -nre 's/^\s*"initial_height":\s*"([0-9]+)"/\1/p')"
   if [ "$got" = "$want" ]; then
-    die "Error: $dir genesis height does not match: want <=$want, got $got"
+    die "Error: $dir genesis height does not match: want $want, got $got"
   fi
 }
 
@@ -54,5 +54,5 @@ check-height bvnn $bvnHeight
 rm -rf "$node"/{dnn,bvnn}/data/{*.db,cs.wal}
 
 # Reset the voting state
-echo '{ "height": "0", "round": 0, "step": 0 }' > dnn/data/priv_validator_state.json
-echo '{ "height": "0", "round": 0, "step": 0 }' > bvnn/data/priv_validator_state.json
+echo '{ "height": "0", "round": 0, "step": 0 }' > "$node/dnn/data/priv_validator_state.json"
+echo '{ "height": "0", "round": 0, "step": 0 }' > "$node/bvnn/data/priv_validator_state.json"
