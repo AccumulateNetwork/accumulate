@@ -151,7 +151,7 @@ func (c *Collector) didCommitBlock(e events.DidCommitBlock) error {
 	defer batch.Discard()
 
 	var err error
-	s.StateTreeHash, err = batch.BPT().GetRootHash()
+	s.StateTreeHash, err = batch.GetBptRootHash()
 	if err != nil {
 		return errors.UnknownError.WithFormat("get BPT root: %w", err)
 	}
