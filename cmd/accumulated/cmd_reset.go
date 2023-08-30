@@ -99,7 +99,7 @@ func resetConsensus(_ *cobra.Command, args []string) {
 	genDoc.GenesisTime = ledger.Timestamp
 	genDoc.ConsensusParams.Version.App = abci.Version
 
-	hash, err := batch.BPT().GetRootHash()
+	hash, err := batch.GetBptRootHash()
 	checkf(err, "get root hash")
 	genDoc.AppHash = hash[:]
 

@@ -190,7 +190,7 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 	part = batch.Partition(msg.Partition)
 
 	// Verify the root hash is the same
-	hash, err := part.BPT().GetRootHash()
+	hash, err := part.GetBptRootHash()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

@@ -22,6 +22,20 @@ func newBPT(parent record.Record, logger log.Logger, store record.Store, key *re
 	return bpt.New(parent, logger, store, key, label)
 }
 
+// GetBptRootHash returns the BPT root hash, after applying updates as necessary
+// for modified accounts.
+func (b *Batch) GetBptRootHash() ([32]byte, error) {
+	for _, a := range b.account {
+		if a.IsDirty() {
+			err := a.putBpt()
+			if err != nil {
+				return [32]byte{}, errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
+			}
+		}
+	}
+	return b.BPT().GetRootHash()
+}
+
 type AccountIterator struct {
 	batch   *Batch
 	it      *bpt.Iterator
