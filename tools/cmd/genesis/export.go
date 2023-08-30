@@ -122,7 +122,7 @@ func export(_ *cobra.Command, args []string) {
 	check(err)
 	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.PartitionUrl()))
 
-	rootHash, err := batch.BPT().GetRootHash()
+	rootHash, err := batch.GetBptRootHash()
 	check(err)
 
 	doc := new(types.GenesisDoc)
