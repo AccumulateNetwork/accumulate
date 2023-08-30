@@ -32,7 +32,7 @@ type CollectOptions struct {
 
 func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts CollectOptions) (*Writer, error) {
 	var err error
-	header.RootHash, err = batch.BPT().GetRootHash()
+	header.RootHash, err = batch.GetBptRootHash()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
 	}
