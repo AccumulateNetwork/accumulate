@@ -15,6 +15,7 @@ import (
 
 	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"golang.org/x/exp/slog"
@@ -67,12 +68,63 @@ func New(filepath string) (*Database, error) {
 
 // Begin begins a change set.
 func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
-	c := new(ChangeSet)
-	c.prefix = prefix
-	c.db = d
-	c.writable = writable
-	c.badger = d.badger.NewTransaction(writable)
-	return c
+	// Use a read-only transaction for reading
+	rd := d.badger.NewTransaction(false)
+
+	// The memory changeset caches entries in a map so Get will see values
+	// updated with Put, regardless of the underlying transaction and write
+	// batch behavior
+	return memory.NewChangeSet(prefix,
+		// Read from the transaction
+		func(key *record.Key) ([]byte, error) {
+			kh := key.Hash()
+			item, err := rd.Get(kh[:])
+			switch {
+			case err == nil:
+				// Ok
+			case errors.Is(err, badger.ErrKeyNotFound):
+				return nil, errors.NotFound.WithFormat("%v not found", key)
+			default:
+				return nil, err
+			}
+
+			// If we didn't find the value, return ErrNotFound
+			v, err := item.ValueCopy(nil)
+			switch {
+			case err == nil:
+				return v, nil
+			case errors.Is(err, badger.ErrKeyNotFound):
+				return nil, errors.NotFound.WithFormat("%v not found", key)
+			default:
+				return nil, errors.UnknownError.WithFormat("get %v: %w", key, err)
+			}
+		},
+
+		// Commit to the write batch
+		func(entries map[[32]byte]memory.Entry) error {
+			l, err := d.lock(false)
+			if err != nil {
+				return err
+			}
+			defer l.Unlock()
+
+			// Use a write batch for writing to work around Badger's limitations
+			wr := d.badger.NewWriteBatch()
+
+			for _, e := range entries {
+				kh := e.Key.Hash()
+				if e.Delete {
+					err = wr.Delete(kh[:])
+				} else {
+					err = wr.Set(kh[:], e.Value)
+				}
+				if err != nil {
+					return err
+				}
+			}
+
+			return wr.Flush()
+		})
 }
 
 // Close
