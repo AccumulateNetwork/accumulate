@@ -333,14 +333,15 @@ func (d *Daemon) startApp() (types.Application, error) {
 		Router:  routing.MessageRouter{Router: d.router},
 	}}
 	execOpts := execute.Options{
-		Logger:    d.Logger,
-		Database:  d.db,
-		Key:       d.Key().Bytes(),
-		Describe:  d.Config.Accumulate.Describe,
-		Router:    d.router,
-		EventBus:  d.eventBus,
-		Sequencer: client.Private(),
-		Querier:   client,
+		Logger:        d.Logger,
+		Database:      d.db,
+		Key:           d.Key().Bytes(),
+		Describe:      d.Config.Accumulate.Describe,
+		Router:        d.router,
+		EventBus:      d.eventBus,
+		Sequencer:     client.Private(),
+		Querier:       client,
+		EnableHealing: d.Config.Accumulate.Healing.Enable,
 		NewDispatcher: func() execute.Dispatcher {
 			return newDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
 		},
