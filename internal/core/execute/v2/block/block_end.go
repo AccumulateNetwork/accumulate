@@ -49,7 +49,10 @@ func (m *Executor) EndBlock(block *Block) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
-	m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
+
+	if m.EnableHealing {
+		m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
+	}
 
 	// List all of the chains that have been modified. shouldPrepareAnchor
 	// relies on this list so this must be done first.

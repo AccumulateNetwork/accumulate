@@ -159,11 +159,17 @@ type Accumulate struct {
 
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
+	Healing     Healing     `toml:"healing" mapstructure:"healing"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
 	API         API         `toml:"api" mapstructure:"api"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
+}
+
+type Healing struct {
+	// Enable enables healing
+	Enable bool `toml:"enable" mapstructure:"enable"`
 }
 
 type Snapshots struct {
