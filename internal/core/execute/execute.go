@@ -67,6 +67,7 @@ type Options struct {
 	NewDispatcher          func() Dispatcher                  // Synthetic transaction dispatcher factory
 	Sequencer              private.Sequencer                  // Synthetic and anchor sequence API service
 	Querier                api.Querier                        // Query API service
+	EnableHealing          bool                               //
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.
