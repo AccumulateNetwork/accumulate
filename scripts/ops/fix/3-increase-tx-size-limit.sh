@@ -3,7 +3,8 @@
 set -e
 
 function update-config {
-    awk -i inplace '{gsub(/^max_tx_bytes = 1048576$/, "max_tx_bytes = 4194304");print$0}' $1
+    awk '{gsub(/^max_tx_bytes = 1048576$/, "max_tx_bytes = 4194304");print$0}' > /tmp/file
+    cat /tmp/file > $1
 }
 
 node="$1"
