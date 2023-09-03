@@ -9,6 +9,9 @@ package healing
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -21,19 +24,28 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *NetworkInfo, srcUrl, dstUrl *url.URL, seqNum uint64, theAnchorTxn *protocol.Transaction, sigSets []*api.SignatureSetRecord) error {
+func HealAnchor(ctx context.Context,
+	C1 api.Submitter, C2 *message.Client, net *NetworkInfo,
+	srcUrl, dstUrl *url.URL, seqNum uint64,
+	theAnchorTxn *protocol.Transaction, sigSets []*api.SignatureSetRecord,
+	pretend bool,
+) error {
 	srcId, ok := protocol.ParsePartitionUrl(srcUrl)
 	if !ok {
 		panic("not a partition: " + srcUrl.String())
 	}
 
-	// dstId, ok := protocol.ParsePartitionUrl(dstUrl)
-	// if !ok {
-	// 	panic("not a partition: " + dstUrl.String())
-	// }
+	dstId, ok := protocol.ParsePartitionUrl(dstUrl)
+	if !ok {
+		panic("not a partition: " + dstUrl.String())
+	}
 
 	// Mark which validators have signed
-	slog.InfoCtx(ctx, "Healing anchor", "txid", theAnchorTxn.ID())
+	if theAnchorTxn == nil {
+		slog.InfoCtx(ctx, "Healing anchor", "source", srcId, "destination", dstId, "sequence-number", seqNum)
+	} else {
+		slog.InfoCtx(ctx, "Healing anchor", "txid", theAnchorTxn.ID())
+	}
 	signed := map[[32]byte]bool{}
 	for _, sigs := range sigSets {
 		for _, sig := range sigs.Signatures.Records {
@@ -60,15 +72,20 @@ func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *
 	}
 
 	seq := &messaging.SequencedMessage{
-		Message:     &messaging.TransactionMessage{Transaction: theAnchorTxn},
 		Source:      srcUrl,
 		Destination: dstUrl,
 		Number:      seqNum,
+	}
+	if theAnchorTxn != nil {
+		seq.Message = &messaging.TransactionMessage{
+			Transaction: theAnchorTxn,
+		}
 	}
 
 	// Get a signature from each node that hasn't signed
 	var gotPartSig bool
 	var signatures []protocol.Signature
+outer:
 	for peer, info := range net.Peers[strings.ToLower(srcId)] {
 		if signed[info.Key] {
 			continue
@@ -89,7 +106,12 @@ func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *
 			slog.ErrorCtx(ctx, "Node gave us an anchor that is not a transaction", "id", info, "type", res.Message.Type())
 			continue
 		}
-		if !myTxn.Transaction.Equal(theAnchorTxn) {
+		if theAnchorTxn == nil {
+			theAnchorTxn = myTxn.Transaction
+			seq.Message = &messaging.TransactionMessage{
+				Transaction: theAnchorTxn,
+			}
+		} else if !myTxn.Transaction.Equal(theAnchorTxn) {
 			slog.ErrorCtx(ctx, "Node gave us an anchor with a different hash", "id", info,
 				"expected", hex.EncodeToString(theAnchorTxn.GetHash()),
 				"got", hex.EncodeToString(myTxn.Transaction.GetHash()))
@@ -141,6 +163,9 @@ func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *
 				}
 
 				signatures = append(signatures, msg.Signature)
+				if pretend {
+					break outer
+				}
 			}
 		}
 	}
@@ -164,6 +189,22 @@ func HealAnchor(ctx context.Context, C1 api.Submitter, C2 *message.Client, net *
 	} else {
 		env.Transaction = []*protocol.Transaction{theAnchorTxn}
 		env.Signatures = signatures
+	}
+
+	if pretend {
+		b, err := theAnchorTxn.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+		slog.InfoCtx(ctx, "Would have submitted anchor", "source", srcId, "destination", dstId, "number", seqNum, "txn-size", len(b))
+
+		b, err = json.MarshalIndent(theAnchorTxn, "", "  ")
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("%s\n", b)
+		os.Exit(0)
+		return nil
 	}
 
 	// addr := api.ServiceTypeSubmit.AddressFor(dstId).Multiaddr()

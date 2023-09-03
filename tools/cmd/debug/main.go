@@ -19,6 +19,7 @@ var (
 	healContinuous bool
 	cachedScan     string
 	verbose        bool
+	pretend        bool
 )
 
 var cmd = &cobra.Command{

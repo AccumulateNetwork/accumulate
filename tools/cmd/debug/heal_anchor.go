@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,12 +27,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 var cmdHealAnchor = &cobra.Command{
-	Use:   "anchor [network] [txid or part→part (optional)]",
+	Use:   "anchor [network] [txid or part→part (optional) [sequence number (optional)]]",
 	Short: "Heal anchoring",
-	Args:  cobra.RangeArgs(1, 2),
+	Args:  cobra.RangeArgs(1, 3),
 	Run:   healAnchor,
 }
 
@@ -39,6 +41,7 @@ func init() {
 	cmdHeal.AddCommand(cmdHealAnchor)
 	cmdHealAnchor.Flags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop every second")
 	cmdHealAnchor.Flags().StringVar(&cachedScan, "cached-scan", "", "A cached network scan")
+	cmdHealAnchor.Flags().BoolVarP(&pretend, "pretend", "n", false, "Do not submit envelopes, only scan")
 	_ = cmdHealAnchor.MarkFlagFilename("cached-scan", ".json")
 }
 
@@ -54,12 +57,16 @@ func healAnchor(_ *cobra.Command, args []string) {
 	checkf(err, "start p2p node")
 	defer func() { _ = node.Close() }()
 
-	fmt.Printf("We are %v\n", node.ID())
+	fmt.Fprintf(os.Stderr, "We are %v\n", node.ID())
+
+	fmt.Fprintln(os.Stderr, "Waiting for addresses")
+	time.Sleep(time.Second)
 
 	// We should be able to use only the p2p client but it doesn't work well for
 	// some reason
 	///C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint(networkID))
 	C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint("http://65.109.48.173:16695/v3"))
+	C1.Client.Timeout = time.Hour
 
 	// Use a hack dialer that uses the API for peer discovery
 	router := new(routing.MessageRouter)
@@ -90,7 +97,7 @@ func healAnchor(_ *cobra.Command, args []string) {
 				fatalf("%v is not sequenced", txid)
 			}
 
-			err = healing.HealAnchor(ctx, C1, C2, net, r.Sequence.Source, r.Sequence.Destination, r.Sequence.Number, r.Message.Transaction, r.Signatures.Records)
+			err = healing.HealAnchor(ctx, C1, C2, net, r.Sequence.Source, r.Sequence.Destination, r.Sequence.Number, r.Message.Transaction, r.Signatures.Records, pretend)
 			check(err)
 			return
 		}
@@ -103,12 +110,24 @@ func healAnchor(_ *cobra.Command, args []string) {
 		srcUrl := protocol.PartitionUrl(srcId)
 		dstUrl := protocol.PartitionUrl(dstId)
 
+		var seqNo uint64
+		if len(args) > 2 {
+			seqNo, err = strconv.ParseUint(args[2], 10, 64)
+			check(err)
+		}
+
+		if seqNo > 0 {
+			err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, seqNo, nil, nil, pretend)
+			check(err)
+			return
+		}
+
 		ledger1 := getAccount[*protocol.AnchorLedger](C1, ctx, dstUrl.JoinPath(protocol.AnchorPool))
 		ledger2 := ledger1.Anchor(srcUrl)
 		for i, txid := range ledger2.Pending {
 			res, err := api.Querier2{Querier: C1}.QueryTransaction(ctx, txid, nil)
 			check(err)
-			err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, ledger2.Delivered+1+uint64(i), res.Message.Transaction, res.Signatures.Records)
+			err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, ledger2.Delivered+1+uint64(i), res.Message.Transaction, res.Signatures.Records, pretend)
 			check(err)
 		}
 		return
@@ -132,12 +151,14 @@ heal:
 			src2dst.Pending = append(src2dst.Pending, ids...)
 
 			for i, txid := range src2dst.Pending {
-				var txn *protocol.Transaction
-				var sigSets []*api.SignatureSetRecord
 				if txid == nil {
-					fmt.Printf("txid is nil for pending %d\n", i)
+					err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), nil, nil, pretend)
+					check(err)
 					continue
 				}
+
+				var txn *protocol.Transaction
+				var sigSets []*api.SignatureSetRecord
 				res, err := api.Querier2{Querier: C1}.QueryTransaction(ctx, txid, nil)
 				switch {
 				case err == nil:
@@ -147,18 +168,18 @@ heal:
 					//check to see if the message is sequence message
 					res, err := api.Querier2{Querier: C1}.QueryMessage(ctx, txid, nil)
 					if err != nil {
-						fmt.Printf("got error on query message %v\n", err)
+						slog.ErrorCtx(ctx, "Query message failed", "error", err)
 						continue
 					}
 
 					seq, ok := res.Message.(*messaging.SequencedMessage)
 					if !ok {
-						fmt.Printf("error, message receieved was not a sequenced message\n")
+						slog.ErrorCtx(ctx, "Message receieved was not a sequenced message")
 						continue
 					}
 					txm, ok := seq.Message.(*messaging.TransactionMessage)
 					if !ok {
-						fmt.Printf("error, sequenced message does not contain a transaction message")
+						slog.ErrorCtx(ctx, "Sequenced message does not contain a transaction message")
 						continue
 					}
 
@@ -171,7 +192,7 @@ heal:
 						check(err)
 					}
 				}
-				err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), txn, sigSets)
+				err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), txn, sigSets, pretend)
 				check(err)
 			}
 		}

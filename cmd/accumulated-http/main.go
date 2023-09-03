@@ -34,6 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/exp/slog"
@@ -121,12 +122,6 @@ func run(_ *cobra.Command, args []string) {
 
 	fmt.Printf("We are %v\n", node.ID())
 
-	fmt.Println("Waiting for a live network service")
-	svcAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(args[0])
-	Check(err)
-	Check(node.WaitForService(ctx, svcAddr))
-
-	fmt.Println("Fetching routing information")
 	router := new(routing.MessageRouter)
 	client := &message.Client{
 		Transport: &message.RoutedTransport{
@@ -135,10 +130,90 @@ func run(_ *cobra.Command, args []string) {
 			Router:  router,
 		},
 	}
-	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
-	Check(err)
-	router.Router, err = routing.NewStaticRouter(ns.Routing, logger)
-	Check(err)
+
+	if strings.EqualFold(args[0], "mainnet") {
+		// Hard code this for now
+		fmt.Println("Using hard-coded routing table for MainNet")
+		rt := &protocol.RoutingTable{
+			Overrides: []protocol.RouteOverride{
+				{
+					Account:   url.MustParse("acc://staking.acme"),
+					Partition: "Directory",
+				},
+				{
+					Account:   url.MustParse("acc://a642a8674f46696cc47fdb6b65f9c87b2a19c5ea8123b3d2f0c13b6f33a9d5ef"),
+					Partition: "Chandrayaan",
+				},
+				{
+					Account:   url.MustParse("acc://ACME"),
+					Partition: "Directory",
+				},
+				{
+					Account:   url.MustParse("acc://bvn-Apollo.acme"),
+					Partition: "Apollo",
+				},
+				{
+					Account:   url.MustParse("acc://bvn-Chandrayaan.acme"),
+					Partition: "Chandrayaan",
+				},
+				{
+					Account:   url.MustParse("acc://bvn-Yutu.acme"),
+					Partition: "Yutu",
+				},
+				{
+					Account:   url.MustParse("acc://dn.acme"),
+					Partition: "Directory",
+				},
+			},
+			Routes: []protocol.Route{
+				{
+					Length:    2,
+					Partition: "Apollo",
+				},
+				{
+					Length:    2,
+					Value:     1,
+					Partition: "Yutu",
+				},
+				{
+					Length:    2,
+					Value:     2,
+					Partition: "Chandrayaan",
+				},
+				{
+					Length:    3,
+					Value:     6,
+					Partition: "Apollo",
+				},
+				{
+					Length:    4,
+					Value:     14,
+					Partition: "Yutu",
+				},
+				{
+					Length:    4,
+					Value:     15,
+					Partition: "Chandrayaan",
+				},
+			},
+		}
+
+		router.Router, err = routing.NewStaticRouter(rt, logger)
+		Check(err)
+
+	} else {
+		fmt.Println("Waiting for a live network service")
+		svcAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(args[0])
+		Check(err)
+		Check(node.WaitForService(ctx, svcAddr))
+
+		fmt.Println("Fetching routing information")
+		ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
+		Check(err)
+
+		router.Router, err = routing.NewStaticRouter(ns.Routing, logger)
+		Check(err)
+	}
 
 	api, err := nodehttp.NewHandler(nodehttp.Options{
 		Logger:    logger,

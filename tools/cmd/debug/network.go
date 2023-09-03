@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
@@ -37,6 +38,7 @@ func init() {
 
 func scanNetwork(_ *cobra.Command, args []string) {
 	client := jsonrpc.NewClient(api.ResolveWellKnownEndpoint(args[0]))
+	client.Client.Timeout = time.Hour
 	net, err := healing.ScanNetwork(context.Background(), client)
 	check(err)
 
