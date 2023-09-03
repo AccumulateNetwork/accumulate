@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -e
+
+function update-config {
+    awk -i inplace '{gsub(/^max_tx_bytes = 1048576$/, "max_tx_bytes = 4194304");print$0}' $1
+}
+
+node="$1"
+if [ -z "$node" ]; then
+  node=/node
+fi
+if ! [ -d "$node" ]; then
+  >&2 echo "Error: $node is not a directory"
+  >&2 echo "Usage: $0 [node dir]"
+  exit 1
+fi
+
+update-config "$node/dnn/config/tendermint.toml"
+update-config "$node/bvnn/config/tendermint.toml"
+
+grep -ri max_tx_bytes "$node"
