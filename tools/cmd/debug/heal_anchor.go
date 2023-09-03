@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -57,8 +58,8 @@ func healAnchor(_ *cobra.Command, args []string) {
 
 	// We should be able to use only the p2p client but it doesn't work well for
 	// some reason
-	// C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint(networkID))
-	C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint("http://localhost:8080/v3"))
+	///C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint(networkID))
+	C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint("http://65.109.48.173:16695/v3"))
 
 	// Use a hack dialer that uses the API for peer discovery
 	router := new(routing.MessageRouter)
@@ -133,13 +134,36 @@ heal:
 			for i, txid := range src2dst.Pending {
 				var txn *protocol.Transaction
 				var sigSets []*api.SignatureSetRecord
+				if txid == nil {
+					fmt.Printf("txid is nil for pending %d\n", i)
+					continue
+				}
 				res, err := api.Querier2{Querier: C1}.QueryTransaction(ctx, txid, nil)
 				switch {
 				case err == nil:
 					txn = res.Message.Transaction
 					sigSets = res.Signatures.Records
 				case !errors.Is(err, errors.NotFound):
-					check(err)
+					//check to see if the message is sequence message
+					res, err := api.Querier2{Querier: C1}.QueryMessage(ctx, txid, nil)
+					if err != nil {
+						fmt.Printf("got error on query message %v\n", err)
+						continue
+					}
+
+					seq, ok := res.Message.(*messaging.SequencedMessage)
+					if !ok {
+						fmt.Printf("error, message receieved was not a sequenced message\n")
+						continue
+					}
+					txm, ok := seq.Message.(*messaging.TransactionMessage)
+					if !ok {
+						fmt.Printf("error, sequenced message does not contain a transaction message")
+						continue
+					}
+
+					txn = txm.Transaction
+					sigSets = res.Signatures.Records
 				default:
 					var ok bool
 					txn, ok = txns[txid.Hash()]
