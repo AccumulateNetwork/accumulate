@@ -20,4 +20,4 @@ fi
 update-config "$node/dnn/config/tendermint.toml"
 update-config "$node/bvnn/config/tendermint.toml"
 
-grep -ri max_tx_bytes "$node"
+grep -ri max_tx_bytes "$node/{dnn,bvnn}/config/tendermint.toml"
