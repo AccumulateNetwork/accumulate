@@ -9,9 +9,6 @@ package healing
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -170,6 +167,15 @@ outer:
 		}
 	}
 
+	if pretend {
+		b, err := theAnchorTxn.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+		slog.InfoCtx(ctx, "Would have submitted anchor", "signatures", len(signatures), "source", srcId, "destination", dstId, "number", seqNum, "txn-size", len(b))
+		return nil
+	}
+
 	// We should always have a partition signature, so there's only something to
 	// sent if we have more than 1 signature
 	if gotPartSig && len(signatures) <= 1 || !gotPartSig && len(signatures) == 0 {
@@ -189,22 +195,6 @@ outer:
 	} else {
 		env.Transaction = []*protocol.Transaction{theAnchorTxn}
 		env.Signatures = signatures
-	}
-
-	if pretend {
-		b, err := theAnchorTxn.MarshalBinary()
-		if err != nil {
-			panic(err)
-		}
-		slog.InfoCtx(ctx, "Would have submitted anchor", "source", srcId, "destination", dstId, "number", seqNum, "txn-size", len(b))
-
-		b, err = json.MarshalIndent(theAnchorTxn, "", "  ")
-		if err != nil {
-			panic(err)
-		}
-		fmt.Printf("%s\n", b)
-		os.Exit(0)
-		return nil
 	}
 
 	// addr := api.ServiceTypeSubmit.AddressFor(dstId).Multiaddr()
