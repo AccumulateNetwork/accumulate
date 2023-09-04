@@ -87,7 +87,7 @@ func HealAnchor(ctx context.Context,
 			continue
 		}
 
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 
 		slog.InfoCtx(ctx, "Querying node for its signature", "id", peer)
