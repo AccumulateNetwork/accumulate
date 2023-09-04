@@ -100,7 +100,8 @@ func healAnchor(_ *cobra.Command, args []string) {
 
 	networkID := args[0]
 	node, err := p2p.New(p2p.Options{
-		Network:        networkID,
+		Network: networkID,
+		// BootstrapPeers: api.BootstrapServers,
 		BootstrapPeers: mainnetAddrs,
 	})
 	checkf(err, "start p2p node")
@@ -114,7 +115,8 @@ func healAnchor(_ *cobra.Command, args []string) {
 	// We should be able to use only the p2p client but it doesn't work well for
 	// some reason
 	///C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint(networkID))
-	C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint("http://65.109.48.173:16695/v3"))
+	// C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint("http://65.109.48.173:16695/v3"))
+	C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint("http://apollo-mainnet.accumulate.defidevs.io:16695/v3"))
 	C1.Client.Timeout = time.Hour
 
 	// Use a hack dialer that uses the API for peer discovery
@@ -172,14 +174,8 @@ func healAnchor(_ *cobra.Command, args []string) {
 			return
 		}
 
-		ledger1 := getAccount[*protocol.AnchorLedger](C1, ctx, dstUrl.JoinPath(protocol.AnchorPool))
-		ledger2 := ledger1.Anchor(srcUrl)
-		for i, txid := range ledger2.Pending {
-			res, err := api.Querier2{Querier: C1}.QueryTransaction(ctx, txid, nil)
-			check(err)
-			err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, ledger2.Delivered+1+uint64(i), res.Message.Transaction, res.Signatures.Records, pretend)
-			check(err)
-		}
+		ledger := getAccount[*protocol.AnchorLedger](C1, ctx, dstUrl.JoinPath(protocol.AnchorPool))
+		healAnchorSequence(ctx, C1, C2, net, srcId, dstId, ledger.Anchor(srcUrl))
 		return
 	}
 
@@ -196,55 +192,7 @@ heal:
 
 			srcUrl := protocol.PartitionUrl(src.ID)
 			src2dst := dstLedger.Partition(srcUrl)
-
-			ids, txns := findPendingAnchors(ctx, C2, api.Querier2{Querier: C1}, srcUrl, dstUrl, true)
-			src2dst.Pending = append(src2dst.Pending, ids...)
-
-			for i, txid := range src2dst.Pending {
-				if txid == nil {
-					err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), nil, nil, pretend)
-					check(err)
-					continue
-				}
-
-				var txn *protocol.Transaction
-				var sigSets []*api.SignatureSetRecord
-				res, err := api.Querier2{Querier: C1}.QueryTransaction(ctx, txid, nil)
-				switch {
-				case err == nil:
-					txn = res.Message.Transaction
-					sigSets = res.Signatures.Records
-				case !errors.Is(err, errors.NotFound):
-					//check to see if the message is sequence message
-					res, err := api.Querier2{Querier: C1}.QueryMessage(ctx, txid, nil)
-					if err != nil {
-						slog.ErrorCtx(ctx, "Query message failed", "error", err)
-						continue
-					}
-
-					seq, ok := res.Message.(*messaging.SequencedMessage)
-					if !ok {
-						slog.ErrorCtx(ctx, "Message receieved was not a sequenced message")
-						continue
-					}
-					txm, ok := seq.Message.(*messaging.TransactionMessage)
-					if !ok {
-						slog.ErrorCtx(ctx, "Sequenced message does not contain a transaction message")
-						continue
-					}
-
-					txn = txm.Transaction
-					sigSets = res.Signatures.Records
-				default:
-					var ok bool
-					txn, ok = txns[txid.Hash()]
-					if !ok {
-						check(err)
-					}
-				}
-				err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), txn, sigSets, pretend)
-				check(err)
-			}
+			healAnchorSequence(ctx, C1, C2, net, src.ID, dst.ID, src2dst)
 		}
 	}
 
@@ -252,6 +200,60 @@ heal:
 	if healContinuous {
 		time.Sleep(time.Second)
 		goto heal
+	}
+}
+
+func healAnchorSequence(ctx context.Context, C1 *jsonrpc.Client, C2 *message.Client, net *healing.NetworkInfo, srcId, dstId string, src2dst *protocol.PartitionSyntheticLedger) {
+	srcUrl := protocol.PartitionUrl(srcId)
+	dstUrl := protocol.PartitionUrl(dstId)
+
+	ids, txns := findPendingAnchors(ctx, C2, api.Querier2{Querier: C1}, srcUrl, dstUrl, true)
+	src2dst.Pending = append(src2dst.Pending, ids...)
+
+	for i, txid := range src2dst.Pending {
+		if txid == nil {
+			err := healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), nil, nil, pretend)
+			check(err)
+			continue
+		}
+
+		var txn *protocol.Transaction
+		var sigSets []*api.SignatureSetRecord
+		res, err := api.Querier2{Querier: C1}.QueryTransaction(ctx, txid, nil)
+		switch {
+		case err == nil:
+			txn = res.Message.Transaction
+			sigSets = res.Signatures.Records
+		case !errors.Is(err, errors.NotFound):
+			//check to see if the message is sequence message
+			res, err := api.Querier2{Querier: C1}.QueryMessage(ctx, txid, nil)
+			if err != nil {
+				slog.ErrorCtx(ctx, "Query message failed", "error", err)
+				continue
+			}
+
+			seq, ok := res.Message.(*messaging.SequencedMessage)
+			if !ok {
+				slog.ErrorCtx(ctx, "Message receieved was not a sequenced message")
+				continue
+			}
+			txm, ok := seq.Message.(*messaging.TransactionMessage)
+			if !ok {
+				slog.ErrorCtx(ctx, "Sequenced message does not contain a transaction message")
+				continue
+			}
+
+			txn = txm.Transaction
+			sigSets = res.Signatures.Records
+		default:
+			var ok bool
+			txn, ok = txns[txid.Hash()]
+			if !ok {
+				check(err)
+			}
+		}
+		err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), txn, sigSets, pretend)
+		check(err)
 	}
 }
 

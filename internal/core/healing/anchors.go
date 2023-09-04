@@ -41,7 +41,7 @@ func HealAnchor(ctx context.Context,
 	if theAnchorTxn == nil {
 		slog.InfoCtx(ctx, "Healing anchor", "source", srcId, "destination", dstId, "sequence-number", seqNum)
 	} else {
-		slog.InfoCtx(ctx, "Healing anchor", "txid", theAnchorTxn.ID())
+		slog.InfoCtx(ctx, "Healing anchor", "source", srcId, "destination", dstId, "sequence-number", seqNum, "txid", theAnchorTxn.ID())
 	}
 	signed := map[[32]byte]bool{}
 	for _, sigs := range sigSets {
