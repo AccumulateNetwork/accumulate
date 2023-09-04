@@ -60,6 +60,7 @@ func healAnchor(_ *cobra.Command, args []string) {
 	// some reason
 	///C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint(networkID))
 	C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint("http://65.109.48.173:16695/v3"))
+	//C1 := jsonrpc.NewClient(api.ResolveWellKnownEndpoint("http://0.0.0.0:16695/v3"))
 
 	// Use a hack dialer that uses the API for peer discovery
 	router := new(routing.MessageRouter)
