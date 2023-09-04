@@ -82,7 +82,6 @@ func HealAnchor(ctx context.Context,
 	// Get a signature from each node that hasn't signed
 	var gotPartSig bool
 	var signatures []protocol.Signature
-outer:
 	for peer, info := range net.Peers[strings.ToLower(srcId)] {
 		if signed[info.Key] {
 			continue
@@ -160,9 +159,6 @@ outer:
 				}
 
 				signatures = append(signatures, msg.Signature)
-				if pretend {
-					break outer
-				}
 			}
 		}
 	}
