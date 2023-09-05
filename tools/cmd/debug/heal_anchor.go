@@ -169,8 +169,7 @@ func healAnchor(_ *cobra.Command, args []string) {
 		}
 
 		if seqNo > 0 {
-			err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, seqNo, nil, nil, pretend)
-			check(err)
+			healSingleAnchor(ctx, C1, C2, net, srcId, dstId, seqNo, nil, map[[32]byte]*protocol.Transaction{})
 			return
 		}
 
@@ -211,50 +210,79 @@ func healAnchorSequence(ctx context.Context, C1 *jsonrpc.Client, C2 *message.Cli
 	src2dst.Pending = append(src2dst.Pending, ids...)
 
 	for i, txid := range src2dst.Pending {
-		if txid == nil {
-			err := healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), nil, nil, pretend)
-			check(err)
-			continue
-		}
-
-		var txn *protocol.Transaction
-		var sigSets []*api.SignatureSetRecord
-		res, err := api.Querier2{Querier: C1}.QueryTransaction(ctx, txid, nil)
-		switch {
-		case err == nil:
-			txn = res.Message.Transaction
-			sigSets = res.Signatures.Records
-		case !errors.Is(err, errors.NotFound):
-			//check to see if the message is sequence message
-			res, err := api.Querier2{Querier: C1}.QueryMessage(ctx, txid, nil)
-			if err != nil {
-				slog.ErrorCtx(ctx, "Query message failed", "error", err)
-				continue
-			}
-
-			seq, ok := res.Message.(*messaging.SequencedMessage)
-			if !ok {
-				slog.ErrorCtx(ctx, "Message receieved was not a sequenced message")
-				continue
-			}
-			txm, ok := seq.Message.(*messaging.TransactionMessage)
-			if !ok {
-				slog.ErrorCtx(ctx, "Sequenced message does not contain a transaction message")
-				continue
-			}
-
-			txn = txm.Transaction
-			sigSets = res.Signatures.Records
-		default:
-			var ok bool
-			txn, ok = txns[txid.Hash()]
-			if !ok {
-				check(err)
-			}
-		}
-		err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), txn, sigSets, pretend)
-		check(err)
+		healSingleAnchor(ctx, C1, C2, net, srcId, dstId, src2dst.Delivered+1+uint64(i), txid, txns)
 	}
+}
+
+func healSingleAnchor(ctx context.Context, C1 *jsonrpc.Client, C2 *message.Client, net *healing.NetworkInfo, srcId, dstId string, seqNum uint64, txid *url.TxID, txns map[[32]byte]*protocol.Transaction) {
+	srcUrl := protocol.PartitionUrl(srcId)
+	dstUrl := protocol.PartitionUrl(dstId)
+
+	if txid == nil {
+		// Get a signature from each node that hasn't signed
+		for peer, info := range net.Peers[strings.ToLower(srcId)] {
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+			defer cancel()
+
+			slog.InfoCtx(ctx, "Querying node for its signature", "id", peer)
+			res, err := C2.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, seqNum)
+			if err != nil {
+				slog.ErrorCtx(ctx, "Query failed", "error", err)
+				continue
+			}
+
+			myTxn, ok := res.Message.(*messaging.TransactionMessage)
+			if !ok {
+				slog.ErrorCtx(ctx, "Node gave us an anchor that is not a transaction", "id", info, "type", res.Message.Type())
+				continue
+			}
+
+			txid = myTxn.ID()
+			txns[txid.Hash()] = myTxn.Transaction
+			break
+		}
+		// err := healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, src2dst.Delivered+1+uint64(i), nil, nil, pretend)
+		// check(err)
+		// continue
+	}
+
+	var txn *protocol.Transaction
+	var sigSets []*api.SignatureSetRecord
+	res, err := api.Querier2{Querier: C1}.QueryTransaction(ctx, txid, nil)
+	switch {
+	case err == nil:
+		txn = res.Message.Transaction
+		sigSets = res.Signatures.Records
+	case !errors.Is(err, errors.NotFound):
+		//check to see if the message is sequence message
+		res, err := api.Querier2{Querier: C1}.QueryMessage(ctx, txid, nil)
+		if err != nil {
+			slog.ErrorCtx(ctx, "Query message failed", "error", err)
+			return
+		}
+
+		seq, ok := res.Message.(*messaging.SequencedMessage)
+		if !ok {
+			slog.ErrorCtx(ctx, "Message receieved was not a sequenced message")
+			return
+		}
+		txm, ok := seq.Message.(*messaging.TransactionMessage)
+		if !ok {
+			slog.ErrorCtx(ctx, "Sequenced message does not contain a transaction message")
+			return
+		}
+
+		txn = txm.Transaction
+		sigSets = res.Signatures.Records
+	default:
+		var ok bool
+		txn, ok = txns[txid.Hash()]
+		if !ok {
+			check(err)
+		}
+	}
+	err = healing.HealAnchor(ctx, C1, C2, net, srcUrl, dstUrl, seqNum, txn, sigSets, pretend)
+	check(err)
 }
 
 func getAccount[T protocol.Account](C api.Querier, ctx context.Context, u *url.URL) T {

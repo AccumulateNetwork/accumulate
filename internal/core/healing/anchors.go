@@ -38,11 +38,6 @@ func HealAnchor(ctx context.Context,
 	}
 
 	// Mark which validators have signed
-	if theAnchorTxn == nil {
-		slog.InfoCtx(ctx, "Healing anchor", "source", srcId, "destination", dstId, "sequence-number", seqNum)
-	} else {
-		slog.InfoCtx(ctx, "Healing anchor", "source", srcId, "destination", dstId, "sequence-number", seqNum, "txid", theAnchorTxn.ID())
-	}
 	signed := map[[32]byte]bool{}
 	for _, sigs := range sigSets {
 		for _, sig := range sigs.Signatures.Records {
@@ -63,7 +58,23 @@ func HealAnchor(ctx context.Context,
 		Routing:         net.Status.Routing,
 		ExecutorVersion: net.Status.ExecutorVersion,
 	}
-	if len(signed) >= int(g.ValidatorThreshold(srcId)) {
+	threshold := g.ValidatorThreshold(srcId)
+
+	lkv := []any{
+		"source", srcId,
+		"destination", dstId,
+		"sequence-number", seqNum,
+		"want", threshold,
+		"have", len(signed),
+	}
+	if theAnchorTxn != nil {
+		lkv = append(lkv,
+			"txid", theAnchorTxn.ID(),
+		)
+	}
+	slog.InfoCtx(ctx, "Healing anchor", lkv...)
+
+	if len(signed) >= int(threshold) {
 		slog.InfoCtx(ctx, "Sufficient signatures have been received")
 		return nil
 	}

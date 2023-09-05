@@ -372,6 +372,7 @@
         "anchor",
         "MainNet",
         "--cached-scan=${env:HOME}/.accumulate/cache/mainnet.json",
+        "Directory→Apollo", "70911"
       ]
     },
     {
