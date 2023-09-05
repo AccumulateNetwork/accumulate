@@ -182,7 +182,17 @@ func HealAnchor(ctx context.Context,
 	slog.InfoCtx(ctx, "Submitting signatures", "count", len(signatures))
 	env := new(messaging.Envelope)
 	if net.Status.ExecutorVersion.V2() {
-		for _, sig := range signatures {
+		for i, sig := range signatures {
+			seq := seq.Copy()
+			if i > 0 {
+				seq.Message = &messaging.TransactionMessage{
+					Transaction: &protocol.Transaction{
+						Body: &protocol.RemoteTransaction{
+							Hash: theAnchorTxn.ID().Hash(),
+						},
+					},
+				}
+			}
 			env.Messages = append(env.Messages, &messaging.BlockAnchor{
 				Signature: sig.(protocol.KeySignature),
 				Anchor:    seq,
