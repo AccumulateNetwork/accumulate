@@ -10,8 +10,10 @@ import (
 	"context"
 	"encoding/hex"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -91,87 +93,133 @@ func HealAnchor(ctx context.Context,
 	}
 
 	// Get a signature from each node that hasn't signed
-	var gotPartSig bool
-	var signatures []protocol.Signature
-	for peer, info := range net.Peers[strings.ToLower(srcId)] {
-		if signed[info.Key] {
-			continue
-		}
+	type fromPeer struct {
+		gotPartSig bool
+		signatures []protocol.Signature
+	}
 
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-		defer cancel()
+	type qPeer struct {
+		peer peer.ID
+		info *PeerInfo
+	}
 
-		slog.InfoCtx(ctx, "Querying node for its signature", "id", peer)
-		res, err := C2.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, seqNum)
-		if err != nil {
-			slog.ErrorCtx(ctx, "Query failed", "error", err)
-			continue
-		}
+	peers := make(chan *qPeer, 10)
+	sigs := make(chan *fromPeer, 10)
 
-		myTxn, ok := res.Message.(*messaging.TransactionMessage)
-		if !ok {
-			slog.ErrorCtx(ctx, "Node gave us an anchor that is not a transaction", "id", info, "type", res.Message.Type())
-			continue
-		}
-		if theAnchorTxn == nil {
-			theAnchorTxn = myTxn.Transaction
-			seq.Message = &messaging.TransactionMessage{
-				Transaction: theAnchorTxn,
-			}
-		} else if !myTxn.Transaction.Equal(theAnchorTxn) {
-			slog.ErrorCtx(ctx, "Node gave us an anchor with a different hash", "id", info,
-				"expected", hex.EncodeToString(theAnchorTxn.GetHash()),
-				"got", hex.EncodeToString(myTxn.Transaction.GetHash()))
-			continue
-		}
+	process := func() {
+		for {
+			fp := new(fromPeer)
+			defer func() { sigs <- fp }()
+			func() {
+				qp := <-peers
+				peer := qp.peer
+				info := qp.info
 
-		for _, sigs := range res.Signatures.Records {
-			for _, sig := range sigs.Signatures.Records {
-				msg, ok := sig.Message.(*messaging.SignatureMessage)
+				if signed[info.Key] {
+					return
+				}
+
+				ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+				defer cancel()
+
+				slog.InfoCtx(ctx, "Querying node for its signature", "id", peer)
+				res, err := C2.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, seqNum)
+				if err != nil {
+					slog.ErrorCtx(ctx, "Query failed", "error", err)
+					return
+				}
+
+				myTxn, ok := res.Message.(*messaging.TransactionMessage)
 				if !ok {
-					slog.ErrorCtx(ctx, "Node gave us a signature that is not a signature", "id", info, "type", sig.Message.Type())
-					continue
+					slog.ErrorCtx(ctx, "Node gave us an anchor that is not a transaction", "id", info, "type", res.Message.Type())
+					return
+				}
+				if theAnchorTxn == nil {
+					theAnchorTxn = myTxn.Transaction
+					seq.Message = &messaging.TransactionMessage{
+						Transaction: theAnchorTxn,
+					}
+				} else if !myTxn.Transaction.Equal(theAnchorTxn) {
+					slog.ErrorCtx(ctx, "Node gave us an anchor with a different hash", "id", info,
+						"expected", hex.EncodeToString(theAnchorTxn.GetHash()),
+						"got", hex.EncodeToString(myTxn.Transaction.GetHash()))
+					return
 				}
 
-				if net.Status.ExecutorVersion.V2() {
-					sig, ok := msg.Signature.(protocol.KeySignature)
-					if !ok {
-						slog.ErrorCtx(ctx, "Node gave us a signature that is not a key signature", "id", info, "type", sig.Type())
-						continue
-					}
-
-					// Filter out bad signatures
-					h := seq.Hash()
-					if !sig.Verify(nil, h[:]) {
-						slog.ErrorCtx(ctx, "Node gave us an invalid signature", "id", info)
-						continue
-					}
-
-				} else {
-					switch sig := msg.Signature.(type) {
-					case *protocol.PartitionSignature:
-						// We only want one partition signature
-						if gotPartSig {
-							continue
-						}
-						gotPartSig = true
-
-					case protocol.UserSignature:
-						// Filter out bad signatures
-						if !sig.Verify(nil, theAnchorTxn.GetHash()) {
-							slog.ErrorCtx(ctx, "Node gave us an invalid signature", "id", info)
+				for _, sigs := range res.Signatures.Records {
+					for _, sig := range sigs.Signatures.Records {
+						msg, ok := sig.Message.(*messaging.SignatureMessage)
+						if !ok {
+							slog.ErrorCtx(ctx, "Node gave us a signature that is not a signature", "id", info, "type", sig.Message.Type())
 							continue
 						}
 
-					default:
-						slog.ErrorCtx(ctx, "Node gave us a signature that is not a user signature", "id", info, "type", sig.Type())
-						continue
+						if net.Status.ExecutorVersion.V2() {
+							sig, ok := msg.Signature.(protocol.KeySignature)
+							if !ok {
+								slog.ErrorCtx(ctx, "Node gave us a signature that is not a key signature", "id", info, "type", sig.Type())
+								continue
+							}
+
+							// Filter out bad signatures
+							h := seq.Hash()
+							if !sig.Verify(nil, h[:]) {
+								slog.ErrorCtx(ctx, "Node gave us an invalid signature", "id", info)
+								continue
+							}
+
+						} else {
+							switch sig := msg.Signature.(type) {
+							case *protocol.PartitionSignature:
+								// We only want one partition signature
+								if fp.gotPartSig {
+									continue
+								}
+								fp.gotPartSig = true
+
+							case protocol.UserSignature:
+								// Filter out bad signatures
+								if !sig.Verify(nil, theAnchorTxn.GetHash()) {
+									slog.ErrorCtx(ctx, "Node gave us an invalid signature", "id", info)
+									continue
+								}
+
+							default:
+								slog.ErrorCtx(ctx, "Node gave us a signature that is not a user signature", "id", info, "type", sig.Type())
+								continue
+							}
+						}
+
+						fp.signatures = append(fp.signatures, msg.Signature)
 					}
 				}
 
-				signatures = append(signatures, msg.Signature)
-			}
+			}()
 		}
+	}
+
+	for i := 0; i < 10; i++ { // How many parallel processes
+		go process() //          Start them up
+	}
+
+	var done atomic.Bool // We quit collecting when we have queued all the peers AND we have processed all sigs
+	go func() {          // Start a go routine to grab all the peers and put them into a channel
+		for peer, info := range net.Peers[strings.ToLower(srcId)] {
+			qp := new(qPeer)
+			qp.peer = peer
+			qp.info = info
+			peers <- qp
+		}
+		done.Store(true)
+	}()
+
+	var gotPartSig bool                 // This is the original bool that somewhere we have a Partial Signature
+	var signatures []protocol.Signature // This collects all the signatures
+
+	for !done.Load() && len(sigs) == 0 { // For every return value from the collection process
+		sig := <-sigs                                      // We get a partial set of data
+		gotPartSig = gotPartSig || sig.gotPartSig          // If any partial signature is found, we set the variable
+		signatures = append(signatures, sig.signatures...) // And collect all the signatures
 	}
 
 	if pretend {
