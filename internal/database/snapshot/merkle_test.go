@@ -75,7 +75,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	key := record.NewKey("Account", foo, "MainChain")
 	storetx := store.Begin(nil, false)
 	defer storetx.Discard()
-	c := database.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
+	c := database.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main")
 
 	entriesShouldFailOrReturnCorrectNumber(t, c, 0, 300)
 	entriesShouldFailOrReturnCorrectNumber(t, c, 100, 300)
@@ -129,7 +129,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 		key := record.NewKey("Account", foo, "MainChain")
 		storetx := store.Begin(nil, false)
 		defer storetx.Discard()
-		c := database.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
+		c := database.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main")
 
 		for i := 0; i < n; i++ {
 			hash, err := c.Get(int64(i))
