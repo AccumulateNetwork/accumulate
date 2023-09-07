@@ -179,6 +179,7 @@ func (n *Node) initValidator(rec consensus.Recorder) error {
 		Describe:      n.describe,
 		Router:        n.simulator.router,
 		EventBus:      n.eventBus,
+		EnableHealing: true,
 		NewDispatcher: n.simulator.newDispatcher,
 		Sequencer:     n.simulator.Services(),
 		Querier:       n.simulator.Services(),
