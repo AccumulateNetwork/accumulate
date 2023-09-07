@@ -83,6 +83,8 @@ RecordType:
     value: 0x82
   IndexEntry:
     value: 0x83
+  Error:
+    value: 0x8F
 
 EventType:
   Error:
