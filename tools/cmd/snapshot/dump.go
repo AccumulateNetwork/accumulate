@@ -7,12 +7,17 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
@@ -42,24 +47,36 @@ func init() {
 
 func dumpSnapshot(_ *cobra.Command, args []string) {
 	filename := args[0]
-	f, err := os.Open(filename)
-	checkf(err, "open snapshot %s", filename)
-	defer f.Close()
+	var rd ioutil.SectionReader
+	if filepath.Base(filename) == "genesis.json" {
+		genDoc, err := types.GenesisDocFromFile(filename)
+		checkf(err, "read %s", filename)
 
-	ver, err := sv2.GetVersion(f)
+		var b []byte
+		check(json.Unmarshal(genDoc.AppState, &b))
+		rd = bytes.NewReader(b)
+
+	} else {
+		f, err := os.Open(filename)
+		checkf(err, "open snapshot %s", filename)
+		defer f.Close()
+		rd = f
+	}
+
+	ver, err := sv2.GetVersion(rd)
 	check(err)
 
 	switch ver {
 	case sv1.Version1:
-		dumpV1(f)
+		dumpV1(rd)
 	case sv2.Version2:
-		dumpV2(f)
+		dumpV2(rd)
 	default:
 		fatalf("I don't know how to handle snapshot version %d", ver)
 	}
 }
 
-func dumpV2(f *os.File) {
+func dumpV2(f ioutil.SectionReader) {
 	r, err := sv2.Open(f)
 	check(err)
 
@@ -92,7 +109,7 @@ func dumpV2(f *os.File) {
 	}
 }
 
-func dumpV1(f *os.File) {
+func dumpV1(f ioutil.SectionReader) {
 	r := sv1.NewReader(f)
 	s, err := r.Next()
 	checkf(err, "find header")
