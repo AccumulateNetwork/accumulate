@@ -92,6 +92,9 @@ const RecordTypeTxID RecordType = 130
 // RecordTypeIndexEntry .
 const RecordTypeIndexEntry RecordType = 131
 
+// RecordTypeError .
+const RecordTypeError RecordType = 143
+
 // ServiceTypeUnknown indicates an unknown service type.
 const ServiceTypeUnknown ServiceType = 0
 
@@ -283,7 +286,7 @@ func (v RecordType) GetEnumValue() uint64 { return uint64(v) }
 func (v *RecordType) SetEnumValue(id uint64) bool {
 	u := RecordType(id)
 	switch u {
-	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry:
+	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry, RecordTypeError:
 		*v = u
 		return true
 	}
@@ -317,6 +320,8 @@ func (v RecordType) String() string {
 		return "txID"
 	case RecordTypeIndexEntry:
 		return "indexEntry"
+	case RecordTypeError:
+		return "error"
 	}
 	return fmt.Sprintf("RecordType:%d", v)
 }
@@ -348,6 +353,8 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeTxID, true
 	case "indexentry":
 		return RecordTypeIndexEntry, true
+	case "error":
+		return RecordTypeError, true
 	}
 	return 0, false
 }
