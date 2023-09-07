@@ -359,14 +359,26 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 		switch r.Type {
 		case merkle.ChainTypeIndex:
 			v := new(protocol.IndexEntry)
-			if v.UnmarshalBinary(value) == nil {
+			err := v.UnmarshalBinary(value)
+			if err == nil {
 				r.Value = &api.IndexEntryRecord{Value: v}
+			} else {
+				r.Value = &api.ErrorRecord{
+					Value: errors.UnknownError.Wrap(err).(*errors.Error),
+				}
 			}
 
 		case merkle.ChainTypeTransaction:
 			var err error
 			r.Value, err = s.queryMessage(ctx, batch, protocol.UnknownUrl().WithTxID(r.Entry))
-			if err != nil {
+			switch {
+			case err == nil:
+				// Ok
+			case errors.Is(err, errors.NotFound):
+				r.Value = &api.ErrorRecord{
+					Value: errors.UnknownError.Wrap(err).(*errors.Error),
+				}
+			default:
 				return nil, errors.UnknownError.Wrap(err)
 			}
 		}

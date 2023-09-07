@@ -224,3 +224,11 @@ IndexEntryRecord:
       type: protocol.IndexEntry
       marshal-as: reference
       pointer: true
+
+ErrorRecord:
+  union: { type: record }
+  fields:
+    - name: Value
+      type: errors2.Error
+      pointer: true
+      marshal-as: reference
