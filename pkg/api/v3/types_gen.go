@@ -163,6 +163,12 @@ type ErrorEvent struct {
 	extraData []byte
 }
 
+type ErrorRecord struct {
+	fieldsSet []bool
+	Value     *errors2.Error `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type FaucetOptions struct {
 	fieldsSet []bool
 	Token     *url.URL `json:"token,omitempty" form:"token" query:"token"`
@@ -435,6 +441,8 @@ func (*DelegateSearchQuery) QueryType() QueryType { return QueryTypeDelegateSear
 func (*DirectoryQuery) QueryType() QueryType { return QueryTypeDirectory }
 
 func (*ErrorEvent) EventType() EventType { return EventTypeError }
+
+func (*ErrorRecord) RecordType() RecordType { return RecordTypeError }
 
 func (*GlobalsEvent) EventType() EventType { return EventTypeGlobals }
 
@@ -795,6 +803,22 @@ func (v *ErrorEvent) Copy() *ErrorEvent {
 }
 
 func (v *ErrorEvent) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ErrorRecord) Copy() *ErrorRecord {
+	u := new(ErrorRecord)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ErrorRecord) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *FaucetOptions) Copy() *FaucetOptions {
 	u := new(FaucetOptions)
@@ -1755,6 +1779,19 @@ func (v *ErrorEvent) Equal(u *ErrorEvent) bool {
 	case v.Err == nil || u.Err == nil:
 		return false
 	case !((v.Err).Equal(u.Err)):
+		return false
+	}
+
+	return true
+}
+
+func (v *ErrorRecord) Equal(u *ErrorRecord) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
 		return false
 	}
 
@@ -3313,6 +3350,54 @@ func (v *ErrorEvent) IsValid() error {
 		errs = append(errs, "field Err is missing")
 	} else if v.Err == nil {
 		errs = append(errs, "field Err is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ErrorRecord = []string{
+	1: "RecordType",
+	2: "Value",
+}
+
+func (v *ErrorRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.RecordType())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ErrorRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ErrorRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field RecordType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -5733,6 +5818,41 @@ func (v *ErrorEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ErrorRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ErrorRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vRecordType RecordType
+	if x := new(RecordType); reader.ReadEnum(1, x) {
+		vRecordType = *x
+	}
+	if !(v.RecordType() == vRecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), vRecordType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ErrorRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(errors2.Error); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ErrorRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *FaucetOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7108,6 +7228,18 @@ func (v *ErrorEvent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ErrorRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		RecordType RecordType     `json:"recordType"`
+		Value      *errors2.Error `json:"value,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	return json.Marshal(&u)
+}
+
 func (v *FindServiceResult) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
@@ -7866,6 +7998,23 @@ func (v *ErrorEvent) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), u.EventType)
 	}
 	v.Err = u.Err
+	return nil
+}
+
+func (v *ErrorRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		RecordType RecordType     `json:"recordType"`
+		Value      *errors2.Error `json:"value,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	u.Value = v.Value
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.RecordType() == u.RecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
+	}
+	v.Value = u.Value
 	return nil
 }
 
