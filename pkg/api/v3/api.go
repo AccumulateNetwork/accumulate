@@ -116,6 +116,10 @@ type Faucet interface {
 	Faucet(ctx context.Context, account *url.URL, opts FaucetOptions) (*Submission, error)
 }
 
+func (r *ErrorRecord) Error() string {
+	return r.Value.Error()
+}
+
 func (r *MessageRecord[T]) StatusNo() uint64 { return uint64(r.Status) }
 
 type MessageRecordError[T messaging.Message] struct {

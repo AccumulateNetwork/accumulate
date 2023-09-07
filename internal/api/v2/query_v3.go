@@ -718,6 +718,9 @@ func (m *JrpcMethods) QueryTxHistory(ctx context.Context, params json.RawMessage
 	res.Count = req.Count
 	res.Total = r.Total
 	for i, r := range r.Records {
+		if r.Value == nil {
+			continue
+		}
 		res.Items[i], err = chainTxnV3(r)
 		if err != nil {
 			return accumulateError(err)
