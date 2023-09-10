@@ -10,9 +10,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tendermint/tendermint/libs/log"
-	coretypes "github.com/tendermint/tendermint/rpc/core/types"
-	"github.com/tendermint/tendermint/types"
+	"github.com/cometbft/cometbft/libs/log"
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
+	"github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"

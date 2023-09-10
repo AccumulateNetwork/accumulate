@@ -10,7 +10,7 @@ import (
 	"compress/gzip"
 	"io"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -32,7 +32,7 @@ type CollectOptions struct {
 
 func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts CollectOptions) (*Writer, error) {
 	var err error
-	header.RootHash, err = batch.BPT().GetRootHash()
+	header.RootHash, err = batch.GetBptRootHash()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
 	}

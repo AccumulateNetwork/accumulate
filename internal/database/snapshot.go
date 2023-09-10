@@ -110,7 +110,7 @@ func (db *Database) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, 
 	batch := db.Begin(false)
 	defer batch.Discard()
 	var err error
-	header.RootHash, err = batch.BPT().GetRootHash()
+	header.RootHash, err = batch.GetBptRootHash()
 	if err != nil {
 		return errors.UnknownError.WithFormat("get root hash: %w", err)
 	}
@@ -437,7 +437,7 @@ func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) err
 
 	// We can't revert the changes at this point (depending on the batch record
 	// limit) so we might as well do this after committing
-	rh, err := batch.BPT().GetRootHash()
+	rh, err := batch.GetBptRootHash()
 	if err != nil {
 		return errors.UnknownError.WithFormat("get root hash: %w", err)
 	}
