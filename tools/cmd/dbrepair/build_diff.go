@@ -8,7 +8,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -70,7 +69,7 @@ func buildDiff(summary, badDB, diffFile string) {
 	var modifiedKeys [][]byte // Slice of keys to update from the bad db
 	var cntDel int
 
-	// Open the Badger database that is the good one.
+	// Open the Badger database to be fixed
 	db, close := OpenDB(badDB)
 	defer close()
 
@@ -117,27 +116,20 @@ func buildDiff(summary, badDB, diffFile string) {
 	}
 	fmt.Printf("\nModified: %d Added: %d \n", len(modifiedKeys), len(addedKeys))
 
-	var buff [32]byte
 	f, err := os.Create(diffFile)
+	checkf(err,"failed to open %s",diffFile)
 	defer func() { _ = f.Close() }()
 
-	wrt64 := func(v uint64) {
-		binary.BigEndian.PutUint64(buff[:], v)
-		_, err := f.Write(buff[:8])
-		check(err)
-	}
-	wrt64int := func(v int) {
-		wrt64(uint64(v))
-	}
+	// write out the diff file
 
-	wrt64int(len(addedKeys))       //   Number of keys to delete
+	write8(f,len(addedKeys))       //   Number of keys to delete
 	for _, dk := range addedKeys { //   32 bytes each
 		check2(f.Write(dk))
 		if len(dk) != 32 {
 			fatalf("Key is not a hash")
 		}
 	}
-	wrt64int(len(modifiedKeys))       //   Number of keys to revert
+	write8(f,len(modifiedKeys))       //   Number of keys to revert
 	for _, uk := range modifiedKeys { //   8 bytes of key hashes
 		check2(f.Write(uk))
 	}
