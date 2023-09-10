@@ -9,7 +9,7 @@ package abci_test
 import (
 	"crypto/ed25519"
 
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )

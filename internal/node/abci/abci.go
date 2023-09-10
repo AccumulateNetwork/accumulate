@@ -18,4 +18,4 @@
 package abci
 
 // Version is the version of the ABCI applications.
-const Version uint64 = 0x1
+const Version uint64 = 0x2

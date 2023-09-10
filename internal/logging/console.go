@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	tmconfig "github.com/cometbft/cometbft/config"
 	"github.com/rs/zerolog"
-	tmconfig "github.com/tendermint/tendermint/config"
 )
 
 // NewConsoleWriter parses the log format and creates an appropriate writer.

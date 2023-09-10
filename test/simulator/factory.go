@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
@@ -24,8 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -450,23 +448,23 @@ func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreF
 	}
 }
 
-func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
-	a := abci.NewAccumulator(abci.AccumulatorOptions{
-		Config: &config.Config{
-			Accumulate: config.Accumulate{
-				Describe: config.Describe{
-					PartitionId: node.networkFactory.id,
-				},
-			},
-		},
-		Executor: exec,
-		EventBus: node.eventBus,
-		Logger:   node.logger,
-		Database: node.getDatabase(),
-		Address:  node.network.PrivValKey,
-	})
-	return (*consensus.AbciApp)(a)
-}
+// func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
+// 	a := abci.NewAccumulator(abci.AccumulatorOptions{
+// 		Config: &config.Config{
+// 			Accumulate: config.Accumulate{
+// 				Describe: config.Describe{
+// 					PartitionId: node.networkFactory.id,
+// 				},
+// 			},
+// 		},
+// 		Executor: exec,
+// 		EventBus: node.eventBus,
+// 		Logger:   node.logger,
+// 		Database: node.getDatabase(),
+// 		Address:  node.network.PrivValKey,
+// 	})
+// 	return (*consensus.AbciApp)(a)
+// }
 
 type appFunc = func(*nodeFactory) *consensus.Node
 
@@ -541,6 +539,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		NewDispatcher: f.getDispatcherFunc(),
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
+		EnableHealing: true,
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
 	}
 

@@ -23,11 +23,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cometbft/cometbft/libs/log"
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	"github.com/cometbft/cometbft/types"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/libs/log"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -184,17 +184,18 @@ func networkReset() {
 			continue
 		}
 
-		dir := path.Join(flagMain.WorkDir, ent.Name())
+		dir := filepath.Join(flagMain.WorkDir, ent.Name())
 		if strings.HasPrefix(ent.Name(), "dnn") || strings.HasPrefix(ent.Name(), "bvnn") {
-			os.RemoveAll(filepath.Join(flagMain.WorkDir, ent.Name()))
-			continue
-		}
-		if !strings.HasPrefix(ent.Name(), "node-") && !strings.HasPrefix(ent.Name(), "bsn-") {
+			// Delete
+		} else if ent.Name() == "bootstrap" {
+			if !bootstrapReset(dir) {
+				fmt.Printf("Keeping %s\n", dir)
+				continue
+			}
+		} else if !strings.HasPrefix(ent.Name(), "node-") && !strings.HasPrefix(ent.Name(), "bsn-") {
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
 			continue
-		}
-
-		if !nodeReset(dir) {
+		} else if !nodeReset(dir) {
 			fmt.Printf("Keeping %s\n", dir)
 			continue
 		}
@@ -233,6 +234,32 @@ func nodeReset(dir string) bool {
 			dir := path.Join(dir, ent.Name())
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
 			keep = true
+		}
+	}
+	return !keep
+}
+
+func bootstrapReset(dir string) bool {
+	ent, err := os.ReadDir(dir)
+	check(err)
+	var keep bool
+	for _, ent := range ent {
+		switch ent.Name() {
+		case "node_key.json", "accumulate.toml":
+			file := filepath.Join(dir, ent.Name())
+			fmt.Printf("Deleting %s\n", file)
+			err := os.Remove(file)
+			check(err)
+			continue
+
+		default:
+			dir := path.Join(dir, ent.Name())
+			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
+			keep = true
+		}
+		if !ent.IsDir() {
+			keep = true
+			continue
 		}
 	}
 	return !keep

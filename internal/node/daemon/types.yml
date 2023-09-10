@@ -4,6 +4,10 @@ NetworkInit:
   fields:
   - name: Id
     type: string
+  - name: Bootstrap
+    type: NodeInit
+    marshal-as: reference
+    pointer: true
   - name: Bvns
     type: BvnInit
     marshal-as: reference

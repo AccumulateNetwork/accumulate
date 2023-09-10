@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -6,7 +6,7 @@
 
 package logging
 
-import "github.com/tendermint/tendermint/libs/log"
+import "github.com/cometbft/cometbft/libs/log"
 
 type NullLogger struct{}
 

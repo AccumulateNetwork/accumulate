@@ -53,7 +53,7 @@ func (x *ExecutorV1) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	b.Index = entry.BlockIndex
 	b.Time = *entry.BlockTime
 
-	h, err := batch.BPT().GetRootHash()
+	h, err := batch.GetBptRootHash()
 	return b, h, err
 }
 
@@ -222,6 +222,10 @@ func (s *BlockStateV1) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 	return s.Block.State.MakeMajorBlock,
 		s.Block.State.MakeMajorBlockTime,
 		s.Block.State.MakeMajorBlock > 0
+}
+
+func (s *BlockStateV1) Hash() ([32]byte, error) {
+	return s.Block.Batch.GetBptRootHash()
 }
 
 func (s *BlockStateV1) Commit() error {
