@@ -45,6 +45,10 @@ func (s *closedBlock) DidUpdateValidators() ([]*execute.ValidatorUpdate, bool) {
 	return s.valUp, len(s.valUp) > 0
 }
 
+func (s *closedBlock) Hash() ([32]byte, error) {
+	return s.Batch.GetBptRootHash()
+}
+
 func (s *closedBlock) Commit() error {
 	if s.IsEmpty() {
 		s.Discard()

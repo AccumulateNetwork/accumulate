@@ -7,12 +7,13 @@
 package consensus
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"time"
 
-	"github.com/tendermint/tendermint/abci/types"
+	"github.com/cometbft/cometbft/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
@@ -44,7 +45,10 @@ func (a *AbciApp) Check(req *CheckRequest) (*CheckResponse, error) {
 		typ = types.CheckTxType_New
 	}
 
-	res := (*abci.Accumulator)(a).CheckTx(types.RequestCheckTx{Tx: tx, Type: typ})
+	res, err := (*abci.Accumulator)(a).CheckTx(context.TODO(), &types.RequestCheckTx{Tx: tx, Type: typ})
+	if err != nil {
+		return nil, err
+	}
 	if res.Code != 0 {
 		return nil, fmt.Errorf("code %d, log %s, info %s", res.Code, res.Log, res.Info)
 	}
@@ -71,7 +75,7 @@ func (a *AbciApp) Init(req *InitRequest) (*InitResponse, error) {
 		return nil, err
 	}
 
-	res := (*abci.Accumulator)(a).InitChain(types.RequestInitChain{
+	res, err := (*abci.Accumulator)(a).InitChain(context.TODO(), &types.RequestInitChain{
 		AppStateBytes: snap,
 	})
 
