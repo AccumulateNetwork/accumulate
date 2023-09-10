@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,10 +12,10 @@ import (
 	"reflect"
 	"strings"
 
+	tmconfig "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
-	tmconfig "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
 )
 
 type testLogger struct {

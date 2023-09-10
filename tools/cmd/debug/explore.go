@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,57 +21,54 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 )
 
-func main() {
-	_ = cmd.Execute()
+func init() {
+	cmd.AddCommand(cmdExplore)
 }
 
-var cmd = &cobra.Command{
+var cmdExplore = &cobra.Command{
 	Use:   "explore [flags]",
 	Short: "Explore a database",
 	Run:   explore,
-	Args:  cobra.NoArgs,
 }
 
-var flag = struct {
+var flagExplore = struct {
 	Node   string
 	Badger string
 }{}
 
 func init() {
-	cmd.Flags().StringVar(&flag.Node, "node", "", "Explore a node's database")
-	cmd.Flags().StringVar(&flag.Badger, "badger", "", "Explore a Badger database")
-	_ = cmd.MarkFlagDirname("node")
-	_ = cmd.MarkFlagDirname("badger")
-	cmd.MarkFlagsMutuallyExclusive("node", "badger")
-	cmd.MarkFlagsRequiredTogether()
+	cmdExplore.Flags().StringVar(&flagExplore.Node, "node", "", "Explore a node's database")
+	cmdExplore.Flags().StringVar(&flagExplore.Badger, "badger", "", "Explore a Badger database")
+	_ = cmdExplore.MarkFlagDirname("node")
+	_ = cmdExplore.MarkFlagDirname("badger")
+	cmdExplore.MarkFlagsMutuallyExclusive("node", "badger")
+	cmdExplore.MarkFlagsRequiredTogether()
 }
 
-func fatalf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
-	os.Exit(1)
-}
-
-func check(err error) {
-	if err != nil {
-		fatalf("%v", err)
-	}
-}
-
-func explore(*cobra.Command, []string) {
+func explore(_ *cobra.Command, args []string) {
 	var err error
 	switch {
-	case flag.Node != "":
-		daemon, err := accumulated.Load(flag.Node, nil)
+	case flagExplore.Node != "":
+		daemon, err := accumulated.Load(flagExplore.Node, nil)
 		check(err)
 		Db, err = database.Open(daemon.Config, nil)
 		check(err)
 
-	case flag.Badger != "":
-		Db, err = database.OpenBadger(flag.Badger, nil)
+	case flagExplore.Badger != "":
+		Db, err = database.OpenBadger(flagExplore.Badger, nil)
 		check(err)
 
 	default:
 		fatalf("no database specified")
+	}
+
+	// Run in immediate (non-repl) mode
+	if len(args) > 0 {
+		repl.SilenceErrors = false
+		repl.SilenceUsage = false
+		repl.SetArgs(args)
+		_ = repl.Execute()
+		return
 	}
 
 	var completer = readline.NewPrefixCompleter(makePcItem(repl).Children...)
