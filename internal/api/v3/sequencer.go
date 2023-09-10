@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -229,8 +229,6 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		}
 		r.Sequence = seq
 		r.Message = seq.Message
-		h := seq.Message.Hash()
-		hash = h[:]
 
 	} else {
 		var msg messaging.MessageWithTransaction
@@ -256,7 +254,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		SetPrivateKey(s.valKey).
 		SetUrl(s.partition.JoinPath(protocol.Network)).
 		SetVersion(globals.Network.Version).
-		SetTimestamp(1).
+		SetTimestampToNow().
 		Sign(hash)
 	if err != nil {
 		return nil, errors.InternalError.Wrap(err)
