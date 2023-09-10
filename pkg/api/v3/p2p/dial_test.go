@@ -123,7 +123,7 @@ func TestDialSelfPartition(t *testing.T) {
 	<-done
 }
 
-func newPeer(t *testing.T, seed ...any) peer.ID {
+func newPeer(t testing.TB, seed ...any) peer.ID {
 	h := storage.MakeKey(seed...)
 	std := ed25519.NewKeyFromSeed(h[:])
 	k, _, err := ic.KeyPairFromStdKey(&std)

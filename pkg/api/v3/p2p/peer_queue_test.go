@@ -7,6 +7,7 @@
 package p2p
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -61,4 +62,23 @@ func TestPeerQueue(t *testing.T) {
 	require.Equal(t, p3, id)
 	require.Equal(t, 2, q.Len())
 	require.Len(t, q.All(), 2)
+}
+
+func BenchmarkPeerQueue(b *testing.B) {
+	q := new(peerQueue)
+	for i := 0; i < 100; i++ {
+		p := newPeer(b, i)
+		q.Add(p)
+	}
+
+	wg := new(sync.WaitGroup)
+	wg.Add(b.N)
+
+	b.ResetTimer()
+
+	// Launch N calls to Next and wait for them all to complete
+	for i := 0; i < b.N; i++ {
+		go func() { defer wg.Done(); q.Next() }()
+	}
+	wg.Wait()
 }
