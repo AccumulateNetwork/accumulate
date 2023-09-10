@@ -124,18 +124,21 @@ func (v *Account) Copy() *Account {
 	}
 	u.OldChains = make([]*OldChain, len(v.OldChains))
 	for i, v := range v.OldChains {
+		v := v
 		if v != nil {
 			u.OldChains[i] = (v).Copy()
 		}
 	}
 	u.Pending = make([]*url.TxID, len(v.Pending))
 	for i, v := range v.Pending {
+		v := v
 		if v != nil {
 			u.Pending[i] = v
 		}
 	}
 	u.Directory = make([]*url.URL, len(v.Directory))
 	for i, v := range v.Directory {
+		v := v
 		if v != nil {
 			u.Directory[i] = v
 		}
@@ -145,6 +148,7 @@ func (v *Account) Copy() *Account {
 	}
 	u.Chains = make([]*Chain, len(v.Chains))
 	for i, v := range v.Chains {
+		v := v
 		if v != nil {
 			u.Chains[i] = (v).Copy()
 		}
@@ -170,6 +174,7 @@ func (v *Chain) Copy() *Chain {
 	}
 	u.MarkPoints = make([]*merkle.State, len(v.MarkPoints))
 	for i, v := range v.MarkPoints {
+		v := v
 		if v != nil {
 			u.MarkPoints[i] = (v).Copy()
 		}
@@ -194,6 +199,7 @@ func (v *Header) Copy() *Header {
 	u.ExecutorVersion = v.ExecutorVersion
 	u.PartitionSnapshotIDs = make([]string, len(v.PartitionSnapshotIDs))
 	for i, v := range v.PartitionSnapshotIDs {
+		v := v
 		u.PartitionSnapshotIDs[i] = v
 	}
 	if len(v.extraData) > 0 {
@@ -214,10 +220,12 @@ func (v *OldChain) Copy() *OldChain {
 	u.Count = v.Count
 	u.Pending = make([][]byte, len(v.Pending))
 	for i, v := range v.Pending {
+		v := v
 		u.Pending[i] = encoding.BytesCopy(v)
 	}
 	u.Entries = make([][]byte, len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		u.Entries[i] = encoding.BytesCopy(v)
 	}
 	if len(v.extraData) > 0 {
@@ -260,6 +268,7 @@ func (v *Transaction) Copy() *Transaction {
 	}
 	u.SignatureSets = make([]*TxnSigSet, len(v.SignatureSets))
 	for i, v := range v.SignatureSets {
+		v := v
 		if v != nil {
 			u.SignatureSets[i] = (v).Copy()
 		}
@@ -283,6 +292,7 @@ func (v *TxnSigSet) Copy() *TxnSigSet {
 	u.Version = v.Version
 	u.Entries = make([]database.SigSetEntry, len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		u.Entries[i] = *(&v).Copy()
 	}
 	if len(v.extraData) > 0 {
@@ -300,6 +310,7 @@ func (v *sigSection) Copy() *sigSection {
 
 	u.Signatures = make([]*Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
+		v := v
 		if v != nil {
 			u.Signatures[i] = (v).Copy()
 		}
@@ -319,6 +330,7 @@ func (v *txnSection) Copy() *txnSection {
 
 	u.Transactions = make([]*Transaction, len(v.Transactions))
 	for i, v := range v.Transactions {
+		v := v
 		if v != nil {
 			u.Transactions[i] = (v).Copy()
 		}

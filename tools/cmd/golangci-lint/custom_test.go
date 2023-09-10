@@ -17,6 +17,7 @@ func TestRangeVarRef(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), &analysis.Analyzer{
 		Name: "rangevarref",
 		Run:  rangevarref,
+		Doc:  "x",
 	}, "rangevarref.go")
 }
 
@@ -24,6 +25,7 @@ func TestNoPrint(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), &analysis.Analyzer{
 		Name: "noprint",
 		Run:  noprint,
+		Doc:  "x",
 	}, "noprint.go")
 }
 
@@ -31,5 +33,6 @@ func TestNoDebug(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), &analysis.Analyzer{
 		Name: "nodebug",
 		Run:  nodebug,
+		Doc:  "x",
 	}, "nodebug.go")
 }
