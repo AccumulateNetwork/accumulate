@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"os/signal"
 	"strings"
@@ -62,6 +63,7 @@ var flag = struct {
 	LetsEncrypt []string
 	TlsCert     string
 	TlsKey      string
+	Pprof       string
 }{}
 
 func init() {
@@ -77,11 +79,19 @@ func init() {
 	cmd.Flags().StringVar(&flag.TlsCert, "tls-cert", "", "Certificate used for HTTPS")
 	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
+	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
 
 	_ = cmd.MarkFlagRequired("peer")
 }
 
 func run(_ *cobra.Command, args []string) {
+	if flag.Pprof != "" {
+		s := new(http.Server)
+		s.Addr = flag.Pprof
+		s.ReadHeaderTimeout = time.Minute
+		go func() { Check(s.ListenAndServe()) }() //nolint:gosec
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
