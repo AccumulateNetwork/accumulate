@@ -17,12 +17,12 @@ import (
 	"testing"
 	"time"
 
+	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	tmp2p "github.com/tendermint/tendermint/p2p"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"

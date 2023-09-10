@@ -143,7 +143,7 @@ func applyDbPatch(_ *cobra.Command, args []string) {
 
 	// Validate it
 	batch := coredb.New(db, nil).Begin(false)
-	stateHash, err := batch.BPT().GetRootHash()
+	stateHash, err := batch.GetBptRootHash()
 	check(err)
 	if stateHash != patch.Result.StateHash {
 		fatalf("state hash does not match: want %x, got %x", patch.Result.StateHash, stateHash)
@@ -182,7 +182,7 @@ func genStallFixPatch(_ *cobra.Command, args []string) {
 	batch := coredb.New(cs, nil).Begin(false)
 	defer batch.Discard()
 	patch.Result = new(DbPatchResult)
-	patch.Result.StateHash, err = batch.BPT().GetRootHash()
+	patch.Result.StateHash, err = batch.GetBptRootHash()
 	check(err)
 
 	// Dump it
