@@ -10,8 +10,8 @@ import (
 	"context"
 	"crypto/ed25519"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tendermint/tendermint/libs/log"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
