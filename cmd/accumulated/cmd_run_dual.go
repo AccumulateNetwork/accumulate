@@ -12,9 +12,9 @@ import (
 	"os/signal"
 	"time"
 
+	service2 "github.com/cometbft/cometbft/libs/service"
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
-	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )

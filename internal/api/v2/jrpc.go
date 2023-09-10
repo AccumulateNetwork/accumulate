@@ -16,8 +16,8 @@ import (
 	"os"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/go-playground/validator/v10"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
