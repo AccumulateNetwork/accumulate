@@ -13,7 +13,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"

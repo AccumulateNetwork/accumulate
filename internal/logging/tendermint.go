@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
-	"github.com/tendermint/tendermint/libs/log"
 )
 
 // TendermintZeroLogger is a Tendermint logger implementation that passes
