@@ -41,6 +41,12 @@ var cmdBuildDiff = &cobra.Command{
 	Args:  cobra.ExactArgs(3),
 	Run:   runBuildDiff,
 }
+var cmdBuildMissing = &cobra.Command{
+	Use:   "buildMissing [summary file] [bad database] [diff File]",
+	Short: "Given the summary data and the bad database, build a diff File of solely the keys missing from the bad database",
+	Args:  cobra.ExactArgs(3),
+	Run:   runBuildMissing,
+}
 
 var cmdPrintDiff = &cobra.Command{
 	Use:   "printDiff [diff file] [good database] [diff File]",
@@ -68,6 +74,7 @@ func init() {
 		cmdBuildTestDBs,
 		cmdBuildSummary,
 		cmdBuildDiff,
+		cmdBuildMissing,
 		cmdPrintDiff,
 		cmdBuildFix,
 		cmdApplyFix,
@@ -132,9 +139,15 @@ func read(f *os.File, buff []byte) {
 	}
 }
 
-func write8(f *os.File, v uint64) {
+// Write the integer value out as 8 bytes
+func write8(f *os.File, i interface{}) {
 	var buff [8]byte
-	binary.BigEndian.PutUint64(buff[:], v)
+	switch v := i.(type) {
+	case uint64:
+		binary.BigEndian.PutUint64(buff[:], v)
+	case int:
+		binary.BigEndian.PutUint64(buff[:], uint64(v))
+	}
 	i, err := f.Write(buff[:])
 	checkf(err, "failed a write to fix file %s", f.Name())
 	if i != 8 {
