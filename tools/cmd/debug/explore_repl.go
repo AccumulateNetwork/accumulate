@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -66,20 +66,43 @@ var repl = newCmd(
 			RunE: txn(txnSignatures),
 		}),
 	),
+	newCmd(
+		&cobra.Command{
+			Use: "bpt",
+		},
+		newCmd(&cobra.Command{
+			Use:  "root",
+			Args: cobra.ExactArgs(0),
+			RunE: db(func(cmd *cobra.Command, batch *database.Batch, args []string) error {
+				hash, err := batch.GetBptRootHash()
+				if err != nil {
+					return err
+				}
+				fmt.Printf("%x\n", hash)
+				return nil
+			}),
+		}),
+	),
 )
 
 var Db *database.Database
 
-func acct(run func(*cobra.Command, *database.Account, []string) error) func(*cobra.Command, []string) error {
+func db(run func(cmd *cobra.Command, batch *database.Batch, args []string) error) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
+		batch := Db.Begin(false)
+		defer batch.Discard()
+		return run(cmd, batch, args)
+	}
+}
+
+func acct(run func(*cobra.Command, *database.Account, []string) error) func(*cobra.Command, []string) error {
+	return db(func(cmd *cobra.Command, batch *database.Batch, args []string) error {
 		u, err := url.Parse(args[0])
 		if err != nil {
 			return err
 		}
-		batch := Db.Begin(false)
-		defer batch.Discard()
 		return run(cmd, batch.Account(u), args[1:])
-	}
+	})
 }
 
 func acctPrintVal[T1 any, T2 Getter[T1]](get func(*database.Account) T2) func(*cobra.Command, []string) error {

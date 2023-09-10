@@ -19,9 +19,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/cometbft/cometbft/rpc/client/http"
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/rpc/client/http"
-	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"

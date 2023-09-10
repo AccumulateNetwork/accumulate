@@ -15,8 +15,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
-	tmtypes "github.com/tendermint/tendermint/types"
+	"github.com/cometbft/cometbft/libs/log"
+	tmtypes "github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -221,7 +221,7 @@ func genesis(time time.Time, values *core.GlobalValues) SnapshotFunc {
 	}
 }
 
-func UseABCI(opts *simFactory) error {
-	opts.abci = withABCI
-	return nil
-}
+// func UseABCI(opts *simFactory) error {
+// 	opts.abci = withABCI
+// 	return nil
+// }
