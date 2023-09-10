@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/lxrand"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"

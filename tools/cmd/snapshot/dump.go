@@ -15,8 +15,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cometbft/cometbft/types"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
