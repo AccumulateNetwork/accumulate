@@ -27,6 +27,8 @@ func NewRecord(typ RecordType) (Record, error) {
 		return new(ChainEntryRecord[Record]), nil
 	case RecordTypeChain:
 		return new(ChainRecord), nil
+	case RecordTypeError:
+		return new(ErrorRecord), nil
 	case RecordTypeIndexEntry:
 		return new(IndexEntryRecord), nil
 	case RecordTypeKey:
@@ -72,6 +74,12 @@ func EqualRecord(a, b Record) bool {
 			return b == nil
 		}
 		b, ok := b.(*ChainRecord)
+		return ok && a.Equal(b)
+	case *ErrorRecord:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ErrorRecord)
 		return ok && a.Equal(b)
 	case *IndexEntryRecord:
 		if a == nil {
@@ -137,6 +145,8 @@ func CopyRecord(v Record) Record {
 	case *AccountRecord:
 		return v.Copy()
 	case *ChainRecord:
+		return v.Copy()
+	case *ErrorRecord:
 		return v.Copy()
 	case *IndexEntryRecord:
 		return v.Copy()

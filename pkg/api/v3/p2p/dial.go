@@ -81,7 +81,10 @@ func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream mes
 // BadDial notifies the dialer that a transport error was encountered while
 // processing the stream.
 func (d *dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, s message.Stream, err error) bool {
-	ss := s.(*stream)
+	ss, ok := s.(*stream)
+	if !ok {
+		return false
+	}
 	d.tracker.markBad(ctx, ss.peer, addr)
 	return true
 }
