@@ -46,7 +46,14 @@ func TestDbRepair(t *testing.T) {
 	// Do we want to add this?  A print against the summaryF instead of the good db?
 }
 
+// TestReal
+// This test can be used against real databases where those are dropped
+// into the source directory for dbrepair as "good" and "bad".
+//
+// Nice to have, but useless for CI.  So un-skip if it is to be used.
 func TestReal(t *testing.T) {
+
+	t.Skip()
 	color.NoColor = false
 	start := time.Now()
 
