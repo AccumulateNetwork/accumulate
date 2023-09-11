@@ -22,10 +22,10 @@ import (
 )
 
 func init() {
-	cmd.AddCommand(cmdExplore)
+	cmdDb.AddCommand(cmdDbExplore)
 }
 
-var cmdExplore = &cobra.Command{
+var cmdDbExplore = &cobra.Command{
 	Use:   "explore [flags]",
 	Short: "Explore a database",
 	Run:   explore,
@@ -37,12 +37,12 @@ var flagExplore = struct {
 }{}
 
 func init() {
-	cmdExplore.Flags().StringVar(&flagExplore.Node, "node", "", "Explore a node's database")
-	cmdExplore.Flags().StringVar(&flagExplore.Badger, "badger", "", "Explore a Badger database")
-	_ = cmdExplore.MarkFlagDirname("node")
-	_ = cmdExplore.MarkFlagDirname("badger")
-	cmdExplore.MarkFlagsMutuallyExclusive("node", "badger")
-	cmdExplore.MarkFlagsRequiredTogether()
+	cmdDbExplore.Flags().StringVar(&flagExplore.Node, "node", "", "Explore a node's database")
+	cmdDbExplore.Flags().StringVar(&flagExplore.Badger, "badger", "", "Explore a Badger database")
+	_ = cmdDbExplore.MarkFlagDirname("node")
+	_ = cmdDbExplore.MarkFlagDirname("badger")
+	cmdDbExplore.MarkFlagsMutuallyExclusive("node", "badger")
+	cmdDbExplore.MarkFlagsRequiredTogether()
 }
 
 func explore(_ *cobra.Command, args []string) {
