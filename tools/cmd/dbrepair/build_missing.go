@@ -87,6 +87,7 @@ func buildMissing(summary, badDB, diffFile string) {
 			if _, exists := keys[kb]; !exists { //   delete keys not in the summary
 				continue //                          Ignore any new keys in the database to be fixed
 			}
+			
 			delete(keys, kb) //                      Remove all keys that the database to fix has
 		}
 		return nil
@@ -109,8 +110,13 @@ func buildMissing(summary, badDB, diffFile string) {
 
 	write8(f, 0) //                       Number of keys to delete is always zero
 
+	var percent float64
 	write8(f, len(missingKeys))      //   Number of keys to add back
-	for _, uk := range missingKeys { //   8 bytes of key hashes
+	for i, uk := range missingKeys { //   8 bytes of key hashes
+		if float64(i)/float64(len(missingKeys)) >= percent*.99 {
+			boldYellow.Printf("%02d%% ", int(percent*100))
+			percent += .05
+		}
 		check2(f.Write(uk))
 	}
 }
