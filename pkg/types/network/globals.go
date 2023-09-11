@@ -79,8 +79,8 @@ func NewGlobals(g *GlobalValues) *GlobalValues {
 	return g
 }
 
-type getStateFunc func(accountUrl *url.URL, target interface{}) error
-type putStateFunc func(account protocol.Account) error
+type getStateFunc = func(accountUrl *url.URL, target interface{}) error
+type putStateFunc = func(account protocol.Account) error
 
 const labelOracle = "oracle"
 const labelGlobals = "network globals"
