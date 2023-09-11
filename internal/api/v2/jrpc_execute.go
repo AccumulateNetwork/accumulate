@@ -69,7 +69,7 @@ func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, p
 }
 
 func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interface{} {
-	if m.Faucet == nil {
+	if m.Options.Faucet == nil {
 		return accumulateError(fmt.Errorf("service not available"))
 	}
 
