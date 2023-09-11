@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/dgraph-io/badger"
 	"github.com/fatih/color"
@@ -45,6 +46,39 @@ func TestDbRepair(t *testing.T) {
 	// Do we want to add this?  A print against the summaryF instead of the good db?
 }
 
+func TestReal(t *testing.T) {
+	color.NoColor = false
+	start := time.Now()
+
+	dir := "./"
+	goodDB := filepath.Join(dir, "good")          // A good db
+	badDB := filepath.Join(dir, "bad")            // a bad db with added, modified, and deleted key/value pairs
+	summaryF := filepath.Join(dir, "summary.dat") // file for the summary data of good db
+	diffF := filepath.Join(dir, "diff.dat")       // file for the diff between good db vs bad db
+	fixF := filepath.Join(dir, "fix.dat")         // The fix file that can be distributed to fix nodes
+	_, _, _, _, _ = goodDB, badDB, summaryF, diffF, fixF
+
+	// Note this documents what we want to do.  Of course, the
+	// test actually skips sending files back and forth between good
+	// nodes and bad nodes.
+	buildSummary(goodDB, summaryF)    // First go to node with good db and build a summary
+	boldBlue.Printf("\n Build Summary complete %v\n",time.Since(start))
+	buildMissing(summaryF, badDB, diffF) // Send the summary to the bad node and create a diff
+	boldBlue.Printf("\n Build Missing complete %v\n",time.Since(start))
+	//printDiff(diffF, goodDB)          // What is the diff you say? We can print!
+	buildFix(diffF, goodDB, fixF)     // Send the diff back to the good node to build a fix
+	boldBlue.Printf("\n Build Fix complete %v\n",time.Since(start))
+	applyFix(fixF, badDB) // Send the fix to the bad node and apply it
+	boldBlue.Printf("\n Apply Fix complete %v\n",time.Since(start))
+	buildDiff(summaryF, badDB, diffF) // Send the summary to bad node to check the fix
+	boldBlue.Printf("\n Build Diff complete %v\n",time.Since(start))
+	//printDiff(diffF, goodDB)          // Send the new diff back to good node to ensure all is good!
+
+	// Note:  If we have the summaryF on the bad node, we can check for correctness without sending
+	// the diff file back to the good node, but we can't produce addresses for nodes to delete.
+	// Do we want to add this?  A print against the summaryF instead of the good db?
+}
+
 func TestDbRepairMissing(t *testing.T) {
 	color.NoColor = false
 
@@ -58,7 +92,7 @@ func TestDbRepairMissing(t *testing.T) {
 	// Note this documents what we want to do.  Of course, the
 	// test actually skips sending files back and forth between good
 	// nodes and bad nodes.
-	buildTestDBs(5e3, goodDB, badDB)     // Build Test DBs
+	buildTestDBs(1e5, goodDB, badDB)     // Build Test DBs
 	buildSummary(goodDB, summaryF)       // First go to node with good db and build a summary
 	buildMissing(summaryF, badDB, diffF) // Send the summary to the bad node and create a diff
 	printDiff(diffF, goodDB)             // What is the diff you say? We can print!
