@@ -41,7 +41,6 @@ type Options struct {
 	LocalV3       V3
 	Querier       api.Querier
 	Submitter     api.Submitter
-	Network       api.NetworkService
 	Faucet        api.Faucet
 	Validator     api.Validator
 	Sequencer     private.Sequencer
