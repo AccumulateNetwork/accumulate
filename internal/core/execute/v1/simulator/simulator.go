@@ -616,7 +616,6 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		LocalV3:       x.service,
 		Querier:       sim.Services(),
 		Submitter:     sim.Services(),
-		Network:       sim.Services(),
 		Faucet:        sim.Services(),
 		Validator:     sim.Services(),
 		Sequencer:     sim.Services(),

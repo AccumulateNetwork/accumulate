@@ -18,7 +18,7 @@ import (
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
-	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 )
 

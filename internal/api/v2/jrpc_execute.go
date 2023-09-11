@@ -69,6 +69,10 @@ func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, p
 }
 
 func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interface{} {
+	if m.Faucet == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(protocol.AcmeFaucet)
 	err := m.parse(params, req)
 	if err != nil {
@@ -161,6 +165,10 @@ func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage)
 }
 
 func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) interface{} {
+	if m.LocalV3 == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(ExecuteRequest)
 	err := json.Unmarshal(params, req)
 	if err != nil {
@@ -181,8 +189,14 @@ func (m *JrpcMethods) submit(sub api.Submitter, val api.Validator, ctx context.C
 	var resp []*api.Submission
 	var yes, no = true, false
 	if checkOnly {
+		if val == nil {
+			return accumulateError(fmt.Errorf("service not available"))
+		}
 		resp, err = val.Validate(ctx, env, api.ValidateOptions{Full: &no})
 	} else {
+		if sub == nil {
+			return accumulateError(fmt.Errorf("service not available"))
+		}
 		resp, err = sub.Submit(ctx, env, api.SubmitOptions{Verify: &no, Wait: &yes})
 	}
 	if err != nil {
