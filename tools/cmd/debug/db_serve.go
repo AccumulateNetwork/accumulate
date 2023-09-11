@@ -87,28 +87,7 @@ func serveDatabases(cmd *cobra.Command, args []string) {
 		defer db.Close()
 
 		// Scan for the partition account
-		var thePart string
-		batch := db.Begin(false)
-		defer batch.Discard()
-		Check(batch.ForEachAccount(func(account *coredb.Account, _ [32]byte) error {
-			if !account.Url().IsRootIdentity() {
-				return nil
-			}
-
-			part, ok := protocol.ParsePartitionUrl(account.Url())
-			if !ok {
-				return nil
-			}
-			fmt.Printf("Found %v in %s\n", account.Url(), arg)
-
-			if thePart == "" {
-				thePart = part
-				return nil
-			}
-
-			Fatalf("%s has multiple partition accounts", arg)
-			panic("not reached")
-		}))
+		thePart := getPartition(db, arg)
 
 		// Record the database and partition
 		thePart = strings.ToLower(thePart)
