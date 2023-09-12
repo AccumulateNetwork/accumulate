@@ -80,6 +80,15 @@ const StorageTypeMemory StorageType = 1
 // StorageTypeBadger .
 const StorageTypeBadger StorageType = 2
 
+// StorageTypeBolt .
+const StorageTypeBolt StorageType = 3
+
+// StorageTypeLevelDB .
+const StorageTypeLevelDB StorageType = 4
+
+// StorageTypeExpBlockDB .
+const StorageTypeExpBlockDB StorageType = 1001
+
 // GetEnumValue returns the value of the Configuration Type
 func (v ConfigurationType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -363,7 +372,7 @@ func (v StorageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *StorageType) SetEnumValue(id uint64) bool {
 	u := StorageType(id)
 	switch u {
-	case StorageTypeMemory, StorageTypeBadger:
+	case StorageTypeMemory, StorageTypeBadger, StorageTypeBolt, StorageTypeLevelDB, StorageTypeExpBlockDB:
 		*v = u
 		return true
 	}
@@ -377,6 +386,12 @@ func (v StorageType) String() string {
 		return "memory"
 	case StorageTypeBadger:
 		return "badger"
+	case StorageTypeBolt:
+		return "bolt"
+	case StorageTypeLevelDB:
+		return "levelDB"
+	case StorageTypeExpBlockDB:
+		return "expBlockDB"
 	}
 	return fmt.Sprintf("StorageType:%d", v)
 }
@@ -388,6 +403,12 @@ func StorageTypeByName(name string) (StorageType, bool) {
 		return StorageTypeMemory, true
 	case "badger":
 		return StorageTypeBadger, true
+	case "bolt":
+		return StorageTypeBolt, true
+	case "leveldb":
+		return StorageTypeLevelDB, true
+	case "expblockdb":
+		return StorageTypeExpBlockDB, true
 	}
 	return 0, false
 }
