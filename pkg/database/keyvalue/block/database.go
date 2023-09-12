@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/edsrzf/mmap-go"
@@ -23,9 +24,9 @@ import (
 
 type Database struct {
 	path      string
+	commitMu  sync.Mutex
 	files     []*blockFile
-	blocks    map[uint64]blockLocation
-	records   map[[32]byte]recordLocation
+	records   vmap[[32]byte, recordLocation]
 	next      uint64
 	fileLimit uint64
 }
@@ -86,8 +87,8 @@ func Open(path string) (_ *Database, err error) {
 	}
 
 	// Build the block index
-	db.blocks = map[uint64]blockLocation{}
-	db.records = map[[32]byte]recordLocation{}
+	blocks := map[uint64]blockLocation{}
+	records := db.records.View()
 	for fileNo, f := range db.files {
 		var offset int64
 		var block *uint64
@@ -108,10 +109,10 @@ func Open(path string) (_ *Database, err error) {
 				if block != nil {
 					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
 				}
-				if _, ok := db.blocks[e.ID]; ok {
+				if _, ok := blocks[e.ID]; ok {
 					return nil, fmt.Errorf("duplicate block %d", e.ID)
 				}
-				db.blocks[e.ID] = blockLocation{file: uint(fileNo), offset: start}
+				blocks[e.ID] = blockLocation{file: uint(fileNo), offset: start}
 				block = &e.ID
 
 				if db.next < e.ID {
@@ -129,7 +130,7 @@ func Open(path string) (_ *Database, err error) {
 					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
 				}
 
-				db.records[e.Key.Hash()] = recordLocation{file: uint(fileNo), block: *block, offset: offset, length: e.Length}
+				records.Put(e.Key.Hash(), recordLocation{file: uint(fileNo), block: *block, offset: offset, length: e.Length})
 
 				if e.Length <= 0 {
 					continue
@@ -139,6 +140,10 @@ func Open(path string) (_ *Database, err error) {
 				offset += e.Length
 			}
 		}
+	}
+	err = records.Commit()
+	if err != nil {
+		return nil, err
 	}
 
 	return db, nil
@@ -183,9 +188,9 @@ func (db *Database) Close() error {
 
 // Begin begins a change set.
 func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
-	// TODO Transactional reading
+	view := d.records.View()
 	get := func(key *record.Key) ([]byte, error) {
-		loc, ok := d.records[key.Hash()]
+		loc, ok := view.Get(key.Hash())
 		if !ok || loc.length < 0 {
 			return nil, errors.NotFound.WithFormat("%v not found", key)
 		}
@@ -201,7 +206,19 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		return b, nil
 	}
 
+	discard := view.Discard
+
+	if !writable {
+		return memory.NewChangeSet(prefix, get, nil, discard)
+	}
+
 	commit := func(entries map[[32]byte]memory.Entry) error {
+		defer view.Discard()
+
+		// Commits must be serialized
+		d.commitMu.Lock()
+		defer d.commitMu.Unlock()
+
 		// Seek to the end of the newest file or create a new file
 		fileNo := len(d.files) - 1
 		var f *blockFile
@@ -281,7 +298,7 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 				return err
 			}
 			offset += int64(n)
-			d.records[kh] = recordLocation{file: uint(fileNo), block: block, offset: offset, length: l}
+			view.Put(kh, recordLocation{file: uint(fileNo), block: block, offset: offset, length: l})
 
 			if e.Delete {
 				continue
@@ -293,6 +310,10 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 				return err
 			}
 			offset += int64(n)
+		}
+		err = view.Commit()
+		if err != nil {
+			return err
 		}
 
 		if !haveBlock {
@@ -322,5 +343,5 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		return nil
 	}
 
-	return memory.NewChangeSet(prefix, get, commit)
+	return memory.NewChangeSet(prefix, get, commit, discard)
 }

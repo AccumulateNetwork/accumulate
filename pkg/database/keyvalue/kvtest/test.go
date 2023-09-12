@@ -46,7 +46,7 @@ func openDb(t testing.TB, open Opener) *closableDb {
 }
 
 func TestDatabase(t *testing.T, open Opener) {
-	const N = 2
+	const N = 10000
 
 	// Open and write changes
 	db := openDb(t, open)
@@ -73,6 +73,41 @@ func TestDatabase(t *testing.T, open Opener) {
 		require.NoError(t, err, "Get")
 		require.Equal(t, fmt.Sprintf("%x this much data ", i), string(val))
 	}
+}
+
+func TestIsolation(t *testing.T, open Opener) {
+	// Open and write
+	db := openDb(t, open)
+
+	batch := db.Begin(nil, true)
+	defer batch.Discard()
+
+	key := record.NewKey("key")
+	err := batch.Put(key, []byte("value"))
+	require.NoError(t, err, "Put")
+	require.NoError(t, batch.Commit())
+
+	// Start two batches
+	b1 := db.Begin(nil, true)
+	defer b1.Discard()
+
+	b2 := db.Begin(nil, false)
+	defer b2.Discard()
+
+	// Delete and commit in batch 1
+	require.NoError(t, b1.Delete(key))
+	require.NoError(t, b1.Commit())
+
+	// Verify the change is not visible from batch 2
+	v, err := b2.Get(key)
+	require.NoError(t, err, "Get")
+	require.Equal(t, []byte("value"), v)
+
+	// Verify the change is now visible
+	batch = db.Begin(nil, true)
+	defer batch.Discard()
+	_, err = batch.Get(key)
+	require.ErrorIs(t, err, errors.NotFound)
 }
 
 func TestSubBatch(t *testing.T, open Opener) {

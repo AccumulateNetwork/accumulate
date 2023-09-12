@@ -108,7 +108,7 @@ func (d *DatabaseV4) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet
 			}
 
 			return wr.Flush()
-		})
+		}, nil)
 }
 
 // Close

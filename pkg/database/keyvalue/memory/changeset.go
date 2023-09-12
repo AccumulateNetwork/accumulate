@@ -16,11 +16,12 @@ import (
 
 // ChangeSet is a key-value change set.
 type ChangeSet struct {
-	mu       sync.RWMutex       //
-	entries  map[[32]byte]Entry //
-	getfn    GetFunc            // Gets an entry from the previous layer
-	commitfn CommitFunc         // Commits changes into the previous layer
-	prefix   *record.Key        // Prefix to apply to keys
+	mu        sync.RWMutex       //
+	entries   map[[32]byte]Entry //
+	getfn     GetFunc            // Gets an entry from the previous layer
+	commitfn  CommitFunc         // Commits changes into the previous layer
+	discardfn DiscardFunc        //
+	prefix    *record.Key        // Prefix to apply to keys
 }
 
 // Entry is a [ChangeSet] entry.
@@ -32,13 +33,15 @@ type Entry struct {
 
 type GetFunc = func(*record.Key) ([]byte, error)
 type CommitFunc = func(map[[32]byte]Entry) error
+type DiscardFunc = func()
 
 var _ keyvalue.ChangeSet = (*ChangeSet)(nil)
 
-func NewChangeSet(prefix *record.Key, get GetFunc, commit CommitFunc) *ChangeSet {
+func NewChangeSet(prefix *record.Key, get GetFunc, commit CommitFunc, discard DiscardFunc) *ChangeSet {
 	c := new(ChangeSet)
 	c.getfn = get
 	c.commitfn = commit
+	c.discardfn = discard
 	c.prefix = prefix
 	return c
 }
@@ -52,7 +55,14 @@ func (c *ChangeSet) Commit() error {
 
 	// Is there anything to do?
 	if len(entries) == 0 {
+		if c.discardfn != nil {
+			c.discardfn()
+		}
 		return nil
+	}
+
+	if c.commitfn == nil {
+		panic("attempted to commit entries from a read-only change set")
 	}
 
 	// Commit to the parent
@@ -64,6 +74,9 @@ func (c *ChangeSet) Discard() {
 	c.mu.Lock()
 	c.entries = nil
 	c.mu.Unlock()
+	if c.discardfn != nil {
+		c.discardfn()
+	}
 }
 
 // Begin begins a nested change set.
@@ -75,7 +88,7 @@ func (c *ChangeSet) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet 
 		}
 		commit = c.putAll
 	}
-	return NewChangeSet(prefix, c.Get, commit)
+	return NewChangeSet(prefix, c.Get, commit, nil)
 }
 
 // putAll stores a set of entries.
