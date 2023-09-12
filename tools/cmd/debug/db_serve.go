@@ -130,6 +130,7 @@ func serveDatabases(cmd *cobra.Command, args []string) {
 	}
 
 	// JSON-RPC API v3
+	//
 	N := (*NetworkService)(g)
 	C := &v3.Collator{Querier: Q, Network: N}
 	v3, err := jsonrpc.NewHandler(
@@ -138,9 +139,12 @@ func serveDatabases(cmd *cobra.Command, args []string) {
 	)
 	Check(err)
 
+	// JSON-RPC API v2
+	//
+	// Use query isolation to avoid weird bugs
 	v2, err := v2.NewJrpc(v2.Options{
 		Logger:  logger,
-		Querier: C,
+		Querier: queryIsolation{q: C},
 	})
 	Check(err)
 
@@ -202,6 +206,24 @@ func (n *NetworkService) NetworkStatus(ctx context.Context, opts v3.NetworkStatu
 		Routing:         n.Routing,
 		ExecutorVersion: protocol.ExecutorVersionV2,
 	}, nil
+}
+
+type queryIsolation struct {
+	q v3.Querier
+}
+
+func (q queryIsolation) Query(ctx context.Context, scope *url.URL, query v3.Query) (v3.Record, error) {
+	r, err := q.q.Query(ctx, scope, query)
+	if r != nil {
+		b, err := r.MarshalBinary()
+		if err == nil {
+			s, err := v3.UnmarshalRecord(b)
+			if err == nil {
+				r = s
+			}
+		}
+	}
+	return r, err
 }
 
 type Querier struct {

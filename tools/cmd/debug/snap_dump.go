@@ -65,7 +65,7 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 func openSnapshotFile(filename string) (ioutil.SectionReader, uint64) {
 	var rd ioutil.SectionReader
 	if filepath.Ext(filename) == ".json" {
-		fmt.Printf("Loading %s\n", filename)
+		fmt.Fprintf(os.Stderr, "Loading %s\n", filename)
 		genDoc, err := types.GenesisDocFromFile(filename)
 		checkf(err, "read %s", filename)
 
