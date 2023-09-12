@@ -7,10 +7,15 @@
 package block
 
 import (
+	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 func BenchmarkCommit(b *testing.B) {
@@ -23,6 +28,32 @@ func BenchmarkOpen(b *testing.B) {
 
 func BenchmarkReadRandom(b *testing.B) {
 	kvtest.BenchmarkReadRandom(b, newOpener(b))
+}
+
+func TestCommitTime(t *testing.T) {
+	t.Skip("Manual")
+
+	const N = 1e6
+
+	db, err := Open(t.TempDir())
+	require.NoError(t, err)
+	defer db.Close()
+
+	batch := db.Begin(nil, true)
+	defer batch.Discard()
+
+	for i := 0; i < N; i++ {
+		k := record.NewKey(i)
+		v := make([]byte, rand.Intn(5000)+100)
+		rand.Read(v)
+		err := batch.Put(k, v)
+		require.NoError(t, err, "Put")
+	}
+
+	// Commit
+	start := time.Now()
+	require.NoError(t, batch.Commit())
+	fmt.Println(time.Since(start))
 }
 
 func TestDatabase(t *testing.T) {
