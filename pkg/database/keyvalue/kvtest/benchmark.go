@@ -76,6 +76,8 @@ func BenchmarkReadRandom(b *testing.B, open Opener) {
 	r := rand.New(rand.NewSource(0))
 	for i := 0; i < b.N; i++ {
 		_, err := batch.Get(keys[r.Intn(N)])
-		require.NoError(b, err)
+		if err != nil {
+			require.NoError(b, err)
+		}
 	}
 }
