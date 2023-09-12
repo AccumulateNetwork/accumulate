@@ -7,13 +7,11 @@
 package badger
 
 import (
-	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/dgraph-io/badger"
+	"github.com/dgraph-io/badger/v4"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -21,22 +19,13 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-// TruncateBadger controls whether Badger is configured to truncate corrupted
-// data. Especially on Windows, if the node is terminated abruptly, setting this
-// may be necessary to recovering the state of the system.
-//
-// However, Accumulate is not robust against this kind of interruption. If the
-// node is terminated abruptly and restarted with this flag, some functions may
-// break, such as synthetic transactions and anchoring.
-var TruncateBadger = false
-
-type Database struct {
+type DatabaseV4 struct {
 	badger *badger.DB
 	ready  bool
 	mu     sync.RWMutex
 }
 
-func New(filepath string) (*Database, error) {
+func NewV4(filepath string) (*DatabaseV4, error) {
 	// Make sure all directories exist
 	err := os.MkdirAll(filepath, 0700)
 	if err != nil {
@@ -46,12 +35,7 @@ func New(filepath string) (*Database, error) {
 	opts := badger.DefaultOptions(filepath)
 	opts = opts.WithLogger(slogger{})
 
-	// Truncate corrupted data
-	if TruncateBadger {
-		opts = opts.WithTruncate(true)
-	}
-
-	d := new(Database)
+	d := new(DatabaseV4)
 	d.ready = true
 
 	// Open Badger
@@ -67,7 +51,7 @@ func New(filepath string) (*Database, error) {
 }
 
 // Begin begins a change set.
-func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
+func (d *DatabaseV4) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	// Use a read-only transaction for reading
 	rd := d.badger.NewTransaction(false)
 
@@ -129,7 +113,7 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 
 // Close
 // Close the underlying database
-func (d *Database) Close() error {
+func (d *DatabaseV4) Close() error {
 	if l, err := d.lock(true); err != nil {
 		return err
 	} else {
@@ -140,7 +124,7 @@ func (d *Database) Close() error {
 	return d.badger.Close()
 }
 
-func (d *Database) gc() {
+func (d *DatabaseV4) gc() {
 	for {
 		// GC every hour
 		time.Sleep(time.Hour)
@@ -169,7 +153,7 @@ func (d *Database) gc() {
 // shutdown process of a Tendermint node is fairly non-deterministic, which lead
 // to a lot of hard-to-reproduce issues showing up in CI tests. Weeks of
 // guesswork lead to this solution.
-func (d *Database) lock(closing bool) (sync.Locker, error) {
+func (d *DatabaseV4) lock(closing bool) (sync.Locker, error) {
 	var l sync.Locker = &d.mu
 	if !closing {
 		l = d.mu.RLocker()
@@ -182,27 +166,4 @@ func (d *Database) lock(closing bool) (sync.Locker, error) {
 	}
 
 	return l, nil
-}
-
-type slogger struct{}
-
-func (l slogger) format(format string, args ...interface{}) string {
-	s := fmt.Sprintf(format, args...)
-	return strings.TrimRight(s, "\n")
-}
-
-func (l slogger) Errorf(format string, args ...interface{}) {
-	slog.Error(l.format(format, args...), "module", "badger")
-}
-
-func (l slogger) Warningf(format string, args ...interface{}) {
-	slog.Warn(l.format(format, args...), "module", "badger")
-}
-
-func (l slogger) Infof(format string, args ...interface{}) {
-	slog.Info(l.format(format, args...), "module", "badger")
-}
-
-func (l slogger) Debugf(format string, args ...interface{}) {
-	slog.Debug(l.format(format, args...), "module", "badger")
 }

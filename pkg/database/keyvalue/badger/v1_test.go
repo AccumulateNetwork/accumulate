@@ -26,7 +26,7 @@ func init() {
 	}.NewTextHandler(os.Stderr)))
 }
 
-func TestWriteLimit(t *testing.T) {
+func TestV1WriteLimit(t *testing.T) {
 	// Create a badger DB
 	raw, err := badger.Open(badger.
 		DefaultOptions(t.TempDir()).
@@ -65,31 +65,31 @@ func TestWriteLimit(t *testing.T) {
 	}
 }
 
-func BenchmarkCommit(b *testing.B) {
-	kvtest.BenchmarkCommit(b, newOpener(b))
+func BenchmarkV1Commit(b *testing.B) {
+	kvtest.BenchmarkCommit(b, newOpenerV1(b))
 }
 
-func BenchmarkReadRandom(b *testing.B) {
-	kvtest.BenchmarkReadRandom(b, newOpener(b))
+func BenchmarkV1ReadRandom(b *testing.B) {
+	kvtest.BenchmarkReadRandom(b, newOpenerV1(b))
 }
 
-func TestDatabase(t *testing.T) {
-	kvtest.TestDatabase(t, newOpener(t))
+func TestV1Database(t *testing.T) {
+	kvtest.TestDatabase(t, newOpenerV1(t))
 }
 
-func TestSubBatch(t *testing.T) {
-	kvtest.TestSubBatch(t, newOpener(t))
+func TestV1SubBatch(t *testing.T) {
+	kvtest.TestSubBatch(t, newOpenerV1(t))
 }
 
-func TestPrefix(t *testing.T) {
-	kvtest.TestPrefix(t, newOpener(t))
+func TestV1Prefix(t *testing.T) {
+	kvtest.TestPrefix(t, newOpenerV1(t))
 }
 
-func TestDelete(t *testing.T) {
-	kvtest.TestDelete(t, newOpener(t))
+func TestV1Delete(t *testing.T) {
+	kvtest.TestDelete(t, newOpenerV1(t))
 }
 
-func newOpener(t testing.TB) kvtest.Opener {
+func newOpenerV1(t testing.TB) kvtest.Opener {
 	path := t.TempDir()
 	return func() (keyvalue.Beginner, error) {
 		return New(path)
