@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/edsrzf/mmap-go"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -22,11 +23,16 @@ import (
 
 type Database struct {
 	path      string
-	files     []*os.File
+	files     []*blockFile
 	blocks    map[uint64]blockLocation
 	records   map[[32]byte]recordLocation
 	next      uint64
 	fileLimit uint64
+}
+
+type blockFile struct {
+	file *os.File
+	mmap mmap.MMap
 }
 
 type blockLocation struct {
@@ -45,15 +51,9 @@ func Open(path string) (_ *Database, err error) {
 	// List all the entries
 	entries, err := os.ReadDir(path)
 	switch {
-	case err == nil:
-		// Directory exists
-
-	case errors.Is(err, fs.ErrNotExist):
-		// Create the directory
-		err = os.Mkdir(path, 0700)
-		if err != nil {
-			return nil, err
-		}
+	case err == nil,
+		errors.Is(err, fs.ErrNotExist):
+		// Directory exists, or doesn't
 
 	default:
 		// Some other error
@@ -70,13 +70,19 @@ func Open(path string) (_ *Database, err error) {
 	}()
 
 	// Open all the files
-	db.files = make([]*os.File, 0, len(entries))
+	db.files = make([]*blockFile, 0, len(entries))
 	for _, e := range entries {
 		f, err := os.OpenFile(filepath.Join(path, e.Name()), os.O_RDWR, 0)
 		if err != nil {
 			return nil, err
 		}
-		db.files = append(db.files, f)
+
+		m, err := mmap.Map(f, mmap.RDWR, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		db.files = append(db.files, &blockFile{file: f, mmap: m})
 	}
 
 	// Build the block index
@@ -86,12 +92,12 @@ func Open(path string) (_ *Database, err error) {
 		var offset int64
 		var block *uint64
 		for {
-			e, n, err := readEntry(f)
+			e, n, err := readEntryMmap(f.mmap, offset)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
 				}
-				return nil, fmt.Errorf("reading entries from %v: %w", f.Name(), err)
+				return nil, fmt.Errorf("reading entries from %v: %w", f.file.Name(), err)
 			}
 
 			start := offset
@@ -100,7 +106,7 @@ func Open(path string) (_ *Database, err error) {
 			switch e := e.(type) {
 			case *startBlockEntry:
 				if block != nil {
-					return nil, fmt.Errorf("%v is corrupted", f.Name())
+					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
 				}
 				if _, ok := db.blocks[e.ID]; ok {
 					return nil, fmt.Errorf("duplicate block %d", e.ID)
@@ -114,13 +120,13 @@ func Open(path string) (_ *Database, err error) {
 
 			case *endBlockEntry:
 				if block == nil {
-					return nil, fmt.Errorf("%v is corrupted", f.Name())
+					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
 				}
 				block = nil
 
 			case *recordEntry:
 				if block == nil {
-					return nil, fmt.Errorf("%v is corrupted", f.Name())
+					return nil, fmt.Errorf("%v is corrupted", f.file.Name())
 				}
 
 				db.records[e.Key.Hash()] = recordLocation{file: uint(fileNo), block: *block, offset: offset, length: e.Length}
@@ -131,41 +137,42 @@ func Open(path string) (_ *Database, err error) {
 
 				// Skip the record data
 				offset += e.Length
-				_, err := f.Seek(int64(e.Length), io.SeekCurrent)
-				if err != nil {
-					return nil, err
-				}
 			}
-		}
-	}
-
-	// Ensure there's at least one file
-	if len(db.files) == 0 {
-		_, err := db.newFile()
-		if err != nil {
-			return nil, err
 		}
 	}
 
 	return db, nil
 }
 
-func (db *Database) newFile() (*os.File, error) {
+func (db *Database) newFile() (*blockFile, error) {
+	// Ensure the directory exists
+	err := os.Mkdir(db.path, 0700)
+	if err != nil && !errors.Is(err, fs.ErrExist) {
+		return nil, err
+	}
+
+	// Create a new file
 	name := fmt.Sprintf("%v.blocks", time.Now().UTC().Unix())
 	f, err := os.OpenFile(filepath.Join(db.path, name), os.O_RDWR|os.O_EXCL|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
-	db.files = append(db.files, f)
-	return f, nil
+
+	bf := &blockFile{f, nil}
+	db.files = append(db.files, bf)
+	return bf, nil
 }
 
 func (db *Database) Close() error {
 	var errs []error
 	for _, f := range db.files {
-		err := f.Close()
-		if err != nil {
-			errs = append(errs, err)
+		e1 := f.mmap.Unmap()
+		e2 := f.file.Close()
+		if e1 != nil {
+			errs = append(errs, e1)
+		}
+		if e2 != nil {
+			errs = append(errs, e2)
 		}
 	}
 	if len(errs) == 0 {
@@ -187,18 +194,26 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		}
 
 		b := make([]byte, loc.length)
-		_, err := d.files[loc.file].ReadAt(b, loc.offset)
-		if err != nil {
-			return nil, err
+		n := copy(b, d.files[loc.file].mmap[loc.offset:])
+		if n < len(b) {
+			return nil, io.ErrUnexpectedEOF
 		}
 		return b, nil
 	}
 
 	commit := func(entries map[[32]byte]memory.Entry) error {
-		// Seek to the end of the newest file
+		// Seek to the end of the newest file or create a new file
 		fileNo := len(d.files) - 1
-		f := d.files[fileNo]
-		offset, err := f.Seek(0, io.SeekEnd)
+		var f *blockFile
+		var offset int64
+		var err error
+		if fileNo < 0 {
+			fileNo = 0
+			f, err = d.newFile()
+		} else {
+			f = d.files[fileNo]
+			offset, err = f.file.Seek(0, io.SeekEnd)
+		}
 		if err != nil {
 			return err
 		}
@@ -210,7 +225,21 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			if offset >= int64(d.fileLimit) {
 				// Close the block
 				haveBlock = false
-				_, err = writeEntry(f, &endBlockEntry{})
+				_, err = writeEntry(f.file, &endBlockEntry{})
+				if err != nil {
+					return err
+				}
+
+				// Remap the file
+				if f.mmap != nil {
+					err := f.mmap.Unmap()
+					f.mmap = nil
+					if err != nil {
+						return err
+					}
+				}
+
+				f.mmap, err = mmap.Map(f.file, mmap.RDWR, 0)
 				if err != nil {
 					return err
 				}
@@ -234,7 +263,7 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 				block = b.ID
 				haveBlock = true
 
-				n, err := writeEntry(f, b)
+				n, err := writeEntry(f.file, b)
 				if err != nil {
 					return err
 				}
@@ -247,7 +276,7 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			}
 
 			// Write the entry
-			n, err := writeEntry(f, &recordEntry{Key: e.Key, Length: l})
+			n, err := writeEntry(f.file, &recordEntry{Key: e.Key, Length: l})
 			if err != nil {
 				return err
 			}
@@ -259,19 +288,35 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			}
 
 			// Write the data
-			n, err = f.Write(e.Value)
+			n, err = f.file.Write(e.Value)
 			if err != nil {
 				return err
 			}
 			offset += int64(n)
 		}
 
+		if !haveBlock {
+			return nil
+		}
+
 		// Close the block
-		if haveBlock {
-			_, err = writeEntry(f, &endBlockEntry{})
+		_, err = writeEntry(f.file, &endBlockEntry{})
+		if err != nil {
+			return err
+		}
+
+		// Remap the file
+		if f.mmap != nil {
+			err := f.mmap.Unmap()
+			f.mmap = nil
 			if err != nil {
 				return err
 			}
+		}
+
+		f.mmap, err = mmap.Map(f.file, mmap.RDWR, 0)
+		if err != nil {
+			return err
 		}
 
 		return nil

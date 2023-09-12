@@ -47,6 +47,7 @@ require (
 	github.com/cometbft/cometbft v0.38.0-rc3
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/dgraph-io/badger/v4 v4.2.0
+	github.com/edsrzf/mmap-go v1.0.0
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/gobeam/stringy v0.0.6
