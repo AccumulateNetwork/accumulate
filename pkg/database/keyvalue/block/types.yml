@@ -1,0 +1,23 @@
+startBlockEntry:
+  union: { type: entry, private: true }
+  fields:
+    - name: ID
+      type: uint
+    - name: Parent
+      type: uint
+
+recordEntry:
+  union: { type: entry, private: true }
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+      pointer: true
+    - name: Deleted
+      type: bool
+    - name: Value
+      type: bytes
+
+endBlockEntry:
+  union: { type: entry, private: true }
+  fields:
