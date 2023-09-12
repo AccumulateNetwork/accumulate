@@ -9,7 +9,7 @@ package main
 import (
 	"fmt"
 	"net/http"
-	_ "net/http/pprof" //nolint:gosec // nosemgrep:G108-1
+	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"strings"
 	"time"
