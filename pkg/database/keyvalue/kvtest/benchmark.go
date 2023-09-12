@@ -72,10 +72,16 @@ func BenchmarkReadRandom(b *testing.B, open Opener) {
 	batch = db.Begin(nil, false)
 	defer batch.Discard()
 
-	// Read
 	r := rand.New(rand.NewSource(0))
-	for i := 0; i < b.N; i++ {
-		_, err := batch.Get(keys[r.Intn(N)])
+	indices := make([]int, b.N)
+	for i := range indices {
+		indices[i] = r.Intn(N)
+	}
+
+	// Read
+	b.ResetTimer()
+	for _, i := range indices {
+		_, err := batch.Get(keys[i])
 		if err != nil {
 			require.NoError(b, err)
 		}
