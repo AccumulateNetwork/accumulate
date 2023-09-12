@@ -20,7 +20,7 @@ func runApplyFix(_ *cobra.Command, args []string) {
 }
 
 // Apply the fix file to a database
-func applyFix(fixFile, badDB string) {
+func applyFix(fixFile, badDB string) (NumModified, NumAdded uint64) {
 	boldCyan.Println("\n Apply Fix")
 
 	f, err := os.Open(fixFile)
@@ -35,27 +35,32 @@ func applyFix(fixFile, badDB string) {
 	// Apply the fixes
 
 	// Keys to be deleted
-	NumAdded := read8(f, buff[:])
+	txn := db.NewWriteBatch()
+	NumAdded = read8(f, buff[:])
 	for i := uint64(0); i < NumAdded; i++ {
 		read32(f, buff[:])
-		txn := db.NewTransaction(true)
-		err := txn.Delete(buff[:32])
+		err := txn.Delete(copyBuf(buff[:32]))
 		checkf(err, "failed to delete")
-		check(txn.Commit())
 	}
 
 	var keyBuff [1024]byte
-	NumModified := read8(f, buff[:])
+	NumModified = read8(f, buff[:])
 	for i := uint64(0); i < NumModified; i++ {
 		keyLen := read8(f, buff[:])
 		read(f, keyBuff[:keyLen])
 		valueLen := read8(f, buff[:])
 		read(f, buff[:valueLen])
-		txn := db.NewTransaction(true)
-		err := txn.Set(keyBuff[:keyLen], buff[:valueLen])
+		err := txn.Set(copyBuf(keyBuff[:keyLen]), copyBuf(buff[:valueLen]))
 		checkf(err, "failed to update a value in the database")
-		check(txn.Commit())
 	}
+	check(txn.Flush())
 
 	fmt.Printf("\nModified: %d Deleted: %d\n", NumModified, NumAdded)
+	return NumModified, NumAdded
+}
+
+func copyBuf(b []byte) []byte {
+	c := make([]byte, len(b))
+	copy(c, b)
+	return c
 }

@@ -38,7 +38,7 @@ func runBuildDiff(_ *cobra.Command, args []string) {
 //
 //	N = 64 bits  -- number of keys modified or missing in the bad state
 //	[N][8]bytes  -- keys of entries to restore to previous values
-func buildDiff(summary, badDB, diffFile string) {
+func buildDiff(summary, badDB, diffFile string) (NumModified, NumAdded int) {
 	boldCyan.Println("\n Build Diff")
 	keys := make(map[[8]byte][8]byte)
 
@@ -141,4 +141,6 @@ func buildDiff(summary, badDB, diffFile string) {
 	for _, uk := range modifiedKeys { //   8 bytes of key hashes
 		check2(f.Write(uk))
 	}
+
+	return len(modifiedKeys), len(addedKeys)
 }
