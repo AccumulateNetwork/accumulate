@@ -38,6 +38,7 @@ type recordLocation struct {
 	file   uint
 	block  uint64
 	offset int64
+	length int64
 }
 
 func Open(path string) (_ *Database, err error) {
@@ -93,7 +94,7 @@ func Open(path string) (_ *Database, err error) {
 				return nil, fmt.Errorf("reading entries from %v: %w", f.Name(), err)
 			}
 
-			pos := offset
+			start := offset
 			offset += int64(n)
 
 			switch e := e.(type) {
@@ -104,7 +105,7 @@ func Open(path string) (_ *Database, err error) {
 				if _, ok := db.blocks[e.ID]; ok {
 					return nil, fmt.Errorf("duplicate block %d", e.ID)
 				}
-				db.blocks[e.ID] = blockLocation{file: uint(fileNo), offset: pos}
+				db.blocks[e.ID] = blockLocation{file: uint(fileNo), offset: start}
 				block = &e.ID
 
 				if db.next < e.ID {
@@ -122,7 +123,18 @@ func Open(path string) (_ *Database, err error) {
 					return nil, fmt.Errorf("%v is corrupted", f.Name())
 				}
 
-				db.records[e.Key.Hash()] = recordLocation{file: uint(fileNo), block: *block, offset: pos}
+				db.records[e.Key.Hash()] = recordLocation{file: uint(fileNo), block: *block, offset: offset, length: e.Length}
+
+				if e.Length <= 0 {
+					continue
+				}
+
+				// Skip the record data
+				offset += e.Length
+				_, err := f.Seek(int64(e.Length), io.SeekCurrent)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -167,26 +179,19 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	// TODO Transactional reading
 	get := func(key *record.Key) ([]byte, error) {
 		loc, ok := d.records[key.Hash()]
-		if !ok {
+		if !ok || loc.length < 0 {
 			return nil, errors.NotFound.WithFormat("%v not found", key)
 		}
 		if loc.file >= uint(len(d.files)) {
 			return nil, errors.InternalError.WithFormat("record is corrupted")
 		}
 
-		f := d.files[loc.file]
-		e, _, err := readEntryAt(f, loc.offset)
+		b := make([]byte, loc.length)
+		_, err := d.files[loc.file].ReadAt(b, loc.offset)
 		if err != nil {
 			return nil, err
 		}
-		r, ok := e.(*recordEntry)
-		if !ok {
-			return nil, errors.InternalError.With("entry is not a record")
-		}
-		if r.Deleted {
-			return nil, errors.NotFound.WithFormat("%v not found", key)
-		}
-		return r.Value, nil
+		return b, nil
 	}
 
 	commit := func(entries map[[32]byte]memory.Entry) error {
@@ -236,9 +241,25 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 				offset += int64(n)
 			}
 
+			l := int64(len(e.Value))
+			if e.Delete {
+				l = -1
+			}
+
 			// Write the entry
-			d.records[kh] = recordLocation{file: uint(fileNo), block: block, offset: offset}
-			n, err := writeEntry(f, &recordEntry{Key: e.Key, Deleted: e.Delete, Value: e.Value})
+			n, err := writeEntry(f, &recordEntry{Key: e.Key, Length: l})
+			if err != nil {
+				return err
+			}
+			offset += int64(n)
+			d.records[kh] = recordLocation{file: uint(fileNo), block: block, offset: offset, length: l}
+
+			if e.Delete {
+				continue
+			}
+
+			// Write the data
+			n, err = f.Write(e.Value)
 			if err != nil {
 				return err
 			}

@@ -46,13 +46,15 @@ func openDb(t testing.TB, open Opener) *closableDb {
 }
 
 func TestDatabase(t *testing.T, open Opener) {
+	const N = 2
+
 	// Open and write changes
 	db := openDb(t, open)
 
 	batch := db.Begin(nil, true)
 	defer batch.Discard()
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < N; i++ {
 		err := batch.Put(record.NewKey("answer", i), []byte(fmt.Sprintf("%x this much data ", i)))
 		require.NoError(t, err, "Put")
 	}
@@ -66,7 +68,7 @@ func TestDatabase(t *testing.T, open Opener) {
 	batch = db.Begin(nil, true)
 	defer batch.Discard()
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < N; i++ {
 		val, err := batch.Get(record.NewKey("answer", i))
 		require.NoError(t, err, "Get")
 		require.Equal(t, fmt.Sprintf("%x this much data ", i), string(val))

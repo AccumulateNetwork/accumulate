@@ -13,10 +13,8 @@ recordEntry:
       type: record.Key
       marshal-as: reference
       pointer: true
-    - name: Deleted
-      type: bool
-    - name: Value
-      type: bytes
+    - name: Length
+      type: int
 
 endBlockEntry:
   union: { type: entry, private: true }

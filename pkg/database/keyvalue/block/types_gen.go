@@ -30,8 +30,7 @@ type endBlockEntry struct {
 type recordEntry struct {
 	fieldsSet []bool
 	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Deleted   bool        `json:"deleted,omitempty" form:"deleted" query:"deleted" validate:"required"`
-	Value     []byte      `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Length    int64       `json:"length,omitempty" form:"length" query:"length" validate:"required"`
 	extraData []byte
 }
 
@@ -67,8 +66,7 @@ func (v *recordEntry) Copy() *recordEntry {
 	if v.Key != nil {
 		u.Key = (v.Key).Copy()
 	}
-	u.Deleted = v.Deleted
-	u.Value = encoding.BytesCopy(v.Value)
+	u.Length = v.Length
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -108,10 +106,7 @@ func (v *recordEntry) Equal(u *recordEntry) bool {
 	case !((v.Key).Equal(u.Key)):
 		return false
 	}
-	if !(v.Deleted == u.Deleted) {
-		return false
-	}
-	if !(bytes.Equal(v.Value, u.Value)) {
+	if !(v.Length == u.Length) {
 		return false
 	}
 
@@ -171,8 +166,7 @@ func (v *endBlockEntry) IsValid() error {
 var fieldNames_recordEntry = []string{
 	1: "Type",
 	2: "Key",
-	3: "Deleted",
-	4: "Value",
+	3: "Length",
 }
 
 func (v *recordEntry) MarshalBinary() ([]byte, error) {
@@ -187,11 +181,8 @@ func (v *recordEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Key == nil) {
 		writer.WriteValue(2, v.Key.MarshalBinary)
 	}
-	if !(!v.Deleted) {
-		writer.WriteBool(3, v.Deleted)
-	}
-	if !(len(v.Value) == 0) {
-		writer.WriteBytes(4, v.Value)
+	if !(v.Length == 0) {
+		writer.WriteInt(3, v.Length)
 	}
 
 	_, _, err := writer.Reset(fieldNames_recordEntry)
@@ -214,14 +205,9 @@ func (v *recordEntry) IsValid() error {
 		errs = append(errs, "field Key is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Deleted is missing")
-	} else if !v.Deleted {
-		errs = append(errs, "field Deleted is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Value is missing")
-	} else if len(v.Value) == 0 {
-		errs = append(errs, "field Value is not set")
+		errs = append(errs, "field Length is missing")
+	} else if v.Length == 0 {
+		errs = append(errs, "field Length is not set")
 	}
 
 	switch len(errs) {
@@ -345,11 +331,8 @@ func (v *recordEntry) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(record.Key); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Key = x
 	}
-	if x, ok := reader.ReadBool(3); ok {
-		v.Deleted = x
-	}
-	if x, ok := reader.ReadBytes(4); ok {
-		v.Value = x
+	if x, ok := reader.ReadInt(3); ok {
+		v.Length = x
 	}
 
 	seen, err := reader.Reset(fieldNames_recordEntry)
@@ -412,20 +395,16 @@ func (v *endBlockEntry) MarshalJSON() ([]byte, error) {
 
 func (v *recordEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    entryType   `json:"type"`
-		Key     *record.Key `json:"key,omitempty"`
-		Deleted bool        `json:"deleted,omitempty"`
-		Value   *string     `json:"value,omitempty"`
+		Type   entryType   `json:"type"`
+		Key    *record.Key `json:"key,omitempty"`
+		Length int64       `json:"length,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Key == nil) {
 		u.Key = v.Key
 	}
-	if !(!v.Deleted) {
-		u.Deleted = v.Deleted
-	}
-	if !(len(v.Value) == 0) {
-		u.Value = encoding.BytesToJSON(v.Value)
+	if !(v.Length == 0) {
+		u.Length = v.Length
 	}
 	return json.Marshal(&u)
 }
@@ -462,15 +441,13 @@ func (v *endBlockEntry) UnmarshalJSON(data []byte) error {
 
 func (v *recordEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    entryType   `json:"type"`
-		Key     *record.Key `json:"key,omitempty"`
-		Deleted bool        `json:"deleted,omitempty"`
-		Value   *string     `json:"value,omitempty"`
+		Type   entryType   `json:"type"`
+		Key    *record.Key `json:"key,omitempty"`
+		Length int64       `json:"length,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Key = v.Key
-	u.Deleted = v.Deleted
-	u.Value = encoding.BytesToJSON(v.Value)
+	u.Length = v.Length
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -478,12 +455,7 @@ func (v *recordEntry) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Key = u.Key
-	v.Deleted = u.Deleted
-	if x, err := encoding.BytesFromJSON(u.Value); err != nil {
-		return fmt.Errorf("error decoding Value: %w", err)
-	} else {
-		v.Value = x
-	}
+	v.Length = u.Length
 	return nil
 }
 
