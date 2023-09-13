@@ -155,10 +155,10 @@
         "devnet",
         "-w=${workspaceFolder}/.nodes",
         "--reset",
-        "-b=2",
-        "-v=2",
+        "-b=1",
+        "-v=1",
         "-f=0",
-        "-s=2",
+        "-s=0",
         "--globals={\"executorVersion\": \"v2\"}",
         "--faucet-seed=ci",
       ]
