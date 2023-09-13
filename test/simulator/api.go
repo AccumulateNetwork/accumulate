@@ -40,7 +40,7 @@ func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
 		Logger:        n.logger,
 		TxMaxWaitTime: time.Hour,
 		LocalV3:       svc.ForPeer(n.peerID),
-		Querier:       svc,
+		Querier:       &api.Collator{Querier: svc, Network: svc},
 		Submitter:     svc,
 		Network:       svc,
 		Faucet:        svc,
