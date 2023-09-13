@@ -1,5 +1,4 @@
 .build validation image:
-  stage: pre test
   extends: .rules all
   image: docker:20
   services: [ docker:20-dind ]
@@ -10,17 +9,19 @@
     - docker push ${VALIDATION_IMAGE}
 
 go build:
-  stage: test
   extends: [ .rules all, .go ]
-  needs: []
+  needs:
+    - job: build-image:golang
+      optional: true
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
   script: go build -v ./...
 
 .go test:
-  stage: test
   extends: [ .rules all, .go ]
-  needs: []
+  needs:
+    - job: build-image:golang
+      optional: true
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
   artifacts:
@@ -53,13 +54,15 @@ go test 1/2:
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m ./test/validate -short -test.validate.network "$PWD/.nodes/node-1/dnn/" -run TestValidateNetwork
 
 lint:
-  stage: test
   extends: [ .rules all, .go ]
-  needs: []
+  needs:
+    - job: build-image:golang
+      optional: true
   variables:
     GIT_DEPTH: 0
   before_script:
     - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
+    - function check-diff { git diff --quiet "$@" && return 0; git --no-pager -c color.ui=always diff; return 1; }
   script:
     - echo -e "${SECTION}section_start:`date +%s`:lint\r${SECTION}Lint"
     - go run ./tools/cmd/golangci-lint run --verbose --timeout 20m
@@ -67,12 +70,12 @@ lint:
 
     - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"
     - go mod tidy
-    - git diff --quiet go.mod go.sum || die "Go mod files are not tidy. Please run \`go mod tidy\`."
+    - check-diff go.mod go.sum || die "Go mod files are not tidy. Please run \`go mod tidy\`."
     - echo -e "${SECTION}section_end:`date +%s`:tidy\r${SECTION}"
 
     - echo -e "${SECTION}section_start:`date +%s`:generate\r${SECTION}Verify generated files are up to date"
     - go generate -x ./...
-    - git diff --quiet || die "Generated files are not up to date. Please run \`go generate ./...\`."
+    - check-diff || die "Generated files are not up to date. Please run \`go generate ./...\`."
     - echo -e "${SECTION}section_end:`date +%s`:generate\r${SECTION}"
 
     - echo -e "${SECTION}section_start:`date +%s`:imports\r${SECTION}Verify code is correctly formatted"
@@ -83,7 +86,6 @@ lint:
 .cleanup images:
   # Once validation is done, delete the images
   # Disabled because it doesn't appear to work, though it was copied from GitLab's docs
-  stage: post test
   extends: .rules all
   image: docker:20
   services: [ docker:20-dind ]

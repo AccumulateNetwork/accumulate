@@ -13,6 +13,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/dgraph-io/badger"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -21,6 +22,45 @@ import (
 func GetKey(key []byte) (dbKey [32]byte) {
 	dbKey = sha256.Sum256(key)
 	return dbKey
+}
+
+func TestWriteLimit(t *testing.T) {
+	// Create a badger DB
+	raw, err := badger.Open(badger.
+		DefaultOptions(t.TempDir()).
+		WithMaxTableSize(1 << 20). // 1MB
+		WithLogger(slogger{}))
+	require.NoError(t, err)
+	defer raw.Close()
+
+	// Verify that 2000 entries causes ErrTxnTooBig (when max table size is 1MB)
+	txn := raw.NewTransaction(true)
+	defer txn.Discard()
+	for i := 0; i < 2000; i++ {
+		err = txn.Set([]byte(fmt.Sprint(i)), []byte{byte(i)})
+		if err == nil {
+			continue
+		}
+	}
+	require.ErrorIs(t, err, badger.ErrTxnTooBig)
+
+	// Create a kv db
+	db := &Database{badger: raw, ready: true}
+
+	// Verify that the kv db supports writes that exceed badger's limits
+	batch := db.Begin(nil, true)
+	for i := 0; i < 2000; i++ {
+		require.NoError(t, batch.Put(record.NewKey(i), []byte{byte(i)}))
+	}
+	require.NoError(t, batch.Commit())
+
+	// Verify the values can be read
+	batch = db.Begin(nil, false)
+	defer batch.Discard()
+	for i := 0; i < 2000; i++ {
+		_, err = batch.Get(record.NewKey(i))
+		require.NoError(t, err)
+	}
 }
 
 func TestDatabase(t *testing.T) {

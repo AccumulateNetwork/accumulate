@@ -13,10 +13,10 @@ import (
 	"io"
 	"os"
 
+	"github.com/cometbft/cometbft/crypto/ed25519"
+	tmjson "github.com/cometbft/cometbft/libs/json"
+	"github.com/cometbft/cometbft/types"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	tmjson "github.com/tendermint/tendermint/libs/json"
-	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -122,7 +122,7 @@ func export(_ *cobra.Command, args []string) {
 	check(err)
 	check(snapshot.CollectAnchors(w, batch, daemon.Config.Accumulate.PartitionUrl()))
 
-	rootHash, err := batch.BPT().GetRootHash()
+	rootHash, err := batch.GetBptRootHash()
 	check(err)
 
 	doc := new(types.GenesisDoc)

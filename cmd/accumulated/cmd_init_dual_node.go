@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"strings"
 
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/spf13/cobra"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"

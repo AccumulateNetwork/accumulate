@@ -28,9 +28,10 @@ type BvnInit struct {
 }
 
 type NetworkInit struct {
-	Id   string     `json:"id,omitempty" form:"id" query:"id" validate:"required"`
-	Bvns []*BvnInit `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
-	Bsn  *BvnInit   `json:"bsn,omitempty" form:"bsn" query:"bsn" validate:"required"`
+	Id        string     `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Bootstrap *NodeInit  `json:"bootstrap,omitempty" form:"bootstrap" query:"bootstrap" validate:"required"`
+	Bvns      []*BvnInit `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
+	Bsn       *BvnInit   `json:"bsn,omitempty" form:"bsn" query:"bsn" validate:"required"`
 }
 
 type NodeInit struct {
@@ -313,12 +314,16 @@ func (v *BvnInit) MarshalJSON() ([]byte, error) {
 
 func (v *NetworkInit) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Id   string                      `json:"id,omitempty"`
-		Bvns encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
-		Bsn  *BvnInit                    `json:"bsn,omitempty"`
+		Id        string                      `json:"id,omitempty"`
+		Bootstrap *NodeInit                   `json:"bootstrap,omitempty"`
+		Bvns      encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
+		Bsn       *BvnInit                    `json:"bsn,omitempty"`
 	}{}
 	if !(len(v.Id) == 0) {
 		u.Id = v.Id
+	}
+	if !(v.Bootstrap == nil) {
+		u.Bootstrap = v.Bootstrap
 	}
 	if !(len(v.Bvns) == 0) {
 		u.Bvns = v.Bvns
@@ -400,17 +405,20 @@ func (v *BvnInit) UnmarshalJSON(data []byte) error {
 
 func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Id   string                      `json:"id,omitempty"`
-		Bvns encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
-		Bsn  *BvnInit                    `json:"bsn,omitempty"`
+		Id        string                      `json:"id,omitempty"`
+		Bootstrap *NodeInit                   `json:"bootstrap,omitempty"`
+		Bvns      encoding.JsonList[*BvnInit] `json:"bvns,omitempty"`
+		Bsn       *BvnInit                    `json:"bsn,omitempty"`
 	}{}
 	u.Id = v.Id
+	u.Bootstrap = v.Bootstrap
 	u.Bvns = v.Bvns
 	u.Bsn = v.Bsn
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Id = u.Id
+	v.Bootstrap = u.Bootstrap
 	v.Bvns = u.Bvns
 	v.Bsn = u.Bsn
 	return nil

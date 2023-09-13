@@ -218,6 +218,9 @@ func recordIs[T Record](r Record, err error) (T, error) {
 	if v, ok := r.(T); ok {
 		return v, nil
 	}
+	if err, ok := r.(*ErrorRecord); ok {
+		return z, err
+	}
 	return z, fmt.Errorf("rpc returned unexpected type: want %T, got %T", z, r)
 }
 
@@ -244,7 +247,10 @@ func chainEntryOfMessage[T messaging.Message](r Record, err error) (*ChainEntryR
 	}
 	cr.Value, err = messageRecordIs[T](cr.Value, nil)
 	if err != nil {
-		return nil, err
+		// Ignore error records
+		if _, ok := err.(*ErrorRecord); !ok {
+			return nil, err
+		}
 	}
 	return ChainEntryRecordAs[*MessageRecord[T]](cr)
 }

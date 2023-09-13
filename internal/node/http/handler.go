@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -113,7 +113,6 @@ func NewHandler(opts Options) (*Handler, error) {
 		LocalV3:       selfClient,
 		Querier:       &api.Collator{Querier: client, Network: client},
 		Submitter:     client,
-		Network:       client,
 		Faucet:        client,
 		Validator:     client,
 		Sequencer:     client.Private(),

@@ -3,7 +3,7 @@
   - if: ($CI_COMMIT_BRANCH == 'release-1.0' || $CI_COMMIT_TAG != null) && $CI_PIPELINE_SOURCE != 'merge_request_event'
 
 git describe:
-  stage: pre deploy
+  stage: test
   extends: .rules all
   needs: []
   script:
@@ -14,7 +14,7 @@ git describe:
       dotenv: git.env
 
 docker buildx:
-  stage: pre deploy
+  stage: test
   extends: .rules release
   image: docker:20-git
   needs: []
@@ -31,7 +31,7 @@ docker buildx:
     - docker build --platform=local -o . ./docker-buildx
 
 build main image:
-  stage: pre deploy
+  stage: test
   extends: .rules release
   needs: [ docker buildx ]
   image: docker:20
@@ -49,12 +49,26 @@ build main image:
     - docker buildx build --platform linux/amd64,linux/arm64 --push -t ${PRODUCTION_IMAGE} .
 
 build binaries:
-  stage: pre deploy
+  stage: test
   extends: [ .rules release, .go ]
   needs: [ git describe ]
   # rules:
   # - if: ($CI_COMMIT_BRANCH != 'develop' && $CI_COMMIT_TAG == null) || $CI_PIPELINE_SOURCE == 'merge_request_event'
   #   when: manual
+  before_script:
+  - |
+    function build-daemon {
+      export GOOS=$1
+      export GOARCH=$2
+      BIN=accumulated
+      [ -z "$GOOS" ] || BIN=${BIN}-${GOOS}
+      [ -z "$GOARCH" ] || BIN=${BIN}-${GOARCH}
+      [[ $GOOS == windows ]] && BIN=${BIN}.exe
+      export BUILDFLAGS="-o ${BIN}"
+      echo -e "${SECTION}section_start:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}Build accumulated for $GOOS $GOARCH"
+      make GIT_COMMIT=${CI_COMMIT_SHA} GIT_DESCRIBE=${GIT_DESCRIBE}
+      echo -e "${SECTION}section_end:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}";
+    }
   script:
     - build-daemon linux amd64
     - build-daemon linux arm64

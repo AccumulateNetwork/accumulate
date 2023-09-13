@@ -16,9 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ghodss/yaml"
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/spf13/cobra"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -26,6 +25,7 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gopkg.in/yaml.v3"
 )
 
 var cmdInitNetwork = &cobra.Command{
@@ -180,6 +180,17 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.BsnNodeKey, bsnGenDoc)
 			checkf(err, "write BSNN files")
 		}
+	}
+
+	if netInit.Bootstrap != nil {
+		i := len(netInit.Bvns)
+		if netInit.Bsn != nil {
+			i++
+		}
+		configs[i][0][0].SetRoot(filepath.Join(flagMain.WorkDir, "bootstrap"))
+
+		err = accumulated.WriteNodeFiles(configs[i][0][0], nil, netInit.Bootstrap.PrivValKey, nil)
+		checkf(err, "write bootstrap files")
 	}
 }
 

@@ -21,20 +21,21 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/cometbft/cometbft/abci/types"
+	tmcfg "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto"
+	tmlog "github.com/cometbft/cometbft/libs/log"
+	service2 "github.com/cometbft/cometbft/libs/service"
+	tmnode "github.com/cometbft/cometbft/node"
+	tmp2p "github.com/cometbft/cometbft/p2p"
+	"github.com/cometbft/cometbft/privval"
+	"github.com/cometbft/cometbft/proxy"
+	tmclient "github.com/cometbft/cometbft/rpc/client"
+	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/fatih/color"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	tmlog "github.com/tendermint/tendermint/libs/log"
-	service2 "github.com/tendermint/tendermint/libs/service"
-	tmnode "github.com/tendermint/tendermint/node"
-	tmp2p "github.com/tendermint/tendermint/p2p"
-	"github.com/tendermint/tendermint/privval"
-	"github.com/tendermint/tendermint/proxy"
-	tmclient "github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
@@ -332,13 +333,14 @@ func (d *Daemon) startApp() (types.Application, error) {
 		Router:  routing.MessageRouter{Router: d.router},
 	}}
 	execOpts := execute.Options{
-		Logger:    d.Logger,
-		Database:  d.db,
-		Key:       d.Key().Bytes(),
-		Router:    d.router,
-		EventBus:  d.eventBus,
-		Sequencer: client.Private(),
-		Querier:   client,
+		Logger:        d.Logger,
+		Database:      d.db,
+		Key:           d.Key().Bytes(),
+		Router:        d.router,
+		EventBus:      d.eventBus,
+		Sequencer:     client.Private(),
+		Querier:       client,
+		EnableHealing: d.Config.Accumulate.Healing.Enable,
 		Describe: execute.DescribeShim{
 			NetworkType: d.Config.Accumulate.Describe.NetworkType,
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,
@@ -378,7 +380,7 @@ func (d *Daemon) startConsensus(app types.Application) error {
 		d.nodeKey,
 		proxy.NewLocalClientCreator(app),
 		tmnode.DefaultGenesisDocProviderFunc(&d.Config.Config),
-		tmnode.DefaultDBProvider,
+		tmcfg.DefaultDBProvider,
 		tmnode.DefaultMetricsProvider(d.Config.Instrumentation),
 		d.Logger,
 	)
@@ -431,7 +433,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	globals := <-chGlobals
 
 	// Initialize all the services
-	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
+	consensusSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
 		Database:         d.db,
@@ -454,7 +456,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	})
 	metricsSvc := api.NewMetricsService(api.MetricsServiceParams{
 		Logger:  d.Logger.With("module", "acc-rpc"),
-		Node:    nodeSvc,
+		Node:    consensusSvc,
 		Querier: querySvc,
 	})
 	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
@@ -480,7 +482,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		ValidatorKey: d.Key().Bytes(),
 	})
 	messageHandler, err := message.NewHandler(
-		&message.ConsensusService{ConsensusService: nodeSvc},
+		&message.ConsensusService{ConsensusService: consensusSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
 		&message.NetworkService{NetworkService: netSvc},
 		&message.Querier{Querier: querySvc},
@@ -494,7 +496,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	}
 
 	services := []interface{ Type() v3.ServiceType }{
-		nodeSvc,
+		consensusSvc,
 		metricsSvc,
 		netSvc,
 		querySvc,

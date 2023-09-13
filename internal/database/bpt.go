@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
@@ -20,6 +20,20 @@ import (
 
 func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *bpt.BPT {
 	return bpt.New(parent, logger, store, key, label)
+}
+
+// GetBptRootHash returns the BPT root hash, after applying updates as necessary
+// for modified accounts.
+func (b *Batch) GetBptRootHash() ([32]byte, error) {
+	for _, a := range b.account {
+		if a.IsDirty() {
+			err := a.putBpt()
+			if err != nil {
+				return [32]byte{}, errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
+			}
+		}
+	}
+	return b.BPT().GetRootHash()
 }
 
 type AccountIterator struct {
