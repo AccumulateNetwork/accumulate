@@ -14,8 +14,8 @@ import (
 	"os"
 	"sync"
 
+	"github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/rpc/client/http"
 )
 
 func init() {

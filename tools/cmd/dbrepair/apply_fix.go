@@ -20,7 +20,7 @@ func runApplyFix(_ *cobra.Command, args []string) {
 }
 
 // Apply the fix file to a database
-func applyFix(fixFile, badDB string) {
+func applyFix(fixFile, badDB string) (NumModified, NumAdded uint64) {
 	boldCyan.Println("\n Apply Fix")
 
 	f, err := os.Open(fixFile)
@@ -35,37 +35,33 @@ func applyFix(fixFile, badDB string) {
 	// Apply the fixes
 
 	// Keys to be deleted
-	var percent float64
-	NumAdded := read8(f, buff[:], "keys to delete")
+	txn := db.NewWriteBatch()
+	NumAdded = read8(f, buff[:],"read key to delete")
 	for i := uint64(0); i < NumAdded; i++ {
-		if float64(i)/float64(NumAdded) >= percent*.99 {
-			boldYellow.Printf("%02d%% ", int(percent*100))
-			percent += .05
-		}
-		read32(f, buff[:], "key to be deleted")
-		txn := db.NewTransaction(true)
-		err := txn.Delete(buff[:32])
+		read32(f, buff[:],"read key to delete")
+		err := txn.Delete(copyBuf(buff[:32]))
 		checkf(err, "failed to delete")
-		check(txn.Commit())
 	}
 	fmt.Println()
 
-	percent = 0
 	var keyBuff [1024]byte
-	NumModified := read8(f, buff[:], "keys modified/restored")
+	NumModified = read8(f, buff[:],"read number modified")
 	for i := uint64(0); i < NumModified; i++ {
-		if float64(i)/float64(NumModified) >= percent*.99 {
-			boldYellow.Printf("%02d%% ", int(percent*100))
-			percent += .05
-		}
-		keyLen := read8(f, buff[:], "key length")
+		keyLen := read8(f, buff[:],"read key of modified key/value")
 		read(f, keyBuff[:keyLen])
-		valueLen := read8(f, buff[:], "value length")
+		valueLen := read8(f, buff[:],"read value of modified key/value")
 		read(f, buff[:valueLen])
-		txn := db.NewTransaction(true)
-		err := txn.Set(keyBuff[:keyLen], buff[:valueLen])
+		err := txn.Set(copyBuf(keyBuff[:keyLen]), copyBuf(buff[:valueLen]))
 		checkf(err, "failed to update a value in the database")
-		check(txn.Commit())
 	}
-	fmt.Printf("\n\nModified: %d Deleted: %d\n", NumModified, NumAdded)
+	check(txn.Flush())
+
+	fmt.Printf("\nModified: %d Deleted: %d\n", NumModified, NumAdded)
+	return NumModified, NumAdded
+}
+
+func copyBuf(b []byte) []byte {
+	c := make([]byte, len(b))
+	copy(c, b)
+	return c
 }

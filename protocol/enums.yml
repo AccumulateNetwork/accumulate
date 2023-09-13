@@ -30,6 +30,8 @@ PartitionType:
   BlockSummary:
     value: 3
     aliases: [block-summary]
+  Bootstrap:
+    value: 4
 
 DataEntryType:
   Unknown:

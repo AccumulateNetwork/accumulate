@@ -21,16 +21,14 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/libs/log"
-	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -102,12 +100,7 @@ func run(_ *cobra.Command, args []string) {
 		Fatalf("must specify at least one peer")
 	}
 
-	lw, err := logging.NewConsoleWriter("plain")
-	Check(err)
-	ll, lw, err := logging.ParseLogLevel(flag.LogLevel, lw)
-	Check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(lw), ll, false)
-	Check(err)
+	logger := NewConsoleLogger(flag.LogLevel)
 
 	node, err := p2p.New(p2p.Options{
 		Key:               loadOrGenerateKey(),

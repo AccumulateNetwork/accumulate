@@ -181,7 +181,7 @@ func (x BlockSummary) process(batch *ChangeSet, ctx *SummaryContext) (err error)
 	}
 
 	// Verify the root hash is the same
-	hash, err := part.BPT().GetRootHash()
+	hash, err := part.GetBptRootHash()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
