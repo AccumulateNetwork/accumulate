@@ -59,6 +59,7 @@ func (v *sigSection) Copy() *sigSection {
 
 	u.Signatures = make([]*Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
+		v := v
 		if v != nil {
 			u.Signatures[i] = (v).Copy()
 		}
