@@ -73,7 +73,7 @@ type BlockState struct {
 func (b *BlockState) Params() execute.BlockParams { return b.params }
 func (b *BlockState) IsEmpty() bool               { return b.stats.IsEmpty() }
 func (b *BlockState) Discard()                    { b.batch.Discard() }
-func (b *BlockState) Hash() []byte                { return nil }
+func (b *BlockState) Hash() ([32]byte, error)     { return [32]byte{}, nil }
 func (b *BlockState) ChangeSet() record.Record    { return b.batch }
 
 func (b *BlockState) DidCompleteMajorBlock() (uint64, time.Time, bool) {

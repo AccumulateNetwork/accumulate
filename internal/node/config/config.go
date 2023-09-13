@@ -16,12 +16,12 @@ import (
 	"strings"
 	"time"
 
+	tm "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/privval"
 	"github.com/mitchellh/mapstructure"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
-	tm "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -159,11 +159,17 @@ type Accumulate struct {
 
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
+	Healing     Healing     `toml:"healing" mapstructure:"healing"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
 	API         API         `toml:"api" mapstructure:"api"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
+}
+
+type Healing struct {
+	// Enable enables healing
+	Enable bool `toml:"enable" mapstructure:"enable"`
 }
 
 type Snapshots struct {
@@ -288,11 +294,17 @@ func (n *Network) GetPartitionByID(partitionID string) *Partition {
 }
 
 func LoadFilePV(keyFilePath, stateFilePath string) (*privval.FilePV, error) {
-	return privval.LoadFilePVSafe(keyFilePath, stateFilePath)
+	// TODO Submit an MR to CometBFT to fix their bull**** (calling os.Exit if
+	// the config file load fails)
+	return privval.LoadFilePV(keyFilePath, stateFilePath), nil
 }
 
 func Load(dir string) (*Config, error) {
 	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
+}
+
+func LoadAcc(dir string) (*Accumulate, error) {
+	return loadAccumulate(dir, filepath.Join(dir, accConfigFile))
 }
 
 func loadFile(dir, tmFile, accFile string) (*Config, error) {
@@ -309,13 +321,25 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 	return &Config{*tm, *acc}, nil
 }
 
-func Store(config *Config) error {
-	err := tm.WriteConfigFileSave(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
-	if err != nil {
-		return err
-	}
+func Store(config *Config) (err error) {
+	// TODO Submit an MR to CometBFT to fix their bull**** (calling os.Exit if
+	// the config file write fails)
+	defer func() {
+		r := recover()
+		if e, ok := r.(error); ok {
+			err = e
+		} else if r != nil {
+			err = fmt.Errorf("panicked: %v", r)
+		}
+	}()
 
-	return writeTomlFile(config.Accumulate, filepath.Join(config.RootDir, configDir, accConfigFile))
+	tm.WriteConfigFile(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
+
+	return StoreAcc(config, filepath.Join(config.RootDir, configDir))
+}
+
+func StoreAcc(config *Config, dir string) error {
+	return writeTomlFile(config.Accumulate, filepath.Join(dir, accConfigFile))
 }
 
 func writeTomlFile(v any, file string) error {

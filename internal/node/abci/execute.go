@@ -11,7 +11,7 @@ package abci
 import (
 	"crypto/sha256"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -39,6 +39,11 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	if err != nil {
 		logger.Info("Failed to execute messages", "tx", logging.AsHex(hash), "error", err)
 		return nil, nil, nil, errors.UnknownError.Wrap(err)
+	}
+	for _, r := range results {
+		if r.Result == nil {
+			r.Result = new(protocol.EmptyResult)
+		}
 	}
 
 	// If the results can't be marshaled, provide no results but do not fail the
