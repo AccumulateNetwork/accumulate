@@ -57,6 +57,7 @@ func (v *DbPatch) Copy() *DbPatch {
 
 	u.Operations = make([]DbPatchOp, len(v.Operations))
 	for i, v := range v.Operations {
+		v := v
 		if v != nil {
 			u.Operations[i] = CopyDbPatchOp(v)
 		}
