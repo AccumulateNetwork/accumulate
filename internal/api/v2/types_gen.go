@@ -363,6 +363,7 @@ func (v *ChainState) Copy() *ChainState {
 	u.Height = v.Height
 	u.Roots = make([][]byte, len(v.Roots))
 	for i, v := range v.Roots {
+		v := v
 		u.Roots[i] = encoding.BytesCopy(v)
 	}
 	if len(v.extraData) > 0 {
@@ -465,6 +466,7 @@ func (v *ResponseDataEntrySet) Copy() *ResponseDataEntrySet {
 
 	u.DataEntries = make([]ResponseDataEntry, len(v.DataEntries))
 	for i, v := range v.DataEntries {
+		v := v
 		u.DataEntries[i] = *(&v).Copy()
 	}
 	u.Total = v.Total

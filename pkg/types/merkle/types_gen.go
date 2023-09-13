@@ -63,6 +63,7 @@ func (v *Receipt) Copy() *Receipt {
 	u.Anchor = encoding.BytesCopy(v.Anchor)
 	u.Entries = make([]*ReceiptEntry, len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		if v != nil {
 			u.Entries[i] = (v).Copy()
 		}
@@ -98,10 +99,12 @@ func (v *State) Copy() *State {
 	u.Count = v.Count
 	u.Pending = make([][]byte, len(v.Pending))
 	for i, v := range v.Pending {
+		v := v
 		u.Pending[i] = encoding.BytesCopy(v)
 	}
 	u.HashList = make([][]byte, len(v.HashList))
 	for i, v := range v.HashList {
+		v := v
 		u.HashList[i] = encoding.BytesCopy(v)
 	}
 
