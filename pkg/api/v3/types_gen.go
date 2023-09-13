@@ -524,6 +524,7 @@ func (v *BlockEvent) Copy() *BlockEvent {
 	u.Major = v.Major
 	u.Entries = make([]*ChainEntryRecord[Record], len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		if v != nil {
 			u.Entries[i] = (v).Copy()
 		}
@@ -587,6 +588,7 @@ func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 	}
 	u.State = make([][]byte, len(v.State))
 	for i, v := range v.State {
+		v := v
 		u.State[i] = encoding.BytesCopy(v)
 	}
 	if len(v.extraData) > 0 {
@@ -652,6 +654,7 @@ func (v *ChainRecord) Copy() *ChainRecord {
 	u.Count = v.Count
 	u.State = make([][]byte, len(v.State))
 	for i, v := range v.State {
+		v := v
 		u.State[i] = encoding.BytesCopy(v)
 	}
 	if len(v.extraData) > 0 {
@@ -695,6 +698,7 @@ func (v *ConsensusStatus) Copy() *ConsensusStatus {
 	u.PartitionType = v.PartitionType
 	u.Peers = make([]*ConsensusPeerInfo, len(v.Peers))
 	for i, v := range v.Peers {
+		v := v
 		if v != nil {
 			u.Peers[i] = (v).Copy()
 		}
@@ -1159,6 +1163,7 @@ func (v *NodeInfo) Copy() *NodeInfo {
 	u.Network = v.Network
 	u.Services = make([]*ServiceAddress, len(v.Services))
 	for i, v := range v.Services {
+		v := v
 		if v != nil {
 			u.Services[i] = (v).Copy()
 		}
@@ -1279,6 +1284,7 @@ func (v *RecordRange[T]) Copy() *RecordRange[T] {
 
 	u.Records = make([]T, len(v.Records))
 	for i, v := range v.Records {
+		v := v
 		if !EqualRecord(v, nil) {
 			u.Records[i] = CopyRecord(v).(T)
 		}

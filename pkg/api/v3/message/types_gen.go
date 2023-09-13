@@ -302,6 +302,7 @@ func (v *EventMessage) Copy() *EventMessage {
 
 	u.Value = make([]api.Event, len(v.Value))
 	for i, v := range v.Value {
+		v := v
 		if v != nil {
 			u.Value[i] = api.CopyEvent(v)
 		}
@@ -368,6 +369,7 @@ func (v *FindServiceResponse) Copy() *FindServiceResponse {
 
 	u.Value = make([]*api.FindServiceResult, len(v.Value))
 	for i, v := range v.Value {
+		v := v
 		if v != nil {
 			u.Value[i] = (v).Copy()
 		}
@@ -565,6 +567,7 @@ func (v *SubmitResponse) Copy() *SubmitResponse {
 
 	u.Value = make([]*api.Submission, len(v.Value))
 	for i, v := range v.Value {
+		v := v
 		if v != nil {
 			u.Value[i] = (v).Copy()
 		}
@@ -628,6 +631,7 @@ func (v *ValidateResponse) Copy() *ValidateResponse {
 
 	u.Value = make([]*api.Submission, len(v.Value))
 	for i, v := range v.Value {
+		v := v
 		if v != nil {
 			u.Value[i] = (v).Copy()
 		}

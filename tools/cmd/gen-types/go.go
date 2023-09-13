@@ -458,7 +458,7 @@ func GoCopy(field *Field, dstName, srcName string) (string, error) {
 	}
 	return fmt.Sprintf(
 		"\t%[1]s = make(%[2]s, len(%[3]s))\n"+
-			"\tfor i, v := range %[3]s { %s }",
+			"\tfor i, v := range %[3]s { v := v; %s }",
 		dstName, GoResolveType(field, false, false), srcName, expr), nil
 }
 
