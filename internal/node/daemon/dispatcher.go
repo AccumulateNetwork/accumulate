@@ -10,8 +10,8 @@ import (
 	"context"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/tendermint/tendermint/mempool"
-	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	"github.com/cometbft/cometbft/mempool"
+	jrpc "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"

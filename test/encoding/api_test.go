@@ -16,9 +16,9 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/libs/log"
 	"github.com/ulikunitz/xz"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"

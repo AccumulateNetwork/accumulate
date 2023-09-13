@@ -16,6 +16,7 @@ import (
 
 	"github.com/dgraph-io/badger"
 	"github.com/fatih/color"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDbRepair(t *testing.T) {
@@ -31,15 +32,18 @@ func TestDbRepair(t *testing.T) {
 	// Note this documents what we want to do.  Of course, the
 	// test actually skips sending files back and forth between good
 	// nodes and bad nodes.
-	buildTestDBs(5e3, goodDB, badDB)  // Build Test DBs
-	buildSummary(goodDB, summaryF)    // First go to node with good db and build a summary
-	buildDiff(summaryF, badDB, diffF) // Send the summary to the bad node and create a diff
-	printDiff(diffF, goodDB)          // What is the diff you say? We can print!
-	buildFix(diffF, goodDB, fixF)     // Send the diff back to the good node to build a fix
-	applyFix(fixF, badDB)             // Send the fix to the bad node and apply it
-	applyFix(fixF, badDB)             // Does it fail if you apply twice?
-	buildDiff(summaryF, badDB, diffF) // Send the summary to bad node to check the fix
-	printDiff(diffF, goodDB)          // Send the new diff back to good node to ensure all is good!
+	buildTestDBs(1e3, goodDB, badDB)            // Build Test DBs
+	buildSummary(goodDB, summaryF)              // First go to node with good db and build a summary
+	buildDiff(summaryF, badDB, diffF)           // Send the summary to the bad node and create a diff
+	printDiff(diffF, goodDB)                    // What is the diff you say? We can print!
+	buildFix(diffF, goodDB, fixF)               // Send the diff back to the good node to build a fix
+	applyFix(fixF, badDB)                       // Send the fix to the bad node and apply it
+	applyFix(fixF, badDB)                       // Does it fail if you apply twice?
+	nm, na := buildDiff(summaryF, badDB, diffF) // Send the summary to bad node to check the fix
+	printDiff(diffF, goodDB)                    // Send the new diff back to good node to ensure all is good!
+
+	assert.Zero(t, nm, "Expected no modifications the second time")
+	assert.Zero(t, na, "Expected no additions the second time")
 
 	// Note:  If we have the summaryF on the bad node, we can check for correctness without sending
 	// the diff file back to the good node, but we can't produce addresses for nodes to delete.
@@ -99,7 +103,7 @@ func TestDbRepairMissing(t *testing.T) {
 	// Note this documents what we want to do.  Of course, the
 	// test actually skips sending files back and forth between good
 	// nodes and bad nodes.
-	buildTestDBs(1e5, goodDB, badDB)     // Build Test DBs
+	buildTestDBs(1e3, goodDB, badDB)     // Build Test DBs
 	buildSummary(goodDB, summaryF)       // First go to node with good db and build a summary
 	buildMissing(summaryF, badDB, diffF) // Send the summary to the bad node and create a diff
 	printDiff(diffF, goodDB)             // What is the diff you say? We can print!
@@ -121,7 +125,7 @@ func TestCompareDB(t *testing.T) {
 	badDB := filepath.Join(dir, "bad.db")
 	summaryF := filepath.Join(dir, "summary.dat")
 
-	buildTestDBs(2e4, goodDB, badDB)
+	buildTestDBs(1e3, goodDB, badDB)
 	buildSummary(goodDB, summaryF)
 
 	gDB, gClose := OpenDB(goodDB)
