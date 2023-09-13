@@ -135,6 +135,7 @@ func (v *ReceiptList) Copy() *ReceiptList {
 	}
 	u.Elements = make([][]byte, len(v.Elements))
 	for i, v := range v.Elements {
+		v := v
 		u.Elements[i] = encoding.BytesCopy(v)
 	}
 	if v.Receipt != nil {
@@ -202,6 +203,7 @@ func (v *SignatureSetEntry) Copy() *SignatureSetEntry {
 	u.Version = v.Version
 	u.Path = make([]*url.URL, len(v.Path))
 	for i, v := range v.Path {
+		v := v
 		if v != nil {
 			u.Path[i] = v
 		}
@@ -277,6 +279,7 @@ func (v *sigSetData) Copy() *sigSetData {
 	u.Version = v.Version
 	u.Entries = make([]SigSetEntry, len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		u.Entries[i] = *(&v).Copy()
 	}
 	if len(v.extraData) > 0 {
