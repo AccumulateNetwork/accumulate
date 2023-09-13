@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	stdlog "log"
 	"mime"
@@ -16,11 +17,10 @@ import (
 	"os"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/go-playground/validator/v10"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -38,16 +38,6 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "jrpc")
-	}
-
-	if opts.LocalV3 == nil ||
-		opts.Querier == nil ||
-		opts.Submitter == nil ||
-		opts.Network == nil ||
-		opts.Faucet == nil ||
-		opts.Validator == nil ||
-		opts.Sequencer == nil {
-		return nil, errors.BadRequest.With("missing P2P clients")
 	}
 
 	m.validate, err = protocol.NewValidator()
@@ -102,6 +92,10 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
+	if m.LocalV3 == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	s, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
@@ -137,6 +131,10 @@ func (m *JrpcMethods) Version(ctx context.Context, _ json.RawMessage) interface{
 }
 
 func (m *JrpcMethods) Describe(ctx context.Context, _ json.RawMessage) interface{} {
+	if m.LocalV3 == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	net, err := m.LocalV3.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	if err != nil {
 		return accumulateError(err)

@@ -9,7 +9,7 @@ package api
 import (
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -41,7 +41,6 @@ type Options struct {
 	LocalV3       V3
 	Querier       api.Querier
 	Submitter     api.Submitter
-	Network       api.NetworkService
 	Faucet        api.Faucet
 	Validator     api.Validator
 	Sequencer     private.Sequencer

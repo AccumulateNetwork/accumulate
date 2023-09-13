@@ -8,6 +8,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -37,8 +38,8 @@ func runBuildDiff(_ *cobra.Command, args []string) {
 //
 //	N = 64 bits  -- number of keys modified or missing in the bad state
 //	[N][8]bytes  -- keys of entries to restore to previous values
-func buildDiff(summary, badDB, diffFile string) {
-	boldCyan.Print("\n Build Diff\n\n")
+func buildDiff(summary, badDB, diffFile string) (NumModified, NumAdded int) {
+	boldCyan.Println("\n Build Diff")
 	keys := make(map[[8]byte][8]byte)
 
 	// Load up the keys from the good database
@@ -116,21 +117,31 @@ func buildDiff(summary, badDB, diffFile string) {
 	}
 	fmt.Printf("\nModified: %d Added: %d \n", len(modifiedKeys), len(addedKeys))
 
+	var buff [32]byte
 	f, err := os.Create(diffFile)
 	checkf(err,"failed to open %s",diffFile)
 	defer func() { _ = f.Close() }()
 
-	// write out the diff file
+	wrt64 := func(v uint64) {
+		binary.BigEndian.PutUint64(buff[:], v)
+		_, err := f.Write(buff[:8])
+		check(err)
+	}
+	wrt64int := func(v int) {
+		wrt64(uint64(v))
+	}
 
-	write8(f,len(addedKeys))       //   Number of keys to delete
+	wrt64int(len(addedKeys))       //   Number of keys to delete
 	for _, dk := range addedKeys { //   32 bytes each
 		check2(f.Write(dk))
 		if len(dk) != 32 {
 			fatalf("Key is not a hash")
 		}
 	}
-	write8(f,len(modifiedKeys))       //   Number of keys to revert
+	wrt64int(len(modifiedKeys))       //   Number of keys to revert
 	for _, uk := range modifiedKeys { //   8 bytes of key hashes
 		check2(f.Write(uk))
 	}
+
+	return len(modifiedKeys), len(addedKeys)
 }

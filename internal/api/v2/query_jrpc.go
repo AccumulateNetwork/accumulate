@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -18,6 +19,10 @@ import (
 )
 
 func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) interface{} {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(TxnQuery)
 	err := m.parse(params, req)
 	if err != nil {

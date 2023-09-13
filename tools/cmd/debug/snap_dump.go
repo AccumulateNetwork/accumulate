@@ -15,8 +15,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cometbft/cometbft/types"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -25,46 +25,32 @@ import (
 	"golang.org/x/text/language"
 )
 
-var enUsTitle = cases.Title(language.AmericanEnglish)
-
-var dumpCmd = &cobra.Command{
-	Use:   "dump <snapshot>",
-	Short: "Dump the contents of a snapshot",
+var cmdSnapDump = &cobra.Command{
+	Use:   "dump [snapshot or genesis.json]",
+	Short: "Dumps a snapshot",
 	Args:  cobra.ExactArgs(1),
 	Run:   dumpSnapshot,
 }
 
-var dumpFlag = struct {
+var flagSnapDump = struct {
 	Short  bool
 	Verify bool
 }{}
 
 func init() {
-	cmd.AddCommand(dumpCmd)
-	dumpCmd.Flags().BoolVarP(&dumpFlag.Short, "short", "s", false, "Short output")
-	dumpCmd.Flags().BoolVar(&dumpFlag.Verify, "verify", false, "Verify the hash of accounts")
+	cmdSnap.AddCommand(cmdSnapDump)
+
+	cmdSnapDump.Flags().BoolVarP(&flagSnapDump.Short, "short", "s", false, "Short output")
+	cmdSnapDump.Flags().BoolVar(&flagSnapDump.Verify, "verify", false, "Verify the hash of accounts")
 }
 
+var enUsTitle = cases.Title(language.AmericanEnglish)
+
 func dumpSnapshot(_ *cobra.Command, args []string) {
-	filename := args[0]
-	var rd ioutil.SectionReader
-	if filepath.Base(filename) == "genesis.json" {
-		genDoc, err := types.GenesisDocFromFile(filename)
-		checkf(err, "read %s", filename)
-
-		var b []byte
-		check(json.Unmarshal(genDoc.AppState, &b))
-		rd = bytes.NewReader(b)
-
-	} else {
-		f, err := os.Open(filename)
-		checkf(err, "open snapshot %s", filename)
-		defer f.Close()
-		rd = f
+	rd, ver := openSnapshotFile(args[0])
+	if c, ok := rd.(io.Closer); ok {
+		defer c.Close()
 	}
-
-	ver, err := sv2.GetVersion(rd)
-	check(err)
 
 	switch ver {
 	case sv1.Version1:
@@ -76,6 +62,28 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 	}
 }
 
+func openSnapshotFile(filename string) (ioutil.SectionReader, uint64) {
+	var rd ioutil.SectionReader
+	if filepath.Ext(filename) == ".json" {
+		fmt.Printf("Loading %s\n", filename)
+		genDoc, err := types.GenesisDocFromFile(filename)
+		checkf(err, "read %s", filename)
+
+		var b []byte
+		check(json.Unmarshal(genDoc.AppState, &b))
+		rd = bytes.NewReader(b)
+
+	} else {
+		f, err := os.Open(filename)
+		checkf(err, "open snapshot %s", filename)
+		rd = f
+	}
+
+	ver, err := sv2.GetVersion(rd)
+	check(err)
+	return rd, ver
+}
+
 func dumpV2(f ioutil.SectionReader) {
 	r, err := sv2.Open(f)
 	check(err)
@@ -85,7 +93,7 @@ func dumpV2(f ioutil.SectionReader) {
 		typstr := s.Type().String()
 		fmt.Printf("%s%s section at %d (size %d)\n", enUsTitle.String(typstr[:1]), typstr[1:], s.Offset(), s.Size())
 
-		if dumpFlag.Short {
+		if flagSnapDump.Short {
 			continue
 		}
 
@@ -137,8 +145,8 @@ func (dumpVisitor) VisitSection(s *sv1.ReaderSection) error {
 	fmt.Printf("%s%s section at %d (size %d)\n", enUsTitle.String(typstr[:1]), typstr[1:], s.Offset(), s.Size())
 
 	switch {
-	case !dumpFlag.Short,
-		dumpFlag.Verify && s.Type() == sv1.SectionTypeAccounts:
+	case !flagSnapDump.Short,
+		flagSnapDump.Verify && s.Type() == sv1.SectionTypeAccounts:
 		return nil
 	default:
 		return sv1.ErrSkip
@@ -152,7 +160,7 @@ func (dumpVisitor) VisitAccount(acct *sv1.Account, _ int) error {
 		return nil
 	}
 
-	if !dumpFlag.Short {
+	if !flagSnapDump.Short {
 		var typ string
 		if acct.Main == nil {
 			typ = "<nil>"
@@ -166,7 +174,7 @@ func (dumpVisitor) VisitAccount(acct *sv1.Account, _ int) error {
 		}
 	}
 
-	if dumpFlag.Verify {
+	if flagSnapDump.Verify {
 		batch := dumpDb.Begin(true)
 		defer batch.Discard()
 
