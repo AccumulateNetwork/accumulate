@@ -87,7 +87,7 @@ func buildMissing(summary, badDB, diffFile string) {
 			if _, exists := keys[kb]; !exists { //   delete keys not in the summary
 				continue //                          Ignore any new keys in the database to be fixed
 			}
-			
+
 			delete(keys, kb) //                      Remove all keys that the database to fix has
 		}
 		return nil

@@ -34,18 +34,18 @@ func printDiff(diffFile, goodDB string) {
 	checkf(err, "buildFix failed to open %s", diffFile)
 
 	// Read Keys to be deleted
-	NumAdded := read8(f, buff[:],"keys to delete")
+	NumAdded := read8(f, buff[:], "keys to delete")
 	for i := uint64(0); i < NumAdded; i++ {
-		read32(f, buff[:],"key to be deleted")
+		read32(f, buff[:], "key to be deleted")
 		key := [32]byte{}
 		copy(key[:], buff[:])
 		AddedKeys = append(AddedKeys, key[:])
 	}
 
 	// Read Keys modified by the bad state
-	NumModified := read8(f, buff[:],"keys modified/restored")
+	NumModified := read8(f, buff[:], "keys modified/restored")
 	for i := uint64(0); i < NumModified; i++ {
-		read8(f, buff[:],"key length")
+		read8(f, buff[:], "key length")
 		key := [8]byte{}
 		copy(key[:], buff[:])
 		ModifiedKeys = append(ModifiedKeys, key)
