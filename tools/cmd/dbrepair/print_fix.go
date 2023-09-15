@@ -31,22 +31,22 @@ func printFix(fixFile string) {
 	// Apply the fixes
 
 	// Keys to be deleted
-	NumAdded := read8(f, buff[:],"keys to delete")
-	fmt.Printf("Keys to delete %d\n",NumAdded)
+	NumAdded := read8(f, buff[:], "keys to delete")
+	fmt.Printf("Keys to delete %d\n", NumAdded)
 	for i := uint64(0); i < NumAdded; i++ {
-		read32(f, buff[:],"key to be deleted")
-		fmt.Printf("key: %x\n",buff[:32])
+		read32(f, buff[:], "key to be deleted")
+		fmt.Printf("key: %x\n", buff[:32])
 	}
 
 	var keyBuff [1024]byte
-	NumModified := read8(f, buff[:],"keys modified/restored")
-	fmt.Printf("Keys to add/update %d\n",NumModified)
+	NumModified := read8(f, buff[:], "keys modified/restored")
+	fmt.Printf("Keys to add/update %d\n", NumModified)
 	for i := uint64(0); i < NumModified; i++ {
-		keyLen := read8(f, buff[:],"key length")
+		keyLen := read8(f, buff[:], "key length")
 		read(f, keyBuff[:keyLen])
-		valueLen := read8(f, buff[:],"value length")
+		valueLen := read8(f, buff[:], "value length")
 		read(f, buff[:valueLen])
-		fmt.Printf("key: %x value len %d\n",buff[:keyLen],valueLen)
+		fmt.Printf("key: %x value len %d\n", buff[:keyLen], valueLen)
 	}
 
 	fmt.Printf("\nModified: %d Deleted: %d\n", NumModified, NumAdded)
