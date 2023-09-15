@@ -114,11 +114,11 @@ func (s Skip) new() *Error {
 }
 
 func convert(err error) *Error {
-	switch err := err.(type) {
-	case *Error:
-		return err
-	case Status:
-		return &Error{Code: err, Message: err.Error()}
+	if x := (*Error)(nil); errors.As(err, &x) {
+		return x
+	}
+	if x := Status(0); errors.As(err, &x) {
+		return &Error{Code: x, Message: err.Error()}
 	}
 
 	e := &Error{
