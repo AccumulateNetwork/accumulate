@@ -119,7 +119,7 @@ func buildDiff(summary, badDB, diffFile string) (NumModified, NumAdded int) {
 
 	var buff [32]byte
 	f, err := os.Create(diffFile)
-	checkf(err,"failed to open %s",diffFile)
+	checkf(err, "failed to open %s", diffFile)
 	defer func() { _ = f.Close() }()
 
 	wrt64 := func(v uint64) {
