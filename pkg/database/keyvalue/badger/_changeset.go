@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -113,7 +114,7 @@ func (c *ChangeSet) Get(key *record.Key) ([]byte, error) {
 	case err == nil:
 		// Ok
 	case errors.Is(err, badger.ErrKeyNotFound):
-		return nil, errors.NotFound.WithFormat("%v not found", key)
+		return nil, (*database.NotFoundError)(key)
 	default:
 		return nil, err
 	}
@@ -124,7 +125,7 @@ func (c *ChangeSet) Get(key *record.Key) ([]byte, error) {
 	case err == nil:
 		return v, nil
 	case errors.Is(err, badger.ErrKeyNotFound):
-		return nil, errors.NotFound.WithFormat("%v not found", key)
+		return nil, (*database.NotFoundError)(key)
 	default:
 		return nil, errors.UnknownError.WithFormat("get %v: %w", key, err)
 	}
