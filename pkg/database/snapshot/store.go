@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -53,7 +54,7 @@ func (r *Reader) AsStore() (*Store, error) {
 
 func (s *Store) Get(key *record.Key) ([]byte, error) {
 	if s.count == 0 {
-		return nil, errors.NotFound.WithFormat("%v not found", key)
+		return nil, (*database.NotFoundError)(key)
 	}
 	rd, err := s.open(s.index)
 	if err != nil {
@@ -81,7 +82,7 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 		return nil, errors.UnknownError.WithFormat("read index entry: %w", err)
 	}
 	if x.Key != target {
-		return nil, errors.NotFound.WithFormat("%v not found", key)
+		return nil, (*database.NotFoundError)(key)
 	}
 
 	// Read the record from the given section and offset

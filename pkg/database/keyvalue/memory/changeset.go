@@ -9,6 +9,7 @@ package memory
 import (
 	"sync"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -120,7 +121,7 @@ func (c *ChangeSet) Get(key *record.Key) ([]byte, error) {
 	entry, ok := c.entries[key.Hash()]
 	if ok {
 		if entry.Delete {
-			return nil, errors.NotFound.WithFormat("%v not found", key)
+			return nil, (*database.NotFoundError)(key)
 		}
 		return entry.Value, nil
 	}
@@ -131,7 +132,7 @@ func (c *ChangeSet) Get(key *record.Key) ([]byte, error) {
 	}
 
 	// Not found
-	return nil, errors.NotFound.WithFormat("%v not found", key)
+	return nil, (*database.NotFoundError)(key)
 }
 
 // Put stores a value.
