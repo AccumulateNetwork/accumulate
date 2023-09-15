@@ -1,0 +1,7 @@
+goos: linux
+goarch: amd64
+pkg: gitlab.com/accumulatenetwork/accumulate/pkg/database/values
+cpu: Intel(R) Core(TM) i9-10850K CPU @ 3.60GHz
+BenchmarkNotFound-20    	  500000	      4837 ns/op	    2113 B/op	      46 allocs/op
+PASS
+ok  	gitlab.com/accumulatenetwork/accumulate/pkg/database/values	2.655s
