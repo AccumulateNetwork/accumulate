@@ -87,7 +87,7 @@ func (v *value[T]) Get() (u T, err error) {
 	// Do we already have the value?
 	switch v.status {
 	case valueNotFound:
-		return zero[T](), errors.NotFound.WithFormat("%s not found", v.name)
+		return zero[T](), (*database.NotFoundError)(v.key)
 
 	case valueClean, valueDirty:
 		return v.value.getValue(), nil
@@ -136,7 +136,7 @@ func (v *value[T]) Get() (u T, err error) {
 	default:
 		// Not found
 		v.status = valueNotFound
-		return zero[T](), errors.NotFound.WithFormat("%s not found", v.name)
+		return zero[T](), err // Allow NotFoundError to propagate
 	}
 }
 
