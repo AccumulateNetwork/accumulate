@@ -1,0 +1,1 @@
+Executed with `go test -benchtime 500000x -run=- -bench BenchmarkNotFound -cpuprofile $x.cpuprof -memprofile $x.memprof ./pkg/database/values -benchmem > $x.bench`. e82e6eb1 is the original, 7cebf291 is after optimization.
