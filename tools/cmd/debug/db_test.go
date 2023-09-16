@@ -20,13 +20,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func TestFindMissingTxns(t *testing.T) {
-	fmt.Println("Hash, Partition")
 	for _, s := range []string{"dn", "apollo", "yutu", "chandrayaan"} {
+		f, err := os.Create("../../../.nodes/restore/" + s + "-missing.csv")
+		require.NoError(t, err)
+		defer f.Close()
+
 		rd, ver := openSnapshotFile("../../../.nodes/restore/" + s + "-genesis.json")
 		if c, ok := rd.(io.Closer); ok {
 			defer c.Close()
@@ -98,7 +102,8 @@ func TestFindMissingTxns(t *testing.T) {
 		}
 
 		for h := range wantMsg {
-			fmt.Printf("%x, %s\n", h, part)
+			kh := record.NewKey("Transaction", h, "Main").Hash()
+			fmt.Fprintf(f, "%x\n", kh)
 		}
 	}
 }
