@@ -45,7 +45,7 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.K
 		"SignatureChain",
 		"ScratchChain",
 		"AnchorSequenceChain",
-		"SyntheticSequenceChain":
+		"SyntheticSequenceChain": // Bug, this is actually an index chain
 		typ = merkle.ChainTypeTransaction
 	case "RootChain",
 		"AnchorChain":

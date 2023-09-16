@@ -27,7 +27,7 @@ import (
 func TestFindMissingTxns(t *testing.T) {
 	fmt.Println("Hash, Partition")
 	for _, s := range []string{"dn", "apollo", "yutu", "chandrayaan"} {
-		rd, ver := openSnapshotFile("/home/firelizzard/src/Accumulate/accumulate/.nodes/restore/" + s + "-genesis.json")
+		rd, ver := openSnapshotFile("../../../.nodes/restore/" + s + "-genesis.json")
 		if c, ok := rd.(io.Closer); ok {
 			defer c.Close()
 		}
@@ -72,7 +72,8 @@ func TestFindMissingTxns(t *testing.T) {
 					switch re.Key.Get(2) {
 					case "MainChain",
 						"SignatureChain",
-						"ScratchChain":
+						"ScratchChain",
+						"AnchorSequenceChain":
 						switch re.Key.Get(3) {
 						case "Head", "States":
 							ms := new(merkle.State)
@@ -103,13 +104,13 @@ func TestFindMissingTxns(t *testing.T) {
 }
 
 func TestCheckFix(t *testing.T) {
-	f, err := os.Open("/home/firelizzard/src/Accumulate/accumulate/missing.csv")
+	f, err := os.Open("../../../missing.csv")
 	require.NoError(t, err)
 	defer f.Close()
 
 	dbs := map[string]*database.Batch{}
 	for _, s := range []string{"directory", "apollo", "yutu", "chandrayaan"} {
-		db, err := database.OpenBadger("/home/firelizzard/src/Accumulate/accumulate/.nodes/restore/"+s+".db", nil)
+		db, err := database.OpenBadger("../../../.nodes/restore/"+s+".db", nil)
 		require.NoError(t, err)
 		defer f.Close()
 		batch := db.Begin(false)
