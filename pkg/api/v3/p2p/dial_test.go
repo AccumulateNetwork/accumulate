@@ -169,13 +169,10 @@ func TestDialServices1(t *testing.T) {
 	}
 
 	// Set up the host mock
-	host := &fakeHost{
-		peerID: selfPeerID,
-		good:   map[string]bool{},
-	}
+	host := newFakeHost(selfPeerID)
 	for _, addr := range services {
 		for _, gpi := range goodPeerIDs {
-			host.good[gpi.String()+"|"+addr.String()] = true
+			host.set(gpi.String() + "|" + addr.String())
 		}
 	}
 
@@ -235,8 +232,28 @@ func (f staticPeers) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit
 }
 
 type fakeHost struct {
+	sync.RWMutex
 	peerID peer.ID
 	good   map[string]bool
+}
+
+func newFakeHost(self peer.ID) *fakeHost {
+	return &fakeHost{
+		peerID: self,
+		good:   map[string]bool{},
+	}
+}
+
+func (h *fakeHost) set(id string) {
+	h.Lock()
+	defer h.Unlock()
+	h.good[id] = true
+}
+
+func (h *fakeHost) clear(id string) {
+	h.Lock()
+	defer h.Unlock()
+	delete(h.good, id)
 }
 
 func (h *fakeHost) selfID() peer.ID {
@@ -248,6 +265,8 @@ func (h *fakeHost) getOwnService(network string, sa *api.ServiceAddress) (*servi
 }
 
 func (h *fakeHost) getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error) {
+	h.RLock()
+	defer h.RUnlock()
 	if h.good[peer.String()+"|"+service.String()] {
 		return fakeStream{}, nil
 	}
@@ -285,13 +304,10 @@ func TestDialServices2(t *testing.T) {
 	}
 
 	// Set up the host mock
-	host := &fakeHost{
-		peerID: selfPeerID,
-		good:   map[string]bool{},
-	}
+	host := newFakeHost(selfPeerID)
 	for _, addr := range services {
 		for _, gpi := range goodPeerIDs {
-			host.good[gpi.String()+"|"+addr.String()] = true
+			host.set(gpi.String() + "|" + addr.String())
 		}
 	}
 
@@ -336,7 +352,7 @@ func TestDialServices2(t *testing.T) {
 		goodPeerIDs = src
 		badPeerIDs = dest
 		fmt.Printf("Remove %d\n", peerMap[peer.String()])
-		delete(host.good, peer.String()+"|"+service.String())
+		host.clear(peer.String() + "|" + service.String())
 		return numSrc
 	}
 	validateOne := func() int {
@@ -344,7 +360,7 @@ func TestDialServices2(t *testing.T) {
 		badPeerIDs = src
 		goodPeerIDs = dest
 		fmt.Printf("Add    %d\n", peerMap[peer.String()])
-		host.good[peer.String()+"|"+service.String()] = true
+		host.set(peer.String() + "|" + service.String())
 		return numSrc
 	}
 
