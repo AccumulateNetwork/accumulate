@@ -12,11 +12,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -26,7 +25,7 @@ import (
 )
 
 func TestFindMissingTxns(t *testing.T) {
-	for _, s := range []string{"dn", "apollo", "yutu", "chandrayaan"} {
+	for _, s := range []string{"directory", "apollo", "yutu", "chandrayaan"} {
 		f, err := os.Create("../../../.nodes/restore/" + s + "-missing.csv")
 		require.NoError(t, err)
 		defer f.Close()
@@ -103,54 +102,50 @@ func TestFindMissingTxns(t *testing.T) {
 
 		for h := range wantMsg {
 			kh := record.NewKey("Transaction", h, "Main").Hash()
-			fmt.Fprintf(f, "%x\n", kh)
+			fmt.Fprintf(f, "%x\n", kh[:])
 		}
 	}
 }
 
 func TestCheckFix(t *testing.T) {
-	f, err := os.Open("../../../missing.csv")
-	require.NoError(t, err)
-	defer f.Close()
-
-	dbs := map[string]*database.Batch{}
-	for _, s := range []string{"directory", "apollo", "yutu", "chandrayaan"} {
-		db, err := database.OpenBadger("../../../.nodes/restore/"+s+".db", nil)
+	for _, part := range []string{"directory", "apollo", "yutu", "chandrayaan"} {
+		f, err := os.Open("../../../.nodes/restore/" + part + "-missing.csv")
 		require.NoError(t, err)
 		defer f.Close()
-		batch := db.Begin(false)
-		defer batch.Discard()
-		dbs[s] = batch
-	}
 
-	r := csv.NewReader(f)
-	r.TrimLeadingSpace = true
-	r.ReuseRecord = true
-	_, err = r.Read() // Skip the header
-	require.NoError(t, err)
-
-	for {
-		rec, err := r.Read()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			require.NoError(t, err)
-		}
-		require.Len(t, rec, 2)
-
-		b, err := hex.DecodeString(rec[0])
+		db, err := badger.New("../../../.nodes/restore/" + part + ".db")
 		require.NoError(t, err)
+		defer db.Close()
+		batch := db.Begin(nil, false)
+		defer batch.Discard()
 
-		_, err = dbs[strings.ToLower(rec[1])].Message2(b).Main().Get()
-		switch {
-		case err == nil:
-			// Yay!
-		case errors.Is(err, errors.NotFound):
-			fmt.Printf("Missing %x from %s\n", b, rec[1])
-			t.Fail()
-		default:
+		r := csv.NewReader(f)
+		r.TrimLeadingSpace = true
+		r.ReuseRecord = true
+
+		for {
+			rec, err := r.Read()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				require.NoError(t, err)
+			}
+			require.Len(t, rec, 1)
+
+			b, err := hex.DecodeString(rec[0])
 			require.NoError(t, err)
+
+			_, err = batch.Get(record.NewKey(*(*record.KeyHash)(b)))
+			switch {
+			case err == nil:
+				// Yay!
+			case errors.Is(err, errors.NotFound):
+				fmt.Printf("Missing %x from %s\n", b, part)
+				t.Fail()
+			default:
+				require.NoError(t, err)
+			}
 		}
 	}
 }
