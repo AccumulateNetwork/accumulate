@@ -77,6 +77,13 @@ var cmdApplyFix = &cobra.Command{
 	Run:   runApplyFix,
 }
 
+var cmdDumpFixHashes = &cobra.Command{
+	Use:   "dumpFixHashes [fix file] [output file]",
+	Short: "collects all the keys, sorts them, then dumps them in ASCII into the output file",
+	Args:  cobra.ExactArgs(2),
+	Run:   runDumpFixHashes,
+}
+
 func init() {
 	cmd.AddCommand(
 		cmdBuildTestDBs,
@@ -87,6 +94,7 @@ func init() {
 		cmdBuildFix,
 		cmdPrintFix,
 		cmdApplyFix,
+		cmdDumpFixHashes,
 	)
 }
 
@@ -123,6 +131,9 @@ func OpenDB(dbName string) (*badger.DB, func()) {
 // Read an 8 byte, uint64 value and return it.
 // As a side effect, the first 8 bytes of buff hold the value
 func read8(f *os.File, buff []byte, tag string) uint64 {
+	if buff == nil {
+		buff = make([]byte, 8)
+	}
 	r, err := f.Read(buff[:8]) // Read 64 bits
 	checkf(err, "%s: failed to read 64 bit int", tag)
 	if r != 8 {
