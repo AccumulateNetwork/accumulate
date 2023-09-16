@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type Database struct {
@@ -67,7 +67,7 @@ func (d *Database) get(key *record.Key) ([]byte, error) {
 	}
 
 	// Not found
-	return nil, errors.NotFound.WithFormat("%v not found", key)
+	return nil, (*database.NotFoundError)(key)
 }
 
 func (d *Database) put(entries map[[32]byte]Entry) error {
