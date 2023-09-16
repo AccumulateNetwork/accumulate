@@ -364,6 +364,14 @@ func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		return nil, errors.FatalError.With("panicked")
 	}
 
+	// Commit the previous block
+	if app.block != nil {
+		err := app.actualCommit()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Begin Block
 	err := app.beginBlock(RequestBeginBlock{
 		Header:              req,
@@ -593,6 +601,8 @@ func (app *Accumulator) endBlock() (ResponseEndBlock, error) {
 }
 
 func (app *Accumulator) discardBlock() {
+	defer app.cleanupBlock()
+
 	timeSinceAppStart := time.Since(app.startTime).Seconds()
 	ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
 	if ds != nil {
@@ -638,14 +648,29 @@ func (app *Accumulator) discardBlock() {
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abci.ResponseCommit, error) {
-	defer app.recover()
+	// // Keep this disabled until we have real snapshot support through Tendermint
+	// if false {
+	// 	// Truncate Tendermint's block store to the latest snapshot
+	// 	resp.RetainHeight = int64(app.lastSnapshot)
+	// }
+
+	// COMMIT DOES NOT COMMIT TO DISK.
+	//
+	// That is deferred until the next BeginBlock, in order to ensure that
+	// nothing is written to disk if there is a consensus failure.
+	//
+	// If the block is non-empty, we simply return the root hash and let
+	// BeginBlock handle the actual commit.
+	return &abci.ResponseCommit{}, nil
+}
+
+func (app *Accumulator) cleanupBlock() {
 	defer func() { app.block, app.blockState = nil, nil }()
 	defer app.blockSpan.End()
+}
 
-	// Is the block empty?
-	if app.blockState.IsEmpty() {
-		return &abci.ResponseCommit{}, nil
-	}
+func (app *Accumulator) actualCommit() error {
+	defer app.cleanupBlock()
 
 	_, span := app.Tracer.Start(app.block.Params().Context, "Commit")
 	defer span.End()
@@ -659,7 +684,7 @@ func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abc
 	tick = time.Now()
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Notify the world of the committed block
@@ -670,23 +695,10 @@ func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abc
 		Major: major,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	publishEventTime := time.Since(tick).Seconds()
-
-	// Notify the executor that we committed
-	var resp abci.ResponseCommit
-	_, hash, err := app.Executor.LastBlock()
-	if err != nil {
-		return nil, err
-	}
-
-	// Keep this disabled until we have real snapshot support through Tendermint
-	if false {
-		// Truncate Tendermint's block store to the latest snapshot
-		resp.RetainHeight = int64(app.lastSnapshot)
-	}
 
 	timeSinceAppStart := time.Since(app.startTime).Seconds()
 	ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
@@ -727,6 +739,6 @@ func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abc
 
 	go app.Accumulate.AnalysisLog.Flush()
 	duration := time.Since(app.timer)
-	app.logger.Debug("Committed", "minor", app.block.Params().Index, "hash", logging.AsHex(hash).Slice(0, 4), "major", major, "duration", duration, "count", app.txct)
-	return &resp, nil
+	app.logger.Debug("Committed", "minor", app.block.Params().Index, "major", major, "duration", duration, "count", app.txct)
+	return nil
 }
