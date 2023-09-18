@@ -2,3 +2,11 @@
 *.play gitlab-language=markdown
 test/testdata/executor-v1-consistency.json filter=lfs merge=lfs -text
 test/testdata/api-v2-consistency.json filter=lfs merge=lfs -text
+scripts/data/dn-12614506.fix filter=lfs diff=lfs merge=lfs -text
+scripts/data/pre-v2-txn-apollo-fix.dat filter=lfs diff=lfs merge=lfs -text
+scripts/data/pre-v2-txn-chandrayaan-fix.dat filter=lfs diff=lfs merge=lfs -text
+scripts/data/pre-v2-txn-dn-fix.dat filter=lfs diff=lfs merge=lfs -text
+scripts/data/pre-v2-txn-yutu-fix.dat filter=lfs diff=lfs merge=lfs -text
+scripts/data/revert-12614506-patch.json filter=lfs diff=lfs merge=lfs -text
+scripts/data/dn-12614506.diff filter=lfs diff=lfs merge=lfs -text
+scripts/bin/v1.2.9/dbrepair-linux-amd64 filter=lfs diff=lfs merge=lfs -text
