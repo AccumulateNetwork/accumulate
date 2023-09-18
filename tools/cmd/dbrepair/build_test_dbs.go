@@ -102,9 +102,9 @@ func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 			}
 			return op
 		}
-		op = pick(i%1027 == 0, 1) // Modify a key value pair
-		op = pick(i%713 == 0, 2)  // Delete a key value pair
-		op = pick(i%303 == 0, 3)  // Add a key value pair
+		op = pick(i%57 == 0, 1) // Modify a key value pair
+		op = pick(i%73 == 0, 2)  // Delete a key value pair
+		op = pick(i%33 == 0, 3)  // Add a key value pair
 
 		// Write bad entries
 
