@@ -57,7 +57,6 @@ func (c *changeSet) newEntity(k entityKey) *entity {
 	v.store = c.store
 	v.key = (*record.Key)(nil).Append("Entity", k.Name)
 	v.parent = c
-	v.label = "entity" + " " + k.Name
 	return v
 }
 
@@ -66,7 +65,7 @@ func (c *changeSet) ChangeLog() values.Counted[string] {
 }
 
 func (c *changeSet) newChangeLog() values.Counted[string] {
-	return values.NewCounted(c.logger.L, c.store, (*record.Key)(nil).Append("ChangeLog"), "change log", values.WrappedFactory(values.StringWrapper))
+	return values.NewCounted(c.logger.L, c.store, (*record.Key)(nil).Append("ChangeLog"), values.WrappedFactory(values.StringWrapper))
 }
 
 func (c *changeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -149,7 +148,6 @@ type entity struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *changeSet
 
 	union            values.Value[protocol.Account]
@@ -165,7 +163,7 @@ func (c *entity) Union() values.Value[protocol.Account] {
 }
 
 func (c *entity) newUnion() values.Value[protocol.Account] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, values.Union(protocol.UnmarshalAccount))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Union"), false, values.Union(protocol.UnmarshalAccount))
 }
 
 func (c *entity) Set() values.Set[*url.TxID] {
@@ -173,7 +171,7 @@ func (c *entity) Set() values.Set[*url.TxID] {
 }
 
 func (c *entity) newSet() values.Set[*url.TxID] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Set"), c.label+" "+"set", values.Wrapped(values.TxidWrapper), values.CompareTxid)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Set"), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *entity) CountableRefType() values.Counted[*protocol.Transaction] {
@@ -181,7 +179,7 @@ func (c *entity) CountableRefType() values.Counted[*protocol.Transaction] {
 }
 
 func (c *entity) newCountableRefType() values.Counted[*protocol.Transaction] {
-	return values.NewCounted(c.logger.L, c.store, c.key.Append("CountableRefType"), c.label+" "+"countable ref type", values.Struct[protocol.Transaction])
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("CountableRefType"), values.Struct[protocol.Transaction])
 }
 
 func (c *entity) CountableUnion() values.Counted[protocol.Account] {
@@ -189,7 +187,7 @@ func (c *entity) CountableUnion() values.Counted[protocol.Account] {
 }
 
 func (c *entity) newCountableUnion() values.Counted[protocol.Account] {
-	return values.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), c.label+" "+"countable union", values.UnionFactory(protocol.UnmarshalAccount))
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), values.UnionFactory(protocol.UnmarshalAccount))
 }
 
 func (c *entity) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -266,7 +264,6 @@ type TemplateTest struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 
 	wrapped     values.Value[string]
 	structPtr   values.Value[*StructType]
@@ -286,7 +283,7 @@ func (c *TemplateTest) Wrapped() values.Value[string] {
 }
 
 func (c *TemplateTest) newWrapped() values.Value[string] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), c.label+" "+"wrapped", false, values.Wrapped(values.StringWrapper))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), false, values.Wrapped(values.StringWrapper))
 }
 
 func (c *TemplateTest) StructPtr() values.Value[*StructType] {
@@ -294,7 +291,7 @@ func (c *TemplateTest) StructPtr() values.Value[*StructType] {
 }
 
 func (c *TemplateTest) newStructPtr() values.Value[*StructType] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), c.label+" "+"struct ptr", false, values.Struct[StructType]())
+	return values.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), false, values.Struct[StructType]())
 }
 
 func (c *TemplateTest) Union() values.Value[UnionType] {
@@ -302,7 +299,7 @@ func (c *TemplateTest) Union() values.Value[UnionType] {
 }
 
 func (c *TemplateTest) newUnion() values.Value[UnionType] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, values.Union(UnmarshalUnionType))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Union"), false, values.Union(UnmarshalUnionType))
 }
 
 func (c *TemplateTest) WrappedSet() values.Set[*url.URL] {
@@ -310,7 +307,7 @@ func (c *TemplateTest) WrappedSet() values.Set[*url.URL] {
 }
 
 func (c *TemplateTest) newWrappedSet() values.Set[*url.URL] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("WrappedSet"), c.label+" "+"wrapped set", values.Wrapped(values.UrlWrapper), values.CompareUrl)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("WrappedSet"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
 }
 
 func (c *TemplateTest) StructSet() values.Set[*StructType] {
@@ -318,7 +315,7 @@ func (c *TemplateTest) StructSet() values.Set[*StructType] {
 }
 
 func (c *TemplateTest) newStructSet() values.Set[*StructType] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("StructSet"), c.label+" "+"struct set", values.Struct[StructType](), func(u, v *StructType) int { return u.Compare(v) })
+	return values.NewSet(c.logger.L, c.store, c.key.Append("StructSet"), values.Struct[StructType](), func(u, v *StructType) int { return u.Compare(v) })
 }
 
 func (c *TemplateTest) UnionSet() values.Set[UnionType] {
@@ -326,7 +323,7 @@ func (c *TemplateTest) UnionSet() values.Set[UnionType] {
 }
 
 func (c *TemplateTest) newUnionSet() values.Set[UnionType] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), c.label+" "+"union set", values.Union(UnmarshalUnionType), func(u, v UnionType) int { return u.Compare(v) })
+	return values.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), values.Union(UnmarshalUnionType), func(u, v UnionType) int { return u.Compare(v) })
 }
 
 func (c *TemplateTest) WrappedList() values.Counted[string] {
@@ -334,7 +331,7 @@ func (c *TemplateTest) WrappedList() values.Counted[string] {
 }
 
 func (c *TemplateTest) newWrappedList() values.Counted[string] {
-	return values.NewCounted(c.logger.L, c.store, c.key.Append("WrappedList"), c.label+" "+"wrapped list", values.WrappedFactory(values.StringWrapper))
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("WrappedList"), values.WrappedFactory(values.StringWrapper))
 }
 
 func (c *TemplateTest) StructList() values.Counted[*StructType] {
@@ -342,7 +339,7 @@ func (c *TemplateTest) StructList() values.Counted[*StructType] {
 }
 
 func (c *TemplateTest) newStructList() values.Counted[*StructType] {
-	return values.NewCounted(c.logger.L, c.store, c.key.Append("StructList"), c.label+" "+"struct list", values.Struct[StructType])
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("StructList"), values.Struct[StructType])
 }
 
 func (c *TemplateTest) UnionList() values.Counted[UnionType] {
@@ -350,7 +347,7 @@ func (c *TemplateTest) UnionList() values.Counted[UnionType] {
 }
 
 func (c *TemplateTest) newUnionList() values.Counted[UnionType] {
-	return values.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), c.label+" "+"union list", values.UnionFactory(UnmarshalUnionType))
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), values.UnionFactory(UnmarshalUnionType))
 }
 
 func (c *TemplateTest) Resolve(key *record.Key) (record.Record, *record.Key, error) {
