@@ -63,6 +63,20 @@ var cmdApplyFix = &cobra.Command{
 	Run:   runApplyFix,
 }
 
+var cmdPrintFix = &cobra.Command{
+	Use:   "printFix [fix file]",
+	Short: "Prints a fix file",
+	Args:  cobra.ExactArgs(1),
+	Run:   runPrintFix,
+}
+
+var cmdCheckFix = &cobra.Command{
+	Use:   "checkFix [fix file] [missing csv]",
+	Short: "Checks a fix file",
+	Args:  cobra.ExactArgs(2),
+	Run:   runCheckFix,
+}
+
 func init() {
 	cmd.AddCommand(
 		cmdBuildTestDBs,
@@ -71,6 +85,8 @@ func init() {
 		cmdPrintDiff,
 		cmdBuildFix,
 		cmdApplyFix,
+		cmdPrintFix,
+		cmdCheckFix,
 	)
 }
 

@@ -7,16 +7,29 @@
 package main
 
 import (
+	"encoding/csv"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 func runApplyFix(_ *cobra.Command, args []string) {
 	fixFile := args[0]
 	badDB := args[1]
 	applyFix(fixFile, badDB)
+}
+
+func runPrintFix(_ *cobra.Command, args []string) {
+	fixFile := args[0]
+	printFix(fixFile)
+}
+
+func runCheckFix(_ *cobra.Command, args []string) {
+	checkFix(args[0], args[1])
 }
 
 // Apply the fix file to a database
@@ -57,6 +70,98 @@ func applyFix(fixFile, badDB string) (NumModified, NumAdded uint64) {
 
 	fmt.Printf("\nModified: %d Deleted: %d\n", NumModified, NumAdded)
 	return NumModified, NumAdded
+}
+
+// Apply the fix file to a database
+func checkFix(fixFile, missingFilePath string) {
+	boldCyan.Println("\n Apply Fix")
+
+	fix, err := os.Open(fixFile)
+	checkf(err, "checkFix failed to open %s", fixFile)
+	defer func() { _ = fix.Close() }()
+
+	missingFile, err := os.Open(missingFilePath)
+	checkf(err, "checkFix failed to open %s", missingFilePath)
+	defer func() { _ = missingFile.Close() }()
+
+	missingKeys := map[[32]byte]bool{}
+
+	r := csv.NewReader(missingFile)
+	r.TrimLeadingSpace = true
+	r.ReuseRecord = true
+
+	for {
+		rec, err := r.Read()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			check(err)
+		}
+
+		b, err := hex.DecodeString(rec[0])
+		check(err)
+		missingKeys[*(*[32]byte)(b)] = true
+	}
+
+	var buff [1024 * 1024]byte // A big buffer
+
+	NumAdded := read8(fix, buff[:])
+	for i := uint64(0); i < NumAdded; i++ {
+		read32(fix, buff[:])
+	}
+
+	var keyBuff [1024]byte
+	NumModified := read8(fix, buff[:])
+	fmt.Println("Modified", NumModified)
+	var extra int
+	for i := uint64(0); i < NumModified; i++ {
+		keyLen := read8(fix, buff[:])
+		read(fix, keyBuff[:keyLen])
+		valueLen := read8(fix, buff[:])
+		read(fix, buff[:valueLen])
+		k := *(*[32]byte)(keyBuff[:keyLen])
+		if missingKeys[k] {
+			delete(missingKeys, k)
+		} else {
+			extra++
+		}
+	}
+
+	if len(missingKeys) > 0 {
+		fmt.Println("Still missing", len(missingKeys))
+		// for k := range missingKeys {
+		// 	fmt.Printf("  %x\n", k)
+		// }
+	}
+	fmt.Println("Extra", extra)
+}
+
+func printFix(fixFile string) {
+	boldCyan.Println("\n Print Fix")
+
+	f, err := os.Open(fixFile)
+	checkf(err, "printFix failed to open %s", fixFile)
+	defer func() { _ = f.Close() }()
+
+	var buff [1024 * 1024]byte // A big buffer
+
+	NumAdded := read8(f, buff[:])
+	for i := uint64(0); i < NumAdded; i++ {
+		read32(f, buff[:])
+		// fmt.Printf("Delete %x\n", buff[:32])
+	}
+
+	var keyBuff [1024]byte
+	NumModified := read8(f, buff[:])
+	for i := uint64(0); i < NumModified; i++ {
+		keyLen := read8(f, buff[:])
+		read(f, keyBuff[:keyLen])
+		valueLen := read8(f, buff[:])
+		read(f, buff[:valueLen])
+		// fmt.Printf("Set %x <= %x\n", keyBuff[:keyLen], buff[:valueLen])
+	}
+	fmt.Printf("\nModified: %d Deleted: %d\n", NumModified, NumAdded)
 }
 
 func copyBuf(b []byte) []byte {
