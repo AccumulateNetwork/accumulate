@@ -25,9 +25,9 @@ type set[T any] struct {
 }
 
 // NewSet returns a new set using the given encoder and comparison.
-func newSet[T any](store database.Store, key *database.Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
+func newSet[T any](store database.Store, key *database.Key, encoder encodableValue[T], cmp func(u, v T) int) *set[T] {
 	s := &set[T]{}
-	s.value = *newValue[[]T](store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
+	s.value = *newValue[[]T](store, key, true, &sliceValue[T]{encoder: encoder})
 	s.compare = cmp
 	return s
 }
@@ -85,7 +85,7 @@ func (s *set[T]) Index(v T) (int, error) {
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
 	if !found {
-		return 0, errors.NotFound.WithFormat("entry not found in %s", s.name)
+		return 0, (*database.NotFoundError)(s.key.Append("(Index)"))
 	}
 
 	return i, nil
@@ -100,7 +100,7 @@ func (s *set[T]) Find(v T) (T, error) {
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
 	if !found {
-		return zero[T](), errors.NotFound.WithFormat("%s entry not found", s.name)
+		return zero[T](), (*database.NotFoundError)(s.key.Append("(Find)"))
 	}
 
 	return l[i], nil
