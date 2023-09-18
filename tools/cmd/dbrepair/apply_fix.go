@@ -102,19 +102,19 @@ func checkFix(fixFile, missingFilePath string) {
 
 	var buff [1024 * 1024]byte // A big buffer
 
-	NumAdded := read8(fix, buff[:])
+	NumAdded := read8(fix, buff[:], "read number added")
 	for i := uint64(0); i < NumAdded; i++ {
-		read32(fix, buff[:])
+		read32(fix, buff[:], "read key added")
 	}
 
 	var keyBuff [1024]byte
-	NumModified := read8(fix, buff[:])
+	NumModified := read8(fix, buff[:], "read number modified")
 	fmt.Println("Modified", NumModified)
 	var extra int
 	for i := uint64(0); i < NumModified; i++ {
-		keyLen := read8(fix, buff[:])
+		keyLen := read8(fix, buff[:], "read key modified")
 		read(fix, keyBuff[:keyLen])
-		valueLen := read8(fix, buff[:])
+		valueLen := read8(fix, buff[:], "read original value")
 		read(fix, buff[:valueLen])
 		k := *(*[32]byte)(keyBuff[:keyLen])
 		if missingKeys[k] {
