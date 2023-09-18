@@ -20,7 +20,6 @@ type BPT struct {
 	logger  logging.OptionalLogger
 	store   record.Store
 	key     *record.Key
-	label   string
 	pending map[[32]byte]*mutation
 
 	state values.Value[*parameters]
