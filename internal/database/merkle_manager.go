@@ -18,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func NewChain(logger log.Logger, store record.Store, key *record.Key, markPower int64, typ merkle.ChainType, namefmt, labelfmt string) *MerkleManager {
+func NewChain(logger log.Logger, store record.Store, key *record.Key, markPower int64, typ merkle.ChainType, namefmt string) *MerkleManager {
 	c := new(MerkleManager)
 	c.logger.L = logger
 	c.store = store
@@ -35,12 +35,6 @@ func NewChain(logger log.Logger, store record.Store, key *record.Key, markPower 
 		c.name = key.Stringf(namefmt)
 	} else {
 		c.name = namefmt
-	}
-
-	if strings.ContainsRune(labelfmt, '%') {
-		c.label = key.Stringf(labelfmt)
-	} else {
-		c.label = labelfmt
 	}
 
 	return c
