@@ -8,7 +8,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -18,28 +17,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func runBuildDiff(_ *cobra.Command, args []string) {
+func runBuildMissing(_ *cobra.Command, args []string) {
 	summary := args[0]
 	badDB := args[1]
 	diffFile := args[2]
-	buildDiff(summary, badDB, diffFile)
+	buildMissing(summary, badDB, diffFile)
 }
 
-// buildDiff
-// Builds a diff file on a node with a bad database because they accepted a bad block.
-// The diffFile can be moved to a node with a good database to create
-// a Fix File.  What we hope is that the Fix File will be complete
-// enough to fix all nodes that need to be backed up (have a bad database)
+// buildMissing
+// Builds a diff file that solely looks for missing entries.  Since we
+// already have a fix function, we simply need a fix file that does not
+// remove anything.
 //
 // Diff file format:
 //
-//	N = 64 bits  -- number of Keys added to the bad state
-//	[N][32]bytes -- keys to delete
+//	N = 64 bits  -- number of Keys to be removed. Always zero
 //
-//	N = 64 bits  -- number of keys modified or missing in the bad state
+//	N = 64 bits  -- number of keys missing in the bad state
 //	[N][8]bytes  -- keys of entries to restore to previous values
-func buildDiff(summary, badDB, diffFile string) (NumModified, NumAdded int) {
-	boldCyan.Println("\n Build Diff")
+func buildMissing(summary, badDB, diffFile string) {
+	boldCyan.Println("\n Build Missing")
 	keys := make(map[[8]byte][8]byte)
 
 	// Load up the keys from the good database
@@ -65,10 +62,8 @@ func buildDiff(summary, badDB, diffFile string) (NumModified, NumAdded int) {
 	}
 	println()
 
-	// Collect the differences
-	var addedKeys [][]byte    // Slice of keys to delete from the bad db
-	var modifiedKeys [][]byte // Slice of keys to update from the bad db
-	var cntDel int
+	// Collect the missing keys
+	var missingKeys [][]byte // Slice of keys to update from the bad db
 
 	// Open the Badger database to be fixed
 	db, close := OpenDB(badDB)
@@ -90,19 +85,10 @@ func buildDiff(summary, badDB, diffFile string) (NumModified, NumAdded int) {
 			kb := [8]byte{}                     //   Get the first 8 bytes of the key hash
 			copy(kb[:], kh[:8])                 //	    in an independent byte array
 			if _, exists := keys[kb]; !exists { //   delete keys not in the summary
-				addedKeys = append(addedKeys, k[:])
-				cntDel++
-				continue
+				continue //                          Ignore any new keys in the database to be fixed
 			}
-			err = item.Value(func(val []byte) error {
-				vh := sha256.Sum256(val)
-				if keys[kb] != *(*[8]byte)(vh[:]) {
-					modifiedKeys = append(modifiedKeys, kb[:]) // Revert keys that exist but value is changed
-				}
-				return nil
-			})
-			checkf(err, "read of value failed")
-			delete(keys, kb) // Remove the keys from the good db that are found in the bad db
+
+			delete(keys, kb) //                      Remove all keys that the database to fix has
 		}
 		return nil
 	})
@@ -113,35 +99,24 @@ func buildDiff(summary, badDB, diffFile string) (NumModified, NumAdded int) {
 		kh := kh
 		kb := [8]byte{}
 		copy(kb[:], kh[:])
-		modifiedKeys = append(modifiedKeys, kb[:]) // All the keys we did not find had to be added back
+		missingKeys = append(missingKeys, kb[:]) // All the keys we did not find had to be added back
 	}
-	fmt.Printf("\nModified: %d Added: %d \n", len(modifiedKeys), len(addedKeys))
+	fmt.Printf("\nMissing: %d \n", len(missingKeys))
 
-	var buff [32]byte
+	// Write out the diff file, with only the keys missing from the good db
 	f, err := os.Create(diffFile)
 	checkf(err, "failed to open %s", diffFile)
 	defer func() { _ = f.Close() }()
 
-	wrt64 := func(v uint64) {
-		binary.BigEndian.PutUint64(buff[:], v)
-		_, err := f.Write(buff[:8])
-		check(err)
-	}
-	wrt64int := func(v int) {
-		wrt64(uint64(v))
-	}
+	write8(f, 0) //                       Number of keys to delete is always zero
 
-	wrt64int(len(addedKeys))       //   Number of keys to delete
-	for _, dk := range addedKeys { //   32 bytes each
-		check2(f.Write(dk))
-		if len(dk) != 32 {
-			fatalf("Key is not a hash")
+	var percent float64
+	write8(f, len(missingKeys))      //   Number of keys to add back
+	for i, uk := range missingKeys { //   8 bytes of key hashes
+		if float64(i)/float64(len(missingKeys)) >= percent*.99 {
+			boldYellow.Printf("%02d%% ", int(percent*100))
+			percent += .05
 		}
-	}
-	wrt64int(len(modifiedKeys))       //   Number of keys to revert
-	for _, uk := range modifiedKeys { //   8 bytes of key hashes
 		check2(f.Write(uk))
 	}
-
-	return len(modifiedKeys), len(addedKeys)
 }

@@ -49,19 +49,20 @@ func applyFix(fixFile, badDB string) (NumModified, NumAdded uint64) {
 
 	// Keys to be deleted
 	txn := db.NewWriteBatch()
-	NumAdded = read8(f, buff[:])
+	NumAdded = read8(f, buff[:], "read key to delete")
 	for i := uint64(0); i < NumAdded; i++ {
-		read32(f, buff[:])
+		read32(f, buff[:], "read key to delete")
 		err := txn.Delete(copyBuf(buff[:32]))
 		checkf(err, "failed to delete")
 	}
+	fmt.Println()
 
 	var keyBuff [1024]byte
-	NumModified = read8(f, buff[:])
+	NumModified = read8(f, buff[:], "read number modified")
 	for i := uint64(0); i < NumModified; i++ {
-		keyLen := read8(f, buff[:])
+		keyLen := read8(f, buff[:], "read key of modified key/value")
 		read(f, keyBuff[:keyLen])
-		valueLen := read8(f, buff[:])
+		valueLen := read8(f, buff[:], "read value of modified key/value")
 		read(f, buff[:valueLen])
 		err := txn.Set(copyBuf(keyBuff[:keyLen]), copyBuf(buff[:valueLen]))
 		checkf(err, "failed to update a value in the database")

@@ -17,8 +17,9 @@ import (
 )
 
 var cmd = &cobra.Command{
-	Use:   "dbRepair",
-	Short: "utilities to use a good db to build a repair script for a bad db",
+	Use: "dbRepair",
+	Short: "utilities to use a reference db to repair or synchronize a target db.\n" +
+		"As short hand, the reference is 'good' and the target is 'bad'",
 }
 
 var cmdBuildTestDBs = &cobra.Command{
@@ -41,9 +42,15 @@ var cmdBuildDiff = &cobra.Command{
 	Args:  cobra.ExactArgs(3),
 	Run:   runBuildDiff,
 }
+var cmdBuildMissing = &cobra.Command{
+	Use:   "buildMissing [summary file] [bad database] [diff File]",
+	Short: "Given the summary data and the bad database, build a diff File of solely the keys missing from the bad database",
+	Args:  cobra.ExactArgs(3),
+	Run:   runBuildMissing,
+}
 
 var cmdPrintDiff = &cobra.Command{
-	Use:   "printDiff [diff file] [good database] [diff File]",
+	Use:   "printDiff [diff file] [good database]",
 	Short: "Given the summary data and the good database, print the diff file",
 	Args:  cobra.ExactArgs(2),
 	Run:   runPrintDiff,
@@ -54,6 +61,13 @@ var cmdBuildFix = &cobra.Command{
 	Short: "Take the difference between the good and bad database, the good data base, and build a fix file",
 	Args:  cobra.ExactArgs(3),
 	Run:   runBuildFix,
+}
+
+var cmdPrintFix = &cobra.Command{
+	Use:   "printFix [fix file]",
+	Short: "Prints the contents of the fix file",
+	Args:  cobra.ExactArgs(1),
+	Run:   runPrintFix,
 }
 
 var cmdApplyFix = &cobra.Command{
@@ -77,16 +91,26 @@ var cmdCheckFix = &cobra.Command{
 	Run:   runCheckFix,
 }
 
+var cmdDumpFixHashes = &cobra.Command{
+	Use:   "dumpFixHashes [fix file] [output file]",
+	Short: "collects all the keys, sorts them, then dumps them in ASCII into the output file",
+	Args:  cobra.ExactArgs(2),
+	Run:   runDumpFixHashes,
+}
+
 func init() {
 	cmd.AddCommand(
 		cmdBuildTestDBs,
 		cmdBuildSummary,
 		cmdBuildDiff,
+		cmdBuildMissing,
 		cmdPrintDiff,
 		cmdBuildFix,
+		cmdPrintFix,
 		cmdApplyFix,
 		cmdPrintFix,
 		cmdCheckFix,
+		cmdDumpFixHashes,
 	)
 }
 
@@ -122,21 +146,24 @@ func OpenDB(dbName string) (*badger.DB, func()) {
 
 // Read an 8 byte, uint64 value and return it.
 // As a side effect, the first 8 bytes of buff hold the value
-func read8(f *os.File, buff []byte) uint64 {
+func read8(f *os.File, buff []byte, tag string) uint64 {
+	if buff == nil {
+		buff = make([]byte, 8)
+	}
 	r, err := f.Read(buff[:8]) // Read 64 bits
-	checkf(err, "failed to read count")
+	checkf(err, "%s: failed to read 64 bit int", tag)
 	if r != 8 {
-		fatalf("failed to read a full 64 bit value")
+		fatalf("%s: failed to read a full 64 bit value", tag)
 	}
 	return binary.BigEndian.Uint64(buff[:8])
 }
 
 // Read 32 bytes into a given buffer
-func read32(f *os.File, buff []byte) {
+func read32(f *os.File, buff []byte, tag string) {
 	r, err := f.Read(buff[:32]) // Read 32
-	checkf(err, "failed to read address")
+	checkf(err, "%s: failed to read address", tag)
 	if r != 32 {
-		fatalf("failed to read a full 64 bit value")
+		fatalf("%s: failed to read a full 32 byte value", tag)
 	}
 }
 
@@ -148,9 +175,15 @@ func read(f *os.File, buff []byte) {
 	}
 }
 
-func write8(f *os.File, v uint64) {
+// Write the integer value out as 8 bytes
+func write8(f *os.File, i interface{}) {
 	var buff [8]byte
-	binary.BigEndian.PutUint64(buff[:], v)
+	switch v := i.(type) {
+	case uint64:
+		binary.BigEndian.PutUint64(buff[:], v)
+	case int:
+		binary.BigEndian.PutUint64(buff[:], uint64(v))
+	}
 	i, err := f.Write(buff[:])
 	checkf(err, "failed a write to fix file %s", f.Name())
 	if i != 8 {
