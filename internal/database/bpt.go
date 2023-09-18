@@ -18,8 +18,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *bpt.BPT {
-	return bpt.New(parent, logger, store, key, label)
+func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name string) *bpt.BPT {
+	return bpt.New(parent, logger, store, key)
 }
 
 // GetBptRootHash returns the BPT root hash, after applying updates as necessary

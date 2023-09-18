@@ -29,16 +29,6 @@ import (
 {{- if .Private}}get{{end}}{{.Name}}
 {{- end}}
 
-{{  define "valueLabel"}}
-{{- if not (and .GetParent.Type.IsEntity .GetParent.Root) -}}
-c.label + " " +
-{{- end -}}
-"{{natural .Name}}"
-{{- if parameterized . -}}
-{{range .GetParameters}} + " " + {{keyToString . (print "k." .Name)}}{{end}}
-{{- end}}
-{{- end}}
-
 {{  define "key"}}
 {{- if .GetParent.Root -}}
 (*record.Key)(nil)
@@ -65,7 +55,7 @@ values.Struct[{{stateType . true}}]()
 
 {{  define "newValue"}}
 {{- if .IsSet}}
-return values.NewSet(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}},
+return values.NewSet(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "encoder" .}},
 	{{- if wrapped . -}}
 	values.Compare{{title .DataType.String}}
 	{{- else if .Comparator -}}
@@ -75,19 +65,19 @@ return values.NewSet(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{tem
 	{{- end -}}
 )
 {{- else if .IsList}}
-return values.NewList(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}})
+return values.NewList(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "encoder" .}})
 {{- else}}
-return values.NewValue(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
+return values.NewValue(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
 {{- end}}
 {{- end}}
 
 {{define "newCounted"}}
 {{- if wrapped .}}
-return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, values.WrappedFactory(values.{{title .DataType.String}}Wrapper))
+return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, values.WrappedFactory(values.{{title .DataType.String}}Wrapper))
 {{- else if .Union}}
-return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, values.UnionFactory({{unionMethod . "Unmarshal"}}))
+return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, values.UnionFactory({{unionMethod . "Unmarshal"}}))
 {{- else}}
-return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, {{template "valueLabel" .}}, values.Struct[{{stateType . true}}])
+return values.NewCounted(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, values.Struct[{{stateType . true}}])
 {{- end}}
 {{- end}}
 
@@ -108,7 +98,6 @@ type {{fullName .}} struct {
 	store record.Store
 	{{- if not .Root}}
 	key *record.Key
-	label string
 	{{- if .GetParent}}
 	parent *{{fullName .GetParent}}
 	{{- end}}
@@ -163,12 +152,11 @@ func (c *{{fullName $c}}) {{if .CustomValueConstructor}}baseNew{{else}}new{{end}
 	v.store = c.{{valueStore .}}
 	v.key = {{template "key" .}}
 	v.parent = c
-	v.label = {{template "valueLabel" .}}
 	return v
 	{{- else if .Type.IsChain}}
-	return database.NewChain(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+	return database.NewChain(c.logger.L, c.{{valueStore .}}, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}")
 	{{- else if .Type.IsOther}}
-	return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+	return {{if .Constructor}}{{.Constructor}}{{else}}new{{.DataType}}{{end}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}")
 	{{- else if .IsCounted}}
 	{{- template "newCounted" .}}
 	{{- else}}

@@ -11,8 +11,6 @@ package light
 //lint:file-ignore S1008,U1000 generated code
 
 import (
-	"encoding/hex"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
@@ -32,7 +30,6 @@ type indexDB struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 
 	account     map[indexDBAccountMapKey]*indexDBAccount
 	partition   map[indexDBPartitionMapKey]*indexDBPartition
@@ -87,7 +84,6 @@ func (c *indexDB) newAccount(k indexDBAccountKey) *indexDBAccount {
 	v.store = c.store
 	v.key = c.key.Append("Account", k.Url)
 	v.parent = c
-	v.label = c.label + " " + "account" + " " + k.Url.RawString()
 	return v
 }
 
@@ -101,7 +97,6 @@ func (c *indexDB) newPartition(k indexDBPartitionKey) *indexDBPartition {
 	v.store = c.store
 	v.key = c.key.Append("Partition", k.Url)
 	v.parent = c
-	v.label = c.label + " " + "partition" + " " + k.Url.RawString()
 	return v
 }
 
@@ -115,7 +110,6 @@ func (c *indexDB) newTransaction(k indexDBTransactionKey) *indexDBTransaction {
 	v.store = c.store
 	v.key = c.key.Append("Transaction", k.Hash)
 	v.parent = c
-	v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(k.Hash[:])
 	return v
 }
 
@@ -229,7 +223,6 @@ type indexDBAccount struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *indexDB
 
 	didIndexTransactionExecution values.Set[[32]byte]
@@ -256,7 +249,7 @@ func (c *indexDBAccount) DidIndexTransactionExecution() values.Set[[32]byte] {
 }
 
 func (c *indexDBAccount) newDidIndexTransactionExecution() values.Set[[32]byte] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), c.label+" "+"did index transaction execution", values.Wrapped(values.HashWrapper), values.CompareHash)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
 func (c *indexDBAccount) DidLoadTransaction() values.Set[[32]byte] {
@@ -264,7 +257,7 @@ func (c *indexDBAccount) DidLoadTransaction() values.Set[[32]byte] {
 }
 
 func (c *indexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), c.label+" "+"did load transaction", values.Wrapped(values.HashWrapper), values.CompareHash)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
 func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
@@ -277,7 +270,6 @@ func (c *indexDBAccount) newChain(k indexDBAccountChainKey) *indexDBAccountChain
 	v.store = c.store
 	v.key = c.key.Append("Chain", k.Name)
 	v.parent = c
-	v.label = c.label + " " + "chain" + " " + k.Name
 	return v
 }
 
@@ -365,7 +357,6 @@ type indexDBAccountChain struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *indexDBAccount
 
 	index values.List[*protocol.IndexEntry]
@@ -378,7 +369,7 @@ func (c *indexDBAccountChain) Index() values.List[*protocol.IndexEntry] {
 }
 
 func (c *indexDBAccountChain) newIndex() values.List[*protocol.IndexEntry] {
-	return values.NewList(c.logger.L, c.store, c.key.Append("Index"), c.label+" "+"index", values.Struct[protocol.IndexEntry]())
+	return values.NewList(c.logger.L, c.store, c.key.Append("Index"), values.Struct[protocol.IndexEntry]())
 }
 
 func (c *indexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -441,7 +432,6 @@ type indexDBPartition struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *indexDB
 
 	anchors values.List[*AnchorMetadata]
@@ -454,7 +444,7 @@ func (c *indexDBPartition) Anchors() values.List[*AnchorMetadata] {
 }
 
 func (c *indexDBPartition) newAnchors() values.List[*AnchorMetadata] {
-	return values.NewList(c.logger.L, c.store, c.key.Append("Anchors"), c.label+" "+"anchors", values.Struct[AnchorMetadata]())
+	return values.NewList(c.logger.L, c.store, c.key.Append("Anchors"), values.Struct[AnchorMetadata]())
 }
 
 func (c *indexDBPartition) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -515,7 +505,6 @@ type indexDBTransaction struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *indexDB
 
 	executed values.Value[*EventMetadata]
@@ -528,7 +517,7 @@ func (c *indexDBTransaction) Executed() values.Value[*EventMetadata] {
 }
 
 func (c *indexDBTransaction) newExecuted() values.Value[*EventMetadata] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Executed"), c.label+" "+"executed", false, values.Struct[EventMetadata]())
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Executed"), false, values.Struct[EventMetadata]())
 }
 
 func (c *indexDBTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
