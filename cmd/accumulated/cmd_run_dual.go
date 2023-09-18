@@ -8,15 +8,13 @@ package main
 
 import (
 	"net/http"
-	"os"
-	"os/signal"
 	"time"
 
 	service2 "github.com/cometbft/cometbft/libs/service"
-	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 var cmdRunDual = &cobra.Command{
@@ -67,41 +65,15 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 
 	flagRun.EnableTimingLogs = flagRunDual.EnableTimingLogs
 
-	// TODO: This only works on POSIX platforms. We need to seriously refactor
-	// how service mode works.
-	serviceConfig.Option = service.KeyValue{
-		"RunWait": func() {
-			sigChan := make(chan os.Signal, 1)
-			signal.Notify(sigChan, os.Interrupt)
-			defer signal.Stop(sigChan)
-
-			select {
-			case <-prog.primary.Done():
-			case <-prog.secondary.Done():
-			case <-sigChan:
-			}
-		},
-	}
-
-	svc, err := service.New(prog, serviceConfig)
-	if err != nil {
-		return "", err
-	}
-
-	logger, err := svc.Logger(nil)
-	if err != nil {
-		return "", err
-	}
-
 	if flagRunDual.CiStopAfter != 0 {
-		go watchDog(prog, svc, flagRunDual.CiStopAfter)
+		go watchDog(prog, flagRunDual.CiStopAfter)
 	}
 
-	err = svc.Run()
+	err := prog.Run()
 	if err != nil {
 		//if it is already stopped, that is ok.
 		if !errors.Is(err, service2.ErrAlreadyStopped) {
-			_ = logger.Error(err)
+			slog.Error("Service failed", err)
 			return "", err
 		}
 	}
