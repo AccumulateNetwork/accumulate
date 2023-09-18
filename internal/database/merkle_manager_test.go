@@ -29,7 +29,7 @@ func begin() database.Store {
 }
 
 func testChain(store record.Store, markPower int64, key ...interface{}) *MerkleManager {
-	return NewChain(nil, store, record.NewKey(key...), markPower, merkle.ChainTypeUnknown, "chain", "chain")
+	return NewChain(nil, store, record.NewKey(key...), markPower, merkle.ChainTypeUnknown, "chain")
 }
 
 func TestMerkleManager_GetChainState(t *testing.T) {
