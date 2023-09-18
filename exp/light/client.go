@@ -145,7 +145,6 @@ func (c *Client) OpenDB(writable bool) *DB {
 	batch.SetObserver(testing.NullObserver{}) // Ignore the BPT
 	index := new(indexDB)
 	index.key = record.NewKey("Light", "Index")
-	index.label = "light index"
 	index.store = keyvalue.RecordStore{Store: kvb}
 	return &DB{batch, index}
 }
