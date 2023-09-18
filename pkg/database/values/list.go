@@ -15,9 +15,9 @@ type list[T any] struct {
 	value[[]T]
 }
 
-func newList[T any](store database.Store, key *database.Key, namefmt string, encoder encodableValue[T]) *list[T] {
+func newList[T any](store database.Store, key *database.Key, encoder encodableValue[T]) *list[T] {
 	s := &list[T]{}
-	s.value = *newValue[[]T](store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
+	s.value = *newValue[[]T](store, key, true, &sliceValue[T]{encoder: encoder})
 	return s
 }
 
