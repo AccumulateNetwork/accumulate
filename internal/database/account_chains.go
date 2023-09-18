@@ -21,14 +21,13 @@ import (
 
 // Chain2 is a wrapper for Chain.
 type Chain2 struct {
-	account  *Account
-	key      *record.Key
-	inner    *MerkleManager
-	index    *Chain2
-	labelfmt string
+	account *Account
+	key     *record.Key
+	inner   *MerkleManager
+	index   *Chain2
 }
 
-func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.Key, namefmt, labelfmt string) *Chain2 {
+func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.Key, namefmt string) *Chain2 {
 	var account *Account
 	switch parent := parent.(type) {
 	case *Account:
@@ -56,8 +55,8 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.K
 		panic("unknown chain key") // Will be removed once chains are completely integrated into the model
 	}
 
-	c := NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt, labelfmt)
-	return &Chain2{account, key, c, nil, labelfmt}
+	c := NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt)
+	return &Chain2{account, key, c, nil}
 }
 
 func (c *Chain2) Key() *record.Key { return c.key }
@@ -181,9 +180,8 @@ func (c *Chain2) newIndex() *Chain2 {
 		panic("cannot index an index chain")
 	}
 	key := c.key.Append("Index")
-	label := c.labelfmt + " index"
-	m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
-	return &Chain2{c.account, key, m, nil, label}
+	m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index")
+	return &Chain2{c.account, key, m, nil}
 }
 
 // ChainByName returns account Chain2 for the named chain, or a not found error if

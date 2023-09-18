@@ -11,9 +11,6 @@ package bsn
 //lint:file-ignore S1008,U1000 generated code
 
 import (
-	"encoding/hex"
-	"strconv"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -79,7 +76,7 @@ func (c *ChangeSet) LastBlock() values.Value[*LastBlock] {
 }
 
 func (c *ChangeSet) newLastBlock() values.Value[*LastBlock] {
-	return values.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), "last block", false, values.Struct[LastBlock]())
+	return values.NewValue(c.logger.L, c.store, (*record.Key)(nil).Append("LastBlock"), false, values.Struct[LastBlock]())
 }
 
 func (c *ChangeSet) Summary(hash [32]byte) *Summary {
@@ -92,7 +89,6 @@ func (c *ChangeSet) newSummary(k summaryKey) *Summary {
 	v.store = c.store
 	v.key = (*record.Key)(nil).Append("Summary", k.Hash)
 	v.parent = c
-	v.label = "summary" + " " + hex.EncodeToString(k.Hash[:])
 	return v
 }
 
@@ -106,7 +102,6 @@ func (c *ChangeSet) newPending(k pendingKey) *Pending {
 	v.store = c.store
 	v.key = (*record.Key)(nil).Append("Pending", k.Partition)
 	v.parent = c
-	v.label = "pending" + " " + k.Partition
 	return v
 }
 
@@ -220,7 +215,6 @@ type Summary struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *ChangeSet
 
 	main       values.Value[*messaging.BlockSummary]
@@ -234,7 +228,7 @@ func (c *Summary) Main() values.Value[*messaging.BlockSummary] {
 }
 
 func (c *Summary) newMain() values.Value[*messaging.BlockSummary] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Struct[messaging.BlockSummary]())
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), false, values.Struct[messaging.BlockSummary]())
 }
 
 func (c *Summary) Signatures() values.Set[protocol.KeySignature] {
@@ -242,7 +236,7 @@ func (c *Summary) Signatures() values.Set[protocol.KeySignature] {
 }
 
 func (c *Summary) newSignatures() values.Set[protocol.KeySignature] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", values.Union(protocol.UnmarshalKeySignature), compareSignatures)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), values.Union(protocol.UnmarshalKeySignature), compareSignatures)
 }
 
 func (c *Summary) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -305,7 +299,6 @@ type Pending struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *ChangeSet
 
 	onBlock map[pendingOnBlockMapKey]values.Value[[32]byte]
@@ -330,7 +323,7 @@ func (c *Pending) OnBlock(index uint64) values.Value[[32]byte] {
 }
 
 func (c *Pending) newOnBlock(k pendingOnBlockKey) values.Value[[32]byte] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", k.Index), c.label+" "+"on block"+" "+strconv.FormatUint(k.Index, 10), false, values.Wrapped(values.HashWrapper))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("OnBlock", k.Index), false, values.Wrapped(values.HashWrapper))
 }
 
 func (c *Pending) Resolve(key *record.Key) (record.Record, *record.Key, error) {
