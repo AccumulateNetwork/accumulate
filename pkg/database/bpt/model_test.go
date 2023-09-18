@@ -40,7 +40,7 @@ func must(err error) {
 var testRoot = func() [32]byte {
 	// Manually construct a tree
 	root := new(branch)
-	root.bpt = New(nil, nil, nilStore{}, nil, "")
+	root.bpt = New(nil, nil, nilStore{}, nil)
 	root.Key, _ = nodeKeyAt(0, [32]byte{})
 	for _, e := range testEntries {
 		_, err := root.insert(&leaf{Key: e[0], Hash: e[1]})
@@ -170,11 +170,11 @@ func TestRange(t *testing.T) {
 // committed without constructing a tree.
 func TestTreelessCommit(t *testing.T) {
 	kvs := memory.New(nil)
-	b1 := newBPT(nil, nil, keyvalue.RecordStore{Store: kvs.Begin(nil, true)}, nil, "BPT", "BPT")
+	b1 := newBPT(nil, nil, keyvalue.RecordStore{Store: kvs.Begin(nil, true)}, nil, "BPT")
 	require.Empty(t, b1.pending)
 
 	rs := testTreelessCommitRecordStore{t, b1}
-	b2 := newBPT(nil, nil, rs, nil, "BPT", "BPT")
+	b2 := newBPT(nil, nil, rs, nil, "BPT")
 	require.NoError(t, b2.Insert([32]byte{1}, [32]byte{2}))
 	require.NoError(t, b2.Commit())
 	require.NotEmpty(t, b1.pending)
@@ -183,7 +183,7 @@ func TestTreelessCommit(t *testing.T) {
 func TestDeleteAcrossBoundary(t *testing.T) {
 	kvs := memory.New(nil).Begin(nil, true)
 	store := keyvalue.RecordStore{Store: kvs}
-	bpt := newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt := newBPT(nil, nil, store, nil, "BPT")
 
 	// Add the test data
 	for _, e := range testEntries {
@@ -234,12 +234,12 @@ func TestDeleteAcrossBoundary(t *testing.T) {
 	require.Equal(t, 8, int(l.parent.Height))
 
 	// Unload the tree and delete the key
-	bpt = newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt = newBPT(nil, nil, store, nil, "BPT")
 	require.NoError(t, bpt.Delete(K2))
 	require.NoError(t, bpt.Commit())
 
 	// Unload the tree and verify that the key is not found
-	bpt = newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt = newBPT(nil, nil, store, nil, "BPT")
 	_, err = bpt.Get(K2)
 	require.ErrorIs(t, err, errors.NotFound)
 
@@ -254,14 +254,14 @@ func TestDeleteAcrossBoundary(t *testing.T) {
 
 	// Unload the tree and add another, different key that will be in the 0080
 	// block
-	bpt = newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt = newBPT(nil, nil, store, nil, "BPT")
 	K3 := testEntries[0][0]
 	K3[1] = 0xC0
 	require.NoError(t, bpt.Insert(K3, [32]byte{'a'}))
 	require.NoError(t, bpt.Commit())
 
 	// Verify that K2 is not found
-	bpt = newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt = newBPT(nil, nil, store, nil, "BPT")
 	_, err = bpt.Get(K2)
 	require.ErrorIs(t, err, errors.NotFound)
 
@@ -334,7 +334,7 @@ func TestDeleteNested(t *testing.T) {
 func TestDelete(t *testing.T) {
 	var rand lxrand.Sequence
 	store := keyvalue.RecordStore{Store: memory.New(nil).Begin(nil, true)}
-	bpt := newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt := newBPT(nil, nil, store, nil, "BPT")
 
 	// Populate the BPT
 	hashes := make([][32]byte, 50000)
@@ -349,7 +349,7 @@ func TestDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	// Reload
-	bpt = newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt = newBPT(nil, nil, store, nil, "BPT")
 
 	// Randomly delete 50% of the entries
 	deleted := make([][32]byte, len(hashes)/2)
@@ -366,7 +366,7 @@ func TestDelete(t *testing.T) {
 	require.NotEqual(t, hex.EncodeToString(before[:]), hex.EncodeToString(after[:]))
 
 	// Reload
-	bpt = newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt = newBPT(nil, nil, store, nil, "BPT")
 
 	// Add the deleted entries back
 	for _, h := range deleted {
@@ -380,8 +380,8 @@ func TestDelete(t *testing.T) {
 	require.Equal(t, hex.EncodeToString(before[:]), hex.EncodeToString(after[:]))
 }
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *BPT {
-	return New(parent, logger, store, key, label)
+func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name string) *BPT {
+	return New(parent, logger, store, key)
 }
 
 func (c *ChangeSet) Begin() *ChangeSet {
@@ -420,7 +420,7 @@ func (nilStore) PutValue(key *record.Key, value database.Value) error { panic("n
 func TestPrint(t *testing.T) {
 	var rand lxrand.Sequence
 	store := keyvalue.RecordStore{Store: memory.New(nil).Begin(nil, true)}
-	bpt := newBPT(nil, nil, store, nil, "BPT", "BPT")
+	bpt := newBPT(nil, nil, store, nil, "BPT")
 
 	for i := 0; i < 50; i++ {
 		require.NoError(t, bpt.Insert(rand.Hash(), rand.Hash()))

@@ -31,7 +31,7 @@ func (c *ChangeSet) BPT() *BPT {
 }
 
 func (c *ChangeSet) newBPT() *BPT {
-	return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt", "bpt")
+	return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt")
 }
 
 func (c *ChangeSet) Resolve(key *record.Key) (record.Record, *record.Key, error) {

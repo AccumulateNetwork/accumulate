@@ -18,12 +18,11 @@ type KeyValuePair struct {
 }
 
 // New returns a new BPT.
-func New(parent database.Record, logger log.Logger, store database.Store, key *database.Key, label string) *BPT {
+func New(parent database.Record, logger log.Logger, store database.Store, key *database.Key) *BPT {
 	b := new(BPT)
 	b.logger.Set(logger)
 	b.store = store
 	b.key = key
-	b.label = label
 	return b
 }
 
@@ -49,7 +48,7 @@ func (b *BPT) GetRootHash() ([32]byte, error) {
 }
 
 func (b *BPT) newState() values.Value[*parameters] {
-	v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), b.label+" "+"state", false, values.Struct[parameters]())
+	v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), false, values.Struct[parameters]())
 	return paramsRecord{v}
 }
 
