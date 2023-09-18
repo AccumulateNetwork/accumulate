@@ -42,7 +42,7 @@ function download {
   echo "$sha $as" | sha256sum -c
 }
 
-download-bin dbrepair f0dda4becf931fc6f02c65b79b3d98332abb876b4abacb1fd9084c36e9aa30c8
+download-bin dbrepair 66df562c69aa0fab21c36dd0c1a9ec24b1de91fe2e81eec6051489d29ecc4e8b
 download data/pre-v2-txn-dn-fix.dat dn.fix 9c83fb66cd42fdc7970a017978c53d031e1045f340e04a9e77188c3dbda8e63e
 
 case $bvn in
