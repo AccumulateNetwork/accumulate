@@ -184,7 +184,6 @@ func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
 		b.store,
 		// This must match the key used for the account's Url state
 		key.Append("Url"),
-		fmt.Sprintf("account %v URL", key),
 		false,
 		values.Wrapped(values.UrlWrapper),
 	).Get()
@@ -217,7 +216,6 @@ func (b *Batch) Resolve(key *record.Key) (database.Record, *record.Key, error) {
 		b.logger.L,
 		b.store,
 		key,
-		fmt.Sprintf("account %v URL", key),
 		false,
 		values.Wrapped(values.UrlWrapper),
 	)
