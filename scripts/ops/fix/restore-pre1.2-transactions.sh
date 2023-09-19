@@ -38,11 +38,11 @@ function download {
   sha=$3
 
   echo "Downloading $path"
-  curl -LJ -o $as https://gitlab.com/accumulatenetwork/accumulate/-/raw/main/scripts/$path
+  curl -LJ -o $as https://gitlab.com/accumulatenetwork/accumulate/-/raw/files/scripts/$path
   echo "$sha $as" | sha256sum -c
 }
 
-download-bin dbrepair 66df562c69aa0fab21c36dd0c1a9ec24b1de91fe2e81eec6051489d29ecc4e8b
+download-bin dbrepair 2287187d0e12af5c6b26eac17158ab695dd4506bf110556c5011ebb50e1ca1de
 download data/pre-v2-txn-dn-fix.dat dn.fix 9c83fb66cd42fdc7970a017978c53d031e1045f340e04a9e77188c3dbda8e63e
 
 case $bvn in
@@ -60,8 +60,8 @@ case $bvn in
     ;;
 esac
 
-dbrepair applyFix dn.fix "$node/dnn/data/accumulate.db"
-dbrepair applyFix bvn.fix "$node/bvnn/data/accumulate.db"
+dbrepair applyMissing dn.fix "$node/dnn/data/accumulate.db"
+dbrepair applyMissing bvn.fix "$node/bvnn/data/accumulate.db"
 
 echo
 echo
