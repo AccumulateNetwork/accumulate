@@ -14,7 +14,7 @@ mkdir /tmpbin
 export PATH="/tmpbin:$PATH"
 
 echo "Downloading debug binary"
-curl -LJ -o debug https://gitlab.com/accumulatenetwork/accumulate/-/raw/main/scripts/bin/v1.2.5/debug-linux-amd64
+curl -LJ -o debug https://gitlab.com/accumulatenetwork/accumulate/-/raw/files/scripts/bin/v1.2.5/debug-linux-amd64
 echo "3838acfe99321b0fbb8c8b148e70785bbf5440d9c9b7a113c680ef7aed5fe50b debug" | sha256sum -c
 chmod +x debug
 mv debug /tmpbin/debug
