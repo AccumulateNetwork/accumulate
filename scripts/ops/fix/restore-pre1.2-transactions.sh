@@ -37,9 +37,15 @@ function download {
   as=$2
   sha=$3
 
-  echo "Downloading $path"
+  echo -n "Downloading $path... "
+  if [ -f $as ] && (echo "$sha $as" | sha256sum -c); then
+    echo "already have the correct file"
+    return
+  fi
+
   curl -LJ -o $as https://gitlab.com/accumulatenetwork/accumulate/-/raw/files/scripts/$path
   echo "$sha $as" | sha256sum -c
+  echo "done"
 }
 
 download-bin dbrepair 2287187d0e12af5c6b26eac17158ab695dd4506bf110556c5011ebb50e1ca1de
