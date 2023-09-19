@@ -398,7 +398,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 				Signature: keySig,
 			}
 		} else {
-			msg = &messaging.SyntheticMessage{
+			msg = &messaging.BadSyntheticMessage{
 				Message:   seq,
 				Signature: keySig,
 				Proof: &protocol.AnnotatedReceipt{

@@ -47,7 +47,7 @@ func (AuthoritySignature) check(batch *database.Batch, ctx *SignatureContext) (*
 	}
 
 	// An authority signature MUST NOT be submitted directly
-	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
+	if !ctx.isWithin(messaging.MessageTypeBadSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		return nil, errors.BadRequest.WithFormat("a non-synthetic message cannot carry an %v signature", ctx.signature.Type())
 	}
 

@@ -34,7 +34,7 @@ func (CreditPayment) check(batch *database.Batch, ctx *MessageContext) (*messagi
 	}
 
 	// Must be synthetic
-	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
+	if !ctx.isWithin(messaging.MessageTypeBadSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		return nil, nil, errors.BadRequest.WithFormat("cannot execute %v outside of a synthetic message", pay.Type())
 	}
 

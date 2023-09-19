@@ -58,7 +58,7 @@ SequencedMessage:
       type: uint
       optional: true
 
-SyntheticMessage:
+BadSyntheticMessage: &synthetic
   # TODO Update to have multiple transactions with a list receipt
   union: { type: message }
   fields:
@@ -72,6 +72,8 @@ SyntheticMessage:
       type: protocol.AnnotatedReceipt
       marshal-as: reference
       pointer: true
+
+# SyntheticMessage: *synthetic
 
 BlockAnchor:
   union: { type: message }

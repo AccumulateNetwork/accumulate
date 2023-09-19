@@ -59,7 +59,7 @@ func (m *SequencedMessage) ID() *url.TxID {
 	return m.Destination.WithTxID(m.Hash())
 }
 
-func (m *SyntheticMessage) ID() *url.TxID {
+func (m *BadSyntheticMessage) ID() *url.TxID {
 	return m.Message.ID().Account().WithTxID(m.Hash())
 }
 
@@ -91,8 +91,8 @@ func (m *BlockSummary) ID() *url.TxID {
 	return protocol.PartitionUrl(m.Partition).WithTxID(m.Hash())
 }
 
-func (m *SyntheticMessage) Unwrap() Message { return m.Message }
-func (m *SequencedMessage) Unwrap() Message { return m.Message }
+func (m *BadSyntheticMessage) Unwrap() Message { return m.Message }
+func (m *SequencedMessage) Unwrap() Message    { return m.Message }
 
 type MessageWithTransaction interface {
 	Message
@@ -139,9 +139,9 @@ type MessageWithProduced interface {
 	GetProduced() []*url.TxID
 }
 
-func (m *SequencedMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
-func (m *SyntheticMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
-func (m *SignatureRequest) GetProduced() []*url.TxID { return []*url.TxID{m.TxID} }
+func (m *SequencedMessage) GetProduced() []*url.TxID    { return []*url.TxID{m.Message.ID()} }
+func (m *BadSyntheticMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
+func (m *SignatureRequest) GetProduced() []*url.TxID    { return []*url.TxID{m.TxID} }
 
 func (m *BlockAnchor) GetProduced() []*url.TxID {
 	id := m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
@@ -156,7 +156,7 @@ func (m *SignatureMessage) Hash() [32]byte {
 	return *(*[32]byte)(m.Signature.Hash())
 }
 
-func (m *SyntheticMessage) Hash() [32]byte {
+func (m *BadSyntheticMessage) Hash() [32]byte {
 	var h hash.Hasher
 	h.AddHash2(m.Message.Hash())
 	h.AddHash((*[32]byte)(m.Proof.Receipt.Anchor))

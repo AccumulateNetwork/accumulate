@@ -190,7 +190,7 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 				debug = true
 			case *messaging.BlockAnchor:
 				debug = true
-			case *messaging.SyntheticMessage:
+			case *messaging.BadSyntheticMessage:
 				msg = m.Message
 				goto again
 			case *messaging.SequencedMessage:

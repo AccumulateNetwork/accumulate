@@ -479,7 +479,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		}
 
 		messages := []messaging.Message{
-			&messaging.SyntheticMessage{
+			&messaging.BadSyntheticMessage{
 				Message:   seq,
 				Proof:     receipt,
 				Signature: keySig,

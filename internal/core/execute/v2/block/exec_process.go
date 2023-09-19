@@ -147,7 +147,7 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 			fn = b.Executor.logger.Info
 			kv = append(kv, "module", "anchoring")
 
-		case *messaging.SyntheticMessage:
+		case *messaging.BadSyntheticMessage:
 			if seq, ok := msg.Message.(*messaging.SequencedMessage); ok {
 				kv = append(kv, "inner-type", seq.Message.ID())
 				kv = append(kv, "source", seq.Source)

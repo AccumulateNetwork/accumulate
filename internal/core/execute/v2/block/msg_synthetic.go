@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	registerSimpleExec[SyntheticMessage](&messageExecutors, messaging.MessageTypeSynthetic)
+	registerSimpleExec[SyntheticMessage](&messageExecutors, messaging.MessageTypeBadSynthetic)
 }
 
 // SyntheticMessage records the synthetic transaction but does not execute
@@ -37,10 +37,10 @@ func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) (
 	return nil, errors.UnknownError.Wrap(err)
 }
 
-func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SyntheticMessage, error) {
-	syn, ok := ctx.message.(*messaging.SyntheticMessage)
+func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.BadSyntheticMessage, error) {
+	syn, ok := ctx.message.(*messaging.BadSyntheticMessage)
 	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSynthetic, ctx.message.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBadSynthetic, ctx.message.Type())
 	}
 
 	// Basic validation

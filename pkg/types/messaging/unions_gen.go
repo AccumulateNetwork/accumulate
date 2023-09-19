@@ -20,6 +20,8 @@ import (
 // NewMessage creates a new Message for the specified MessageType.
 func NewMessage(typ MessageType) (Message, error) {
 	switch typ {
+	case MessageTypeBadSynthetic:
+		return new(BadSyntheticMessage), nil
 	case MessageTypeBlockAnchor:
 		return new(BlockAnchor), nil
 	case MessageTypeBlockSummary:
@@ -32,8 +34,6 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(SignatureMessage), nil
 	case MessageTypeSignatureRequest:
 		return new(SignatureRequest), nil
-	case MessageTypeSynthetic:
-		return new(SyntheticMessage), nil
 	case MessageTypeTransaction:
 		return new(TransactionMessage), nil
 	}
@@ -46,6 +46,12 @@ func EqualMessage(a, b Message) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *BadSyntheticMessage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BadSyntheticMessage)
+		return ok && a.Equal(b)
 	case *BlockAnchor:
 		if a == nil {
 			return b == nil
@@ -82,12 +88,6 @@ func EqualMessage(a, b Message) bool {
 		}
 		b, ok := b.(*SignatureRequest)
 		return ok && a.Equal(b)
-	case *SyntheticMessage:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*SyntheticMessage)
-		return ok && a.Equal(b)
 	case *TransactionMessage:
 		if a == nil {
 			return b == nil
@@ -101,6 +101,8 @@ func EqualMessage(a, b Message) bool {
 // CopyMessage copies a Message.
 func CopyMessage(v Message) Message {
 	switch v := v.(type) {
+	case *BadSyntheticMessage:
+		return v.Copy()
 	case *BlockAnchor:
 		return v.Copy()
 	case *BlockSummary:
@@ -112,8 +114,6 @@ func CopyMessage(v Message) Message {
 	case *SignatureMessage:
 		return v.Copy()
 	case *SignatureRequest:
-		return v.Copy()
-	case *SyntheticMessage:
 		return v.Copy()
 	case *TransactionMessage:
 		return v.Copy()

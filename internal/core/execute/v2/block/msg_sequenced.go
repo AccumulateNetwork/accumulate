@@ -67,7 +67,7 @@ func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*me
 	}
 
 	// Sequenced messages must either be synthetic or anchors
-	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
+	if !ctx.isWithin(messaging.MessageTypeBadSynthetic, internal.MessageTypeMessageIsReady) {
 		if txn, ok := seq.Message.(*messaging.TransactionMessage); !ok || !txn.Transaction.Body.Type().IsAnchor() {
 			return nil, errors.BadRequest.WithFormat("invalid payload for sequenced message")
 		}
