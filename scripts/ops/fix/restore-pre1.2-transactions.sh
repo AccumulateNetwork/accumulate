@@ -68,6 +68,7 @@ esac
 
 dbrepair applyMissing dn.fix "$node/dnn/data/accumulate.db"
 dbrepair applyMissing bvn.fix "$node/bvnn/data/accumulate.db"
+rm dn.fix bvn.fix
 
 echo
 echo
