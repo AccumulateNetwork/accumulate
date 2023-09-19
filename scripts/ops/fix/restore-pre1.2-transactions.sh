@@ -50,10 +50,10 @@ case $bvn in
     download data/pre-v2-txn-$bvn-fix.dat bvn.fix 9f67fc53db86322ebb958ef3fe404db6ff335a1e4484a782ab5cc6068baf6f2d
     ;;
   yutu)
-    download data/pre-v2-txn-$bvn-fix.dat bvn.fix 97904b2dc7d344841b2b14f95a7a890a61bcc5869a028c30ed71a36a2091d9bb
+    download data/pre-v2-txn-$bvn-fix.dat bvn.fix 4c21a63dc6feca3b48b9f1a5e38b34024ce32c10c24fff6fb893d1e25c671ee9
     ;;
   chandrayaan)
-    download data/pre-v2-txn-$bvn-fix.dat bvn.fix 90db00407b67be369a1b060fb336017215b852bbb1edbea273be225df359433f
+    download data/pre-v2-txn-$bvn-fix.dat bvn.fix 812b7c0f7460bff2cec112ba01b1903462e6b5d8ddcb81ca38863544ee2b3af1
     ;;
   *)
     die "Error: $bvn is not a known BVN"
