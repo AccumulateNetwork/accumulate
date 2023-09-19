@@ -23,6 +23,6 @@ MessageType:
   BlockSummary:
     value: 8
     description: is a summary of a block
-  # Synthetic:
-  #   value: 9
-  #   description: is a message produced by the protocol, requiring proof
+  Synthetic:
+    value: 9
+    description: is a message produced by the protocol, requiring proof

@@ -20,6 +20,7 @@ Envelope:
       repeatable: true
 
 TransactionMessage:
+  # DO NOT ADD ANY OTHER FIELDS TO THIS MESSAGE TYPE
   union: { type: message }
   fields:
     - name: Transaction
@@ -28,6 +29,7 @@ TransactionMessage:
       pointer: true
 
 SignatureMessage:
+  # DO NOT ADD ANY OTHER FIELDS TO THIS MESSAGE TYPE
   union: { type: message }
   fields:
     - name: Signature
@@ -58,10 +60,13 @@ SequencedMessage:
       type: uint
       optional: true
 
-BadSyntheticMessage: &synthetic
-  # TODO Update to have multiple transactions with a list receipt
-  union: { type: message }
-  fields:
+# TODO Update synthetic messages to have multiple transactions with a list
+# receipt
+
+SynthFields:
+  description: contains the fields of a synthetic message
+  non-binary: true
+  fields: &synthetic
     - name: Message
       type: Message
       marshal-as: union
@@ -73,7 +78,13 @@ BadSyntheticMessage: &synthetic
       marshal-as: reference
       pointer: true
 
-# SyntheticMessage: *synthetic
+BadSyntheticMessage:
+  union: { type: message }
+  fields: *synthetic
+
+SyntheticMessage:
+  union: { type: message }
+  fields: *synthetic
 
 BlockAnchor:
   union: { type: message }

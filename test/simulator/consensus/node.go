@@ -193,6 +193,9 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 			case *messaging.BadSyntheticMessage:
 				msg = m.Message
 				goto again
+			case *messaging.SyntheticMessage:
+				msg = m.Message
+				goto again
 			case *messaging.SequencedMessage:
 				msg = m.Message
 				goto again

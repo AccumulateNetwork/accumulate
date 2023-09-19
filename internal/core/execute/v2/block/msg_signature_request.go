@@ -34,7 +34,7 @@ func (SignatureRequest) check(batch *database.Batch, ctx *MessageContext) (*mess
 	}
 
 	// Must be synthetic
-	if !ctx.isWithin(messaging.MessageTypeBadSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
+	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		return nil, errors.BadRequest.WithFormat("cannot execute %v outside of a synthetic message", req.Type())
 	}
 

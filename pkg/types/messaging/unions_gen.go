@@ -34,6 +34,8 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(SignatureMessage), nil
 	case MessageTypeSignatureRequest:
 		return new(SignatureRequest), nil
+	case MessageTypeSynthetic:
+		return new(SyntheticMessage), nil
 	case MessageTypeTransaction:
 		return new(TransactionMessage), nil
 	}
@@ -88,6 +90,12 @@ func EqualMessage(a, b Message) bool {
 		}
 		b, ok := b.(*SignatureRequest)
 		return ok && a.Equal(b)
+	case *SyntheticMessage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SyntheticMessage)
+		return ok && a.Equal(b)
 	case *TransactionMessage:
 		if a == nil {
 			return b == nil
@@ -114,6 +122,8 @@ func CopyMessage(v Message) Message {
 	case *SignatureMessage:
 		return v.Copy()
 	case *SignatureRequest:
+		return v.Copy()
+	case *SyntheticMessage:
 		return v.Copy()
 	case *TransactionMessage:
 		return v.Copy()

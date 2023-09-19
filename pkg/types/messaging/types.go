@@ -63,6 +63,10 @@ func (m *BadSyntheticMessage) ID() *url.TxID {
 	return m.Message.ID().Account().WithTxID(m.Hash())
 }
 
+func (m *SyntheticMessage) ID() *url.TxID {
+	return m.Message.ID().Account().WithTxID(m.Hash())
+}
+
 func (m *BlockAnchor) ID() *url.TxID {
 	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
 }
@@ -92,6 +96,7 @@ func (m *BlockSummary) ID() *url.TxID {
 }
 
 func (m *BadSyntheticMessage) Unwrap() Message { return m.Message }
+func (m *SyntheticMessage) Unwrap() Message    { return m.Message }
 func (m *SequencedMessage) Unwrap() Message    { return m.Message }
 
 type MessageWithTransaction interface {
@@ -141,6 +146,7 @@ type MessageWithProduced interface {
 
 func (m *SequencedMessage) GetProduced() []*url.TxID    { return []*url.TxID{m.Message.ID()} }
 func (m *BadSyntheticMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
+func (m *SyntheticMessage) GetProduced() []*url.TxID    { return []*url.TxID{m.Message.ID()} }
 func (m *SignatureRequest) GetProduced() []*url.TxID    { return []*url.TxID{m.TxID} }
 
 func (m *BlockAnchor) GetProduced() []*url.TxID {
@@ -149,14 +155,19 @@ func (m *BlockAnchor) GetProduced() []*url.TxID {
 }
 
 func (m *TransactionMessage) Hash() [32]byte {
+	// A transaction message must contain nothing besides the transaction, so
+	// this is safe
 	return *(*[32]byte)(m.Transaction.GetHash())
 }
 
 func (m *SignatureMessage) Hash() [32]byte {
+	// A signature message must contain nothing besides the signature and
+	// optionally a transaction hash, so this is safe
 	return *(*[32]byte)(m.Signature.Hash())
 }
 
 func (m *BadSyntheticMessage) Hash() [32]byte {
+	// This is unsafe and buggy, which is why this type is deprecated
 	var h hash.Hasher
 	h.AddHash2(m.Message.Hash())
 	h.AddHash((*[32]byte)(m.Proof.Receipt.Anchor))
@@ -168,6 +179,7 @@ func (m *BlockAnchor) Hash() [32]byte      { return marshalAndHash(m) }
 func (m *SignatureRequest) Hash() [32]byte { return marshalAndHash(m) }
 func (m *CreditPayment) Hash() [32]byte    { return marshalAndHash(m) }
 func (m *BlockSummary) Hash() [32]byte     { return marshalAndHash(m) }
+func (m *SyntheticMessage) Hash() [32]byte { return marshalAndHash(m) }
 
 func marshalAndHash(m Message) [32]byte {
 	// If this fails something is seriously wrong

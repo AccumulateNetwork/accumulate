@@ -38,6 +38,9 @@ const MessageTypeCreditPayment MessageType = 7
 // MessageTypeBlockSummary is a summary of a block.
 const MessageTypeBlockSummary MessageType = 8
 
+// MessageTypeSynthetic is a message produced by the protocol, requiring proof.
+const MessageTypeSynthetic MessageType = 9
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -45,7 +48,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic:
 		*v = u
 		return true
 	}
@@ -71,6 +74,8 @@ func (v MessageType) String() string {
 		return "creditPayment"
 	case MessageTypeBlockSummary:
 		return "blockSummary"
+	case MessageTypeSynthetic:
+		return "synthetic"
 	}
 	return fmt.Sprintf("MessageType:%d", v)
 }
@@ -94,6 +99,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeCreditPayment, true
 	case "blocksummary":
 		return MessageTypeBlockSummary, true
+	case "synthetic":
+		return MessageTypeSynthetic, true
 	}
 	return 0, false
 }

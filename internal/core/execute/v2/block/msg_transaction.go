@@ -140,7 +140,7 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 	// either production of MessageIsReady should be changed to match the normal
 	// process, or the normal process should be updated to be less fragile, or
 	// both.
-	if !ctx.isWithin(messaging.MessageTypeBadSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic, internal.MessageTypeNetworkUpdate) {
+	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic, internal.MessageTypeNetworkUpdate) {
 		var signed bool
 		for _, msg := range ctx.messages {
 			// Resolve MessageIsReady
@@ -209,7 +209,7 @@ func (TransactionMessage) checkWrapper(ctx *MessageContext, txn *protocol.Transa
 	// Only allow synthetic transactions within a synthetic message, anchor
 	// transactions within a block anchor, and don't allow other transactions to
 	// be wrapped in either
-	if ctx.isWithin(messaging.MessageTypeBadSynthetic, internal.MessageTypePseudoSynthetic) {
+	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypePseudoSynthetic) {
 		if !txn.Body.Type().IsSynthetic() {
 			return errors.BadRequest.WithFormat("a synthetic message cannot carry a %v transaction", txn.Body.Type())
 		}

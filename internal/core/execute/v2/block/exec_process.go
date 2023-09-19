@@ -159,6 +159,19 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 					kv = append(kv, "txn-type", msg.Transaction.Body.Type())
 				}
 			}
+
+		case *messaging.SyntheticMessage:
+			if seq, ok := msg.Message.(*messaging.SequencedMessage); ok {
+				kv = append(kv, "inner-type", seq.Message.ID())
+				kv = append(kv, "source", seq.Source)
+				kv = append(kv, "dest", seq.Destination)
+				kv = append(kv, "seq", seq.Number)
+
+				switch msg := seq.Message.(type) {
+				case *messaging.TransactionMessage:
+					kv = append(kv, "txn-type", msg.Transaction.Body.Type())
+				}
+			}
 		}
 
 		fn("Executing message", kv...)

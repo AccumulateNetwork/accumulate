@@ -69,7 +69,7 @@ func (SignatureMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 
 	// Only allow authority signatures within a synthetic message and don't
 	// allow them outside of one
-	if ctx.isWithin(messaging.MessageTypeBadSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
+	if ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady, internal.MessageTypePseudoSynthetic) {
 		if sig.Signature.Type() != protocol.SignatureTypeAuthority {
 			return nil, nil, errors.BadRequest.WithFormat("a synthetic message cannot carry a %v signature", sig.Signature.Type())
 		}
