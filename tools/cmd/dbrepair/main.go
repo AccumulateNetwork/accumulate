@@ -77,12 +77,18 @@ var cmdApplyFix = &cobra.Command{
 	Run:   runApplyFix,
 }
 
-
 var cmdCheckFix = &cobra.Command{
 	Use:   "checkFix [fix file] [missing csv]",
 	Short: "Checks a fix file",
 	Args:  cobra.ExactArgs(2),
 	Run:   runCheckFix,
+}
+
+var cmdApplyMissing = &cobra.Command{
+	Use:   "applyMissing [fix file] [database]",
+	Short: "Only adds missing key/value pairs to database. Does not delete or update existing keys",
+	Args:  cobra.ExactArgs(2),
+	Run:   runApplyMissing,
 }
 
 var cmdDumpFixHashes = &cobra.Command{
@@ -104,6 +110,7 @@ func init() {
 		cmdApplyFix,
 		cmdPrintFix,
 		cmdCheckFix,
+		cmdApplyMissing,
 		cmdDumpFixHashes,
 	)
 }
