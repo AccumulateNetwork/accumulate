@@ -48,7 +48,7 @@ function download {
   echo "done"
 }
 
-download-bin dbrepair 2287187d0e12af5c6b26eac17158ab695dd4506bf110556c5011ebb50e1ca1de
+download-bin dbrepair 08465f3150b6c9906c7996fb7d3e2f8cbbb8add280f3ad788526147fe767b8b0
 download data/pre-v2-txn-dn-fix.dat dn.fix 9c83fb66cd42fdc7970a017978c53d031e1045f340e04a9e77188c3dbda8e63e
 
 case $bvn in
