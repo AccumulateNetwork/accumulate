@@ -580,7 +580,7 @@ func didUpdateToV2(anchor protocol.AnchorBody) bool {
 
 	for _, update := range dir.Updates {
 		update, ok := update.Body.(*protocol.ActivateProtocolVersion)
-		if ok && update.Version.V2() {
+		if ok && update.Version.V2Enabled() {
 			return true
 		}
 	}
