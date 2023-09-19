@@ -167,7 +167,7 @@ func (e *eventsSet[T]) postRestore() error {
 	// Update the BPT
 	for _, v := range v {
 		err = e.bpt.Insert(
-			e.baseKey.AppendKey(e.getKey(v)).Hash(),
+			e.baseKey.AppendKey(e.getKey(v)),
 			*(*[32]byte)(e.getHash(v)))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
@@ -203,7 +203,7 @@ func (e *eventsSet[T]) Put(v []T) error {
 		k := e.getKey(v)
 		kh := k.Hash()
 		err = e.bpt.Insert(
-			e.baseKey.AppendKey(k).Hash(),
+			e.baseKey.AppendKey(k),
 			*(*[32]byte)(e.getHash(v)))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
@@ -213,7 +213,7 @@ func (e *eventsSet[T]) Put(v []T) error {
 
 	// Remove any entries that no longer exist
 	for _, k := range m {
-		err = e.bpt.Delete(e.baseKey.AppendKey(k).Hash())
+		err = e.bpt.Delete(e.baseKey.AppendKey(k))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -226,7 +226,7 @@ func (e *eventsSet[T]) Add(v ...T) error {
 	// Update the BPT
 	for _, v := range v {
 		err := e.bpt.Insert(
-			e.baseKey.AppendKey(e.getKey(v)).Hash(),
+			e.baseKey.AppendKey(e.getKey(v)),
 			*(*[32]byte)(e.getHash(v)))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
@@ -238,7 +238,7 @@ func (e *eventsSet[T]) Add(v ...T) error {
 
 func (e *eventsSet[T]) Remove(v T) error {
 	// Update the BPT
-	err := e.bpt.Delete(e.baseKey.AppendKey(e.getKey(v)).Hash())
+	err := e.bpt.Delete(e.baseKey.AppendKey(e.getKey(v)))
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
