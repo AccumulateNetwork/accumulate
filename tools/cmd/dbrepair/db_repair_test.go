@@ -187,3 +187,36 @@ func TestCompareDB(t *testing.T) {
 	fmt.Printf("Modified: %d Delete: %d Added: %d\n", cntMod, cntDel, cntAdd)
 
 }
+
+func TestFixMissing(t *testing.T) {
+	color.NoColor = false
+
+	dir := t.TempDir()                            // create temporary directory that will auto delete after test
+	goodDB := filepath.Join(dir, "good.db")       // A good db
+	badDB := filepath.Join(dir, "bad.db")         // a bad db with added, modified, and deleted key/value pairs
+	summaryF := filepath.Join(dir, "summary.dat") // file for the summary data of good db
+	diffF := filepath.Join(dir, "diff.dat")       // file for the diff between good db vs bad db
+	fixF := filepath.Join(dir, "fix.dat")         // The fix file that can be distributed to fix nodes
+
+	// Note this documents what we want to do.  Of course, the
+	// test actually skips sending files back and forth between good
+	// nodes and bad nodes.
+	add, mod, miss := buildTestDBs(1e3, goodDB, badDB) // Build Test DBs
+	buildSummary(goodDB, summaryF)                     // First go to node with good db and build a summary
+	buildDiff(summaryF, badDB, diffF)                  // Send the summary to the bad node and create a diff
+	//printDiff(diffF, goodDB)                           // What is the diff you say? We can print!
+	buildFix(diffF, goodDB, fixF)                      // Send the diff back to the good node to build a fix
+	add2, mod2, miss2 := applyMissing(fixF, badDB)     // Send the fix to the bad node and apply it
+
+	assert.True(t, add == add2 && mod == mod2 && miss == miss2, "Something isn't right")
+
+	nm, na := buildDiff(summaryF, badDB, diffF) // Send the summary to bad node to check the fix
+	printDiff(diffF, goodDB)                    // Send the new diff back to good node to ensure all is good!
+
+	assert.True(t, nm==int(mod), "Should still have modified entries")
+	assert.True(t, na==int(add), "Should still have added entries")
+
+	// Note:  If we have the summaryF on the bad node, we can check for correctness without sending
+	// the diff file back to the good node, but we can't produce addresses for nodes to delete.
+	// Do we want to add this?  A print against the summaryF instead of the good db?
+}
