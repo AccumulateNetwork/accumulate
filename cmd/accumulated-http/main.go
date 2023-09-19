@@ -52,18 +52,19 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Key         string
-	LogLevel    string
-	HttpListen  []multiaddr.Multiaddr
-	P2pListen   []multiaddr.Multiaddr
-	Peers       []multiaddr.Multiaddr
-	Timeout     time.Duration
-	ConnLimit   int
-	CorsOrigins []string
-	LetsEncrypt []string
-	TlsCert     string
-	TlsKey      string
-	Pprof       string
+	Key             string
+	LogLevel        string
+	HttpListen      []multiaddr.Multiaddr
+	P2pListen       []multiaddr.Multiaddr
+	Peers           []multiaddr.Multiaddr
+	Timeout         time.Duration
+	ConnLimit       int
+	CorsOrigins     []string
+	LetsEncrypt     []string
+	TlsCert         string
+	TlsKey          string
+	Pprof           string
+	DisableTracking bool
 }{}
 
 func init() {
@@ -80,6 +81,7 @@ func init() {
 	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
 	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
+	cmd.Flags().BoolVar(&flag.DisableTracking, "disable-peer-tracking", false, "Disable tracking of peer quality")
 
 	_ = cmd.MarkFlagRequired("peer")
 }
@@ -124,7 +126,7 @@ func run(_ *cobra.Command, args []string) {
 		Network:           args[0],
 		Listen:            flag.P2pListen,
 		BootstrapPeers:    flag.Peers,
-		EnablePeerTracker: true,
+		EnablePeerTracker: !flag.DisableTracking,
 	})
 	Check(err)
 	defer func() { _ = node.Close() }()
