@@ -22,7 +22,12 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
+
+func init() {
+	acctesting.EnableDebugFeatures()
+}
 
 func TestBTCSignature(t *testing.T) {
 
@@ -166,7 +171,7 @@ func TestInitWithOtherKeys(t *testing.T) {
 			// Initialize
 			sim := NewSim(t,
 				simulator.SimpleNetwork(t.Name(), 1, 1),
-				simulator.Genesis(GenesisTime),
+				simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2SignatureEthereum),
 			)
 
 			MakeIdentity(t, sim.DatabaseFor(alice), alice)
