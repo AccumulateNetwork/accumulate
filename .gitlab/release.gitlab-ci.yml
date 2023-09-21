@@ -46,7 +46,7 @@ build main image:
   script:
     - docker buildx create --use
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker buildx build --platform linux/amd64,linux/arm64 --push -t ${PRODUCTION_IMAGE} .
+    - make docker-push IMAGE=${PRODUCTION_IMAGE}
 
 build binaries:
   stage: test
