@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"runtime/debug"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -114,14 +115,16 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 		var results []*api.FindServiceResult
 		for _, peer := range n.tracker.allGood(ctx, addr) {
 			results = append(results, &api.FindServiceResult{
-				PeerID: peer,
-				Status: api.PeerStatusIsKnownGood,
+				PeerID:    peer,
+				Status:    api.PeerStatusIsKnownGood,
+				Addresses: n.host.Peerstore().Addrs(peer),
 			})
 		}
 		for _, peer := range n.tracker.allBad(ctx, addr) {
 			results = append(results, &api.FindServiceResult{
-				PeerID: peer,
-				Status: api.PeerStatusIsKnownBad,
+				PeerID:    peer,
+				Status:    api.PeerStatusIsKnownBad,
+				Addresses: n.host.Peerstore().Addrs(peer),
 			})
 		}
 		return results, nil
@@ -132,12 +135,27 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 		return nil, err
 	}
 
-	var results []*api.FindServiceResult
-	for peer := range ch {
-		results = append(results, &api.FindServiceResult{
-			PeerID: peer.ID,
-			Status: n.tracker.status(ctx, peer.ID, addr),
-		})
+	var timeout <-chan time.Time
+	if opts.Timeout > 0 {
+		timeout = time.After(opts.Timeout)
 	}
-	return results, nil
+
+	var results []*api.FindServiceResult
+	for {
+		select {
+		case peer, ok := <-ch:
+			if !ok {
+				return results, nil
+			}
+			results = append(results, &api.FindServiceResult{
+				PeerID:    peer.ID,
+				Status:    n.tracker.status(ctx, peer.ID, addr),
+				Addresses: peer.Addrs,
+			})
+		case <-timeout:
+			return results, nil
+		case <-ctx.Done():
+			return results, nil
+		}
+	}
 }

@@ -180,7 +180,9 @@ type FindServiceOptions struct {
 	Network   string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Service   *ServiceAddress `json:"service,omitempty" form:"service" query:"service" validate:"required"`
 	// Known restricts the results to known peers.
-	Known     bool `json:"known,omitempty" form:"known" query:"known"`
+	Known bool `json:"known,omitempty" form:"known" query:"known"`
+	// Timeout is the time to wait before stopping, when querying the DHT.
+	Timeout   time.Duration `json:"timeout,omitempty" form:"timeout" query:"timeout"`
 	extraData []byte
 }
 
@@ -188,6 +190,7 @@ type FindServiceResult struct {
 	fieldsSet []bool
 	PeerID    p2p.PeerID      `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
 	Status    KnownPeerStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Addresses []p2p.Multiaddr `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
 	extraData []byte
 }
 
@@ -847,6 +850,7 @@ func (v *FindServiceOptions) Copy() *FindServiceOptions {
 		u.Service = (v.Service).Copy()
 	}
 	u.Known = v.Known
+	u.Timeout = v.Timeout
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -864,6 +868,12 @@ func (v *FindServiceResult) Copy() *FindServiceResult {
 		u.PeerID = p2p.CopyPeerID(v.PeerID)
 	}
 	u.Status = v.Status
+	u.Addresses = make([]p2p.Multiaddr, len(v.Addresses))
+	for i, v := range v.Addresses {
+		if v != nil {
+			u.Addresses[i] = p2p.CopyMultiaddr(v)
+		}
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1831,6 +1841,9 @@ func (v *FindServiceOptions) Equal(u *FindServiceOptions) bool {
 	if !(v.Known == u.Known) {
 		return false
 	}
+	if !(v.Timeout == u.Timeout) {
+		return false
+	}
 
 	return true
 }
@@ -1841,6 +1854,14 @@ func (v *FindServiceResult) Equal(u *FindServiceResult) bool {
 	}
 	if !(v.Status == u.Status) {
 		return false
+	}
+	if len(v.Addresses) != len(u.Addresses) {
+		return false
+	}
+	for i := range v.Addresses {
+		if !(p2p.EqualMultiaddr(v.Addresses[i], u.Addresses[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -3462,6 +3483,7 @@ var fieldNames_FindServiceOptions = []string{
 	1: "Network",
 	2: "Service",
 	3: "Known",
+	4: "Timeout",
 }
 
 func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
@@ -3480,6 +3502,9 @@ func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
 	}
 	if !(!v.Known) {
 		writer.WriteBool(3, v.Known)
+	}
+	if !(v.Timeout == 0) {
+		writer.WriteDuration(4, v.Timeout)
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceOptions)
@@ -3517,6 +3542,7 @@ func (v *FindServiceOptions) IsValid() error {
 var fieldNames_FindServiceResult = []string{
 	1: "PeerID",
 	2: "Status",
+	3: "Addresses",
 }
 
 func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
@@ -3532,6 +3558,11 @@ func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Status == 0) {
 		writer.WriteEnum(2, v.Status)
+	}
+	if !(len(v.Addresses) == 0) {
+		for _, v := range v.Addresses {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceResult)
@@ -3554,6 +3585,11 @@ func (v *FindServiceResult) IsValid() error {
 		errs = append(errs, "field Status is missing")
 	} else if v.Status == 0 {
 		errs = append(errs, "field Status is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Addresses is missing")
+	} else if len(v.Addresses) == 0 {
+		errs = append(errs, "field Addresses is not set")
 	}
 
 	switch len(errs) {
@@ -5916,6 +5952,9 @@ func (v *FindServiceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(3); ok {
 		v.Known = x
 	}
+	if x, ok := reader.ReadDuration(4); ok {
+		v.Timeout = x
+	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceOptions)
 	if err != nil {
@@ -5945,6 +5984,18 @@ func (v *FindServiceResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	})
 	if x := new(KnownPeerStatus); reader.ReadEnum(2, x) {
 		v.Status = *x
+	}
+	for {
+		ok := reader.ReadValue(3, func(r io.Reader) error {
+			x, err := p2p.UnmarshalMultiaddrFrom(r)
+			if err == nil {
+				v.Addresses = append(v.Addresses, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceResult)
@@ -7270,16 +7321,42 @@ func (v *ErrorRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *FindServiceOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Network string          `json:"network,omitempty"`
+		Service *ServiceAddress `json:"service,omitempty"`
+		Known   bool            `json:"known,omitempty"`
+		Timeout interface{}     `json:"timeout,omitempty"`
+	}{}
+	if !(len(v.Network) == 0) {
+		u.Network = v.Network
+	}
+	if !(v.Service == nil) {
+		u.Service = v.Service
+	}
+	if !(!v.Known) {
+		u.Known = v.Known
+	}
+	if !(v.Timeout == 0) {
+		u.Timeout = encoding.DurationToJSON(v.Timeout)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *FindServiceResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
-		Status KnownPeerStatus                         `json:"status,omitempty"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"peerID,omitempty"`
+		Status    KnownPeerStatus                                `json:"status,omitempty"`
+		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
 	if !(v.PeerID == ("")) {
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	}
 	if !(v.Status == 0) {
 		u.Status = v.Status
+	}
+	if !(len(v.Addresses) == 0) {
+		u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -8052,13 +8129,40 @@ func (v *ErrorRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *FindServiceOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Network string          `json:"network,omitempty"`
+		Service *ServiceAddress `json:"service,omitempty"`
+		Known   bool            `json:"known,omitempty"`
+		Timeout interface{}     `json:"timeout,omitempty"`
+	}{}
+	u.Network = v.Network
+	u.Service = v.Service
+	u.Known = v.Known
+	u.Timeout = encoding.DurationToJSON(v.Timeout)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Network = u.Network
+	v.Service = u.Service
+	v.Known = u.Known
+	if x, err := encoding.DurationFromJSON(u.Timeout); err != nil {
+		return fmt.Errorf("error decoding Timeout: %w", err)
+	} else {
+		v.Timeout = x
+	}
+	return nil
+}
+
 func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
-		Status KnownPeerStatus                         `json:"status,omitempty"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"peerID,omitempty"`
+		Status    KnownPeerStatus                                `json:"status,omitempty"`
+		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Status = v.Status
+	u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8067,6 +8171,12 @@ func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Status = u.Status
+	if u.Addresses != nil {
+		v.Addresses = make([]p2p.Multiaddr, len(u.Addresses.Value))
+		for i, x := range u.Addresses.Value {
+			v.Addresses[i] = x
+		}
+	}
 	return nil
 }
 
