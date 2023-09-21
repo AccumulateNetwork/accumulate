@@ -128,7 +128,7 @@ func TestCreateIdentity_Eth(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
-		simulator.Genesis(GenesisTime),
+		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2SignatureEthereum),
 	)
 
 	MakeAccount(t, sim.DatabaseFor(lite), &LiteIdentity{Url: lite, CreditBalance: 1e9})
