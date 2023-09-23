@@ -6,16 +6,14 @@
 
 package main
 
-import (
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
-var cmdDb = &cobra.Command{
-	Use:     "database",
-	Aliases: []string{"db"},
-	Short:   "Database utilities",
+var cmdSnap = &cobra.Command{
+	Use:     "snapshot",
+	Aliases: []string{"snap"},
+	Short:   "Snapshot utilities",
 }
 
 func init() {
-	cmd.AddCommand(cmdDb)
+	cmd.AddCommand(cmdSnap)
 }
