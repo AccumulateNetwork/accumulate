@@ -51,6 +51,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/node/connections/status"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -379,7 +380,7 @@ func (d *Daemon) startConsensus(app types.Application) error {
 		d.privVal,
 		d.nodeKey,
 		proxy.NewLocalClientCreator(app),
-		tmnode.DefaultGenesisDocProviderFunc(&d.Config.Config),
+		genesis.DocProvider(d.Config),
 		tmcfg.DefaultDBProvider,
 		tmnode.DefaultMetricsProvider(d.Config.Instrumentation),
 		d.Logger,
@@ -390,7 +391,6 @@ func (d *Daemon) startConsensus(app types.Application) error {
 	d.node = &node.Node{Node: tmn, Config: d.Config, ABCI: app}
 
 	// Start node
-	// TODO Feed Tendermint logger to service logger
 	err = d.node.Start()
 	if err != nil {
 		return errors.UnknownError.WithFormat("start consensus: %v", err)
