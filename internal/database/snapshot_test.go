@@ -227,3 +227,37 @@ func TestCollectAndRestore(t *testing.T) {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 }
+
+func TestPreservationOfOldTransactions(t *testing.T) {
+	// Some random transaction
+	env, err := build.Transaction().For("alice", "tokens").BurnTokens(1, 0).
+		SignWith("alice", "book", "1").Version(1).Timestamp(1).PrivateKey(make([]byte, 64)).
+		Done()
+	require.NoError(t, err)
+
+	// Store it in a database
+	txn := env.Transaction[0]
+	db := database.OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
+	batch := db.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, batch.Transaction(txn.GetHash()).Main().Put(&database.SigOrTxn{Transaction: txn}))
+	require.NoError(t, batch.Account(txn.Header.Principal).MainChain().Inner().AddHash(txn.GetHash(), false))
+	require.NoError(t, batch.Commit())
+
+	// Collect a snapshot
+	buf := new(ioutil.Buffer)
+	require.NoError(t, db.Collect(buf, nil, nil))
+
+	// Restore the snapshot
+	db = database.OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
+	require.NoError(t, db.Restore(buf, nil))
+
+	// Verify the transaction still exists
+	batch = db.Begin(false)
+	defer batch.Discard()
+	txn2, err := batch.Transaction(txn.GetHash()).Main().Get()
+	require.NoError(t, err)
+	require.True(t, txn.Equal(txn2.Transaction))
+}
