@@ -27,7 +27,7 @@ import (
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
-	if x.globals.Active.ExecutorVersion.V2() {
+	if x.globals.Active.ExecutorVersion.V2Enabled() {
 		return errors.Conflict.WithFormat("executor v1 is incompatible with version %v", x.globals.Active.ExecutorVersion)
 	}
 
