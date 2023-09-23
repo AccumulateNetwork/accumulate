@@ -226,9 +226,10 @@ func (db *Database) collectMessages(w *snapshot.Writer, index *badger.DB, opts *
 			return errors.UnknownError.WithFormat("collect %x: %w", hash, err)
 		}
 
-		// Collect the transaction status (which is the only part of the
-		// transaction entity that is still used by exec v2)
-		err = records.Collect(batch.newTransaction(transactionKey{Hash: hash}).newStatus(), copts)
+		// Collect the transaction's records. Executor v2 only uses the
+		// transaction status, but transactions and signatures from v1 are still
+		// stored here, so they should be collected.
+		err = records.Collect(batch.newTransaction(transactionKey{Hash: hash}), copts)
 		if err != nil {
 			return errors.UnknownError.WithFormat("collect %x status: %w", hash, err)
 		}
