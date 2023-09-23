@@ -50,7 +50,6 @@ func DumpFixHashes(fixFile, outputFile string) (NumAdded uint64) {
 
 	NumModified := read8(f, nil, "read modified")
 	for i := uint64(0); i < NumModified; i++ {
-
 		kLen := read8(f, nil, "read length of key")
 		if kLen != 32 {
 			fatalf("keys always have to be 32 bytes long")
