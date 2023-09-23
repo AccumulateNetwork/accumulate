@@ -19,6 +19,9 @@ import (
 )
 
 var boldCyan = color.New(color.FgCyan, color.Bold)
+var boldYellow = color.New(color.FgHiYellow, color.Bold)
+var boldBlue = color.New(color.FgBlue, color.Bold)
+var _, _, _ = boldCyan, boldYellow, boldBlue
 
 func runBuildSummary(_ *cobra.Command, args []string) {
 	dbName := args[0]
