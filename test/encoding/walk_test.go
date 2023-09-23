@@ -38,7 +38,7 @@ func init() {
 }
 
 func TestWalkAndReplay(t *testing.T) {
-	t.Skip("Flakey")
+	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3412")
 
 	liteKey := acctesting.GenerateKey("Lite")
 	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
