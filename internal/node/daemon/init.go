@@ -8,7 +8,6 @@ package accumulated
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,7 +19,6 @@ import (
 
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
-	tmbytes "github.com/cometbft/cometbft/libs/bytes"
 	tmjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/libs/log"
 	tmos "github.com/cometbft/cometbft/libs/os"
@@ -210,81 +208,32 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 	cfg.Accumulate.API.ListenAddress = node.Listen().Scheme("http").PartitionType(part).AccumulateAPI().String()
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func() (ioutil2.SectionReader, error)) (map[string]*tmtypes.GenesisDoc, error) {
-	docs := map[string]*tmtypes.GenesisDoc{}
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func() (ioutil2.SectionReader, error)) (map[string][]byte, error) {
+	docs := map[string][]byte{}
 	var operators [][]byte
 	netinfo := new(protocol.NetworkDefinition)
 	netinfo.NetworkName = network.Id
 	netinfo.AddPartition(protocol.Directory, protocol.PartitionTypeDirectory)
 
-	var dnTmValidators []tmtypes.GenesisValidator
-
 	var i int
 	for _, bvn := range network.Bvns {
-		var bvnTmValidators []tmtypes.GenesisValidator
+		netinfo.AddPartition(bvn.Id, protocol.PartitionTypeBlockValidator)
 
-		for j, node := range bvn.Nodes {
+		for _, node := range bvn.Nodes {
 			i++
 			key := tmed25519.PrivKey(node.PrivValKey)
 			operators = append(operators, key.PubKey().Bytes())
-
 			netinfo.AddValidator(key.PubKey().Bytes(), protocol.Directory, node.DnnType == config.Validator)
 			netinfo.AddValidator(key.PubKey().Bytes(), bvn.Id, node.BvnnType == config.Validator)
-
-			if node.DnnType == config.Validator {
-				dnTmValidators = append(dnTmValidators, tmtypes.GenesisValidator{
-					Name:    fmt.Sprintf("Directory.%d", i),
-					Address: key.PubKey().Address(),
-					PubKey:  key.PubKey(),
-					Power:   1,
-				})
-			}
-
-			if node.BvnnType == config.Validator {
-				bvnTmValidators = append(bvnTmValidators, tmtypes.GenesisValidator{
-					Name:    fmt.Sprintf("%s.%d", bvn.Id, j+1),
-					Address: key.PubKey().Address(),
-					PubKey:  key.PubKey(),
-					Power:   1,
-				})
-			}
-		}
-
-		netinfo.AddPartition(bvn.Id, protocol.PartitionTypeBlockValidator)
-		docs[bvn.Id] = &tmtypes.GenesisDoc{
-			ChainID:         bvn.Id,
-			GenesisTime:     time,
-			InitialHeight:   protocol.GenesisBlock + 1,
-			Validators:      bvnTmValidators,
-			ConsensusParams: tmtypes.DefaultConsensusParams(),
 		}
 	}
 
-	var bsnTmValidators []tmtypes.GenesisValidator
 	if network.Bsn != nil {
-		for j, node := range network.Bsn.Nodes {
+		for _, node := range network.Bsn.Nodes {
 			key := tmed25519.PrivKey(node.PrivValKey)
 			operators = append(operators, key.PubKey().Bytes())
-
 			netinfo.AddValidator(key.PubKey().Bytes(), network.Bsn.Id, node.BsnnType == config.Validator)
-
-			if node.BsnnType == config.Validator {
-				bsnTmValidators = append(bsnTmValidators, tmtypes.GenesisValidator{
-					Name:    fmt.Sprintf("%s.%d", network.Bsn.Id, j+1),
-					Address: key.PubKey().Address(),
-					PubKey:  key.PubKey(),
-					Power:   1,
-				})
-			}
 		}
-	}
-
-	docs[protocol.Directory] = &tmtypes.GenesisDoc{
-		ChainID:         protocol.Directory,
-		GenesisTime:     time,
-		InitialHeight:   protocol.GenesisBlock + 1,
-		Validators:      dnTmValidators,
-		ConsensusParams: tmtypes.DefaultConsensusParams(),
 	}
 
 	globals.Network = netinfo
@@ -314,7 +263,8 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			netType = protocol.PartitionTypeDirectory
 		}
 		snapBuf := new(ioutil2.Buffer)
-		root, err := genesis.Init(snapBuf, genesis.InitOpts{
+		err = genesis.Init(snapBuf, genesis.InitOpts{
+			NetworkID:       network.Id,
 			PartitionId:     id,
 			NetworkType:     netType,
 			GenesisTime:     time,
@@ -323,6 +273,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			OperatorKeys:    operators,
 			FactomAddresses: factomAddresses,
 			Snapshots:       snapshots,
+			ConsensusParams: tmtypes.DefaultConsensusParams(),
 		})
 		if err != nil {
 			return nil, err
@@ -344,33 +295,17 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 		}
 
-		docs[id].AppHash = root
-		docs[id].AppState, err = json.Marshal(snapBuf.Bytes())
-		if err != nil {
-			return nil, err
-		}
+		docs[id] = snapBuf.Bytes()
 	}
 
 	if network.Bsn != nil {
-		b, err := json.Marshal(bsnSnapBuf.Bytes())
-		if err != nil {
-			return nil, err
-		}
-		docs[network.Bsn.Id] = &tmtypes.GenesisDoc{
-			ChainID:         network.Bsn.Id,
-			GenesisTime:     time,
-			InitialHeight:   1,
-			Validators:      bsnTmValidators,
-			ConsensusParams: tmtypes.DefaultConsensusParams(),
-			AppHash:         make(tmbytes.HexBytes, 32),
-			AppState:        b,
-		}
+		docs[network.Bsn.Id] = bsnSnapBuf.Bytes()
 	}
 
 	return docs, nil
 }
 
-func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmtypes.GenesisDoc) (err error) {
+func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc []byte) (err error) {
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(cfg.RootDir)
@@ -425,7 +360,7 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 		return fmt.Errorf("failed to write node key: %w", err)
 	}
 
-	err = genDoc.SaveAs(cfg.GenesisFile())
+	err = os.WriteFile(cfg.GenesisFile(), genDoc, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write genesis file: %w", err)
 	}

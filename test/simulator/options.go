@@ -7,7 +7,6 @@
 package simulator
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
-	tmtypes "github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -201,7 +199,7 @@ func genesis(time time.Time, values *core.GlobalValues) SnapshotFunc {
 		values = new(core.GlobalValues)
 	}
 
-	var genDocs map[string]*tmtypes.GenesisDoc
+	var genDocs map[string][]byte
 	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
 		var err error
 		if genDocs == nil {
@@ -211,13 +209,7 @@ func genesis(time time.Time, values *core.GlobalValues) SnapshotFunc {
 			}
 		}
 
-		var snapshot []byte
-		err = json.Unmarshal(genDocs[partition].AppState, &snapshot)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		return ioutil2.NewBuffer(snapshot), nil
+		return ioutil2.NewBuffer(genDocs[partition]), nil
 	}
 }
 

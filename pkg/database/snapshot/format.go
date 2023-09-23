@@ -108,6 +108,16 @@ func (r *Reader) open(i int, typ SectionType) (ioutil.SectionReader, error) {
 	return rd, nil
 }
 
+// Open opens the first section of the given type
+func (r *Reader) Open(typ SectionType) (ioutil.SectionReader, error) {
+	for _, s := range r.Sections {
+		if s.Type() == typ {
+			return s.Open()
+		}
+	}
+	return nil, errors.NotFound.WithFormat("%v section not found", typ)
+}
+
 func (r *Reader) OpenIndex(i int) (*IndexReader, error) {
 	rd, err := r.open(i, SectionTypeRecordIndex)
 	if err != nil {
