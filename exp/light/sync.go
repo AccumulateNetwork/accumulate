@@ -648,6 +648,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 	// Load the root chain and anchor index of each partition, and the
 	// directory's anchor chain index for each partition
 	type PartData struct {
+		ID                        string
 		RootIndex, DirAnchorIndex []*protocol.IndexEntry
 		AnchorIndex               []*AnchorMetadata
 	}
@@ -667,6 +668,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 		}
 
 		part := new(PartData)
+		part.ID = partId
 		parts[partId] = part
 
 		// Load the partition's root chain index
@@ -754,7 +756,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 				// Get anchor
 				_, anchor, ok := FindEntry(part.AnchorIndex, ByAnchorBlock(root.BlockIndex))
 				if !ok || anchor.Anchor.MinorBlockIndex != root.BlockIndex {
-					return errors.NotFound.WithFormat("cannot find anchor for block %d", root.BlockIndex)
+					return errors.NotFound.WithFormat("cannot find anchor for %s block %d", part.ID, root.BlockIndex)
 				}
 
 				// TODO skip if not anchored
