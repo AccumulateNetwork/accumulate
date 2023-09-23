@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -41,6 +42,11 @@ func (b SignatureBuilder) Url(signer any, path ...string) SignatureBuilder {
 
 func (b SignatureBuilder) Delegator(delegator any, path ...string) SignatureBuilder {
 	b.signer.Delegators = append(b.signer.Delegators, b.parseUrl(delegator, path...))
+	return b
+}
+
+func (b SignatureBuilder) Delegators(delegators ...*url.URL) SignatureBuilder {
+	b.signer.Delegators = append(b.signer.Delegators, delegators...)
 	return b
 }
 
