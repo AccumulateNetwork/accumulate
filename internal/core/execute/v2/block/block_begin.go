@@ -479,11 +479,20 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		}
 
 		messages := []messaging.Message{
-			&messaging.SyntheticMessage{
+			&messaging.BadSyntheticMessage{
 				Message:   seq,
 				Proof:     receipt,
 				Signature: keySig,
 			},
+		}
+		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+			messages = []messaging.Message{
+				&messaging.SyntheticMessage{
+					Message:   seq,
+					Proof:     receipt,
+					Signature: keySig,
+				},
+			}
 		}
 
 		// Send the transaction along with the signature request/authority
@@ -519,7 +528,7 @@ func (x *Executor) sendBlockAnchor(block *Block, anchor protocol.AnchorBody, seq
 		return nil
 	}
 
-	// If we're on the DN,  the last block updated to v2, and the destination is
+	// If we're on the DN, the last block updated to v2, and the destination is
 	// a BVN, then we must send out the anchor as a v1 anchor since the BVNs
 	// will still be running v1
 	destPartUrl := protocol.PartitionUrl(destPart)
@@ -580,7 +589,7 @@ func didUpdateToV2(anchor protocol.AnchorBody) bool {
 
 	for _, update := range dir.Updates {
 		update, ok := update.Body.(*protocol.ActivateProtocolVersion)
-		if ok && update.Version.V2Enabled() {
+		if ok && update.Version == protocol.ExecutorVersionV2 {
 			return true
 		}
 	}
