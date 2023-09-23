@@ -234,6 +234,14 @@ func (b *bundle) recordPending(batch *database.Batch, ctx *MessageContext, msg m
 		return nil, errors.UnknownError.WithFormat("store message: %w", err)
 	}
 
+	// Add it to the principal's pending list
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		err = batch.Account(msg.ID().Account()).Pending().Add(msg.ID())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("update pending list: %w", err)
+		}
+	}
+
 	// Update the status
 	status, err := batch.Transaction(h[:]).Status().Get()
 	if err != nil {
