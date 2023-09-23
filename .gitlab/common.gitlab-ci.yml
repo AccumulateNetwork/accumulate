@@ -6,7 +6,6 @@ variables:
   NO_COLOR: '\e[0m'
   SECTION: '\e[0K'
   PRODUCTION_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
-  VALIDATION_IMAGE: ${CI_REGISTRY_IMAGE}/validation:${CI_COMMIT_REF_SLUG}
   GO_CI_IMAGE: ${CI_REGISTRY_IMAGE}/ci-golang
 
 build-image:golang:

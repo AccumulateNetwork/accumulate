@@ -1,6 +1,6 @@
 .rules release:
   rules:
-  - if: ($CI_COMMIT_BRANCH == 'release-1.0' || $CI_COMMIT_TAG != null) && $CI_PIPELINE_SOURCE != 'merge_request_event'
+  - if: (($CI_COMMIT_BRANCH == 'release-1.0' || $CI_COMMIT_TAG != null) && $CI_PIPELINE_SOURCE != 'merge_request_event') || $BUILD_BIN != null
 
 git describe:
   stage: test
@@ -9,44 +9,31 @@ git describe:
   script:
   - git fetch --unshallow
   - echo "GIT_DESCRIBE=$(git describe --dirty)" >> git.env
+  - echo "GIT_COMMIT=$(git rev-parse HEAD)" >> git.env
   artifacts:
     reports:
       dotenv: git.env
 
-docker buildx:
-  stage: test
-  extends: .rules release
-  image: docker:20-git
-  needs: []
-  variables:
-    GIT_STRATEGY: none
-  artifacts:
-    paths:
-      - buildx
-    expire_in: 1 day
-  services: [ docker:20-dind ]
-  script:
-    - export DOCKER_BUILDKIT=1
-    - git clone https://github.com/docker/buildx ./docker-buildx
-    - docker build --platform=local -o . ./docker-buildx
-
 build main image:
   stage: test
   extends: .rules release
-  needs: [ docker buildx ]
-  image: docker:20
+  needs: [git describe]
+  image: docker:24
   timeout: 2 hours
   services:
-    - name: docker:20-dind
-      command: [ --experimental ] # Do we need this?
+    - name: docker:24-dind
+  variables:
+    COSIGN_YES: "true"
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
   before_script:
-    - mkdir -p ~/.docker/cli-plugins
-    - mv buildx ~/.docker/cli-plugins/docker-buildx
-    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    - apk add --update cosign make
   script:
-    - docker buildx create --use
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - make docker-push IMAGE=${PRODUCTION_IMAGE}
+    - make docker-push IMAGE=$PRODUCTION_IMAGE
+    - IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $PRODUCTION_IMAGE)
+    - cosign sign $IMAGE_DIGEST
 
 build binaries:
   stage: test
