@@ -18,6 +18,10 @@ import (
 
 // Metrics returns Metrics for explorer (tps, etc.)
 func (m *JrpcMethods) Metrics(ctx context.Context, params json.RawMessage) interface{} {
+	if m.LocalV3 == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(MetricsQuery)
 	err := m.parse(params, req)
 	if err != nil {
