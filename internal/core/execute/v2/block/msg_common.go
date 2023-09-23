@@ -83,13 +83,25 @@ func (m *MessageContext) txnWith(txn *protocol.Transaction) *TransactionContext 
 // isWithin returns true if the given message type appears somewhere in the
 // message chain.
 func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
+	newSynth := m.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled()
 	for {
 		if m.parent == nil {
 			return false
 		}
 		m = m.parent
 		for _, typ := range typ {
-			if m.message.Type() == typ {
+			switch {
+			case typ != messaging.MessageTypeSynthetic && m.message.Type() == typ:
+				// Check for the given message type
+				return true
+
+			case !newSynth && m.message.Type() == messaging.MessageTypeBadSynthetic:
+				// Check for the old synthetic message type
+				return true
+
+			case newSynth && m.message.Type() == messaging.MessageTypeBadSynthetic,
+				newSynth && m.message.Type() == messaging.MessageTypeSynthetic:
+				// Check for either synthetic message type
 				return true
 			}
 		}
