@@ -126,7 +126,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 
 	var signatures []protocol.Signature
 	r := new(api.MessageRecord[messaging.Message])
-	if globals.ExecutorVersion.V2() {
+	if globals.ExecutorVersion.V2Enabled() {
 		r.Sequence = new(messaging.SequencedMessage)
 		r.Sequence.Message = &messaging.TransactionMessage{Transaction: txn}
 		r.Sequence.Source = s.partition.URL
@@ -221,7 +221,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	}
 
 	// Load the transaction
-	if globals.ExecutorVersion.V2() {
+	if globals.ExecutorVersion.V2Enabled() {
 		var seq *messaging.SequencedMessage
 		err = batch.Message2(hash).Main().GetAs(&seq)
 		if err != nil {
@@ -326,7 +326,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		}
 	}
 
-	if globals.ExecutorVersion.V2() {
+	if globals.ExecutorVersion.V2Enabled() {
 		r.SourceReceipt = receipt
 
 		sigMsg := &messaging.SignatureMessage{

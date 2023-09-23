@@ -28,12 +28,12 @@ func (v ExecutorVersion) HaltV1() bool {
 	return v >= ExecutorVersionV1Halt
 }
 
-// V2 checks if the version is at least V2.
-func (v ExecutorVersion) V2() bool {
+// V2Enabled checks if the version is at least V2Enabled.
+func (v ExecutorVersion) V2Enabled() bool {
 	return v >= ExecutorVersionV2
 }
 
-// V2SignatureRSV check if the version is at least signature RSV
-func (v ExecutorVersion) V2SignatureEthereumEnabled() bool {
-	return v >= ExecutorVersionV2SignatureEthereum
+// V2BaikonurEnabled checks if the version is at least V2 Baikonur.
+func (v ExecutorVersion) V2BaikonurEnabled() bool {
+	return v >= ExecutorVersionV2Baikonur
 }
