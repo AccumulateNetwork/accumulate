@@ -12,14 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/vdk/utils"
 )
 
 type LogWriterConfig struct {
-	Service     service.Service
 	LogFile     string
 	JsonLogFile string
 }
@@ -61,20 +59,13 @@ func NewLogWriter(config LogWriterConfig) (LogWriter, error) {
 	return func(format string, annotate LogAnnotator) (io.Writer, error) {
 		var mainWriter io.Writer
 		var err error
-		if !service.Interactive() && config.Service != nil {
-			mainWriter, err = logging.NewServiceLogger(config.Service, format)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			mainWriter = os.Stderr
-			if annotate != nil {
-				mainWriter = annotate(mainWriter, format, true)
-			}
-			mainWriter, err = logging.NewConsoleWriterWith(mainWriter, format)
-			if err != nil {
-				return nil, err
-			}
+		mainWriter = os.Stderr
+		if annotate != nil {
+			mainWriter = annotate(mainWriter, format, true)
+		}
+		mainWriter, err = logging.NewConsoleWriterWith(mainWriter, format)
+		if err != nil {
+			return nil, err
 		}
 
 		var writers multiWriter
