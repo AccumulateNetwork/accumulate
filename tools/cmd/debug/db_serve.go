@@ -130,7 +130,6 @@ func serveDatabases(cmd *cobra.Command, args []string) {
 	}
 
 	// JSON-RPC API v3
-	//
 	N := (*NetworkService)(g)
 	C := &v3.Collator{Querier: Q, Network: N}
 	v3, err := jsonrpc.NewHandler(
