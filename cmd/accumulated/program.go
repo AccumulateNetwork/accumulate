@@ -7,12 +7,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
-	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -44,17 +46,25 @@ func singleNodeWorkDir(cmd *cobra.Command) (string, error) {
 		return flagMain.WorkDir, nil
 	}
 
-	if service.Interactive() {
-		fmt.Fprint(os.Stderr, "Error: at least one of --work-dir or --node is required\n")
-		printUsageAndExit1(cmd, []string{})
-		return "", nil // Not reached
-	} else {
-		return "", fmt.Errorf("at least one of --work-dir or --node is required")
-	}
+	fmt.Fprint(os.Stderr, "Error: at least one of --work-dir or --node is required\n")
+	printUsageAndExit1(cmd, []string{})
+	return "", nil // Not reached
 }
 
-func (p *Program) Start(s service.Service) (err error) {
-	logWriter := newLogWriter(s)
+func (p *Program) Run() error {
+	ctx := contextForMainProcess(context.Background())
+
+	err := p.Start()
+	if err != nil {
+		return err
+	}
+
+	<-ctx.Done()
+	return p.Stop()
+}
+
+func (p *Program) Start() (err error) {
+	logWriter := newLogWriter()
 
 	primaryDir, err := p.primaryDir(p.cmd)
 	if err != nil {
@@ -105,7 +115,7 @@ func (p *Program) Start(s service.Service) (err error) {
 	return startDual(p.primary, p.secondary)
 }
 
-func (p *Program) Stop(service.Service) error {
+func (p *Program) Stop() error {
 	if p.secondary == nil {
 		return p.primary.Stop()
 	}
@@ -157,4 +167,18 @@ func stopDual(primary, secondary *accumulated.Daemon) error {
 	errg.Go(primary.Stop)
 	errg.Go(secondary.Stop)
 	return errg.Wait()
+}
+
+func contextForMainProcess(ctx context.Context) context.Context {
+	ctx, cancel := context.WithCancel(ctx)
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigs
+		signal.Stop(sigs)
+		cancel()
+	}()
+
+	return ctx
 }
