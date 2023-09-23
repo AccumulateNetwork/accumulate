@@ -96,7 +96,7 @@ func runDevNet(*cobra.Command, []string) {
 	didStop := make(chan struct{}, len(vals)*2+len(bsns))
 	done := new(sync.WaitGroup)
 
-	logWriter := newLogWriter(nil)
+	logWriter := newLogWriter()
 
 	var daemons []*accumulated.Daemon
 	started := new(sync.WaitGroup)
