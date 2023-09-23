@@ -26,3 +26,6 @@ SectionType:
   BPT:
     description: contains the BPT
     value: 9
+  Consensus:
+    description: contains consensus parameters
+    value: 10
