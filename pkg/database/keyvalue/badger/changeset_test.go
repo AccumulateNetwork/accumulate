@@ -29,7 +29,7 @@ func TestWriteLimit(t *testing.T) {
 	raw, err := badger.Open(badger.
 		DefaultOptions(t.TempDir()).
 		WithMaxTableSize(1 << 20). // 1MB
-		WithLogger(slogger{}))
+		WithLogger(Slogger{}))
 	require.NoError(t, err)
 	defer raw.Close()
 

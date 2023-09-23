@@ -141,6 +141,9 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 	for _, configs := range configs {
 		for _, configs := range configs {
 			for _, config := range configs {
+				// Use binary genesis files
+				config.Genesis = "config/genesis.snap"
+
 				if flagInit.LogLevels != "" {
 					config.LogLevel = flagInit.LogLevels
 				}

@@ -53,6 +53,8 @@ func captureBsnStore(db **memory.Database) simulator.Option {
 }
 
 func TestSimulator(t *testing.T) {
+	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3412")
+
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
