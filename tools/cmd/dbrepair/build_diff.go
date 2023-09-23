@@ -38,7 +38,7 @@ func runBuildDiff(_ *cobra.Command, args []string) {
 //
 //	N = 64 bits  -- number of keys modified or missing in the bad state
 //	[N][8]bytes  -- keys of entries to restore to previous values
-func buildDiff(summary, badDB, diffFile string) {
+func buildDiff(summary, badDB, diffFile string) (NumModified, NumAdded int) {
 	boldCyan.Println("\n Build Diff")
 	keys := make(map[[8]byte][8]byte)
 
@@ -70,7 +70,7 @@ func buildDiff(summary, badDB, diffFile string) {
 	var modifiedKeys [][]byte // Slice of keys to update from the bad db
 	var cntDel int
 
-	// Open the Badger database that is the good one.
+	// Open the Badger database to be fixed
 	db, close := OpenDB(badDB)
 	defer close()
 
@@ -119,6 +119,7 @@ func buildDiff(summary, badDB, diffFile string) {
 
 	var buff [32]byte
 	f, err := os.Create(diffFile)
+	checkf(err, "failed to open %s", diffFile)
 	defer func() { _ = f.Close() }()
 
 	wrt64 := func(v uint64) {
@@ -141,4 +142,6 @@ func buildDiff(summary, badDB, diffFile string) {
 	for _, uk := range modifiedKeys { //   8 bytes of key hashes
 		check2(f.Write(uk))
 	}
+
+	return len(modifiedKeys), len(addedKeys)
 }
