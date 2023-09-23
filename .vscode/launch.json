@@ -66,6 +66,27 @@
         "diff.dat"
       ],
     },
+    // Build Missing file
+    {
+      "name": "Build Missing file",
+      "presentation": {
+        "group": "00_DB_Repair"
+      },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/dbrepair",
+      "dlvFlags": [
+        "--check-go-version=false"
+      ],
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "buildMissing",
+        "missing.dat",
+        "good",
+        "fix.dat"
+      ],
+    },
       // Build Fix file
       {
         "name": "Build Fix file",
