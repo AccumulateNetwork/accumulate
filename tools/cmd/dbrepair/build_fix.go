@@ -7,6 +7,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/dgraph-io/badger"
@@ -56,20 +57,20 @@ func buildFix(diffFile, goodDB, fixFile string) {
 	// Load up the Diff file
 
 	// Keys to be deleted
-	NumAdded := read8(f, buff[:])
+	NumAdded := read8(f, buff[:], "keys to be deleted")
+	boldYellow.Printf("Number of keys to delete: %d %016x\n", NumAdded, NumAdded)
 	for i := uint64(0); i < NumAdded; i++ {
-		read32(f, buff[:])
-		key := [32]byte{}
-		copy(key[:], buff[:])
+		var key [32]byte
+		read32(f, key[:], "key to be deleted")
 		AddedKeys = append(AddedKeys, key[:])
 	}
 
 	// Keys modified by the bad state
-	NumModified := read8(f, buff[:])
+	NumModified := read8(f, buff[:], "keys modified or deleted")
+	boldYellow.Printf("Number of keys to update/restore: %d %016x\n", NumModified, NumModified)
 	for i := uint64(0); i < NumModified; i++ {
-		read8(f, buff[:])
-		key := [8]byte{}
-		copy(key[:], buff[:])
+		var key [8]byte
+		read8(f, key[:], "key length")
 		ModifiedKeys = append(ModifiedKeys, key)
 	}
 
@@ -87,11 +88,14 @@ func buildFix(diffFile, goodDB, fixFile string) {
 	}
 
 	write8(f, uint64(len(ModifiedKeys)))
-	var kBuff [8]byte
-	for _, k := range ModifiedKeys { // list all the keys added to the bad db
-		k := k
-		copy(kBuff[:], k[:])
-		key, ok := Hash2Key[kBuff]
+
+	var percent float64
+	for i, k := range ModifiedKeys { // list all the keys added to the bad db
+		if float64(i)/float64(len(ModifiedKeys)) > percent*.99 {
+			boldYellow.Printf("%02d%% ", int(percent*100))
+			percent += .05
+		}
+		key, ok := Hash2Key[k]
 		if !ok {
 			fatalf("missing")
 		}
@@ -111,5 +115,5 @@ func buildFix(diffFile, goodDB, fixFile string) {
 		})
 		checkf(err, "Modified keys")
 	}
-
+	fmt.Println()
 }
