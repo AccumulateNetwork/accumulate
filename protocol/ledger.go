@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -23,7 +23,7 @@ func (s *PartitionSyntheticLedger) Add(delivered bool, sequenceNumber uint64, tx
 		if len(s.Pending) > 0 {
 			s.Pending, dirty = s.Pending[1:], true
 		}
-		return
+		return dirty
 	}
 
 	// Grow pending if necessary
