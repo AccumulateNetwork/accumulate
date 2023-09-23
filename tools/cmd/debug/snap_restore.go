@@ -66,7 +66,7 @@ func restoreSnapshot(cmd *cobra.Command, args []string) {
 		check(sv1.Restore(db, rd, nil))
 	case sv2.Version2:
 		var metrics coredb.RestoreMetrics
-		check(db.Restore(rd, &coredb.RestoreOptions{
+		check(coredb.Restore(db, rd, &coredb.RestoreOptions{
 			Metrics: &metrics,
 			Predicate: func(r *sv2.RecordEntry, _ database.Value) (bool, error) {
 				select {
