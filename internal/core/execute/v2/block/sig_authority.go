@@ -166,12 +166,17 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 	}
 
 	// Add the signature to the transaction's signature set and chain
-	err = addSignature(batch, ctx, signer, &database.SignatureSetEntry{
+	entry := &database.SignatureSetEntry{
 		KeyIndex: uint64(keyIndex),
 		Version:  signer.GetVersion(),
 		Hash:     ctx.message.Hash(),
 		Path:     sig.Delegator,
-	})
+	}
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		// The path should not include the current signer
+		entry.Path = sig.Delegator[1:]
+	}
+	err = addSignature(batch, ctx, signer, entry)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
