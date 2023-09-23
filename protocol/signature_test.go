@@ -171,7 +171,7 @@ func TestInitWithOtherKeys(t *testing.T) {
 			// Initialize
 			sim := NewSim(t,
 				simulator.SimpleNetwork(t.Name(), 1, 1),
-				simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Baikonur),
+				simulator.Genesis(GenesisTime),
 			)
 
 			MakeIdentity(t, sim.DatabaseFor(alice), alice)
