@@ -17,9 +17,9 @@ ExecutorVersion:
   V2:
     value: 5
     description: is the second version of the executor system
-  V2SignatureEthereum:
+  V2Baikonur:
     value: 6
-    description: verifies ethereum signatures in the RSV format
+    description: enables the Baikonur release's features
 
 PartitionType:
   Directory:
