@@ -44,6 +44,7 @@ require (
 	github.com/FactomProject/factomd v1.13.0
 	github.com/chzyer/readline v1.5.1
 	github.com/cometbft/cometbft v0.38.0-rc3
+	github.com/cosmos/gogoproto v1.4.6
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/gobeam/stringy v0.0.6
@@ -89,7 +90,6 @@ require (
 	github.com/chigopher/pathlib v0.12.0 // indirect
 	github.com/cometbft/cometbft-db v0.7.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
-	github.com/cosmos/gogoproto v1.4.6 // indirect
 	github.com/curioswitch/go-reassign v0.2.0 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect

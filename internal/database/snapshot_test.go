@@ -61,7 +61,7 @@ func TestSnapshot(t *testing.T) {
 	// Restore the snapshot
 	db := database.OpenInMemory(nil)
 	db.SetObserver(execute.NewDatabaseObserver())
-	require.NoError(t, db.Restore(ioutil.NewBuffer(buf.Bytes()), nil))
+	require.NoError(t, database.Restore(db, ioutil.NewBuffer(buf.Bytes()), nil))
 
 	// Verify
 	account := GetAccount[*TokenAccount](t, db, bob.JoinPath("tokens"))
@@ -109,7 +109,7 @@ func TestSnapshotRestore(t *testing.T) {
 	// Restore the snapshot **restoring each record in a separate batch**
 	db := database.OpenInMemory(nil)
 	db.SetObserver(execute.NewDatabaseObserver())
-	require.NoError(t, db.Restore(ioutil.NewBuffer(buf.Bytes()), &database.RestoreOptions{BatchRecordLimit: 1}))
+	require.NoError(t, database.Restore(db, ioutil.NewBuffer(buf.Bytes()), &database.RestoreOptions{BatchRecordLimit: 1}))
 
 	// Verify
 	account := GetAccount[*TokenAccount](t, db, bob.JoinPath("tokens"))
@@ -252,7 +252,7 @@ func TestPreservationOfOldTransactions(t *testing.T) {
 	// Restore the snapshot
 	db = database.OpenInMemory(nil)
 	db.SetObserver(execute.NewDatabaseObserver())
-	require.NoError(t, db.Restore(buf, nil))
+	require.NoError(t, database.Restore(db, buf, nil))
 
 	// Verify the transaction still exists
 	batch = db.Begin(false)

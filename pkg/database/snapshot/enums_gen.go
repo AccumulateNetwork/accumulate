@@ -41,6 +41,9 @@ const SectionTypeRecordIndex SectionType = 8
 // SectionTypeBPT contains the BPT.
 const SectionTypeBPT SectionType = 9
 
+// SectionTypeConsensus contains consensus parameters.
+const SectionTypeConsensus SectionType = 10
+
 // GetEnumValue returns the value of the Section Type
 func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -48,7 +51,7 @@ func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SectionType) SetEnumValue(id uint64) bool {
 	u := SectionType(id)
 	switch u {
-	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot, SectionTypeRecords, SectionTypeRecordIndex, SectionTypeBPT:
+	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot, SectionTypeRecords, SectionTypeRecordIndex, SectionTypeBPT, SectionTypeConsensus:
 		*v = u
 		return true
 	}
@@ -76,6 +79,8 @@ func (v SectionType) String() string {
 		return "recordIndex"
 	case SectionTypeBPT:
 		return "bpt"
+	case SectionTypeConsensus:
+		return "consensus"
 	}
 	return fmt.Sprintf("SectionType:%d", v)
 }
@@ -101,6 +106,8 @@ func SectionTypeByName(name string) (SectionType, bool) {
 		return SectionTypeRecordIndex, true
 	case "bpt":
 		return SectionTypeBPT, true
+	case "consensus":
+		return SectionTypeConsensus, true
 	}
 	return 0, false
 }
