@@ -190,6 +190,9 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 				debug = true
 			case *messaging.BlockAnchor:
 				debug = true
+			case *messaging.BadSyntheticMessage:
+				msg = m.Message
+				goto again
 			case *messaging.SyntheticMessage:
 				msg = m.Message
 				goto again
