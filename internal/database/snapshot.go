@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	kvb "gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -29,8 +30,9 @@ const collectIndexTxnPrefix = "txn."
 const collectIndexRecordPrefix = "rec."
 
 type CollectOptions struct {
-	BuildIndex bool
-	Predicate  func(database.Record) (bool, error)
+	BuildIndex     bool
+	Predicate      func(database.Record) (bool, error)
+	DidWriteHeader func(*snapshot.Writer) error
 
 	Metrics *CollectMetrics
 }
@@ -59,6 +61,13 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		return errors.UnknownError.Wrap(err)
 	}
 
+	if opts.DidWriteHeader != nil {
+		err = opts.DidWriteHeader(w)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
 	// Collect the BPT
 	err = db.collectBPT(w, opts)
 	if err != nil {
@@ -74,7 +83,7 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		_ = os.RemoveAll(dir)
 	}(dir)
 
-	index, err := badger.Open(badger.DefaultOptions(dir))
+	index, err := badger.Open(badger.DefaultOptions(dir).WithLogger(kvb.Slogger{}))
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -306,7 +315,7 @@ type postRestorer interface {
 	postRestore() error
 }
 
-func (db *Database) Restore(file ioutil.SectionReader, opts *RestoreOptions) error {
+func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error {
 	if opts == nil {
 		opts = new(RestoreOptions)
 	}

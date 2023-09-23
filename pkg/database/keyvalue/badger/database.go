@@ -44,7 +44,7 @@ func New(filepath string) (*Database, error) {
 	}
 
 	opts := badger.DefaultOptions(filepath)
-	opts = opts.WithLogger(slogger{})
+	opts = opts.WithLogger(Slogger{})
 
 	// Truncate corrupted data
 	if TruncateBadger {
@@ -184,25 +184,25 @@ func (d *Database) lock(closing bool) (sync.Locker, error) {
 	return l, nil
 }
 
-type slogger struct{}
+type Slogger struct{}
 
-func (l slogger) format(format string, args ...interface{}) string {
+func (l Slogger) format(format string, args ...interface{}) string {
 	s := fmt.Sprintf(format, args...)
 	return strings.TrimRight(s, "\n")
 }
 
-func (l slogger) Errorf(format string, args ...interface{}) {
+func (l Slogger) Errorf(format string, args ...interface{}) {
 	slog.Error(l.format(format, args...), "module", "badger")
 }
 
-func (l slogger) Warningf(format string, args ...interface{}) {
+func (l Slogger) Warningf(format string, args ...interface{}) {
 	slog.Warn(l.format(format, args...), "module", "badger")
 }
 
-func (l slogger) Infof(format string, args ...interface{}) {
+func (l Slogger) Infof(format string, args ...interface{}) {
 	slog.Info(l.format(format, args...), "module", "badger")
 }
 
-func (l slogger) Debugf(format string, args ...interface{}) {
+func (l Slogger) Debugf(format string, args ...interface{}) {
 	slog.Debug(l.format(format, args...), "module", "badger")
 }

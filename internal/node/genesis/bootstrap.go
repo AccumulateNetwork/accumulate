@@ -17,20 +17,21 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/abci/types"
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/libs/log"
+	tmtypes "github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
-	snap2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -40,19 +41,27 @@ import (
 )
 
 type InitOpts struct {
-	PartitionId     string
-	NetworkType     protocol.PartitionType
-	GenesisTime     time.Time
-	Logger          log.Logger
+	Logger log.Logger
+
+	NetworkID      string
+	PartitionId    string
+	NetworkType    protocol.PartitionType
+	GenesisTime    time.Time
+	GenesisGlobals *core.GlobalValues
+	OperatorKeys   [][]byte
+
+	// For Tendermint
+	ConsensusParams *tmtypes.ConsensusParams
+
+	// Preloaded data
 	FactomAddresses func() (io.Reader, error)
 	Snapshots       []func() (ioutil2.SectionReader, error)
-	GenesisGlobals  *core.GlobalValues
-	OperatorKeys    [][]byte
 
+	// Flags
 	IncludeHistoryFromSnapshots bool
 }
 
-func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
+func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	// Initialize globals
 	gg := core.NewGlobals(opts.GenesisGlobals)
 
@@ -81,11 +90,10 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	b := &bootstrap{
 		InitOpts:    opts,
 		kvdb:        store,
-		db:          database.New(store, opts.Logger.With("module", "database")),
+		db:          coredb.New(store, opts.Logger.With("module", "database")),
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
 		acmeIssued:  new(big.Int),
-		omitHistory: map[[32]byte]bool{},
 		partition:   config.NetworkUrl{URL: protocol.PartitionUrl(opts.PartitionId)},
 	}
 	b.db.SetObserver(execute.NewDatabaseObserver())
@@ -94,13 +102,13 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	var err error
 	b.router, err = routing.NewStaticRouter(gg.Routing, b.Logger)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Unpack snapshots
 	err = b.unpackSnapshots()
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
@@ -108,7 +116,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		PartitionId: opts.PartitionId,
 	}, gg, b.router)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Capture background tasks
@@ -124,44 +132,66 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	err = exec.Genesis(b.block, b)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = b.block.Batch.Commit()
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Wait for background tasks
 	err = errg.Wait()
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 
-	// Preserve history in the Genesis snapshot
-	batch := b.db.Begin(false)
-	defer batch.Discard()
+	// Create the snapshot
+	err = b.db.Collect(snapshotWriter, b.partition.URL, &coredb.CollectOptions{
+		DidWriteHeader: func(w *snapshot.Writer) error {
+			// Convert the consensus parameters
+			doc := new(consensusDoc)
+			doc.ChainID = opts.NetworkID + "." + opts.PartitionId
+			doc.Params = (*consensusParams)(opts.ConsensusParams)
+			for _, v := range opts.GenesisGlobals.Network.Validators {
+				if !v.IsActiveOn(opts.PartitionId) {
+					continue
+				}
 
-	header := new(snapshot.Header)
-	header.Height = protocol.GenesisBlock
+				var name string
+				if v.Operator == nil {
+					name = fmt.Sprintf("Validator-%x", v.PublicKeyHash[:4])
+				} else {
+					name = v.Operator.ShortString()
+				}
 
-	w, err := snapshot.Collect(batch, header, snapshotWriter, snapshot.CollectOptions{
-		Logger: b.Logger,
-		PreserveAccountHistory: func(account *database.Account) (bool, error) {
-			return !b.omitHistory[account.Url().AccountID32()], nil
+				key := tmed25519.PubKey(v.PublicKey)
+				doc.Validators = append(doc.Validators, &genesisValidator{
+					Address: key.Address(),
+					PubKey:  key,
+					Type:    protocol.SignatureTypeED25519,
+					Power:   1,
+					Name:    name,
+				})
+			}
+
+			// Write it
+			b, err := doc.MarshalBinary()
+			if err != nil {
+				return err
+			}
+			sw, err := w.OpenRaw(snapshot.SectionTypeConsensus)
+			if err != nil {
+				return err
+			}
+			_, err = sw.Write(b)
+			if err != nil {
+				return err
+			}
+			return sw.Close()
 		},
 	})
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("collect snapshot: %w", err)
-	}
-
-	err = snapshot.CollectAnchors(w, batch, exec.Describe.PartitionUrl())
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	h, err := batch.GetBptRootHash()
-	return h[:], err
+	return errors.UnknownError.Wrap(err)
 }
 
 type bootstrap struct {
@@ -171,7 +201,7 @@ type bootstrap struct {
 	localAuthority   *url.URL
 
 	kvdb        keyvalue.Beginner
-	db          *database.Database
+	db          *coredb.Database
 	block       *block.Block
 	urls        []*url.URL
 	records     []protocol.Account
@@ -180,7 +210,6 @@ type bootstrap struct {
 
 	accountsFromSnapshots []*url.URL
 	acmeIssued            *big.Int
-	omitHistory           map[[32]byte]bool
 }
 
 type DataRecord struct {
@@ -289,6 +318,7 @@ func (b *bootstrap) createMainLedger() {
 	ledger := new(protocol.SystemLedger)
 	ledger.Url = b.partition.Ledger()
 	ledger.Index = protocol.GenesisBlock
+	ledger.Timestamp = b.InitOpts.GenesisTime
 	ledger.ExecutorVersion = b.GenesisGlobals.ExecutorVersion
 	b.WriteRecords(ledger)
 }
@@ -442,10 +472,10 @@ func (b *bootstrap) unpackSnapshots() error {
 			defer c.Close()
 		}
 
-		err = b.db.Restore(file, &database.RestoreOptions{
+		err = coredb.Restore(b.db, file, &coredb.RestoreOptions{
 			BatchRecordLimit: 50_000,
 			SkipHashCheck:    true,
-			Predicate: func(e *snap2.RecordEntry, v record.TerminalRecord) (bool, error) {
+			Predicate: func(e *snapshot.RecordEntry, v record.TerminalRecord) (bool, error) {
 				switch e.Key.Get(0) {
 				case "Account":
 					// Skip the faucet
@@ -537,10 +567,10 @@ func (b *bootstrap) unpackSnapshots() error {
 			defer c.Close()
 		}
 
-		err = b.db.Restore(file, &database.RestoreOptions{
+		err = coredb.Restore(b.db, file, &coredb.RestoreOptions{
 			BatchRecordLimit: 50_000,
 			SkipHashCheck:    true,
-			Predicate: func(e *snap2.RecordEntry, v record.TerminalRecord) (bool, error) {
+			Predicate: func(e *snapshot.RecordEntry, v record.TerminalRecord) (bool, error) {
 				switch e.Key.Get(0) {
 				case "Transaction", "Message":
 					h := e.Key.Get(1).([32]byte)
