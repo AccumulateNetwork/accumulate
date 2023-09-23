@@ -94,7 +94,7 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	}
 
 	verifySignature := protocol.VerifyUserSignature
-	if !ctx.Executor.globals.Active.ExecutorVersion.V2SignatureEthereumEnabled() {
+	if !ctx.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
 		//if ethereum RSV based verification is not enabled, then revert to old methods
 		verifySignature = protocol.VerifyUserSignatureV1
 	}

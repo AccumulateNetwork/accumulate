@@ -34,7 +34,7 @@ func CollectSignature(batch *database.Batch, hash [32]byte) (*Signature, error) 
 
 func (s *Signature) Restore(header *Header, batch *database.Batch) error {
 	var err error
-	if header.ExecutorVersion.V2() {
+	if header.ExecutorVersion.V2Enabled() {
 		err = batch.Message2(s.Signature.Hash()).Main().Put(&messaging.SignatureMessage{
 			Signature: s.Signature,
 			TxID:      s.Txid,
@@ -92,7 +92,7 @@ func CollectTransaction(batch *database.Batch, hash [32]byte) (*Transaction, err
 
 func (t *Transaction) Restore(header *Header, batch *database.Batch) error {
 	var err error
-	if header.ExecutorVersion.V2() {
+	if header.ExecutorVersion.V2Enabled() {
 		saveState[messaging.Message](&err, batch.Message(t.Transaction.ID().Hash()).Main().Put, &messaging.TransactionMessage{Transaction: t.Transaction})
 	} else {
 		saveState(&err, batch.Transaction(t.Transaction.GetHash()).Main().Put, &database.SigOrTxn{Transaction: t.Transaction})
