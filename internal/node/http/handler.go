@@ -113,7 +113,6 @@ func NewHandler(opts Options) (*Handler, error) {
 		LocalV3:       selfClient,
 		Querier:       &api.Collator{Querier: client, Network: client},
 		Submitter:     client,
-		Network:       client,
 		Faucet:        client,
 		Validator:     client,
 		Sequencer:     client.Private(),
