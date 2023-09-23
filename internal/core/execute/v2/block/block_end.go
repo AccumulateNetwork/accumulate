@@ -397,8 +397,19 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 				Anchor:    seq,
 				Signature: keySig,
 			}
-		} else {
+		} else if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
 			msg = &messaging.SyntheticMessage{
+				Message:   seq,
+				Signature: keySig,
+				Proof: &protocol.AnnotatedReceipt{
+					Receipt: resp.SourceReceipt,
+					Anchor: &protocol.AnchorMetadata{
+						Account: protocol.DnUrl(),
+					},
+				},
+			}
+		} else {
+			msg = &messaging.BadSyntheticMessage{
 				Message:   seq,
 				Signature: keySig,
 				Proof: &protocol.AnnotatedReceipt{

@@ -20,8 +20,8 @@ const MessageTypeTransaction MessageType = 1
 // MessageTypeSignature is a signature.
 const MessageTypeSignature MessageType = 2
 
-// MessageTypeSynthetic is a message produced by the protocol, requiring proof.
-const MessageTypeSynthetic MessageType = 3
+// MessageTypeBadSynthetic is deprecated.
+const MessageTypeBadSynthetic MessageType = 3
 
 // MessageTypeBlockAnchor is a block anchor signed by validator.
 const MessageTypeBlockAnchor MessageType = 4
@@ -38,6 +38,9 @@ const MessageTypeCreditPayment MessageType = 7
 // MessageTypeBlockSummary is a summary of a block.
 const MessageTypeBlockSummary MessageType = 8
 
+// MessageTypeSynthetic is a message produced by the protocol, requiring proof.
+const MessageTypeSynthetic MessageType = 9
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -45,7 +48,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeTransaction, MessageTypeSignature, MessageTypeSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic:
 		*v = u
 		return true
 	}
@@ -59,8 +62,8 @@ func (v MessageType) String() string {
 		return "transaction"
 	case MessageTypeSignature:
 		return "signature"
-	case MessageTypeSynthetic:
-		return "synthetic"
+	case MessageTypeBadSynthetic:
+		return "badSynthetic"
 	case MessageTypeBlockAnchor:
 		return "blockAnchor"
 	case MessageTypeSequenced:
@@ -71,6 +74,8 @@ func (v MessageType) String() string {
 		return "creditPayment"
 	case MessageTypeBlockSummary:
 		return "blockSummary"
+	case MessageTypeSynthetic:
+		return "synthetic"
 	}
 	return fmt.Sprintf("MessageType:%d", v)
 }
@@ -82,8 +87,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeTransaction, true
 	case "signature":
 		return MessageTypeSignature, true
-	case "synthetic":
-		return MessageTypeSynthetic, true
+	case "badsynthetic":
+		return MessageTypeBadSynthetic, true
 	case "blockanchor":
 		return MessageTypeBlockAnchor, true
 	case "sequenced":
@@ -94,6 +99,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeCreditPayment, true
 	case "blocksummary":
 		return MessageTypeBlockSummary, true
+	case "synthetic":
+		return MessageTypeSynthetic, true
 	}
 	return 0, false
 }

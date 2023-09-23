@@ -49,7 +49,7 @@ func TestSyntheticAnchor(t *testing.T) {
 		Number:      10,
 	}
 	hash := seq.Hash()
-	syn := &messaging.SyntheticMessage{
+	syn := &messaging.BadSyntheticMessage{
 		Message: seq,
 		Proof: &protocol.AnnotatedReceipt{
 			Anchor: &protocol.AnchorMetadata{
