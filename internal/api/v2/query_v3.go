@@ -311,6 +311,10 @@ func queryTx(v3 api.Querier, ctx context.Context, txid *url.TxID, includeReceipt
 }
 
 func (m *JrpcMethods) QueryDirectory(ctx context.Context, params json.RawMessage) any {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(DirectoryQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -602,6 +606,10 @@ func txnOrSigV3(v3 api.Querier, ctx context.Context, r *api.ChainEntryRecord[*ap
 }
 
 func (m *JrpcMethods) QueryKeyPageIndex(ctx context.Context, params json.RawMessage) any {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(KeyPageIndexQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -637,6 +645,10 @@ func (m *JrpcMethods) QueryKeyPageIndex(ctx context.Context, params json.RawMess
 }
 
 func (m *JrpcMethods) QueryData(ctx context.Context, params json.RawMessage) any {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(DataEntryQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -668,6 +680,10 @@ func (m *JrpcMethods) QueryData(ctx context.Context, params json.RawMessage) any
 }
 
 func (m *JrpcMethods) QueryDataSet(ctx context.Context, params json.RawMessage) any {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(DataEntrySetQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -691,6 +707,10 @@ func (m *JrpcMethods) QueryDataSet(ctx context.Context, params json.RawMessage) 
 }
 
 func (m *JrpcMethods) QueryTxHistory(ctx context.Context, params json.RawMessage) any {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(TxHistoryQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -730,6 +750,10 @@ func (m *JrpcMethods) QueryTxHistory(ctx context.Context, params json.RawMessage
 }
 
 func (m *JrpcMethods) QueryTxLocal(ctx context.Context, params json.RawMessage) any {
+	if m.LocalV3 == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(TxnQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -755,6 +779,10 @@ func (m *JrpcMethods) QueryTxLocal(ctx context.Context, params json.RawMessage) 
 
 // Query queries an account or account chain by URL.
 func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) any {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(GeneralQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -1013,6 +1041,10 @@ chain_query:
 }
 
 func (m *JrpcMethods) QueryMinorBlocks(ctx context.Context, params json.RawMessage) interface{} {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(MinorBlocksQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -1114,6 +1146,10 @@ func (m *JrpcMethods) QueryMinorBlocks(ctx context.Context, params json.RawMessa
 }
 
 func (m *JrpcMethods) QueryMajorBlocks(ctx context.Context, params json.RawMessage) interface{} {
+	if m.Querier == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(MajorBlocksQuery)
 	err := m.parse(params, req)
 	if err != nil {
@@ -1159,6 +1195,10 @@ func (m *JrpcMethods) QueryMajorBlocks(ctx context.Context, params json.RawMessa
 }
 
 func (m *JrpcMethods) QuerySynth(ctx context.Context, params json.RawMessage) interface{} {
+	if m.Sequencer == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	req := new(SyntheticTransactionRequest)
 	err := m.parse(params, req)
 	if err != nil {

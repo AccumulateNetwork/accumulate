@@ -61,7 +61,7 @@ func runBuildTestDBs(_ *cobra.Command, args []string) {
 	buildTestDBs(numEntries, GoodDBName, BadDBName)
 }
 
-func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
+func buildTestDBs(numEntries int, GoodDBName, BadDBName string) (added, modified, missing uint64) {
 	boldCyan.Println("\n Build Test DBs")
 	gDB, gClose := OpenDB(GoodDBName)
 	defer gClose()
@@ -102,9 +102,9 @@ func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 			}
 			return op
 		}
-		op = pick(i%1027 == 0, 1) // Modify a key value pair
-		op = pick(i%713 == 0, 2)  // Delete a key value pair
-		op = pick(i%303 == 0, 3)  // Add a key value pair
+		op = pick(i%57 == 0, 1) // Modify a key value pair
+		op = pick(i%73 == 0, 2) // Delete a key value pair
+		op = pick(i%33 == 0, 3) // Add a key value pair
 
 		// Write bad entries
 
@@ -149,4 +149,5 @@ func buildTestDBs(numEntries int, GoodDBName, BadDBName string) {
 	fmt.Printf("\nThe test modified %d keys, deleted %d keys, and added %d keys.\n", cntMod, cntDel, cntAdd)
 	fmt.Printf("\nAs far as a fix is concerned, the bad DB has:\n")
 	fmt.Printf("Modified: %d Added: %d", cntMod+cntDel, cntAdd)
+	return uint64(cntAdd), uint64(cntMod), uint64(cntDel)
 }

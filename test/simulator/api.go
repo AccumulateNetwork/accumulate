@@ -42,7 +42,6 @@ func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
 		LocalV3:       svc.ForPeer(n.peerID),
 		Querier:       &api.Collator{Querier: svc, Network: svc},
 		Submitter:     svc,
-		Network:       svc,
 		Faucet:        svc,
 		Validator:     svc,
 		Sequencer:     svc.Private(),
