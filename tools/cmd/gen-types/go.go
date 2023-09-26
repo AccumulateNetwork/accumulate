@@ -608,7 +608,11 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	case method == "Value":
 		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadValue(%d, x.UnmarshalBinaryFrom) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
 	case method == "Enum":
-		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadEnum(%d, x) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
+		var x = "x"
+		if isGenericParameter(field.ParentType, field.Type.String()) {
+			x = "any(x).(encoding.EnumValueSetter)" // This is a hack to avoid requiring more complex generic type parameterization
+		}
+		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadEnum(%d, %s) { %s }", GoResolveType(field, true, true), readerName, field.Number, x, set), true
 	default:
 		expr, hasIf = fmt.Sprintf("if x, ok := %s.Read%s(%d); ok { %s }", readerName, method, field.Number, set), true
 	}
@@ -622,6 +626,15 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	}
 
 	return "\tfor { ok := " + expr + "; if !ok { break } }", nil
+}
+
+func isGenericParameter(parent *Type, typ string) bool {
+	for _, param := range parent.Params {
+		if param.Name == typ {
+			return true
+		}
+	}
+	return false
 }
 
 func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {

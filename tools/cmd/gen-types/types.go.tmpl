@@ -69,6 +69,7 @@ func (*{{.FullName true false}}) {{if $lud}}{{.UnionType}}{{else}}Type{{end}}() 
 {{end}}{{end}}
 {{end}}
 
+{{ $skipAs := .GenericSkipAs }}
 {{range .Types}}{{if .IsCopyable}}
 func (v *{{.FullName true false}}) Copy() *{{.FullName true false}} {
 	u := new({{.FullName true false}})
@@ -95,7 +96,7 @@ func (v *{{.FullName true false}}) Copy() *{{.FullName true false}} {
 
 func (v *{{.FullName true false}}) CopyAsInterface() interface{} { return v.Copy() }
 
-{{if .Params}}
+{{if and .Params (not $skipAs)}}
 func {{.Name}}As[{{range .Params}}{{.Name}}2 {{.Type}},{{end}} {{range .Params}}{{.Name}}1 {{.Type}},{{end}}](v *{{.Name}}[{{range .Params}}{{.Name}}1,{{end}}]) (*{{.Name}}[{{range .Params}}{{.Name}}2,{{end}}], error) {
 	if v == nil {
 		return nil, nil
