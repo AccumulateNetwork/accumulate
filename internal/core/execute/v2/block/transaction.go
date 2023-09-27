@@ -584,7 +584,7 @@ func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, deli
 	}
 
 	// If this transaction is a synthetic transaction, send a refund
-	if swo, ok := delivery.Transaction.Body.(protocol.SynthTxnWithOrigin); ok {
+	if swo, ok := delivery.Transaction.Body.(protocol.SyntheticTransaction); ok {
 		init, refundAmount := swo.GetRefund()
 		if refundAmount > 0 {
 			refund := new(protocol.SyntheticDepositCredits)

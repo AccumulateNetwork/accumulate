@@ -21,6 +21,8 @@ type Block struct {
 	State    BlockState
 	Batch    *database.Batch
 	Executor *Executor
+
+	syntheticCount uint64
 }
 
 func (b *Block) Params() execute.BlockParams { return b.BlockParams }
