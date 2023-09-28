@@ -7,6 +7,7 @@
 package database_test
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -16,12 +17,30 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
+
+func BenchmarkCollect(b *testing.B) {
+	db, err := database.OpenBadger(b.TempDir(), nil)
+	require.NoError(b, err)
+	db.SetObserver(execute.NewDatabaseObserver())
+	batch := db.Begin(true)
+	defer batch.Discard()
+	for i := 0; i < b.N; i++ {
+		account := &ADI{Url: protocol.AccountUrl(fmt.Sprintf("a-%d", i)), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: protocol.AccountUrl("foo")}}}}
+		require.NoError(b, batch.Account(account.Url).Main().Put(account))
+	}
+	require.NoError(b, batch.Commit())
+
+	b.ResetTimer()
+	err = db.Collect(new(ioutil.Discard), nil, nil)
+	require.NoError(b, err)
+}
 
 func TestSnapshot(t *testing.T) {
 	alice := AccountUrl("alice")
