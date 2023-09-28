@@ -480,6 +480,9 @@ func (r *subFieldReader) Read(b []byte) (n int, err error) {
 }
 
 func (r *subFieldReader) ReadByte() (byte, error) {
+	if r.n == 0 {
+		return 0, io.EOF
+	}
 	b, err := r.rd.ReadByte()
 	if err == nil {
 		r.n--
