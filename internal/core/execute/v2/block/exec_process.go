@@ -46,7 +46,7 @@ func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionSt
 	}
 
 	// Make sure every transaction is signed
-	err = checkForUnsignedTransactions(messages)
+	err = b.Executor.checkForUnsignedTransactions(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -229,26 +229,49 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 
 // checkForUnsignedTransactions returns an error if the message bundle includes
 // any unsigned transactions.
-func checkForUnsignedTransactions(messages []messaging.Message) error {
-	unsigned := set[[32]byte]{}
+func (x *Executor) checkForUnsignedTransactions(messages []messaging.Message) error {
+	// Record signatures and transactions
+	haveSigFor := map[[32]byte]bool{}
+	haveTxn := map[[32]byte]bool{}
 	for _, msg := range messages {
-		if msg, ok := msg.(*messaging.TransactionMessage); ok {
-			unsigned[msg.ID().Hash()] = struct{}{}
+		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+			if _, ok := msg.(*messaging.BlockAnchor); ok {
+				continue
+			}
+		}
+
+		if msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg); ok {
+			// User signatures can be sent without a transaction, but authority
+			// signatures and other message-for-transaction types cannot
+			sig, ok := msg.(*messaging.SignatureMessage)
+			isUser := ok && sig.Signature.Type() != protocol.SignatureTypeAuthority
+			haveSigFor[msg.GetTxID().Hash()] = isUser
+		}
+
+		if txn, ok := msg.(*messaging.TransactionMessage); ok {
+			isRemote := txn.GetTransaction().Body.Type() == protocol.TransactionTypeRemote
+			haveTxn[txn.ID().Hash()] = isRemote
 		}
 	}
-	for _, msg := range messages {
-	again:
-		switch m := msg.(type) {
-		case messaging.MessageForTransaction:
-			delete(unsigned, m.GetTxID().Hash())
-		case interface{ Unwrap() messaging.Message }:
-			msg = m.Unwrap()
-			goto again
+
+	// If a transaction does not have a signature, reject the bundle
+	for txn := range haveTxn {
+		if _, has := haveSigFor[txn]; !has {
+			return errors.BadRequest.With("message bundle includes an unsigned transaction")
 		}
 	}
-	if len(unsigned) > 0 {
-		return errors.BadRequest.With("message bundle includes an unsigned transaction")
+
+	// If an authority signature or other synthetic message-for-transaction is
+	// sent without its transaction, reject the bundle
+	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		for txn, isUserSig := range haveSigFor {
+			isRemote, has := haveTxn[txn]
+			if !isUserSig && (!has || isRemote) {
+				return errors.BadRequest.With("message bundle is missing a transaction")
+			}
+		}
 	}
+
 	return nil
 }
 

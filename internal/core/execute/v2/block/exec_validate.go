@@ -28,7 +28,7 @@ func (x *Executor) Validate(envelope *messaging.Envelope, _ bool) ([]*protocol.T
 	}
 
 	// Make sure every transaction is signed
-	err = checkForUnsignedTransactions(messages)
+	err = x.checkForUnsignedTransactions(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
