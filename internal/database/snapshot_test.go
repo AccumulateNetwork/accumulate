@@ -26,8 +26,9 @@ import (
 )
 
 func BenchmarkCollect(b *testing.B) {
-	db, err := database.OpenBadger(b.TempDir(), nil)
-	require.NoError(b, err)
+	// db, err := database.OpenBadger(b.TempDir(), nil)
+	// require.NoError(b, err)
+	db := database.OpenInMemory(nil)
 	db.SetObserver(execute.NewDatabaseObserver())
 	batch := db.Begin(true)
 	defer batch.Discard()
@@ -38,7 +39,7 @@ func BenchmarkCollect(b *testing.B) {
 	require.NoError(b, batch.Commit())
 
 	b.ResetTimer()
-	err = db.Collect(new(ioutil.Discard), nil, nil)
+	err := db.Collect(new(ioutil.Discard), nil, nil)
 	require.NoError(b, err)
 }
 
