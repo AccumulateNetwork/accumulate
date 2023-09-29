@@ -28,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 const collectIndexTxnPrefix = "txn."
@@ -102,6 +103,12 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
+	defer func() {
+		err := os.RemoveAll(tmpDir)
+		if err != nil {
+			slog.Error("Failed to remove temp directory", "dir", tmpDir, "error", err)
+		}
+	}()
 
 	hashes, err := indexing.OpenBucket(filepath.Join(tmpDir, "hash"), true)
 	if err != nil {
