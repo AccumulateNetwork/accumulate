@@ -50,7 +50,9 @@ func BenchmarkCollect(b *testing.B) {
 	require.NoError(b, batch.Commit())
 
 	b.ResetTimer()
-	err := db.Collect(new(ioutil.Discard), nil, nil)
+	err := db.Collect(new(ioutil.Discard), nil, &database.CollectOptions{
+		BuildIndex: true,
+	})
 	require.NoError(b, err)
 }
 
