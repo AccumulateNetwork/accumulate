@@ -16,9 +16,9 @@ import (
 )
 
 func TestBucket(t *testing.T) {
-	k, err := OpenBucket(t.TempDir(), 0, true)
+	dir := t.TempDir()
+	k, err := OpenBucket(dir, 0, true)
 	require.NoError(t, err)
-	defer k.Close()
 
 	const N = 10000
 	var seq lxrand.Sequence // Creates a random sequence
@@ -31,7 +31,11 @@ func TestBucket(t *testing.T) {
 	sort.Slice(values, func(i, j int) bool {
 		return bytes.Compare(values[i][:], values[j][:]) < 0
 	})
+	require.NoError(t, k.Close())
 
+	k, err = OpenBucket(dir, 0, false)
+	require.NoError(t, err)
+	defer k.Close()
 	var all [][32]byte
 	for i := 0; i < 256; i++ {
 		e, err := k.Read(byte(i))
