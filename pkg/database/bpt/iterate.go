@@ -89,12 +89,12 @@ func walkNode(n node, found *bool, key [32]byte, values []KeyValuePair, pos *int
 		return n.walkRange(found, key, values, pos)
 
 	case *leaf: //                                                If not a node, not nil, it is a value.
-		*found = true     //                                      No matter what, start collecting the range
-		if n.Key == key { //                                      But don't collect if equal to the key
+		*found = true            //                                      No matter what, start collecting the range
+		if n.Key.Hash() == key { //                                      But don't collect if equal to the key
 			break //                                              because we use the last key to get the
 		} //                                                      next range
-		values[*pos] = KeyValuePair{Key: n.Key, Value: n.Hash} // Otherwise copy the value out of the BPT
-		*pos++                                                 // and stuff it in the values list
+		values[*pos] = KeyValuePair{Key: n.Key.Hash(), Value: n.Hash} // Otherwise copy the value out of the BPT
+		*pos++                                                        // and stuff it in the values list
 	}
 
 	return nil

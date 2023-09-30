@@ -63,7 +63,9 @@ leaf:
   union: { type: node, private: true }
   fields:
     - name: Key
-      type: hash
+      type: record.Key
+      marshal-as: reference
+      pointer: true
     - name: Hash
       type: hash
 
