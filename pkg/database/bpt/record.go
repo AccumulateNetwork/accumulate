@@ -66,16 +66,16 @@ func (b *BPT) commitUpdatesDirect() (bool, error) {
 	}
 
 	// Push the updates
-	for k, v := range b.pending {
+	for _, v := range b.pending {
 		if v.committed {
 			continue
 		}
 		v.committed = true
 
 		if v.delete {
-			err = c.Delete(k)
+			err = c.Delete(v.key)
 		} else {
-			err = c.Insert(k, v.value)
+			err = c.Insert(v.key, v.value)
 		}
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
