@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 func BenchmarkInsert(b *testing.B) {
@@ -23,7 +24,7 @@ func BenchmarkInsert(b *testing.B) {
 
 	var rh common.RandHash
 	for i := 0; i < b.N; i++ {
-		err := bpt.Insert(rh.NextA(), rh.NextA())
+		err := bpt.Insert(record.KeyFromHash(rh.NextA()), rh.NextA())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -40,7 +41,7 @@ func BenchmarkInsertSubbatch(b *testing.B) {
 	var rh common.RandHash
 	for i := 0; i < b.N; i++ {
 		sub := model.Begin()
-		err := sub.BPT().Insert(rh.NextA(), rh.NextA())
+		err := sub.BPT().Insert(record.KeyFromHash(rh.NextA()), rh.NextA())
 		if err != nil {
 			b.Fatal(err)
 		}
