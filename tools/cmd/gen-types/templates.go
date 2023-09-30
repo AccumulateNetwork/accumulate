@@ -31,6 +31,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 	ttypes.LongUnionDiscriminator = flags.LongUnionDiscriminator
 	ttypes.UnionSkipNew = flags.UnionSkipNew
 	ttypes.UnionSkipType = flags.UnionSkipType
+	ttypes.GenericSkipAs = flags.GenericSkipAs
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
 
@@ -207,6 +208,7 @@ type Types struct {
 	UnionSkipType          bool
 	Types                  []*Type
 	Unions                 []*UnionSpec
+	GenericSkipAs          bool
 }
 
 type SingleTypeFile struct {
