@@ -471,6 +471,9 @@ type subFieldReader struct {
 func (r *subFieldReader) Len() int { return int(r.n) }
 
 func (r *subFieldReader) Read(b []byte) (n int, err error) {
+	if r.n == 0 {
+		return 0, io.EOF
+	}
 	if int64(len(b)) > r.n {
 		b = b[:r.n]
 	}

@@ -75,27 +75,18 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		return errors.UnknownError.Wrap(err)
 	}
 
-	// Open a temporary badger DB for indexing hashes
-	dir, err := os.MkdirTemp("", "accumulate-collect-snapshot-*.db")
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	defer func(dir string) {
-		_ = os.RemoveAll(dir)
-	}(dir)
-
-	tmpDir, err := os.MkdirTemp("", "accumulate-snapshot-*")
+	dir, err := os.MkdirTemp("", "accumulate-snapshot-*")
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 	defer func() {
-		err := os.RemoveAll(tmpDir)
+		err := os.RemoveAll(dir)
 		if err != nil {
-			slog.Error("Failed to remove temp directory", "dir", tmpDir, "error", err)
+			slog.Error("Failed to remove temp directory", "dir", dir, "error", err)
 		}
 	}()
 
-	hashes, err := indexing.OpenBucket(filepath.Join(tmpDir, "hash"), 0, true)
+	hashes, err := indexing.OpenBucket(filepath.Join(dir, "hash"), 0, true)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -103,7 +94,7 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 
 	var index *indexing.Bucket
 	if opts.BuildIndex {
-		index, err = indexing.OpenBucket(filepath.Join(tmpDir, "index"), indexDataSize, true)
+		index, err = indexing.OpenBucket(filepath.Join(dir, "index"), indexDataSize, true)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}

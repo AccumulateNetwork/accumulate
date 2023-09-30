@@ -124,7 +124,7 @@ func (b *Bucket) Read(i byte) ([]Entry, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer g.Unmap()
+		defer func() { _ = g.Unmap() }()
 
 		if len(g)%S != 0 {
 			return nil, errors.New("internal error: invalid file length")
