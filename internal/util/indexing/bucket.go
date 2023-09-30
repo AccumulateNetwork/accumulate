@@ -20,7 +20,7 @@ const pageSize = 1 << 10 // 1024 entries
 
 // Bucket is a collection of 256 files.
 type Bucket struct {
-	files     map[byte]*bucketFile
+	files     [256]*bucketFile
 	valueSize int
 }
 
@@ -39,7 +39,6 @@ func OpenBucket(prefix string, valueSize int, create bool) (*Bucket, error) {
 	b.valueSize = valueSize
 
 	// Create a file for every byte prefix
-	b.files = make(map[byte]*bucketFile, 256)
 	for i := 0; i < 256; i++ {
 		name := fmt.Sprintf("%s%02x", prefix, i)
 
@@ -52,7 +51,7 @@ func OpenBucket(prefix string, valueSize int, create bool) (*Bucket, error) {
 		if err != nil {
 			return nil, err
 		}
-		b.files[byte(i)] = &bucketFile{file: file}
+		b.files[i] = &bucketFile{file: file}
 	}
 
 	return b, nil

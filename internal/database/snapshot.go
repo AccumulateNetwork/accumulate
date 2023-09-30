@@ -612,7 +612,9 @@ func writeSnapshotIndex(w *snapshot.Writer, index *indexing.Bucket, opts *Collec
 				Section: int(binary.BigEndian.Uint64(e.Value)),
 				Offset:  binary.BigEndian.Uint64(e.Value[8:]),
 			})
-			return errors.UnknownError.Wrap(err)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
 		}
 	}
 
