@@ -17,21 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// none is an empty struct.
-type none = struct{}
-
-// set is an unordered set of T implemented as a map of T to [none].
-type set[T comparable] map[T]none
-
-// Add adds a value to the set.
-func (s set[T]) Add(v T) { s[v] = none{} }
-
-// Remove removes a value from the set.
-func (s set[T]) Remove(v T) { delete(s, v) }
-
-// Hash checks if the set has the given value.
-func (s set[T]) Has(v T) bool { _, ok := s[v]; return ok }
-
 // orderedMap is an ordered map from K to V implemented with a builtin map,
 // slice of keys, and comparison function.
 type orderedMap[K comparable, V any] struct {
