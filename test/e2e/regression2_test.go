@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"math/big"
@@ -1136,4 +1137,86 @@ func TestChainUpdateAnchor(t *testing.T) {
 
 	// Verify the anchor matches the receipt
 	require.Equal(t, r1.Receipt.LocalBlock, anchor.MinorBlockIndex)
+}
+
+func TestAuthoritySignatureWithoutTransaction(t *testing.T) {
+	cases := []struct {
+		Version ExecutorVersion
+		Fails   bool
+	}{
+		{Version: ExecutorVersionV2, Fails: false},
+		{Version: ExecutorVersionLatest, Fails: true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.Version.String(), func(t *testing.T) {
+			alice := url.MustParse("alice")
+			aliceKey := acctesting.GenerateKey(alice)
+
+			// Capture the authority signature
+			var captured *messaging.Envelope
+			capFn := func(_ context.Context, _ *url.URL, env *messaging.Envelope) (send bool, err error) {
+				for _, m := range env.Messages {
+					syn, ok := m.(interface{ Data() *messaging.SynthFields })
+					if !ok {
+						continue
+					}
+					seq, ok := syn.Data().Message.(*messaging.SequencedMessage)
+					if !ok {
+						continue
+					}
+					sig, ok := seq.Message.(*messaging.SignatureMessage)
+					if !ok || sig.Signature.Type() != SignatureTypeAuthority {
+						continue
+					}
+					require.Nil(t, captured)
+					captured = env
+					return false, nil
+				}
+				return true, nil
+			}
+
+			// Initialize
+			sim := NewSim(t,
+				simulator.SimpleNetwork(t.Name(), 1, 1),
+				simulator.GenesisWithVersion(GenesisTime, c.Version),
+				simulator.CaptureDispatchedMessages(capFn),
+			)
+
+			MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+			CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+			// Execute
+			sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For("bob.acme", "tokens").
+					BurnTokens(1, 0).
+					SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+			sim.StepUntil(
+				True(func(h *Harness) bool { return captured != nil }))
+
+			// Remove the transaction
+			msgs, err := captured.Normalize()
+			require.NoError(t, err)
+			captured = new(messaging.Envelope)
+			var removed int
+			for _, msg := range msgs {
+				if msg.Type() == messaging.MessageTypeTransaction {
+					removed++
+				} else {
+					captured.Messages = append(captured.Messages, msg)
+				}
+			}
+			require.NotZero(t, removed)
+
+			// Resubmit
+			_, err = sim.SubmitTo("BVN0", captured)
+			if c.Fails {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "message bundle is missing a transaction")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }
