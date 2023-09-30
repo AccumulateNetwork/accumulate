@@ -7,27 +7,70 @@
 package indexing
 
 import (
+	"bytes"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/lxrand"
 )
 
-func BenchmarkBucketRead(b *testing.B) {
-	k, err := OpenBucket(b.TempDir(), true)
-	require.NoError(b, err)
+func TestBucket(t *testing.T) {
+	k, err := OpenBucket(t.TempDir(), 0, true)
+	require.NoError(t, err)
+	defer k.Close()
 
+	const N = 10000
 	var seq lxrand.Sequence // Creates a random sequence
-	for i := 0; i < b.N; i++ {
-		require.NoError(b, k.Write(seq.Hash()))
+	var values [][32]byte
+	for i := 0; i < N; i++ {
+		v := seq.Hash()
+		values = append(values, v)
+		require.NoError(t, k.Write(v, nil))
 	}
+	sort.Slice(values, func(i, j int) bool {
+		return bytes.Compare(values[i][:], values[j][:]) < 0
+	})
 
-	b.ResetTimer()
-	it := k.Iterate(4 << 10)
-	var count int
-	for it.Next() {
-		count += len(it.Value())
+	var all [][32]byte
+	for i := 0; i < 256; i++ {
+		e, err := k.Read(byte(i))
+		require.NoError(t, err)
+		sort.Slice(e, func(i, j int) bool {
+			return bytes.Compare(e[i].Hash[:], e[j].Hash[:]) < 0
+		})
+		for _, e := range e {
+			all = append(all, e.Hash)
+		}
 	}
-	require.NoError(b, it.Close())
-	require.Equal(b, b.N, count)
+	require.Equal(t, values, all)
+}
+
+func TestBucketWithValues(t *testing.T) {
+	k, err := OpenBucket(t.TempDir(), 10, true)
+	require.NoError(t, err)
+	defer k.Close()
+
+	const N = 10000
+	var seq lxrand.Sequence // Creates a random sequence
+	var values []Entry
+	for i := 0; i < N; i++ {
+		e := Entry{seq.Hash(), seq.Slice(10)}
+		values = append(values, e)
+		require.NoError(t, k.Write(e.Hash, e.Value))
+	}
+	sort.Slice(values, func(i, j int) bool {
+		return bytes.Compare(values[i].Hash[:], values[j].Hash[:]) < 0
+	})
+
+	var all []Entry
+	for i := 0; i < 256; i++ {
+		e, err := k.Read(byte(i))
+		require.NoError(t, err)
+		sort.Slice(e, func(i, j int) bool {
+			return bytes.Compare(e[i].Hash[:], e[j].Hash[:]) < 0
+		})
+		all = append(all, e...)
+	}
+	require.Equal(t, values, all)
 }

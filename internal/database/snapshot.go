@@ -110,7 +110,7 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		}
 	}()
 
-	hashes, err := indexing.OpenBucket(filepath.Join(tmpDir, "hash"), true)
+	hashes, err := indexing.OpenBucket(filepath.Join(tmpDir, "hash"), 0, true)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -235,12 +235,12 @@ func (db *Database) collectMessages(w *snapshot.Writer, index *badger.DB, hashes
 		}
 
 		sort.Slice(hashes, func(i, j int) bool {
-			return bytes.Compare(hashes[i][:], hashes[j][:]) < 0
+			return bytes.Compare(hashes[i].Hash[:], hashes[j].Hash[:]) < 0
 		})
 
 		for i, hash := range hashes {
 			// Skip duplicates
-			if i > 0 && hash == hashes[i-1] {
+			if i > 0 && hash.Hash == hashes[i-1].Hash {
 				continue
 			}
 
@@ -249,7 +249,7 @@ func (db *Database) collectMessages(w *snapshot.Writer, index *badger.DB, hashes
 			}
 
 			// Check if the caller wants to skip this message
-			message := batch.newMessage(messageKey{Hash: hash})
+			message := batch.newMessage(messageKey{Hash: hash.Hash})
 			if opts.Predicate != nil {
 				ok, err := opts.Predicate(message)
 				if err != nil {
@@ -269,7 +269,7 @@ func (db *Database) collectMessages(w *snapshot.Writer, index *badger.DB, hashes
 			// Collect the transaction's records. Executor v2 only uses the
 			// transaction status, but transactions and signatures from v1 are still
 			// stored here, so they should be collected.
-			err = records.Collect(batch.newTransaction(transactionKey{Hash: hash}), copts)
+			err = records.Collect(batch.newTransaction(transactionKey{Hash: hash.Hash}), copts)
 			if err != nil {
 				return errors.UnknownError.WithFormat("collect %x status: %w", hash, err)
 			}
@@ -573,7 +573,7 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 			return errors.UnknownError.WithFormat("load %s chain entries: %w", c.Name(), err)
 		}
 		for _, h := range entries {
-			err = hashes.Write(*(*[32]byte)(h))
+			err = hashes.Write(*(*[32]byte)(h), nil)
 			if err != nil {
 				return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
 			}
@@ -587,7 +587,7 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 				return errors.UnknownError.WithFormat("load %s chain entry: %w", c.Name(), err)
 			}
 			if msg, ok := msg.(messaging.MessageForTransaction); ok {
-				err = hashes.Write(msg.GetTxID().Hash())
+				err = hashes.Write(msg.GetTxID().Hash(), nil)
 				if err != nil {
 					return errors.UnknownError.WithFormat("record %s chain entry: %w", c.Name(), err)
 				}

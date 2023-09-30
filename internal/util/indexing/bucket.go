@@ -18,10 +18,11 @@ import (
 
 // Bucket is a collection of 256 files.
 type Bucket struct {
-	files map[byte]*os.File
+	files     map[byte]*os.File
+	valueSize int
 }
 
-func OpenBucket(prefix string, create bool) (*Bucket, error) {
+func OpenBucket(prefix string, valueSize int, create bool) (*Bucket, error) {
 	// Ensure the directory exists
 	dir := prefix
 	if !strings.HasSuffix(dir, "/") {
@@ -32,8 +33,10 @@ func OpenBucket(prefix string, create bool) (*Bucket, error) {
 		return nil, err
 	}
 
-	// Create a file for every byte prefix
 	b := new(Bucket)
+	b.valueSize = valueSize
+
+	// Create a file for every byte prefix
 	b.files = make(map[byte]*os.File, 256)
 	for i := 0; i < 256; i++ {
 		var file *os.File
@@ -52,15 +55,12 @@ func OpenBucket(prefix string, create bool) (*Bucket, error) {
 	return b, nil
 }
 
-func (b *Bucket) Iterate(window int) *BucketIterator {
-	return &BucketIterator{
-		bucket: b,
-		values: make([][32]byte, window),
+func (b *Bucket) Write(hash [32]byte, value []byte) error {
+	if len(value) != b.valueSize {
+		return errors.New("value does not match expected size")
 	}
-}
-
-func (b *Bucket) Write(hash [32]byte) error {
-	_, err := b.files[hash[0]].Write(hash[:])
+	value = append(hash[:], value...)
+	_, err := b.files[hash[0]].Write(value)
 	return err
 }
 
@@ -75,7 +75,12 @@ func (b *Bucket) Close() error {
 	return err
 }
 
-func (b *Bucket) Read(i byte) ([][32]byte, error) {
+type Entry struct {
+	Hash  [32]byte
+	Value []byte
+}
+
+func (b *Bucket) Read(i byte) ([]Entry, error) {
 	f := b.files[i]
 	st, err := f.Stat()
 	if err != nil || st.Size() == 0 {
@@ -88,90 +93,18 @@ func (b *Bucket) Read(i byte) ([][32]byte, error) {
 	}
 	defer g.Unmap()
 
-	if len(g)%32 != 0 {
+	S := 32 + b.valueSize
+	if len(g)%S != 0 {
 		return nil, errors.New("internal error: invalid file length")
 	}
 
-	hashes := make([][32]byte, len(g)/32)
-	for i := range hashes {
-		hashes[i] = *(*[32]byte)(g[i*32:])
-	}
-	return hashes, nil
-}
-
-type BucketIterator struct {
-	bucket *Bucket
-	values [][32]byte
-	file   mmap.MMap
-	err    error
-	index  int
-	read   int
-	count  int
-}
-
-func (it *BucketIterator) Value() [][32]byte {
-	return it.values[:it.count]
-}
-
-func (it *BucketIterator) Close() error {
-	if it.err != nil {
-		return it.err
-	}
-	if it.file != nil {
-		return it.file.Unmap()
-	}
-	return nil
-}
-
-func (it *BucketIterator) Next() bool {
-again:
-	if it.err != nil || it.index > 0xFF {
-		return false
-	}
-
-	// Open the next file
-	if it.file == nil {
-		f := it.bucket.files[byte(it.index)]
-		st, err := f.Stat()
-		if err != nil {
-			it.err = err
-			return false
-		}
-		if st.Size() == 0 {
-			it.index++
-			goto again
-		}
-
-		it.file, it.err = mmap.Map(f, mmap.RDONLY, 0)
-		if it.err != nil {
-			return false
-		}
-		if len(it.file)%32 != 0 {
-			it.file.Unmap()
-			it.err = errors.New("internal error: invalid file length")
-			return false
+	entries := make([]Entry, len(g)/S)
+	for i := range entries {
+		entries[i].Hash = *(*[32]byte)(g[i*S:])
+		if b.valueSize > 0 {
+			entries[i].Value = make([]byte, b.valueSize)
+			copy(entries[i].Value, g[i*S+32:])
 		}
 	}
-
-	// Copy the hashes
-	total := len(it.file) / 32
-	it.count = total - it.read
-	if it.count > len(it.values) {
-		it.count = len(it.values)
-	}
-	for i := 0; i < it.count; i++ {
-		it.values[i] = *(*[32]byte)(it.file[(it.read+i)*32:])
-	}
-
-	it.read += it.count
-	if it.read < total {
-		return true
-	}
-
-	// Done with this file
-	it.read = 0
-	it.index++
-	it.err = it.file.Unmap()
-	it.file = nil
-	return true
+	return entries, nil
 }
