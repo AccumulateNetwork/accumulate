@@ -248,7 +248,7 @@ func (op *DeleteDbPatchOp) Apply(cs keyvalue.ChangeSet) error {
 	// Delete it's BPT entry
 	batch := coredb.New(cs, nil).Begin(true)
 	defer batch.Discard()
-	err = batch.BPT().Delete(record.NewKey("Account", u).Hash())
+	err = batch.BPT().Delete(record.NewKey("Account", u))
 	if err != nil {
 		return err
 	}

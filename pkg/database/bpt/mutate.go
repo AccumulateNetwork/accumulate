@@ -6,49 +6,53 @@
 
 package bpt
 
-import "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+)
 
 type mutation struct {
 	applied   bool
 	committed bool
 	delete    bool
+	key       *record.Key
 	value     [32]byte
 }
 
 // Insert updates or inserts a hash for the given key. Insert may defer the
 // actual update.
-func (b *BPT) Insert(key, hash [32]byte) error {
+func (b *BPT) Insert(key *record.Key, hash [32]byte) error {
 	if b.pending == nil {
 		b.pending = map[[32]byte]*mutation{}
 	}
-	b.pending[key] = &mutation{value: hash}
+	b.pending[key.Hash()] = &mutation{key: key, value: hash}
 	return nil
 }
 
 // Delete removes the entry for the given key, if present. Delete may defer the
 // actual update.
-func (b *BPT) Delete(key [32]byte) error {
+func (b *BPT) Delete(key *record.Key) error {
 	if b.pending == nil {
 		b.pending = map[[32]byte]*mutation{}
 	}
-	b.pending[key] = &mutation{delete: true}
+	b.pending[key.Hash()] = &mutation{key: key, delete: true}
 	return nil
 }
 
 // executePending pushes pending updates into the tree.
 func (b *BPT) executePending() error {
 	// Push the updates
-	for k, v := range b.pending {
-		if v.applied {
+	for _, e := range b.pending {
+		if e.applied {
 			continue
 		}
-		v.applied = true
+		e.applied = true
 
 		var err error
-		if v.delete {
-			_, err = b.getRoot().delete(k)
+		if e.delete {
+			_, err = b.getRoot().delete(e.key)
 		} else {
-			_, err = b.getRoot().insert(&leaf{Key: k, Hash: v.value})
+			_, err = b.getRoot().insert(&leaf{Key: e.key, Hash: e.value})
 		}
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
@@ -59,7 +63,7 @@ func (b *BPT) executePending() error {
 
 func (e *branch) insert(l *leaf) (updated bool, err error) {
 	// Get a pointer to the left or right, and load if necessary
-	f, err := e.getAt(l.Key)
+	f, err := e.getAt(l.Key.Hash())
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
 	}
@@ -88,18 +92,19 @@ func (e *branch) insert(l *leaf) (updated bool, err error) {
 		// If the key and hash match, there's no change. If the key matches and the
 		// hash is new, update the hash and return the value to indicate it has been
 		// updated. If the key does not match, the value must be split.
-		if g.Key == l.Key {
+		if g.Key.Hash() == l.Key.Hash() {
 			if g.Hash == l.Hash {
 				return false, nil // No change
 			}
 
-			g.Hash = l.Hash
-			e.status = branchUnhashed
+			g.Key = l.Key             // Update the key in case its expanded now
+			g.Hash = l.Hash           // Update the hash
+			e.status = branchUnhashed // Mark the branch as unhashed
 			return true, nil
 		}
 
 		// Create a new branch
-		br, err := e.newBranch(g.Key)
+		br, err := e.newBranch(g.Key.Hash())
 		if err != nil {
 			return false, errors.UnknownError.Wrap(err)
 		}
@@ -125,9 +130,9 @@ func (e *branch) insert(l *leaf) (updated bool, err error) {
 	}
 }
 
-func (e *branch) delete(key [32]byte) (updated bool, err error) {
+func (e *branch) delete(key *record.Key) (updated bool, err error) {
 	// Get a pointer to the left or right, and load if necessary
-	f, err := e.getAt(key)
+	f, err := e.getAt(key.Hash())
 	if err != nil {
 		return false, errors.UnknownError.Wrap(err)
 	}
@@ -137,7 +142,7 @@ func (e *branch) delete(key [32]byte) (updated bool, err error) {
 		return false, nil // Key not found
 
 	case *leaf:
-		if g.Key != key {
+		if g.Key.Hash() != key.Hash() {
 			return false, nil // Key not found
 		}
 
