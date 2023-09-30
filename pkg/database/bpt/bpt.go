@@ -8,6 +8,7 @@ package bpt
 
 import (
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -140,15 +141,15 @@ func (b *BPT) newRoot() *rootRecord {
 }
 
 // Get retrieves the latest hash associated with the given key.
-func (b *BPT) Get(key [32]byte) ([32]byte, error) {
-	if v, ok := b.pending[key]; ok {
+func (b *BPT) Get(key *record.Key) ([32]byte, error) {
+	if v, ok := b.pending[key.Hash()]; ok {
 		if v.delete {
 			return [32]byte{}, errors.NotFound
 		}
 		return v.value, nil
 	}
 
-	e, err := b.getRoot().getLeaf(key)
+	e, err := b.getRoot().getLeaf(key.Hash())
 	if err != nil {
 		return [32]byte{}, errors.UnknownError.Wrap(err)
 	}
@@ -165,7 +166,7 @@ again:
 
 	switch f := (*f).(type) {
 	case *leaf:
-		if f.Key == key {
+		if f.Key.Hash() == key {
 			return f, nil
 		}
 	case *branch:

@@ -29,6 +29,8 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 	ttypes.Package = pkgName
 	ttypes.GoInclude = flags.GoInclude
 	ttypes.LongUnionDiscriminator = flags.LongUnionDiscriminator
+	ttypes.UnionSkipNew = flags.UnionSkipNew
+	ttypes.UnionSkipType = flags.UnionSkipType
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
 
@@ -201,6 +203,8 @@ type Types struct {
 	Package                string
 	GoInclude              []string
 	LongUnionDiscriminator bool
+	UnionSkipNew           bool
+	UnionSkipType          bool
 	Types                  []*Type
 	Unions                 []*UnionSpec
 }
