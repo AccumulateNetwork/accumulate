@@ -14,7 +14,6 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/lxrand"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -22,13 +21,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-var testEntries = [][2][32]byte{
-	{{0x00}, {1}},
-	{{0x80}, {2}},
-	{{0x40}, {3}},
-	{{0xC0}, {4}},
+var testEntries = []struct {
+	Key  *record.Key
+	Hash [32]byte
+}{
+	{record.NewKey(record.KeyHash{0x00}), [32]byte{1}},
+	{record.NewKey(record.KeyHash{0x80}), [32]byte{2}},
+	{record.NewKey(record.KeyHash{0x40}), [32]byte{3}},
+	{record.NewKey(record.KeyHash{0xC0}), [32]byte{4}},
 }
 
 func must(err error) {
@@ -43,7 +46,7 @@ var testRoot = func() [32]byte {
 	root.bpt = New(nil, nil, nilStore{}, nil)
 	root.Key, _ = nodeKeyAt(0, [32]byte{})
 	for _, e := range testEntries {
-		_, err := root.insert(&leaf{Key: e[0], Hash: e[1]})
+		_, err := root.insert(&leaf{Key: e.Key, Hash: e.Hash})
 		must(err)
 	}
 	h, _ := root.getHash()
@@ -60,13 +63,13 @@ func TestInsertDirect(t *testing.T) {
 
 	n := len(testEntries)
 	for _, e := range testEntries[:n-1] {
-		require.NoError(t, model.BPT().Insert(e[0], e[1]))
+		require.NoError(t, model.BPT().Insert(e.Key, e.Hash))
 	}
 	require.NoError(t, model.Commit())
 
 	model = new(ChangeSet)
 	model.store = keyvalue.RecordStore{Store: store}
-	require.NoError(t, model.BPT().Insert(testEntries[n-1][0], testEntries[n-1][1]))
+	require.NoError(t, model.BPT().Insert(testEntries[n-1].Key, testEntries[n-1].Hash))
 	root, err := model.BPT().GetRootHash()
 	require.NoError(t, err)
 	require.True(t, testRoot == root, "Expected root to match")
@@ -82,16 +85,16 @@ func TestInsertNested(t *testing.T) {
 
 	n := len(testEntries)
 	for _, e := range testEntries[:n/2] {
-		require.NoError(t, model.BPT().Insert(e[0], e[1]))
+		require.NoError(t, model.BPT().Insert(e.Key, e.Hash))
 	}
 
 	sub := model.Begin()
-	hash, err := sub.BPT().Get(testEntries[0][0])
+	hash, err := sub.BPT().Get(testEntries[0].Key)
 	require.NoError(t, err)
-	require.Equal(t, testEntries[0][1], hash)
+	require.Equal(t, testEntries[0].Hash, hash)
 
 	for _, e := range testEntries[n/2:] {
-		require.NoError(t, sub.BPT().Insert(e[0], e[1]))
+		require.NoError(t, sub.BPT().Insert(e.Key, e.Hash))
 	}
 	require.NoError(t, sub.Commit())
 	root, err := model.BPT().GetRootHash()
@@ -112,15 +115,15 @@ func TestInsertConcurrent(t *testing.T) {
 	sub2 := model.Begin()
 
 	// Insert into root after creating a child batch
-	require.NoError(t, model.BPT().Insert(e[0][0], e[0][1]))
+	require.NoError(t, model.BPT().Insert(e[0].Key, e[0].Hash))
 
 	// Insert into child batches
-	require.NoError(t, sub1.BPT().Insert(e[1][0], e[1][1]))
-	require.NoError(t, sub2.BPT().Insert(e[2][0], e[2][1]))
+	require.NoError(t, sub1.BPT().Insert(e[1].Key, e[1].Hash))
+	require.NoError(t, sub2.BPT().Insert(e[2].Key, e[2].Hash))
 
 	// Insert the remainder into the root batch
 	for _, e := range e[3:] {
-		require.NoError(t, model.BPT().Insert(e[0], e[1]))
+		require.NoError(t, model.BPT().Insert(e.Key, e.Hash))
 	}
 
 	// Commit the child batches
@@ -143,7 +146,7 @@ func TestRange(t *testing.T) {
 	var expect [][2][32]byte
 	for i := 0; i < 100; i++ {
 		key, hash := rh.NextA(), rh.NextA()
-		require.NoError(t, sub.BPT().Insert(key, hash))
+		require.NoError(t, sub.BPT().Insert(record.KeyFromHash(key), hash))
 		expect = append(expect, [2][32]byte{key, hash})
 	}
 	require.NoError(t, sub.Commit())
@@ -175,7 +178,7 @@ func TestTreelessCommit(t *testing.T) {
 
 	rs := testTreelessCommitRecordStore{t, b1}
 	b2 := newBPT(nil, nil, rs, nil, "BPT")
-	require.NoError(t, b2.Insert([32]byte{1}, [32]byte{2}))
+	require.NoError(t, b2.Insert(record.NewKey(1), [32]byte{2}))
 	require.NoError(t, b2.Commit())
 	require.NotEmpty(t, b1.pending)
 }
@@ -187,13 +190,13 @@ func TestDeleteAcrossBoundary(t *testing.T) {
 
 	// Add the test data
 	for _, e := range testEntries {
-		require.NoError(t, bpt.Insert(e[0], e[1]))
+		require.NoError(t, bpt.Insert(e.Key, e.Hash))
 	}
 
 	// Add a key in the root block
-	K1 := testEntries[0][0]
+	K1 := testEntries[0].Key.Hash()
 	K1[0] = 0x08
-	require.NoError(t, bpt.Insert(K1, [32]byte{'a'}))
+	require.NoError(t, bpt.Insert(record.NewKey(K1), [32]byte{'a'}))
 	require.NoError(t, bpt.Commit())
 
 	Print(t, bpt, false)
@@ -206,9 +209,9 @@ func TestDeleteAcrossBoundary(t *testing.T) {
 	//     ╰─ 0000
 
 	// Add a key that will be in another block
-	K2 := testEntries[0][0]
+	K2 := testEntries[0].Key.Hash()
 	K2[1] = 0x80
-	require.NoError(t, bpt.Insert(K2, [32]byte{'a'}))
+	require.NoError(t, bpt.Insert(record.KeyFromHash(K2), [32]byte{'a'}))
 	require.NoError(t, bpt.Commit())
 
 	Print(t, bpt, false)
@@ -235,12 +238,12 @@ func TestDeleteAcrossBoundary(t *testing.T) {
 
 	// Unload the tree and delete the key
 	bpt = newBPT(nil, nil, store, nil, "BPT")
-	require.NoError(t, bpt.Delete(K2))
+	require.NoError(t, bpt.Delete(record.KeyFromHash(K2)))
 	require.NoError(t, bpt.Commit())
 
 	// Unload the tree and verify that the key is not found
 	bpt = newBPT(nil, nil, store, nil, "BPT")
-	_, err = bpt.Get(K2)
+	_, err = bpt.Get(record.KeyFromHash(K2))
 	require.ErrorIs(t, err, errors.NotFound)
 
 	Print(t, bpt, false)
@@ -255,14 +258,14 @@ func TestDeleteAcrossBoundary(t *testing.T) {
 	// Unload the tree and add another, different key that will be in the 0080
 	// block
 	bpt = newBPT(nil, nil, store, nil, "BPT")
-	K3 := testEntries[0][0]
+	K3 := testEntries[0].Key.Hash()
 	K3[1] = 0xC0
-	require.NoError(t, bpt.Insert(K3, [32]byte{'a'}))
+	require.NoError(t, bpt.Insert(record.KeyFromHash(K3), [32]byte{'a'}))
 	require.NoError(t, bpt.Commit())
 
 	// Verify that K2 is not found
 	bpt = newBPT(nil, nil, store, nil, "BPT")
-	_, err = bpt.Get(K2)
+	_, err = bpt.Get(record.KeyFromHash(K2))
 	require.ErrorIs(t, err, errors.NotFound)
 
 	Print(t, bpt, false)
@@ -286,17 +289,17 @@ func TestDeleteNested(t *testing.T) {
 
 	// Populate the BPT
 	for _, e := range testEntries {
-		require.NoError(t, model.BPT().Insert(e[0], e[1]))
+		require.NoError(t, model.BPT().Insert(e.Key, e.Hash))
 	}
 
 	before, err := model.BPT().GetRootHash()
 	require.NoError(t, err)
 
 	// Add entries
-	A, B := [32]byte{0x20}, [32]byte{0x30}
-	err = model.BPT().Insert(A, [32]byte{'a'})
+	A, B := record.KeyHash{0x20}, record.KeyHash{0x30}
+	err = model.BPT().Insert(record.NewKey(A), [32]byte{'a'})
 	require.NoError(t, err)
-	err = model.BPT().Insert(B, [32]byte{'b'})
+	err = model.BPT().Insert(record.NewKey(B), [32]byte{'b'})
 	require.NoError(t, err)
 
 	// Force the tree to load
@@ -307,9 +310,9 @@ func TestDeleteNested(t *testing.T) {
 	sub := model.Begin()
 
 	// Delete the added entries in the child
-	err = sub.BPT().Delete(A)
+	err = sub.BPT().Delete(record.NewKey(A))
 	require.NoError(t, err)
-	err = sub.BPT().Delete(B)
+	err = sub.BPT().Delete(record.NewKey(B))
 	require.NoError(t, err)
 
 	// Force the tree to load and verify the hash
@@ -322,7 +325,7 @@ func TestDeleteNested(t *testing.T) {
 	require.NoError(t, err)
 
 	// This must return not found
-	_, err = model.BPT().Get(A)
+	_, err = model.BPT().Get(record.NewKey(A))
 	require.ErrorIs(t, err, errors.NotFound)
 
 	// Verify the root hash returns to the previous value
@@ -337,11 +340,11 @@ func TestDelete(t *testing.T) {
 	bpt := newBPT(nil, nil, store, nil, "BPT")
 
 	// Populate the BPT
-	hashes := make([][32]byte, 50000)
-	for i := range hashes {
-		h := rand.Hash()
-		hashes[i] = h
-		require.NoError(t, bpt.Insert(h, h))
+	keys := make([]*record.Key, 50000)
+	for i := range keys {
+		k := record.NewKey(rand.Uint())
+		keys[i] = k
+		require.NoError(t, bpt.Insert(k, k.Hash()))
 	}
 	require.NoError(t, bpt.Commit())
 
@@ -352,11 +355,11 @@ func TestDelete(t *testing.T) {
 	bpt = newBPT(nil, nil, store, nil, "BPT")
 
 	// Randomly delete 50% of the entries
-	deleted := make([][32]byte, len(hashes)/2)
+	deleted := make([]*record.Key, len(keys)/2)
 	for i := range deleted {
-		h := hashes[rand.Uint()%len(deleted)]
-		deleted[i] = h
-		require.NoError(t, bpt.Delete(h))
+		k := keys[rand.Uint()%len(deleted)]
+		deleted[i] = k
+		require.NoError(t, bpt.Delete(k))
 	}
 	require.NoError(t, bpt.Commit())
 
@@ -369,8 +372,8 @@ func TestDelete(t *testing.T) {
 	bpt = newBPT(nil, nil, store, nil, "BPT")
 
 	// Add the deleted entries back
-	for _, h := range deleted {
-		require.NoError(t, bpt.Insert(h, h))
+	for _, k := range deleted {
+		require.NoError(t, bpt.Insert(k, k.Hash()))
 	}
 	require.NoError(t, bpt.Commit())
 
@@ -380,7 +383,7 @@ func TestDelete(t *testing.T) {
 	require.Equal(t, hex.EncodeToString(before[:]), hex.EncodeToString(after[:]))
 }
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name string) *BPT {
+func newBPT(parent database.Record, logger log.Logger, store database.Store, key *record.Key, name string) *BPT {
 	return New(parent, logger, store, key)
 }
 
@@ -393,10 +396,10 @@ func (c *ChangeSet) Begin() *ChangeSet {
 
 type testTreelessCommitRecordStore struct {
 	t      testing.TB
-	record record.Record
+	record database.Record
 }
 
-func (s testTreelessCommitRecordStore) Unwrap() record.Record { return s.record }
+func (s testTreelessCommitRecordStore) Unwrap() database.Record { return s.record }
 
 func (s testTreelessCommitRecordStore) GetValue(key *database.Key, value database.Value) error {
 	s.t.Helper()
@@ -423,7 +426,7 @@ func TestPrint(t *testing.T) {
 	bpt := newBPT(nil, nil, store, nil, "BPT")
 
 	for i := 0; i < 50; i++ {
-		require.NoError(t, bpt.Insert(rand.Hash(), rand.Hash()))
+		require.NoError(t, bpt.Insert(record.KeyFromHash(rand.Hash()), rand.Hash()))
 	}
 
 	Print(t, bpt, false)
@@ -483,9 +486,9 @@ func Print(t *testing.T, b *BPT, values bool) {
 			fmt.Printf("%s%s─∅\n", p1, lp)
 		case *leaf:
 			if values {
-				fmt.Printf("%s%s─%x → %x\n", p1, lp, n.Key, n.Hash)
+				fmt.Printf("%s%s─%v → %x\n", p1, lp, n.Key, n.Hash)
 			} else {
-				fmt.Printf("%s%s─%x\n", p1, lp, n.Key)
+				fmt.Printf("%s%s─%v\n", p1, lp, n.Key)
 			}
 		case *branch:
 			print(n, p1+lp, p2+sp)
@@ -499,9 +502,9 @@ func Print(t *testing.T, b *BPT, values bool) {
 			fmt.Printf("%s%s─∅\n", p2, rp)
 		case *leaf:
 			if values {
-				fmt.Printf("%s%s─%x → %x\n", p2, rp, n.Key, n.Hash)
+				fmt.Printf("%s%s─%v → %x\n", p2, rp, n.Key, n.Hash)
 			} else {
-				fmt.Printf("%s%s─%x\n", p2, rp, n.Key)
+				fmt.Printf("%s%s─%v\n", p2, rp, n.Key)
 			}
 		case *branch:
 			print(n, p2+rp, p2+" ")

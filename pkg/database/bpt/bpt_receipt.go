@@ -36,7 +36,7 @@ func (b *BPT) collectReceipt(BIdx, bit byte, n *branch, key [32]byte, r *merkle.
 
 	value, ok := entry.(*leaf)
 	if ok {
-		if value.Key == key {
+		if value.Key.Hash() == key {
 			r.Start = append(r.Start[:0], value.Hash[:]...)
 			if other != nil { // If other isn't nil, then add it to the node list of the receipt
 				h, _ := other.getHash()

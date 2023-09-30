@@ -29,6 +29,10 @@ func NewKey(v ...any) *Key {
 	return &Key{v}
 }
 
+func KeyFromHash(kh KeyHash) *Key {
+	return NewKey(kh)
+}
+
 func (k *Key) Len() int {
 	if k == nil {
 		return 0

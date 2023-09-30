@@ -7,6 +7,7 @@
 package bpt
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"io"
 
@@ -38,7 +39,7 @@ type node interface {
 	writeTo(io.Writer) error
 
 	// readFrom reads the node from the reader and unmarshals it.
-	readFrom(io.Reader) error
+	readFrom(*bytes.Buffer, marshalOpts) error
 }
 
 // branchStatus is the status of a branch node.

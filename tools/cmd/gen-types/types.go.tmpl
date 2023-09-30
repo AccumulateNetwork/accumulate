@@ -62,10 +62,12 @@ type {{.FullName true true}} struct {
 }
 {{end}}
 
+{{ if not .UnionSkipType }}
 {{ $lud := .LongUnionDiscriminator }}
 {{range .Types}}{{if .IsUnion}}
 func (*{{.FullName true false}}) {{if $lud}}{{.UnionType}}{{else}}Type{{end}}() {{.UnionType}} { return {{.UnionType}}{{.UnionValue}} }
 {{end}}{{end}}
+{{end}}
 
 {{range .Types}}{{if .IsCopyable}}
 func (v *{{.FullName true false}}) Copy() *{{.FullName true false}} {
