@@ -823,6 +823,7 @@ type SyntheticOrigin struct {
 	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	// FeeRefund is portion of the cause's fee that will be refunded if this transaction fails.
 	FeeRefund uint64 `json:"feeRefund,omitempty" form:"feeRefund" query:"feeRefund" validate:"required"`
+	Index     uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	extraData []byte
 }
 
@@ -2947,6 +2948,7 @@ func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 		u.Initiator = v.Initiator
 	}
 	u.FeeRefund = v.FeeRefund
+	u.Index = v.Index
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -5213,6 +5215,9 @@ func (v *SyntheticOrigin) Equal(u *SyntheticOrigin) bool {
 		return false
 	}
 	if !(v.FeeRefund == u.FeeRefund) {
+		return false
+	}
+	if !(v.Index == u.Index) {
 		return false
 	}
 
@@ -11166,6 +11171,7 @@ var fieldNames_SyntheticOrigin = []string{
 	1: "Cause",
 	3: "Initiator",
 	4: "FeeRefund",
+	5: "Index",
 }
 
 func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
@@ -11184,6 +11190,9 @@ func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.FeeRefund == 0) {
 		writer.WriteUint(4, v.FeeRefund)
+	}
+	if !(v.Index == 0) {
+		writer.WriteUint(5, v.Index)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticOrigin)
@@ -11211,6 +11220,11 @@ func (v *SyntheticOrigin) IsValid() error {
 		errs = append(errs, "field FeeRefund is missing")
 	} else if v.FeeRefund == 0 {
 		errs = append(errs, "field FeeRefund is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
 	}
 
 	switch len(errs) {
@@ -16202,6 +16216,9 @@ func (v *SyntheticOrigin) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.FeeRefund = x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Index = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticOrigin)
 	if err != nil {
@@ -18675,6 +18692,7 @@ func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
+		Index     uint64          `json:"index,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
@@ -18695,6 +18713,10 @@ func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 
 		u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	}
+	if !(v.SyntheticOrigin.Index == 0) {
+
+		u.Index = v.SyntheticOrigin.Index
+	}
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		u.Amount = encoding.BigintToJSON(&v.Amount)
 	}
@@ -18711,6 +18733,7 @@ func (v *SyntheticCreateIdentity) MarshalJSON() ([]byte, error) {
 		Source    *url.URL                                 `json:"source,omitempty"`
 		Initiator *url.URL                                 `json:"initiator,omitempty"`
 		FeeRefund uint64                                   `json:"feeRefund,omitempty"`
+		Index     uint64                                   `json:"index,omitempty"`
 		Accounts  *encoding.JsonUnmarshalListWith[Account] `json:"accounts,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -18730,6 +18753,10 @@ func (v *SyntheticCreateIdentity) MarshalJSON() ([]byte, error) {
 
 		u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	}
+	if !(v.SyntheticOrigin.Index == 0) {
+
+		u.Index = v.SyntheticOrigin.Index
+	}
 	if !(len(v.Accounts) == 0) {
 		u.Accounts = &encoding.JsonUnmarshalListWith[Account]{Value: v.Accounts, Func: UnmarshalAccountJSON}
 	}
@@ -18743,6 +18770,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 		Source           *url.URL        `json:"source,omitempty"`
 		Initiator        *url.URL        `json:"initiator,omitempty"`
 		FeeRefund        uint64          `json:"feeRefund,omitempty"`
+		Index            uint64          `json:"index,omitempty"`
 		Amount           uint64          `json:"amount,omitempty"`
 		AcmeRefundAmount *string         `json:"acmeRefundAmount,omitempty"`
 		IsRefund         bool            `json:"isRefund,omitempty"`
@@ -18764,6 +18792,10 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 
 		u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	}
+	if !(v.SyntheticOrigin.Index == 0) {
+
+		u.Index = v.SyntheticOrigin.Index
+	}
 	if !(v.Amount == 0) {
 		u.Amount = v.Amount
 	}
@@ -18783,6 +18815,7 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
+		Index     uint64          `json:"index,omitempty"`
 		Token     *url.URL        `json:"token,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 		IsIssuer  bool            `json:"isIssuer,omitempty"`
@@ -18804,6 +18837,10 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 	if !(v.SyntheticOrigin.FeeRefund == 0) {
 
 		u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	}
+	if !(v.SyntheticOrigin.Index == 0) {
+
+		u.Index = v.SyntheticOrigin.Index
 	}
 	if !(v.Token == nil) {
 		u.Token = v.Token
@@ -18859,6 +18896,7 @@ func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 		Source    *url.URL                               `json:"source,omitempty"`
 		Initiator *url.URL                               `json:"initiator,omitempty"`
 		FeeRefund uint64                                 `json:"feeRefund,omitempty"`
+		Index     uint64                                 `json:"index,omitempty"`
 		Entry     *encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -18877,6 +18915,10 @@ func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	if !(v.SyntheticOrigin.FeeRefund == 0) {
 
 		u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	}
+	if !(v.SyntheticOrigin.Index == 0) {
+
+		u.Index = v.SyntheticOrigin.Index
 	}
 	if !(EqualDataEntry(v.Entry, nil)) {
 		u.Entry = &encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
@@ -21178,6 +21220,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
+		Index     uint64          `json:"index,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
@@ -21186,6 +21229,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	u.Index = v.SyntheticOrigin.Index
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.IsRefund = v.IsRefund
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -21197,6 +21241,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
+	v.SyntheticOrigin.Index = u.Index
 	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
 		return fmt.Errorf("error decoding Amount: %w", err)
 	} else {
@@ -21213,6 +21258,7 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 		Source    *url.URL                                 `json:"source,omitempty"`
 		Initiator *url.URL                                 `json:"initiator,omitempty"`
 		FeeRefund uint64                                   `json:"feeRefund,omitempty"`
+		Index     uint64                                   `json:"index,omitempty"`
 		Accounts  *encoding.JsonUnmarshalListWith[Account] `json:"accounts,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -21220,6 +21266,7 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	u.Index = v.SyntheticOrigin.Index
 	u.Accounts = &encoding.JsonUnmarshalListWith[Account]{Value: v.Accounts, Func: UnmarshalAccountJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -21230,6 +21277,7 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
+	v.SyntheticOrigin.Index = u.Index
 	if u.Accounts != nil {
 		v.Accounts = make([]Account, len(u.Accounts.Value))
 		for i, x := range u.Accounts.Value {
@@ -21246,6 +21294,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 		Source           *url.URL        `json:"source,omitempty"`
 		Initiator        *url.URL        `json:"initiator,omitempty"`
 		FeeRefund        uint64          `json:"feeRefund,omitempty"`
+		Index            uint64          `json:"index,omitempty"`
 		Amount           uint64          `json:"amount,omitempty"`
 		AcmeRefundAmount *string         `json:"acmeRefundAmount,omitempty"`
 		IsRefund         bool            `json:"isRefund,omitempty"`
@@ -21255,6 +21304,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	u.Index = v.SyntheticOrigin.Index
 	u.Amount = v.Amount
 	u.AcmeRefundAmount = encoding.BigintToJSON(v.AcmeRefundAmount)
 	u.IsRefund = v.IsRefund
@@ -21267,6 +21317,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
+	v.SyntheticOrigin.Index = u.Index
 	v.Amount = u.Amount
 	if x, err := encoding.BigintFromJSON(u.AcmeRefundAmount); err != nil {
 		return fmt.Errorf("error decoding AcmeRefundAmount: %w", err)
@@ -21284,6 +21335,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
+		Index     uint64          `json:"index,omitempty"`
 		Token     *url.URL        `json:"token,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 		IsIssuer  bool            `json:"isIssuer,omitempty"`
@@ -21294,6 +21346,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	u.Index = v.SyntheticOrigin.Index
 	u.Token = v.Token
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.IsIssuer = v.IsIssuer
@@ -21307,6 +21360,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
+	v.SyntheticOrigin.Index = u.Index
 	v.Token = u.Token
 	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
 		return fmt.Errorf("error decoding Amount: %w", err)
@@ -21365,6 +21419,7 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 		Source    *url.URL                               `json:"source,omitempty"`
 		Initiator *url.URL                               `json:"initiator,omitempty"`
 		FeeRefund uint64                                 `json:"feeRefund,omitempty"`
+		Index     uint64                                 `json:"index,omitempty"`
 		Entry     *encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -21372,6 +21427,7 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
+	u.Index = v.SyntheticOrigin.Index
 	u.Entry = &encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -21382,6 +21438,7 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
+	v.SyntheticOrigin.Index = u.Index
 	if u.Entry != nil {
 		v.Entry = u.Entry.Value
 	}
