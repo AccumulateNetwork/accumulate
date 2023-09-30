@@ -44,11 +44,12 @@ type simFactory struct {
 	recordings RecordingFunc
 	abci       abciFunc
 
-	dropDispatchedMessages bool
-	skipProposalCheck      bool
-	ignoreDeliverResults   bool
-	ignoreCommitResults    bool
-	deterministic          bool
+	dropDispatchedMessages      bool
+	skipProposalCheck           bool
+	ignoreDeliverResults        bool
+	ignoreCommitResults         bool
+	deterministic               bool
+	interceptDispatchedMessages dispatchInterceptor
 
 	// State
 	logger           log.Logger
@@ -298,12 +299,14 @@ func (f *simFactory) getDispatcherFunc() func() execute.Dispatcher {
 	// Avoid capture
 	services := f.getServices()
 	router := f.getRouter()
+	interceptor := f.interceptDispatchedMessages
 
 	f.dispatcherFunc = func() execute.Dispatcher {
 		d := new(dispatcher)
 		d.client = services
 		d.router = router
 		d.envelopes = map[string][]*messaging.Envelope{}
+		d.interceptor = interceptor
 		return d
 	}
 	return f.dispatcherFunc
