@@ -8,19 +8,18 @@ package database
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/util/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
-	kvb "gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -30,9 +29,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
 )
-
-const collectIndexTxnPrefix = "txn."
-const collectIndexRecordPrefix = "rec."
 
 type CollectOptions struct {
 	BuildIndex     bool
@@ -88,17 +84,6 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 		_ = os.RemoveAll(dir)
 	}(dir)
 
-	var index *badger.DB
-	if opts.BuildIndex {
-		index, err = badger.Open(badger.DefaultOptions(dir).WithLogger(kvb.Slogger{}))
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		defer func() {
-			_ = index.Close()
-		}()
-	}
-
 	tmpDir, err := os.MkdirTemp("", "accumulate-snapshot-*")
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -113,6 +98,16 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	hashes, err := indexing.OpenBucket(filepath.Join(tmpDir, "hash"), 0, true)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
+	}
+	defer func() { _ = hashes.Close() }()
+
+	var index *indexing.Bucket
+	if opts.BuildIndex {
+		index, err = indexing.OpenBucket(filepath.Join(tmpDir, "index"), indexDataSize, true)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		defer func() { _ = index.Close() }()
 	}
 
 	// Collect accounts
@@ -165,7 +160,7 @@ func (db *Database) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, 
 	return nil
 }
 
-func (db *Database) collectAccounts(w *snapshot.Writer, index *badger.DB, hashes *indexing.Bucket, opts *CollectOptions) error {
+func (db *Database) collectAccounts(w *snapshot.Writer, index, hashes *indexing.Bucket, opts *CollectOptions) error {
 	// Open a records section
 	records, err := w.OpenRecords()
 	if err != nil {
@@ -176,7 +171,7 @@ func (db *Database) collectAccounts(w *snapshot.Writer, index *badger.DB, hashes
 	batch := db.Begin(false)
 	defer batch.Discard()
 	it := batch.IterateAccounts()
-	close, copts := collectOptions(index, opts)
+	copts := collectOptions(index, opts)
 	for it.Next() {
 		account := it.Value()
 
@@ -207,16 +202,11 @@ func (db *Database) collectAccounts(w *snapshot.Writer, index *badger.DB, hashes
 		return errors.UnknownError.Wrap(it.Err())
 	}
 
-	err = close()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
 	err = records.Close()
 	return errors.UnknownError.Wrap(err)
 }
 
-func (db *Database) collectMessages(w *snapshot.Writer, index *badger.DB, hashes *indexing.Bucket, opts *CollectOptions) error {
+func (db *Database) collectMessages(w *snapshot.Writer, index, hashes *indexing.Bucket, opts *CollectOptions) error {
 	// Open a records section
 	records, err := w.OpenRecords()
 	if err != nil {
@@ -226,7 +216,7 @@ func (db *Database) collectMessages(w *snapshot.Writer, index *badger.DB, hashes
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	close, copts := collectOptions(index, opts)
+	copts := collectOptions(index, opts)
 
 	for i := 0; i < 256; i++ {
 		hashes, err := hashes.Read(byte(i))
@@ -274,11 +264,6 @@ func (db *Database) collectMessages(w *snapshot.Writer, index *badger.DB, hashes
 				return errors.UnknownError.WithFormat("collect %x status: %w", hash, err)
 			}
 		}
-	}
-
-	err = close()
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
 	}
 
 	err = records.Close()
@@ -601,7 +586,7 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 	return errors.UnknownError.Wrap(err)
 }
 
-func writeSnapshotIndex(w *snapshot.Writer, index *badger.DB, opts *CollectOptions) error {
+func writeSnapshotIndex(w *snapshot.Writer, index *indexing.Bucket, opts *CollectOptions) error {
 	if !opts.BuildIndex {
 		return nil
 	}
@@ -611,28 +596,22 @@ func writeSnapshotIndex(w *snapshot.Writer, index *badger.DB, opts *CollectOptio
 		return errors.UnknownError.Wrap(err)
 	}
 
-	indexTxn := index.NewTransaction(false)
-	defer indexTxn.Discard()
-	it := indexTxn.NewIterator(badger.IteratorOptions{
-		Prefix: []byte(collectIndexRecordPrefix),
-	})
-	defer it.Close()
-
-	for it.Rewind(); it.Valid(); it.Next() {
-		err := it.Item().Value(func(val []byte) error {
-			e := new(recordIndexEntry)
-			err := e.UnmarshalBinary(val)
-			if err != nil {
-				return errors.EncodingError.WithFormat("decode record index entry: %w", err)
-			}
-			err = x.Write(snapshot.RecordIndexEntry{
-				Key:     e.Key.Hash(),
-				Section: int(e.Section),
-				Offset:  e.Offset,
-			})
-			return errors.UnknownError.Wrap(err)
-		})
+	for i := 0; i < 256; i++ {
+		entries, err := index.Read(byte(i))
 		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		sort.Slice(entries, func(i, j int) bool {
+			return bytes.Compare(entries[i].Hash[:], entries[j].Hash[:]) < 0
+		})
+
+		for _, e := range entries {
+			err = x.Write(snapshot.RecordIndexEntry{
+				Key:     e.Hash,
+				Section: int(binary.BigEndian.Uint64(e.Value)),
+				Offset:  binary.BigEndian.Uint64(e.Value[8:]),
+			})
 			return errors.UnknownError.Wrap(err)
 		}
 	}
@@ -641,7 +620,9 @@ func writeSnapshotIndex(w *snapshot.Writer, index *badger.DB, opts *CollectOptio
 	return errors.UnknownError.Wrap(err)
 }
 
-func collectOptions(index *badger.DB, opts *CollectOptions) (func() error, snapshot.CollectOptions) {
+const indexDataSize = 16
+
+func collectOptions(index *indexing.Bucket, opts *CollectOptions) snapshot.CollectOptions {
 	copts := snapshot.CollectOptions{
 		Walk: database.WalkOptions{
 			IgnoreIndices: true,
@@ -650,27 +631,15 @@ func collectOptions(index *badger.DB, opts *CollectOptions) (func() error, snaps
 	}
 
 	if !opts.BuildIndex {
-		return func() error { return nil }, copts
+		return copts
 	}
 
-	wb := index.NewWriteBatch()
 	copts.DidCollect = func(value database.Value, section, offset uint64) error {
-		entry := &recordIndexEntry{
-			Key:     value.Key(),
-			Section: section,
-			Offset:  offset,
-		}
-		b, err := entry.MarshalBinary()
-		if err != nil {
-			return errors.EncodingError.WithFormat("encode record index entry: %w", err)
-		}
-		h := value.Key().Hash()
-		err = wb.Set(append([]byte(collectIndexRecordPrefix), h[:]...), b)
-		if err != nil {
-			return errors.InternalError.WithFormat("write record index entry: %w", err)
-		}
-		return nil
+		var b [indexDataSize]byte
+		binary.BigEndian.PutUint64(b[:], section)
+		binary.BigEndian.PutUint64(b[8:], offset)
+		return index.Write(value.Key().Hash(), b[:])
 	}
 
-	return wb.Flush, copts
+	return copts
 }
