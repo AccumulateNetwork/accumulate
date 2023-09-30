@@ -158,7 +158,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 		SetPrivateKey(s.valKey).
 		SetUrl(signer.Url).
 		SetVersion(globals.Network.Version).
-		SetTimestamp(1).
+		SetTimestampToNow().
 		Sign(hash)
 	if err != nil {
 		return nil, errors.InternalError.Wrap(err)
