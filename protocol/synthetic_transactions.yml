@@ -16,6 +16,8 @@ SyntheticOrigin:
     - name: FeeRefund
       description: is portion of the cause's fee that will be refunded if this transaction fails
       type: uint
+    - name: Index
+      type: uint
 
 SyntheticCreateIdentity:
   union: { type: transaction }
@@ -52,7 +54,7 @@ SyntheticDepositTokens:
     - name: IsRefund
       type: bool
 
-      
+
 SyntheticDepositCredits:
   union: { type: transaction }
   embeddings:
