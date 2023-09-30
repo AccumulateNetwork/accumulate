@@ -60,7 +60,7 @@ func (x *Executor) produceSynthetic(batch *database.Batch, produced []*ProducedM
 // transaction. setSyntheticOrigin sets the refund amount for each synthetic
 // transaction, spreading the potential refund across all produced synthetic
 // transactions.
-func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []protocol.SynthTxnWithOrigin) error {
+func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []protocol.SyntheticTransaction) error {
 	for _, swo := range produced {
 		swo.SetCause(from.ID().Hash(), from.ID().Account())
 	}
