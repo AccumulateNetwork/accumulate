@@ -47,7 +47,7 @@ func (a *Account) putBpt() error {
 	}
 
 	hash := *(*[32]byte)(hasher.MerkleHash())
-	return a.parent.BPT().Insert(a.key.Hash(), hash)
+	return a.parent.BPT().Insert(a.key, hash)
 }
 
 // BptReceipt builds a BPT receipt for the account.
