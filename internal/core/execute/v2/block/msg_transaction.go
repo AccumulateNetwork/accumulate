@@ -394,9 +394,9 @@ func (x TransactionMessage) executeTransaction(batch *database.Batch, ctx *Trans
 
 func (x TransactionMessage) postProcess(batch *database.Batch, ctx *TransactionContext, state *chain.ProcessTransactionState, delivered bool) error {
 	// Calculate refunds
-	var swos []protocol.SynthTxnWithOrigin
+	var swos []protocol.SyntheticTransaction
 	for _, newTxn := range state.ProducedTxns {
-		if swo, ok := newTxn.Body.(protocol.SynthTxnWithOrigin); ok {
+		if swo, ok := newTxn.Body.(protocol.SyntheticTransaction); ok {
 			swos = append(swos, swo)
 		}
 	}
