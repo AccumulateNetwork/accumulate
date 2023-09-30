@@ -52,6 +52,15 @@ func DropDispatchedMessages(opts *simFactory) error {
 	return nil
 }
 
+// CaptureDispatchedMessages allows the caller to capture internally dispatched
+// messages.
+func CaptureDispatchedMessages(fn dispatchInterceptor) Option {
+	return func(opts *simFactory) error {
+		opts.interceptDispatchedMessages = fn
+		return nil
+	}
+}
+
 // SkipProposalCheck skips checking if each non-leader node agrees with the
 // leader's proposed block.
 func SkipProposalCheck(opts *simFactory) error {
