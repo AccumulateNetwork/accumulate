@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 // MessageContext is the context in which a message is processed.
@@ -151,14 +152,37 @@ func (m *MessageContext) queueAdditional(msg messaging.Message) {
 
 // didProduce queues a produced synthetic message for dispatch.
 func (m *MessageContext) didProduce(batch *database.Batch, dest *url.URL, msg messaging.Message) error {
-	if dest == nil {
-		panic("nil destination for produced message")
-	}
-	m.produced = append(m.produced, &ProducedMessage{
+	p := &ProducedMessage{
 		Producer:    m.message.ID(),
 		Destination: dest,
 		Message:     msg,
-	})
+	}
+
+	// Add an index to synthetic transactions to differentiate otherwise
+	// identical messages
+	m.syntheticCount++
+	switch msg := msg.(type) {
+	case *messaging.TransactionMessage:
+		if !m.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+			break
+		}
+
+		// SyntheticForwardTransaction is the only synthetic transaction type
+		// that does not satisfy this interface, but they are not used in v2
+		txn, ok := msg.Transaction.Body.(protocol.SyntheticTransaction)
+		if !ok {
+			slog.ErrorCtx(m.Context, "Synthetic transaction is not synthetic", "id", msg.ID())
+			break
+		}
+
+		txn.SetIndex(m.syntheticCount)
+		p.Message = msg.Copy() // Clear memoized hashes
+	}
+
+	if dest == nil {
+		panic("nil destination for produced message")
+	}
+	m.produced = append(m.produced, p)
 
 	err := batch.Message(m.message.Hash()).Produced().Add(msg.ID())
 	if err != nil {

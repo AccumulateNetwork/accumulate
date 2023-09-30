@@ -14,7 +14,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 // bundle is a bundle of messages to be processed.
@@ -192,6 +194,20 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 
 		d.additional = append(d.additional, ctx.additional...)
 		d.produced = append(d.produced, ctx.produced...)
+	}
+
+	// Check for duplicates. This is a serious error if it occurs, but returning
+	// an error here would effectively stall the network.
+	pCount := map[[32]byte]int{}
+	pID := map[[32]byte]*url.TxID{}
+	for _, m := range d.produced {
+		pCount[m.Message.Hash()]++
+		pID[m.Message.Hash()] = m.Message.ID()
+	}
+	for h, c := range pCount {
+		if c > 1 {
+			slog.ErrorCtx(d.Context, "Duplicate synthetic messages", "id", pID[h], "count", c)
+		}
 	}
 
 	// Execute produced messages immediately if and only if the producer and
