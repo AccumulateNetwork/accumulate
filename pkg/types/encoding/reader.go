@@ -117,6 +117,7 @@ func (r *Reader) readLimited(field uint, n uint64) (BytesReader, bool) {
 
 	if rl, ok := r.r.(interface{ Len() int }); ok && uint64(rl.Len()) < n {
 		r.didRead(field, io.EOF, "failed to read field")
+		return nil, false
 	}
 
 	return &subFieldReader{r.r, int64(n)}, true

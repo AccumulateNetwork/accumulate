@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/edsrzf/mmap-go"
+	"golang.org/x/exp/slog"
 )
 
 const pageSize = 1 << 10 // 1024 entries
@@ -84,6 +85,7 @@ func (b *Bucket) Close() error {
 		if f.mmap != nil {
 			e := f.mmap.Unmap()
 			if e != nil {
+				slog.Error("Error unmapping bucket", "error", e)
 				err = e
 			}
 		}
@@ -91,11 +93,13 @@ func (b *Bucket) Close() error {
 		// Truncate extra space
 		e := f.file.Truncate(int64(f.count * (32 + b.valueSize)))
 		if e != nil {
+			slog.Error("Error truncating bucket", "error", e)
 			err = e
 		}
 
 		e = f.file.Close()
 		if e != nil {
+			slog.Error("Error closing bucket", "error", e)
 			err = e
 		}
 	}
