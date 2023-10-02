@@ -19,7 +19,7 @@ func Unwrap(err error) error { return errors.Unwrap(err) }
 
 // Code returns the status code if the error is an [Error], or 0.
 func Code(err error) Status {
-	var err2 *Error
+	var err2 *ErrorBase[Status]
 	if !As(err, &err2) {
 		return 0
 	}

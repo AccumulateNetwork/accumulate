@@ -34,7 +34,9 @@ func (s Status) IsServerError() bool { return s >= 500 }
 func (s Status) Error() string { return s.String() }
 
 // Skip skips N frames when locating the call site.
-func (s Status) Skip(n int) Skip { return Skip{n, s} }
+func (s Status) Skip(n int) Factory[Status] {
+	return Factory[Status]{n, s, UnknownError, EncodingError}
+}
 
 func (s Status) Wrap(err error) error {
 	return s.Skip(1).Wrap(err)
@@ -52,12 +54,14 @@ func (s Status) WithCauseAndFormat(cause error, format string, args ...interface
 	return s.Skip(1).WithCauseAndFormat(cause, format, args...)
 }
 
-type Skip struct {
-	n      int
-	status Status
+type Factory[Status statusType] struct {
+	Skip         int
+	Code         Status
+	UnknownCode  Status
+	EncodingCode Status
 }
 
-func (s Skip) Wrap(err error) error {
+func (f Factory[Status]) Wrap(err error) error {
 	if err == nil {
 		// The return type must be `error` - otherwise this returns statement
 		// can cause strange errors
@@ -65,89 +69,93 @@ func (s Skip) Wrap(err error) error {
 	}
 
 	// If err is an Error and we're not going to add anything, return it
-	if !trackLocation && s.status == UnknownError {
-		if _, ok := err.(*Error); ok {
+	if !trackLocation && !f.Code.IsKnownError() {
+		if _, ok := err.(*ErrorBase[Status]); ok {
 			return err
 		}
 	}
 
-	e := s.new()
-	e.setCause(convert(err))
+	e := f.new()
+	e.setCause(f.convert(err))
 	return e
 }
 
-func (s Skip) With(v ...interface{}) *Error {
-	e := s.new()
+func (f Factory[Status]) With(v ...interface{}) *ErrorBase[Status] {
+	e := f.new()
 	e.Message = fmt.Sprint(v...)
 	return e
 }
 
-func (s Skip) WithCauseAndFormat(cause error, format string, args ...interface{}) *Error {
-	e := s.new()
+func (f Factory[Status]) WithCauseAndFormat(cause error, format string, args ...interface{}) *ErrorBase[Status] {
+	e := f.new()
 	e.Message = fmt.Sprintf(format, args...)
-	e.setCause(convert(cause))
+	e.setCause(f.convert(cause))
 	return e
 }
 
-func (s Skip) WithFormat(format string, args ...interface{}) *Error {
+func (f Factory[Status]) WithFormat(format string, args ...interface{}) *ErrorBase[Status] {
 	err := fmt.Errorf(format, args...)
 
 	u, ok := err.(interface{ Unwrap() error })
 	if ok {
-		e := s.new()
+		e := f.new()
 		e.Message = err.Error()
-		e.setCause(convert(u.Unwrap()))
+		e.setCause(f.convert(u.Unwrap()))
 		return e
 	}
 
-	e := convert(err)
-	e.Code = s.status
-	e.recordCallSite(2 + s.n)
+	e := f.convert(err)
+	e.Code = f.Code
+	e.recordCallSite(2 + f.Skip)
 	return e
 }
 
-func (s Skip) new() *Error {
-	e := new(Error)
-	e.Code = s.status
-	e.recordCallSite(3 + s.n)
+func (f Factory[Status]) new() *ErrorBase[Status] {
+	e := new(ErrorBase[Status])
+	e.Code = f.Code
+	e.recordCallSite(3 + f.Skip)
 	return e
 }
 
-func convert(err error) *Error {
-	if x := (*Error)(nil); errors.As(err, &x) {
+func (f Factory[Status]) convert(err error) *ErrorBase[Status] {
+	if x := (*ErrorBase[Status])(nil); errors.As(err, &x) {
 		return x
 	}
 	if x := Status(0); errors.As(err, &x) {
-		return &Error{Code: x, Message: err.Error()}
+		return &ErrorBase[Status]{Code: x, Message: err.Error()}
 	}
 
-	e := &Error{
-		Code:    UnknownError,
+	e := &ErrorBase[Status]{
+		Code:    f.UnknownCode,
 		Message: err.Error(),
 	}
 
 	var encErr encoding.Error
 	if errors.As(err, &encErr) {
-		e.Code = EncodingError
+		if f.EncodingCode != 0 {
+			e.Code = f.EncodingCode
+		} else {
+			e.Code = f.UnknownCode
+		}
 		err = encErr.E
 	}
 
 	if u, ok := err.(interface{ Unwrap() error }); ok {
 		if err := u.Unwrap(); err != nil {
-			e.setCause(convert(err))
+			e.setCause(f.convert(err))
 		}
 	}
 
 	return e
 }
 
-func (e *Error) setCause(f *Error) {
+func (e *ErrorBase[Status]) setCause(f *ErrorBase[Status]) {
 	e.Cause = f
 	if f == nil {
 		return
 	}
 
-	if e.Code != UnknownError {
+	if e.Code.IsKnownError() {
 		return
 	}
 
@@ -163,7 +171,7 @@ func (e *Error) setCause(f *Error) {
 	e.CallStack = append(cs, f.CallStack...)
 }
 
-func (e *Error) recordCallSite(depth int) {
+func (e *ErrorBase[Status]) recordCallSite(depth int) {
 	if !trackLocation {
 		return
 	}
@@ -189,25 +197,25 @@ caller:
 	e.CallStack = append(e.CallStack, cs)
 }
 
-func (e *Error) CodeID() uint64 {
+func (e *ErrorBase[Status]) CodeID() uint64 {
 	return uint64(e.Code)
 }
 
-func (e *Error) Error() string {
+func (e *ErrorBase[Status]) Error() string {
 	if e.Message == "" && e.Cause != nil {
 		return e.Cause.Error()
 	}
 	return e.Message
 }
 
-func (e *Error) Unwrap() error {
+func (e *ErrorBase[Status]) Unwrap() error {
 	if e.Cause != nil {
 		return e.Cause
 	}
 	return e.Code
 }
 
-func (e *Error) Format(f fmt.State, verb rune) {
+func (e *ErrorBase[Status]) Format(f fmt.State, verb rune) {
 	if f.Flag('+') {
 		f.Write([]byte(e.Print()))
 	} else {
@@ -224,7 +232,7 @@ func (e *Error) Format(f fmt.State, verb rune) {
 //
 //	<cause>
 //	<call stack>
-func (e *Error) Print() string {
+func (e *ErrorBase[Status]) Print() string {
 	// If the error has no call stack just return the message
 	if e.CallStack == nil {
 		return e.Error()
@@ -247,7 +255,7 @@ func (e *Error) Print() string {
 	return strings.Join(str, "\n")
 }
 
-func (e *Error) printCallstack() string {
+func (e *ErrorBase[Status]) printCallstack() string {
 	var str string
 	for _, cs := range e.CallStack {
 		str += fmt.Sprintf("%s\n    %s:%d\n", cs.FuncName, cs.File, cs.Line)
@@ -255,7 +263,7 @@ func (e *Error) printCallstack() string {
 	return str
 }
 
-func (e *Error) PrintFullCallstack() string {
+func (e *ErrorBase[Status]) PrintFullCallstack() string {
 	var str string
 	for e != nil {
 		str += e.printCallstack()
@@ -264,9 +272,9 @@ func (e *Error) PrintFullCallstack() string {
 	return str
 }
 
-func (e *Error) Is(target error) bool {
+func (e *ErrorBase[Status]) Is(target error) bool {
 	switch f := target.(type) {
-	case *Error:
+	case *ErrorBase[Status]:
 		if e.Code == f.Code {
 			return true
 		}
