@@ -31,6 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
@@ -467,6 +468,10 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	description, err := accClient.Describe(context.Background())
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
+	}
+
+	if description.NetworkType == protocol.PartitionTypeBlockValidator {
+		netPort -= config.PortOffsetBlockValidator
 	}
 
 	genDoc, err := getGenesis(args[0], tmClient)
