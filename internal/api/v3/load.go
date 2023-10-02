@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -19,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 func loadMessage(batch *database.Batch, txid *url.TxID) (*api.MessageRecord[messaging.Message], error) {
@@ -152,12 +154,16 @@ func loadTransactionSignaturesV1(batch *database.Batch, r *api.MessageRecord[mes
 		}
 
 		messages, err := api.MakeRange(entries.Entries(), 0, 0, func(e database.SigSetEntry) (*api.MessageRecord[messaging.Message], error) {
+			r := new(api.MessageRecord[messaging.Message])
+
 			msg, err := batch.Message2(e.SignatureHash[:]).Main().Get()
 			if err != nil {
-				return nil, errors.UnknownError.WithFormat("load signature %x: %w", e.SignatureHash[:], err)
+				slog.Info("Failed to load signature", "error", err, "account", signer.GetUrl(), "hash", logging.AsHex(e.SignatureHash))
+				r.Error = errors.UnknownError.WithFormat("load signature %x: %w", e.SignatureHash[:], err)
+				r.Status = r.Error.Code
+				return r, nil
 			}
 
-			r := new(api.MessageRecord[messaging.Message])
 			r.ID = msg.ID()
 			r.Message = msg
 			return r, nil
@@ -211,17 +217,24 @@ func loadTransactionSignaturesV2(batch *database.Batch, r *api.MessageRecord[mes
 
 		// Load messages
 		messages, err := api.MakeRange(history, 0, 0, func(i uint64) (*api.MessageRecord[messaging.Message], error) {
+			r := new(api.MessageRecord[messaging.Message])
+
 			hash, err := batch.Account(s).SignatureChain().Entry(int64(i))
 			if err != nil {
-				return nil, errors.UnknownError.WithFormat("load %v signature chain entry %d: %w", s, i, err)
+				slog.Info("Failed to load signature chain entry", "error", err, "account", s, "index", i)
+				r.Error = errors.UnknownError.WithFormat("load %v signature chain entry %d: %w", s, i, err)
+				r.Status = r.Error.Code
+				return r, nil
 			}
 
 			msg, err := batch.Message2(hash).Main().Get()
 			if err != nil {
-				return nil, errors.UnknownError.WithFormat("load signature %x: %w", hash, err)
+				slog.Info("Failed to load signature", "error", err, "account", s, "index", i, "hash", logging.AsHex(hash))
+				r.Error = errors.UnknownError.WithFormat("load signature %x: %w", hash, err)
+				r.Status = r.Error.Code
+				return r, nil
 			}
 
-			r := new(api.MessageRecord[messaging.Message])
 			r.ID = msg.ID()
 			r.Message = msg
 			r.Historical = !active[*(*[32]byte)(hash)] && msg.Type() != messaging.MessageTypeBlockAnchor
@@ -270,7 +283,11 @@ func loadBlockEntry(batch *database.Batch, entry *protocol.BlockEntry) (*api.Cha
 
 	value, err := chain.Entry(int64(entry.Index))
 	if err != nil {
-		return r, errors.UnknownError.WithFormat("load %s chain entry %d: %w", entry.Chain, entry.Index, err)
+		slog.Info("Failed to load chain entry", "error", err, "account", entry.Account, "chain", entry.Chain, "index", entry.Index)
+		r.Value = &api.ErrorRecord{
+			Value: errors.UnknownError.WithFormat("load %s chain entry %d: %w", entry.Chain, entry.Index, err),
+		}
+		return r, nil
 	}
 	r.Entry = *(*[32]byte)(value)
 
@@ -284,7 +301,10 @@ func loadBlockEntry(batch *database.Batch, entry *protocol.BlockEntry) (*api.Cha
 	case merkle.ChainTypeTransaction:
 		r.Value, err = loadMessage(batch, protocol.UnknownUrl().WithTxID(r.Entry))
 		if err != nil {
-			return r, errors.UnknownError.WithFormat("load %s chain entry %d transaction: %w", entry.Chain, entry.Index, err)
+			slog.Info("Failed to load message", "error", err, "account", entry.Account, "chain", entry.Chain, "index", entry.Index, "hash", logging.AsHex(r.Entry))
+			r.Value = &api.ErrorRecord{
+				Value: errors.UnknownError.WithFormat("load %s chain entry %d transaction: %w", entry.Chain, entry.Index, err),
+			}
 		}
 	}
 
