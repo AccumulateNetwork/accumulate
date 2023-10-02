@@ -182,10 +182,6 @@ func (t *Transaction) GetAdditionalAuthorities() []*url.URL {
 	return nil
 }
 
-type SyntheticTransaction interface {
-	TransactionBody
-}
-
 func (tx *SendTokens) AddRecipient(to *url.URL, amount *big.Int) {
 	recipient := new(TokenRecipient)
 	recipient.Url = to
