@@ -9,6 +9,7 @@ package snapshot
 import (
 	"bufio"
 	"io"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -95,19 +96,29 @@ type Reader struct {
 }
 
 func (r *Reader) open(i int, typ ...SectionType) (ioutil.SectionReader, *sectionReader, error) {
+	if i < 0 {
+		for _, s := range r.Sections {
+			if s.Type().isOneOf(typ...) {
+				rd, err := s.Open()
+				if err != nil {
+					return nil, nil, errors.UnknownError.Wrap(err)
+				}
+				return rd, s, nil
+			}
+		}
+		var s []string
+		for _, typ := range typ {
+			s = append(s, typ.String())
+		}
+		return nil, nil, errors.NotFound.WithFormat("%v section not found", strings.Join(s, "|"))
+	}
+
 	if i < 0 || i >= len(r.Sections) {
 		return nil, nil, errors.NotFound.WithFormat("section %d not found", i)
 	}
-	s := r.Sections[i]
 
-	var ok bool
-	for _, typ := range typ {
-		if s.Type() == typ {
-			ok = true
-			break
-		}
-	}
-	if !ok {
+	s := r.Sections[i]
+	if !s.Type().isOneOf(typ...) {
 		return nil, nil, errors.BadRequest.WithFormat("section %d's type is %v not %v", i, s.Type(), typ)
 	}
 
@@ -119,9 +130,9 @@ func (r *Reader) open(i int, typ ...SectionType) (ioutil.SectionReader, *section
 }
 
 // Open opens the first section of the given type
-func (r *Reader) Open(typ SectionType) (ioutil.SectionReader, error) {
+func (r *Reader) Open(typ ...SectionType) (ioutil.SectionReader, error) {
 	for _, s := range r.Sections {
-		if s.Type() == typ {
+		if s.Type().isOneOf(typ...) {
 			return s.Open()
 		}
 	}
