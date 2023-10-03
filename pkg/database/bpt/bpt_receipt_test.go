@@ -47,7 +47,7 @@ func TestBPT_receipt(t *testing.T) {
 
 	// Make sure every key we added to the BPT has a valid receipt
 	for i := range keys.List { // go through the list of keys
-		r, err := bpt.GetReceipt(keys.GetAElement(i))
+		r, err := bpt.GetReceipt(record.KeyFromHash(keys.GetAElement(i)))
 		require.NoError(t, err)
 		v := r.Validate(nil)
 		require.Truef(t, v, "should validate BPT element %d", i+1)

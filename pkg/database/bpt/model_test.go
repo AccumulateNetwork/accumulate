@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/lxrand"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -161,8 +160,8 @@ func TestRange(t *testing.T) {
 	model = new(ChangeSet)
 	model.store = keyvalue.RecordStore{Store: store}
 	var actual [][2][32]byte
-	require.NoError(t, ForEach(model.BPT(), func(key storage.Key, hash [32]byte) error {
-		actual = append(actual, [2][32]byte{key, hash})
+	require.NoError(t, ForEach(model.BPT(), func(key *record.Key, hash [32]byte) error {
+		actual = append(actual, [2][32]byte{key.Hash(), hash})
 		return nil
 	}))
 	require.True(t, len(expect) == len(actual), "Expect the same number of items")
