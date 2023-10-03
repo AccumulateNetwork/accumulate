@@ -19,7 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
@@ -54,7 +54,7 @@ func healSynth(_ *cobra.Command, args []string) {
 
 	node, err := p2p.New(p2p.Options{
 		Network:        args[0],
-		BootstrapPeers: api.BootstrapServers,
+		BootstrapPeers: accumulate.BootstrapServers,
 	})
 	check(err)
 	defer func() { _ = node.Close() }()
