@@ -146,7 +146,7 @@ func (r *Reader) OpenRecords(i int) (RecordReader, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	bufio.NewReader(rd)
-	return &recordReader{rd}, nil
+	return recordReader{rd}, nil
 }
 
 func (r *Reader) OpenBPT(i int) (RecordReader, error) {
@@ -155,9 +155,9 @@ func (r *Reader) OpenBPT(i int) (RecordReader, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	if s.Type() == SectionTypeRawBPT {
-		return &rawBptReader{rd}, nil
+		return rawBptReader{rd}, nil
 	}
-	return &recordReader{rd}, nil
+	return recordReader{rd}, nil
 }
 
 type IndexReader struct {
@@ -174,25 +174,47 @@ func (i *IndexReader) Read(n int) (*RecordIndexEntry, error) {
 type RecordReader interface {
 	io.Seeker
 	Read() (*RecordEntry, error)
+	ReadAt(offset int64) (*RecordEntry, error)
 }
 
+// recordReader reads length-prefixed record entries.
 type recordReader struct {
 	ioutil.SectionReader
 }
 
-func (r *recordReader) Read() (*RecordEntry, error) {
+func (r recordReader) Read() (*RecordEntry, error) {
 	v := new(RecordEntry)
 	_, err := readValue(r.SectionReader, v)
 	return v, err
 }
 
+func (r recordReader) ReadAt(offset int64) (*RecordEntry, error) {
+	v := new(RecordEntry)
+	_, err := readValueAt(r.SectionReader, offset, v)
+	return v, err
+}
+
+// rawBptReader reads (key hash, value) BPT pairs.
 type rawBptReader struct {
 	ioutil.SectionReader
 }
 
-func (r *rawBptReader) Read() (*RecordEntry, error) {
+func (r rawBptReader) Read() (*RecordEntry, error) {
 	var b [64]byte
 	_, err := io.ReadFull(r.SectionReader, b[:])
+	if err != nil {
+		return nil, err
+	}
+
+	return &RecordEntry{
+		Key:   record.KeyFromHash(*(*[32]byte)(b[:32])),
+		Value: b[32:],
+	}, nil
+}
+
+func (r rawBptReader) ReadAt(offset int64) (*RecordEntry, error) {
+	var b [64]byte
+	_, err := readFullAt(r.SectionReader, offset, b[:])
 	if err != nil {
 		return nil, err
 	}
