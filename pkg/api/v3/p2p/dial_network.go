@@ -48,11 +48,13 @@ func (d *discoverer) Discover(ctx context.Context, req *dial.DiscoveryRequest) (
 		return nil, errors.BadRequest.With("no network or service specified")
 	}
 
-	s, ok := (*Node)(d).getOwnService(req.Network, req.Service)
-	if ok {
-		return dial.DiscoveredLocal(func(ctx context.Context) (message.Stream, error) {
-			return handleLocally(ctx, s), nil
-		}), nil
+	if req.Service != nil {
+		s, ok := (*Node)(d).getOwnService(req.Network, req.Service)
+		if ok {
+			return dial.DiscoveredLocal(func(ctx context.Context) (message.Stream, error) {
+				return handleLocally(ctx, s), nil
+			}), nil
+		}
 	}
 
 	ch, err := (*Node)(d).peermgr.getPeers(ctx, addr, req.Limit, req.Timeout)

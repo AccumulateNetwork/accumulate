@@ -1,0 +1,55 @@
+PeerStatus:
+  non-binary: true
+  fields:
+    - name: ID
+      type: p2p.PeerID
+      marshal-as: none
+    - name: Addresses
+      type: { name: AtomicSlice, parameters: [{ type: PeerAddressStatus, pointer: true }, { type: PeerAddressStatus }] }
+      marshal-as: reference
+      pointer: true
+    - name: Networks
+      type: { name: AtomicSlice, parameters: [{ type: PeerNetworkStatus, pointer: true }, { type: PeerNetworkStatus }] }
+      marshal-as: reference
+      pointer: true
+
+PeerAddressStatus:
+  non-binary: true
+  fields:
+    - name: Address
+      type: p2p.Multiaddr
+      marshal-as: union
+    - name: Last
+      type: LastStatus
+      marshal-as: reference
+
+PeerNetworkStatus:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+    - name: Services
+      type: { name: AtomicSlice, parameters: [{ type: PeerServiceStatus, pointer: true }, { type: PeerServiceStatus }] }
+      marshal-as: reference
+      pointer: true
+
+PeerServiceStatus:
+  non-binary: true
+  fields:
+    - name: Address
+      type: api.ServiceAddress
+      marshal-as: reference
+      pointer: true
+    - name: Last
+      type: LastStatus
+      marshal-as: reference
+
+LastStatus:
+  non-binary: true
+  fields:
+    - name: Success
+      type: time
+      pointer: true
+    - name: Attempt
+      type: time
+      pointer: true
