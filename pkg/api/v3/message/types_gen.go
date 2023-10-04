@@ -53,7 +53,7 @@ type ErrorResponse struct {
 
 type EventMessage struct {
 	fieldsSet []bool
-	Value     []api.Event `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     []api.Event `json:"value" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -78,7 +78,7 @@ type FindServiceRequest struct {
 
 type FindServiceResponse struct {
 	fieldsSet []bool
-	Value     []*api.FindServiceResult `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     []*api.FindServiceResult `json:"value" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -154,7 +154,7 @@ type SubmitRequest struct {
 
 type SubmitResponse struct {
 	fieldsSet []bool
-	Value     []*api.Submission `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     []*api.Submission `json:"value" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -178,7 +178,7 @@ type ValidateRequest struct {
 
 type ValidateResponse struct {
 	fieldsSet []bool
-	Value     []*api.Submission `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     []*api.Submission `json:"value" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -1160,10 +1160,8 @@ func (v *EventMessage) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(len(v.Value) == 0) {
-		for _, v := range v.Value {
-			writer.WriteValue(2, v.MarshalBinary)
-		}
+	for _, v := range v.Value {
+		writer.WriteValue(2, v.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_EventMessage)
@@ -1182,8 +1180,6 @@ func (v *EventMessage) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
-	} else if len(v.Value) == 0 {
-		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -1355,10 +1351,8 @@ func (v *FindServiceResponse) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(len(v.Value) == 0) {
-		for _, v := range v.Value {
-			writer.WriteValue(2, v.MarshalBinary)
-		}
+	for _, v := range v.Value {
+		writer.WriteValue(2, v.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceResponse)
@@ -1377,8 +1371,6 @@ func (v *FindServiceResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
-	} else if len(v.Value) == 0 {
-		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -1948,10 +1940,8 @@ func (v *SubmitResponse) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(len(v.Value) == 0) {
-		for _, v := range v.Value {
-			writer.WriteValue(2, v.MarshalBinary)
-		}
+	for _, v := range v.Value {
+		writer.WriteValue(2, v.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SubmitResponse)
@@ -1970,8 +1960,6 @@ func (v *SubmitResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
-	} else if len(v.Value) == 0 {
-		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -2134,10 +2122,8 @@ func (v *ValidateResponse) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(len(v.Value) == 0) {
-		for _, v := range v.Value {
-			writer.WriteValue(2, v.MarshalBinary)
-		}
+	for _, v := range v.Value {
+		writer.WriteValue(2, v.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ValidateResponse)
@@ -2156,8 +2142,6 @@ func (v *ValidateResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
-	} else if len(v.Value) == 0 {
-		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -3143,12 +3127,10 @@ func (v *ErrorResponse) MarshalJSON() ([]byte, error) {
 func (v *EventMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  Type                                       `json:"type"`
-		Value *encoding.JsonUnmarshalListWith[api.Event] `json:"value,omitempty"`
+		Value *encoding.JsonUnmarshalListWith[api.Event] `json:"value"`
 	}{}
 	u.Type = v.Type()
-	if !(len(v.Value) == 0) {
-		u.Value = &encoding.JsonUnmarshalListWith[api.Event]{Value: v.Value, Func: api.UnmarshalEventJSON}
-	}
+	u.Value = &encoding.JsonUnmarshalListWith[api.Event]{Value: v.Value, Func: api.UnmarshalEventJSON}
 	return json.Marshal(&u)
 }
 
@@ -3207,12 +3189,10 @@ func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
 func (v *FindServiceResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  Type                                      `json:"type"`
-		Value encoding.JsonList[*api.FindServiceResult] `json:"value,omitempty"`
+		Value encoding.JsonList[*api.FindServiceResult] `json:"value"`
 	}{}
 	u.Type = v.Type()
-	if !(len(v.Value) == 0) {
-		u.Value = v.Value
-	}
+	u.Value = v.Value
 	return json.Marshal(&u)
 }
 
@@ -3381,12 +3361,10 @@ func (v *SubmitRequest) MarshalJSON() ([]byte, error) {
 func (v *SubmitResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  Type                               `json:"type"`
-		Value encoding.JsonList[*api.Submission] `json:"value,omitempty"`
+		Value encoding.JsonList[*api.Submission] `json:"value"`
 	}{}
 	u.Type = v.Type()
-	if !(len(v.Value) == 0) {
-		u.Value = v.Value
-	}
+	u.Value = v.Value
 	return json.Marshal(&u)
 }
 
@@ -3436,12 +3414,10 @@ func (v *ValidateRequest) MarshalJSON() ([]byte, error) {
 func (v *ValidateResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  Type                               `json:"type"`
-		Value encoding.JsonList[*api.Submission] `json:"value,omitempty"`
+		Value encoding.JsonList[*api.Submission] `json:"value"`
 	}{}
 	u.Type = v.Type()
-	if !(len(v.Value) == 0) {
-		u.Value = v.Value
-	}
+	u.Value = v.Value
 	return json.Marshal(&u)
 }
 
@@ -3528,7 +3504,7 @@ func (v *ErrorResponse) UnmarshalJSON(data []byte) error {
 func (v *EventMessage) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  Type                                       `json:"type"`
-		Value *encoding.JsonUnmarshalListWith[api.Event] `json:"value,omitempty"`
+		Value *encoding.JsonUnmarshalListWith[api.Event] `json:"value"`
 	}{}
 	u.Type = v.Type()
 	u.Value = &encoding.JsonUnmarshalListWith[api.Event]{Value: v.Value, Func: api.UnmarshalEventJSON}
@@ -3610,7 +3586,7 @@ func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 func (v *FindServiceResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  Type                                      `json:"type"`
-		Value encoding.JsonList[*api.FindServiceResult] `json:"value,omitempty"`
+		Value encoding.JsonList[*api.FindServiceResult] `json:"value"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
@@ -3841,7 +3817,7 @@ func (v *SubmitRequest) UnmarshalJSON(data []byte) error {
 func (v *SubmitResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  Type                               `json:"type"`
-		Value encoding.JsonList[*api.Submission] `json:"value,omitempty"`
+		Value encoding.JsonList[*api.Submission] `json:"value"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
@@ -3912,7 +3888,7 @@ func (v *ValidateRequest) UnmarshalJSON(data []byte) error {
 func (v *ValidateResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  Type                               `json:"type"`
-		Value encoding.JsonList[*api.Submission] `json:"value,omitempty"`
+		Value encoding.JsonList[*api.Submission] `json:"value"`
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
