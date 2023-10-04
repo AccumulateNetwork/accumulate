@@ -9,7 +9,6 @@ package p2p
 import (
 	"context"
 	"crypto/ed25519"
-	"io"
 	"net"
 	"strings"
 
@@ -24,6 +23,7 @@ import (
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -49,7 +49,8 @@ type Node struct {
 	cancel   context.CancelFunc
 	peermgr  *peerManager
 	host     host.Host
-	tracker  peerTracker
+	dialOpts []dial.Option
+	tracker  dial.Tracker
 	services []*serviceHandler
 }
 
@@ -89,9 +90,14 @@ func New(opts Options) (_ *Node, err error) {
 	n.context, n.cancel = context.WithCancel(context.Background())
 
 	if opts.EnablePeerTracker {
-		n.tracker = new(simpleTracker)
+		n.tracker = new(dial.SimpleTracker)
 	} else {
-		n.tracker = fakeTracker{}
+		n.tracker = dial.FakeTracker
+	}
+	n.dialOpts = []dial.Option{
+		dial.WithConnector((*connector)(n)),
+		dial.WithDiscoverer((*discoverer)(n)),
+		dial.WithTracker(n.tracker),
 	}
 
 	// Cancel on fail
@@ -208,14 +214,17 @@ func (n *Node) Close() error {
 	return n.host.Close()
 }
 
-// selfID returns the node's ID.
-func (n *Node) selfID() peer.ID {
-	return n.host.ID()
-}
-
 // getPeerService returns a new stream for the given peer and service.
-func (n *Node) getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error) {
-	return n.host.NewStream(ctx, peer, idRpc(service))
+func (n *Node) getPeerService(ctx context.Context, peerID peer.ID, service *api.ServiceAddress) (message.Stream, error) {
+	s, err := n.host.NewStream(ctx, peerID, idRpc(service))
+	if err != nil {
+		return nil, err
+	}
+
+	// Close the stream when the context is canceled
+	go func() { <-ctx.Done(); _ = s.Close() }()
+
+	return message.NewStream(s), nil
 }
 
 // getOwnService returns a service of this node.

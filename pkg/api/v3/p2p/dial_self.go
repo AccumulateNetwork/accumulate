@@ -31,8 +31,7 @@ func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (messag
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	if peer != "" && peer != d.host.ID() {
-		s, err := openStreamFor(ctx, (*Node)(d), peer, sa)
-		return s, errors.UnknownError.Wrap(err)
+		return nil, errors.BadRequest.With("attempted to dial a different node")
 	}
 
 	// Check if we provide the service

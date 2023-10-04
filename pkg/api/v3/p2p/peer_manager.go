@@ -138,7 +138,7 @@ func (m *peerManager) waitFor(ctx context.Context, addr multiaddr.Multiaddr) err
 		wait := <-m.wait
 
 		// Look for a peer
-		ch, err := m.routing.FindPeers(ctx, addr.String(), discovery.Limit(1))
+		ch, err := m.getPeers(ctx, addr, 1)
 		if err != nil {
 			return err
 		}

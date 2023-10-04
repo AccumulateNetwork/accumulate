@@ -109,34 +109,56 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 		return nil, errors.BadRequest.With("no network or service specified")
 	}
 
+	var results []*api.FindServiceResult
 	if opts.Known {
 		// Find known peers
-		var results []*api.FindServiceResult
-		for _, peer := range n.tracker.allGood(ctx, addr) {
-			results = append(results, &api.FindServiceResult{
-				PeerID: peer,
-				Status: api.PeerStatusIsKnownGood,
-			})
+		results = n.getKnownPeers(ctx, addr)
+
+	} else {
+		// Discover peers
+		var err error
+		results, err = n.discoverPeers(ctx, addr)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
 		}
-		for _, peer := range n.tracker.allBad(ctx, addr) {
-			results = append(results, &api.FindServiceResult{
-				PeerID: peer,
-				Status: api.PeerStatusIsKnownBad,
-			})
-		}
-		return results, nil
 	}
 
+	// Return an empty array, not nil, because JSON-RPC handles that better
+	if results == nil {
+		return []*api.FindServiceResult{}, nil
+	}
+	return results, nil
+}
+
+func (n *nodeService) getKnownPeers(ctx context.Context, addr multiaddr.Multiaddr) []*api.FindServiceResult {
+	// Find known peers
+	var results []*api.FindServiceResult
+	for _, peer := range n.tracker.All(addr, api.PeerStatusIsKnownGood) {
+		results = append(results, &api.FindServiceResult{
+			PeerID: peer,
+			Status: api.PeerStatusIsKnownGood,
+		})
+	}
+	for _, peer := range n.tracker.All(addr, api.PeerStatusIsKnownBad) {
+		results = append(results, &api.FindServiceResult{
+			PeerID: peer,
+			Status: api.PeerStatusIsKnownBad,
+		})
+	}
+	return results
+}
+
+func (n *nodeService) discoverPeers(ctx context.Context, addr multiaddr.Multiaddr) ([]*api.FindServiceResult, error) {
 	ch, err := n.peermgr.getPeers(ctx, addr, 100)
 	if err != nil {
 		return nil, err
 	}
 
-	var results []*api.FindServiceResult
+	results := []*api.FindServiceResult{}
 	for peer := range ch {
 		results = append(results, &api.FindServiceResult{
 			PeerID: peer.ID,
-			Status: n.tracker.status(ctx, peer.ID, addr),
+			Status: n.tracker.Status(peer.ID, addr),
 		})
 	}
 	return results, nil
