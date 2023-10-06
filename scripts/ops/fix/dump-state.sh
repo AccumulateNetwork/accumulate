@@ -1,4 +1,5 @@
 #!/bin/bash
+# image: registry.gitlab.com/accumulatenetwork/accumulate:v1-2-9
 
 node="$1"
 if [ -z "$node" ]; then
