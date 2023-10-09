@@ -14,7 +14,7 @@ import (
 )
 
 type Indexer struct {
-	wr   *sectionWriter
+	wr   *SectionWriter
 	last [32]byte
 }
 

@@ -38,11 +38,14 @@ const SectionTypeRecords SectionType = 7
 // SectionTypeRecordIndex indexes record keys, including the offset and section number.
 const SectionTypeRecordIndex SectionType = 8
 
-// SectionTypeBPT contains the BPT.
-const SectionTypeBPT SectionType = 9
+// SectionTypeRawBPT contains the BPT, as raw (key hash, value) pairs.
+const SectionTypeRawBPT SectionType = 9
 
 // SectionTypeConsensus contains consensus parameters.
 const SectionTypeConsensus SectionType = 10
+
+// SectionTypeBPT contains the BPT, as records.
+const SectionTypeBPT SectionType = 11
 
 // GetEnumValue returns the value of the Section Type
 func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
@@ -51,7 +54,7 @@ func (v SectionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SectionType) SetEnumValue(id uint64) bool {
 	u := SectionType(id)
 	switch u {
-	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot, SectionTypeRecords, SectionTypeRecordIndex, SectionTypeBPT, SectionTypeConsensus:
+	case SectionTypeHeader, SectionTypeAccountsV1, SectionTypeTransactionsV1, SectionTypeSignaturesV1, SectionTypeGzTransactionsV1, SectionTypeSnapshot, SectionTypeRecords, SectionTypeRecordIndex, SectionTypeRawBPT, SectionTypeConsensus, SectionTypeBPT:
 		*v = u
 		return true
 	}
@@ -77,10 +80,12 @@ func (v SectionType) String() string {
 		return "records"
 	case SectionTypeRecordIndex:
 		return "recordIndex"
-	case SectionTypeBPT:
-		return "bpt"
+	case SectionTypeRawBPT:
+		return "rawBPT"
 	case SectionTypeConsensus:
 		return "consensus"
+	case SectionTypeBPT:
+		return "bpt"
 	}
 	return fmt.Sprintf("SectionType:%d", v)
 }
@@ -104,10 +109,12 @@ func SectionTypeByName(name string) (SectionType, bool) {
 		return SectionTypeRecords, true
 	case "recordindex":
 		return SectionTypeRecordIndex, true
-	case "bpt":
-		return SectionTypeBPT, true
+	case "rawbpt":
+		return SectionTypeRawBPT, true
 	case "consensus":
 		return SectionTypeConsensus, true
+	case "bpt":
+		return SectionTypeBPT, true
 	}
 	return 0, false
 }
