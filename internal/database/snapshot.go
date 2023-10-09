@@ -288,12 +288,10 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	it := batch.BPT().Iterate(1000)
 	for it.Next() {
 		for _, entry := range it.Value() {
-			kh := entry.Key.Hash()
-			_, err = wr.Write(kh[:])
-			if err != nil {
-				return errors.UnknownError.Wrap(err)
-			}
-			_, err = wr.Write(entry.Value[:])
+			err = wr.WriteValue(&snapshot.RecordEntry{
+				Key:   entry.Key,
+				Value: entry.Value[:],
+			})
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
@@ -474,36 +472,35 @@ func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte]
 		return nil, nil
 	}
 
-	hashes := map[[32]byte][32]byte{}
-	var bpt *ioutil.Segment[snapshot.SectionType, *snapshot.SectionType]
-	for _, s := range snap.Sections {
-		if s.Type() == snapshot.SectionTypeBPT {
-			bpt = s
-			break
+	var i int
+	for i = range snap.Sections {
+		switch snap.Sections[i].Type() {
+		case snapshot.SectionTypeRawBPT,
+			snapshot.SectionTypeBPT:
+			goto found
 		}
 	}
-	if bpt == nil {
-		return nil, errors.InvalidRecord.WithFormat("missing BPT section")
-	}
-	if bpt.Size()%64 != 0 {
-		return nil, errors.InvalidRecord.WithFormat("invalid BPT section: want size to be a multiple of %d, got %d", 64, bpt.Size())
-	}
-	rd, err := bpt.Open()
+	return nil, errors.InvalidRecord.WithFormat("missing BPT section")
+found:
+
+	bpt, err := snap.OpenBPT(i)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+
+	hashes := map[[32]byte][32]byte{}
 	for {
-		var b [64]byte
-		_, err := io.ReadFull(rd, b[:])
+		r, err := bpt.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return hashes, nil
+				break
 			}
-			return nil, err
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
-		hashes[*(*[32]byte)(b[:32])] = *(*[32]byte)(b[32:])
+		hashes[r.Key.Hash()] = *(*[32]byte)(r.Value)
 	}
+	return hashes, nil
 }
 
 func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOptions) error {
