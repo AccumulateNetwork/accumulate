@@ -472,18 +472,7 @@ func readBptSnapshot(snap *snapshot.Reader, opts *RestoreOptions) (map[[32]byte]
 		return nil, nil
 	}
 
-	var i int
-	for i = range snap.Sections {
-		switch snap.Sections[i].Type() {
-		case snapshot.SectionTypeRawBPT,
-			snapshot.SectionTypeBPT:
-			goto found
-		}
-	}
-	return nil, errors.InvalidRecord.WithFormat("missing BPT section")
-found:
-
-	bpt, err := snap.OpenBPT(i)
+	bpt, err := snap.OpenBPT(-1)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

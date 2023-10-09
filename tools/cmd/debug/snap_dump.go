@@ -112,12 +112,13 @@ func dumpV2(f ioutil.SectionReader) {
 			}
 
 		case sv2.SectionTypeRecords,
-			sv2.SectionTypeBPT:
+			sv2.SectionTypeBPT,
+			sv2.SectionTypeRawBPT:
 			var rr snapshot.RecordReader
-			if s.Type() == sv2.SectionTypeBPT {
-				rr, err = r.OpenBPT(i)
-			} else {
+			if s.Type() == sv2.SectionTypeRecords {
 				rr, err = r.OpenRecords(i)
+			} else {
+				rr, err = r.OpenBPT(i)
 			}
 			check(err)
 
