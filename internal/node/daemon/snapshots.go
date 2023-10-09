@@ -17,12 +17,14 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
@@ -36,7 +38,11 @@ func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
 	return nil
 }
 
-func (d *Daemon) collectSnapshot(batch *database.Batch, blockTime time.Time, majorBlock, minorBlock uint64) {
+func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, majorBlock, minorBlock uint64) {
+	if !d.isTimeForSnapshot(blockTime) {
+		return
+	}
+
 	// Don't collect a snapshot if one is still being collected
 	if !d.snapshotLock.TryLock() {
 		return
@@ -49,10 +55,6 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, blockTime time.Time, maj
 		}
 	}()
 	defer batch.Discard()
-
-	if !d.isTimeForSnapshot(blockTime) {
-		return
-	}
 
 	d.Logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
@@ -76,7 +78,36 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, blockTime time.Time, maj
 		}
 	}()
 
-	err = snapshot.FullCollect(batch, file, d.Config.Accumulate.PartitionUrl(), d.Logger.With("module", "snapshot"), false)
+	// Timer for updating progress
+	tick := time.NewTicker(10 * time.Second)
+	defer tick.Stop()
+
+	var metrics coredb.CollectMetrics
+	err = batch.Collect(file, d.Config.Accumulate.PartitionUrl().URL, &coredb.CollectOptions{
+		Metrics:    &metrics,
+		BuildIndex: d.Config.Accumulate.Snapshots.EnableIndexing,
+		Predicate: func(r database.Record) (bool, error) {
+			select {
+			case <-tick.C:
+			default:
+				return true, nil
+			}
+
+			// The sole purpose of this function is to print progress
+			switch r.Key().Get(0) {
+			case "Account":
+				k := r.Key().SliceJ(2)
+				h := k.Hash()
+				slog.Info("Collecting an account", "module", "snapshot", "majorBlock", majorBlock, "account", k, "hash", h[:4], "totalMessages", metrics.Messages.Count)
+
+			case "Message", "Transaction":
+				slog.Info("Collecting a message", "module", "snapshot", "majorBlock", majorBlock, "message", r.Key().Get(1), "count", fmt.Sprintf("%d/%d", metrics.Messages.Collecting, metrics.Messages.Count))
+			}
+
+			// Retain everything
+			return true, nil
+		},
+	})
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
@@ -127,7 +158,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, blockTime time.Time, maj
 }
 
 func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
-	db, err := database.Open(d.Config, d.Logger)
+	db, err := coredb.Open(d.Config, d.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
