@@ -106,7 +106,7 @@ func (r *Reader) readRaw(field uint, n uint64) ([]byte, bool) {
 	return v, err == nil
 }
 
-func (r *Reader) readLimited(field uint, n uint64) (io.Reader, bool) {
+func (r *Reader) readLimited(field uint, n uint64) (BytesReader, bool) {
 	if r.err != nil {
 		return nil, false
 	}
@@ -117,9 +117,10 @@ func (r *Reader) readLimited(field uint, n uint64) (io.Reader, bool) {
 
 	if rl, ok := r.r.(interface{ Len() int }); ok && uint64(rl.Len()) < n {
 		r.didRead(field, io.EOF, "failed to read field")
+		return nil, false
 	}
 
-	return io.LimitReader(r.r, int64(n)), true
+	return &subFieldReader{r.r, int64(n)}, true
 }
 
 // Reset returns a list of seen fields and an error, if one occurred, and resets
@@ -442,5 +443,61 @@ func (r *Reader) ReadAll() ([]byte, error) {
 			return nil, err
 		}
 	}
-	return io.ReadAll(r.r)
+
+	// If the reader is a bytes.Reader or subFieldReader (which it usually is),
+	// we know how much remaining data there is so we can avoid allocating an
+	// unnecessarily large buffer
+	rd, ok := r.r.(interface{ Len() int })
+	if !ok {
+		return io.ReadAll(r.r)
+	}
+
+	n := rd.Len()
+	if n == 0 {
+		return nil, nil
+	}
+	b := make([]byte, n)
+	_, err := io.ReadFull(r.r, b)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+type subFieldReader struct {
+	rd BytesReader
+	n  int64 // remaining
+}
+
+func (r *subFieldReader) Len() int { return int(r.n) }
+
+func (r *subFieldReader) Read(b []byte) (n int, err error) {
+	if r.n == 0 {
+		return 0, io.EOF
+	}
+	if int64(len(b)) > r.n {
+		b = b[:r.n]
+	}
+	n, err = r.rd.Read(b)
+	r.n -= int64(n)
+	return n, err
+}
+
+func (r *subFieldReader) ReadByte() (byte, error) {
+	if r.n == 0 {
+		return 0, io.EOF
+	}
+	b, err := r.rd.ReadByte()
+	if err == nil {
+		r.n--
+	}
+	return b, err
+}
+
+func (r *subFieldReader) UnreadByte() error {
+	err := r.rd.UnreadByte()
+	if err == nil {
+		r.n++
+	}
+	return err
 }
