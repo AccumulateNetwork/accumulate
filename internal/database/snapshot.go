@@ -288,7 +288,8 @@ func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	it := batch.BPT().Iterate(1000)
 	for it.Next() {
 		for _, entry := range it.Value() {
-			_, err = wr.Write(entry.Key[:])
+			kh := entry.Key.Hash()
+			_, err = wr.Write(kh[:])
 			if err != nil {
 				return errors.UnknownError.Wrap(err)
 			}
