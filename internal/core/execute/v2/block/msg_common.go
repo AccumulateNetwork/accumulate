@@ -224,6 +224,11 @@ func (m *MessageContext) callMessageValidator(batch *database.Batch, msg messagi
 func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol.Transaction, error) {
 	// Look in the bundle
 	for _, msg := range b.messages {
+		// Look inside block anchors
+		if blk, ok := msg.(*messaging.BlockAnchor); ok && b.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+			msg = blk.Anchor
+		}
+
 		txn, ok := messaging.UnwrapAs[messaging.MessageWithTransaction](msg)
 		if ok &&
 			txn.GetTransaction().Body.Type() != protocol.TransactionTypeRemote &&
