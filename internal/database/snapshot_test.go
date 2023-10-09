@@ -7,6 +7,8 @@
 package database_test
 
 import (
+	"encoding/binary"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -16,12 +18,43 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
+
+func BenchmarkCollect(b *testing.B) {
+	// db, err := database.OpenBadger(b.TempDir(), nil)
+	// require.NoError(b, err)
+	db := database.OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
+	batch := db.Begin(true)
+	defer batch.Discard()
+	for i := 0; i < b.N; i++ {
+		v := &ADI{Url: protocol.AccountUrl(fmt.Sprintf("a-%d", i)), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: protocol.AccountUrl("foo")}}}}
+		account := batch.Account(v.Url)
+		require.NoError(b, account.Main().Put(v))
+
+		txn := new(protocol.Transaction)
+		txn.Header.Principal = v.Url
+		binary.BigEndian.PutUint64(txn.Header.Initiator[:], uint64(i))
+		txn.Body = new(SendTokens)
+		err := account.MainChain().Inner().AddHash(txn.GetHash(), false)
+		require.NoError(b, err)
+		require.NoError(b, batch.Message2(txn.GetHash()).Main().Put(&messaging.TransactionMessage{Transaction: txn}))
+	}
+	require.NoError(b, batch.Commit())
+
+	b.ResetTimer()
+	err := db.Collect(new(ioutil.Discard), nil, &database.CollectOptions{
+		BuildIndex: true,
+	})
+	require.NoError(b, err)
+}
 
 func TestSnapshot(t *testing.T) {
 	alice := AccountUrl("alice")
