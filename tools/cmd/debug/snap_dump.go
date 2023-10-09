@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -98,8 +99,26 @@ func dumpV2(f ioutil.SectionReader) {
 		}
 
 		switch s.Type() {
-		case sv2.SectionTypeRecords:
-			rr, err := r.OpenRecords(i)
+		case sv2.SectionTypeHeader:
+			{
+				fmt.Printf("  Version    %d\n", r.Header.Version)
+			}
+			if r.Header.SystemLedger != nil {
+				fmt.Printf("  Height     %d\n", r.Header.SystemLedger.Index)
+				fmt.Printf("  Time       %v\n", r.Header.SystemLedger.Timestamp)
+			}
+			if r.Header.RootHash != [32]byte{} {
+				fmt.Printf("  State hash %x\n", r.Header.RootHash)
+			}
+
+		case sv2.SectionTypeRecords,
+			sv2.SectionTypeBPT:
+			var rr snapshot.RecordReader
+			if s.Type() == sv2.SectionTypeBPT {
+				rr, err = r.OpenBPT(i)
+			} else {
+				rr, err = r.OpenRecords(i)
+			}
 			check(err)
 
 			for {
@@ -112,6 +131,16 @@ func dumpV2(f ioutil.SectionReader) {
 				}
 
 				fmt.Printf("  %v\n", re.Key)
+			}
+
+		case sv2.SectionTypeRecordIndex:
+			rd, err := r.OpenIndex(i)
+			check(err)
+
+			for i, n := 0, rd.Count; i < n; i++ {
+				e, err := rd.Read(i)
+				check(err)
+				fmt.Printf("  %x in section %d offset %d\n", e.Key[:8], e.Section, e.Offset)
 			}
 		}
 	}
