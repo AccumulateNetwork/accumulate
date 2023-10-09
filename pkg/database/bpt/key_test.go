@@ -70,7 +70,7 @@ func TestOldBptStillWorks(t *testing.T) {
 
 	for it := model.BPT().Iterate(100); it.Next(); {
 		for _, leaf := range it.Value() {
-			require.Equal(t, testEntryMap[leaf.Key], leaf.Value)
+			require.Equal(t, testEntryMap[leaf.Key.Hash()], leaf.Value)
 		}
 	}
 }
@@ -123,7 +123,7 @@ func allBptKeys(bpt *BPT) [][32]byte {
 	var entries [][32]byte
 	for it := bpt.Iterate(100); it.Next(); {
 		for _, leaf := range it.Value() {
-			entries = append(entries, leaf.Key)
+			entries = append(entries, leaf.Key.Hash())
 		}
 	}
 	return entries
