@@ -99,6 +99,9 @@ func (v blockTimeOnPart) Format(prefix, suffix string) string {
 	return fmt.Sprintf("%s%s reached block time %v%s", prefix, v.partition, v.time, suffix)
 }
 
+// Msg defines a condition on a message.
+func Msg(id *url.TxID) msgCond { return msgCond{id: id, message: []string{"message"}} }
+
 // Txn defines a condition on a transaction.
 func Txn(id *url.TxID) txnCond { return txnCond{msgCond{id: id, message: []string{"transaction"}}} }
 
