@@ -56,7 +56,8 @@ func GetRangeFor(t *testing.T, numberEntries, rangeNum int) {
 		}
 		for j, v := range bptValues {
 			k := keys.List[i+j]
-			require.Truef(t, bytes.Equal(v.Key[:], k), "i,j= %d:%d %02x should be %02x", i, j, v.Key[:2], k[:2])
+			h := v.Key.Hash()
+			require.Truef(t, bytes.Equal(h[:], k), "i,j= %d:%d %02x should be %02x", i, j, h[:2], k[:2])
 		}
 		cnt += len(bptValues)
 	}
