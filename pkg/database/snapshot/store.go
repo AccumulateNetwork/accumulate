@@ -8,7 +8,6 @@ package snapshot
 
 import (
 	"bytes"
-	"io"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -91,12 +90,7 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 		return nil, errors.UnknownError.WithFormat("open index: %w", err)
 	}
 
-	_, err = rd.Seek(int64(x.Offset), io.SeekStart)
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("seek to record: %w", err)
-	}
-
-	entry, err := (&recordReader{rd}).Read()
+	entry, err := recordReader{rd}.ReadAt(int64(x.Offset))
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
