@@ -90,3 +90,12 @@ func TestValidator(t *testing.T) {
 	require.Equal(t, len(expect), len(actual))
 	require.True(t, expect[0].Equal(actual[0]))
 }
+
+func TestEmptyResponse(t *testing.T) {
+	s := mocks.NewNodeService(t)
+	s.EXPECT().FindService(mock.Anything, mock.Anything).Return(nil, nil)
+	c := setupTest(t, NodeService{NodeService: s})
+	actual, err := c.FindService(context.Background(), api.FindServiceOptions{})
+	require.NoError(t, err)
+	require.Empty(t, actual)
+}
