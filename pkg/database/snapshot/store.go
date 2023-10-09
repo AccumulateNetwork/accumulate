@@ -96,7 +96,7 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 		return nil, errors.BadRequest.WithFormat("seek to record: %w", err)
 	}
 
-	entry, err := (&RecordReader{rd}).Read()
+	entry, err := (&recordReader{rd}).Read()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
