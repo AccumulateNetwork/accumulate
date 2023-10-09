@@ -67,7 +67,7 @@ func (it *AccountIterator) Next() bool {
 	v := it.entries[it.pos]
 	it.pos++
 
-	u, err := it.batch.getAccountUrl(record.NewKey(storage.Key(v.Key)))
+	u, err := it.batch.getAccountUrl(v.Key)
 	if err != nil {
 		it.err = errors.UnknownError.WithFormat("resolve key hash: %w", err)
 		return false
@@ -93,9 +93,9 @@ func (b *Batch) IterateAccounts() *AccountIterator {
 }
 
 func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
-	return bpt.ForEach(b.BPT(), func(key storage.Key, hash [32]byte) error {
+	return bpt.ForEach(b.BPT(), func(key *record.Key, hash [32]byte) error {
 		// Create an Account object
-		u, err := b.getAccountUrl(record.NewKey(key))
+		u, err := b.getAccountUrl(key)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -135,6 +135,6 @@ func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte
 }
 
 // BptReceipt builds a BPT receipt for the given key.
-func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*merkle.Receipt, error) {
+func (b *Batch) BptReceipt(key *record.Key, value [32]byte) (*merkle.Receipt, error) {
 	return b.BPT().GetReceipt(key)
 }

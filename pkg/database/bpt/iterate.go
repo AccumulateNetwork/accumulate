@@ -12,7 +12,7 @@ import (
 )
 
 // ForEach calls the callback for each BPT entry.
-func ForEach(b *BPT, fn func(key record.KeyHash, hash [32]byte) error) error {
+func ForEach(b *BPT, fn func(key *record.Key, hash [32]byte) error) error {
 	it := b.Iterate(1000)
 	for it.Next() {
 		for _, v := range it.Value() {
@@ -93,8 +93,8 @@ func walkNode(n node, found *bool, key [32]byte, values []KeyValuePair, pos *int
 		if n.Key.Hash() == key { //                                      But don't collect if equal to the key
 			break //                                              because we use the last key to get the
 		} //                                                      next range
-		values[*pos] = KeyValuePair{Key: n.Key.Hash(), Value: n.Hash} // Otherwise copy the value out of the BPT
-		*pos++                                                        // and stuff it in the values list
+		values[*pos] = KeyValuePair{Key: n.Key, Value: n.Hash} // Otherwise copy the value out of the BPT
+		*pos++                                                 // and stuff it in the values list
 	}
 
 	return nil
@@ -162,5 +162,5 @@ func (b *BPT) getRange(startKey [32]byte, values []KeyValuePair) (lastKey [32]by
 		return startKey, values, nil
 	}
 	//                                                             If we got something, go ahead and return the last element
-	return values[len(values)-1].Key, values, nil //               The lastKey can be easily used to ask for another contiguous range
+	return values[len(values)-1].Key.Hash(), values, nil //               The lastKey can be easily used to ask for another contiguous range
 }
