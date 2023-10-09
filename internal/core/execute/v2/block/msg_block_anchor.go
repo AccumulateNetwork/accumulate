@@ -118,12 +118,30 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 	if !ok {
 		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeSequenced, anchor.Anchor.Type())
 	}
-	txn, ok := seq.Message.(*messaging.TransactionMessage)
+	txnMsg, ok := seq.Message.(*messaging.TransactionMessage)
 	if !ok {
 		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeTransaction, seq.Message.Type())
 	}
-	if typ := txn.GetTransaction().Body.Type(); !typ.IsAnchor() {
-		return nil, nil, nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", typ, anchor.Type())
+
+	// Resolve placeholders
+	txn := txnMsg.Transaction
+	signed := seq.Hash()
+	if txn.Body.Type() == protocol.TransactionTypeRemote && ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		var err error
+		txn, err = ctx.getTransaction(batch, txn.ID().Hash())
+		if err != nil {
+			return nil, nil, nil, nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+		}
+
+		// Recalculate the hash with the full transaction
+		seq2 := seq.Copy()
+		seq2.Message = &messaging.TransactionMessage{Transaction: txn}
+		signed = seq2.Hash()
+	}
+
+	// Verify the transaction is an anchor
+	if !txn.Body.Type().IsAnchor() {
+		return nil, nil, nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), anchor.Type())
 	}
 
 	if seq.Source == nil {
@@ -131,8 +149,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 	}
 
 	// Basic validation
-	h := seq.Hash()
-	if !anchor.Signature.Verify(nil, h[:]) {
+	if !anchor.Signature.Verify(nil, signed[:]) {
 		return nil, nil, nil, nil, errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
@@ -152,7 +169,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 		return nil, nil, nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
-	return anchor, txn.GetTransaction(), seq, signer, nil
+	return anchor, txn, seq, signer, nil
 }
 
 func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *MessageContext, txn *protocol.Transaction, seq *messaging.SequencedMessage) (bool, error) {

@@ -68,6 +68,10 @@ func (m *SyntheticMessage) ID() *url.TxID {
 }
 
 func (m *BlockAnchor) ID() *url.TxID {
+	return m.Signature.GetSigner().WithTxID(m.Hash())
+}
+
+func (m *BlockAnchor) OldID() *url.TxID {
 	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
 }
 

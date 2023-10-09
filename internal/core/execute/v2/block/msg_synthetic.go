@@ -86,7 +86,7 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	}
 
 	// Verify the signature
-	h := syn.Message.ID().Hash()
+	h := syn.Message.Hash()
 	if !syn.Signature.Verify(nil, h[:]) {
 		return nil, errors.BadRequest.With("invalid signature")
 	}
