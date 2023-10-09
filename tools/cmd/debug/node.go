@@ -16,6 +16,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -89,7 +90,7 @@ func checkNode(_ *cobra.Command, args []string) {
 	pc, err = p2p.New(p2p.Options{
 		Network:        ni.Network,
 		Key:            key,
-		BootstrapPeers: api.BootstrapServers,
+		BootstrapPeers: accumulate.BootstrapServers,
 	})
 	check(err)
 	time.Sleep(time.Second)
