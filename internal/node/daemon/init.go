@@ -31,7 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -115,8 +115,8 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 			dnn.P2P.AddrBookStrict = strict
 			bvnn.P2P.AddrBookStrict = strict
 
-			dnn.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
-			bvnn.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
+			dnn.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
+			bvnn.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
 
 			if network.Bootstrap != nil {
 				p2pPeers := AddressSliceBuilder{network.Bootstrap.Peer()}.
