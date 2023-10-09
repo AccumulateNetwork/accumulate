@@ -15,7 +15,8 @@ import (
 )
 
 type KeyValuePair struct {
-	Key, Value [32]byte
+	Key   *record.Key
+	Value [32]byte
 }
 
 // New returns a new BPT.

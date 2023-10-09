@@ -67,11 +67,12 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 		NodeCnt += uint64(len(bptVals))
 
 		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
-			_, e1 := file.Write(v.Key[:])                         // Write the key out
+			kh := v.Key.Hash()                                    //
+			_, e1 := file.Write(kh[:])                            // Write the key out
 			_, e2 := file.Write(v.Value[:])                       // Write the hash out
 			_, e3 := file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
 
-			value, e4 := loadState(v.Key, v.Value)               // Get that next value
+			value, e4 := loadState(kh, v.Value)                  // Get that next value
 			vLen := uint64(len(value))                           // get the value's length as uint64
 			_, e5 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
 			_, e6 := values.Write(value)                         // write out the value
