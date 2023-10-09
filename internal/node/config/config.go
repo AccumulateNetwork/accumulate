@@ -176,6 +176,9 @@ type Snapshots struct {
 	// Enable enables snapshots
 	Enable bool `toml:"enable" mapstructure:"enable"`
 
+	// EnableIndexing enables indexing of snapshots
+	EnableIndexing bool `toml:"enable-indexing" mapstructure:"enable-indexing"`
+
 	// Directory is the directory to store snapshots in
 	Directory string `toml:"directory" mapstructure:"directory"`
 

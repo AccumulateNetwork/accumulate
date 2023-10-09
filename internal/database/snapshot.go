@@ -45,7 +45,20 @@ type CollectMetrics struct {
 	}
 }
 
+// Collect collects a snapshot of the database.
+//
+// Collect is a wrapper around [Batch.Collect].
 func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
+	batch := db.Begin(false)
+	defer batch.Discard()
+	return batch.Collect(file, partition, opts)
+}
+
+// Collect collects a snapshot of the database.
+//
+// WARNING: If the batch is nested (if it is not a root batch), Collect may
+// cause excessive memory consumption until the root batch is discarded.
+func (batch *Batch) Collect(file io.WriteSeeker, partition *url.URL, opts *CollectOptions) error {
 	if opts == nil {
 		opts = new(CollectOptions)
 	}
@@ -57,7 +70,7 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	}
 
 	// Write the header
-	err = db.writeSnapshotHeader(w, partition, opts)
+	err = batch.writeSnapshotHeader(w, partition, opts)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -70,7 +83,7 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	}
 
 	// Collect the BPT
-	err = db.collectBPT(w, opts)
+	err = batch.collectBPT(w, opts)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -102,13 +115,13 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	}
 
 	// Collect accounts
-	err = db.collectAccounts(w, index, hashes, opts)
+	err = batch.collectAccounts(w, index, hashes, opts)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Collect messages
-	err = db.collectMessages(w, index, hashes, opts)
+	err = batch.collectMessages(w, index, hashes, opts)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -122,12 +135,10 @@ func (db *Database) Collect(file io.WriteSeeker, partition *url.URL, opts *Colle
 	return nil
 }
 
-func (db *Database) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, opts *CollectOptions) error {
+func (batch *Batch) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, opts *CollectOptions) error {
 	header := new(snapshot.Header)
 
 	// Load the BPT root hash
-	batch := db.Begin(false)
-	defer batch.Discard()
 	var err error
 	header.RootHash, err = batch.GetBptRootHash()
 	if err != nil {
@@ -151,7 +162,7 @@ func (db *Database) writeSnapshotHeader(w *snapshot.Writer, partition *url.URL, 
 	return nil
 }
 
-func (db *Database) collectAccounts(w *snapshot.Writer, index, hashes *indexing.Bucket, opts *CollectOptions) error {
+func (batch *Batch) collectAccounts(w *snapshot.Writer, index, hashes *indexing.Bucket, opts *CollectOptions) error {
 	// Open a records section
 	records, err := w.OpenRecords()
 	if err != nil {
@@ -159,8 +170,6 @@ func (db *Database) collectAccounts(w *snapshot.Writer, index, hashes *indexing.
 	}
 
 	// Iterate over the BPT and collect accounts
-	batch := db.Begin(false)
-	defer batch.Discard()
 	it := batch.IterateAccounts()
 	copts := collectOptions(index, opts)
 	for it.Next() {
@@ -197,15 +206,12 @@ func (db *Database) collectAccounts(w *snapshot.Writer, index, hashes *indexing.
 	return errors.UnknownError.Wrap(err)
 }
 
-func (db *Database) collectMessages(w *snapshot.Writer, index, hashes *indexing.Bucket, opts *CollectOptions) error {
+func (batch *Batch) collectMessages(w *snapshot.Writer, index, hashes *indexing.Bucket, opts *CollectOptions) error {
 	// Open a records section
 	records, err := w.OpenRecords()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-
-	batch := db.Begin(false)
-	defer batch.Discard()
 
 	copts := collectOptions(index, opts)
 
@@ -261,10 +267,7 @@ func (db *Database) collectMessages(w *snapshot.Writer, index, hashes *indexing.
 	return errors.UnknownError.Wrap(err)
 }
 
-func (db *Database) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
-	batch := db.Begin(false)
-	defer batch.Discard()
-
+func (batch *Batch) collectBPT(w *snapshot.Writer, opts *CollectOptions) error {
 	// Check if the caller wants to skip the BPT
 	if opts.Predicate != nil {
 		ok, err := opts.Predicate(batch.BPT())
