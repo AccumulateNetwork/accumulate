@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -46,6 +47,8 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		}
 	}
 
+	AdjustStatusIDs(deliveries, results)
+
 	// If the results can't be marshaled, provide no results but do not fail the
 	// batch
 	rset, err := (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
@@ -55,4 +58,25 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	}
 
 	return deliveries, results, rset, nil
+}
+
+// AdjustStatusIDs corrects for the fact that the block anchor's ID method was
+// bad and has been changed.
+func AdjustStatusIDs(messages []messaging.Message, st []*protocol.TransactionStatus) {
+	adjustedIDs := map[[32]byte]*url.TxID{}
+	for _, msg := range messages {
+		switch msg := msg.(type) {
+		case *messaging.BlockAnchor:
+			adjustedIDs[msg.Hash()] = msg.OldID()
+		}
+	}
+	for _, st := range st {
+		if st.TxID == nil {
+			continue
+		}
+		id, ok := adjustedIDs[st.TxID.Hash()]
+		if ok {
+			st.TxID = id
+		}
+	}
 }
