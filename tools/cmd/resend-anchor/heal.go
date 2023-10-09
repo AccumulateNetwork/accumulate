@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -58,7 +59,7 @@ func heal(_ *cobra.Command, args []string) {
 
 	node, err := p2p.New(p2p.Options{
 		Network:        apiNode.Network,
-		BootstrapPeers: api.BootstrapServers,
+		BootstrapPeers: accumulate.BootstrapServers,
 	})
 	checkf(err, "start p2p node")
 	defer func() { _ = node.Close() }()
