@@ -9,6 +9,7 @@ package jsonrpc
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -31,14 +32,19 @@ func parseRequest[T any](input json.RawMessage) (T, error) {
 }
 
 func formatResponse(res interface{}, err error) interface{} {
-	if err == nil {
-		return res
+	if err != nil {
+		// Ensure the error is an Error
+		type Error errors.Error
+		err2 := errors.UnknownError.Wrap(err).(*errors.Error)
+		return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Error(), (*Error)(err2))
 	}
 
-	// Ensure the error is an Error
-	type Error errors.Error
-	err2 := errors.UnknownError.Wrap(err).(*errors.Error)
-	return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Error(), (*Error)(err2))
+	// jsonrpc2 behaves badly if the response is nil
+	v := reflect.ValueOf(res)
+	if v.Kind() == reflect.Slice && v.IsNil() {
+		return json.RawMessage("[]")
+	}
+	return res
 }
 
 type NodeService struct {
