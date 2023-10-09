@@ -253,11 +253,16 @@ func (serviceAddressTranscoder) ValidateBytes(b []byte) error {
 }
 
 func (a *ServiceAddress) MarshalJSON() ([]byte, error) {
+	typ := a.Type.String()
+	if !new(ServiceType).SetEnumValue(a.Type.GetEnumValue()) {
+		typ = fmt.Sprintf("ServiceType:%x", a.Type.GetEnumValue())
+	}
+
 	return json.Marshal(struct {
 		Type     string `json:"type,omitempty"`
 		Argument string `json:"argument,omitempty"`
 	}{
-		Type:     a.Type.String(),
+		Type:     typ,
 		Argument: a.Argument,
 	})
 }
