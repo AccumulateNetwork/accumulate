@@ -23,7 +23,7 @@ import (
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -139,7 +139,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	c.Accumulate.BatchReplayLimit = 500
-	c.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
+	c.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
 	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
