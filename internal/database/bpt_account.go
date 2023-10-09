@@ -56,7 +56,7 @@ func (a *Account) BptReceipt() (*merkle.Receipt, error) {
 		return nil, errors.InternalError.With("cannot generate a BPT receipt when there are uncommitted changes")
 	}
 
-	receipt, err := a.parent.BPT().GetReceipt(a.key.Hash())
+	receipt, err := a.parent.BPT().GetReceipt(a.key)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

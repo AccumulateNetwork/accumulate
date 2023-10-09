@@ -11,10 +11,11 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 // GetReceipt constructs a receipt for the current state for the given key.
-func (b *BPT) GetReceipt(key [32]byte) (*merkle.Receipt, error) {
+func (b *BPT) GetReceipt(key *record.Key) (*merkle.Receipt, error) {
 	const debug = false
 
 	err := b.executePending()
@@ -23,7 +24,7 @@ func (b *BPT) GetReceipt(key [32]byte) (*merkle.Receipt, error) {
 	}
 
 	// Find the leaf node
-	n, err := b.getRoot().getLeaf(key)
+	n, err := b.getRoot().getLeaf(key.Hash())
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
