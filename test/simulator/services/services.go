@@ -64,6 +64,9 @@ func (s Services) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.S
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	if sa == nil {
+		return nil, errors.BadRequest.WithFormat("invalid address %v", addr)
+	}
 
 	m, ok := s[sa.String()]
 	if !ok {
