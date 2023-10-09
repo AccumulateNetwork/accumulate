@@ -17,6 +17,7 @@ import (
 	"time"
 
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -25,7 +26,6 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gopkg.in/yaml.v3"
 )
 
 var cmdInitNetwork = &cobra.Command{
