@@ -6,7 +6,12 @@
 
 package accumulate
 
-import "github.com/multiformats/go-multiaddr"
+import (
+	stdurl "net/url"
+	"strings"
+
+	"github.com/multiformats/go-multiaddr"
+)
 
 var BootstrapServers = func() []multiaddr.Multiaddr {
 	s := []string{
@@ -22,3 +27,32 @@ var BootstrapServers = func() []multiaddr.Multiaddr {
 	}
 	return addrs
 }()
+
+const MainNetEndpoint = "https://mainnet.accumulatenetwork.io"
+const KermitEndpoint = "https://kermit.accumulatenetwork.io"
+const FozzieEndpoint = "https://fozzie.accumulatenetwork.io"
+
+var WellKnownNetworks = map[string]string{
+	"mainnet": MainNetEndpoint,
+	"kermit":  KermitEndpoint,
+	"fozzie":  FozzieEndpoint,
+
+	"testnet": "https://kermit.accumulatenetwork.io",
+	"local":   "http://127.0.1.1:26660",
+}
+
+func ResolveWellKnownEndpoint(name string, version string) string {
+	addr, ok := WellKnownNetworks[strings.ToLower(name)]
+	if !ok {
+		addr = name
+	}
+
+	u, err := stdurl.Parse(addr)
+	if err != nil {
+		return addr
+	}
+	if u.Path == "" {
+		addr += "/"
+	}
+	return addr + version
+}
