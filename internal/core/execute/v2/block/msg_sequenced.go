@@ -68,20 +68,46 @@ func (x SequencedMessage) check(batch *database.Batch, ctx *MessageContext) (*me
 
 	// Sequenced messages must either be synthetic or anchors
 	if !ctx.isWithin(messaging.MessageTypeSynthetic, internal.MessageTypeMessageIsReady) {
-		if txn, ok := seq.Message.(*messaging.TransactionMessage); !ok || !txn.Transaction.Body.Type().IsAnchor() {
+		isAnchor, err := x.isAnchor(batch, ctx, seq)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		if !isAnchor {
 			return nil, errors.BadRequest.WithFormat("invalid payload for sequenced message")
 		}
 	}
 
 	// Load the transaction
-	if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
-		_, err := x.resolveTransaction(batch, txn)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+	if !ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
+			_, err := x.resolveTransaction(batch, txn)
+			if err != nil {
+				return nil, errors.UnknownError.Wrap(err)
+			}
 		}
 	}
 
 	return seq, nil
+}
+
+func (x SequencedMessage) isAnchor(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, error) {
+	msg, ok := seq.Message.(*messaging.TransactionMessage)
+	switch {
+	case ok && msg.Transaction.Body.Type().IsAnchor():
+		return true, nil
+
+	case !ok,
+		!ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled(),
+		msg.Transaction.Body.Type() != protocol.TransactionTypeRemote:
+		return false, nil
+
+	}
+
+	txn, err := ctx.getTransaction(batch, msg.Hash())
+	if err != nil {
+		return false, errors.UnknownError.Wrap(err)
+	}
+	return txn.Body.Type().IsAnchor(), nil
 }
 
 func (x SequencedMessage) Process(batch *database.Batch, ctx *MessageContext) (_ *protocol.TransactionStatus, err error) {
@@ -126,8 +152,19 @@ func (x SequencedMessage) process(batch *database.Batch, ctx *MessageContext, se
 
 	var st *protocol.TransactionStatus
 	if ready {
+		// Copy to avoid issues with resolving remote transactions. If the
+		// transaction is a placeholder (a remote transaction), the executor
+		// will resolve the full transaction and replace the placeholder. If we
+		// don't copy, that causes the sequenced message to change, which
+		// changes its hash, which causes problems with recording it in the
+		// database.
+		msg := seq.Message
+		if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+			msg = msg.CopyAsInterface().(messaging.Message)
+		}
+
 		// Process the message within
-		st, err = ctx.callMessageExecutor(batch, seq.Message)
+		st, err = ctx.callMessageExecutor(batch, msg)
 	} else {
 		// Mark the message as pending
 		ctx.Executor.logger.Debug("Pending sequenced message", "hash", logging.AsHex(seq.Message.Hash()).Slice(0, 4), "module", "synthetic")
@@ -223,16 +260,19 @@ func (x SequencedMessage) updateLedger(batch *database.Batch, ctx *MessageContex
 	return partLedger, nil
 }
 
-func (SequencedMessage) loadLedger(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, protocol.SequenceLedger, error) {
+func (x SequencedMessage) loadLedger(batch *database.Batch, ctx *MessageContext, seq *messaging.SequencedMessage) (bool, protocol.SequenceLedger, error) {
 	var isAnchor bool
 	u := ctx.Executor.Describe.Synthetic()
-	if txn, ok := seq.Message.(*messaging.TransactionMessage); ok && txn.Transaction.Body.Type().IsAnchor() {
-		isAnchor = true
+	isAnchor, err := x.isAnchor(batch, ctx, seq)
+	if err != nil {
+		return false, nil, errors.UnknownError.Wrap(err)
+	}
+	if isAnchor {
 		u = ctx.Executor.Describe.AnchorPool()
 	}
 
 	var ledger protocol.SequenceLedger
-	err := batch.Account(u).Main().GetAs(&ledger)
+	err = batch.Account(u).Main().GetAs(&ledger)
 	if err != nil {
 		msg := "synthetic"
 		if isAnchor {

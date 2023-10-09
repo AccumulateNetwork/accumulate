@@ -7,10 +7,12 @@
 package e2e
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -87,4 +89,94 @@ func TestAnchorThreshold(t *testing.T) {
 	// Submit a second signature and verify it is delivered
 	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{anchors[1]}})
 	sim.StepUntil(Txn(txid).Succeeds())
+}
+
+func TestAnchorPlaceholder(t *testing.T) {
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	opts := []simulator.Option{
+		simulator.Genesis(GenesisTime),
+	}
+
+	// One BVN, two nodes
+	opts = append(opts, simulator.SimpleNetwork(t.Name(), 1, 2))
+
+	// Capture anchors
+	var captured []*messaging.BlockAnchor
+	opts = append(opts, simulator.CaptureDispatchedMessages(func(ctx context.Context, u *url.URL, env *messaging.Envelope) (send bool, err error) {
+		for _, m := range env.Messages {
+			blk, ok := m.(*messaging.BlockAnchor)
+			if !ok {
+				continue
+			}
+			require.Len(t, env.Messages, 1)
+			require.IsType(t, (*messaging.SequencedMessage)(nil), blk.Anchor)
+			seq := blk.Anchor.(*messaging.SequencedMessage)
+			require.IsType(t, (*messaging.TransactionMessage)(nil), seq.Message)
+			txn := seq.Message.(*messaging.TransactionMessage)
+			anchor, ok := txn.Transaction.Body.(*BlockValidatorAnchor)
+			if !ok || anchor.MinorBlockIndex <= 10 {
+				continue
+			}
+
+			captured = append(captured, blk)
+			return false, nil
+		}
+		return true, nil
+	}))
+
+	// Init
+	sim := NewSim(t, opts...)
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// Get past the genesis anchors
+	sim.StepN(50)
+
+	// Do something and wait for anchors
+	sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "book", "1").
+			BurnCredits(1).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	// Wait for anchors
+	sim.StepUntil(
+		True(func(h *Harness) bool { return len(captured) >= 2 }))
+
+	// Replace the second transaction with a hash
+	txn := captured[1].
+		Anchor.(*messaging.SequencedMessage).
+		Message.(*messaging.TransactionMessage)
+	hash := txn.Hash()
+	txn.Transaction.Body = &RemoteTransaction{Hash: hash}
+
+	// Submit the first one
+	sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{captured[0]}})
+
+	// Verify it appears on the pending list
+	sim.StepUntil(
+		Txn(txn.ID()).IsPending())
+
+	pending := sim.QueryPendingIds(txn.ID().Account(), nil).Records
+	require.Len(t, pending, 1)
+	require.Equal(t, pending[0].Value.String(), txn.ID().String())
+
+	// Submit the second one
+	st := sim.SubmitSuccessfully(&messaging.Envelope{Messages: []messaging.Message{captured[1]}})
+
+	// Verify that AdjustStatusIDs changes the ID back to the old ID
+	require.Equal(t, captured[1].ID().String(), st[0].TxID.String())
+	abci.AdjustStatusIDs([]messaging.Message{captured[1]}, st)
+	require.Equal(t, captured[1].OldID().String(), st[0].TxID.String())
+
+	// Verify it executes
+	sim.StepUntil(
+		Txn(txn.ID()).Succeeds())
+
+	// Verify the signatures succeed
+	for _, msg := range captured {
+		sim.Verify(
+			Msg(msg.ID()).Succeeds())
+	}
 }

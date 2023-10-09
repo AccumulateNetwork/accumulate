@@ -869,7 +869,7 @@ func (s *Querier) searchForTransactionHash(ctx context.Context, batch *database.
 
 	default:
 		// TODO Replace with principal or signer as appropriate
-		txid := s.partition.WithTxID(msg.ID().Hash())
+		txid := s.partition.WithTxID(msg.Hash())
 		r := new(api.RecordRange[*api.TxIDRecord])
 		r.Total = 1
 		r.Records = []*api.TxIDRecord{{Value: txid}}
