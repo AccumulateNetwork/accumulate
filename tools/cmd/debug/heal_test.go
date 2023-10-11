@@ -20,6 +20,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -64,7 +65,7 @@ func TestHealSynth(t *testing.T) {
 	peer, err := peer.Decode("12D3KooWEzhg3CRvC3xdrUBFsWETF1nG3gyYfEjx4oEJer95y1Rk")
 	require.NoError(t, err)
 
-	r, err := client.ForPeer(peer).Private().Sequence(context.Background(), protocol.PartitionUrl("Yutu").JoinPath(protocol.Synthetic), protocol.DnUrl(), 1075)
+	r, err := client.ForPeer(peer).Private().Sequence(context.Background(), protocol.PartitionUrl("Yutu").JoinPath(protocol.Synthetic), protocol.DnUrl(), 1075, private.SequenceOptions{})
 	require.NoError(t, err)
 	b, err := json.Marshal(r.Message)
 	require.NoError(t, err)
@@ -124,7 +125,7 @@ func TestHealAnchors(t *testing.T) {
 
 	env := new(messaging.Envelope)
 	for _, peer := range peers {
-		r, err := client.ForPeer(peer.PeerID).Private().Sequence(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), protocol.PartitionUrl("Groucho"), 1)
+		r, err := client.ForPeer(peer.PeerID).Private().Sequence(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), protocol.PartitionUrl("Groucho"), 1, private.SequenceOptions{})
 		require.NoError(t, err)
 
 		env.Transaction = []*protocol.Transaction{r.Message.(*messaging.TransactionMessage).Transaction}
