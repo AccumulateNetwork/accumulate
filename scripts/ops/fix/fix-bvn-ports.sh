@@ -14,3 +14,7 @@ fi
 # Replace 1679x with 1669x
 sed -i -re 's/1679([1-5])/1669\1/g' "$node/bvnn/config/accumulate.toml"
 sed -i -re 's/1679([1-5])/1669\1/g' "$node/bvnn/config/tendermint.toml"
+
+# Report port numbers
+cd "$node/bvnn/config
+grep -nE '16\d9\d' *.toml
