@@ -1,0 +1,385 @@
+openapi: "3.1.0"
+
+info:
+  version: "1.0.0"
+  title: Accumulate JSON-RPC
+  license:
+    name: MIT
+  basePath: /v3
+  consumes:
+    - application/json
+  produces:
+    - application/json
+
+paths:
+  query:
+    post:
+      summary: Query the network state
+      operationId: query
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope: { $ref: '#/components/schemas/url' }
+                query: { $ref: '#/components/schemas/query' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/record' }
+
+components:
+  schemas:
+    query:
+      oneOf:
+        - type: object
+          properties:
+            queryType: { const: default, required: true }
+            includeReceipt: { type: boolean }
+
+        - type: object
+          properties:
+            queryType: { const: chain, required: true }
+            index: { type: integer, min: 0 }
+            entry: { $ref: '#/components/schemas/hash' }
+            range: { $ref: '#/components/schemas/rangeOptions' }
+            includeReceipt: { type: boolean }
+
+        - type: object
+          properties:
+            queryType: { const: data, required: true }
+            index: { type: integer, min: 0 }
+            entry: { $ref: '#/components/schemas/hash' }
+            range: { $ref: '#/components/schemas/rangeOptions' }
+
+        - type: object
+          properties:
+            queryType: { const: directory, required: true }
+            range: { $ref: '#/components/schemas/rangeOptions' }
+
+        - type: object
+          properties:
+            queryType: { const: pending, required: true }
+            range: { $ref: '#/components/schemas/rangeOptions' }
+
+        - type: object
+          properties:
+            queryType: { const: block, required: true }
+            minor: { type: integer, min: 1 }
+            major: { type: integer, min: 1 }
+            minorRange: { $ref: '#/components/schemas/rangeOptions' }
+            majorRange: { $ref: '#/components/schemas/rangeOptions' }
+            entryRange: { $ref: '#/components/schemas/rangeOptions' }
+            omitEmpty: { type: boolean }
+
+        - type: object
+          properties:
+            queryType: { const: anchorSearch, required: true }
+            anchor: { $ref: '#/components/schemas/hash' }
+            includeReceipt: { type: boolean }
+
+        - type: object
+          properties:
+            queryType: { const: publicKeySearch, required: true }
+            publicKey: { $ref: '#/components/schemas/bytes' }
+            type: { $ref: '#/components/schemas/signatureType' }
+
+        - type: object
+          properties:
+            queryType: { const: publicKeyHashSearch, required: true }
+            publicKeyHash: { $ref: '#/components/schemas/hash' }
+
+        - type: object
+          properties:
+            queryType: { const: delegateSearch, required: true }
+            delegate: { $ref: '#/components/schemas/url' }
+
+        - type: object
+          properties:
+            queryType: { const: messageHashSearch, required: true }
+            hash: { $ref: '#/components/schemas/hash' }
+
+    record:
+      oneOf:
+        - $ref: '#/components/schemas/recordRange'
+
+    # Request options
+    rangeOptions:
+      type: object
+      properties:
+        start: { type: integer, min: 0 }
+        count: { type: integer, min: 0 }
+        expand: { type: boolean }
+        fromEnd: { type: boolean }
+
+    # Record types
+    recordRange:
+      type: object
+      properties:
+        recordType: { const: record }
+        records: { type: array, items: { $ref: '#/components/schemas/record' } }
+        start: { type: integer, min: 0 }
+        total: { type: integer, min: 0 }
+
+    accountRecord:
+      type: object
+      properties:
+        recordType: { const: account }
+        account: { $ref: '#/components/schemas/account' }
+        directory:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/urlRecord' } }
+        pending:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/txidRecord' } }
+        receipt: { $ref: '#/components/schemas/receipt' }
+
+    chainRecord:
+      type: object
+      properties:
+        recordType: { const: chain }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/chainType' }
+        count: { type: integer, min: 0 }
+        state: { type: array, items: { $ref: '#/components/schemas/hash' } }
+
+    chainEntryRecord:
+      type: object
+      properties:
+        recordType: { const: chainEntry }
+        account: { $ref: '#/components/schemas/url' }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/chainType' }
+        index: { type: integer, min: 0 }
+        entry: { $ref: '#/components/schemas/hash' }
+        value: { type: any }
+        receipt: { $ref: '#/components/schemas/receipt' }
+        state: { type: array, items: { $ref: '#/components/schemas/hash' } }
+
+
+    keyRecord:
+      type: object
+      properties:
+        recordType: { const: key }
+        authority: { $ref: '#/components/schemas/url' }
+        signer: { $ref: '#/components/schemas/url' }
+        version: { type: integer, min: 1 }
+        index: { type: integer, min: 0 }
+        entry:
+          type: object
+          properties:
+            publicKeyHash: { $ref: '#/components/schemas/bytes' }
+            lastUsedOn: { type: integer, min: 0 }
+            delegate: { $ref: '#/components/schemas/url' }
+
+    messageRecord:
+      type: object
+      properties:
+        recordType: { const: message }
+        id: { $ref: '#/components/schemas/url' }
+        message: { $ref: '#/components/schemas/message' }
+        status: { $ref: '#/components/schemas/statusCode' }
+        statusNo: { type: integer, min: 0 }
+        error: { $ref: '#/components/schemas/error' }
+        result: { type: object }
+        received: { type: number, min: 1 }
+        produced:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/txidRecord' } }
+        cause:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/txidRecord' } }
+
+        # For transactions
+        pending:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/signatureSetRecord' } }
+
+        # For a signature's record within a transaction's record
+        historical: { type: boolean }
+
+        # For sequenced messages
+        sequence: { type: object }
+
+        # For synthetic messages
+        sourceReceipt: { $ref: '#/components/schemas/receipt' }
+
+    signatureSetRecord:
+      type: object
+      properties:
+        recordType: { const: signatureSet }
+        account: { $ref: '#/components/schemas/account' }
+        signatures:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/messageRecord' } }
+
+    minorBlockRecord:
+      type: object
+      properties:
+        recordType: { const: minorBlock }
+        index: { type: integer, min: 0 }
+        time: { $ref: '#/components/schemas/time' }
+        source: { $ref: '#/components/schemas/url' }
+        entries:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
+        anchored:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/minorBlockRecord' } }
+
+    majorBlockRecord:
+      type: object
+      properties:
+        recordType: { const: majorBlock }
+        index: { type: integer, min: 0 }
+        time: { $ref: '#/components/schemas/time' }
+        minorBlocks:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/minorBlockRecord' } }
+
+    urlRecord:
+      type: object
+      properties:
+        recordType: { const: url }
+        value: { $ref: '#/components/schemas/url' }
+
+    txidRecord:
+      type: object
+      properties:
+        recordType: { const: txID }
+        value: { $ref: '#/components/schemas/url' }
+
+    indexEntryRecord:
+      type: object
+      properties:
+        recordType: { const: indexEntry }
+        value:
+          type: object
+          properties:
+            source: { type: integer, min: 0 }
+            anchor: { type: integer, min: 0 }
+            blockIndex: { type: integer, min: 0 }
+            blockTime: { $ref: '#/components/schemas/time' }
+            rootIndexIndex: { type: integer, min: 0 }
+
+    errorRecord:
+      type: object
+      properties:
+        recordType: { const: error }
+        value: { $ref: '#/components/schemas/error' }
+
+
+    # Protocol objects
+    account:
+      type: object
+
+    message:
+      type: object
+
+    receipt:
+      type: object
+
+    # Protocol enumerations
+    signatureType:
+      enum:
+        - legacyED25519
+        - ed25519
+        - rcd1
+        - btc
+        - btclegacy
+        - eth
+        - delegated
+        - authority
+
+    chainType:
+      enum:
+        - transaction
+        - anchor
+        - index
+
+    statusCode:
+      enum:
+        - ok
+        - delivered
+        - pending
+        - remote
+        - wrongPartition
+        - badRequest
+        - unauthenticated
+        - insufficientCredits
+        - unauthorized
+        - notFound
+        - notAllowed
+        - rejected
+        - expired
+        - conflict
+        - badSignerVersion
+        - badTimestamp
+        - badUrlLength
+        - incompleteChain
+        - insufficientBalance
+        - internalError
+        - unknownError
+        - encodingError
+        - fatalError
+        - notReady
+        - wrongType
+        - noPeer
+        - peerMisbehaved
+        - invalidRecord
+
+    # Basic data types
+    error:
+      type: object
+      properties:
+        message: { type: string }
+        code: { $ref: '#/components/schemas/statusCode' }
+        codeID: { type: integer }
+        cause: { $ref: '#/components/schemas/error' }
+        dat: { type: any }
+
+    url:
+      type: string
+      pattern: '^(?<scheme>acc:\/\/)?(?<hash>[0-9a-fA-F]+@)?(?<domain>[-\w]+(\.acme)?)$'
+
+    time:
+      type: string
+
+    bytes:
+      type: string
+      pattern: '^[0-9a-fA-F]+$'
+
+    hash:
+      allOf: [{ $ref: '#/components/schemas/bytes' }]
+      minLength: 64
+      maxLength: 64
