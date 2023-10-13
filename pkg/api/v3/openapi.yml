@@ -5,13 +5,20 @@ info:
   title: Accumulate JSON-RPC
   license:
     name: MIT
-  host: mainnet.accumulatenetwork.io
   schemes:
     - https
   consumes:
     - application/json
   produces:
     - application/json
+
+servers:
+  - url: https://mainnet.accumulatenetwork.io
+    description: MainNet
+  - url: https://kermit.accumulatenetwork.io
+    description: Kermit TestNet
+  - url: https://fozzie.accumulatenetwork.io
+    description: Fozzie TestNet
 
 paths:
   /v3:
