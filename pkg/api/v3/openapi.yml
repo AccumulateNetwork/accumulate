@@ -5,185 +5,256 @@ info:
   title: Accumulate JSON-RPC
   license:
     name: MIT
-  basePath: /v3
+  host: mainnet.accumulatenetwork.io
+  schemes:
+    - https
   consumes:
     - application/json
   produces:
     - application/json
 
 paths:
-  query:
+  /v3:
     post:
-      summary: Query the network state
-      operationId: query
+      summary: API v3 (query)
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                scope: { $ref: '#/components/schemas/url' }
-                query: { $ref: '#/components/schemas/query' }
+                jsonrpc: { const: "2.0" }
+                method: { const: query }
+                id: { type: integer }
+                params:
+                  type: object
+                  properties:
+                    scope: { $ref: '#/components/schemas/url' }
+                    query: { $ref: '#/components/schemas/query' }
             examples:
               queryAccount:
                 summary: Query an account
                 value:
-                  scope: acc://accumulate.acme
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: query
+                  params:
+                    scope: acc://accumulate.acme
               queryTransaction:
                 summary: Query a transaction
                 value:
-                  scope: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@unknown
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: query
+                  params:
+                    scope: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@unknown
+              querySignature:
+                summary: Query a signature
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: query
+                  params:
+                    scope: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/record' }
+              schema:
+                type: object
+                properties:
+                  jsonrpc: { const: "2.0" }
+                  id: { type: integer }
+                  result: { $ref: '#/components/schemas/record' }
               examples:
                 queryAccount:
+                  summary: Query an account
                   value:
-                    recordType: account
-                    account:
-                      type: identity
-                      url: acc://accumulate.acme
-                      authorities:
-                        - url: acc://accumulate.acme/book
-                    directory:
-                      recordType: range
-                      records:
-                        - { recordType: url, value: acc://accumulate.acme/business }
-                        - { recordType: url, value: acc://accumulate.acme/committee-members }
-                        - { recordType: url, value: acc://accumulate.acme/core-dev }
-                        - { recordType: url, value: acc://accumulate.acme/dev-block }
-                        - { recordType: url, value: acc://accumulate.acme/ecosystem }
-                        - { recordType: url, value: acc://accumulate.acme/factom-block }
-                        - { recordType: url, value: acc://accumulate.acme/governance }
-                        - { recordType: url, value: acc://accumulate.acme/grant-block }
-                        - { recordType: url, value: acc://accumulate.acme/stake }
-                        - { recordType: url, value: acc://accumulate.acme/treasury-book }
-                      start: 0
-                      total: 10
-                    pending:
-                      recordType: range
-                      start: 0
-                      total: 0
-                queryTransaction:
-                  value:
-                    recordType: message
-                    id: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
-                    message:
-                      type: transaction
-                      transaction:
-                        header:
-                          principal: acc://staking.acme/governance/1
-                          initiator: bf54d5df5e3a692255c4cc8fc3f17e38e2da1a7134af9099d7a3115e0d7a3066
-                        body:
-                          type: burnCredits
-                          amount: 100
-                    status: delivered
-                    statusNo: 201
+                    jsonrpc: "2.0"
+                    id: 1
                     result:
-                      type: unknown
-                    produced:
-                      recordType: range
-                      start: 0
-                      total: 0
-                    cause:
-                      recordType: range
-                      records:
-                      - recordType: txID
-                        value: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
-                      - recordType: txID
-                        value: acc://bc47e584d150c2a4837f86c036939def7d0cfe6bde7b85a1a9ce26af571bda42@staking.acme/governance
-                      start: 0
-                      total: 2
-                    signatures:
-                      recordType: range
-                      records:
-                      - recordType: signatureSet
-                        account:
-                          type: keyBook
-                          url: acc://staking.acme/governance
-                          authorities:
-                          - url: acc://staking.acme/governance
-                          pageCount: 2
-                        signatures:
-                          recordType: range
-                          records:
-                          - recordType: message
-                            id: acc://bc47e584d150c2a4837f86c036939def7d0cfe6bde7b85a1a9ce26af571bda42@staking.acme/governance
-                            message:
-                              type: signatureRequest
-                              authority: acc://staking.acme/governance
-                              txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
-                              cause: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
-                            historical: true
-                          start: 0
-                          total: 1
-                      - recordType: signatureSet
-                        account:
-                          type: keyPage
-                          keyBook: acc://staking.acme/governance
-                          url: acc://staking.acme/governance/1
-                          creditBalance: 197774
-                          version: 6
-                          keys:
-                          - delegate: acc://paul.acme/book
-                          - delegate: acc://staking.acme/book
-                          - publicKeyHash: 5d451373b966a4c95e4df30023b75ce75509a3bed1a9898f2f76df9ba414e6fa
-                            publicKey: 5d451373b966a4c95e4df30023b75ce75509a3bed1a9898f2f76df9ba414e6fa
-                            lastUsedOn: 1696867800137
-                            delegate: acc://ethan.acme/book
-                        signatures:
-                          recordType: range
-                          records:
-                          - recordType: message
-                            id: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
-                            message:
-                              type: signature
-                              signature:
-                                type: ed25519
-                                publicKey: 4ff2d22133c0ddac02f7645cf3bb286fa9e6035caeda46198839f912f39a6457
-                                signature: a8a5f1fef6e8ee1bea890ca15a221c2c042bd0659cc930a64d1c8531c73bb9937faeeed7a233ba9751e94a2e5e2753762b010fd0a166f8cf499acf1c6521ea0a
-                                signer: acc://staking.acme/governance/1
-                                signerVersion: 6
-                                timestamp: 1696867800137
-                                transactionHash: bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f
-                              txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
-                            historical: true
-                          - recordType: message
-                            id: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
-                            message:
-                              type: signatureRequest
-                              authority: acc://staking.acme/governance/1
-                              txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
-                              cause: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
-                            historical: true
-                          - recordType: message
-                            id: acc://c5f05f0ee8d49df98836e923e15fd0c73ac20a6ca6f296ba3e9f8f4ec5a2c0d6@staking.acme/governance/1
-                            message:
-                              type: creditPayment
-                              payer: acc://staking.acme/governance/1
-                              initiator: true
-                              txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
-                              cause: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
-                            historical: true
-                          - recordType: message
-                            id: acc://9f8c0acf755ac74c7aad472d429d586c33100e33b023eae539f67eb3218b4ff6@staking.acme/governance/1
-                            message:
-                              type: signature
-                              signature:
-                                type: authority
-                                origin: acc://staking.acme/governance/1
+                      recordType: account
+                      account:
+                        type: identity
+                        url: acc://accumulate.acme
+                        authorities:
+                          - url: acc://accumulate.acme/book
+                      directory:
+                        recordType: range
+                        records:
+                          - { recordType: url, value: acc://accumulate.acme/business }
+                          - { recordType: url, value: acc://accumulate.acme/committee-members }
+                          - { recordType: url, value: acc://accumulate.acme/core-dev }
+                          - { recordType: url, value: acc://accumulate.acme/dev-block }
+                          - { recordType: url, value: acc://accumulate.acme/ecosystem }
+                          - { recordType: url, value: acc://accumulate.acme/factom-block }
+                          - { recordType: url, value: acc://accumulate.acme/governance }
+                          - { recordType: url, value: acc://accumulate.acme/grant-block }
+                          - { recordType: url, value: acc://accumulate.acme/stake }
+                          - { recordType: url, value: acc://accumulate.acme/treasury-book }
+                        start: 0
+                        total: 10
+                      pending:
+                        recordType: range
+                        start: 0
+                        total: 0
+                queryTransaction:
+                  summary: Query a transaction
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      recordType: message
+                      id: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                      message:
+                        type: transaction
+                        transaction:
+                          header:
+                            principal: acc://staking.acme/governance/1
+                            initiator: bf54d5df5e3a692255c4cc8fc3f17e38e2da1a7134af9099d7a3115e0d7a3066
+                          body:
+                            type: burnCredits
+                            amount: 100
+                      status: delivered
+                      statusNo: 201
+                      result:
+                        type: unknown
+                      produced:
+                        recordType: range
+                        start: 0
+                        total: 0
+                      cause:
+                        recordType: range
+                        records:
+                        - recordType: txID
+                          value: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
+                        - recordType: txID
+                          value: acc://bc47e584d150c2a4837f86c036939def7d0cfe6bde7b85a1a9ce26af571bda42@staking.acme/governance
+                        start: 0
+                        total: 2
+                      signatures:
+                        recordType: range
+                        records:
+                        - recordType: signatureSet
+                          account:
+                            type: keyBook
+                            url: acc://staking.acme/governance
+                            authorities:
+                            - url: acc://staking.acme/governance
+                            pageCount: 2
+                          signatures:
+                            recordType: range
+                            records:
+                            - recordType: message
+                              id: acc://bc47e584d150c2a4837f86c036939def7d0cfe6bde7b85a1a9ce26af571bda42@staking.acme/governance
+                              message:
+                                type: signatureRequest
                                 authority: acc://staking.acme/governance
                                 txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                                cause: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
+                              historical: true
+                            start: 0
+                            total: 1
+                        - recordType: signatureSet
+                          account:
+                            type: keyPage
+                            keyBook: acc://staking.acme/governance
+                            url: acc://staking.acme/governance/1
+                            creditBalance: 197774
+                            version: 6
+                            keys:
+                            - delegate: acc://paul.acme/book
+                            - delegate: acc://staking.acme/book
+                            - publicKeyHash: 5d451373b966a4c95e4df30023b75ce75509a3bed1a9898f2f76df9ba414e6fa
+                              publicKey: 5d451373b966a4c95e4df30023b75ce75509a3bed1a9898f2f76df9ba414e6fa
+                              lastUsedOn: 1696867800137
+                              delegate: acc://ethan.acme/book
+                          signatures:
+                            recordType: range
+                            records:
+                            - recordType: message
+                              id: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                              message:
+                                type: signature
+                                signature:
+                                  type: ed25519
+                                  publicKey: 4ff2d22133c0ddac02f7645cf3bb286fa9e6035caeda46198839f912f39a6457
+                                  signature: a8a5f1fef6e8ee1bea890ca15a221c2c042bd0659cc930a64d1c8531c73bb9937faeeed7a233ba9751e94a2e5e2753762b010fd0a166f8cf499acf1c6521ea0a
+                                  signer: acc://staking.acme/governance/1
+                                  signerVersion: 6
+                                  timestamp: 1696867800137
+                                  transactionHash: bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                              historical: true
+                            - recordType: message
+                              id: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
+                              message:
+                                type: signatureRequest
+                                authority: acc://staking.acme/governance/1
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
                                 cause: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
-                              txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
-                            historical: true
-                          start: 0
-                          total: 4
-                      start: 0
-                      total: 2
+                              historical: true
+                            - recordType: message
+                              id: acc://c5f05f0ee8d49df98836e923e15fd0c73ac20a6ca6f296ba3e9f8f4ec5a2c0d6@staking.acme/governance/1
+                              message:
+                                type: creditPayment
+                                payer: acc://staking.acme/governance/1
+                                initiator: true
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                                cause: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                              historical: true
+                            - recordType: message
+                              id: acc://9f8c0acf755ac74c7aad472d429d586c33100e33b023eae539f67eb3218b4ff6@staking.acme/governance/1
+                              message:
+                                type: signature
+                                signature:
+                                  type: authority
+                                  origin: acc://staking.acme/governance/1
+                                  authority: acc://staking.acme/governance
+                                  txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                                  cause: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                              historical: true
+                            start: 0
+                            total: 4
+                        start: 0
+                        total: 2
+                querySignature:
+                  summary: Query a signature
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      recordType: message
+                      id: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                      message:
+                        type: signature
+                        signature:
+                          type: ed25519
+                          publicKey: 4ff2d22133c0ddac02f7645cf3bb286fa9e6035caeda46198839f912f39a6457
+                          signature: a8a5f1fef6e8ee1bea890ca15a221c2c042bd0659cc930a64d1c8531c73bb9937faeeed7a233ba9751e94a2e5e2753762b010fd0a166f8cf499acf1c6521ea0a
+                          signer: acc://staking.acme/governance/1
+                          signerVersion: 6
+                          timestamp: 1696867800137
+                          transactionHash: bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f
+                        txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                      status: delivered
+                      statusNo: 201
+                      result:
+                        type: unknown
+                      received: 14207881
+                      produced:
+                        recordType: range
+                        records:
+                        - recordType: txID
+                          value: acc://9f8c0acf755ac74c7aad472d429d586c33100e33b023eae539f67eb3218b4ff6@staking.acme/governance/1
+                        - recordType: txID
+                          value: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
+                        - recordType: txID
+                          value: acc://c5f05f0ee8d49df98836e923e15fd0c73ac20a6ca6f296ba3e9f8f4ec5a2c0d6@staking.acme/governance/1
+                        start: 0
+                        total: 6
 
 components:
   schemas:
