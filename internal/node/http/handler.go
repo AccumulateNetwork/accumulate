@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"github.com/julienschmidt/httprouter"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -22,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/rest"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -29,7 +31,7 @@ import (
 // Handler processes API requests.
 type Handler struct {
 	logger logging.OptionalLogger
-	mux    *http.ServeMux
+	mux    *httprouter.Router
 }
 
 // Options are the options for a [Handler].
@@ -123,16 +125,33 @@ func NewHandler(opts Options) (*Handler, error) {
 	}
 
 	// Set up mux
-	h.mux = v2.NewMux()
-	h.mux.Handle("/v3", ws.FallbackTo(v3))
+	h.mux, err = rest.NewHandler(
+		v2,
+		rest.NodeService{NodeService: selfClient},
+		rest.ConsensusService{ConsensusService: selfClient},
+		rest.NetworkService{NetworkService: client},
+		rest.MetricsService{MetricsService: client},
+		rest.Querier{Querier: &api.Collator{Querier: client, Network: client}},
+		rest.Submitter{Submitter: client},
+		rest.Validator{Validator: client},
+		rest.Faucet{Faucet: client},
+	)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("register API v2: %v", err)
+	}
 
-	h.mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	v3h := ws.FallbackTo(v3)
+	h.mux.POST("/v3", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		v3h.ServeHTTP(w, r)
+	})
+
+	h.mux.GET("/", func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 		w.Header().Set("Location", "/x")
 		w.WriteHeader(http.StatusTemporaryRedirect)
 	})
 
 	webex := web.Handler()
-	h.mux.HandleFunc("/x/", func(w http.ResponseWriter, r *http.Request) {
+	h.mux.GET("/x/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x")
 		r.RequestURI = strings.TrimPrefix(r.RequestURI, "/x")
 		webex.ServeHTTP(w, r)
