@@ -34,6 +34,8 @@ func TestUpdateKey(t *testing.T) {
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) {
+		// Require a second signature from a non-existent authority to ensure
+		// UpdateKey skips the normal multisig checks
 		page.CreditBalance = 1e9
 		page.AddKeySpec(&KeySpec{Delegate: AccountUrl("foo")})
 		page.AcceptThreshold = 2
