@@ -287,3 +287,6 @@ AuthoritySignature:
       type: url
       pointer: true
       repeatable: true
+    - name: Memo
+      type: string
+      optional: true

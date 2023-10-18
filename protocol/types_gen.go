@@ -149,6 +149,7 @@ type AuthoritySignature struct {
 	// Cause is the ID of the signature that produced this.
 	Cause     *url.TxID  `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 	Delegator []*url.URL `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
+	Memo      string     `json:"memo,omitempty" form:"memo" query:"memo"`
 	extraData []byte
 }
 
@@ -1507,6 +1508,7 @@ func (v *AuthoritySignature) Copy() *AuthoritySignature {
 			u.Delegator[i] = v
 		}
 	}
+	u.Memo = v.Memo
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3789,6 +3791,9 @@ func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
 		if !((v.Delegator[i]).Equal(u.Delegator[i])) {
 			return false
 		}
+	}
+	if !(v.Memo == u.Memo) {
+		return false
 	}
 
 	return true
@@ -6614,6 +6619,7 @@ var fieldNames_AuthoritySignature = []string{
 	5: "TxID",
 	6: "Cause",
 	7: "Delegator",
+	8: "Memo",
 }
 
 func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
@@ -6644,6 +6650,9 @@ func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Delegator {
 			writer.WriteUrl(7, v)
 		}
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(8, v.Memo)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AuthoritySignature)
@@ -13481,6 +13490,9 @@ func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 			break
 		}
 	}
+	if x, ok := reader.ReadString(8); ok {
+		v.Memo = x
+	}
 
 	seen, err := reader.Reset(fieldNames_AuthoritySignature)
 	if err != nil {
@@ -17631,6 +17643,7 @@ func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 		TxID      *url.TxID                   `json:"txID,omitempty"`
 		Cause     *url.TxID                   `json:"cause,omitempty"`
 		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+		Memo      string                      `json:"memo,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Origin == nil) {
@@ -17650,6 +17663,9 @@ func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Delegator) == 0) {
 		u.Delegator = v.Delegator
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
 	}
 	return json.Marshal(&u)
 }
@@ -19861,6 +19877,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 		TxID      *url.TxID                   `json:"txID,omitempty"`
 		Cause     *url.TxID                   `json:"cause,omitempty"`
 		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+		Memo      string                      `json:"memo,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Origin = v.Origin
@@ -19869,6 +19886,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	u.TxID = v.TxID
 	u.Cause = v.Cause
 	u.Delegator = v.Delegator
+	u.Memo = v.Memo
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -19881,6 +19899,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	v.TxID = u.TxID
 	v.Cause = u.Cause
 	v.Delegator = u.Delegator
+	v.Memo = u.Memo
 	return nil
 }
 
