@@ -41,8 +41,8 @@ func (m *MessageContext) GetActiveGlobals() *core.GlobalValues {
 	return &m.Executor.globals.Active
 }
 
-func (*MessageContext) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
-	return getAccountAuthoritySet(batch, account)
+func (m *MessageContext) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+	return m.getAccountAuthoritySet(batch, account)
 }
 
 func (*MessageContext) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {

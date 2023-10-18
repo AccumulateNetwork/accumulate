@@ -443,8 +443,7 @@ func TestSubAdi(t *testing.T) {
 	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *ADI
 		require.NoError(t, batch.Account(alice.JoinPath("sub")).Main().GetAs(&identity))
-		require.Len(t, identity.Authorities, 1)
-		require.Equal(t, "alice.acme/book", identity.Authorities[0].Url.ShortString())
+		require.Empty(t, identity.Authorities)
 		return nil
 	})
 }

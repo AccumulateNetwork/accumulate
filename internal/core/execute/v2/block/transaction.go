@@ -166,7 +166,7 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 	}
 
 	// Get the principal's account auth
-	auth, err := getAccountAuthoritySet(batch, principal)
+	auth, err := t.getAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return false, fmt.Errorf("unable to load authority of %v: %w", delivery.Transaction.Header.Principal, err)
 	}
