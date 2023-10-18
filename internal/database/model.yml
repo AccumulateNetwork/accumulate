@@ -184,6 +184,11 @@
       dataType: Chain2
       hasChains: true
       pointer: true
+    - name: BptChain
+      type: other
+      dataType: Chain2
+      hasChains: true
+      pointer: true
     - name: AnchorSequenceChain
       type: other
       dataType: Chain2

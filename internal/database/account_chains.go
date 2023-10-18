@@ -47,6 +47,7 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.K
 		"SyntheticSequenceChain": // Bug, this is actually an index chain
 		typ = merkle.ChainTypeTransaction
 	case "RootChain",
+		"BptChain",
 		"AnchorChain":
 		typ = merkle.ChainTypeAnchor
 	case "MajorBlockChain":
@@ -233,6 +234,8 @@ func (a *Account) chainByName(name string) *Chain2 {
 		return a.ScratchChain()
 	case "root":
 		return a.RootChain()
+	case "bpt":
+		return a.BptChain()
 	case "anchor-sequence":
 		return a.AnchorSequenceChain()
 	case "major-block":
