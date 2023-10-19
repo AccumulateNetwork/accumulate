@@ -215,7 +215,25 @@ func (n *Node) Close() error {
 }
 
 // getPeerService returns a new stream for the given peer and service.
-func (n *Node) getPeerService(ctx context.Context, peerID peer.ID, service *api.ServiceAddress) (message.Stream, error) {
+func (n *Node) getPeerService(ctx context.Context, peerID peer.ID, service *api.ServiceAddress, ip multiaddr.Multiaddr) (message.Stream, error) {
+	if ip != nil {
+		// libp2p requires that the address include the peer ID
+		c, err := multiaddr.NewComponent("p2p", peerID.String())
+		if err != nil {
+			return nil, errors.InternalError.With(err)
+		}
+		ip = ip.Encapsulate(c)
+
+		// Tell the host to connect to the specified address
+		err = n.host.Connect(ctx, peer.AddrInfo{
+			ID:    peerID,
+			Addrs: []multiaddr.Multiaddr{ip},
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	s, err := n.host.NewStream(ctx, peerID, idRpc(service))
 	if err != nil {
 		return nil, err

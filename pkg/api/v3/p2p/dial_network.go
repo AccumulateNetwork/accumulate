@@ -63,7 +63,7 @@ type connector Node
 
 func (c *connector) Connect(ctx context.Context, req *dial.ConnectionRequest) (message.Stream, error) {
 	if req.PeerID != c.host.ID() {
-		return (*Node)(c).getPeerService(ctx, req.PeerID, req.Service)
+		return (*Node)(c).getPeerService(ctx, req.PeerID, req.Service, req.PeerAddr)
 	}
 
 	s, ok := (*Node)(c).getOwnService("", req.Service)
