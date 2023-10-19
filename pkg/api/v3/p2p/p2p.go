@@ -77,27 +77,6 @@ func New(opts Options) (_ *Node, err error) {
 	n := new(Node)
 	n.context, n.cancel = context.WithCancel(context.Background())
 
-	if opts.PeerDatabase != "" {
-		n.tracker, err = dial.NewPersistentTracker(n.context, dial.PersistentTrackerOptions{
-			Filename:         opts.PeerDatabase,
-			Host:             (*connector)(n),
-			Peers:            (*discoverer)(n),
-			PersistFrequency: 10 * time.Second,
-		})
-		if err != nil {
-			return nil, err
-		}
-	} else if opts.EnablePeerTracker {
-		n.tracker = new(dial.SimpleTracker)
-	} else {
-		n.tracker = dial.FakeTracker
-	}
-	n.dialOpts = []dial.Option{
-		dial.WithConnector((*connector)(n)),
-		dial.WithDiscoverer((*discoverer)(n)),
-		dial.WithTracker(n.tracker),
-	}
-
 	// Cancel on fail
 	defer func() {
 		if err != nil {
@@ -170,6 +149,28 @@ func New(opts Options) (_ *Node, err error) {
 			return nil, errors.BadRequest.WithFormat("create network multiaddr: %w", err)
 		}
 		util.Advertise(n.context, n.peermgr.routing, c.String())
+	}
+
+	if opts.PeerDatabase != "" {
+		n.tracker, err = dial.NewPersistentTracker(n.context, dial.PersistentTrackerOptions{
+			Network:          opts.Network,
+			Filename:         opts.PeerDatabase,
+			Host:             (*connector)(n),
+			Peers:            (*discoverer)(n),
+			PersistFrequency: 10 * time.Second,
+		})
+		if err != nil {
+			return nil, err
+		}
+	} else if opts.EnablePeerTracker {
+		n.tracker = new(dial.SimpleTracker)
+	} else {
+		n.tracker = dial.FakeTracker
+	}
+	n.dialOpts = []dial.Option{
+		dial.WithConnector((*connector)(n)),
+		dial.WithDiscoverer((*discoverer)(n)),
+		dial.WithTracker(n.tracker),
 	}
 
 	return n, nil

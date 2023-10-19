@@ -16,7 +16,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/peerdb"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/exp/slog"
 )
 
@@ -25,27 +27,43 @@ type PersistentTracker struct {
 	cancel  context.CancelFunc
 	db      *peerdb.DB
 	file    string
+	network string
 	host    Connector
 	peers   Discoverer
 	stopwg  *sync.WaitGroup
+
+	successThreshold time.Duration
 }
 
 type PersistentTrackerOptions struct {
+	Network          string
 	Filename         string
 	Host             Connector
 	Peers            Discoverer
 	PersistFrequency time.Duration
+	ScanFrequency    time.Duration
 }
+
+const defaultPersistFrequency = time.Hour
+const defaultScanFrequency = time.Hour
 
 func NewPersistentTracker(ctx context.Context, opts PersistentTrackerOptions) (*PersistentTracker, error) {
 	t := new(PersistentTracker)
 	t.db = peerdb.New()
 	t.file = opts.Filename
+	t.network = opts.Network
 	t.host = opts.Host
 	t.peers = opts.Peers
 	t.stopwg = new(sync.WaitGroup)
-
 	t.context, t.cancel = context.WithCancel(ctx)
+
+	// Set the success threshold ~5% higher than the scan frequency
+	if opts.ScanFrequency == 0 {
+		t.successThreshold = defaultScanFrequency
+	} else {
+		t.successThreshold = opts.ScanFrequency
+	}
+	t.successThreshold = 17 * t.successThreshold / 16
 
 	// Ensure the file can be created
 	f, err := os.OpenFile(opts.Filename, os.O_RDWR|os.O_CREATE, 0644)
@@ -66,11 +84,14 @@ func NewPersistentTracker(ctx context.Context, opts PersistentTrackerOptions) (*
 		}
 	}
 
-	if opts.PersistFrequency == 0 {
-		opts.PersistFrequency = time.Hour
+	// Launch async jobs
+	t.runJob(t.writeDb, opts.PersistFrequency, defaultPersistFrequency, false)
+
+	if opts.Network == "" {
+		slog.Info("Scanning disabled, network unspecified")
+	} else {
+		t.runJob(t.scanPeers, opts.ScanFrequency, defaultScanFrequency, true)
 	}
-	t.stopwg.Add(1)
-	go t.writeDb(opts.PersistFrequency)
 
 	return t, nil
 }
@@ -80,27 +101,138 @@ func (t *PersistentTracker) Stop() {
 	t.stopwg.Wait()
 }
 
-func (t *PersistentTracker) writeDb(frequency time.Duration) {
-	defer t.stopwg.Done()
+func (t *PersistentTracker) runJob(fn func(time.Duration), frequency, defaultFrequency time.Duration, immediate bool) {
+	if frequency == 0 {
+		frequency = defaultFrequency
+	}
 
-	tick := time.NewTicker(frequency)
-	go func() { <-t.context.Done(); tick.Stop() }()
+	t.stopwg.Add(1)
 
-	for range tick.C {
-		slog.InfoCtx(t.context, "Writing peer database")
+	go func() {
+		defer t.stopwg.Done()
 
-		f, err := os.OpenFile(t.file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-		if err != nil {
-			slog.ErrorCtx(t.context, "Failed to open peer database", "error", err)
-			continue
+		if immediate {
+			fn(frequency)
 		}
 
-		err = t.db.Store(f)
-		if err != nil {
-			slog.ErrorCtx(t.context, "Failed to write peer database", "error", err)
-		}
+		tick := time.NewTicker(frequency)
+		go func() { <-t.context.Done(); tick.Stop() }()
 
-		f.Close()
+		for range tick.C {
+			fn(frequency)
+		}
+	}()
+}
+
+func (t *PersistentTracker) writeDb(time.Duration) {
+	slog.InfoCtx(t.context, "Writing peer database")
+
+	f, err := os.OpenFile(t.file, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		slog.ErrorCtx(t.context, "Failed to open peer database", "error", err)
+		return
+	}
+	defer f.Close()
+
+	err = t.db.Store(f)
+	if err != nil {
+		slog.ErrorCtx(t.context, "Failed to write peer database", "error", err)
+	}
+}
+
+func (t *PersistentTracker) scanPeers(duration time.Duration) {
+	slog.InfoCtx(t.context, "Scanning for peers")
+
+	// Run discovery
+	resp, err := t.peers.Discover(t.context, &DiscoveryRequest{
+		Timeout: duration,
+		Network: t.network,
+	})
+	if err != nil {
+		slog.ErrorCtx(t.context, "Failed to scan for peers", "error", err)
+		return
+	}
+
+	// The response should only ever be DiscoveredPeers
+	peers, ok := resp.(DiscoveredPeers)
+	if !ok {
+		slog.ErrorCtx(t.context, "Failed to scan for peers", "error", errors.InternalError.WithFormat("bad discovery response: want %T, got %T", make(DiscoveredPeers), resp))
+		return
+	}
+
+	// Scan each peer
+	ctx, cancel := context.WithTimeout(t.context, duration/2)
+	defer cancel()
+
+	wg := new(sync.WaitGroup)
+	for peer := range peers {
+		wg.Add(1)
+		peer := peer
+		go func() {
+			defer wg.Done()
+			t.scanPeer(ctx, peer)
+		}()
+	}
+
+	wg.Wait()
+}
+
+func (t *PersistentTracker) scanPeer(ctx context.Context, peer peer.AddrInfo) {
+	slog.InfoCtx(t.context, "Scanning peer", "id", peer.ID)
+
+	// TODO Check addresses
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	creq := &ConnectionRequest{
+		Service: api.ServiceTypeNode.Address(),
+		PeerID:  peer.ID,
+	}
+	if len(peer.Addrs) > 0 {
+		creq.PeerAddr = peer.Addrs[0]
+	}
+
+	t.db.Peer(peer.ID).Network(t.network).Service(creq.Service).Last.DidAttempt()
+	s, err := t.host.Connect(ctx, creq)
+	if err != nil {
+		slog.Info("Unable to connect to peer", "peer", peer.ID, "error", err)
+		return
+	}
+	t.db.Peer(peer.ID).Network(t.network).Service(creq.Service).Last.DidSucceed()
+
+	err = s.Write(&message.NodeInfoRequest{})
+	if err != nil {
+		slog.Info("Failed to request node info", "peer", peer.ID, "error", err)
+		return
+	}
+	res, err := s.Read()
+	if err != nil {
+		slog.Info("Failed to request node info", "peer", peer.ID, "error", err)
+		return
+	}
+	var ni *message.NodeInfoResponse
+	switch res := res.(type) {
+	case *message.ErrorResponse:
+		slog.Info("Failed to request node info", "peer", peer.ID, "error", res.Error)
+		return
+	case *message.NodeInfoResponse:
+		ni = res
+	default:
+		slog.Info("Invalid node info response", "peer", peer.ID, "want", message.TypeNodeInfoResponse, "got", res.Type())
+		return
+	}
+
+	for _, svc := range ni.Value.Services {
+		slog.InfoCtx(t.context, "Attempting to conenct to service", "id", peer.ID, "service", svc)
+
+		t.db.Peer(peer.ID).Network(t.network).Service(svc).Last.DidAttempt()
+		_, err := t.host.Connect(ctx, &ConnectionRequest{Service: svc, PeerID: peer.ID})
+		if err != nil {
+			slog.Info("Unable to connect to peer", "peer", peer.ID, "error", err)
+			return
+		}
+		t.db.Peer(peer.ID).Network(t.network).Service(svc).Last.DidSucceed()
 	}
 }
 
@@ -136,10 +268,10 @@ func (t *PersistentTracker) Status(peer peer.ID, addr multiaddr.Multiaddr) api.K
 	}
 
 	s := t.db.Peer(peer).Network(netName).Service(service)
-	return statusForLast(s.Last)
+	return t.statusForLast(s.Last)
 }
 
-func statusForLast(l peerdb.LastStatus) api.KnownPeerStatus {
+func (t *PersistentTracker) statusForLast(l peerdb.LastStatus) api.KnownPeerStatus {
 	switch {
 	case l.Attempt == nil:
 		// No connection attempted
@@ -149,7 +281,7 @@ func statusForLast(l peerdb.LastStatus) api.KnownPeerStatus {
 		// No successful connection
 
 		// Attempt was too long ago?
-		if attemptIsTooOld(l) {
+		if t.attemptIsTooOld(l) {
 			return api.PeerStatusIsKnownBad
 		}
 
@@ -160,28 +292,28 @@ func statusForLast(l peerdb.LastStatus) api.KnownPeerStatus {
 		// Connection attempted since the last success
 
 		// Attempt was too long ago?
-		if attemptIsTooOld(l) {
+		if t.attemptIsTooOld(l) {
 			return api.PeerStatusIsKnownBad
 		}
 
 		// Last success was too long ago?
-		return statusForLastSuccess(l)
+		return t.statusForLastSuccess(l)
 
 	default:
 		// Last attempt was successful
 
 		// Was it too long ago?
-		return statusForLastSuccess(l)
+		return t.statusForLastSuccess(l)
 	}
 }
 
-func attemptIsTooOld(l peerdb.LastStatus) bool {
+func (t *PersistentTracker) attemptIsTooOld(l peerdb.LastStatus) bool {
 	return time.Since(*l.Attempt) > time.Second
 }
 
-func statusForLastSuccess(l peerdb.LastStatus) api.KnownPeerStatus {
+func (t *PersistentTracker) statusForLastSuccess(l peerdb.LastStatus) api.KnownPeerStatus {
 	// Last success was too long ago?
-	if time.Since(*l.Success) > 10*time.Minute {
+	if time.Since(*l.Success) > t.successThreshold {
 		return api.PeerStatusIsUnknown
 	}
 
@@ -199,7 +331,7 @@ func (t *PersistentTracker) Next(addr multiaddr.Multiaddr, status api.KnownPeerS
 	var candidates []*peerdb.PeerStatus
 	for _, p := range t.db.Peers() {
 		s := p.Network(netName).Service(service)
-		if statusForLast(s.Last) == status {
+		if t.statusForLast(s.Last) == status {
 			candidates = append(candidates, p)
 		}
 	}
@@ -236,11 +368,14 @@ func (t *PersistentTracker) All(addr multiaddr.Multiaddr, status api.KnownPeerSt
 	if err != nil {
 		panic(err)
 	}
+	if netName == "" {
+		netName = t.network
+	}
 
 	var peers []peer.ID
 	for _, p := range t.db.Peers() {
 		s := p.Network(netName).Service(service)
-		if statusForLast(s.Last) == status {
+		if t.statusForLast(s.Last) == status {
 			peers = append(peers, p.ID)
 		}
 	}
