@@ -180,7 +180,9 @@ type FindServiceOptions struct {
 	Network   string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Service   *ServiceAddress `json:"service,omitempty" form:"service" query:"service" validate:"required"`
 	// Known restricts the results to known peers.
-	Known     bool `json:"known,omitempty" form:"known" query:"known"`
+	Known bool `json:"known,omitempty" form:"known" query:"known"`
+	// Timeout is the time to wait before stopping, when querying the DHT.
+	Timeout   time.Duration `json:"timeout,omitempty" form:"timeout" query:"timeout"`
 	extraData []byte
 }
 
@@ -851,6 +853,7 @@ func (v *FindServiceOptions) Copy() *FindServiceOptions {
 		u.Service = (v.Service).Copy()
 	}
 	u.Known = v.Known
+	u.Timeout = v.Timeout
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1835,6 +1838,9 @@ func (v *FindServiceOptions) Equal(u *FindServiceOptions) bool {
 		return false
 	}
 	if !(v.Known == u.Known) {
+		return false
+	}
+	if !(v.Timeout == u.Timeout) {
 		return false
 	}
 
@@ -3468,6 +3474,7 @@ var fieldNames_FindServiceOptions = []string{
 	1: "Network",
 	2: "Service",
 	3: "Known",
+	4: "Timeout",
 }
 
 func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
@@ -3486,6 +3493,9 @@ func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
 	}
 	if !(!v.Known) {
 		writer.WriteBool(3, v.Known)
+	}
+	if !(v.Timeout == 0) {
+		writer.WriteDuration(4, v.Timeout)
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceOptions)
@@ -5922,6 +5932,9 @@ func (v *FindServiceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(3); ok {
 		v.Known = x
 	}
+	if x, ok := reader.ReadDuration(4); ok {
+		v.Timeout = x
+	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceOptions)
 	if err != nil {
@@ -7276,6 +7289,28 @@ func (v *ErrorRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *FindServiceOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Network string          `json:"network,omitempty"`
+		Service *ServiceAddress `json:"service,omitempty"`
+		Known   bool            `json:"known,omitempty"`
+		Timeout interface{}     `json:"timeout,omitempty"`
+	}{}
+	if !(len(v.Network) == 0) {
+		u.Network = v.Network
+	}
+	if !(v.Service == nil) {
+		u.Service = v.Service
+	}
+	if !(!v.Known) {
+		u.Known = v.Known
+	}
+	if !(v.Timeout == 0) {
+		u.Timeout = encoding.DurationToJSON(v.Timeout)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *FindServiceResult) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
@@ -8055,6 +8090,31 @@ func (v *ErrorRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
 	}
 	v.Value = u.Value
+	return nil
+}
+
+func (v *FindServiceOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Network string          `json:"network,omitempty"`
+		Service *ServiceAddress `json:"service,omitempty"`
+		Known   bool            `json:"known,omitempty"`
+		Timeout interface{}     `json:"timeout,omitempty"`
+	}{}
+	u.Network = v.Network
+	u.Service = v.Service
+	u.Known = v.Known
+	u.Timeout = encoding.DurationToJSON(v.Timeout)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Network = u.Network
+	v.Service = u.Service
+	v.Known = u.Known
+	if x, err := encoding.DurationFromJSON(u.Timeout); err != nil {
+		return fmt.Errorf("error decoding Timeout: %w", err)
+	} else {
+		v.Timeout = x
+	}
 	return nil
 }
 

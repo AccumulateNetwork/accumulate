@@ -3169,6 +3169,7 @@ func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
 		Network string              `json:"network,omitempty"`
 		Service *api.ServiceAddress `json:"service,omitempty"`
 		Known   bool                `json:"known,omitempty"`
+		Timeout interface{}         `json:"timeout,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.FindServiceOptions.Network) == 0) {
@@ -3182,6 +3183,10 @@ func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
 	if !(!v.FindServiceOptions.Known) {
 
 		u.Known = v.FindServiceOptions.Known
+	}
+	if !(v.FindServiceOptions.Timeout == 0) {
+
+		u.Timeout = encoding.DurationToJSON(v.FindServiceOptions.Timeout)
 	}
 	return json.Marshal(&u)
 }
@@ -3566,11 +3571,13 @@ func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 		Network string              `json:"network,omitempty"`
 		Service *api.ServiceAddress `json:"service,omitempty"`
 		Known   bool                `json:"known,omitempty"`
+		Timeout interface{}         `json:"timeout,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Network = v.FindServiceOptions.Network
 	u.Service = v.FindServiceOptions.Service
 	u.Known = v.FindServiceOptions.Known
+	u.Timeout = encoding.DurationToJSON(v.FindServiceOptions.Timeout)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3580,6 +3587,11 @@ func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 	v.FindServiceOptions.Network = u.Network
 	v.FindServiceOptions.Service = u.Service
 	v.FindServiceOptions.Known = u.Known
+	if x, err := encoding.DurationFromJSON(u.Timeout); err != nil {
+		return fmt.Errorf("error decoding Timeout: %w", err)
+	} else {
+		v.FindServiceOptions.Timeout = x
+	}
 	return nil
 }
 
