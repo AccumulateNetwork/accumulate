@@ -55,7 +55,7 @@ func (d *discoverer) Discover(ctx context.Context, req *dial.DiscoveryRequest) (
 		}), nil
 	}
 
-	ch, err := (*Node)(d).peermgr.getPeers(ctx, addr, req.Limit)
+	ch, err := (*Node)(d).peermgr.getPeers(ctx, addr, req.Limit, req.Timeout)
 	return dial.DiscoveredPeers(ch), err
 }
 
