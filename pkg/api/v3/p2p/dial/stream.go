@@ -39,6 +39,11 @@ func openStreamFor(ctx context.Context, host Connector, req *ConnectionRequest) 
 		return nil, errors.BadRequest.With("missing service address")
 	}
 
+	// Use the batch's context to avoid closing the stream early
+	if batch := api.GetBatchData(ctx); batch != nil {
+		ctx = batch.Context()
+	}
+
 	conn, err := host.Connect(ctx, req)
 	if err != nil {
 		// Do not wrap as it will clobber the error
