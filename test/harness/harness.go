@@ -45,6 +45,7 @@ type Services interface {
 	api.Submitter
 	api.NetworkService
 	api.ConsensusService
+	api.NodeService
 }
 
 // EnvelopeBuilder builds an envelope.
