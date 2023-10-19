@@ -16,6 +16,26 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
+type pipeOpts struct {
+	depth int
+}
+
+type pipeOpt func(*pipeOpts)
+
+func QueueDepth(depth int) pipeOpt {
+	return func(opts *pipeOpts) {
+		opts.depth = depth
+	}
+}
+
+func mergeOpts(opts []pipeOpt) *pipeOpts {
+	o := &pipeOpts{}
+	for _, fn := range opts {
+		fn(o)
+	}
+	return o
+}
+
 // pipe is a Stream backed by channels.
 type pipe[T encoding.BinaryValue] struct {
 	rd        pipedir[<-chan []byte]  // Read
@@ -36,8 +56,8 @@ func newPipeDir[T any](ch T, ctx context.Context, cancel context.CancelFunc) pip
 }
 
 // newPipeDirPair constructs a new pipedir pair.
-func newPipeDirPair[T any](ctx context.Context) (pipedir[chan<- T], pipedir[<-chan T]) {
-	ch := make(chan T)
+func newPipeDirPair[T any](ctx context.Context, opts *pipeOpts) (pipedir[chan<- T], pipedir[<-chan T]) {
+	ch := make(chan T, opts.depth)
 	ctx, cancel := context.WithCancel(ctx)
 	rd := newPipeDir[<-chan T](ch, ctx, cancel)
 	wr := newPipeDir[chan<- T](ch, ctx, cancel)
@@ -45,50 +65,50 @@ func newPipeDirPair[T any](ctx context.Context) (pipedir[chan<- T], pipedir[<-ch
 }
 
 // Pipe allocates a simplex [Message] [Stream] backed by an unbuffered channel.
-func Pipe(ctx context.Context) *pipe[Message] {
-	return newSimplex(ctx, Unmarshal)
+func Pipe(ctx context.Context, opts ...pipeOpt) *pipe[Message] {
+	return newSimplex(ctx, Unmarshal, mergeOpts(opts))
 }
 
 // PipeOf allocates a simplex [Stream] of *T backed by an unbuffered channel. *T
 // must implement [encoding.BinaryValue].
-func PipeOf[T any, PT valuePtr[T]](ctx context.Context) *pipe[PT] {
+func PipeOf[T any, PT valuePtr[T]](ctx context.Context, opts ...pipeOpt) *pipe[PT] {
 	return newSimplex(ctx, func(b []byte) (PT, error) {
 		v := PT(new(T))
 		err := v.UnmarshalBinary(b)
 		return v, err
-	})
+	}, mergeOpts(opts))
 }
 
 // newSimplex allocates a simplex pipe.
-func newSimplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error)) *pipe[T] {
+func newSimplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error), opts *pipeOpts) *pipe[T] {
 	p := new(pipe[T])
 	p.unmarshal = unmarshal
-	p.wr, p.rd = newPipeDirPair[[]byte](ctx)
+	p.wr, p.rd = newPipeDirPair[[]byte](ctx, opts)
 	return p
 }
 
 // DuplexPipe allocates a pair of duplex [Message] [Stream]s backed by a pair of
 // unbuffered channels.
-func DuplexPipe(ctx context.Context) (p, q *pipe[Message]) {
-	return newDuplex(ctx, Unmarshal)
+func DuplexPipe(ctx context.Context, opts ...pipeOpt) (p, q *pipe[Message]) {
+	return newDuplex(ctx, Unmarshal, mergeOpts(opts))
 }
 
 // DuplexPipeOf allocates a pair of duplex [Stream]s of *T backed by a pair of
 // unbuffered channels. *T must implement [encoding.BinaryValue].
-func DuplexPipeOf[T any, PT valuePtr[T]](ctx context.Context) (p, q *pipe[PT]) {
+func DuplexPipeOf[T any, PT valuePtr[T]](ctx context.Context, opts ...pipeOpt) (p, q *pipe[PT]) {
 	return newDuplex(ctx, func(b []byte) (PT, error) {
 		v := PT(new(T))
 		err := v.UnmarshalBinary(b)
 		return v, err
-	})
+	}, mergeOpts(opts))
 }
 
 // newDuplex allocates a pair of duplex pipes.
-func newDuplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error)) (p, q *pipe[T]) {
+func newDuplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error), opts *pipeOpts) (p, q *pipe[T]) {
 	p, q = new(pipe[T]), new(pipe[T])
 	p.unmarshal, q.unmarshal = unmarshal, unmarshal
-	p.wr, q.rd = newPipeDirPair[[]byte](ctx) // p → q
-	q.wr, p.rd = newPipeDirPair[[]byte](ctx) // q → p
+	p.wr, q.rd = newPipeDirPair[[]byte](ctx, opts) // p → q
+	q.wr, p.rd = newPipeDirPair[[]byte](ctx, opts) // q → p
 	return p, q
 }
 
