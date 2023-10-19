@@ -60,7 +60,7 @@ func (s Services) Register(id peer.ID, address *api.ServiceAddress, handler Hand
 }
 
 func (s Services) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	_, peer, sa, err := api.UnpackAddress(addr)
+	_, peer, sa, _, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

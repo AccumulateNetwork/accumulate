@@ -68,9 +68,13 @@ var _ message.MultiDialer = (*dialer)(nil)
 // find an appropriate peer that can service the address. If no peer can be
 // found, Dial will return [errors.NoPeer].
 func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream message.Stream, err error) {
-	net, peer, sa, err := api.UnpackAddress(addr)
+	net, peer, sa, ip, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	if ip != nil && peer == "" {
+		return nil, errors.BadRequest.WithFormat("cannot specify address without peer ID")
 	}
 
 	if peer == "" {
@@ -80,8 +84,9 @@ func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream mes
 
 	// Open a new stream
 	return openStreamFor(ctx, d.host, &ConnectionRequest{
-		Service: sa,
-		PeerID:  peer,
+		Service:  sa,
+		PeerID:   peer,
+		PeerAddr: ip,
 	})
 }
 

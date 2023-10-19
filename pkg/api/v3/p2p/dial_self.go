@@ -26,7 +26,7 @@ func (n *Node) DialSelf() message.Dialer { return (*selfDialer)(n) }
 // Dial returns a stream for the current node.
 func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
 	// Parse the address
-	_, peer, sa, err := api.UnpackAddress(addr)
+	_, peer, sa, _, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
