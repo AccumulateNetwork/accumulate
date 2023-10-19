@@ -4,11 +4,10 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package p2p
+package dial
 
 import (
 	"context"
-	"io"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -23,38 +22,41 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+type Discoverer interface {
+	Discover(context.Context, *DiscoveryRequest) (DiscoveryResponse, error)
+}
+
+type DiscoveryRequest struct {
+	Network string
+	Service *api.ServiceAddress
+	Limit   int
+}
+
+type DiscoveryResponse interface {
+	isDiscoveryResponse()
+}
+
+type DiscoveredPeers <-chan peer.AddrInfo
+type DiscoveredLocal func(context.Context) (message.Stream, error)
+
+func (DiscoveredPeers) isDiscoveryResponse() {}
+func (DiscoveredLocal) isDiscoveryResponse() {}
+
+type Tracker interface {
+	Mark(peer peer.ID, service multiaddr.Multiaddr, status api.KnownPeerStatus)
+	Status(peer peer.ID, service multiaddr.Multiaddr) api.KnownPeerStatus
+	Next(service multiaddr.Multiaddr, status api.KnownPeerStatus) (peer.ID, bool)
+	All(service multiaddr.Multiaddr, status api.KnownPeerStatus) []peer.ID
+}
+
 // dialer implements [message.MultiDialer].
 type dialer struct {
-	host    dialerHost
-	peers   dialerPeers
-	tracker peerTracker
+	host    Connector
+	peers   Discoverer
+	tracker Tracker
 }
 
 var _ message.MultiDialer = (*dialer)(nil)
-
-// dialerHost are the parts of [Node] required by [dialer]. dialerHost exists to
-// support testing with mocks.
-type dialerHost interface {
-	selfID() peer.ID
-	getOwnService(network string, sa *api.ServiceAddress) (*serviceHandler, bool)
-	getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error)
-}
-
-// dialerPeers are the parts of [peerManager] required by [dialer]. dialerPeers
-// exists to support testing with mocks.
-type dialerPeers interface {
-	getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error)
-}
-
-// DialNetwork returns a [message.MultiDialer] that opens a stream to a node
-// that can provides a given service.
-func (n *Node) DialNetwork() message.MultiDialer {
-	return &dialer{
-		host:    n,
-		peers:   n.peermgr,
-		tracker: n.tracker,
-	}
-}
 
 // Dial dials the given address. The address must include an /acc component and
 // may include a /p2p component. Dial will return an error if the address
@@ -75,7 +77,11 @@ func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream mes
 		return d.newNetworkStream(ctx, sa, net, nil)
 	}
 
-	return d.newPeerStream(ctx, sa, peer)
+	// Open a new stream
+	return openStreamFor(ctx, d.host, &ConnectionRequest{
+		Service: sa,
+		PeerID:  peer,
+	})
 }
 
 // BadDial notifies the dialer that a transport error was encountered while
@@ -85,31 +91,8 @@ func (d *dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, s messag
 	if !ok {
 		return false
 	}
-	d.tracker.markBad(ctx, ss.peer, addr)
+	d.tracker.Mark(ss.peer, addr, api.PeerStatusIsKnownBad)
 	return true
-}
-
-// newPeerStream dials the given partition of the given peer. If the peer is the
-// current node, newPeerStream returns a pipe and spawns a goroutine to handle
-// it as if it were an incoming stream.
-//
-// If the peer ID does not match a peer known by the node, or if the node does
-// not have an address for the given peer, newPeerStream will fail.
-func (d *dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer peer.ID) (message.Stream, error) {
-	// If the peer ID is our ID
-	if d.host.selfID() == peer {
-		// Check if we have the service
-		s, ok := d.host.getOwnService("", sa)
-		if !ok {
-			return nil, errors.NotFound // TODO return protocol not supported
-		}
-
-		// Create a pipe and handle it
-		return handleLocally(ctx, s), nil
-	}
-
-	// Open a new stream
-	return openStreamFor(ctx, d.host, peer, sa)
 }
 
 // newNetworkStream opens a stream to the highest priority peer that
@@ -124,11 +107,6 @@ func (d *dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer
 //
 // The wait group is only used for testing.
 func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddress, netName string, wg *sync.WaitGroup) (message.Stream, error) {
-	// Check if we participate in this partition
-	if h, ok := d.host.getOwnService(netName, service); ok {
-		return handleLocally(ctx, h), nil
-	}
-
 	// Construct an address for the service
 	addr, err := service.MultiaddrFor(netName)
 	if err != nil {
@@ -138,9 +116,23 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 	// Query the DHT for peers that provide the service
 	callCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	peers, err := d.peers.getPeers(callCtx, addr, 10)
+	resp, err := d.peers.Discover(callCtx, &DiscoveryRequest{
+		Network: netName,
+		Service: service,
+		Limit:   10,
+	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	var peers <-chan peer.AddrInfo
+	switch resp := resp.(type) {
+	case DiscoveredLocal:
+		return resp(ctx)
+	case DiscoveredPeers:
+		peers = resp
+	default:
+		panic("invalid discovery response")
 	}
 
 	// Check the remaining unknown peers from the DHT (non-blocking)
@@ -152,7 +144,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 					return
 				}
 
-				if d.tracker.status(ctx, peer.ID, addr) != api.PeerStatusIsUnknown {
+				if d.tracker.Status(peer.ID, addr) != api.PeerStatusIsUnknown {
 					break
 				}
 
@@ -165,7 +157,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 	}()
 
 	// If there are at least 4 known-good peers, try those
-	if len(d.tracker.allGood(ctx, addr)) >= 4 {
+	if len(d.tracker.All(addr, api.PeerStatusIsKnownGood)) >= 4 {
 		s := d.dialFromTracker(ctx, service, addr, wg)
 		if s != nil {
 			return s, nil
@@ -176,7 +168,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 	var bad []peer.ID
 	for peer := range peers {
 		// Skip known-bad peers
-		if d.tracker.status(ctx, peer.ID, addr) == api.PeerStatusIsKnownBad {
+		if d.tracker.Status(peer.ID, addr) == api.PeerStatusIsKnownBad {
 			bad = append(bad, peer.ID)
 			continue
 		}
@@ -207,7 +199,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 
 func (d *dialer) dialFromTracker(ctx context.Context, service *api.ServiceAddress, addr multiaddr.Multiaddr, wg *sync.WaitGroup) *stream {
 	// Asynchronously retry a known-bad peer to check if it has recovered
-	if bad, ok := d.tracker.nextBad(ctx, addr); ok {
+	if bad, ok := d.tracker.Next(addr, api.PeerStatusIsKnownBad); ok {
 		d.tryDial(bad, service, addr, wg)
 	}
 
@@ -216,7 +208,7 @@ func (d *dialer) dialFromTracker(ctx context.Context, service *api.ServiceAddres
 	var first peer.ID
 	for i := 0; i < 10; i++ {
 		// Get the next
-		peer, ok := d.tracker.nextGood(ctx, addr)
+		peer, ok := d.tracker.Next(addr, api.PeerStatusIsKnownGood)
 		if !ok {
 			return nil
 		}
@@ -253,10 +245,7 @@ func (d *dialer) tryDial(peer peer.ID, service *api.ServiceAddress, addr multiad
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		s := d.dial(ctx, peer, service, addr)
-		if s != nil {
-			s.conn.Close()
-		}
+		d.dial(ctx, peer, service, addr)
 	}()
 }
 
@@ -269,15 +258,15 @@ func (d *dialer) dial(ctx context.Context, peer peer.ID, service *api.ServiceAdd
 	}()
 
 	// Open a stream
-	stream, err := openStreamFor(ctx, d.host, peer, service)
+	stream, err := openStreamFor(ctx, d.host, &ConnectionRequest{
+		Service: service,
+		PeerID:  peer,
+	})
 	if err == nil {
 		// Mark the peer good
-		d.tracker.markGood(ctx, peer, addr)
+		d.tracker.Mark(peer, addr, api.PeerStatusIsKnownGood)
 		return stream
 	}
-
-	// Mark the peer bad
-	d.tracker.markBad(ctx, peer, addr)
 
 	// Log the error
 	var timeoutError interface{ Timeout() bool }
@@ -289,18 +278,18 @@ func (d *dialer) dial(ctx context.Context, peer peer.ID, service *api.ServiceAdd
 	case errors.Is(err, network.ErrNoConn),
 		errors.Is(err, network.ErrNoRemoteAddrs):
 		// Mark the peer as dead
-		d.tracker.markDead(ctx, peer)
+		d.tracker.Mark(peer, addr, api.PeerStatusIsUnknown)
 		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 
 	case errors.Is(err, swarm.ErrDialBackoff),
 		errors.As(err, &timeoutError) && timeoutError.Timeout():
 		// Mark the peer bad
-		d.tracker.markBad(ctx, peer, addr)
+		d.tracker.Mark(peer, addr, api.PeerStatusIsKnownBad)
 		slog.DebugCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 
 	default:
 		// Mark the peer bad
-		d.tracker.markBad(ctx, peer, addr)
+		d.tracker.Mark(peer, addr, api.PeerStatusIsKnownBad)
 		slog.WarnCtx(ctx, "Unknown error while dialing peer", "peer", peer, "service", service, "error", err)
 	}
 	return nil
