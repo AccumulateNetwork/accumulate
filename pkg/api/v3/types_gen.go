@@ -190,6 +190,7 @@ type FindServiceResult struct {
 	fieldsSet []bool
 	PeerID    p2p.PeerID      `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
 	Status    KnownPeerStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Addresses []p2p.Multiaddr `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
 	extraData []byte
 }
 
@@ -871,6 +872,13 @@ func (v *FindServiceResult) Copy() *FindServiceResult {
 		u.PeerID = p2p.CopyPeerID(v.PeerID)
 	}
 	u.Status = v.Status
+	u.Addresses = make([]p2p.Multiaddr, len(v.Addresses))
+	for i, v := range v.Addresses {
+		v := v
+		if v != nil {
+			u.Addresses[i] = p2p.CopyMultiaddr(v)
+		}
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1853,6 +1861,14 @@ func (v *FindServiceResult) Equal(u *FindServiceResult) bool {
 	}
 	if !(v.Status == u.Status) {
 		return false
+	}
+	if len(v.Addresses) != len(u.Addresses) {
+		return false
+	}
+	for i := range v.Addresses {
+		if !(p2p.EqualMultiaddr(v.Addresses[i], u.Addresses[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -3533,6 +3549,7 @@ func (v *FindServiceOptions) IsValid() error {
 var fieldNames_FindServiceResult = []string{
 	1: "PeerID",
 	2: "Status",
+	3: "Addresses",
 }
 
 func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
@@ -3548,6 +3565,11 @@ func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Status == 0) {
 		writer.WriteEnum(2, v.Status)
+	}
+	if !(len(v.Addresses) == 0) {
+		for _, v := range v.Addresses {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceResult)
@@ -3570,6 +3592,11 @@ func (v *FindServiceResult) IsValid() error {
 		errs = append(errs, "field Status is missing")
 	} else if v.Status == 0 {
 		errs = append(errs, "field Status is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Addresses is missing")
+	} else if len(v.Addresses) == 0 {
+		errs = append(errs, "field Addresses is not set")
 	}
 
 	switch len(errs) {
@@ -5965,6 +5992,18 @@ func (v *FindServiceResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(KnownPeerStatus); reader.ReadEnum(2, x) {
 		v.Status = *x
 	}
+	for {
+		ok := reader.ReadValue(3, func(r io.Reader) error {
+			x, err := p2p.UnmarshalMultiaddrFrom(r)
+			if err == nil {
+				v.Addresses = append(v.Addresses, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceResult)
 	if err != nil {
@@ -7313,14 +7352,18 @@ func (v *FindServiceOptions) MarshalJSON() ([]byte, error) {
 
 func (v *FindServiceResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
-		Status KnownPeerStatus                         `json:"status,omitempty"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"peerID,omitempty"`
+		Status    KnownPeerStatus                                `json:"status,omitempty"`
+		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
 	if !(v.PeerID == ("")) {
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	}
 	if !(v.Status == 0) {
 		u.Status = v.Status
+	}
+	if !(len(v.Addresses) == 0) {
+		u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -8120,11 +8163,13 @@ func (v *FindServiceOptions) UnmarshalJSON(data []byte) error {
 
 func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
-		Status KnownPeerStatus                         `json:"status,omitempty"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"peerID,omitempty"`
+		Status    KnownPeerStatus                                `json:"status,omitempty"`
+		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Status = v.Status
+	u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8133,6 +8178,12 @@ func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Status = u.Status
+	if u.Addresses != nil {
+		v.Addresses = make([]p2p.Multiaddr, len(u.Addresses.Value))
+		for i, x := range u.Addresses.Value {
+			v.Addresses[i] = x
+		}
+	}
 	return nil
 }
 
