@@ -37,6 +37,10 @@ FindServiceOptions:
       description: restricts the results to known peers
       type: boolean
       optional: true
+    - name: Timeout
+      description: is the time to wait before stopping, when querying the DHT
+      type: duration
+      optional: true
 
 ConsensusStatusOptions:
   fields:
