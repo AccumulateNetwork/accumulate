@@ -9,11 +9,13 @@ package api
 import "context"
 
 type BatchData struct {
-	values map[any]any
+	context context.Context
+	values  map[any]any
 }
 
-func (d *BatchData) Get(k any) any { return d.values[k] }
-func (d *BatchData) Put(k, v any)  { d.values[k] = v }
+func (d *BatchData) Context() context.Context { return d.context }
+func (d *BatchData) Get(k any) any            { return d.values[k] }
+func (d *BatchData) Put(k, v any)             { d.values[k] = v }
 
 type contextKeyBatch struct{}
 
@@ -29,9 +31,10 @@ func ContextWithBatchData(ctx context.Context) (context.Context, context.CancelF
 		return ctx, func() {}, v
 	}
 
-	bd := new(BatchData)
-	bd.values = map[any]any{}
 	ctx, cancel := context.WithCancel(ctx)
+	bd := new(BatchData)
+	bd.context = ctx
+	bd.values = map[any]any{}
 	ctx = context.WithValue(ctx, contextKeyBatch{}, bd)
 	return ctx, cancel, bd
 }
