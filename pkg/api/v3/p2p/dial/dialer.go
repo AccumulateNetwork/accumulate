@@ -245,6 +245,13 @@ func (d *dialer) tryDial(peer peer.ID, service *api.ServiceAddress, addr multiad
 	}
 
 	go func() {
+		// Panic protection
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("Panicked while handling stream", "error", r, "stack", debug.Stack(), "module", "api")
+			}
+		}()
+
 		if wg != nil {
 			defer wg.Done()
 		}
