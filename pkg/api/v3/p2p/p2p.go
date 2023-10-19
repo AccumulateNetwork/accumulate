@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -26,21 +27,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
-
-var BootstrapNodes = func() []multiaddr.Multiaddr {
-	p := func(s string) multiaddr.Multiaddr {
-		addr, err := multiaddr.NewMultiaddr(s)
-		if err != nil {
-			panic(err)
-		}
-		return addr
-	}
-
-	return []multiaddr.Multiaddr{
-		// Defi Devs bootstrap node
-		p("/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg"),
-	}
-}()
 
 // Node implements peer-to-peer routing of API v3 messages over via binary
 // message transport.
@@ -81,6 +67,8 @@ type Options struct {
 	// EnablePeerTracker enables the peer tracker to reduce the impact of
 	// mis-configured peers. This is currently experimental.
 	EnablePeerTracker bool
+
+	PeerDatabase string
 }
 
 // New creates a node with the given [Options].
@@ -89,7 +77,17 @@ func New(opts Options) (_ *Node, err error) {
 	n := new(Node)
 	n.context, n.cancel = context.WithCancel(context.Background())
 
-	if opts.EnablePeerTracker {
+	if opts.PeerDatabase != "" {
+		n.tracker, err = dial.NewPersistentTracker(n.context, dial.PersistentTrackerOptions{
+			Filename:         opts.PeerDatabase,
+			Host:             (*connector)(n),
+			Peers:            (*discoverer)(n),
+			PersistFrequency: 10 * time.Second,
+		})
+		if err != nil {
+			return nil, err
+		}
+	} else if opts.EnablePeerTracker {
 		n.tracker = new(dial.SimpleTracker)
 	} else {
 		n.tracker = dial.FakeTracker
