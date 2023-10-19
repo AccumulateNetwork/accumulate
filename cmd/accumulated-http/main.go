@@ -29,6 +29,7 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -49,18 +50,21 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Key         string
-	LogLevel    string
-	HttpListen  []multiaddr.Multiaddr
-	P2pListen   []multiaddr.Multiaddr
-	Peers       []multiaddr.Multiaddr
-	Timeout     time.Duration
-	ConnLimit   int
-	CorsOrigins []string
-	LetsEncrypt []string
-	TlsCert     string
-	TlsKey      string
-}{}
+	Key          string
+	LogLevel     string
+	HttpListen   []multiaddr.Multiaddr
+	P2pListen    []multiaddr.Multiaddr
+	Peers        []multiaddr.Multiaddr
+	Timeout      time.Duration
+	ConnLimit    int
+	CorsOrigins  []string
+	LetsEncrypt  []string
+	TlsCert      string
+	TlsKey       string
+	PeerDatabase string
+}{
+	Peers: accumulate.BootstrapServers,
+}
 
 func init() {
 	cmd.Flags().StringVar(&flag.Key, "key", "", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
@@ -74,9 +78,8 @@ func init() {
 	cmd.Flags().StringSliceVar(&flag.LetsEncrypt, "lets-encrypt", nil, "Enable HTTPS on 443 and use Let's Encrypt to retrieve a certificate. Use of this feature implies acceptance of the LetsEncrypt Terms of Service.")
 	cmd.Flags().StringVar(&flag.TlsCert, "tls-cert", "", "Certificate used for HTTPS")
 	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
+	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", "peerdb.json", "Track peers using a persistent database")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
-
-	_ = cmd.MarkFlagRequired("peer")
 }
 
 func run(_ *cobra.Command, args []string) {
@@ -107,6 +110,7 @@ func run(_ *cobra.Command, args []string) {
 		Network:           args[0],
 		Listen:            flag.P2pListen,
 		BootstrapPeers:    flag.Peers,
+		PeerDatabase:      flag.PeerDatabase,
 		EnablePeerTracker: true,
 	})
 	Check(err)
