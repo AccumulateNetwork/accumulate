@@ -288,9 +288,10 @@ func (a *ServiceAddress) UnmarshalJSON(b []byte) error {
 // include an /acc-svc component and may include a /p2p component or an /acc
 // component. UnpackAddress will return an error if the address includes any
 // other components.
-func UnpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *ServiceAddress, error) {
+func UnpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *ServiceAddress, multiaddr.Multiaddr, error) {
 	// Scan the address for /acc, /acc-svc, and /p2p components
 	var cNetwork, cService, cPeer *multiaddr.Component
+	var netAddr multiaddr.Multiaddr
 	var bad bool
 	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
 		switch c.Protocol().Code {
@@ -300,6 +301,20 @@ func UnpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *ServiceAddress, 
 			cService = &c
 		case multiaddr.P_P2P:
 			cPeer = &c
+		case multiaddr.P_DNS,
+			multiaddr.P_DNS4,
+			multiaddr.P_DNS6,
+			multiaddr.P_IP4,
+			multiaddr.P_IP6,
+			multiaddr.P_TCP,
+			multiaddr.P_UDP,
+			multiaddr.P_QUIC,
+			multiaddr.P_QUIC_V1:
+			if netAddr == nil {
+				netAddr = &c
+			} else {
+				netAddr = netAddr.Encapsulate(&c)
+			}
 		default:
 			bad = true
 		}
@@ -309,16 +324,16 @@ func UnpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *ServiceAddress, 
 	// The address must contain a /acc-svc component and must not contain any
 	// unexpected components
 	if bad || cService == nil {
-		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
+		return "", "", nil, nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
 	// Parse the /acc-svc component
 	sa := new(ServiceAddress)
 	err := sa.UnmarshalBinary(cService.RawValue())
 	if err != nil {
-		return "", "", nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
+		return "", "", nil, nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
 	} else if sa.Type == ServiceTypeUnknown {
-		return "", "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
+		return "", "", nil, nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
 	var peerID peer.ID
@@ -331,5 +346,5 @@ func UnpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *ServiceAddress, 
 		net = string(cNetwork.RawValue())
 	}
 
-	return net, peerID, sa, nil
+	return net, peerID, sa, netAddr, nil
 }
