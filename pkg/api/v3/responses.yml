@@ -21,6 +21,10 @@ FindServiceResult:
     - name: Status
       type: KnownPeerStatus
       marshal-as: enum
+    - name: Addresses
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
 
 ConsensusStatus:
   fields:
