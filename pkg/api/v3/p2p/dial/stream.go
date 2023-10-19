@@ -12,14 +12,16 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type ConnectionRequest struct {
-	Service *api.ServiceAddress
-	PeerID  peer.ID
+	Service  *api.ServiceAddress
+	PeerID   peer.ID
+	PeerAddr multiaddr.Multiaddr
 }
 
 type Connector interface {
