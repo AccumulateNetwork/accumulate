@@ -30,6 +30,7 @@ type DiscoveryRequest struct {
 	Network string
 	Service *api.ServiceAddress
 	Limit   int
+	Timeout time.Duration
 }
 
 type DiscoveryResponse interface {
@@ -120,6 +121,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 		Network: netName,
 		Service: service,
 		Limit:   10,
+		Timeout: 1 * time.Second,
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)

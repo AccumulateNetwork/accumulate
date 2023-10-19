@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"runtime/debug"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -115,11 +116,11 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 		results = n.getKnownPeers(ctx, addr)
 
 	} else {
-		// Discover peers
+		// Discover peers using the DHT
 		var err error
-		results, err = n.discoverPeers(ctx, addr)
+		results, err = n.discoverPeers(ctx, addr, opts.Timeout)
 		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return nil, err
 		}
 	}
 
@@ -148,8 +149,12 @@ func (n *nodeService) getKnownPeers(ctx context.Context, addr multiaddr.Multiadd
 	return results
 }
 
-func (n *nodeService) discoverPeers(ctx context.Context, addr multiaddr.Multiaddr) ([]*api.FindServiceResult, error) {
-	ch, err := n.peermgr.getPeers(ctx, addr, 100)
+func (n *nodeService) discoverPeers(ctx context.Context, addr multiaddr.Multiaddr, timeout time.Duration) ([]*api.FindServiceResult, error) {
+	if timeout == 0 {
+		timeout = 2 * time.Second
+	}
+
+	ch, err := n.peermgr.getPeers(ctx, addr, 100, timeout)
 	if err != nil {
 		return nil, err
 	}
