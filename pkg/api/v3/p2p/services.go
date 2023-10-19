@@ -128,6 +128,11 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 	if results == nil {
 		return []*api.FindServiceResult{}, nil
 	}
+
+	// Add addresses
+	for _, r := range results {
+		r.Addresses = n.host.Peerstore().Addrs(r.PeerID)
+	}
 	return results, nil
 }
 
