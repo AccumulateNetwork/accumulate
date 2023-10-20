@@ -18,6 +18,7 @@ import (
 	"io"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -35,7 +36,7 @@ type Addressed struct {
 
 type ConsensusStatusRequest struct {
 	fieldsSet []bool
-	ConsensusStatusOptions
+	api.ConsensusStatusOptions
 	extraData []byte
 }
 
@@ -60,7 +61,7 @@ type EventMessage struct {
 type FaucetRequest struct {
 	fieldsSet []bool
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	FaucetOptions
+	api.FaucetOptions
 	extraData []byte
 }
 
@@ -72,7 +73,7 @@ type FaucetResponse struct {
 
 type FindServiceRequest struct {
 	fieldsSet []bool
-	FindServiceOptions
+	api.FindServiceOptions
 	extraData []byte
 }
 
@@ -84,7 +85,7 @@ type FindServiceResponse struct {
 
 type MetricsRequest struct {
 	fieldsSet []bool
-	MetricsOptions
+	api.MetricsOptions
 	extraData []byte
 }
 
@@ -96,7 +97,7 @@ type MetricsResponse struct {
 
 type NetworkStatusRequest struct {
 	fieldsSet []bool
-	NetworkStatusOptions
+	api.NetworkStatusOptions
 	extraData []byte
 }
 
@@ -108,7 +109,7 @@ type NetworkStatusResponse struct {
 
 type NodeInfoRequest struct {
 	fieldsSet []bool
-	NodeInfoOptions
+	api.NodeInfoOptions
 	extraData []byte
 }
 
@@ -123,7 +124,8 @@ type PrivateSequenceRequest struct {
 	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
 	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
-	extraData      []byte
+	private.SequenceOptions
+	extraData []byte
 }
 
 type PrivateSequenceResponse struct {
@@ -148,7 +150,7 @@ type RecordResponse struct {
 type SubmitRequest struct {
 	fieldsSet []bool
 	Envelope  *messaging.Envelope `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	SubmitOptions
+	api.SubmitOptions
 	extraData []byte
 }
 
@@ -160,7 +162,7 @@ type SubmitResponse struct {
 
 type SubscribeRequest struct {
 	fieldsSet []bool
-	SubscribeOptions
+	api.SubscribeOptions
 	extraData []byte
 }
 
@@ -172,7 +174,7 @@ type SubscribeResponse struct {
 type ValidateRequest struct {
 	fieldsSet []bool
 	Envelope  *messaging.Envelope `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	ValidateOptions
+	api.ValidateOptions
 	extraData []byte
 }
 
@@ -484,6 +486,7 @@ func (v *PrivateSequenceRequest) Copy() *PrivateSequenceRequest {
 		u.Destination = v.Destination
 	}
 	u.SequenceNumber = v.SequenceNumber
+	u.SequenceOptions = *v.SequenceOptions.Copy()
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -835,6 +838,9 @@ func (v *PrivateSequenceRequest) Equal(u *PrivateSequenceRequest) bool {
 		return false
 	}
 	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
 		return false
 	}
 
@@ -1664,6 +1670,7 @@ var fieldNames_PrivateSequenceRequest = []string{
 	2: "Source",
 	3: "Destination",
 	4: "SequenceNumber",
+	5: "SequenceOptions",
 }
 
 func (v *PrivateSequenceRequest) MarshalBinary() ([]byte, error) {
@@ -1684,6 +1691,7 @@ func (v *PrivateSequenceRequest) MarshalBinary() ([]byte, error) {
 	if !(v.SequenceNumber == 0) {
 		writer.WriteUint(4, v.SequenceNumber)
 	}
+	writer.WriteValue(5, v.SequenceOptions.MarshalBinary)
 
 	_, _, err := writer.Reset(fieldNames_PrivateSequenceRequest)
 	if err != nil {
@@ -1713,6 +1721,9 @@ func (v *PrivateSequenceRequest) IsValid() error {
 		errs = append(errs, "field SequenceNumber is missing")
 	} else if v.SequenceNumber == 0 {
 		errs = append(errs, "field SequenceNumber is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	switch len(errs) {
@@ -2722,6 +2733,7 @@ func (v *PrivateSequenceRequest) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	if x, ok := reader.ReadUint(4); ok {
 		v.SequenceNumber = x
 	}
+	reader.ReadValue(5, v.SequenceOptions.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_PrivateSequenceRequest)
 	if err != nil {
@@ -3283,10 +3295,11 @@ func (v *NodeInfoResponse) MarshalJSON() ([]byte, error) {
 
 func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           Type     `json:"type"`
-		Source         *url.URL `json:"source,omitempty"`
-		Destination    *url.URL `json:"destination,omitempty"`
-		SequenceNumber uint64   `json:"sequenceNumber,omitempty"`
+		Type           Type                                    `json:"type"`
+		Source         *url.URL                                `json:"source,omitempty"`
+		Destination    *url.URL                                `json:"destination,omitempty"`
+		SequenceNumber uint64                                  `json:"sequenceNumber,omitempty"`
+		NodeID         *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Source == nil) {
@@ -3297,6 +3310,10 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SequenceNumber == 0) {
 		u.SequenceNumber = v.SequenceNumber
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -3722,15 +3739,17 @@ func (v *NodeInfoResponse) UnmarshalJSON(data []byte) error {
 
 func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           Type     `json:"type"`
-		Source         *url.URL `json:"source,omitempty"`
-		Destination    *url.URL `json:"destination,omitempty"`
-		SequenceNumber uint64   `json:"sequenceNumber,omitempty"`
+		Type           Type                                    `json:"type"`
+		Source         *url.URL                                `json:"source,omitempty"`
+		Destination    *url.URL                                `json:"destination,omitempty"`
+		SequenceNumber uint64                                  `json:"sequenceNumber,omitempty"`
+		NodeID         *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.Source
 	u.Destination = v.Destination
 	u.SequenceNumber = v.SequenceNumber
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3740,6 +3759,10 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 	v.Source = u.Source
 	v.Destination = u.Destination
 	v.SequenceNumber = u.SequenceNumber
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
 	return nil
 }
 

@@ -1,0 +1,6 @@
+SequenceOptions:
+  fields:
+    - name: NodeID
+      type: p2p.PeerID
+      marshal-as: union
+      zero-value: '""'
