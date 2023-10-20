@@ -9,6 +9,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"strings"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -356,7 +357,14 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	r.State = ms.Pending
 
 	if expand {
-		switch r.Type {
+		// The data model incorrectly labels synthetic sequence chains as
+		// transaction chains when in reality they are index chains
+		typ := r.Type
+		if strings.HasPrefix(r.Name, "synthetic-sequence(") {
+			typ = merkle.ChainTypeIndex
+		}
+
+		switch typ {
 		case merkle.ChainTypeIndex:
 			v := new(protocol.IndexEntry)
 			err := v.UnmarshalBinary(value)
