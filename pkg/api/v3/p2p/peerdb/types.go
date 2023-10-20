@@ -8,6 +8,7 @@ package peerdb
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 )
@@ -65,4 +66,18 @@ func (l *LastStatus) DidAttempt() {
 func (l *LastStatus) DidSucceed() {
 	now := time.Now()
 	l.Success = &now
+}
+
+func (l *LastStatus) SinceAttempt() time.Duration {
+	if l.Attempt == nil {
+		return math.MaxInt64
+	}
+	return time.Since(*l.Attempt)
+}
+
+func (l *LastStatus) SinceSuccess() time.Duration {
+	if l.Success == nil {
+		return math.MaxInt64
+	}
+	return time.Since(*l.Success)
 }
