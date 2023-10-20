@@ -18,6 +18,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
@@ -278,7 +279,7 @@ func healAnchor(C *message.Client, C2 *jsonrpc.Client, ctx context.Context, srcU
 		defer cancel()
 
 		fmt.Printf("Querying %v for %v\n", peer, txid)
-		res, err := C.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, seqNum)
+		res, err := C.ForPeer(peer).Private().Sequence(ctx, srcUrl.JoinPath(protocol.AnchorPool), dstUrl, seqNum, private.SequenceOptions{})
 		if err != nil {
 			fmt.Printf("%+v\n", err)
 			bad = append(bad, peer)

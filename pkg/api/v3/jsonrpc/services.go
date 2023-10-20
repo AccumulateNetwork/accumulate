@@ -12,6 +12,7 @@ import (
 	"reflect"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -184,4 +185,20 @@ func (s Faucet) faucet(ctx context.Context, params json.RawMessage) interface{} 
 		return formatResponse(nil, err)
 	}
 	return formatResponse(s.Faucet.Faucet(ctx, req.Account, req.FaucetOptions))
+}
+
+type Sequencer struct{ private.Sequencer }
+
+func (s Sequencer) methods() jsonrpc2.MethodMap {
+	return jsonrpc2.MethodMap{
+		"private-sequence": s.sequence,
+	}
+}
+
+func (s Sequencer) sequence(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.PrivateSequenceRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.Sequencer.Sequence(ctx, req.Source, req.Destination, req.SequenceNumber, req.SequenceOptions))
 }

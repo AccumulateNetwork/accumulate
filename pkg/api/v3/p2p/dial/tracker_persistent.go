@@ -32,8 +32,6 @@ type PersistentTracker struct {
 	host    Connector
 	peers   Discoverer
 	stopwg  *sync.WaitGroup
-
-	successThreshold time.Duration
 }
 
 type PersistentTrackerOptions struct {
@@ -58,14 +56,6 @@ func NewPersistentTracker(ctx context.Context, opts PersistentTrackerOptions) (*
 	t.stopwg = new(sync.WaitGroup)
 	t.context, t.cancel = context.WithCancel(ctx)
 
-	// Set the success threshold ~5% higher than the scan frequency
-	if opts.ScanFrequency == 0 {
-		t.successThreshold = defaultScanFrequency
-	} else {
-		t.successThreshold = opts.ScanFrequency
-	}
-	t.successThreshold = 17 * t.successThreshold / 16
-
 	// Ensure the file can be created
 	f, err := os.OpenFile(opts.Filename, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
@@ -87,7 +77,7 @@ func NewPersistentTracker(ctx context.Context, opts PersistentTrackerOptions) (*
 
 	// Launch async jobs
 	t.runJob(t.writeDb, opts.PersistFrequency, defaultPersistFrequency, false)
-	t.runJob(t.scanPeers, opts.ScanFrequency, defaultScanFrequency, true)
+	t.runJob(t.scanPeers, opts.ScanFrequency, defaultScanFrequency, false)
 
 	return t, nil
 }
@@ -146,6 +136,10 @@ func (t *PersistentTracker) writeDb(time.Duration) {
 func (t *PersistentTracker) scanPeers(duration time.Duration) {
 	slog.InfoCtx(t.context, "Scanning for peers")
 
+	// Update the last scan time
+	now := time.Now()
+	defer func() { t.db.LastScan = &now }()
+
 	// Run discovery
 	resp, err := t.peers.Discover(t.context, &DiscoveryRequest{
 		Timeout: duration,
@@ -177,6 +171,7 @@ func (t *PersistentTracker) scanPeers(duration time.Duration) {
 		}()
 	}
 
+	// Wait for the scans to complete
 	wg.Wait()
 }
 
@@ -346,17 +341,33 @@ func (t *PersistentTracker) statusForLast(l peerdb.LastStatus) api.KnownPeerStat
 }
 
 func (t *PersistentTracker) attemptIsTooOld(l peerdb.LastStatus) bool {
+	// Expect connection attempts to succeed within 1 second
 	return time.Since(*l.Attempt) > time.Second
 }
 
 func (t *PersistentTracker) statusForLastSuccess(l peerdb.LastStatus) api.KnownPeerStatus {
 	// Last success was too long ago?
-	if time.Since(*l.Success) > t.successThreshold {
+	if t.successIsTooOld(l) {
 		return api.PeerStatusIsUnknown
 	}
 
 	// Last success was recent
 	return api.PeerStatusIsKnownGood
+}
+
+func (t *PersistentTracker) successIsTooOld(l peerdb.LastStatus) bool {
+	if l.Success == nil {
+		return true
+	}
+
+	// If this is the first scan and it is not complete, assume the success is
+	// valid
+	if t.db.LastScan == nil {
+		return false
+	}
+
+	// If the success is older than the last (complete) scan, it is invalid
+	return l.Success.Before(*t.db.LastScan)
 }
 
 func (t *PersistentTracker) Next(addr multiaddr.Multiaddr, status api.KnownPeerStatus) (peer.ID, bool) {
@@ -371,7 +382,7 @@ func (t *PersistentTracker) Next(addr multiaddr.Multiaddr, status api.KnownPeerS
 
 	// Get all the candidates with the given status
 	var candidates []*peerdb.PeerStatus
-	for _, p := range t.db.Peers() {
+	for _, p := range t.db.Peers.Load() {
 		s := p.Network(netName).Service(service)
 		if t.statusForLast(s.Last) == status {
 			candidates = append(candidates, p)
@@ -414,7 +425,7 @@ func (t *PersistentTracker) All(addr multiaddr.Multiaddr, status api.KnownPeerSt
 	}
 
 	var peers []peer.ID
-	for _, p := range t.db.Peers() {
+	for _, p := range t.db.Peers.Load() {
 		n := p.Network(netName)
 		if service != nil {
 			s := n.Service(service)
@@ -446,14 +457,14 @@ func (t *PersistentTracker) Discover(ctx context.Context, req *DiscoveryRequest)
 	go func() {
 		defer close(ch)
 
-		for _, p := range t.db.Peers() {
-			if p.Network(req.Network).Service(req.Service).Last.SinceSuccess() > t.successThreshold {
+		for _, p := range t.db.Peers.Load() {
+			if t.successIsTooOld(p.Network(req.Network).Service(req.Service).Last) {
 				continue
 			}
 
 			info := peer.AddrInfo{ID: p.ID}
 			for _, a := range p.Addresses.Load() {
-				if a.Last.SinceSuccess() < t.successThreshold {
+				if t.successIsTooOld(a.Last) {
 					info.Addrs = append(info.Addrs, a.Address)
 				}
 			}

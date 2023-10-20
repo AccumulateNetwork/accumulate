@@ -19,6 +19,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 )
 
+type DB struct {
+	LastScan *time.Time                            `json:"lastScan,omitempty" form:"lastScan" query:"lastScan" validate:"required"`
+	Peers    *AtomicSlice[*PeerStatus, PeerStatus] `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
+}
+
 type LastStatus struct {
 	Success *time.Time `json:"success,omitempty" form:"success" query:"success" validate:"required"`
 	Attempt *time.Time `json:"attempt,omitempty" form:"attempt" query:"attempt" validate:"required"`
@@ -44,6 +49,22 @@ type PeerStatus struct {
 	Addresses *AtomicSlice[*PeerAddressStatus, PeerAddressStatus] `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
 	Networks  *AtomicSlice[*PeerNetworkStatus, PeerNetworkStatus] `json:"networks,omitempty" form:"networks" query:"networks" validate:"required"`
 }
+
+func (v *DB) Copy() *DB {
+	u := new(DB)
+
+	if v.LastScan != nil {
+		u.LastScan = new(time.Time)
+		*u.LastScan = *v.LastScan
+	}
+	if v.Peers != nil {
+		u.Peers = (v.Peers).Copy()
+	}
+
+	return u
+}
+
+func (v *DB) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *LastStatus) Copy() *LastStatus {
 	u := new(LastStatus)
@@ -115,6 +136,27 @@ func (v *PeerStatus) Copy() *PeerStatus {
 }
 
 func (v *PeerStatus) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DB) Equal(u *DB) bool {
+	switch {
+	case v.LastScan == u.LastScan:
+		// equal
+	case v.LastScan == nil || u.LastScan == nil:
+		return false
+	case !((*v.LastScan).Equal(*u.LastScan)):
+		return false
+	}
+	switch {
+	case v.Peers == u.Peers:
+		// equal
+	case v.Peers == nil || u.Peers == nil:
+		return false
+	case !((v.Peers).Equal(u.Peers)):
+		return false
+	}
+
+	return true
+}
 
 func (v *LastStatus) Equal(u *LastStatus) bool {
 	switch {
