@@ -449,25 +449,38 @@ func (t *PersistentTracker) Discover(ctx context.Context, req *DiscoveryRequest)
 	if req.Network == "" {
 		req.Network = t.network
 	}
-	if req.Service == nil {
-		return nil, errors.BadRequest.With("missing service")
-	}
 
 	ch := make(chan peer.AddrInfo)
 	go func() {
 		defer close(ch)
 
 		for _, p := range t.db.Peers.Load() {
-			if t.successIsTooOld(p.Network(req.Network).Service(req.Service).Last) {
+			if req.Service == nil {
+				// If no service is specified, include the peer if any service is good
+				var found bool
+				for _, s := range p.Network(req.Network).Services.Load() {
+					if !t.successIsTooOld(s.Last) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
+
+			} else if t.successIsTooOld(p.Network(req.Network).Service(req.Service).Last) {
+				// If a service is specified, include the peer if the service is good
 				continue
 			}
 
+			// Get all the valid addresses
 			info := peer.AddrInfo{ID: p.ID}
 			for _, a := range p.Addresses.Load() {
 				if t.successIsTooOld(a.Last) {
 					info.Addrs = append(info.Addrs, a.Address)
 				}
 			}
+
 			ch <- info
 		}
 	}()
