@@ -16,15 +16,57 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+func (n *Node) Tracker() dial.Tracker { return n.tracker }
+
 // DialNetwork returns a [message.MultiDialer] that opens a stream to a node
 // that can provides a given service.
 func (n *Node) DialNetwork() message.Dialer {
-	return dial.New(n.dialOpts...)
+	var host dial.Connector
+	var peers dial.Discoverer
+
+	tr, ok := n.tracker.(*dial.PersistentTracker)
+	if ok {
+		// Use the persistent tracker as the host and for discovery
+		host, peers = tr, tr
+	} else {
+		// Use the basic host and discovery
+		host = (*connector)(n)
+		peers = (*dhtDiscoverer)(n)
+	}
+
+	// Always use self-discovery
+	peers = &selfDiscoverer{n, peers}
+
+	return dial.New(
+		dial.WithConnector(host),
+		dial.WithDiscoverer(peers),
+		dial.WithTracker(n.tracker),
+	)
 }
 
-type discoverer Node
+type selfDiscoverer struct {
+	n *Node
+	d dial.Discoverer
+}
 
-func (d *discoverer) Discover(ctx context.Context, req *dial.DiscoveryRequest) (dial.DiscoveryResponse, error) {
+func (d *selfDiscoverer) Discover(ctx context.Context, req *dial.DiscoveryRequest) (dial.DiscoveryResponse, error) {
+	if req.Service == nil {
+		return d.d.Discover(ctx, req)
+	}
+
+	s, ok := d.n.getOwnService(req.Network, req.Service)
+	if !ok {
+		return d.d.Discover(ctx, req)
+	}
+
+	return dial.DiscoveredLocal(func(ctx context.Context) (message.Stream, error) {
+		return handleLocally(ctx, s), nil
+	}), nil
+}
+
+type dhtDiscoverer Node
+
+func (d *dhtDiscoverer) Discover(ctx context.Context, req *dial.DiscoveryRequest) (dial.DiscoveryResponse, error) {
 	var addr multiaddr.Multiaddr
 	if req.Network != "" {
 		c, err := multiaddr.NewComponent(api.N_ACC, req.Network)
@@ -46,15 +88,6 @@ func (d *discoverer) Discover(ctx context.Context, req *dial.DiscoveryRequest) (
 	}
 	if addr == nil {
 		return nil, errors.BadRequest.With("no network or service specified")
-	}
-
-	if req.Service != nil {
-		s, ok := (*Node)(d).getOwnService(req.Network, req.Service)
-		if ok {
-			return dial.DiscoveredLocal(func(ctx context.Context) (message.Stream, error) {
-				return handleLocally(ctx, s), nil
-			}), nil
-		}
 	}
 
 	ch, err := (*Node)(d).peermgr.getPeers(ctx, addr, req.Limit, req.Timeout)
