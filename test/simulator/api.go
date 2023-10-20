@@ -169,6 +169,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 			jsonrpc.Querier{Querier: network},
 			jsonrpc.Submitter{Submitter: network},
 			jsonrpc.Validator{Validator: network},
+			jsonrpc.Sequencer{Sequencer: network.Private()},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize API v3: %w", err)
