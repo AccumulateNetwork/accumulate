@@ -85,6 +85,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		jsonrpc.Submitter{Submitter: client},
 		jsonrpc.Validator{Validator: client},
 		jsonrpc.Faucet{Faucet: client},
+		jsonrpc.Sequencer{Sequencer: client.Private()},
 	)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize API v3: %w", err)
