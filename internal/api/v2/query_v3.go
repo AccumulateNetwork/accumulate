@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -1212,7 +1213,7 @@ func (m *JrpcMethods) QuerySynth(ctx context.Context, params json.RawMessage) in
 		src = req.Source.JoinPath(protocol.Synthetic)
 	}
 
-	r, err := recordIs[*api.MessageRecord[messaging.Message]](m.Sequencer.Sequence(ctx, src, req.Destination, req.SequenceNumber))
+	r, err := recordIs[*api.MessageRecord[messaging.Message]](m.Sequencer.Sequence(ctx, src, req.Destination, req.SequenceNumber, private.SequenceOptions{}))
 	if err != nil {
 		return accumulateError(err)
 	}

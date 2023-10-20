@@ -65,7 +65,16 @@ func NewSequencer(params SequencerParams) *Sequencer {
 
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
-func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
+func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	if src == nil {
+		return nil, errors.BadRequest.With("missing source")
+	}
+	if dst == nil {
+		return nil, errors.BadRequest.With("missing destination")
+	}
+	if num == 0 {
+		return nil, errors.BadRequest.With("missing sequence number")
+	}
 	if !s.partition.URL.ParentOf(src) {
 		return nil, errors.BadRequest.WithFormat("requested source is %s but this partition is %s", src.RootIdentity(), s.partitionID)
 	}

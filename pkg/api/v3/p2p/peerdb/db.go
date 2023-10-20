@@ -18,12 +18,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 )
 
-type DB struct {
-	peers *AtomicSlice[*PeerStatus, PeerStatus]
-}
-
 func New() *DB {
-	return &DB{peers: new(AtomicSlice[*PeerStatus, PeerStatus])}
+	return &DB{Peers: new(AtomicSlice[*PeerStatus, PeerStatus])}
 }
 
 func LoadFile(file string) (*DB, error) {
@@ -42,14 +38,14 @@ func LoadFile(file string) (*DB, error) {
 func (db *DB) Load(rd io.Reader) error {
 	dec := json.NewDecoder(rd)
 	dec.DisallowUnknownFields()
-	err := dec.Decode(db.peers)
+	err := dec.Decode(db)
 	return err
 }
 
 func (db *DB) Store(wr io.Writer) error {
 	enc := json.NewEncoder(wr)
 	enc.SetIndent("", "  ")
-	return enc.Encode(db.peers)
+	return enc.Encode(db)
 }
 
 func (db *DB) StoreFile(file string) error {
@@ -61,12 +57,8 @@ func (db *DB) StoreFile(file string) error {
 	return db.Store(f)
 }
 
-func (db *DB) Peers() []*PeerStatus {
-	return db.peers.Load()
-}
-
 func (db *DB) Peer(id peer.ID) *PeerStatus {
-	return db.peers.Insert(&PeerStatus{
+	return db.Peers.Insert(&PeerStatus{
 		ID:        id,
 		Networks:  &AtomicSlice[*PeerNetworkStatus, PeerNetworkStatus]{},
 		Addresses: &AtomicSlice[*PeerAddressStatus, PeerAddressStatus]{},
