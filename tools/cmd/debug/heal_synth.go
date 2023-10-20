@@ -16,6 +16,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -111,7 +112,7 @@ func healSynth(_ *cobra.Command, args []string) {
 				}
 
 				// Get a signature
-				r, err := p.Sequence(context.Background(), partSig.SourceNetwork.JoinPath(protocol.Synthetic), partSig.DestinationNetwork, partSig.SequenceNumber)
+				r, err := p.Sequence(context.Background(), partSig.SourceNetwork.JoinPath(protocol.Synthetic), partSig.DestinationNetwork, partSig.SequenceNumber, private.SequenceOptions{})
 				check(err)
 				var note string
 				for _, sigs := range r.Signatures.Records {

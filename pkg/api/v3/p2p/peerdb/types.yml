@@ -1,3 +1,14 @@
+DB:
+  non-binary: true
+  fields:
+    - name: LastScan
+      type: time
+      pointer: true
+    - name: Peers
+      type: { name: AtomicSlice, parameters: [{ type: PeerStatus, pointer: true }, { type: PeerStatus }] }
+      marshal-as: reference
+      pointer: true
+
 PeerStatus:
   non-binary: true
   fields:
