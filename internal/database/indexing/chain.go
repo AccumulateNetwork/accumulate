@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -52,6 +52,16 @@ const (
 
 // IndexChainSearchFunction determines the direction an index chain search should proceed.
 type IndexChainSearchFunction func(*protocol.IndexEntry) SearchDirection
+
+// SearchIndexChain2 is a wrapper for [SearchIndexChain] that accepts
+// [database.Chain2].
+func SearchIndexChain2(chain *database.Chain2, index uint64, mode MatchMode, find IndexChainSearchFunction) (uint64, *protocol.IndexEntry, error) {
+	c, err := chain.Get()
+	if err != nil {
+		return 0, nil, err
+	}
+	return SearchIndexChain(c, index, mode, find)
+}
 
 // SearchIndexChain searches along an index chain using the given search
 // function. The search starts from the given index and proceeds forwards or
