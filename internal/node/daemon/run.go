@@ -453,6 +453,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		Logger:    d.Logger.With("module", "acc-rpc"),
 		Database:  d.db,
 		Partition: d.Config.Accumulate.PartitionId,
+		Consensus: consensusSvc,
 	})
 	metricsSvc := api.NewMetricsService(api.MetricsServiceParams{
 		Logger:  d.Logger.With("module", "acc-rpc"),

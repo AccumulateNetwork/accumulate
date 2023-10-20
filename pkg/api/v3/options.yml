@@ -48,6 +48,14 @@ ConsensusStatusOptions:
       type: string
     - name: Partition
       type: string
+    - name: IncludePeers
+      type: bool
+      pointer: true
+      optional: true
+    - name: IncludeAccumulate
+      type: bool
+      pointer: true
+      optional: true
 
 NetworkStatusOptions:
   fields:
