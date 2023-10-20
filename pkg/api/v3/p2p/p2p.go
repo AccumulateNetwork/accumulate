@@ -11,7 +11,6 @@ import (
 	"crypto/ed25519"
 	"net"
 	"strings"
-	"time"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -35,7 +34,6 @@ type Node struct {
 	cancel   context.CancelFunc
 	peermgr  *peerManager
 	host     host.Host
-	dialOpts []dial.Option
 	tracker  dial.Tracker
 	services []*serviceHandler
 }
@@ -151,13 +149,13 @@ func New(opts Options) (_ *Node, err error) {
 		util.Advertise(n.context, n.peermgr.routing, c.String())
 	}
 
+	// Set up the peer tracker
 	if opts.PeerDatabase != "" {
 		n.tracker, err = dial.NewPersistentTracker(n.context, dial.PersistentTrackerOptions{
-			Network:          opts.Network,
-			Filename:         opts.PeerDatabase,
-			Host:             (*connector)(n),
-			Peers:            (*discoverer)(n),
-			PersistFrequency: 10 * time.Second,
+			Network:  opts.Network,
+			Filename: opts.PeerDatabase,
+			Host:     (*connector)(n),
+			Peers:    (*dhtDiscoverer)(n),
 		})
 		if err != nil {
 			return nil, err
@@ -166,11 +164,6 @@ func New(opts Options) (_ *Node, err error) {
 		n.tracker = new(dial.SimpleTracker)
 	} else {
 		n.tracker = dial.FakeTracker
-	}
-	n.dialOpts = []dial.Option{
-		dial.WithConnector((*connector)(n)),
-		dial.WithDiscoverer((*discoverer)(n)),
-		dial.WithTracker(n.tracker),
 	}
 
 	return n, nil

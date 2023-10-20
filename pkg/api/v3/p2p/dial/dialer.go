@@ -72,6 +72,9 @@ func (d *dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (stream mes
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	if sa == nil {
+		return nil, errors.BadRequest.WithFormat("invalid address %v", addr)
+	}
 
 	if ip != nil && peer == "" {
 		return nil, errors.BadRequest.WithFormat("cannot specify address without peer ID")
@@ -119,7 +122,7 @@ func (d *dialer) newNetworkStream(ctx context.Context, service *api.ServiceAddre
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Query the DHT for peers that provide the service
+	// Discover peers that provide the service
 	callCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	resp, err := d.peers.Discover(callCtx, &DiscoveryRequest{
@@ -290,12 +293,14 @@ func (d *dialer) dial(ctx context.Context, peer peer.ID, service *api.ServiceAdd
 		// Context was canceled, don't mark the peer
 
 	case errors.Is(err, network.ErrNoConn),
-		errors.Is(err, network.ErrNoRemoteAddrs):
+		errors.Is(err, network.ErrNoRemoteAddrs),
+		errors.Is(err, swarm.ErrNoAddresses):
 		// Mark the peer as dead
 		d.tracker.Mark(peer, addr, api.PeerStatusIsUnknown)
 		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 
 	case errors.Is(err, swarm.ErrDialBackoff),
+		errors.Is(err, swarm.ErrNoGoodAddresses),
 		errors.As(err, &timeoutError) && timeoutError.Timeout():
 		// Mark the peer bad
 		d.tracker.Mark(peer, addr, api.PeerStatusIsKnownBad)
