@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/user"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -25,15 +27,12 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/exp/slog"
 )
@@ -67,6 +66,11 @@ var flag = struct {
 }
 
 func init() {
+	cu, _ := user.Current()
+	if cu != nil {
+		flag.PeerDatabase = filepath.Join(cu.HomeDir, ".accumulate", "cache", "peerdb.json")
+	}
+
 	cmd.Flags().StringVar(&flag.Key, "key", "", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.HttpListen), "http-listen", "l", "HTTP listening address(es) (default /ip4/0.0.0.0/tcp/8080/http)")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.P2pListen), "p2p-listen", "P2P listening address(es)")
@@ -78,7 +82,7 @@ func init() {
 	cmd.Flags().StringSliceVar(&flag.LetsEncrypt, "lets-encrypt", nil, "Enable HTTPS on 443 and use Let's Encrypt to retrieve a certificate. Use of this feature implies acceptance of the LetsEncrypt Terms of Service.")
 	cmd.Flags().StringVar(&flag.TlsCert, "tls-cert", "", "Certificate used for HTTPS")
 	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
-	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", "peerdb.json", "Track peers using a persistent database")
+	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", flag.PeerDatabase, "Track peers using a persistent database.")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
 }
 
@@ -118,29 +122,13 @@ func run(_ *cobra.Command, args []string) {
 
 	fmt.Printf("We are %v\n", node.ID())
 
-	fmt.Println("Waiting for a live network service")
-	svcAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(args[0])
-	Check(err)
-	Check(node.WaitForService(ctx, svcAddr))
-
-	fmt.Println("Fetching routing information")
-	router := new(routing.MessageRouter)
-	client := &message.Client{
-		Transport: &message.RoutedTransport{
-			Network: args[0],
-			Dialer:  node.DialNetwork(),
-			Router:  router,
-		},
-	}
-	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
-	Check(err)
-	router.Router, err = routing.NewStaticRouter(ns.Routing, logger)
+	router, err := apiutil.InitRouter(ctx, node, args[0])
 	Check(err)
 
 	api, err := nodehttp.NewHandler(nodehttp.Options{
 		Logger:    logger,
 		Node:      node,
-		Router:    router.Router,
+		Router:    router,
 		MaxWait:   10 * time.Second,
 		NetworkId: args[0],
 	})
