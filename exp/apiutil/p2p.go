@@ -41,7 +41,7 @@ func InitRouter(ctx context.Context, node *p2p.Node, network string) (routing.Ro
 	} else {
 		// Check if we know of a suitable peer
 		var found bool
-		for _, peer := range tr.DB().Peers() {
+		for _, peer := range tr.DB().Peers.Load() {
 			if peer.Network(network).Service(dirNetSvc).Last.Success != nil {
 				found = true
 			}
