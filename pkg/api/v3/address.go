@@ -321,18 +321,8 @@ func UnpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *ServiceAddress, 
 		return true
 	})
 
-	// The address must contain a /acc-svc component and must not contain any
-	// unexpected components
-	if bad || cService == nil {
-		return "", "", nil, nil, errors.BadRequest.WithFormat("invalid address %v", addr)
-	}
-
-	// Parse the /acc-svc component
-	sa := new(ServiceAddress)
-	err := sa.UnmarshalBinary(cService.RawValue())
-	if err != nil {
-		return "", "", nil, nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
-	} else if sa.Type == ServiceTypeUnknown {
+	// The address must not contain any unexpected components
+	if bad {
 		return "", "", nil, nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
@@ -344,6 +334,19 @@ func UnpackAddress(addr multiaddr.Multiaddr) (string, peer.ID, *ServiceAddress, 
 	var net string
 	if cNetwork != nil {
 		net = string(cNetwork.RawValue())
+	}
+
+	if cService == nil {
+		return net, peerID, nil, netAddr, nil
+	}
+
+	// Parse the /acc-svc component
+	sa := new(ServiceAddress)
+	err := sa.UnmarshalBinary(cService.RawValue())
+	if err != nil {
+		return "", "", nil, nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
+	} else if sa.Type == ServiceTypeUnknown {
+		return "", "", nil, nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
 	return net, peerID, sa, netAddr, nil
