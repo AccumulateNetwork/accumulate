@@ -405,7 +405,9 @@ type FeeSchedule struct {
 	fieldsSet []bool
 	// CreateIdentitySliding is the sliding fee schedule for creating an ADI. The first entry is the cost of a one-character ADI, the second is the cost of a two-character ADI, etc.
 	CreateIdentitySliding []Fee `json:"createIdentitySliding,omitempty" form:"createIdentitySliding" query:"createIdentitySliding" validate:"required"`
-	extraData             []byte
+	// CreateSubIdentity is the fee for creating a non-root ADI..
+	CreateSubIdentity Fee `json:"createSubIdentity,omitempty" form:"createSubIdentity" query:"createSubIdentity" validate:"required"`
+	extraData         []byte
 }
 
 // IndexEntry represents an entry in an index chain.
@@ -2091,6 +2093,7 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 		v := v
 		u.CreateIdentitySliding[i] = v
 	}
+	u.CreateSubIdentity = v.CreateSubIdentity
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -4368,6 +4371,9 @@ func (v *FeeSchedule) Equal(u *FeeSchedule) bool {
 		if !(v.CreateIdentitySliding[i] == u.CreateIdentitySliding[i]) {
 			return false
 		}
+	}
+	if !(v.CreateSubIdentity == u.CreateSubIdentity) {
+		return false
 	}
 
 	return true
@@ -8373,6 +8379,7 @@ func (v *FactomDataEntryWrapper) IsValid() error {
 
 var fieldNames_FeeSchedule = []string{
 	1: "CreateIdentitySliding",
+	2: "CreateSubIdentity",
 }
 
 func (v *FeeSchedule) MarshalBinary() ([]byte, error) {
@@ -8387,6 +8394,9 @@ func (v *FeeSchedule) MarshalBinary() ([]byte, error) {
 		for _, v := range v.CreateIdentitySliding {
 			writer.WriteEnum(1, v)
 		}
+	}
+	if !(v.CreateSubIdentity == 0) {
+		writer.WriteEnum(2, v.CreateSubIdentity)
 	}
 
 	_, _, err := writer.Reset(fieldNames_FeeSchedule)
@@ -8404,6 +8414,11 @@ func (v *FeeSchedule) IsValid() error {
 		errs = append(errs, "field CreateIdentitySliding is missing")
 	} else if len(v.CreateIdentitySliding) == 0 {
 		errs = append(errs, "field CreateIdentitySliding is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field CreateSubIdentity is missing")
+	} else if v.CreateSubIdentity == 0 {
+		errs = append(errs, "field CreateSubIdentity is not set")
 	}
 
 	switch len(errs) {
@@ -14610,6 +14625,9 @@ func (v *FeeSchedule) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x := new(Fee); reader.ReadEnum(2, x) {
+		v.CreateSubIdentity = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_FeeSchedule)
 	if err != nil {
@@ -18210,9 +18228,13 @@ func (v *FactomDataEntryWrapper) MarshalJSON() ([]byte, error) {
 func (v *FeeSchedule) MarshalJSON() ([]byte, error) {
 	u := struct {
 		CreateIdentitySliding encoding.JsonList[Fee] `json:"createIdentitySliding,omitempty"`
+		CreateSubIdentity     Fee                    `json:"createSubIdentity,omitempty"`
 	}{}
 	if !(len(v.CreateIdentitySliding) == 0) {
 		u.CreateIdentitySliding = v.CreateIdentitySliding
+	}
+	if !(v.CreateSubIdentity == 0) {
+		u.CreateSubIdentity = v.CreateSubIdentity
 	}
 	return json.Marshal(&u)
 }
@@ -20612,12 +20634,15 @@ func (v *FactomDataEntryWrapper) UnmarshalJSON(data []byte) error {
 func (v *FeeSchedule) UnmarshalJSON(data []byte) error {
 	u := struct {
 		CreateIdentitySliding encoding.JsonList[Fee] `json:"createIdentitySliding,omitempty"`
+		CreateSubIdentity     Fee                    `json:"createSubIdentity,omitempty"`
 	}{}
 	u.CreateIdentitySliding = v.CreateIdentitySliding
+	u.CreateSubIdentity = v.CreateSubIdentity
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.CreateIdentitySliding = u.CreateIdentitySliding
+	v.CreateSubIdentity = u.CreateSubIdentity
 	return nil
 }
 
