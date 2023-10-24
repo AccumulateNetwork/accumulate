@@ -73,16 +73,24 @@ func (p *parser) parseDataEntry(v ...any) protocol.DataEntry {
 	return &protocol.AccumulateDataEntry{Data: p.parseDataEntryParts(v...)}
 }
 
+func (p *parser) parseBytes(v any) []byte {
+	switch v := v.(type) {
+	case string:
+		return []byte(v)
+	case []byte:
+		return v
+	case [32]byte:
+		return v[:]
+	default:
+		p.errorf(errors.BadRequest, "cannot convert %T to bytes", v)
+	}
+	return nil
+}
+
 func (p *parser) parseDataEntryParts(v ...any) [][]byte {
 	var parts [][]byte
 	for _, v := range v {
 		switch v := v.(type) {
-		case string:
-			parts = append(parts, []byte(v))
-		case []byte:
-			parts = append(parts, v)
-		case [32]byte:
-			parts = append(parts, v[:])
 		case []string:
 			for _, v := range v {
 				parts = append(parts, []byte(v))
@@ -95,8 +103,7 @@ func (p *parser) parseDataEntryParts(v ...any) [][]byte {
 				parts = append(parts, v[:])
 			}
 		default:
-			p.errorf(errors.BadRequest, "cannot convert %T to bytes", v)
-			return nil
+			parts = append(parts, p.parseBytes(v))
 		}
 	}
 	return parts
