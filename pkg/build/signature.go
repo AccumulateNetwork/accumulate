@@ -100,6 +100,16 @@ func (b SignatureBuilder) Signer(signer any) SignatureBuilder {
 	return b
 }
 
+func (b SignatureBuilder) Memo(s string) SignatureBuilder {
+	b.signer.Memo = s
+	return b
+}
+
+func (b SignatureBuilder) Metadata(v any) SignatureBuilder {
+	b.signer.Data = b.parseBytes(v)
+	return b
+}
+
 func (b SignatureBuilder) PrivateKey(key []byte) SignatureBuilder {
 	b.signer.Signer = signing.PrivateKey(key)
 	return b
