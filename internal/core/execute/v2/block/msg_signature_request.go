@@ -68,7 +68,7 @@ func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (_
 	// Process the message
 	req, err := x.check(batch, ctx)
 	if err == nil {
-		err = x.record(batch, ctx, req)
+		err = x.process(batch, ctx, req)
 	}
 
 	// Record the message and its status
@@ -80,26 +80,41 @@ func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (_
 	return status, nil
 }
 
-func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *messaging.SignatureRequest) error {
-	// Check if the transaction has already been recorded
-	pending := batch.Account(req.Authority).Pending()
-	_, err := pending.Index(req.TxID)
-	switch {
-	case err == nil:
-		// Already recorded as pending
-		return nil
-
-	case errors.Is(err, errors.NotFound):
-		// Ok
-
-	default:
-		return errors.UnknownError.WithFormat("load pending: %w", err)
+func (x SignatureRequest) process(batch *database.Batch, ctx *MessageContext, req *messaging.SignatureRequest) error {
+	// If the 'authority' is not the principal, verify it exists and is an
+	// authority
+	var invalid bool
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() && !req.Authority.Equal(req.TxID.Account()) {
+		ok, err := x.authorityIsValid(batch, ctx, req)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		if !ok {
+			invalid = true
+		}
 	}
 
-	// Record the transaction as pending
-	err = batch.Account(req.Authority).Pending().Add(req.TxID)
-	if err != nil {
-		return errors.UnknownError.WithFormat("add pending: %w", err)
+	if !invalid {
+		// Check if the transaction has already been recorded
+		pending := batch.Account(req.Authority).Pending()
+		_, err := pending.Index(req.TxID)
+		switch {
+		case err == nil:
+			// Already recorded as pending
+			return nil
+
+		case errors.Is(err, errors.NotFound):
+			// Ok
+
+		default:
+			return errors.UnknownError.WithFormat("load pending: %w", err)
+		}
+
+		// Record the transaction as pending
+		err = batch.Account(req.Authority).Pending().Add(req.TxID)
+		if err != nil {
+			return errors.UnknownError.WithFormat("add pending: %w", err)
+		}
 	}
 
 	// Get the transaction from the message bundle (or the database) and store
@@ -126,10 +141,52 @@ func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *
 	}
 
 	// If the 'authority' is the principal, send a signature request to each authority
-	if !req.Authority.Equal(req.TxID.Account()) {
-		return nil
+	if req.Authority.Equal(req.TxID.Account()) {
+		return x.requestSignaturesFromAuthorities(batch, ctx, req)
+	}
+	return nil
+}
+
+func (SignatureRequest) authorityIsValid(batch *database.Batch, ctx *MessageContext, req *messaging.SignatureRequest) (bool, error) {
+	var message string
+	account, err := batch.Account(req.Authority).Main().Get()
+	switch {
+	case err == nil:
+		if _, ok := account.(protocol.Authority); ok {
+			return true, nil
+		}
+		message = req.Authority.String() + " is not an authority"
+
+	case errors.Is(err, errors.NotFound):
+		message = req.Authority.String() + " does not exist"
+
+	default:
+		// Unknown error
+		return true, errors.UnknownError.WithFormat("load authority: %w", err)
 	}
 
+	// The invalid authority abstains from the transaction
+	authSig := &protocol.AuthoritySignature{
+		Authority: req.Authority,
+		Origin:    req.Authority,
+		TxID:      req.TxID,
+		Cause:     req.ID(),
+		Vote:      protocol.VoteTypeAbstain,
+		Memo:      message,
+	}
+
+	err = ctx.didProduce(
+		batch,
+		authSig.RoutingLocation(),
+		&messaging.SignatureMessage{
+			Signature: authSig,
+			TxID:      req.TxID,
+		},
+	)
+	return false, errors.UnknownError.Wrap(err)
+}
+
+func (SignatureRequest) requestSignaturesFromAuthorities(batch *database.Batch, ctx *MessageContext, req *messaging.SignatureRequest) error {
 	principal, err := batch.Account(req.TxID.Account()).Main().Get()
 	switch {
 	case err == nil:
@@ -154,7 +211,7 @@ func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *
 
 		msg := new(messaging.SignatureRequest)
 		msg.Authority = auth.Url
-		msg.Cause = ctx.message.ID()
+		msg.Cause = req.ID()
 		msg.TxID = req.TxID
 		err = ctx.didProduce(batch, msg.Authority, msg)
 		if err != nil {
