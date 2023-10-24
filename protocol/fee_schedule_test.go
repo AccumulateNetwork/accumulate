@@ -20,8 +20,9 @@ import (
 )
 
 func TestFee(t *testing.T) {
-	s := new(FeeSchedule)
 	t.Run("SendTokens", func(t *testing.T) {
+		s := new(FeeSchedule)
+
 		env :=
 			MustBuild(t, build.Transaction().
 				For(AcmeUrl()).
@@ -34,6 +35,8 @@ func TestFee(t *testing.T) {
 	})
 
 	t.Run("Lots of data", func(t *testing.T) {
+		s := new(FeeSchedule)
+
 		env :=
 			MustBuild(t, build.Transaction().
 				For(AcmeUrl()).
@@ -47,6 +50,8 @@ func TestFee(t *testing.T) {
 	})
 
 	t.Run("Scratch data", func(t *testing.T) {
+		s := new(FeeSchedule)
+
 		env :=
 			MustBuild(t, build.Transaction().
 				For(AcmeUrl()).
@@ -59,7 +64,55 @@ func TestFee(t *testing.T) {
 		require.Equal(t, FeeScratchData*5, fee)
 	})
 
+	t.Run("Create root ADI", func(t *testing.T) {
+		s := new(FeeSchedule)
+
+		// Make sure this is ignored for a root identity
+		s.CreateSubIdentity = 100
+
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				CreateIdentity("foo").
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+		require.Equal(t, FeeCreateIdentity, fee)
+	})
+
+	t.Run("Create sub ADI (original)", func(t *testing.T) {
+		s := new(FeeSchedule)
+
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				CreateIdentity("foo", "bar").
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+		require.Equal(t, FeeCreateIdentity, fee)
+	})
+
+	t.Run("Create sub ADI (reduced)", func(t *testing.T) {
+		s := new(FeeSchedule)
+		s.CreateSubIdentity = 100
+
+		env :=
+			MustBuild(t, build.Transaction().
+				For(AcmeUrl()).
+				CreateIdentity("foo", "bar").
+				SignWith(AccountUrl("foo", "book", "1")).Version(1).Timestamp(time.Now()).PrivateKey(acctesting.GenerateKey(t.Name())).Type(SignatureTypeLegacyED25519))
+
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+		require.Equal(t, s.CreateSubIdentity, fee)
+	})
+
 	t.Run("All types", func(t *testing.T) {
+		s := new(FeeSchedule)
+
 		// Test every valid user transaction
 		for i := TransactionType(0); i < 1<<16; i++ {
 			body, err := NewTransactionBody(i)
