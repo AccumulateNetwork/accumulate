@@ -54,6 +54,20 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 
 	x.logger.Debug("Begin block", "module", "block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
+	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		// Get the previous block's root hash, before making any changes
+		prevRootHash, err := block.Batch.GetBptRootHash()
+		if err != nil {
+			return nil, err
+		}
+
+		// Record it on the BPT chain
+		err = block.Batch.Account(x.Describe.Ledger()).BptChain().Inner().AddHash(prevRootHash[:], false)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Finalize the previous block
 	err = x.finalizeBlock(block)
 	if err != nil {
