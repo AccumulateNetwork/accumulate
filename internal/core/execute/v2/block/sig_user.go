@@ -405,7 +405,11 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 	}
 
 	// If transaction requests additional authorities, send out signature requests
-	for _, auth := range ctx.transaction.GetAdditionalAuthorities() {
+	authorities := ctx.transaction.GetAdditionalAuthorities()
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		authorities = append(authorities, ctx.transaction.Header.Authorities...)
+	}
+	for _, auth := range authorities {
 		msg := new(messaging.SignatureRequest)
 		msg.Authority = auth
 		msg.Cause = ctx.message.ID()
