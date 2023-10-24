@@ -15,6 +15,9 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+// This file exists entirely because of
+// https://github.com/rr-debugger/rr/issues/3635
+
 func (b *Bucket) Read(i byte) ([]Entry, error) {
 	f := b.files[i]
 	st, err := f.file.Stat()
