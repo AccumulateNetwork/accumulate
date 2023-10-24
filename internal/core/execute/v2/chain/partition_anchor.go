@@ -78,6 +78,12 @@ func (x PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 		}
 
 		issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
+		if st.Globals.ExecutorVersion.V2BaikonurEnabled() && issuerState.Issued.Sign() < 0 {
+			// The marshaller isn't capable of encoding negative bigint values,
+			// so this would fail anyways
+			return nil, errors.Conflict.With("acme burnt exceeds amount issued")
+		}
+
 		err = st.Update(issuerState)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update issuer state: %v", err)
