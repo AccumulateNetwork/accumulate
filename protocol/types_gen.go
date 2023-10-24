@@ -914,7 +914,9 @@ type TransactionHeader struct {
 	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 	// HoldUntil holds the transaction as pending until the threshold is met.
 	HoldUntil *BlockThreshold `json:"holdUntil,omitempty" form:"holdUntil" query:"holdUntil"`
-	extraData []byte
+	// Authorities is a list of additional authorities that must approve the transaction.
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
+	extraData   []byte
 }
 
 type TransactionResultSet struct {
@@ -3145,6 +3147,13 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	u.Metadata = encoding.BytesCopy(v.Metadata)
 	if v.HoldUntil != nil {
 		u.HoldUntil = (v.HoldUntil).Copy()
+	}
+	u.Authorities = make([]*url.URL, len(v.Authorities))
+	for i, v := range v.Authorities {
+		v := v
+		if v != nil {
+			u.Authorities[i] = v
+		}
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -5428,6 +5437,14 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 		return false
 	case !((v.HoldUntil).Equal(u.HoldUntil)):
 		return false
+	}
+	if len(v.Authorities) != len(u.Authorities) {
+		return false
+	}
+	for i := range v.Authorities {
+		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -11806,6 +11823,7 @@ var fieldNames_TransactionHeader = []string{
 	3: "Memo",
 	4: "Metadata",
 	5: "HoldUntil",
+	6: "Authorities",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -11830,6 +11848,11 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.HoldUntil == nil) {
 		writer.WriteValue(5, v.HoldUntil.MarshalBinary)
+	}
+	if !(len(v.Authorities) == 0) {
+		for _, v := range v.Authorities {
+			writer.WriteUrl(6, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -16604,6 +16627,13 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(BlockThreshold); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.HoldUntil = x
 	}
+	for {
+		if x, ok := reader.ReadUrl(6); ok {
+			v.Authorities = append(v.Authorities, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
 	if err != nil {
@@ -19078,11 +19108,12 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Principal *url.URL        `json:"principal,omitempty"`
-		Initiator string          `json:"initiator,omitempty"`
-		Memo      string          `json:"memo,omitempty"`
-		Metadata  *string         `json:"metadata,omitempty"`
-		HoldUntil *BlockThreshold `json:"holdUntil,omitempty"`
+		Principal   *url.URL                    `json:"principal,omitempty"`
+		Initiator   string                      `json:"initiator,omitempty"`
+		Memo        string                      `json:"memo,omitempty"`
+		Metadata    *string                     `json:"metadata,omitempty"`
+		HoldUntil   *BlockThreshold             `json:"holdUntil,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	if !(v.Principal == nil) {
 		u.Principal = v.Principal
@@ -19098,6 +19129,9 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.HoldUntil == nil) {
 		u.HoldUntil = v.HoldUntil
+	}
+	if !(len(v.Authorities) == 0) {
+		u.Authorities = v.Authorities
 	}
 	return json.Marshal(&u)
 }
@@ -21637,17 +21671,19 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Principal *url.URL        `json:"principal,omitempty"`
-		Initiator string          `json:"initiator,omitempty"`
-		Memo      string          `json:"memo,omitempty"`
-		Metadata  *string         `json:"metadata,omitempty"`
-		HoldUntil *BlockThreshold `json:"holdUntil,omitempty"`
+		Principal   *url.URL                    `json:"principal,omitempty"`
+		Initiator   string                      `json:"initiator,omitempty"`
+		Memo        string                      `json:"memo,omitempty"`
+		Metadata    *string                     `json:"metadata,omitempty"`
+		HoldUntil   *BlockThreshold             `json:"holdUntil,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	u.HoldUntil = v.HoldUntil
+	u.Authorities = v.Authorities
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -21664,6 +21700,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 		v.Metadata = x
 	}
 	v.HoldUntil = u.HoldUntil
+	v.Authorities = u.Authorities
 	return nil
 }
 
