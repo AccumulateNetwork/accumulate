@@ -170,6 +170,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 			jsonrpc.Submitter{Submitter: network},
 			jsonrpc.Validator{Validator: network},
 			jsonrpc.Sequencer{Sequencer: network.Private()},
+			jsonrpc.Faucet{Faucet: network},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize API v3: %w", err)
@@ -186,6 +187,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 			message.Submitter{Submitter: network},
 			message.Validator{Validator: network},
 			message.EventService{EventService: network},
+			message.Faucet{Faucet: network},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize websocket API: %w", err)
