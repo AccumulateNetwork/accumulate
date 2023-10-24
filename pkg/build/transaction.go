@@ -42,6 +42,11 @@ func (b TransactionBuilder) HoldUntil(threshold protocol.BlockThreshold) Transac
 	return b
 }
 
+func (b TransactionBuilder) AdditionalAuthority(signer any, path ...string) TransactionBuilder {
+	b.t.Header.Authorities = append(b.t.Header.Authorities, b.parseUrl(signer, path...))
+	return b
+}
+
 func (b TransactionBuilder) Body(body protocol.TransactionBody) TransactionBuilder {
 	b.t.Body = body
 	return b
