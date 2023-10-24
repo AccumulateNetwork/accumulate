@@ -139,7 +139,7 @@ func (x CreateTokenAccount) Execute(st *StateManager, tx *Delivery) (protocol.Tr
 	account := new(protocol.TokenAccount)
 	account.Url = body.Url
 	account.TokenUrl = body.TokenUrl
-	err = st.SetAuth(account, body.Authorities)
+	err = setInitialAuthorities(st, account, body.Authorities)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("set auth: %w", err)
 	}

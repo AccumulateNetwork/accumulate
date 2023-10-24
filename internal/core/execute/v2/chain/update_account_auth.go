@@ -146,9 +146,25 @@ func (x UpdateAccountAuth) Execute(st *StateManager, tx *Delivery) (protocol.Tra
 				return nil, fmt.Errorf("no such authority %v", op.Authority)
 			}
 
-			// An account must retain at least one authority
-			if len(auth.Authorities) == 0 {
+			switch {
+			case len(auth.Authorities) > 0:
+				// Ok
+
+			case !st.Globals.ExecutorVersion.V2BaikonurEnabled():
+				// Old logic
 				return nil, errors.BadRequest.With("removing the last authority from an account is not allowed")
+
+			case account.GetUrl().IsRootIdentity():
+				// A root account must retain at least one authority
+				return nil, errors.BadRequest.With("removing the last authority from a root account is not allowed")
+
+			default:
+				// Verify that there is a parent identity with a non-empty
+				// authority set
+				err = verifyCanInheritAuth(st.batch, account)
+				if err != nil {
+					return nil, errors.UnknownError.Wrap(err)
+				}
 			}
 
 		default:
@@ -165,6 +181,20 @@ func (x UpdateAccountAuth) Execute(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, fmt.Errorf("failed to update %v: %w", st.OriginUrl, err)
 	}
 	return nil, nil
+}
+
+func verifyCanInheritAuth(batch *database.Batch, account protocol.FullAccount) error {
+	for a := account; !a.GetUrl().IsRootIdentity(); {
+		err := batch.Account(a.GetUrl().Identity()).Main().GetAs(&a)
+		if err != nil {
+			return errors.UnknownError.WithFormat("inherit authority: %w", err)
+		}
+
+		if len(a.GetAuth().Authorities) > 0 {
+			return nil
+		}
+	}
+	return errors.BadRequest.WithFormat("cannot remove last authority: no parent from which authorities can be inherited")
 }
 
 // verifyIsNotPage returns an error if the url is a page belonging to one of the

@@ -93,7 +93,7 @@ func (x CreateToken) Execute(st *StateManager, tx *Delivery) (protocol.Transacti
 	token.Symbol = body.Symbol
 	token.Properties = body.Properties
 
-	err = st.SetAuth(token, body.Authorities)
+	err = setInitialAuthorities(st, token, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

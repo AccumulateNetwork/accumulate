@@ -135,20 +135,42 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2, blockInde
 	return indexIndex, true, nil
 }
 
-func getAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+func (m *MessageContext) getAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
 	auth, url, err := shared.GetAccountAuthoritySet(account)
-	if err != nil {
+	switch {
+	case err != nil:
 		return nil, errors.UnknownError.Wrap(err)
-	}
-	if auth != nil {
+
+	case auth == nil:
+		// Look at <url>
+		break
+
+	case len(auth.Authorities) > 0:
+		// Account has it's own authorities
 		return auth, nil
+
+	case !m.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled():
+		// Old logic
+		return auth, nil
+
+	case account.Type() == protocol.AccountTypeLiteDataAccount:
+		// LDAs have no authorities
+		return auth, nil
+
+	default:
+		// Inherit authority
+		var ok bool
+		url, ok = account.GetUrl().Parent()
+		if !ok {
+			return nil, errors.InvalidRecord.WithFormat("root account %v has an empty authority set", account.GetUrl())
+		}
 	}
 
 	account, err = batch.Account(url).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	return getAccountAuthoritySet(batch, account)
+	return m.getAccountAuthoritySet(batch, account)
 }
 
 func getValidator[T any](x *Executor, typ protocol.TransactionType) (T, bool) {

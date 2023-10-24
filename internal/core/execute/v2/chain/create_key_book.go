@@ -88,7 +88,7 @@ func (x CreateKeyBook) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 	book.AddAuthority(body.Url)
 	book.PageCount = 1
 
-	err = st.SetAuth(book, body.Authorities)
+	err = setInitialAuthorities(st, book, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

@@ -179,7 +179,7 @@ func (x CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.Transa
 	}
 
 	// Add additional authorities or inherit
-	err = st.SetAuth(identity, body.Authorities)
+	err = setInitialAuthorities(st, identity, body.Authorities)
 	if err != nil {
 		return nil, err
 	}
