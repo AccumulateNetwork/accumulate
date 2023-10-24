@@ -161,6 +161,8 @@ type BTCLegacySignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	Memo            string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Data            []byte   `json:"data,omitempty" form:"data" query:"data"`
 	extraData       []byte
 }
 
@@ -173,6 +175,8 @@ type BTCSignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	Memo            string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Data            []byte   `json:"data,omitempty" form:"data" query:"data"`
 	extraData       []byte
 }
 
@@ -354,6 +358,8 @@ type ED25519Signature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	Memo            string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Data            []byte   `json:"data,omitempty" form:"data" query:"data"`
 	extraData       []byte
 }
 
@@ -366,6 +372,8 @@ type ETHSignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	Memo            string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Data            []byte   `json:"data,omitempty" form:"data" query:"data"`
 	extraData       []byte
 }
 
@@ -657,6 +665,8 @@ type RCD1Signature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	Memo            string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Data            []byte   `json:"data,omitempty" form:"data" query:"data"`
 	extraData       []byte
 }
 
@@ -1515,6 +1525,8 @@ func (v *BTCLegacySignature) Copy() *BTCLegacySignature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	u.Memo = v.Memo
+	u.Data = encoding.BytesCopy(v.Data)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1537,6 +1549,8 @@ func (v *BTCSignature) Copy() *BTCSignature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	u.Memo = v.Memo
+	u.Data = encoding.BytesCopy(v.Data)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1974,6 +1988,8 @@ func (v *ED25519Signature) Copy() *ED25519Signature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	u.Memo = v.Memo
+	u.Data = encoding.BytesCopy(v.Data)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1996,6 +2012,8 @@ func (v *ETHSignature) Copy() *ETHSignature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	u.Memo = v.Memo
+	u.Data = encoding.BytesCopy(v.Data)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2559,6 +2577,8 @@ func (v *RCD1Signature) Copy() *RCD1Signature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	u.Memo = v.Memo
+	u.Data = encoding.BytesCopy(v.Data)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3789,6 +3809,12 @@ func (v *BTCLegacySignature) Equal(u *BTCLegacySignature) bool {
 	if !(v.TransactionHash == u.TransactionHash) {
 		return false
 	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
 
 	return true
 }
@@ -3818,6 +3844,12 @@ func (v *BTCSignature) Equal(u *BTCSignature) bool {
 		return false
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
 	}
 
@@ -4236,6 +4268,12 @@ func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 	if !(v.TransactionHash == u.TransactionHash) {
 		return false
 	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
 
 	return true
 }
@@ -4265,6 +4303,12 @@ func (v *ETHSignature) Equal(u *ETHSignature) bool {
 		return false
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
 	}
 
@@ -4860,6 +4904,12 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 		return false
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
 	}
 
@@ -6624,14 +6674,16 @@ func (v *AuthoritySignature) IsValid() error {
 }
 
 var fieldNames_BTCLegacySignature = []string{
-	1: "Type",
-	2: "PublicKey",
-	3: "Signature",
-	4: "Signer",
-	5: "SignerVersion",
-	6: "Timestamp",
-	7: "Vote",
-	8: "TransactionHash",
+	1:  "Type",
+	2:  "PublicKey",
+	3:  "Signature",
+	4:  "Signer",
+	5:  "SignerVersion",
+	6:  "Timestamp",
+	7:  "Vote",
+	8:  "TransactionHash",
+	9:  "Memo",
+	10: "Data",
 }
 
 func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
@@ -6663,6 +6715,12 @@ func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(9, v.Memo)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(10, v.Data)
 	}
 
 	_, _, err := writer.Reset(fieldNames_BTCLegacySignature)
@@ -6711,14 +6769,16 @@ func (v *BTCLegacySignature) IsValid() error {
 }
 
 var fieldNames_BTCSignature = []string{
-	1: "Type",
-	2: "PublicKey",
-	3: "Signature",
-	4: "Signer",
-	5: "SignerVersion",
-	6: "Timestamp",
-	7: "Vote",
-	8: "TransactionHash",
+	1:  "Type",
+	2:  "PublicKey",
+	3:  "Signature",
+	4:  "Signer",
+	5:  "SignerVersion",
+	6:  "Timestamp",
+	7:  "Vote",
+	8:  "TransactionHash",
+	9:  "Memo",
+	10: "Data",
 }
 
 func (v *BTCSignature) MarshalBinary() ([]byte, error) {
@@ -6750,6 +6810,12 @@ func (v *BTCSignature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(9, v.Memo)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(10, v.Data)
 	}
 
 	_, _, err := writer.Reset(fieldNames_BTCSignature)
@@ -7985,14 +8051,16 @@ func (v *DoubleHashDataEntry) IsValid() error {
 }
 
 var fieldNames_ED25519Signature = []string{
-	1: "Type",
-	2: "PublicKey",
-	3: "Signature",
-	4: "Signer",
-	5: "SignerVersion",
-	6: "Timestamp",
-	7: "Vote",
-	8: "TransactionHash",
+	1:  "Type",
+	2:  "PublicKey",
+	3:  "Signature",
+	4:  "Signer",
+	5:  "SignerVersion",
+	6:  "Timestamp",
+	7:  "Vote",
+	8:  "TransactionHash",
+	9:  "Memo",
+	10: "Data",
 }
 
 func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
@@ -8024,6 +8092,12 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(9, v.Memo)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(10, v.Data)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ED25519Signature)
@@ -8072,14 +8146,16 @@ func (v *ED25519Signature) IsValid() error {
 }
 
 var fieldNames_ETHSignature = []string{
-	1: "Type",
-	2: "PublicKey",
-	3: "Signature",
-	4: "Signer",
-	5: "SignerVersion",
-	6: "Timestamp",
-	7: "Vote",
-	8: "TransactionHash",
+	1:  "Type",
+	2:  "PublicKey",
+	3:  "Signature",
+	4:  "Signer",
+	5:  "SignerVersion",
+	6:  "Timestamp",
+	7:  "Vote",
+	8:  "TransactionHash",
+	9:  "Memo",
+	10: "Data",
 }
 
 func (v *ETHSignature) MarshalBinary() ([]byte, error) {
@@ -8111,6 +8187,12 @@ func (v *ETHSignature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(9, v.Memo)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(10, v.Data)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ETHSignature)
@@ -9933,14 +10015,16 @@ func (v *PartitionSyntheticLedger) IsValid() error {
 }
 
 var fieldNames_RCD1Signature = []string{
-	1: "Type",
-	2: "PublicKey",
-	3: "Signature",
-	4: "Signer",
-	5: "SignerVersion",
-	6: "Timestamp",
-	7: "Vote",
-	8: "TransactionHash",
+	1:  "Type",
+	2:  "PublicKey",
+	3:  "Signature",
+	4:  "Signer",
+	5:  "SignerVersion",
+	6:  "Timestamp",
+	7:  "Vote",
+	8:  "TransactionHash",
+	9:  "Memo",
+	10: "Data",
 }
 
 func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
@@ -9972,6 +10056,12 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(9, v.Memo)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(10, v.Data)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RCD1Signature)
@@ -13406,6 +13496,12 @@ func (v *BTCLegacySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
 	}
+	if x, ok := reader.ReadString(9); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.Data = x
+	}
 
 	seen, err := reader.Reset(fieldNames_BTCLegacySignature)
 	if err != nil {
@@ -13458,6 +13554,12 @@ func (v *BTCSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
+	}
+	if x, ok := reader.ReadString(9); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.Data = x
 	}
 
 	seen, err := reader.Reset(fieldNames_BTCSignature)
@@ -14316,6 +14418,12 @@ func (v *ED25519Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
 	}
+	if x, ok := reader.ReadString(9); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.Data = x
+	}
 
 	seen, err := reader.Reset(fieldNames_ED25519Signature)
 	if err != nil {
@@ -14368,6 +14476,12 @@ func (v *ETHSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
+	}
+	if x, ok := reader.ReadString(9); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.Data = x
 	}
 
 	seen, err := reader.Reset(fieldNames_ETHSignature)
@@ -15415,6 +15529,12 @@ func (v *RCD1Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
+	}
+	if x, ok := reader.ReadString(9); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(10); ok {
+		v.Data = x
 	}
 
 	seen, err := reader.Reset(fieldNames_RCD1Signature)
@@ -17496,6 +17616,8 @@ func (v *BTCLegacySignature) MarshalJSON() ([]byte, error) {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.PublicKey) == 0) {
@@ -17518,6 +17640,12 @@ func (v *BTCLegacySignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
 	}
 	return json.Marshal(&u)
 }
@@ -17532,6 +17660,8 @@ func (v *BTCSignature) MarshalJSON() ([]byte, error) {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.PublicKey) == 0) {
@@ -17554,6 +17684,12 @@ func (v *BTCSignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
 	}
 	return json.Marshal(&u)
 }
@@ -17926,6 +18062,8 @@ func (v *ED25519Signature) MarshalJSON() ([]byte, error) {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.PublicKey) == 0) {
@@ -17948,6 +18086,12 @@ func (v *ED25519Signature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
 	}
 	return json.Marshal(&u)
 }
@@ -17962,6 +18106,8 @@ func (v *ETHSignature) MarshalJSON() ([]byte, error) {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.PublicKey) == 0) {
@@ -17984,6 +18130,12 @@ func (v *ETHSignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
 	}
 	return json.Marshal(&u)
 }
@@ -18482,6 +18634,8 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.PublicKey) == 0) {
@@ -18504,6 +18658,12 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	}
+	if !(len(v.Memo) == 0) {
+		u.Memo = v.Memo
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
 	}
 	return json.Marshal(&u)
 }
@@ -19678,6 +19838,8 @@ func (v *BTCLegacySignature) UnmarshalJSON(data []byte) error {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -19687,6 +19849,8 @@ func (v *BTCLegacySignature) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.Memo = v.Memo
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -19711,6 +19875,12 @@ func (v *BTCLegacySignature) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
 		v.TransactionHash = x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
 	}
 	return nil
 }
@@ -19725,6 +19895,8 @@ func (v *BTCSignature) UnmarshalJSON(data []byte) error {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -19734,6 +19906,8 @@ func (v *BTCSignature) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.Memo = v.Memo
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -19758,6 +19932,12 @@ func (v *BTCSignature) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
 		v.TransactionHash = x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
 	}
 	return nil
 }
@@ -20217,6 +20397,8 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -20226,6 +20408,8 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.Memo = v.Memo
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -20250,6 +20434,12 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
 		v.TransactionHash = x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
 	}
 	return nil
 }
@@ -20264,6 +20454,8 @@ func (v *ETHSignature) UnmarshalJSON(data []byte) error {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -20273,6 +20465,8 @@ func (v *ETHSignature) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.Memo = v.Memo
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -20297,6 +20491,12 @@ func (v *ETHSignature) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
 		v.TransactionHash = x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
 	}
 	return nil
 }
@@ -20927,6 +21127,8 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		Memo            string        `json:"memo,omitempty"`
+		Data            *string       `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -20936,6 +21138,8 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.Memo = v.Memo
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -20960,6 +21164,12 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
 		v.TransactionHash = x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
 	}
 	return nil
 }

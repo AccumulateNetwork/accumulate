@@ -31,6 +31,8 @@ type Builder struct {
 	Version    uint64
 	Vote       protocol.VoteType
 	Timestamp  Timestamp
+	Memo       string
+	Data       []byte
 
 	// Ignore64Byte (when set) stops the signature builder from automatically
 	// correcting a transaction header or body that marshals to 64 bytes.
@@ -49,22 +51,32 @@ func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
+		s.Memo = sig.Memo
+		s.Data = sig.Data
 	case *protocol.RCD1Signature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
+		s.Memo = sig.Memo
+		s.Data = sig.Data
 	case *protocol.BTCSignature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
+		s.Memo = sig.Memo
+		s.Data = sig.Data
 	case *protocol.BTCLegacySignature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
+		s.Memo = sig.Memo
+		s.Data = sig.Data
 	case *protocol.ETHSignature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
 		s.Timestamp = TimestampFromValue(sig.Timestamp)
+		s.Memo = sig.Memo
+		s.Data = sig.Data
 	case *protocol.DelegatedSignature:
 		_, err := s.Import(sig.Signature)
 		if err != nil {
@@ -220,6 +232,8 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
 		sig.Vote = s.Vote
+		sig.Memo = s.Memo
+		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeRCD1:
@@ -228,6 +242,8 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
 		sig.Vote = s.Vote
+		sig.Memo = s.Memo
+		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeBTC:
@@ -236,6 +252,8 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
 		sig.Vote = s.Vote
+		sig.Memo = s.Memo
+		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeBTCLegacy:
@@ -244,6 +262,8 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
 		sig.Vote = s.Vote
+		sig.Memo = s.Memo
+		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeETH:
@@ -252,6 +272,8 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
 		sig.Vote = s.Vote
+		sig.Memo = s.Memo
+		sig.Data = s.Data
 		return sig, s.Signer.SetPublicKey(sig)
 
 	default:
