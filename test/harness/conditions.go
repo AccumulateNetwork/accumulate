@@ -156,29 +156,35 @@ func (c sigCond) CreditPayment() msgCond {
 
 // SignatureRequest defines a condition on signature requests produced by a
 // signature.
-func (c sigCond) SignatureRequest() sigCond2 {
-	return sigCond2{c.with("signature request", deliveredThen, producedFiltered(func(r *msgResult) bool {
+func (c sigCond) SignatureRequest() sigCond {
+	return sigCond{c.with("signature request", deliveredThen, producedFiltered(func(r *msgResult) bool {
 		_, ok := messaging.UnwrapAs[*messaging.SignatureRequest](r.Message)
 		return ok
 	}))}
 }
 
+// SignatureRequestTo defines a condition on signature requests produced by a
+// signature.
+func (c sigCond) SignatureRequestTo(auth *url.URL, path ...string) sigCond {
+	auth = auth.JoinPath(path...)
+	return sigCond{c.with("signature request", deliveredThen, producedFiltered(func(r *msgResult) bool {
+		msg, ok := messaging.UnwrapAs[*messaging.SignatureRequest](r.Message)
+		return ok && msg.Authority.Equal(auth)
+	}))}
+}
+
 // AuthoritySignature defines a condition on the authority signature produced by
 // a signature.
-func (c sigCond) AuthoritySignature() sigCond2 {
-	return sigCond2{c.with("authority signature", deliveredThen, producedFiltered(func(r *msgResult) bool {
+func (c sigCond) AuthoritySignature() sigCond {
+	return sigCond{c.with("authority signature", deliveredThen, producedFiltered(func(r *msgResult) bool {
 		msg, ok := messaging.UnwrapAs[*messaging.SignatureMessage](r.Message)
 		return ok && msg.Signature.Type() == protocol.SignatureTypeAuthority
 	}))}
 }
 
-// sigCond2 provides methods to define conditions on a signature request or
-// authority signature.
-type sigCond2 struct{ msgCond }
-
 // Produced defines a condition on messages produced by a signature request or
 // authority signature.
-func (c sigCond2) Produced() sigCond2 { return sigCond2{c.with("produced", deliveredThen, produced)} }
+func (c sigCond) Produced() sigCond { return sigCond{c.with("produced", deliveredThen, produced)} }
 
 // msgCond provides methods to define conditions on a message.
 type msgCond struct {
