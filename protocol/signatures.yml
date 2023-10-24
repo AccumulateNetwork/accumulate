@@ -44,6 +44,12 @@ RCD1Signature:
     - name: TransactionHash
       type: hash
       optional: true
+    - name: Memo
+      type: string
+      optional: true
+    - name: Data
+      type: bytes
+      optional: true
 
 ED25519Signature:
   union: { type: signature }
@@ -66,6 +72,12 @@ ED25519Signature:
       optional: true
     - name: TransactionHash
       type: hash
+      optional: true
+    - name: Memo
+      type: string
+      optional: true
+    - name: Data
+      type: bytes
       optional: true
 
 BTCSignature:
@@ -90,6 +102,12 @@ BTCSignature:
     - name: TransactionHash
       type: hash
       optional: true
+    - name: Memo
+      type: string
+      optional: true
+    - name: Data
+      type: bytes
+      optional: true
 
 BTCLegacySignature:
   union: { type: signature }
@@ -113,6 +131,12 @@ BTCLegacySignature:
     - name: TransactionHash
       type: hash
       optional: true
+    - name: Memo
+      type: string
+      optional: true
+    - name: Data
+      type: bytes
+      optional: true
 
 ETHSignature:
   union: { type: signature }
@@ -135,6 +159,12 @@ ETHSignature:
       optional: true
     - name: TransactionHash
       type: hash
+      optional: true
+    - name: Memo
+      type: string
+      optional: true
+    - name: Data
+      type: bytes
       optional: true
 
 ReceiptSignature:
