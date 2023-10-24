@@ -305,6 +305,7 @@ type Account struct {
 	scratchChain           *Chain2
 	signatureChain         *Chain2
 	rootChain              *Chain2
+	bptChain               *Chain2
 	anchorSequenceChain    *Chain2
 	majorBlockChain        *Chain2
 	syntheticSequenceChain map[accountSyntheticSequenceChainMapKey]*Chain2
@@ -462,6 +463,14 @@ func (c *Account) newRootChain() *Chain2 {
 	return newChain2(c, c.logger.L, c.store, c.key.Append("RootChain"), "root")
 }
 
+func (c *Account) BptChain() *Chain2 {
+	return values.GetOrCreate(c, &c.bptChain, (*Account).newBptChain)
+}
+
+func (c *Account) newBptChain() *Chain2 {
+	return newChain2(c, c.logger.L, c.store, c.key.Append("BptChain"), "bpt")
+}
+
 func (c *Account) AnchorSequenceChain() *Chain2 {
 	return values.GetOrCreate(c, &c.anchorSequenceChain, (*Account).newAnchorSequenceChain)
 }
@@ -572,6 +581,8 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.SignatureChain(), key.SliceI(1), nil
 	case "RootChain":
 		return c.RootChain(), key.SliceI(1), nil
+	case "BptChain":
+		return c.BptChain(), key.SliceI(1), nil
 	case "AnchorSequenceChain":
 		return c.AnchorSequenceChain(), key.SliceI(1), nil
 	case "MajorBlockChain":
@@ -649,6 +660,9 @@ func (c *Account) IsDirty() bool {
 	if values.IsDirty(c.rootChain) {
 		return true
 	}
+	if values.IsDirty(c.bptChain) {
+		return true
+	}
 	if values.IsDirty(c.anchorSequenceChain) {
 		return true
 	}
@@ -689,6 +703,7 @@ func (c *Account) dirtyChains() []*MerkleManager {
 	chains = append(chains, c.scratchChain.dirtyChains()...)
 	chains = append(chains, c.signatureChain.dirtyChains()...)
 	chains = append(chains, c.rootChain.dirtyChains()...)
+	chains = append(chains, c.bptChain.dirtyChains()...)
 	chains = append(chains, c.anchorSequenceChain.dirtyChains()...)
 	chains = append(chains, c.majorBlockChain.dirtyChains()...)
 	for _, v := range c.syntheticSequenceChain {
@@ -721,6 +736,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
 	values.WalkField(&err, c.signatureChain, c.newSignatureChain, opts, fn)
 	values.WalkField(&err, c.rootChain, c.newRootChain, opts, fn)
+	values.WalkField(&err, c.bptChain, c.newBptChain, opts, fn)
 	values.WalkField(&err, c.anchorSequenceChain, c.newAnchorSequenceChain, opts, fn)
 	values.WalkField(&err, c.majorBlockChain, c.newMajorBlockChain, opts, fn)
 	values.WalkMap(&err, c.syntheticSequenceChain, c.newSyntheticSequenceChain, c.getSyntheticSequenceKeys, opts, fn)
@@ -754,6 +770,7 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.scratchChain)
 	values.Commit(&err, c.signatureChain)
 	values.Commit(&err, c.rootChain)
+	values.Commit(&err, c.bptChain)
 	values.Commit(&err, c.anchorSequenceChain)
 	values.Commit(&err, c.majorBlockChain)
 	for _, v := range c.syntheticSequenceChain {
