@@ -244,7 +244,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 	}()
 	go func() { <-ctx.Done(); _ = srv.Shutdown(context.Background()) }()
 
-	n.logger.Info("Node HTTP up", "address", "http://"+addr)
+	n.logger.Info("Node HTTP up", "module", "sim", "address", "http://"+addr)
 	return nil
 }
 
