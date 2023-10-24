@@ -364,6 +364,15 @@ func authorityIsAccepted(batch *database.Batch, txn *protocol.Transaction, sig *
 // signerIsAuthorized calls the transaction executor's SignerIsAuthorized if it
 // is defined. Otherwise it calls the default signerIsAuthorized.
 func (s *SignatureContext) signerIsAuthorized(batch *database.Batch, sig *protocol.AuthoritySignature) error {
+	// Check additional authorities
+	if s.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		for _, auth := range s.transaction.Header.Authorities {
+			if auth.Equal(sig.Authority) {
+				return nil
+			}
+		}
+	}
+
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](s.Executor, s.transaction.Body.Type())
 	if ok {
