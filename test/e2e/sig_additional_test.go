@@ -11,6 +11,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -110,4 +113,103 @@ func TestUpdateKeyAdditionalAuthority(t *testing.T) {
 	page := GetAccount[*KeyPage](t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"))
 	_, _, ok := page.EntryByKey(otherKey[32:])
 	require.True(t, ok)
+}
+
+func TestMissingAdditionalAuthority(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+	// DO NOT CREATE BOB
+
+	// Initiate, requiring a signature from bob
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice, "book", "1").
+			AdditionalAuthority(bob, "book").
+			BurnCredits(1).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	// The transaction is rejected due to the missing authority
+	var bobSigSt *protocol.TransactionStatus
+	sim.StepUntil(
+		Txn(st[0].TxID).Fails().WithError(errors.Rejected),
+		Sig(st[1].TxID).SignatureRequestTo(bob, "book").AuthoritySignature().Capture(&bobSigSt).Completes())
+
+	bobSig := sim.QueryMessage(bobSigSt.TxID, nil).Message.(*messaging.SignatureMessage).Signature.(*AuthoritySignature)
+	require.Equal(t, bobSig.Memo, "acc://bob.acme/book does not exist")
+}
+
+func TestMissingCreateAuthority(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+	// DO NOT CREATE BOB
+
+	// Initiate, requiring a signature from bob
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice).
+			CreateTokenAccount(alice, "tokens").ForToken(ACME).
+			WithAuthority(bob, "book").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	// The transaction is rejected due to the missing authority
+	var bobSigSt *protocol.TransactionStatus
+	sim.StepUntil(
+		Txn(st[0].TxID).Fails().WithError(errors.Rejected),
+		Sig(st[1].TxID).SignatureRequestTo(bob, "book").AuthoritySignature().Capture(&bobSigSt).Completes())
+
+	bobSig := sim.QueryMessage(bobSigSt.TxID, nil).Message.(*messaging.SignatureMessage).Signature.(*AuthoritySignature)
+	require.Equal(t, bobSig.Memo, "acc://bob.acme/book does not exist")
+}
+
+func TestInvalidCreateAuthority(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
+	MakeIdentity(t, sim.DatabaseFor(bob), bob)
+
+	// Initiate, requiring a signature from an account that is not a key book
+	st := sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice).
+			CreateTokenAccount(alice, "tokens").ForToken(ACME).
+			WithAuthority(bob).
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
+
+	// The transaction is rejected due to the missing authority
+	var bobSigSt *protocol.TransactionStatus
+	sim.StepUntil(
+		Txn(st[0].TxID).Fails().WithError(errors.Rejected),
+		Sig(st[1].TxID).SignatureRequestTo(bob).AuthoritySignature().Capture(&bobSigSt).Completes())
+
+	bobSig := sim.QueryMessage(bobSigSt.TxID, nil).Message.(*messaging.SignatureMessage).Signature.(*AuthoritySignature)
+	require.Equal(t, bobSig.Memo, "acc://bob.acme is not an authority")
 }
