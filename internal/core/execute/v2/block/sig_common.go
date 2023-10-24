@@ -332,7 +332,7 @@ func baseSignerCanSignTransaction(txn *protocol.Transaction, signer protocol.Sig
 }
 
 // authorityIsAccepted checks that an authority is authorized to sign for an account.
-func authorityIsAccepted(batch *database.Batch, txn *protocol.Transaction, sig *protocol.AuthoritySignature) error {
+func (m *MessageContext) authorityIsAccepted(batch *database.Batch, txn *protocol.Transaction, sig *protocol.AuthoritySignature) error {
 	// Load the principal
 	principal, err := batch.Account(txn.Header.Principal).Main().Get()
 	if err != nil {
@@ -340,7 +340,7 @@ func authorityIsAccepted(batch *database.Batch, txn *protocol.Transaction, sig *
 	}
 
 	// Get the principal's account auth
-	auth, err := getAccountAuthoritySet(batch, principal)
+	auth, err := m.getAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -385,7 +385,7 @@ func (s *SignatureContext) signerIsAuthorized(batch *database.Batch, sig *protoc
 		}
 	}
 
-	return authorityIsAccepted(batch, s.transaction, sig)
+	return s.authorityIsAccepted(batch, s.transaction, sig)
 }
 
 func loadSigner(batch *database.Batch, signerUrl *url.URL) (protocol.Signer, error) {
