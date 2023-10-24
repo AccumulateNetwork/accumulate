@@ -37,3 +37,40 @@ func checkCreateAdiAccount(st *StateManager, account *url.URL) error {
 
 	return nil
 }
+
+func setInitialAuthorities(st *StateManager, account protocol.FullAccount, authorities []*url.URL) error {
+	if !st.Globals.ExecutorVersion.V2BaikonurEnabled() {
+		// Old logic
+		return st.SetAuth(account, authorities)
+	}
+
+	switch {
+	case len(authorities) > 0:
+		// If the user specified a list of authorities, use them. Each authority
+		// is required to sign the transaction; since it is not possible to sign
+		// with an invalid authority, there's no need to check now.
+		for _, authority := range authorities {
+			account.GetAuth().AddAuthority(authority)
+		}
+		return nil
+
+	case len(account.GetAuth().Authorities) > 0:
+		// If the account already has an authority, there's nothing to do
+		return nil
+
+	default:
+		// Otherwise leave the authority set empty - but verify that there is a
+		// parent with a non-empty authority set
+		for a := account; !a.GetUrl().IsRootIdentity(); {
+			err := st.batch.Account(a.GetUrl().Identity()).Main().GetAs(&a)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+
+			if len(a.GetAuth().Authorities) > 0 {
+				return nil
+			}
+		}
+		return errors.Conflict.WithFormat("authority set of %v cannot be empty", account.GetUrl())
+	}
+}
