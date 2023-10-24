@@ -141,7 +141,7 @@ func (SignatureRequest) record(batch *database.Batch, ctx *MessageContext, req *
 		return errors.UnknownError.WithFormat("load principal: %w", err)
 	}
 
-	auth, err := getAccountAuthoritySet(batch, principal)
+	auth, err := ctx.getAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return errors.UnknownError.WithFormat("get authority set: %w", err)
 	}
