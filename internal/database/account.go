@@ -120,7 +120,7 @@ func (a *Account) Commit() error {
 
 		// Make sure the key book is set
 		account, ok := acc.(protocol.FullAccount)
-		if ok && len(account.GetAuth().Authorities) == 0 {
+		if ok && account.GetUrl().IsRootIdentity() && len(account.GetAuth().Authorities) == 0 {
 			return fmt.Errorf("missing key book")
 		}
 	}
