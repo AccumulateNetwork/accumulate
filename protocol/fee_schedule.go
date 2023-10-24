@@ -144,6 +144,12 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	case *CreateIdentity:
 		fee = FeeData * Fee(count-1)
 
+		// If the sub-ADI fee has been set, apply it
+		if s != nil && s.CreateSubIdentity != 0 && body.Url != nil && !body.Url.IsRootIdentity() {
+			fee += s.CreateSubIdentity
+			break
+		}
+
 		// Only apply the sliding schedule if the schedule exists, the name is
 		// suffixed with .acme, and the prefix is not empty
 		if s == nil || body.Url == nil || !body.Url.IsRootIdentity() || !strings.HasSuffix(body.Url.Authority, TLD) {
