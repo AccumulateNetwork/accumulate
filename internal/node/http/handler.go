@@ -152,7 +152,6 @@ type unrouter string
 func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 	service := new(api.ServiceAddress)
 	service.Argument = string(r)
-	var err error
 	switch msg := msg.(type) {
 	case *message.NodeInfoRequest:
 		// If no peer is specified, don't attach anything else to the address so
@@ -171,12 +170,18 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		return c1.Encapsulate(c2), nil
 
 	case *message.FindServiceRequest:
+		// Route the request to /acc-svc/node (with no argument)
 		return api.ServiceTypeNode.Address().Multiaddr(), nil
 
 	case *message.ConsensusStatusRequest:
 		// If no node ID is specified, route normally
 		if msg.NodeID == "" {
 			service.Type = api.ServiceTypeConsensus
+
+			// Respect the partition if it is specified
+			if msg.Partition != "" {
+				service.Argument = msg.Partition
+			}
 			break
 		}
 
@@ -196,25 +201,44 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 	case *message.NetworkStatusRequest:
 		service.Type = api.ServiceTypeNetwork
+
+		// Respect the partition if it is specified
+		if msg.Partition != "" {
+			service.Argument = msg.Partition
+		}
+
 	case *message.MetricsRequest:
 		service.Type = api.ServiceTypeMetrics
+
+		// Respect the partition if it is specified
+		if msg.Partition != "" {
+			service.Argument = msg.Partition
+		}
+
 	case *message.QueryRequest:
 		service.Type = api.ServiceTypeQuery
+
 	case *message.SubmitRequest:
 		service.Type = api.ServiceTypeSubmit
+
 	case *message.ValidateRequest:
 		service.Type = api.ServiceTypeValidate
+
 	case *message.SubscribeRequest:
 		service.Type = api.ServiceTypeEvent
+
+		// Respect the partition if it is specified
+		if msg.Partition != "" {
+			service.Argument = msg.Partition
+		}
+
 	case *message.FaucetRequest:
 		service.Type = api.ServiceTypeFaucet
+
 	default:
 		return nil, errors.BadRequest.WithFormat("%v is not routable", msg.Type())
 	}
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("cannot route request: %w", err)
-	}
 
-	// Send the request to /acc-svc/{service}:{partition}
+	// Route the request to /acc-svc/{service}:{partition}
 	return service.Multiaddr(), nil
 }
