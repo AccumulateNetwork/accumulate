@@ -746,8 +746,6 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 // reflected in the transaction results, which causes a consensus failure
 // (manually disabled here), but they really should be reflected in the BPT.
 func TestDifferentValidatorSignaturesV1(t *testing.T) {
-	t.Skip("Flakey")
-
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 

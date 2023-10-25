@@ -57,7 +57,7 @@ func TestDbRepair(t *testing.T) {
 // Nice to have, but useless for CI.  So un-skip if it is to be used.
 func TestReal(t *testing.T) {
 
-	t.Skip()
+	t.Skip("Manual")
 	color.NoColor = false
 	start := time.Now()
 

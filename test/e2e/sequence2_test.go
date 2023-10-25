@@ -136,8 +136,6 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 }
 
 func TestMissingBlockValidatorAnchorTxn(t *testing.T) {
-	t.Skip("Flaky TODO FIXME")
-
 	// Initialize
 	const bvnCount, valCount = 3, 3
 	sim := NewSim(t,

@@ -37,7 +37,7 @@ import (
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package encoding ../../internal/database/snapshot/types.yml --include sigSection,Signature
 
 func TestGenerateDbTestdata(t *testing.T) {
-	t.Skip("Only run manually")
+	t.Skip("Manual")
 
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")

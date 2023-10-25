@@ -221,7 +221,6 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 }
 
 func TestBadgerReceipts(t *testing.T) {
-	// acctesting.SkipCI(t, "flaky")
 	if os.Getenv("CI") == "true" {
 		t.Skip("Skipping test: running CI: flaky")
 	}
