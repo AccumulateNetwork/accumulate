@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -29,11 +30,17 @@ import (
 	"github.com/rs/cors"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/exp/slog"
 )
@@ -146,6 +153,15 @@ func run(_ *cobra.Command, args []string) {
 		MaxWait:   10 * time.Second,
 		NetworkId: args[0],
 	}
+	client := &message.Client{Transport: &message.RoutedTransport{
+		Network: args[0],
+		Router:  routing.MessageRouter{Router: router},
+		Dialer:  node.DialNetwork(),
+	}}
+	timestamps := &TimestampService{
+		querier: &api.Collator{Querier: client, Network: client},
+		cache:   memory.New(nil),
+	}
 
 	if strings.EqualFold(args[0], "MainNet") {
 		// Hard code the peers used for the MainNet as a hack for stability
@@ -160,11 +176,41 @@ func run(_ *cobra.Command, args []string) {
 	api, err := nodehttp.NewHandler(apiOpts)
 	Check(err)
 
+	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const prefix = "/timestamp/"
+		if r.Method != "GET" || !strings.HasPrefix(r.URL.Path, prefix) {
+			api.ServeHTTP(w, r)
+			return
+		}
+
+		var res any
+		id, err := url.ParseTxID(r.URL.Path[len(prefix):])
+		if err == nil {
+			res, err = timestamps.GetTimestamp(r.Context(), id)
+		}
+
+		if err == nil {
+			err := json.NewEncoder(w).Encode(res)
+			if err != nil {
+				slog.ErrorCtx(r.Context(), "Failed to encode response", "error", err)
+			}
+			return
+		}
+
+		err2 := errors.UnknownError.Wrap(err).(*errors.Error)
+		w.WriteHeader(int(err2.Code))
+
+		err = json.NewEncoder(w).Encode(err2)
+		if err != nil {
+			slog.ErrorCtx(r.Context(), "Failed to encode response", "error", err)
+		}
+	})
+
 	c := cors.New(cors.Options{
 		AllowedOrigins: flag.CorsOrigins,
 	})
 	server := &http.Server{
-		Handler:           c.Handler(api),
+		Handler:           c.Handler(api2),
 		ReadHeaderTimeout: flag.Timeout,
 	}
 
