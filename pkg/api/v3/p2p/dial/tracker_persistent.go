@@ -286,7 +286,8 @@ func (t *PersistentTracker) Mark(peer peer.ID, addr multiaddr.Multiaddr, status 
 		t.db.Peer(peer).Network(netName).Service(service).Last.Success = nil
 
 	case api.PeerStatusIsKnownBad:
-		// Don't do anything - last attempt will be greater than last success
+		// Increment the number of failed attempts
+		t.db.Peer(peer).Network(netName).Service(service).Last.Failed.Add(1)
 	}
 }
 
@@ -399,7 +400,10 @@ func (t *PersistentTracker) Next(addr multiaddr.Multiaddr, status api.KnownPeerS
 		sort.Slice(candidates, func(i, j int) bool {
 			a := candidates[i].Network(netName).Service(service)
 			b := candidates[j].Network(netName).Service(service)
+			x, y := a.Last.Failed.Load(), b.Last.Failed.Load()
 			switch {
+			case x != y:
+				return x < y
 			case a.Last.Attempt == nil || b.Last.Attempt == nil:
 				return false
 			case a.Last.Attempt == nil:
