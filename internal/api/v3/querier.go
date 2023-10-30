@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -31,6 +32,7 @@ type Querier struct {
 	logger    logging.OptionalLogger
 	db        database.Viewer
 	partition config.NetworkUrl
+	consensus api.ConsensusService
 }
 
 var _ api.Querier = (*Querier)(nil)
@@ -39,12 +41,14 @@ type QuerierParams struct {
 	Logger    log.Logger
 	Database  database.Viewer
 	Partition string
+	Consensus api.ConsensusService
 }
 
 func NewQuerier(params QuerierParams) *Querier {
 	s := new(Querier)
 	s.logger.L = params.Logger
 	s.db = params.Database
+	s.consensus = params.Consensus
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	return s
 }
@@ -86,22 +90,59 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 	return r, err
 }
 
+func (s *Querier) getLastBlockTime(ctx context.Context, batch *database.Batch) *time.Time {
+	if s.consensus != nil {
+		var no = false
+		cs, err := s.consensus.ConsensusStatus(ctx, api.ConsensusStatusOptions{
+			IncludePeers:      &no,
+			IncludeAccumulate: &no,
+		})
+		if err == nil {
+			return &cs.LastBlock.Time
+		}
+	}
+
+	var ledger *protocol.SystemLedger
+	if batch.Account(s.partition.Ledger()).Main().GetAs(&ledger) == nil {
+		return &ledger.Timestamp
+	}
+
+	// Cannot determine last block time
+	return nil
+}
+
 func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.URL, query api.Query) (api.Record, error) {
 	switch query := query.(type) {
 	case *api.DefaultQuery:
 		if txid, err := scope.AsTxID(); err == nil {
-			return s.queryMessage(ctx, batch, txid)
+			r, err := s.queryMessage(ctx, batch, txid)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
-		return s.queryAccount(ctx, batch, batch.Account(scope), query.IncludeReceipt)
+		r, err := s.queryAccount(ctx, batch, batch.Account(scope), query.IncludeReceipt)
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.ChainQuery:
 		if query.Name == "" {
 			if txid, err := scope.AsTxID(); err == nil {
 				h := txid.Hash()
-				return s.queryTransactionChains(ctx, batch, h[:], query.IncludeReceipt)
+				r, err := s.queryTransactionChains(ctx, batch, h[:], query.IncludeReceipt)
+				if r != nil {
+					r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+				}
+				return r, err
 			}
-			return s.queryAccountChains(ctx, batch.Account(scope))
+			r, err := s.queryAccountChains(ctx, batch.Account(scope))
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
 		record, err := batch.Account(scope).ChainByName(query.Name)
@@ -110,79 +151,155 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		}
 
 		if query.Index != nil {
-			return s.queryChainEntryByIndex(ctx, batch, record, *query.Index, true, query.IncludeReceipt)
+			r, err := s.queryChainEntryByIndex(ctx, batch, record, *query.Index, true, query.IncludeReceipt)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
 		if query.Entry != nil {
-			return s.queryChainEntryByValue(ctx, batch, record, query.Entry, true, query.IncludeReceipt)
+			r, err := s.queryChainEntryByValue(ctx, batch, record, query.Entry, true, query.IncludeReceipt)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
 		if query.Range != nil {
-			return s.queryChainEntryRange(ctx, batch, record, query.Range)
+			r, err := s.queryChainEntryRange(ctx, batch, record, query.Range)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
-		return s.queryChain(ctx, record)
+		r, err := s.queryChain(ctx, record)
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.DataQuery:
 		if query.Index != nil {
-			return s.queryDataEntryByIndex(ctx, batch, indexing.Data(batch, scope), *query.Index, true)
+			r, err := s.queryDataEntryByIndex(ctx, batch, indexing.Data(batch, scope), *query.Index, true)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
 		if query.Entry != nil {
-			return s.queryDataEntryByHash(ctx, batch, indexing.Data(batch, scope), query.Entry, true)
+			r, err := s.queryDataEntryByHash(ctx, batch, indexing.Data(batch, scope), query.Entry, true)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
 		if query.Range != nil {
-			return s.queryDataEntryRange(ctx, batch, indexing.Data(batch, scope), query.Range)
+			r, err := s.queryDataEntryRange(ctx, batch, indexing.Data(batch, scope), query.Range)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
-		return s.queryLastDataEntry(ctx, batch, indexing.Data(batch, scope))
+		r, err := s.queryLastDataEntry(ctx, batch, indexing.Data(batch, scope))
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.DirectoryQuery:
-		return s.queryDirectoryRange(ctx, batch, batch.Account(scope), query.Range)
+		r, err := s.queryDirectoryRange(ctx, batch, batch.Account(scope), query.Range)
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.PendingQuery:
-		return s.queryPendingRange(ctx, batch, batch.Account(scope), query.Range)
+		r, err := s.queryPendingRange(ctx, batch, batch.Account(scope), query.Range)
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.BlockQuery:
 		if query.Minor != nil {
-			return s.queryMinorBlock(ctx, batch, *query.Minor, query.EntryRange)
+			r, err := s.queryMinorBlock(ctx, batch, *query.Minor, query.EntryRange)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
 		if query.Major != nil {
-			return s.queryMajorBlock(ctx, batch, *query.Major, query.MinorRange, query.OmitEmpty)
+			r, err := s.queryMajorBlock(ctx, batch, *query.Major, query.MinorRange, query.OmitEmpty)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
 		if query.MinorRange != nil {
-			return s.queryMinorBlockRange(ctx, batch, query.MinorRange, query.OmitEmpty)
+			r, err := s.queryMinorBlockRange(ctx, batch, query.MinorRange, query.OmitEmpty)
+			if r != nil {
+				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+			}
+			return r, err
 		}
 
-		return s.queryMajorBlockRange(ctx, batch, query.MajorRange, query.OmitEmpty)
+		r, err := s.queryMajorBlockRange(ctx, batch, query.MajorRange, query.OmitEmpty)
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.AnchorSearchQuery:
-		return s.searchForAnchor(ctx, batch, batch.Account(scope), query.Anchor, query.IncludeReceipt)
+		r, err := s.searchForAnchor(ctx, batch, batch.Account(scope), query.Anchor, query.IncludeReceipt)
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.PublicKeySearchQuery:
 		hash, err := protocol.PublicKeyHash(query.PublicKey, query.Type)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("hash key: %w", err)
 		}
-		return s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
+		r, err := s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
 			return s.EntryByKeyHash(hash)
 		})
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.PublicKeyHashSearchQuery:
-		return s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
+		r, err := s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
 			return s.EntryByKeyHash(query.PublicKeyHash)
 		})
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.DelegateSearchQuery:
-		return s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
+		r, err := s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
 			return s.EntryByDelegate(query.Delegate)
 		})
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	case *api.MessageHashSearchQuery:
-		return s.searchForTransactionHash(ctx, batch, query.Hash)
+		r, err := s.searchForTransactionHash(ctx, batch, query.Hash)
+		if r != nil {
+			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
+		}
+		return r, err
 
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())

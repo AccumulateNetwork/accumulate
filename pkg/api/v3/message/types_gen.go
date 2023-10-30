@@ -3096,9 +3096,11 @@ func (v *Addressed) MarshalJSON() ([]byte, error) {
 
 func (v *ConsensusStatusRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      Type   `json:"type"`
-		NodeID    string `json:"nodeID,omitempty"`
-		Partition string `json:"partition,omitempty"`
+		Type              Type   `json:"type"`
+		NodeID            string `json:"nodeID,omitempty"`
+		Partition         string `json:"partition,omitempty"`
+		IncludePeers      *bool  `json:"includePeers,omitempty"`
+		IncludeAccumulate *bool  `json:"includeAccumulate,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.ConsensusStatusOptions.NodeID) == 0) {
@@ -3108,6 +3110,14 @@ func (v *ConsensusStatusRequest) MarshalJSON() ([]byte, error) {
 	if !(len(v.ConsensusStatusOptions.Partition) == 0) {
 
 		u.Partition = v.ConsensusStatusOptions.Partition
+	}
+	if !(v.ConsensusStatusOptions.IncludePeers == nil) {
+
+		u.IncludePeers = v.ConsensusStatusOptions.IncludePeers
+	}
+	if !(v.ConsensusStatusOptions.IncludeAccumulate == nil) {
+
+		u.IncludeAccumulate = v.ConsensusStatusOptions.IncludeAccumulate
 	}
 	return json.Marshal(&u)
 }
@@ -3471,13 +3481,17 @@ func (v *Addressed) UnmarshalJSON(data []byte) error {
 
 func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      Type   `json:"type"`
-		NodeID    string `json:"nodeID,omitempty"`
-		Partition string `json:"partition,omitempty"`
+		Type              Type   `json:"type"`
+		NodeID            string `json:"nodeID,omitempty"`
+		Partition         string `json:"partition,omitempty"`
+		IncludePeers      *bool  `json:"includePeers,omitempty"`
+		IncludeAccumulate *bool  `json:"includeAccumulate,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.NodeID = v.ConsensusStatusOptions.NodeID
 	u.Partition = v.ConsensusStatusOptions.Partition
+	u.IncludePeers = v.ConsensusStatusOptions.IncludePeers
+	u.IncludeAccumulate = v.ConsensusStatusOptions.IncludeAccumulate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3486,6 +3500,8 @@ func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.ConsensusStatusOptions.NodeID = u.NodeID
 	v.ConsensusStatusOptions.Partition = u.Partition
+	v.ConsensusStatusOptions.IncludePeers = u.IncludePeers
+	v.ConsensusStatusOptions.IncludeAccumulate = u.IncludeAccumulate
 	return nil
 }
 
