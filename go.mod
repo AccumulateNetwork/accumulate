@@ -7,6 +7,8 @@ retract (
 
 go 1.19
 
+replace github.com/julienschmidt/httprouter v1.3.0 => github.com/firelizzard18/httprouter v0.0.0-20231019203155-74063b4f447c
+
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
 	github.com/FactomProject/factom v0.4.0
@@ -48,6 +50,7 @@ require (
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/gobeam/stringy v0.0.6
+	github.com/julienschmidt/httprouter v1.3.0
 	github.com/libp2p/go-libp2p v0.29.2
 	github.com/libp2p/go-libp2p-kad-dht v0.21.1
 	github.com/libp2p/go-libp2p-pubsub v0.9.1
