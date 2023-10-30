@@ -19,6 +19,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/cometbft/cometbft/libs/log"
+	"github.com/julienschmidt/httprouter"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
@@ -148,8 +149,11 @@ func serveDatabases(cmd *cobra.Command, args []string) {
 	Check(err)
 
 	// Set up mux
-	mux := v2.NewMux()
-	mux.Handle("/v3", v3)
+	mux := httprouter.New()
+	Check(v2.Register(mux))
+	mux.POST("/v3", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+		v3.ServeHTTP(w, r)
+	})
 
 	// Serve
 	server := &http.Server{
