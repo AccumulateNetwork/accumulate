@@ -92,22 +92,38 @@ func (x CreditPayment) Process(batch *database.Batch, ctx *MessageContext) (_ *p
 
 func (CreditPayment) process(batch *database.Batch, ctx *MessageContext, pay *messaging.CreditPayment) error {
 	// Record the payment
-	txn := batch.Account(pay.TxID.Account()).Transaction(pay.TxID.Hash())
-	err := txn.RecordHistory(ctx.message)
+	acctTxn := batch.Account(pay.TxID.Account()).Transaction(pay.TxID.Hash())
+	err := acctTxn.RecordHistory(ctx.message)
 	if err != nil {
 		return errors.UnknownError.WithFormat("record history: %w", err)
 	}
 
-	err = txn.Payments().Add(pay.Hash())
+	err = acctTxn.Payments().Add(pay.Hash())
 	if err != nil {
 		return errors.UnknownError.WithFormat("record payment: %w", err)
 	}
 
-	// If the transaction is being initiated, mark it as pending. This only
-	// persists if the transaction remains pending through the end of the block.
-	if pay.Initiator {
-		ctx.State.MarkTransactionPending(pay.TxID)
+	if !pay.Initiator {
+		return nil
 	}
 
+	// If the transaction is being initiated, mark it as pending. This only
+	// persists if the transaction remains pending through the end of the block.
+	var txn *protocol.Transaction
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		// Load the transaction
+		txn, err = ctx.getTransaction(batch, pay.TxID.Hash())
+		if err != nil {
+			return errors.UnknownError.WithFormat("load transaction: %w", err)
+		}
+
+	} else {
+		// Fake transaction
+		txn = new(protocol.Transaction)
+		txn.Header.Principal = pay.TxID.Account()
+		txn.Body = &protocol.RemoteTransaction{Hash: pay.TxID.Hash()}
+	}
+
+	ctx.State.MarkTransactionPending(txn)
 	return nil
 }
