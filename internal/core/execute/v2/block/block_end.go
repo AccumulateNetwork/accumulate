@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -98,30 +99,14 @@ func (block *Block) Close() (execute.BlockState, error) {
 	t := time.Now()
 
 	// Record pending transactions
-	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
-	ledger := block.Batch.Account(ledgerUrl)
-	if len(block.State.Pending) > 0 {
-		// Get the major block height
-		major, err := getMajorHeight(m.Describe, block.Batch)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		// Set the expiration height
-		if m.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
-			major += 14 // default to 2 weeks
-		} else {
-			major += m.globals.Active.Globals.Limits.PendingMajorBlocks
-		}
-
-		// Record the IDs
-		err = ledger.Events().Major().Pending(major).Add(block.State.GetPending()...)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store pending expirations: %w", err)
-		}
+	err = block.recordTransactionExpiration()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Load the main chain of the minor root
+	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
+	ledger := block.Batch.Account(ledgerUrl)
 	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
@@ -251,6 +236,75 @@ func (block *Block) Close() (execute.BlockState, error) {
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
 	return &closedBlock{*block, valUp}, nil
+}
+
+func (block *Block) recordTransactionExpiration() error {
+	if len(block.State.Pending) == 0 {
+		return nil
+	}
+
+	// Get the currentMajor block height
+	currentMajor, err := getMajorHeight(block.Executor.Describe, block.Batch)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Set the expiration height
+	var max uint64
+	if block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
+		max = 14 // default to 2 weeks
+	} else {
+		max = block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks
+	}
+
+	// Parse the schedule
+	schedule, err := core.Cron.Parse(block.Executor.globals.Active.Globals.MajorBlockSchedule)
+	if err != nil && block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Determine which major block each transaction should expire on
+	pending := map[uint64][]*url.TxID{}
+	for _, txn := range block.State.GetPending() {
+		var count uint64
+		switch {
+		case !block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled():
+			// Old logic
+			count = max
+
+		case txn.Header.Expire == nil || txn.Header.Expire.AtTime == nil:
+			// No expiration specified, use the default
+			count = max
+
+		default:
+			// Always at least the next major block
+			count = 1
+
+			// Increment until the expire time is after the expected major block time
+			now := block.Time
+			for count < max && txn.Header.Expire.AtTime.After(schedule.Next(now)) {
+				now = schedule.Next(now)
+				count++
+			}
+		}
+
+		if count <= 0 || count > max {
+			count = max
+		}
+
+		major := currentMajor + count
+		pending[major] = append(pending[major], txn.ID())
+	}
+
+	// Record the IDs
+	ledger := block.Batch.Account(block.Executor.Describe.NodeUrl(protocol.Ledger))
+	for major, ids := range pending {
+		err = ledger.Events().Major().Pending(major).Add(ids...)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store pending expirations: %w", err)
+		}
+	}
+	return nil
 }
 
 func getMajorHeight(desc execute.DescribeShim, batch *database.Batch) (uint64, error) {

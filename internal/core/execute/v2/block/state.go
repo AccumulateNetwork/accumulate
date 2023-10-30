@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // BlockState tracks various metrics of a block of transactions as they are
@@ -29,7 +30,7 @@ type BlockState struct {
 
 	Anchor *BlockAnchorState
 
-	Pending map[[32]byte]*url.TxID
+	Pending map[[32]byte]*protocol.Transaction
 	Events  int
 }
 
@@ -61,11 +62,11 @@ func (s *BlockState) Empty() bool {
 		len(s.ChainUpdates.Entries) == 0
 }
 
-func (s *BlockState) MarkTransactionPending(id *url.TxID) {
+func (s *BlockState) MarkTransactionPending(txn *protocol.Transaction) {
 	if s.Pending == nil {
-		s.Pending = map[[32]byte]*url.TxID{}
+		s.Pending = map[[32]byte]*protocol.Transaction{}
 	}
-	s.Pending[id.Hash()] = id
+	s.Pending[txn.Hash()] = txn
 }
 
 func (s *BlockState) MarkTransactionDelivered(id *url.TxID) {
@@ -75,13 +76,13 @@ func (s *BlockState) MarkTransactionDelivered(id *url.TxID) {
 	delete(s.Pending, id.Hash())
 }
 
-func (s *BlockState) GetPending() []*url.TxID {
-	l := make([]*url.TxID, 0, len(s.Pending))
+func (s *BlockState) GetPending() []*protocol.Transaction {
+	l := make([]*protocol.Transaction, 0, len(s.Pending))
 	for _, p := range s.Pending {
 		l = append(l, p)
 	}
 	sort.Slice(l, func(i, j int) bool {
-		return l[i].Compare(l[j]) < 0
+		return l[i].ID().Compare(l[j].ID()) < 0
 	})
 	return l
 }
