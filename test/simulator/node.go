@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/services"
 )
 
 type Node struct {
@@ -85,4 +86,54 @@ func (n *Node) submit(envelope *messaging.Envelope, pretend bool) ([]*api.Submis
 	}
 
 	return subs, nil
+}
+
+type nodeService struct {
+	network  string
+	peerID   peer.ID
+	services services.Services
+}
+
+func (n *nodeService) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
+	info := new(api.NodeInfo)
+	info.PeerID = n.peerID
+	info.Network = n.network
+	for s, peers := range n.services {
+		if peers[n.peerID] == nil {
+			continue
+		}
+		sa, err := api.ParseServiceAddress(s)
+		if err != nil {
+			continue
+		}
+		info.Services = append(info.Services, sa)
+	}
+	return info, nil
+}
+
+func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
+	if opts.Service != nil {
+		var results []*api.FindServiceResult
+		for peer := range n.services[opts.Service.String()] {
+			results = append(results, &api.FindServiceResult{
+				PeerID: peer,
+			})
+		}
+		return results, nil
+	}
+
+	// Find all nodes
+	var results []*api.FindServiceResult
+	seen := map[peer.ID]bool{}
+	for _, service := range n.services {
+		for peer := range service {
+			if !seen[peer] {
+				seen[peer] = true
+				results = append(results, &api.FindServiceResult{
+					PeerID: peer,
+				})
+			}
+		}
+	}
+	return results, nil
 }
