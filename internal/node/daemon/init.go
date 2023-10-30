@@ -90,6 +90,9 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 				Type:    node.BvnnType,
 			})
 
+			dnn.Instrumentation.Namespace += fmt.Sprintf("_directory_%d", i)
+			bvnn.Instrumentation.Namespace += fmt.Sprintf("_%s_%d", strings.ToLower(bvn.Id), i)
+
 			if dnn.P2P.ExternalAddress == "" {
 				dnn.P2P.ExternalAddress = node.Peer().TendermintP2P().Directory().String()
 			}

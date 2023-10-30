@@ -184,6 +184,8 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 		c.Consensus.CreateEmptyBlocks = false
 	}
 
+	c.Instrumentation.Namespace += "_" + strings.ToLower(c.Accumulate.PartitionId)
+
 	// if len(c.P2P.PersistentPeers) > 0 {
 	// 	c.P2P.BootstrapPeers = c.P2P.PersistentPeers
 	// 	c.P2P.PersistentPeers = ""
@@ -220,6 +222,8 @@ func finalizeBvnn() (*cfg.Config, error) {
 	if flagInit.NoEmptyBlocks {
 		c.Consensus.CreateEmptyBlocks = false
 	}
+
+	c.Instrumentation.Namespace += "_" + strings.ToLower(c.Accumulate.PartitionId)
 
 	//in dual mode, the key between bvn and dn is shared.
 	//This will be cleaned up when init system is overhauled with AC-1263
