@@ -198,12 +198,6 @@ type BlockLedger struct {
 	extraData []byte
 }
 
-type BlockThreshold struct {
-	fieldsSet  []bool
-	MinorBlock uint64 `json:"minorBlock,omitempty" form:"minorBlock" query:"minorBlock"`
-	extraData  []byte
-}
-
 type BlockValidatorAnchor struct {
 	fieldsSet []bool
 	PartitionAnchor
@@ -390,6 +384,12 @@ type EnableAccountAuthOperation struct {
 	extraData []byte
 }
 
+type ExpireOptions struct {
+	fieldsSet []bool
+	AtTime    *time.Time `json:"atTime,omitempty" form:"atTime" query:"atTime"`
+	extraData []byte
+}
+
 type FactomDataEntry struct {
 	AccountId [32]byte `json:"accountId,omitempty" form:"accountId" query:"accountId" validate:"required"`
 	Data      []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
@@ -409,6 +409,12 @@ type FeeSchedule struct {
 	// CreateSubIdentity is the fee for creating a non-root ADI..
 	CreateSubIdentity Fee `json:"createSubIdentity,omitempty" form:"createSubIdentity" query:"createSubIdentity" validate:"required"`
 	extraData         []byte
+}
+
+type HoldUntilOptions struct {
+	fieldsSet  []bool
+	MinorBlock uint64 `json:"minorBlock,omitempty" form:"minorBlock" query:"minorBlock"`
+	extraData  []byte
 }
 
 // IndexEntry represents an entry in an index chain.
@@ -925,8 +931,10 @@ type TransactionHeader struct {
 	Initiator [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	Memo      string   `json:"memo,omitempty" form:"memo" query:"memo"`
 	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
-	// HoldUntil holds the transaction as pending until the threshold is met.
-	HoldUntil *BlockThreshold `json:"holdUntil,omitempty" form:"holdUntil" query:"holdUntil"`
+	// Expire expires the transaction as pending once the condition(s) are met.
+	Expire *ExpireOptions `json:"expire,omitempty" form:"expire" query:"expire"`
+	// HoldUntil holds the transaction as pending until the condition(s) are met.
+	HoldUntil *HoldUntilOptions `json:"holdUntil,omitempty" form:"holdUntil" query:"holdUntil"`
 	// Authorities is a list of additional authorities that must approve the transaction.
 	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
@@ -1610,20 +1618,6 @@ func (v *BlockLedger) Copy() *BlockLedger {
 
 func (v *BlockLedger) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *BlockThreshold) Copy() *BlockThreshold {
-	u := new(BlockThreshold)
-
-	u.MinorBlock = v.MinorBlock
-	if len(v.extraData) > 0 {
-		u.extraData = make([]byte, len(v.extraData))
-		copy(u.extraData, v.extraData)
-	}
-
-	return u
-}
-
-func (v *BlockThreshold) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 	u := new(BlockValidatorAnchor)
 
@@ -2059,6 +2053,23 @@ func (v *EnableAccountAuthOperation) Copy() *EnableAccountAuthOperation {
 
 func (v *EnableAccountAuthOperation) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ExpireOptions) Copy() *ExpireOptions {
+	u := new(ExpireOptions)
+
+	if v.AtTime != nil {
+		u.AtTime = new(time.Time)
+		*u.AtTime = *v.AtTime
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ExpireOptions) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *FactomDataEntry) Copy() *FactomDataEntry {
 	u := new(FactomDataEntry)
 
@@ -2107,6 +2118,20 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 }
 
 func (v *FeeSchedule) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *HoldUntilOptions) Copy() *HoldUntilOptions {
+	u := new(HoldUntilOptions)
+
+	u.MinorBlock = v.MinorBlock
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *HoldUntilOptions) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *IndexEntry) Copy() *IndexEntry {
 	u := new(IndexEntry)
@@ -3170,6 +3195,9 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	u.Initiator = v.Initiator
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesCopy(v.Metadata)
+	if v.Expire != nil {
+		u.Expire = (v.Expire).Copy()
+	}
 	if v.HoldUntil != nil {
 		u.HoldUntil = (v.HoldUntil).Copy()
 	}
@@ -3919,14 +3947,6 @@ func (v *BlockLedger) Equal(u *BlockLedger) bool {
 	return true
 }
 
-func (v *BlockThreshold) Equal(u *BlockThreshold) bool {
-	if !(v.MinorBlock == u.MinorBlock) {
-		return false
-	}
-
-	return true
-}
-
 func (v *BlockValidatorAnchor) Equal(u *BlockValidatorAnchor) bool {
 	if !v.PartitionAnchor.Equal(&u.PartitionAnchor) {
 		return false
@@ -4350,6 +4370,19 @@ func (v *EnableAccountAuthOperation) Equal(u *EnableAccountAuthOperation) bool {
 	return true
 }
 
+func (v *ExpireOptions) Equal(u *ExpireOptions) bool {
+	switch {
+	case v.AtTime == u.AtTime:
+		// equal
+	case v.AtTime == nil || u.AtTime == nil:
+		return false
+	case !((*v.AtTime).Equal(*u.AtTime)):
+		return false
+	}
+
+	return true
+}
+
 func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
 	if !(v.AccountId == u.AccountId) {
 		return false
@@ -4387,6 +4420,14 @@ func (v *FeeSchedule) Equal(u *FeeSchedule) bool {
 		}
 	}
 	if !(v.CreateSubIdentity == u.CreateSubIdentity) {
+		return false
+	}
+
+	return true
+}
+
+func (v *HoldUntilOptions) Equal(u *HoldUntilOptions) bool {
+	if !(v.MinorBlock == u.MinorBlock) {
 		return false
 	}
 
@@ -5489,6 +5530,14 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Metadata, u.Metadata)) {
+		return false
+	}
+	switch {
+	case v.Expire == u.Expire:
+		// equal
+	case v.Expire == nil || u.Expire == nil:
+		return false
+	case !((v.Expire).Equal(u.Expire)):
 		return false
 	}
 	switch {
@@ -7029,43 +7078,6 @@ func (v *BlockLedger) IsValid() error {
 	}
 }
 
-var fieldNames_BlockThreshold = []string{
-	1: "MinorBlock",
-}
-
-func (v *BlockThreshold) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.MinorBlock == 0) {
-		writer.WriteUint(1, v.MinorBlock)
-	}
-
-	_, _, err := writer.Reset(fieldNames_BlockThreshold)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *BlockThreshold) IsValid() error {
-	var errs []string
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_BlockValidatorAnchor = []string{
 	1: "Type",
 	2: "PartitionAnchor",
@@ -8359,6 +8371,43 @@ func (v *EnableAccountAuthOperation) IsValid() error {
 	}
 }
 
+var fieldNames_ExpireOptions = []string{
+	1: "AtTime",
+}
+
+func (v *ExpireOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.AtTime == nil) {
+		writer.WriteTime(1, *v.AtTime)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ExpireOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ExpireOptions) IsValid() error {
+	var errs []string
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_FactomDataEntryWrapper = []string{
 	1: "Type",
 	2: "FactomDataEntry",
@@ -8446,6 +8495,43 @@ func (v *FeeSchedule) IsValid() error {
 	} else if v.CreateSubIdentity == 0 {
 		errs = append(errs, "field CreateSubIdentity is not set")
 	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_HoldUntilOptions = []string{
+	1: "MinorBlock",
+}
+
+func (v *HoldUntilOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.MinorBlock == 0) {
+		writer.WriteUint(1, v.MinorBlock)
+	}
+
+	_, _, err := writer.Reset(fieldNames_HoldUntilOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *HoldUntilOptions) IsValid() error {
+	var errs []string
 
 	switch len(errs) {
 	case 0:
@@ -11936,8 +12022,9 @@ var fieldNames_TransactionHeader = []string{
 	2: "Initiator",
 	3: "Memo",
 	4: "Metadata",
-	5: "HoldUntil",
-	6: "Authorities",
+	5: "Expire",
+	6: "HoldUntil",
+	7: "Authorities",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -11960,12 +12047,15 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	if !(len(v.Metadata) == 0) {
 		writer.WriteBytes(4, v.Metadata)
 	}
+	if !(v.Expire == nil) {
+		writer.WriteValue(5, v.Expire.MarshalBinary)
+	}
 	if !(v.HoldUntil == nil) {
-		writer.WriteValue(5, v.HoldUntil.MarshalBinary)
+		writer.WriteValue(6, v.HoldUntil.MarshalBinary)
 	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteUrl(6, v)
+			writer.WriteUrl(7, v)
 		}
 	}
 
@@ -13701,29 +13791,6 @@ func (v *BlockLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
-func (v *BlockThreshold) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *BlockThreshold) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUint(1); ok {
-		v.MinorBlock = x
-	}
-
-	seen, err := reader.Reset(fieldNames_BlockThreshold)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *BlockValidatorAnchor) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -14613,6 +14680,29 @@ func (v *EnableAccountAuthOperation) UnmarshalFieldsFrom(reader *encoding.Reader
 	return nil
 }
 
+func (v *ExpireOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ExpireOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadTime(1); ok {
+		v.AtTime = &x
+	}
+
+	seen, err := reader.Reset(fieldNames_ExpireOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *FactomDataEntryWrapper) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -14665,6 +14755,29 @@ func (v *FeeSchedule) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_FeeSchedule)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *HoldUntilOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *HoldUntilOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.MinorBlock = x
+	}
+
+	seen, err := reader.Reset(fieldNames_HoldUntilOptions)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -16774,11 +16887,14 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(4); ok {
 		v.Metadata = x
 	}
-	if x := new(BlockThreshold); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+	if x := new(ExpireOptions); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+		v.Expire = x
+	}
+	if x := new(HoldUntilOptions); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.HoldUntil = x
 	}
 	for {
-		if x, ok := reader.ReadUrl(6); ok {
+		if x, ok := reader.ReadUrl(7); ok {
 			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
@@ -19310,7 +19426,8 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 		Initiator   string                      `json:"initiator,omitempty"`
 		Memo        string                      `json:"memo,omitempty"`
 		Metadata    *string                     `json:"metadata,omitempty"`
-		HoldUntil   *BlockThreshold             `json:"holdUntil,omitempty"`
+		Expire      *ExpireOptions              `json:"expire,omitempty"`
+		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	if !(v.Principal == nil) {
@@ -19324,6 +19441,9 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Metadata) == 0) {
 		u.Metadata = encoding.BytesToJSON(v.Metadata)
+	}
+	if !(v.Expire == nil) {
+		u.Expire = v.Expire
 	}
 	if !(v.HoldUntil == nil) {
 		u.HoldUntil = v.HoldUntil
@@ -21929,13 +22049,15 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 		Initiator   string                      `json:"initiator,omitempty"`
 		Memo        string                      `json:"memo,omitempty"`
 		Metadata    *string                     `json:"metadata,omitempty"`
-		HoldUntil   *BlockThreshold             `json:"holdUntil,omitempty"`
+		Expire      *ExpireOptions              `json:"expire,omitempty"`
+		HoldUntil   *HoldUntilOptions           `json:"holdUntil,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
+	u.Expire = v.Expire
 	u.HoldUntil = v.HoldUntil
 	u.Authorities = v.Authorities
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -21953,6 +22075,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Metadata = x
 	}
+	v.Expire = u.Expire
 	v.HoldUntil = u.HoldUntil
 	v.Authorities = u.Authorities
 	return nil
