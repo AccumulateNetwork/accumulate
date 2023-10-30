@@ -8,14 +8,13 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -48,11 +47,9 @@ func init() {
 }
 
 func accountId(_ *cobra.Command, args []string) {
-	var dclient *client.Client
+	var dclient *jsonrpc.Client
 	if len(args) == 2 {
-		var err error
-		dclient, err = client.New(args[0])
-		check(err)
+		dclient = jsonrpc.NewClient(accumulate.ResolveWellKnownEndpoint(args[0], "v3"))
 		args = args[1:]
 	}
 
@@ -69,35 +66,14 @@ func accountId(_ *cobra.Command, args []string) {
 	}
 
 	// Route using a routing table
-	req := new(api.GeneralQuery)
-	req.Url = protocol.DnUrl().JoinPath(protocol.Routing)
-	resp := new(api.ChainQueryResponse)
-	account := new(protocol.DataAccount)
-	resp.Data = account
-	err = dclient.RequestAPIv2(context.Background(), "query", req, resp)
-	if err == nil {
-		table := new(protocol.RoutingTable)
-		check(table.UnmarshalBinary(account.Entry.GetData()[0]))
-		router, err := routing.NewStaticRouter(table, nil)
-		check(err)
-
-		partition, err := router.RouteAccount(u)
-		check(err)
-		fmt.Printf("Method:         prefix routing table\n")
-		fmt.Printf("Routes to:      %s\n", partition)
-		return
-	}
-
-	var jerr *jsonrpc2.Error
-	if errors.As(err, &jerr) && jerr.Code == api.ErrCodeNotFound {
-		check(err)
-	}
-
-	// Route using old-style modulo routing
-	info, err := dclient.Describe(context.Background())
+	ns, err := dclient.NetworkStatus(context.Background(), api.NetworkStatusOptions{Partition: protocol.Directory})
 	check(err)
-	bvns := info.Network.GetBvnNames()
-	nr := u.Routing() % uint64(len(bvns))
-	fmt.Printf("Method:         modulo routing\n")
-	fmt.Printf("Routes to:      %s\n", bvns[nr])
+
+	router, err := routing.NewStaticRouter(ns.Routing, nil)
+	check(err)
+
+	partition, err := router.RouteAccount(u)
+	check(err)
+	fmt.Printf("Method:         prefix routing table\n")
+	fmt.Printf("Routes to:      %s\n", partition)
 }

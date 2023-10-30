@@ -267,30 +267,6 @@ func bootstrapReset(dir string) bool {
 	return !keep
 }
 
-func findInDescribe(addr string, partitionId string, d *cfg.Network) (partition *cfg.Partition, node *cfg.Node, err error) {
-	if partitionId == "" {
-		partitionId = d.Id
-	}
-	for i, v := range d.Partitions {
-		//search for the address.
-		partition = &d.Partitions[i]
-		if strings.EqualFold(partition.Id, partitionId) {
-			for j, n := range v.Nodes {
-				nodeAddr, err := resolveAddr(n.Address)
-				if err != nil {
-					return nil, nil, fmt.Errorf("cannot resolve node address in network describe")
-				}
-				if nodeAddr == addr {
-					node = &v.Nodes[j]
-					return partition, node, nil
-				}
-			}
-			return partition, nil, nil
-		}
-	}
-	return nil, nil, fmt.Errorf("cannot locate partition %s or address %s in network description", partitionId, addr)
-}
-
 func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config, *types.GenesisDoc, error) {
 	s := strings.Split(args[0], ".")
 	if len(s) != 2 {
@@ -433,7 +409,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		return 0, nil, nil, err
 	}
 
-	config.Accumulate.Describe = cfg.Describe{NetworkType: resp.Type, PartitionId: partitionName, LocalAddress: "", Network: nc.NetworkState.Network}
+	config.Accumulate.Describe = cfg.Describe{NetworkType: resp.Type, PartitionId: partitionName, Network: nc.NetworkState.Network}
 
 	return int(resp.BasePort), config, genDoc, nil
 }
@@ -523,7 +499,7 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 
 	config.Accumulate.Describe = cfg.Describe{
 		NetworkType: description.NetworkType, PartitionId: description.PartitionId,
-		LocalAddress: "", Network: description.Network}
+		Network: cfg.Network{Id: description.Network.Id}}
 	return netPort, config, genDoc, nil
 }
 
@@ -619,33 +595,16 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 			return "", fmt.Errorf("invalid public address %v", err)
 		}
 
-		partition, node, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
+		localAddr, port, err := resolveAddrWithPort(config.Accumulate.API.ListenAddress)
 		if err != nil {
-			return "", fmt.Errorf("cannot resolve public address in description, %v", err)
+			return "", fmt.Errorf("invalid node address %v", err)
+		}
+		if publicAddr == "" {
+			publicAddr = localAddr
 		}
 
-		//the address wasn't found in the network description, so add it
-		var localAddr string
-		var port int
-		if node == nil {
-			u, err := ensureNodeOnPartition(partition, publicAddr, getNodeTypeFromFlag())
-			if err != nil {
-				return "", err
-			}
-
-			localAddr, port, err = resolveAddrWithPort(u.String())
-			if err != nil {
-				return "", fmt.Errorf("invalid node address %v", err)
-			}
-		} else {
-			localAddr, port, err = resolveAddrWithPort(node.Address)
-			if err != nil {
-				return "", fmt.Errorf("invalid node address %v", err)
-			}
-		}
 		//local address expect ip:port only with no scheme for connection manager to work
-		config.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", localAddr, port)
-		config.P2P.ExternalAddress = config.Accumulate.LocalAddress
+		config.P2P.ExternalAddress = fmt.Sprintf("%s:%d", publicAddr, port-int(cfg.PortOffsetAccumulateApi)+int(cfg.PortOffsetTendermintP2P))
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs

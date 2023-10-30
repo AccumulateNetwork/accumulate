@@ -9,9 +9,6 @@ Describe:
     alternative: SubnetId
     toml: partition-id
     type: string
-  - name: LocalAddress
-    toml: local-address
-    type: string
   - name: Network
     toml: network
     type: Network
@@ -35,12 +32,6 @@ Network:
     - name: Id
       toml: id
       type: string
-    - name: Partitions
-      alternative: Subnets
-      toml: partitions
-      type: Partition
-      marshal-as: reference
-      repeatable: true
 
 Partition:
   fields:
