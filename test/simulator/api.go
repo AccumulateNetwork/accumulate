@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/julienschmidt/httprouter"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -148,15 +149,16 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 		return nil
 	}
 
-	var mux *http.ServeMux
+	mux := httprouter.New()
 	if opts.ListenHTTPv2 {
 		api, err := n.newApiV2()
 		if err != nil {
 			return err
 		}
-		mux = api.NewMux()
-	} else {
-		mux = new(http.ServeMux)
+		err = api.Register(mux)
+		if err != nil {
+			return err
+		}
 	}
 
 	var v3 http.Handler
@@ -200,16 +202,18 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 	}
 
 	if v3 != nil {
-		mux.Handle("/v3", v3)
+		mux.POST("/v3", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+			v3.ServeHTTP(w, r)
+		})
 	}
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.GET("/", func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 		w.Header().Set("Location", "/x")
 		w.WriteHeader(http.StatusTemporaryRedirect)
 	})
 
 	webex := web.Handler()
-	mux.HandleFunc("/x/", func(w http.ResponseWriter, r *http.Request) {
+	mux.GET("/x/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x")
 		r.RequestURI = strings.TrimPrefix(r.RequestURI, "/x")
 		webex.ServeHTTP(w, r)
