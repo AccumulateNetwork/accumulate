@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -105,8 +106,23 @@ func (p *Program) Start() (err error) {
 		return err
 	}
 
-	// Only one node can run Prometheus
-	p.secondary.Config.Instrumentation.Prometheus = false
+	{
+		a := p.primary.Config.Instrumentation
+		b := p.secondary.Config.Instrumentation
+
+		// If both sub-nodes have the default instrumentation namespace,
+		// dynamically append the partition ID to it
+		if (a.Namespace == "tendermint" || a.Namespace == "cometbft") && (b.Namespace == "tendermint" || b.Namespace == "cometbft") {
+			a.Namespace += "_" + strings.ToLower(p.primary.Config.Accumulate.PartitionId)
+			b.Namespace += "_" + strings.ToLower(p.secondary.Config.Accumulate.PartitionId)
+		}
+
+		// If both sub-nodes still have the same instrumentation namespace,
+		// disable the second one to prevent conflicts
+		if a.Namespace == b.Namespace {
+			b.Prometheus = false
+		}
+	}
 
 	if flagRun.EnableTimingLogs {
 		p.secondary.Config.Accumulate.AnalysisLog.Enabled = true
