@@ -21,6 +21,452 @@ servers:
     description: Fozzie TestNet
 
 paths:
+  /query/:id:
+    parameters:
+      - name: id
+        description: The ID of the account or message
+        in: path
+        required: true
+      - name: include_receipt
+        description: Whether to include a receipt
+        in: query
+    get:
+      summary: Query an account or message
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/accountRecord'
+                  - $ref: '#/components/schemas/messageRecord'
+
+  /query/:id/chain:
+    parameters:
+      - name: id
+        description: The ID of the account or message
+        in: path
+        required: true
+    get:
+      summary: Query an account or message's chains
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/chainRecord' } }
+
+  /query/:id/chain/:name:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: name
+        description: The chain name
+        in: path
+        required: true
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: expand
+        description: Whether to resolve chain values
+        in: query
+    get:
+      summary: Query an account's chain
+      description: Queries the state or range of entries of the given chain
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/chainRecord'
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
+
+  /query/:id/chain/:name/index/:index:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: name
+        description: The chain name
+        in: path
+        required: true
+      - name: index
+        description: The entry index
+        in: path
+        required: true
+      - name: include_receipt
+        description: Whether to include a receipt
+        in: query
+    get:
+      summary: Query a chain entry by index
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chainEntryRecord'
+
+  /query/:id/chain/:name/entry/:value:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: name
+        description: The chain name
+        in: path
+        required: true
+      - name: value
+        description: The entry value
+        in: path
+        required: true
+      - name: include_receipt
+        description: Whether to include a receipt
+        in: query
+    get:
+      summary: Look up a chain entry by value
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chainEntryRecord'
+
+  /query/:id/data:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: expand
+        description: Whether to resolve chain values
+        in: query
+    get:
+      summary: Query a data account
+      description: Queries the latest entry or a range of entries of the given data account
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/chainEntryRecord'
+                      - type: object
+                        properties:
+                          # TODO the message is a transaction
+                          value: { $ref: '#/components/schemas/messageRecord' }
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
+
+  /query/:id/data/index/:index:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: index
+        description: The entry index
+        in: path
+        required: true
+    get:
+      summary: Query a data entry by index
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/chainEntryRecord'
+                  - type: object
+                    properties:
+                      # TODO the message is a transaction
+                      value: { $ref: '#/components/schemas/messageRecord' }
+
+  /query/:id/data/entry/:hash:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: hash
+        description: The entry hash
+        in: path
+        required: true
+    get:
+      summary: Look up a data entry by hash
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/chainEntryRecord'
+                  - type: object
+                    properties:
+                      # TODO the message is a transaction
+                      value: { $ref: '#/components/schemas/messageRecord' }
+
+  /query/:id/directory:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: expand
+        description: Whether to resolve accounts
+        in: query
+    get:
+      summary: Query an identity's directory entries
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/urlRecord' } }
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/accountRecord' } }
+
+  /query/:id/pending:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: expand
+        description: Whether to resolve transactions
+        in: query
+    get:
+      summary: Query an account's pending transactions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/txidRecord' } }
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          # TODO the message is a transaction
+                          records: { type: array, items: { $ref: '#/components/schemas/messageRecord' } }
+
+  /block/minor:
+    parameters:
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: omit_empty
+        description: Whether to omit or include empty blocks
+        in: query
+    get:
+      summary: List minor blocks
+      responses:
+        '200':
+          description: OK
+
+  /block/major:
+    parameters:
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: omit_empty
+        description: Whether to omit or include empty blocks
+        in: query
+    get:
+      summary: List major blocks
+      responses:
+        '200':
+          description: OK
+
+  /block/minor/:index:
+    parameters:
+      - name: index
+        description: The minor block index
+        in: path
+        required: true
+      - name: entry_start
+        description: The start of the entry range
+        in: query
+      - name: entry_count
+        description: The size of the entry range
+        in: query
+      - name: entry_from_end
+        description: Whether to start querying entries from the beginning or end
+        in: query
+    get:
+      summary: Query a minor block
+      responses:
+        '200':
+          description: OK
+
+  /block/major/:index:
+    parameters:
+      - name: index
+        description: The major block index
+        in: path
+        required: true
+      - name: minor_start
+        description: The start of the minor block range
+        in: query
+      - name: minor_count
+        description: The size of the minor block range
+        in: query
+      - name: minor_from_end
+        description: Whether to start querying minor blocks from the beginning or end
+        in: query
+      - name: omit_empty
+        description: Whether to omit or include empty blocks
+        in: query
+    get:
+      summary: Query a major block
+      responses:
+        '200':
+          description: OK
+
+  /search/:id/anchor/:value:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: value
+        description: The anchor value
+        in: path
+        required: true
+      - name: include_receipt
+        description: Whether to include a receipt
+        in: query
+    get:
+      summary: Search an account for an anchor
+      responses:
+        '200':
+          description: OK
+
+  /search/:id/publicKey/:value:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: value
+        description: An address, public key, or public key hash
+        in: path
+        required: true
+      - name: type
+        description: The type of the public key
+        in: query
+    get:
+      summary: Search an account for a public key
+      responses:
+        '200':
+          description: OK
+
+  /search/:id/delegate/:value:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: value
+        description: The delegate URL
+        in: path
+        required: true
+    get:
+      summary: Search an account for a delegate
+      responses:
+        '200':
+          description: OK
+
   /v3:
     post:
       summary: API v3 (query)

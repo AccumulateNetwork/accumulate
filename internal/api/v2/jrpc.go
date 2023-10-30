@@ -19,6 +19,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/go-playground/validator/v10"
+	"github.com/julienschmidt/httprouter"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -55,17 +56,26 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 	}
 }
 
-func (m *JrpcMethods) NewMux() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.Handle("/status", m.jrpc2http(m.Status))
-	mux.Handle("/version", m.jrpc2http(m.Version))
-	mux.Handle("/describe", m.jrpc2http(m.Describe))
-	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
+func (m *JrpcMethods) Register(r *httprouter.Router) error {
+	r.GET("/status", m.jrpc2http(m.Status))
+	r.GET("/version", m.jrpc2http(m.Version))
+	r.GET("/describe", m.jrpc2http(m.Describe))
+
+	rpc := jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0))
+	r.POST("/v2", func(w http.ResponseWriter, r *http.Request, p_ httprouter.Params) {
+		rpc(w, r)
+	})
+	return nil
+}
+
+func (m *JrpcMethods) NewMux() http.Handler {
+	mux := httprouter.New()
+	_ = m.Register(mux)
 	return mux
 }
 
-func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
-	return func(res http.ResponseWriter, req *http.Request) {
+func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) httprouter.Handle {
+	return func(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			res.WriteHeader(http.StatusBadRequest)
