@@ -158,6 +158,11 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	}
 
 	// Register services
+	f.registerSvc(api.ServiceTypeNode, message.NodeService{NodeService: &nodeService{
+		network:  f.networkFactory.network.Id,
+		peerID:   n.peerID,
+		services: f.getServices().Services,
+	}})
 	f.registerSvc(api.ServiceTypeConsensus, message.ConsensusService{ConsensusService: n})
 	f.registerSvc(api.ServiceTypeSubmit, message.Submitter{Submitter: n})
 	f.registerSvc(api.ServiceTypeValidate, message.Validator{Validator: n})
@@ -436,9 +441,16 @@ func (f *nodeFactory) getSvcHandler() *message.Handler {
 }
 
 func (f *nodeFactory) registerSvc(typ api.ServiceType, svc message.Service) {
+	var sa *api.ServiceAddress
+	if typ == api.ServiceTypeNode {
+		sa = typ.Address()
+	} else {
+		sa = typ.AddressFor(f.networkFactory.id)
+	}
+
 	h := f.getSvcHandler()
 	_ = h.Register(svc)
-	f.getServices().RegisterService(f.getPeerID(), typ.AddressFor(f.networkFactory.id), h.Handle)
+	f.getServices().RegisterService(f.getPeerID(), sa, h.Handle)
 }
 
 type abciFunc = func(*nodeFactory, execute.Executor, consensus.RestoreFunc) consensus.App

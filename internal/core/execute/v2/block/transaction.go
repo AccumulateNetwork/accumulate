@@ -49,6 +49,14 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 		}
 	}
 
+	// Check if the transaction has expired
+	if t.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() &&
+		t.transaction.Header.Expire != nil &&
+		t.transaction.Header.Expire.AtTime != nil &&
+		t.Block.Time.After(*t.transaction.Header.Expire.AtTime) {
+		return t.recordFailedTransaction(batch, delivery, errors.Expired.With("transaction deadline exceeded"))
+	}
+
 	// Load the principal
 	principal, err := batch.Account(delivery.Transaction.Header.Principal).Main().Get()
 	switch {
