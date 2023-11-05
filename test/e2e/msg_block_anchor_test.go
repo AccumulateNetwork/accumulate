@@ -27,13 +27,41 @@ import (
 // TestAnchorThreshold verifies that an anchor is not executed until it is
 // signed by 2/3 of the validators
 func TestAnchorThreshold(t *testing.T) {
-	const bvnCount, valCount = 1, 3 // One BVN, three nodes
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice)
-	sim := NewSim(t,
+
+	const bvnCount, valCount = 1, 3 // One BVN, three nodes
+	opts := []simulator.Option{
 		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
-	)
+		simulator.DisableAnchorHealing,
+	}
+
+	// Capture the BVN's anchors and verify they're the same
+	var anchors []*messaging.BlockAnchor
+	opts = append(opts, simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+		for _, m := range env.Messages {
+			blk, ok := m.(*messaging.BlockAnchor)
+			if !ok {
+				continue
+			}
+			require.Len(t, env.Messages, 1)
+			require.IsType(t, (*messaging.SequencedMessage)(nil), blk.Anchor)
+			seq := blk.Anchor.(*messaging.SequencedMessage)
+			require.IsType(t, (*messaging.TransactionMessage)(nil), seq.Message)
+			txn := seq.Message.(*messaging.TransactionMessage)
+			anchor, ok := txn.Transaction.Body.(*BlockValidatorAnchor)
+			if !ok || anchor.MinorBlockIndex <= 10 {
+				continue
+			}
+
+			anchors = append(anchors, blk)
+			return false, nil
+		}
+		return true, nil
+	}))
+
+	sim := NewSim(t, opts...)
 	sim.SetRoute(alice, "BVN0")
 
 	// Clear out the anchors from genesis
@@ -49,18 +77,6 @@ func TestAnchorThreshold(t *testing.T) {
 			Body(&CreateTokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()}).
 			SignWith(alice.JoinPath("book", "1")).Version(1).Timestamp(1).PrivateKey(aliceKey)),
 	)
-
-	// Capture the BVN's anchors and verify they're the same
-	var anchors []*messaging.BlockAnchor
-	sim.SetSubmitHook(Directory, func(messages []messaging.Message) (drop bool, keepHook bool) {
-		for _, msg := range messages {
-			if anchor, ok := msg.(*messaging.BlockAnchor); ok {
-				anchors = append(anchors, anchor)
-				drop = true
-			}
-		}
-		return drop, len(anchors) < valCount
-	})
 
 	sim.StepUntil(True(func(*Harness) bool { return len(anchors) >= valCount }))
 
@@ -97,6 +113,7 @@ func TestAnchorPlaceholder(t *testing.T) {
 
 	opts := []simulator.Option{
 		simulator.Genesis(GenesisTime),
+		simulator.DisableAnchorHealing,
 	}
 
 	// One BVN, two nodes
@@ -104,7 +121,7 @@ func TestAnchorPlaceholder(t *testing.T) {
 
 	// Capture anchors
 	var captured []*messaging.BlockAnchor
-	opts = append(opts, simulator.CaptureDispatchedMessages(func(ctx context.Context, u *url.URL, env *messaging.Envelope) (send bool, err error) {
+	opts = append(opts, simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
 		for _, m := range env.Messages {
 			blk, ok := m.(*messaging.BlockAnchor)
 			if !ok {
