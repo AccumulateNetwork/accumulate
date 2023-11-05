@@ -25,8 +25,9 @@ type DB struct {
 }
 
 type LastStatus struct {
-	Success *time.Time `json:"success,omitempty" form:"success" query:"success" validate:"required"`
-	Attempt *time.Time `json:"attempt,omitempty" form:"attempt" query:"attempt" validate:"required"`
+	Success *time.Time  `json:"success,omitempty" form:"success" query:"success" validate:"required"`
+	Attempt *time.Time  `json:"attempt,omitempty" form:"attempt" query:"attempt" validate:"required"`
+	Failed  *AtomicUint `json:"failed,omitempty" form:"failed" query:"failed" validate:"required"`
 }
 
 type PeerAddressStatus struct {
@@ -76,6 +77,9 @@ func (v *LastStatus) Copy() *LastStatus {
 	if v.Attempt != nil {
 		u.Attempt = new(time.Time)
 		*u.Attempt = *v.Attempt
+	}
+	if v.Failed != nil {
+		u.Failed = (v.Failed).Copy()
 	}
 
 	return u
@@ -173,6 +177,14 @@ func (v *LastStatus) Equal(u *LastStatus) bool {
 	case v.Attempt == nil || u.Attempt == nil:
 		return false
 	case !((*v.Attempt).Equal(*u.Attempt)):
+		return false
+	}
+	switch {
+	case v.Failed == u.Failed:
+		// equal
+	case v.Failed == nil || u.Failed == nil:
+		return false
+	case !((v.Failed).Equal(u.Failed)):
 		return false
 	}
 
