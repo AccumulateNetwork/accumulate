@@ -1,0 +1,29 @@
+MessageData:
+  fields:
+    - name: LastUpdated
+      type: time
+    - name: Chains
+      type: ChainData
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+      keep-empty: true
+
+ChainData:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Chain
+      type: string
+    - name: Block
+      type: uint
+    - name: Time
+      type: time
+
+AnchorData:
+  fields:
+    - name: Block
+      type: uint
+    - name: Time
+      type: time
