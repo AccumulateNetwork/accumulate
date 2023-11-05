@@ -68,6 +68,9 @@ func (db *DB) Peer(id peer.ID) *PeerStatus {
 func (p *PeerStatus) Address(addr multiaddr.Multiaddr) *PeerAddressStatus {
 	return p.Addresses.Insert(&PeerAddressStatus{
 		Address: addr,
+		Last: LastStatus{
+			Failed: &AtomicUint{},
+		},
 	})
 }
 
@@ -81,5 +84,8 @@ func (p *PeerStatus) Network(name string) *PeerNetworkStatus {
 func (p *PeerNetworkStatus) Service(addr *api.ServiceAddress) *PeerServiceStatus {
 	return p.Services.Insert(&PeerServiceStatus{
 		Address: addr,
+		Last: LastStatus{
+			Failed: &AtomicUint{},
+		},
 	})
 }
