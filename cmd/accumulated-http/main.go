@@ -24,6 +24,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/cometbft/cometbft/libs/log"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
 	"github.com/spf13/cobra"
@@ -86,6 +87,19 @@ func init() {
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
 }
 
+var nodeMainnetApollo = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWAgrBYpWEXRViTnToNmpCoC3dvHdmR6m1FmyKjDn1NYpj"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/apollo-mainnet.accumulate.defidevs.io")},
+}
+var nodeMainnetYutu = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWDqFDwjHEog1bNbxai2dKSaR1aFvq2LAZ2jivSohgoSc7"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/yutu-mainnet.accumulate.defidevs.io")},
+}
+var nodeMainnetChandrayaan = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWHzjkoeAqe7L55tAaepCbMbhvNu9v52ayZNVQobdEE1RL"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/chandrayaan-mainnet.accumulate.defidevs.io")},
+}
+
 func run(_ *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	sigs := make(chan os.Signal, 1)
@@ -125,13 +139,25 @@ func run(_ *cobra.Command, args []string) {
 	router, err := apiutil.InitRouter(ctx, node, args[0])
 	Check(err)
 
-	api, err := nodehttp.NewHandler(nodehttp.Options{
+	apiOpts := nodehttp.Options{
 		Logger:    logger,
 		Node:      node,
 		Router:    router,
 		MaxWait:   10 * time.Second,
 		NetworkId: args[0],
-	})
+	}
+
+	if strings.EqualFold(args[0], "MainNet") {
+		// Hard code the peers used for the MainNet as a hack for stability
+		apiOpts.PeerMap = map[string][]peer.AddrInfo{
+			"apollo":      {nodeMainnetApollo},
+			"yutu":        {nodeMainnetYutu},
+			"chandrayaan": {nodeMainnetChandrayaan},
+			"directory":   {nodeMainnetApollo, nodeMainnetYutu, nodeMainnetChandrayaan},
+		}
+	}
+
+	api, err := nodehttp.NewHandler(apiOpts)
 	Check(err)
 
 	c := cors.New(cors.Options{
@@ -235,4 +261,20 @@ func serve(server *http.Server, l net.Listener, secure bool, wg *sync.WaitGroup,
 		}
 		slog.Error("Server stopped", "error", err, "address", l.Addr())
 	}()
+}
+
+func mustParsePeer(s string) peer.ID {
+	id, err := peer.Decode(s)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func mustParseMulti(s string) multiaddr.Multiaddr {
+	addr, err := multiaddr.NewMultiaddr(s)
+	if err != nil {
+		panic(err)
+	}
+	return addr
 }

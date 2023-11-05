@@ -7,12 +7,15 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/julienschmidt/httprouter"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -23,6 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/rest"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -40,6 +44,9 @@ type Options struct {
 	Node      *p2p.Node
 	Router    routing.Router
 	NetworkId string
+
+	// PeerMap hard-codes the peers used for partitions
+	PeerMap map[string][]peer.AddrInfo
 
 	// For API v2
 	Network *config.Describe
@@ -60,10 +67,20 @@ func NewHandler(opts Options) (*Handler, error) {
 	}
 
 	// Message clients
+	var netDial message.Dialer
+	if opts.PeerMap != nil {
+		netDial = &dumbDialer{
+			peers:     opts.PeerMap,
+			connector: opts.Node.Connector(),
+			self:      opts.Node.ID(),
+		}
+	} else {
+		netDial = opts.Node.DialNetwork()
+	}
 	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: network,
 		Router:  routing.MessageRouter{Router: opts.Router},
-		Dialer:  opts.Node.DialNetwork(),
+		Dialer:  netDial,
 	}}
 
 	var selfClient *message.Client
@@ -260,4 +277,56 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 	// Route the request to /acc-svc/{service}:{partition}
 	return service.Multiaddr(), nil
+}
+
+// dumbDialer always dials one of the seed nodes
+type dumbDialer struct {
+	peers     map[string][]peer.AddrInfo
+	connector dial.Connector
+	count     atomic.Int32
+	self      peer.ID
+}
+
+func (d *dumbDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
+	_, id, sa, ip, err := api.UnpackAddress(addr)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if sa == nil {
+		return nil, errors.BadRequest.WithFormat("invalid address %v (missing service)", addr)
+	}
+
+	if ip != nil && id == "" {
+		return nil, errors.BadRequest.WithFormat("cannot specify address without peer ID")
+	}
+
+	if id != "" {
+		return d.connector.Connect(ctx, &dial.ConnectionRequest{
+			Service:  sa,
+			PeerID:   id,
+			PeerAddr: ip,
+		})
+	}
+
+	if sa.Argument == "" {
+		return d.connector.Connect(ctx, &dial.ConnectionRequest{
+			Service: sa,
+			PeerID:  d.self,
+		})
+	}
+
+	// Pick a peer from the map
+	peers, ok := d.peers[strings.ToLower(sa.Argument)]
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("invalid address %v (unknown partition %q)", addr, sa.Argument)
+	}
+	peer := peers[d.count.Add(1)%int32(len(peers))]
+	if len(peer.Addrs) > 0 {
+		ip = peer.Addrs[0]
+	}
+	return d.connector.Connect(ctx, &dial.ConnectionRequest{
+		Service:  sa,
+		PeerID:   peer.ID,
+		PeerAddr: ip,
+	})
 }
