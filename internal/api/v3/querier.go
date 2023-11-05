@@ -412,7 +412,7 @@ func (s *Querier) queryTransactionChains(ctx context.Context, batch *database.Ba
 			return nil, errors.UnknownError.Wrap(err)
 		}
 
-		if !bytes.Equal(r.Receipt.Start, hash) {
+		if r.Receipt != nil && !bytes.Equal(r.Receipt.Start, hash) {
 			return nil, errors.InternalError.With("receipt does not belong to the transaction")
 		}
 
