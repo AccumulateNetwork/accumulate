@@ -18,6 +18,8 @@ import (
 
 func (n *Node) Tracker() dial.Tracker { return n.tracker }
 
+func (n *Node) Connector() dial.Connector { return (*connector)(n) }
+
 // DialNetwork returns a [message.MultiDialer] that opens a stream to a node
 // that can provides a given service.
 func (n *Node) DialNetwork() message.Dialer {
