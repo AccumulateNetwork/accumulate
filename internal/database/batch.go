@@ -138,7 +138,9 @@ func (b *Batch) Commit() error {
 
 	err := b.baseCommit()
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		// An error during commit indicates a serious bug and likely will result
+		// in a corrupted database (partial write) so it's time to panic
+		panic(errors.UnknownError.Wrap(err))
 	}
 
 	// Committing may have changed the BPT, so commit it

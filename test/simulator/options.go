@@ -9,6 +9,7 @@ package simulator
 import (
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -219,6 +220,15 @@ func genesis(time time.Time, values *core.GlobalValues) SnapshotFunc {
 		}
 
 		return ioutil2.NewBuffer(genDocs[partition]), nil
+	}
+}
+
+// InitialAcmeSupply overrides the default initial ACME supply. A value of nil
+// will disable setting the initial supply.
+func InitialAcmeSupply(v *big.Int) Option {
+	return func(f *simFactory) error {
+		f.initialSupply = v
+		return nil
 	}
 }
 

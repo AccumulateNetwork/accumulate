@@ -32,7 +32,20 @@ go test 1/2:
   - export RECORD_FAILURE="${PWD}/failures"
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags testnet ./...
 
-.go test 2/2:
+go test 2/2:
+  # No-mmap indexer test
+  extends: .go test
+  variables:
+    GOMODCACHE: ''
+    GOLANGCI_LINT_CACHE: ''
+  artifacts:
+    paths:
+      - failures/*
+  script:
+  - export RECORD_FAILURE="${PWD}/failures"
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -tags no_mmap ./internal/util/indexing
+
+.go test x:
   # Full devnet validation test
   extends: .go test
   variables:
