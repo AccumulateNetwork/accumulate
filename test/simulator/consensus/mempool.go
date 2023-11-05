@@ -20,16 +20,20 @@ import (
 type mempool struct {
 	count      int
 	logger     logging.OptionalLogger
-	byHash     map[[32]byte]*messaging.Envelope
-	arrival    map[*messaging.Envelope]int
-	candidates []*messaging.Envelope
+	pool       map[[32]byte]*mpEntry
+	candidates []*mpEntry
+}
+
+type mpEntry struct {
+	order int
+	hash  [32]byte
+	env   *messaging.Envelope
 }
 
 func newMempool(logger log.Logger) *mempool {
 	m := new(mempool)
 	m.logger.Set(logger)
-	m.byHash = map[[32]byte]*messaging.Envelope{}
-	m.arrival = map[*messaging.Envelope]int{}
+	m.pool = map[[32]byte]*mpEntry{}
 	return m
 }
 
@@ -41,14 +45,23 @@ func (m *mempool) Add(block uint64, envelope *messaging.Envelope) {
 	}
 	h := sha256.Sum256(b)
 
-	m.byHash[h] = envelope
-	m.arrival[envelope] = m.count
+	m.pool[h] = &mpEntry{m.count, h, envelope.Copy()}
 	m.count++
 }
 
 // Propose proposes a list of envelopes to execute in the next block.
 func (m *mempool) Propose(block uint64) []*messaging.Envelope {
-	return m.candidates
+	// Sort by arrival order
+	sort.Slice(m.candidates, func(i, j int) bool {
+		a, b := m.candidates[i], m.candidates[j]
+		return a.order < b.order
+	})
+
+	env := make([]*messaging.Envelope, len(m.candidates))
+	for i, c := range m.candidates {
+		env[i] = c.env
+	}
+	return env
 }
 
 // CheckPropose checks a block proposal received from another node.
@@ -59,7 +72,7 @@ func (m *mempool) CheckProposed(block uint64, envelope *messaging.Envelope) erro
 	}
 	h := sha256.Sum256(b)
 
-	if _, ok := m.byHash[h]; !ok {
+	if _, ok := m.pool[h]; !ok {
 		return errors.Conflict.With("not present in mempool")
 	}
 	return nil
@@ -77,17 +90,12 @@ func (m *mempool) AcceptProposed(block uint64, envelopes []*messaging.Envelope) 
 		}
 		h := sha256.Sum256(b)
 
-		delete(m.arrival, m.byHash[h])
-		delete(m.byHash, h)
+		delete(m.pool, h)
 	}
 
-	// Use remaining envelopes as candidates and sort by arrival order
+	// Use remaining envelopes as candidates
 	m.candidates = m.candidates[:0]
-	for env := range m.arrival {
-		m.candidates = append(m.candidates, env)
+	for _, c := range m.pool {
+		m.candidates = append(m.candidates, c)
 	}
-	sort.Slice(m.candidates, func(i, j int) bool {
-		a, b := m.candidates[i], m.candidates[j]
-		return m.arrival[a] < m.arrival[b]
-	})
 }

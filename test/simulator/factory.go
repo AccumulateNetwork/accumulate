@@ -19,6 +19,7 @@ import (
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -51,6 +52,8 @@ type simFactory struct {
 	ignoreDeliverResults        bool
 	ignoreCommitResults         bool
 	deterministic               bool
+	dropInitialAnchor           bool
+	disableAnchorHealing        bool
 	interceptDispatchedMessages dispatchInterceptor
 
 	// State
@@ -573,6 +576,24 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Initialize the major block scheduler
 	if f.networkFactory.typ == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(f.getEventBus())
+	}
+
+	// Create the conductor. This must happen before creating the executor since
+	// it needs to receive the initial WillChangeGlobals event.
+	conductor := &crosschain.Conductor{
+		Partition:            &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
+		ValidatorKey:         execOpts.Key,
+		Database:             execOpts.Database,
+		Querier:              api.Querier2{Querier: f.getServices()},
+		Submitter:            f.getServices(),
+		RunTask:              execOpts.BackgroundTaskLauncher,
+		DropInitialAnchor:    f.dropInitialAnchor,
+		DisableAnchorHealing: f.disableAnchorHealing,
+		Intercept:            f.interceptDispatchedMessages,
+	}
+	err := conductor.Start(f.getEventBus())
+	if err != nil {
+		panic(err)
 	}
 
 	// Create an executor
