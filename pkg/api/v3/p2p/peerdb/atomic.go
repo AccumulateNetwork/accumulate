@@ -120,3 +120,45 @@ func (s *AtomicSlice[PT, T]) UnmarshalJSON(b []byte) error {
 	s.Store(l)
 	return err
 }
+
+type AtomicUint atomic.Uint64
+
+func (v *AtomicUint) u() *atomic.Uint64 {
+	return (*atomic.Uint64)(v)
+}
+
+func (v *AtomicUint) Load() uint64 {
+	if v == nil {
+		return 0
+	}
+	return v.u().Load()
+}
+
+func (v *AtomicUint) Store(u uint64) {
+	v.u().Store(u)
+}
+
+func (v *AtomicUint) Add(delta uint64) {
+	v.u().Add(delta)
+}
+
+func (v *AtomicUint) Copy() *AtomicUint {
+	var u AtomicUint
+	u.Store(v.Load())
+	return &u
+}
+
+func (v *AtomicUint) Equal(u *AtomicUint) bool {
+	return v.Load() == u.Load()
+}
+
+func (v *AtomicUint) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.Load())
+}
+
+func (v *AtomicUint) UnmarshalJSON(b []byte) error {
+	var u uint64
+	err := json.Unmarshal(b, &u)
+	v.Store(u)
+	return err
+}
