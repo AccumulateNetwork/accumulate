@@ -28,7 +28,7 @@ func New(prefix *record.Key) *Database {
 
 // Begin begins a change set.
 func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
-	return NewChangeSet(prefix, d.get, d.put)
+	return NewChangeSet(prefix, d.get, d.put, nil)
 }
 
 // Export exports the database as a set of entries. Behavior is undefined if the

@@ -125,6 +125,12 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			}
 
 			return wr.Flush()
+		},
+
+		// Discard the transaction
+		func() {
+			// Fix https://discuss.dgraph.io/t/badgerdb-consume-too-much-disk-space/17070?
+			rd.Discard()
 		})
 }
 
