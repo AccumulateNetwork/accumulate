@@ -16,42 +16,41 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
-	newsim "gitlab.com/accumulatenetwork/accumulate/test/simulator"
-	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-func sendLotsOfTokens(sim *simulator.Simulator, N, M int, timestamp *uint64, sender *url.URL, senderKey ed25519.PrivateKey) {
+func sendLotsOfTokens(sim *Sim, N, M int, timestamp *uint64, sender *url.URL, senderKey ed25519.PrivateKey) {
+	sim.TB.Helper()
+
 	recipients := make([]*url.URL, N)
 	for i := range recipients {
 		recipients[i] = acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey("recipient", i))
 	}
 
 	for i := 0; i < M; i++ {
-		var envs []*messaging.Envelope
-
+		var cond []Condition
 		for i := 0; i < N; i++ {
-			envs = append(envs,
-				MustBuild(sim.TB, build.Transaction().
+			st := sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().
 					For(sender).
 					Body(&SendTokens{To: []*TokenRecipient{{
 						Url:    recipients[rand.Intn(len(recipients))],
 						Amount: *big.NewInt(1000),
 					}}}).
-					SignWith(sender).Version(1).Timestamp(timestamp).PrivateKey(senderKey)),
-			)
+					SignWith(sender).Version(1).Timestamp(timestamp).PrivateKey(senderKey))
+			cond = append(cond,
+				Txn(st.TxID).Completes())
 		}
 
-		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(envs...)...)
+		sim.StepUntil(cond...)
 	}
 }
 
@@ -74,38 +73,40 @@ func TestStateRelaunch(t *testing.T) {
 	}
 
 	// [1] Setup
-	s1 := simulator.NewWith(t, simulator.SimulatorOptions{BvnCount: bvnCount, OpenDB: openDb})
-	s1.InitFromGenesis()
-	s1.CreateAccount(&LiteIdentity{Url: sender.RootIdentity(), CreditBalance: 1e9})
-	s1.CreateAccount(&LiteTokenAccount{Url: sender, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e6 * AcmePrecision)})
+	s1 := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), bvnCount, 1),
+		simulator.WithDatabase(openDb),
+		simulator.Genesis(GenesisTime),
+	)
+	MakeAccount(t, s1.DatabaseFor(sender), &LiteIdentity{Url: sender.RootIdentity(), CreditBalance: 1e9})
+	MakeAccount(t, s1.DatabaseFor(sender), &LiteTokenAccount{Url: sender, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e6 * AcmePrecision)})
 
 	// [1] Send a bunch of tokens
 	sendLotsOfTokens(s1, 10, 1, &timestamp, sender, senderKey)
 
 	// [1] Wait a bit for everything to settle
-	s1.ExecuteBlocks(10)
+	s1.StepN(10)
 
 	// [1] Get the DN root hash
 	var root1 []byte
 	var err error
-	x := s1.Partition(Directory)
-	_ = x.Database.View(func(batch *database.Batch) error {
-		root1, err = batch.GetMinorRootChainAnchor(&x.Executor.Describe)
+	_ = s1.Database(Directory).View(func(batch *database.Batch) error {
+		root1, err = batch.Account(DnUrl().JoinPath(Ledger)).RootChain().Anchor()
 		require.NoError(t, err)
 		return nil
 	})
 
 	// [2] Reload (do not init)
-	s2 := simulator.NewWith(t, simulator.SimulatorOptions{BvnCount: bvnCount, OpenDB: openDb})
-	s2.Init(newsim.WithSnapshot(func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
-		return new(ioutil2.Buffer), nil // Empty, must init from db
-	}))
+	s2 := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), bvnCount, 1),
+		simulator.WithDatabase(openDb),
+		// Do not provide a snapshot
+	)
 
 	// [2] Check the DN root hash
 	var root2 []byte
-	x = s2.Partition(Directory)
-	_ = x.Database.View(func(batch *database.Batch) error {
-		root2, err = batch.GetMinorRootChainAnchor(&x.Executor.Describe)
+	_ = s1.Database(Directory).View(func(batch *database.Batch) error {
+		root2, err = batch.Account(DnUrl().JoinPath(Ledger)).RootChain().Anchor()
 		require.NoError(t, err)
 		return nil
 	})
@@ -115,5 +116,5 @@ func TestStateRelaunch(t *testing.T) {
 	sendLotsOfTokens(s2, 10, 1, &timestamp, sender, senderKey)
 
 	// [2] Wait a bit for everything to settle
-	s2.ExecuteBlocks(10)
+	s2.StepN(10)
 }
