@@ -7,8 +7,6 @@
 package shared
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -49,7 +47,7 @@ func GetAccountAuthoritySet(account protocol.Account) (*protocol.AccountAuth, *u
 	}
 }
 
-func SignTransaction(network *protocol.NetworkDefinition, nodeKey []byte, batch *database.Batch, txn *protocol.Transaction, destination *url.URL) (protocol.Signature, error) {
+func SignTransaction(network *protocol.NetworkDefinition, nodeKey []byte, txn *protocol.Transaction, destination *url.URL) (protocol.Signature, error) {
 	// TODO Exporting this is not great
 
 	if nodeKey == nil {
@@ -72,7 +70,7 @@ func SignTransaction(network *protocol.NetworkDefinition, nodeKey []byte, batch 
 	return keySig, nil
 }
 
-func PrepareBlockAnchor(network execute.DescribeShim, netdef *protocol.NetworkDefinition, nodeKey []byte, batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*messaging.Envelope, error) {
+func PrepareBlockAnchor(network *url.URL, netdef *protocol.NetworkDefinition, nodeKey []byte, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*messaging.Envelope, error) {
 	// TODO Exporting this is not great
 
 	txn := new(protocol.Transaction)
@@ -81,7 +79,7 @@ func PrepareBlockAnchor(network execute.DescribeShim, netdef *protocol.NetworkDe
 
 	// Create a synthetic origin signature
 	initSig, err := new(signing.Builder).
-		SetUrl(network.NodeUrl()).
+		SetUrl(network).
 		SetVersion(sequenceNumber).
 		InitiateSynthetic(txn, destPartUrl)
 	if err != nil {
@@ -89,7 +87,7 @@ func PrepareBlockAnchor(network execute.DescribeShim, netdef *protocol.NetworkDe
 	}
 
 	// Create a key signature
-	keySig, err := SignTransaction(netdef, nodeKey, batch, txn, initSig.DestinationNetwork)
+	keySig, err := SignTransaction(netdef, nodeKey, txn, initSig.DestinationNetwork)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

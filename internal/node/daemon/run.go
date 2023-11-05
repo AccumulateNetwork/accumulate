@@ -42,6 +42,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -354,6 +355,21 @@ func (d *Daemon) startApp() (types.Application, error) {
 	// On DNs initialize the major block scheduler
 	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
+	// This must happen before creating the executor since it needs to receive
+	// the initial WillChangeGlobals event
+	conductor := &crosschain.Conductor{
+		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.NetworkType},
+		ValidatorKey: execOpts.Key,
+		Database:     execOpts.Database,
+		Querier:      v3.Querier2{Querier: client},
+		Submitter:    client,
+		RunTask:      execOpts.BackgroundTaskLauncher,
+	}
+	err := conductor.Start(d.eventBus)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
 	}
 
 	exec, err := execute.NewExecutor(execOpts)
