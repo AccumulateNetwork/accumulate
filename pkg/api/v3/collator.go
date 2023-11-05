@@ -37,6 +37,12 @@ func (c *Collator) Query(ctx context.Context, scope *url.URL, query Query) (Reco
 			return r, errors.UnknownError.Wrap(err)
 		}
 
+	case *ChainQuery:
+		r, err := c.queryChain(ctx, scope, query)
+		if r != nil || err != nil {
+			return r, errors.UnknownError.Wrap(err)
+		}
+
 	case *MessageHashSearchQuery:
 		r, err := c.messageHashSearch(ctx, scope, query)
 		if r != nil || err != nil {
@@ -175,6 +181,53 @@ func (c *Collator) queryMessage(ctx context.Context, scope *url.URL, query *Defa
 	uniqueTxid(all.Cause)
 	mergeSignatureSets(all.Signatures)
 
+	return all, nil
+}
+
+func (c *Collator) queryChain(ctx context.Context, scope *url.URL, query *ChainQuery) (Record, error) {
+	// Scope must be unknown
+	if scope == nil || !protocol.IsUnknown(scope) {
+		return nil, nil
+	}
+
+	// Scope must have a transaction ID
+	txid, err := scope.AsTxID()
+	if err != nil {
+		return nil, nil
+	}
+
+	// List partitions
+	ns, err := c.Network.NetworkStatus(ctx, NetworkStatusOptions{Partition: protocol.Directory})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("query network status: %w", err)
+	}
+
+	// Query each partition
+	all := new(RecordRange[*ChainEntryRecord[Record]])
+
+	// For each partition
+	for _, part := range ns.Network.Partitions {
+		// Don't query the summary network
+		if part.Type == protocol.PartitionTypeBlockSummary {
+			continue
+		}
+
+		// Query the partition
+		scope := protocol.PartitionUrl(part.ID).WithTxID(txid.Hash())
+		r, err := Querier2{c.Querier}.QueryTransactionChains(ctx, scope, query)
+		switch {
+		case err == nil:
+			// Ok
+		case errors.Is(err, errors.NotFound):
+			continue
+		default:
+			return nil, errors.UnknownError.Wrap(err)
+		}
+
+		// Collate the response
+		all.Records = append(all.Records, r.Records...)
+		all.Total += r.Total
+	}
 	return all, nil
 }
 
