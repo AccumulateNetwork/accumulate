@@ -16,6 +16,7 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	snap2 "gitlab.com/accumulatenetwork/accumulate/exp/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -56,17 +57,17 @@ func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSn
 	resp := new(abci.ResponseListSnapshots)
 	resp.Snapshots = make([]*abci.Snapshot, 0, len(info))
 	for _, info := range info {
-		metadata := make([]byte, 32*len(info.chunks))
-		for i, chunk := range info.chunks {
-			copy(metadata[i*32:], chunk[:])
+		b, err := info.md.MarshalBinary()
+		if err != nil {
+			return nil, err
 		}
 
 		resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
 			Height:   info.height,
 			Format:   uint32(info.version),
-			Chunks:   uint32(len(info.chunks)),
+			Chunks:   uint32(len(info.md.Chunks)),
 			Hash:     info.hash[:],
-			Metadata: metadata,
+			Metadata: b,
 		})
 	}
 	return resp, nil
@@ -121,9 +122,28 @@ func (app *Accumulator) OfferSnapshot(_ context.Context, req *abci.RequestOfferS
 // Tendermint/CometBFT.
 func (app *Accumulator) ApplySnapshotChunk(_ context.Context, req *abci.RequestApplySnapshotChunk) (*abci.ResponseApplySnapshotChunk, error) {
 	r, err := app.acceptSnapshotChunk(req.Index, req.Chunk)
+	if err != nil || r != abci.ResponseApplySnapshotChunk_ACCEPT || !app.snapshots.Done() {
+		return nil, err
+	}
+
+	// Assemble the snapshot
+	buf := new(ioutil.Buffer)
+	e1 := app.snapshots.WriteTo(buf)
+	e2 := app.snapshots.Reset() // Reset regardless of success
+	switch {
+	case e1 != nil:
+		return nil, e1
+	case e2 != nil:
+		return nil, e2
+	}
+
+	// TODO Check hash
+
+	err = app.finishedLoadingSnapshot(buf)
 	if err != nil {
 		return nil, err
 	}
+
 	return &abci.ResponseApplySnapshotChunk{Result: r}, nil
 }
 
@@ -134,11 +154,11 @@ func (app *Accumulator) finishedLoadingSnapshot(assembled ioutil.SectionReader) 
 }
 
 type snapshotInfo struct {
+	md       snap2.SnapshotMetadata
 	version  uint64
 	height   uint64
 	hash     [32]byte
 	rootHash [32]byte
-	chunks   [][32]byte
 }
 
 // listSnapshots finds snapshots in the given directory and reads metadata from
@@ -243,46 +263,73 @@ func snapshotInfoV2(f *os.File) (*snapshotInfo, error) {
 	}, nil
 }
 
+const chunkSize = 10 << 20
+
 // getSnapshotChunks returns the number of chunks that the snapshot will be
 // split into for transfer.
 func getSnapshotChunks(snapshot *os.File, info *snapshotInfo) error {
-	info.chunks = [][32]byte{
-		// TODO Set to chunk hashes
+	st, err := snapshot.Stat()
+	if err != nil {
+		return err
 	}
-	panic("TODO")
+	var buf [chunkSize]byte
+	for i := 0; int64(i)*chunkSize < st.Size(); i++ {
+		_, err = io.ReadFull(snapshot, buf[:])
+		if err != nil {
+			return err
+		}
+
+		info.md.Chunks = append(info.md.Chunks, &snap2.ChunkMetadata{
+			Index:  uint64(i),
+			Size:   chunkSize,
+			Offset: chunkSize * uint64(i),
+			Hash:   sha256.Sum256(buf[:]),
+		})
+	}
+	return nil
 }
 
 // getSnapshotChunk returns the given chunk of the snapshot.
 func (*Accumulator) getSnapshotChunk(snapshot *os.File, chunk uint32) ([]byte, error) {
-	panic("TODO")
+	_, err := snapshot.Seek(int64(chunk)*chunkSize, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf [chunkSize]byte
+	_, err = io.ReadFull(snapshot, buf[:])
+	if err != nil {
+		return nil, err
+	}
+
+	return buf[:], nil
 }
 
 // startSnapshotSync initializes the snapshot sync state.
-func (*Accumulator) startSnapshotSync(snapshot *abci.Snapshot, bptHash []byte) (abci.ResponseOfferSnapshot_Result, error) {
-	if len(snapshot.Metadata) != 32*int(snapshot.Chunks) {
+func (app *Accumulator) startSnapshotSync(snapshot *abci.Snapshot, bptHash []byte) (abci.ResponseOfferSnapshot_Result, error) {
+	md := new(snap2.SnapshotMetadata)
+	err := md.UnmarshalBinary(snapshot.Metadata)
+	if err != nil {
 		return abci.ResponseOfferSnapshot_REJECT, nil
 	}
-	chunks := make([][32]byte, snapshot.Chunks)
-	for i := range chunks {
-		chunks[i] = *(*[32]byte)(snapshot.Metadata[32*i:])
-	}
 
-	// Reference:
-	//  - Cosmos ABCI: https://github.com/cosmos/cosmos-sdk/blob/167b702732620d35cf3c8e786fe828d4f97e5268/baseapp/abci.go#L276
-	//  - Snapshot manager: https://github.com/cosmos/cosmos-sdk/blob/main/store/snapshots/manager.go#L265
-	panic("TODO")
+	err = app.snapshots.Start(md)
+	if err != nil {
+		return 0, err
+	}
+	return abci.ResponseOfferSnapshot_ACCEPT, nil
 }
 
 // acceptSnapshotChunk accepts a chunk of a snapshot. acceptSnapshotChunk must
 // call finishedLoadingSnapshot once all the chunks have been received.
 func (app *Accumulator) acceptSnapshotChunk(chunk uint32, data []byte) (abci.ResponseApplySnapshotChunk_Result, error) {
-	// Reference:
-	//  - Cosmos ABCI: https://github.com/cosmos/cosmos-sdk/blob/167b702732620d35cf3c8e786fe828d4f97e5268/baseapp/abci.go#L325
-	//  - Snapshot manager: https://github.com/cosmos/cosmos-sdk/blob/main/store/snapshots/manager.go#L401
-	// Optional inputs:
-	//  - Sender
-	// Optional outputs:
-	//  - Chunks to refetch
-	//  - Senders to reject
-	panic("TODO")
+	err := app.snapshots.Apply(int(chunk), data)
+	switch {
+	case err == nil:
+		return abci.ResponseApplySnapshotChunk_ACCEPT, nil
+	case errors.Is(err, snap2.ErrBadHash):
+		return abci.ResponseApplySnapshotChunk_RETRY, nil
+	default:
+		return 0, err
+	}
 }

@@ -1,0 +1,18 @@
+ChunkMetadata:
+  fields:
+    - name: Index
+      type: uint
+    - name: Size
+      type: uint
+    - name: Offset
+      type: uint
+    - name: Hash
+      type: hash
+
+SnapshotMetadata:
+  fields:
+    - name: Chunks
+      type: ChunkMetadata
+      marshal-as: reference
+      pointer: true
+      repeatable: true

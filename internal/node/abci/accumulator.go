@@ -24,6 +24,7 @@ import (
 	"github.com/cometbft/cometbft/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	snap2 "gitlab.com/accumulatenetwork/accumulate/exp/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -47,6 +48,7 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
+	snapshots      snap2.Manager
 	block          execute.Block
 	blockState     execute.BlockState
 	blockSpan      trace.Span
