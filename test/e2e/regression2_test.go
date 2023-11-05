@@ -1155,7 +1155,7 @@ func TestAuthoritySignatureWithoutTransaction(t *testing.T) {
 
 			// Capture the authority signature
 			var captured *messaging.Envelope
-			capFn := func(_ context.Context, _ *url.URL, env *messaging.Envelope) (send bool, err error) {
+			capFn := func(_ context.Context, env *messaging.Envelope) (send bool, err error) {
 				for _, m := range env.Messages {
 					syn, ok := m.(interface{ Data() *messaging.SynthFields })
 					if !ok {
