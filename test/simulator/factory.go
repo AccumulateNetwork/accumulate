@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"fmt"
+	"math/big"
 	"sync"
 
 	"github.com/cometbft/cometbft/libs/log"
@@ -38,11 +39,12 @@ import (
 
 type simFactory struct {
 	// Options
-	network    *accumulated.NetworkInit
-	storeOpt   OpenDatabaseFunc
-	snapshot   SnapshotFunc
-	recordings RecordingFunc
-	abci       abciFunc
+	network       *accumulated.NetworkInit
+	storeOpt      OpenDatabaseFunc
+	snapshot      SnapshotFunc
+	recordings    RecordingFunc
+	abci          abciFunc
+	initialSupply *big.Int
 
 	dropDispatchedMessages      bool
 	skipProposalCheck           bool
