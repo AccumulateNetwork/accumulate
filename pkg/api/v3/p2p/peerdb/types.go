@@ -58,6 +58,18 @@ func (s *PeerNetworkStatus) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+func (s *LastStatus) UnmarshalJSON(b []byte) error {
+	type T LastStatus
+	err := json.Unmarshal(b, (*T)(s))
+	if err != nil {
+		return err
+	}
+	if s.Failed == nil {
+		s.Failed = new(AtomicUint)
+	}
+	return nil
+}
+
 func (l *LastStatus) DidAttempt() {
 	now := time.Now()
 	l.Attempt = &now
@@ -66,6 +78,7 @@ func (l *LastStatus) DidAttempt() {
 func (l *LastStatus) DidSucceed() {
 	now := time.Now()
 	l.Success = &now
+	l.Failed.Store(0)
 }
 
 func (l *LastStatus) SinceAttempt() time.Duration {
