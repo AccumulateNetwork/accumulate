@@ -33,7 +33,7 @@ func (fakeDispatcher) Send(context.Context) <-chan error {
 	return ch
 }
 
-type dispatchInterceptor = func(ctx context.Context, u *url.URL, env *messaging.Envelope) (send bool, err error)
+type dispatchInterceptor = func(ctx context.Context, env *messaging.Envelope) (send bool, err error)
 
 // dispatcher implements [block.Dispatcher] for the simulator.
 //
@@ -51,7 +51,7 @@ var _ execute.Dispatcher = (*dispatcher)(nil)
 // Submit routes the envelope and adds it to the queue for a partition.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
 	if d.interceptor != nil {
-		keep, err := d.interceptor(ctx, u, env)
+		keep, err := d.interceptor(ctx, env)
 		if !keep || err != nil {
 			return err
 		}

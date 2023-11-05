@@ -50,6 +50,21 @@ func Deterministic(opts *simFactory) error {
 // DropDispatchedMessages drops all internally dispatched messages.
 func DropDispatchedMessages(opts *simFactory) error {
 	opts.dropDispatchedMessages = true
+	opts.dropInitialAnchor = true
+	opts.disableAnchorHealing = true
+	return nil
+}
+
+// DropInitialAnchor drops anchors when they are initially submitted.
+func DropInitialAnchor(opts *simFactory) error {
+	opts.dropInitialAnchor = true
+	return nil
+}
+
+// DisableAnchorHealing disables healing of anchors after they are initially
+// submitted.
+func DisableAnchorHealing(opts *simFactory) error {
+	opts.disableAnchorHealing = true
 	return nil
 }
 
