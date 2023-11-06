@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3
+
+- Protocol
+  - User-specified transaction expiration
+  - Rejection of invalid authorities
+  - Dynamic inheritance of authorities
+  - Additional transaction authorities
+  - Reduced cost for creating sub-ADIs
+  - Memos and metadata for signatures
+  - RSV Ethereum signatures (deprecates DER)
+  - Database performance improvements
+  - Prevent persistence of bad blocks
+  - Bug fixes
+- Operations
+  - Anchoring improvements
+  - Enable snapshot v2
+  - Use binary genesis file for new nodes
+- API improvements
+- SDK
+  - Embedded checkpoint for validating network state
+
 ## 1.2
 
 - Signature processing overhaul
