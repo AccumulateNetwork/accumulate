@@ -21,6 +21,7 @@ type ChangeSet struct {
 	entries  map[[32]byte]Entry //
 	getfn    GetFunc            // Gets an entry from the previous layer
 	commitfn CommitFunc         // Commits changes into the previous layer
+	discard  DiscardFunc        // Cleans up after discard
 	prefix   *record.Key        // Prefix to apply to keys
 }
 
@@ -33,13 +34,15 @@ type Entry struct {
 
 type GetFunc = func(*record.Key) ([]byte, error)
 type CommitFunc = func(map[[32]byte]Entry) error
+type DiscardFunc = func()
 
 var _ keyvalue.ChangeSet = (*ChangeSet)(nil)
 
-func NewChangeSet(prefix *record.Key, get GetFunc, commit CommitFunc) *ChangeSet {
+func NewChangeSet(prefix *record.Key, get GetFunc, commit CommitFunc, discard DiscardFunc) *ChangeSet {
 	c := new(ChangeSet)
 	c.getfn = get
 	c.commitfn = commit
+	c.discard = discard
 	c.prefix = prefix
 	return c
 }
@@ -50,6 +53,10 @@ func (c *ChangeSet) Commit() error {
 	entries := c.entries
 	c.entries = nil
 	c.mu.Unlock()
+
+	if c.discard != nil {
+		defer c.discard()
+	}
 
 	// Is there anything to do?
 	if len(entries) == 0 {
@@ -65,6 +72,10 @@ func (c *ChangeSet) Discard() {
 	c.mu.Lock()
 	c.entries = nil
 	c.mu.Unlock()
+
+	if c.discard != nil {
+		c.discard()
+	}
 }
 
 // Begin begins a nested change set.
@@ -76,7 +87,7 @@ func (c *ChangeSet) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet 
 		}
 		commit = c.putAll
 	}
-	return NewChangeSet(prefix, c.Get, commit)
+	return NewChangeSet(prefix, c.Get, commit, nil)
 }
 
 // putAll stores a set of entries.
