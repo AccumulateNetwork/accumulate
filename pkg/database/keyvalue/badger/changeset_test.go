@@ -166,3 +166,42 @@ func TestDelete(t *testing.T) {
 	_, err = batch.Get(record.NewKey("foo"))
 	require.ErrorIs(t, err, errors.NotFound)
 }
+
+func TestVersions(t *testing.T) {
+	dir := t.TempDir()
+	db, err := New(dir)
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Write a value 100 times
+	for i := 0; i < 100; i++ {
+		// Write the value
+		batch := db.Begin(nil, true)
+		defer batch.Discard()
+		require.NoError(t, batch.Put(record.NewKey("foo"), []byte{byte(i)}))
+		require.NoError(t, batch.Commit())
+
+		// Open and close a batch
+		db.Begin(nil, false).Discard()
+	}
+
+	// Reopen
+	require.NoError(t, db.Close())
+	db, err = New(dir)
+	require.NoError(t, err)
+
+	tx := db.badger.NewTransaction(false)
+	defer tx.Discard()
+	opts := badger.DefaultIteratorOptions
+	opts.AllVersions = true
+	it := tx.NewIterator(opts)
+	defer it.Close()
+
+	var count int
+	for it.Seek(nil); it.Valid(); it.Next() {
+		count++
+	}
+
+	// Only one version survives
+	require.Equal(t, 1, count)
+}
