@@ -83,12 +83,14 @@ func runDevNet(*cobra.Command, []string) {
 	}
 
 	vals, bsns, hasBS := getNodeDirs(flagMain.WorkDir)
-	for _, nodes := range [][]int{vals, bsns} {
-		for _, node := range nodes {
-			id := fmt.Sprint(node)
-			if len(id) > nodeIdLen {
-				nodeIdLen = len(id)
-			}
+	for _, node := range vals {
+		name := fmt.Sprintf("node-%d", node)
+		c, err := config.Load(filepath.Join(flagMain.WorkDir, name, "bvnn"))
+		check(err)
+
+		id := fmt.Sprintf("%s.%d", c.Accumulate.PartitionId, node)
+		if len(id) > nodeIdLen {
+			nodeIdLen = len(id)
 		}
 	}
 
@@ -377,7 +379,7 @@ func newNodeWriter(w io.Writer, format, partition string, node int, color bool) 
 	switch format {
 	case tmconfig.LogFormatPlain:
 		id := fmt.Sprintf("%s.%d", partition, node)
-		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen+len("bvnxx")-len(id)+1)
+		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen-len(id)+1)
 		if !color {
 			return &plainNodeWriter{s, w}
 		}
