@@ -241,7 +241,7 @@ func (x ValidatorContext) signTransaction(hash []byte) (protocol.KeySignature, e
 		SetPrivateKey(x.ValidatorKey).
 		SetUrl(protocol.DnUrl().JoinPath(protocol.Network)).
 		SetVersion(x.Globals.Network.Version).
-		SetTimestamp(1).
+		SetTimestampToNow().
 		Sign(hash)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
