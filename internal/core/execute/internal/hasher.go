@@ -92,5 +92,5 @@ func (f stringfn) String() string {
 type stringers []any
 
 func (s stringers) String() string {
-	return fmt.Sprint(s...)
+	return fmt.Sprint([]any(s)...)
 }
