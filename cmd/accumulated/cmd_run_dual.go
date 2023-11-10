@@ -88,11 +88,6 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 		return "", err
 	}
 
-	logger, err := svc.Logger(nil)
-	if err != nil {
-		return "", err
-	}
-
 	if flagRunDual.CiStopAfter != 0 {
 		go watchDog(prog, svc, flagRunDual.CiStopAfter)
 	}
@@ -101,7 +96,6 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	if err != nil {
 		//if it is already stopped, that is ok.
 		if !errors.Is(err, service2.ErrAlreadyStopped) {
-			_ = logger.Error(err)
 			return "", err
 		}
 	}
