@@ -167,7 +167,13 @@ func runDevNet(*cobra.Command, []string) {
 	// Connect every node to every other node
 	for i, d := range daemons {
 		for _, e := range daemons[i+1:] {
-			check(d.ConnectDirectly(e))
+			err := d.ConnectDirectly(e)
+			if err == nil {
+				continue
+			}
+			if err.Error() != "cannot connect nodes directly as they have the same node key" {
+				check(err)
+			}
 		}
 	}
 
