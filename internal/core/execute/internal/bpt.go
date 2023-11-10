@@ -7,9 +7,10 @@
 package internal
 
 import (
+	"crypto/sha256"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -32,31 +33,30 @@ func NewDatabaseObserver() database.Observer {
 func (databaseObserver) DidChangeAccount(batch *database.Batch, account *database.Account) (hash.Hasher, error) {
 	a := observedAccount{account, batch}
 	hasher, err := a.hashState()
-	return hasher, errors.UnknownError.Wrap(err)
+
+	h := hasher.Hash()
+	return hash.Hasher{h[:]}, errors.UnknownError.Wrap(err)
 }
 
 // hashState returns a merkle hash of the account's main state, chains, and
 // transactions.
-func (a *observedAccount) hashState() (hash.Hasher, error) {
+func (a *observedAccount) hashState() (hashable, error) {
 	var err error
-	var hasher hash.Hasher
-	hashState(&err, &hasher, true, a.Main().Get)          // Add a simple hash of the main state
-	hashState(&err, &hasher, false, a.hashSecondaryState) // Add a merkle hash of the Secondary State which is a list of accounts contained by the adi
-	hashState(&err, &hasher, false, a.hashChains)         // Add a merkle hash of chains
-	hashState(&err, &hasher, false, a.hashPending)        // Add a merkle hash of transactions
-	return hasher, err
+	var h hashSet
+	loadAndHashValue(&err, &h, true, a.Main().Get, "main")        // Add a simple hash of the main state
+	hashComplexState(&err, &h, a.hashSecondaryState, "secondary") // Add a merkle hash of the Secondary State which is a list of accounts contained by the adi
+	hashComplexState(&err, &h, a.hashChains, "chains")            // Add a merkle hash of chains
+	hashComplexState(&err, &h, a.hashPending, "pending")          // Add a merkle hash of transactions
+	return &h, err
 }
 
-func (a *observedAccount) hashSecondaryState() (hash.Hasher, error) {
-	var hasher hash.Hasher
-
+func (a *observedAccount) hashSecondaryState(h *hashSet) error {
 	// Add the directory list
 	var err error
-	var dirHasher hash.Hasher
+	dirHasher := h.Child("directory")
 	for _, u := range loadState(&err, false, a.Directory().Get) {
-		dirHasher.AddUrl(u)
+		hashUrl(dirHasher, u, u)
 	}
-	hasher.AddValue(dirHasher)
 
 	// Add scheduled events
 	u := a.Url()
@@ -64,18 +64,17 @@ func (a *observedAccount) hashSecondaryState() (hash.Hasher, error) {
 		// For backwards compatibility, don't add the hash if the BPT is empty
 		hash := loadState(&err, false, a.Events().BPT().GetRootHash)
 		if hash != [32]byte{} {
-			hasher.AddHash2(hash)
+			h.Add(rawHash(hash), "events")
 		}
 	}
 
-	return hasher, err
+	return err
 }
 
 // hashChains returns a merkle hash of the DAG root of every chain in
 // alphabetical order.
-func (a *observedAccount) hashChains() (hash.Hasher, error) {
+func (a *observedAccount) hashChains(hs *hashSet) error {
 	var err error
-	var hasher hash.Hasher
 	for _, chainMeta := range loadState(&err, false, a.Chains().Get) {
 		chain := loadState1(&err, false, a.GetChainByName, chainMeta.Name)
 		if err != nil {
@@ -83,75 +82,75 @@ func (a *observedAccount) hashChains() (hash.Hasher, error) {
 		}
 
 		if chain.CurrentState().Count == 0 {
-			hasher.AddHash(new([32]byte))
+			hs.Add(rawHash{}, chainMeta.Name)
 		} else {
-			hasher.AddHash((*[32]byte)(chain.CurrentState().Anchor()))
+			hs.Add(rawHash(*(*[32]byte)(chain.CurrentState().Anchor())), chainMeta.Name)
 		}
 	}
-	return hasher, err
+	return err
 }
 
 // hashPending returns a merkle hash of the transaction hash and status of
 // every pending transaction and every synthetic transaction waiting for an
 // anchor.
-func (a *observedAccount) hashPending() (hash.Hasher, error) {
+func (a *observedAccount) hashPending(h *hashSet) error {
 	var err error
-	var hasher hash.Hasher
+	// var hasher hash.Hasher
 
 	for _, txid := range loadState(&err, false, a.Pending().Get) {
 		// V1 BPT logic for pending transactions
 		v1 := a.batch.Transaction2(txid.Hash())
 		isV1 := loadState(&err, true, v1.Main().Get) != nil
 		if isV1 {
-			hashState(&err, &hasher, false, v1.Main().Get)
-			hashState(&err, &hasher, false, v1.Status().Get)
+			loadAndHashValue(&err, h, false, v1.Main().Get, stringers{txid, "main"})
+			loadAndHashValue(&err, h, false, v1.Status().Get, stringers{txid, "status"})
 		}
 
 		// V2 BPT logic for pending transactions
 		if !isV1 {
 			// If the transaction is not a V1 transaction, add its hash directly
-			hasher.AddTxID(txid)
+			hashTxID(h, txid, txid)
 		}
-		a.hashPendingV2(&err, &hasher, txid)
+		a.hashPendingV2(&err, h, txid)
 	}
 
 	// If the account is a page, look on the book for pending transactions
 	page, ok := loadState(&err, true, a.Main().Get).(*protocol.KeyPage)
 	if !ok {
-		return hasher, err
+		return err
 	}
 	for _, txid := range loadState(&err, false, a.batch.Account(page.GetAuthority()).Pending().Get) {
-		a.hashPendingV2(&err, &hasher, txid)
+		a.hashPendingV2(&err, h, txid)
 	}
 
-	return hasher, err
+	return err
 }
 
-func (a *observedAccount) hashPendingV2(err *error, hasher *hash.Hasher, txid *url.TxID) {
+func (a *observedAccount) hashPendingV2(err *error, h *hashSet, txid *url.TxID) {
 	txn := a.Transaction(txid.Hash())
 
 	// Validator signatures
-	for _, sig := range loadState(err, true, txn.ValidatorSignatures().Get) {
-		hasher.AddHash((*[32]byte)(sig.Hash()))
+	for i, sig := range loadState(err, true, txn.ValidatorSignatures().Get) {
+		h.Add(rawHash(*(*[32]byte)(sig.Hash())), stringers{txid, "signature", i})
 	}
 
 	// Credit payments
-	for _, hash := range loadState(err, true, txn.Payments().Get) {
-		hasher.AddHash2(hash)
+	for i, hash := range loadState(err, true, txn.Payments().Get) {
+		h.Add(rawHash(hash), stringers{txid, "payment", i})
 	}
 
 	// Authority votes
-	for _, entry := range loadState(err, true, txn.Votes().Get) {
-		hashValue(err, hasher, entry)
+	for i, entry := range loadState(err, true, txn.Votes().Get) {
+		hashValue(err, h, entry, stringers{txid, "vote", i})
 	}
 
 	// Active signatures
-	for _, entry := range loadState(err, true, txn.Signatures().Get) {
-		hashValue(err, hasher, entry)
+	for i, entry := range loadState(err, true, txn.Signatures().Get) {
+		hashValue(err, h, entry, stringers{txid, "active", i})
 	}
 }
 
-func hashState[T any](lastErr *error, hasher *hash.Hasher, allowMissing bool, get func() (T, error)) {
+func loadAndHashValue[T encoding.BinaryValue](lastErr *error, h *hashSet, allowMissing bool, get func() (T, error), memo any) {
 	if *lastErr != nil {
 		return
 	}
@@ -159,36 +158,94 @@ func hashState[T any](lastErr *error, hasher *hash.Hasher, allowMissing bool, ge
 	v, err := get()
 	switch {
 	case err == nil:
-		hashValue(lastErr, hasher, v)
+		hashValue(&err, h, v, memo)
 	case allowMissing && errors.Is(err, errors.NotFound):
-		hasher.AddHash(new([32]byte))
+		h.Add(rawHash{}, memo)
 	default:
 		*lastErr = err
 	}
 }
 
-func hashValue(lastErr *error, hasher *hash.Hasher, v any) {
+func hashComplexState(lastErr *error, h *hashSet, hash func(*hashSet) error, memo string) {
 	if *lastErr != nil {
 		return
 	}
 
-	switch v := v.(type) {
-	case interface{ MerkleHash() []byte }:
-		hasher.AddValue(v)
-	case interface{ GetHash() []byte }:
-		hasher.AddHash((*[32]byte)(v.GetHash()))
-	case encoding.BinaryValue:
-		data, err := v.MarshalBinary()
-		if err != nil {
-			*lastErr = err
-			return
-		}
-		hasher.AddBytes(data)
-	default:
-		h := storage.MakeKey(v)
-		hasher.AddHash2(h)
+	err := hash(h.Child(memo))
+	if err != nil {
+		*lastErr = err
 	}
 }
+
+func hashValue(lastErr *error, h *hashSet, v encoding.BinaryValue, memo any) {
+	data, err := v.MarshalBinary()
+	if err != nil {
+		*lastErr = err
+		return
+	}
+
+	hashBytes(h, data, memo)
+}
+
+func hashUrl(h *hashSet, v *url.URL, memo any) {
+	if v == nil {
+		h.Add(rawHash{}, memo)
+	} else {
+		hashString(h, v.String(), memo)
+	}
+}
+
+func hashUrl2(h *hashSet, v *url.URL, memo any) {
+	if v == nil {
+		h.Add(rawHash{}, memo)
+	} else {
+		h.Add(rawHash(v.Hash32()), memo)
+	}
+}
+
+func hashTxID(h *hashSet, v *url.TxID, memo any) {
+	if v == nil {
+		h.Add(rawHash{}, memo)
+	} else {
+		u := v.Hash()
+		x := hash.Combine(u[:], v.Account().Hash())
+		h.Add(rawHash(*(*[32]byte)(x)), memo)
+	}
+}
+
+func hashString(h *hashSet, v string, memo any) {
+	hashBytes(h, []byte(v), memo)
+}
+
+func hashBytes(h *hashSet, v []byte, memo any) {
+	h.Add(rawHash(sha256.Sum256(v)), memo)
+}
+
+// func hashValue(lastErr *error, hasher *hash.Hasher, v any, print bool) {
+// 	if *lastErr != nil {
+// 		return
+// 	}
+
+// 	switch v := v.(type) {
+// 	case interface{ MerkleHash() []byte }:
+// 		hasher.AddValue(v)
+// 	case interface{ GetHash() []byte }:
+// 		hasher.AddHash((*[32]byte)(v.GetHash()))
+// 	case encoding.BinaryValue:
+// 		data, err := v.MarshalBinary()
+// 		if err != nil {
+// 			*lastErr = err
+// 			return
+// 		}
+// 		hasher.AddBytes(data)
+// 	default:
+// 		h := storage.MakeKey(v)
+// 		hasher.AddHash2(h)
+// 	}
+// 	if print {
+// 		fmt.Printf("  %x\n", (*hasher)[len(*hasher)-1])
+// 	}
+// }
 
 func zero[T any]() (z T) { return z }
 
