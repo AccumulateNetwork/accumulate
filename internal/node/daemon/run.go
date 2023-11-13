@@ -34,6 +34,8 @@ import (
 	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/fatih/color"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate"
@@ -554,6 +556,14 @@ func (d *Daemon) startAPI() error {
 		Router:  d.router,
 		Network: &d.Config.Accumulate.Describe,
 		MaxWait: d.Config.Accumulate.API.TxMaxWaitTime,
+
+		// Hard code the peers used for the MainNet as a hack for stability
+		PeerMap: map[string][]peer.AddrInfo{
+			"apollo":      {nodeMainnetApollo},
+			"yutu":        {nodeMainnetYutu},
+			"chandrayaan": {nodeMainnetChandrayaan},
+			"directory":   {nodeMainnetApollo, nodeMainnetYutu, nodeMainnetChandrayaan},
+		},
 	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("initialize API: %w", err)
@@ -725,4 +735,33 @@ func (d *Daemon) Stop() error {
 
 func (d *Daemon) Done() <-chan struct{} {
 	return d.node.Quit()
+}
+
+var nodeMainnetApollo = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWAgrBYpWEXRViTnToNmpCoC3dvHdmR6m1FmyKjDn1NYpj"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/apollo-mainnet.accumulate.defidevs.io")},
+}
+var nodeMainnetYutu = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWDqFDwjHEog1bNbxai2dKSaR1aFvq2LAZ2jivSohgoSc7"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/yutu-mainnet.accumulate.defidevs.io")},
+}
+var nodeMainnetChandrayaan = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWHzjkoeAqe7L55tAaepCbMbhvNu9v52ayZNVQobdEE1RL"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/chandrayaan-mainnet.accumulate.defidevs.io")},
+}
+
+func mustParsePeer(s string) peer.ID {
+	id, err := peer.Decode(s)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func mustParseMulti(s string) multiaddr.Multiaddr {
+	addr, err := multiaddr.NewMultiaddr(s)
+	if err != nil {
+		panic(err)
+	}
+	return addr
 }

@@ -50,6 +50,9 @@ func (c *Collator) Query(ctx context.Context, scope *url.URL, query Query) (Reco
 		}
 
 	case *BlockQuery:
+		// Disable block collation
+		break
+
 		r, err := c.Querier.Query(ctx, scope, query)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
