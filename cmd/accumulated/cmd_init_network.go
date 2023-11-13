@@ -61,15 +61,11 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	for _, bvn := range network.Bvns {
 		for _, node := range bvn.Nodes {
-			if node.PrivValKey == nil {
-				node.PrivValKey = tmed25519.GenPrivKey()
-			}
-			if node.DnNodeKey == nil {
-				node.DnNodeKey = tmed25519.GenPrivKey()
-			}
-			if node.BvnNodeKey == nil {
-				node.BvnNodeKey = tmed25519.GenPrivKey()
-			}
+			// TODO Check for existing keys?
+			node.PrivValKey = tmed25519.GenPrivKey()
+			node.DnNodeKey = tmed25519.GenPrivKey()
+			node.BvnNodeKey = tmed25519.GenPrivKey()
+
 			if node.ListenAddress == "" {
 				node.ListenAddress = "0.0.0.0"
 			}
@@ -145,6 +141,9 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 	for _, configs := range configs {
 		for _, configs := range configs {
 			for _, config := range configs {
+				// Use binary genesis files
+				config.Genesis = "config/genesis.snap"
+
 				if flagInit.LogLevels != "" {
 					config.LogLevel = flagInit.LogLevels
 				}

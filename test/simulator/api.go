@@ -11,10 +11,14 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/julienschmidt/httprouter"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
@@ -24,15 +28,38 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 	testhttp "gitlab.com/accumulatenetwork/accumulate/test/util/http"
 )
 
 // Services returns the simulator's API v3 implementation.
-func (s *Simulator) Services() *simService { return (*simService)(s) }
+func (s *Simulator) Services() *message.Client { return s.services.Client }
+
+func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
+	svc := n.partition.sim.services
+	return apiv2.NewJrpc(apiv2.Options{
+		Logger:        n.logger,
+		TxMaxWaitTime: time.Hour,
+		LocalV3:       svc.ForPeer(n.peerID),
+		Querier:       &api.Collator{Querier: svc, Network: svc},
+		Submitter:     svc,
+		Faucet:        svc,
+		Validator:     svc,
+		Sequencer:     svc.Private(),
+		Describe: &config.Describe{
+			NetworkType: n.partition.Type,
+			PartitionId: n.partition.ID,
+		},
+	})
+}
 
 // ClientV2 returns an API V2 client for the given partition.
 func (s *Simulator) ClientV2(part string) *client.Client {
-	return s.partitions[part].nodes[0].clientV2
+	api, err := s.partitions[part].nodes[0].newApiV2()
+	if err != nil {
+		panic(err)
+	}
+	return testing.DirectJrpcClient(api)
 }
 
 // NewDirectClientWithHook creates a direct HTTP client and applies the given
@@ -43,8 +70,12 @@ func (s *Simulator) NewDirectClientWithHook(hook func(http.Handler) http.Handler
 		panic(err)
 	}
 
-	h := s.partitions[protocol.Directory].nodes[0].apiV2.NewMux()
-	c.Client.Client = *testhttp.DirectHttpClient(hook(h))
+	api, err := s.partitions[protocol.Directory].nodes[0].newApiV2()
+	if err != nil {
+		panic(err)
+	}
+
+	c.Client.Client = *testhttp.DirectHttpClient(hook(api.NewMux()))
 	return c
 }
 
@@ -82,7 +113,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 	}
 
 	// The simulator network configuration must specify a listening address
-	if s.init.Bvns[0].Nodes[0].Listen().String() == "" {
+	if s.partitions[protocol.Directory].nodes[0].network.Listen().String() == "" {
 		return errors.BadRequest.With("no address to listen on")
 	}
 
@@ -96,7 +127,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 	var nodes []*p2p.Node
 	for _, part := range s.partitions {
 		for _, node := range part.nodes {
-			err := node.listenAndServeHTTP(ctx, opts, s.Services())
+			err := node.listenAndServeHTTP(ctx, opts)
 			if err != nil {
 				return err
 			}
@@ -111,29 +142,37 @@ func (s *Simulator) ListenAndServe(ctx context.Context, opts ListenOptions) (err
 	return nil
 }
 
-func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, services *simService) error {
+func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error {
 	if !opts.ListenHTTPv2 &&
 		!opts.ListenHTTPv3 &&
 		!opts.ListenWSv3 {
 		return nil
 	}
 
-	var mux *http.ServeMux
+	mux := httprouter.New()
 	if opts.ListenHTTPv2 {
-		mux = n.apiV2.NewMux()
-	} else {
-		mux = new(http.ServeMux)
+		api, err := n.newApiV2()
+		if err != nil {
+			return err
+		}
+		err = api.Register(mux)
+		if err != nil {
+			return err
+		}
 	}
 
 	var v3 http.Handler
+	network := n.partition.sim.services
 	if opts.ListenHTTPv3 {
 		jrpc, err := jsonrpc.NewHandler(
-			jsonrpc.ConsensusService{ConsensusService: (*nodeService)(n)},
-			jsonrpc.NetworkService{NetworkService: services},
-			jsonrpc.MetricsService{MetricsService: services},
-			jsonrpc.Querier{Querier: services},
-			jsonrpc.Submitter{Submitter: services},
-			jsonrpc.Validator{Validator: services},
+			jsonrpc.ConsensusService{ConsensusService: n},
+			jsonrpc.NetworkService{NetworkService: network},
+			jsonrpc.MetricsService{MetricsService: network},
+			jsonrpc.Querier{Querier: network},
+			jsonrpc.Submitter{Submitter: network},
+			jsonrpc.Validator{Validator: network},
+			jsonrpc.Sequencer{Sequencer: network.Private()},
+			jsonrpc.Faucet{Faucet: network},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize API v3: %w", err)
@@ -143,13 +182,14 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 
 	if opts.ListenWSv3 {
 		ws, err := websocket.NewHandler(
-			message.ConsensusService{ConsensusService: (*nodeService)(n)},
-			message.NetworkService{NetworkService: services},
-			message.MetricsService{MetricsService: services},
-			message.Querier{Querier: services},
-			message.Submitter{Submitter: services},
-			message.Validator{Validator: services},
-			message.EventService{EventService: services},
+			message.ConsensusService{ConsensusService: n},
+			message.NetworkService{NetworkService: network},
+			message.MetricsService{MetricsService: network},
+			message.Querier{Querier: network},
+			message.Submitter{Submitter: network},
+			message.Validator{Validator: network},
+			message.EventService{EventService: network},
+			message.Faucet{Faucet: network},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize websocket API: %w", err)
@@ -162,16 +202,18 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	}
 
 	if v3 != nil {
-		mux.Handle("/v3", v3)
+		mux.POST("/v3", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+			v3.ServeHTTP(w, r)
+		})
 	}
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.GET("/", func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 		w.Header().Set("Location", "/x")
 		w.WriteHeader(http.StatusTemporaryRedirect)
 	})
 
 	webex := web.Handler()
-	mux.HandleFunc("/x/", func(w http.ResponseWriter, r *http.Request) {
+	mux.GET("/x/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x")
 		r.RequestURI = strings.TrimPrefix(r.RequestURI, "/x")
 		webex.ServeHTTP(w, r)
@@ -185,7 +227,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	}
 
 	// Determine the listening address
-	addr := n.init.Listen().PartitionType(n.partition.Type).AccumulateAPI().String()
+	addr := n.network.Listen().PartitionType(n.partition.Type).AccumulateAPI().String()
 
 	// Start the listener
 	ln, err := net.Listen("tcp", addr)
@@ -208,7 +250,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions, servi
 	}()
 	go func() { <-ctx.Done(); _ = srv.Shutdown(context.Background()) }()
 
-	n.logger.Info("Node HTTP up", "address", "http://"+addr)
+	n.logger.Info("Node HTTP up", "module", "sim", "address", "http://"+addr)
 	return nil
 }
 
@@ -217,25 +259,11 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 		return nil
 	}
 
-	addr1 := n.init.Listen().Scheme("tcp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
-	addr2 := n.init.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
-
-	h, err := message.NewHandler(
-		&message.ConsensusService{ConsensusService: (*nodeService)(n)},
-		&message.MetricsService{MetricsService: (*nodeService)(n)},
-		&message.NetworkService{NetworkService: (*nodeService)(n)},
-		&message.Querier{Querier: (*nodeService)(n)},
-		&message.Submitter{Submitter: (*nodeService)(n)},
-		&message.Validator{Validator: (*nodeService)(n)},
-		&message.EventService{EventService: (*nodeService)(n)},
-		&message.Sequencer{Sequencer: n.seqSvc},
-	)
-	if err != nil {
-		return err
-	}
+	addr1 := n.network.Listen().Scheme("tcp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
+	addr2 := n.network.Listen().Scheme("udp").PartitionType(n.partition.Type).AccumulateP2P().Multiaddr()
 
 	p2p, err := p2p.New(p2p.Options{
-		Network:       n.simulator.init.Id,
+		Network:       "Simulator",
 		Listen:        []multiaddr.Multiaddr{addr1, addr2},
 		Key:           n.nodeKey,
 		DiscoveryMode: dht.ModeServer,
@@ -256,14 +284,14 @@ func (n *Node) listenP2P(ctx context.Context, opts ListenOptions, nodes *[]*p2p.
 	}
 	*nodes = append(*nodes, p2p)
 
-	p2p.RegisterService(api.ServiceTypeConsensus.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeMetrics.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeNetwork.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeQuery.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeSubmit.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeValidate.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(api.ServiceTypeEvent.AddressFor(n.partition.ID), h.Handle)
-	p2p.RegisterService(private.ServiceTypeSequencer.AddressFor(n.partition.ID), h.Handle)
+	p2p.RegisterService(api.ServiceTypeConsensus.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeMetrics.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeNetwork.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeQuery.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeSubmit.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeValidate.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(api.ServiceTypeEvent.AddressFor(n.partition.ID), n.services.Handle)
+	p2p.RegisterService(private.ServiceTypeSequencer.AddressFor(n.partition.ID), n.services.Handle)
 
 	n.logger.Info("Node P2P up", "addresses", p2p.Addresses())
 	return nil

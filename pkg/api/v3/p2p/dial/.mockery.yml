@@ -1,4 +1,4 @@
-name: ^(dialerHost|dialerPeers|MessageStreamHandler)$
+name: ^(Connector|Discoverer|MessageStreamHandler)$
 inpackage: true
 testonly: true
 with-expecter: true

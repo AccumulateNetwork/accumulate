@@ -35,7 +35,7 @@ func TestAccountState(t *testing.T) {
 	require.NoError(t, err)
 	h2, err := (&observedAccount{a, batch}).hashState()
 	require.NoError(t, err)
-	require.NotEqual(t, h1.MerkleHash(), h2.MerkleHash())
+	require.NotEqual(t, h1.Hash(), h2.Hash())
 }
 
 func TestEvents(t *testing.T) {

@@ -8,15 +8,14 @@ package message
 
 import (
 	"github.com/multiformats/go-multiaddr"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 //go:generate go run github.com/vektra/mockery/v2
 //go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w mocks
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package message enums.yml --registry Type:messageRegistry
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --elide-package-type --package message messages.yml private.yml --reference ../options.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --elide-package-type --package message --language go-union --out unions_gen.go messages.yml private.yml --reference ../options.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --elide-package-type --package message messages.yml private.yml --reference api:../options.yml,private:../../../../internal/api/private/types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --elide-package-type --package message --language go-union --out unions_gen.go messages.yml private.yml --reference api:../options.yml,private:../../../../internal/api/private/types.yml
 
 // Type is the type of a [Message].
 type Type int
@@ -34,19 +33,6 @@ func AddressOf(msg Message) multiaddr.Multiaddr {
 	}
 	return nil
 }
-
-// Shims for code gen
-type (
-	NodeInfoOptions        = api.NodeInfoOptions
-	FindServiceOptions     = api.FindServiceOptions
-	ConsensusStatusOptions = api.ConsensusStatusOptions
-	NetworkStatusOptions   = api.NetworkStatusOptions
-	MetricsOptions         = api.MetricsOptions
-	SubscribeOptions       = api.SubscribeOptions
-	SubmitOptions          = api.SubmitOptions
-	ValidateOptions        = api.ValidateOptions
-	FaucetOptions          = api.FaucetOptions
-)
 
 type msgStructPtr[T any] interface {
 	*T

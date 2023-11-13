@@ -12,31 +12,31 @@ Addressed:
 NodeInfoRequest:
   union: { type: message }
   fields:
-    - type: NodeInfoOptions
+    - type: api.NodeInfoOptions
       marshal-as: reference
 
 FindServiceRequest:
   union: { type: message }
   fields:
-    - type: FindServiceOptions
+    - type: api.FindServiceOptions
       marshal-as: reference
 
 ConsensusStatusRequest:
   union: { type: message }
   fields:
-    - type: ConsensusStatusOptions
+    - type: api.ConsensusStatusOptions
       marshal-as: reference
 
 NetworkStatusRequest:
   union: { type: message }
   fields:
-    - type: NetworkStatusOptions
+    - type: api.NetworkStatusOptions
       marshal-as: reference
 
 MetricsRequest:
   union: { type: message }
   fields:
-    - type: MetricsOptions
+    - type: api.MetricsOptions
       marshal-as: reference
 
 QueryRequest:
@@ -57,7 +57,7 @@ SubmitRequest:
       type: messaging.Envelope
       marshal-as: reference
       pointer: true
-    - type: SubmitOptions
+    - type: api.SubmitOptions
       marshal-as: reference
 
 ValidateRequest:
@@ -67,7 +67,7 @@ ValidateRequest:
       type: messaging.Envelope
       marshal-as: reference
       pointer: true
-    - type: ValidateOptions
+    - type: api.ValidateOptions
       marshal-as: reference
 
 FaucetRequest:
@@ -76,13 +76,13 @@ FaucetRequest:
     - name: Account
       type: url
       pointer: true
-    - type: FaucetOptions
+    - type: api.FaucetOptions
       marshal-as: reference
 
 SubscribeRequest:
   union: { type: message }
   fields:
-    - type: SubscribeOptions
+    - type: api.SubscribeOptions
       marshal-as: reference
 
 ErrorResponse:
@@ -109,6 +109,7 @@ FindServiceResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+      keep-empty: true
 
 ConsensusStatusResponse:
   union: { type: message }
@@ -149,6 +150,7 @@ SubmitResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+      keep-empty: true
 
 ValidateResponse:
   union: { type: message }
@@ -158,6 +160,7 @@ ValidateResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+      keep-empty: true
 
 FaucetResponse:
   union: { type: message }
@@ -178,3 +181,4 @@ EventMessage:
       type: api.Event
       marshal-as: union
       repeatable: true
+      keep-empty: true

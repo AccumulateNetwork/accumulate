@@ -297,7 +297,9 @@ func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}
-	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, &app.Accumulate.Describe)
+	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, config.NetworkUrl{
+		URL: protocol.PartitionUrl(app.Accumulate.PartitionId),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}

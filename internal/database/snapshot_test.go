@@ -7,6 +7,8 @@
 package database_test
 
 import (
+	"encoding/binary"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -16,12 +18,43 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
+
+func BenchmarkCollect(b *testing.B) {
+	// db, err := database.OpenBadger(b.TempDir(), nil)
+	// require.NoError(b, err)
+	db := database.OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
+	batch := db.Begin(true)
+	defer batch.Discard()
+	for i := 0; i < b.N; i++ {
+		v := &ADI{Url: protocol.AccountUrl(fmt.Sprintf("a-%d", i)), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: protocol.AccountUrl("foo")}}}}
+		account := batch.Account(v.Url)
+		require.NoError(b, account.Main().Put(v))
+
+		txn := new(protocol.Transaction)
+		txn.Header.Principal = v.Url
+		binary.BigEndian.PutUint64(txn.Header.Initiator[:], uint64(i))
+		txn.Body = new(SendTokens)
+		err := account.MainChain().Inner().AddHash(txn.GetHash(), false)
+		require.NoError(b, err)
+		require.NoError(b, batch.Message2(txn.GetHash()).Main().Put(&messaging.TransactionMessage{Transaction: txn}))
+	}
+	require.NoError(b, batch.Commit())
+
+	b.ResetTimer()
+	err := db.Collect(new(ioutil.Discard), nil, &database.CollectOptions{
+		BuildIndex: true,
+	})
+	require.NoError(b, err)
+}
 
 func TestSnapshot(t *testing.T) {
 	alice := AccountUrl("alice")
@@ -61,7 +94,7 @@ func TestSnapshot(t *testing.T) {
 	// Restore the snapshot
 	db := database.OpenInMemory(nil)
 	db.SetObserver(execute.NewDatabaseObserver())
-	require.NoError(t, db.Restore(ioutil.NewBuffer(buf.Bytes()), nil))
+	require.NoError(t, database.Restore(db, ioutil.NewBuffer(buf.Bytes()), nil))
 
 	// Verify
 	account := GetAccount[*TokenAccount](t, db, bob.JoinPath("tokens"))
@@ -109,7 +142,7 @@ func TestSnapshotRestore(t *testing.T) {
 	// Restore the snapshot **restoring each record in a separate batch**
 	db := database.OpenInMemory(nil)
 	db.SetObserver(execute.NewDatabaseObserver())
-	require.NoError(t, db.Restore(ioutil.NewBuffer(buf.Bytes()), &database.RestoreOptions{BatchRecordLimit: 1}))
+	require.NoError(t, database.Restore(db, ioutil.NewBuffer(buf.Bytes()), &database.RestoreOptions{BatchRecordLimit: 1}))
 
 	// Verify
 	account := GetAccount[*TokenAccount](t, db, bob.JoinPath("tokens"))
@@ -126,7 +159,6 @@ func TestCollectAndRestore(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -181,6 +213,9 @@ func TestCollectAndRestore(t *testing.T) {
 		assert.NotEmpty(t, blocks)
 	})
 
+	// Give it time to settle
+	sim.StepN(50)
+
 	// Collect snapshots
 	snap := map[string][]byte{}
 	for _, p := range sim.Partitions() {
@@ -193,7 +228,6 @@ func TestCollectAndRestore(t *testing.T) {
 
 	// Restart the simulator
 	sim = NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.SnapshotMap(snap),
 	)
@@ -225,4 +259,38 @@ func TestCollectAndRestore(t *testing.T) {
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
+}
+
+func TestPreservationOfOldTransactions(t *testing.T) {
+	// Some random transaction
+	env, err := build.Transaction().For("alice", "tokens").BurnTokens(1, 0).
+		SignWith("alice", "book", "1").Version(1).Timestamp(1).PrivateKey(make([]byte, 64)).
+		Done()
+	require.NoError(t, err)
+
+	// Store it in a database
+	txn := env.Transaction[0]
+	db := database.OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
+	batch := db.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, batch.Transaction(txn.GetHash()).Main().Put(&database.SigOrTxn{Transaction: txn}))
+	require.NoError(t, batch.Account(txn.Header.Principal).MainChain().Inner().AddHash(txn.GetHash(), false))
+	require.NoError(t, batch.Commit())
+
+	// Collect a snapshot
+	buf := new(ioutil.Buffer)
+	require.NoError(t, db.Collect(buf, nil, nil))
+
+	// Restore the snapshot
+	db = database.OpenInMemory(nil)
+	db.SetObserver(execute.NewDatabaseObserver())
+	require.NoError(t, database.Restore(db, buf, nil))
+
+	// Verify the transaction still exists
+	batch = db.Begin(false)
+	defer batch.Discard()
+	txn2, err := batch.Transaction(txn.GetHash()).Main().Get()
+	require.NoError(t, err)
+	require.True(t, txn.Equal(txn2.Transaction))
 }

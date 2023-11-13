@@ -92,8 +92,29 @@ func newPeerManager(ctx context.Context, host host.Host, getServices func() []*s
 }
 
 // getPeers queries the DHT for peers that provide the given service.
-func (m *peerManager) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit int) (<-chan peer.AddrInfo, error) {
-	return m.routing.FindPeers(ctx, ma.String(), discovery.Limit(limit))
+func (m *peerManager) getPeers(ctx context.Context, ma multiaddr.Multiaddr, limit int, timeout time.Duration) (<-chan peer.AddrInfo, error) {
+	ch, err := m.routing.FindPeers(ctx, ma.String(), discovery.Limit(limit))
+	if err != nil || timeout == 0 {
+		return ch, err
+	}
+
+	ch2 := make(chan peer.AddrInfo)
+	stop := time.After(timeout)
+	go func() {
+		defer close(ch2)
+		for {
+			select {
+			case <-stop:
+				return
+			case v, ok := <-ch:
+				if !ok {
+					return
+				}
+				ch2 <- v
+			}
+		}
+	}()
+	return ch2, nil
 }
 
 // advertizeNewService advertizes new whoami info to everyone.
@@ -138,7 +159,7 @@ func (m *peerManager) waitFor(ctx context.Context, addr multiaddr.Multiaddr) err
 		wait := <-m.wait
 
 		// Look for a peer
-		ch, err := m.routing.FindPeers(ctx, addr.String(), discovery.Limit(1))
+		ch, err := m.getPeers(ctx, addr, 1, 0)
 		if err != nil {
 			return err
 		}

@@ -21,12 +21,12 @@ import (
 	tmconfig "github.com/cometbft/cometbft/config"
 	service2 "github.com/cometbft/cometbft/libs/service"
 	"github.com/fatih/color"
-	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"golang.org/x/exp/slog"
 )
 
 var cmdRun = &cobra.Command{
@@ -90,37 +90,27 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 func runNode(cmd *cobra.Command, _ []string) (string, error) {
 	prog := NewProgram(cmd, singleNodeWorkDir, nil)
 
-	svc, err := service.New(prog, serviceConfig)
-	if err != nil {
-		return "", err
-	}
-
-	logger, err := svc.Logger(nil)
-	if err != nil {
-		return "", err
-	}
-
 	if flagRun.CiStopAfter != 0 {
-		go watchDog(prog, svc, flagRun.CiStopAfter)
+		go watchDog(prog, flagRun.CiStopAfter)
 	}
 	color.HiGreen("------ starting a new node ------")
 
-	err = svc.Run()
+	err := prog.Run()
 	if err != nil {
 		//if it is already stopped, that is ok.
 		if !errors.Is(err, service2.ErrAlreadyStopped) {
-			_ = logger.Error(err)
+			slog.Error("Service failed", err)
 			return "", err
 		}
 	}
 	return "shutdown complete", nil
 }
 
-func watchDog(prog *Program, svc service.Service, duration time.Duration) {
+func watchDog(prog *Program, duration time.Duration) {
 	time.Sleep(duration)
 
 	//this will cause tendermint to stop and exit cleanly.
-	_ = prog.Stop(svc)
+	_ = prog.Stop()
 
 	//the following will stop the Run()
 	interrupt(syscall.Getpid())
@@ -128,7 +118,7 @@ func watchDog(prog *Program, svc service.Service, duration time.Duration) {
 
 type logAnnotator func(io.Writer, string, bool) io.Writer
 
-func newLogWriter(s service.Service) func(string, logAnnotator) (io.Writer, error) {
+func newLogWriter() func(string, logAnnotator) (io.Writer, error) {
 	// Each log file writer must be created once, otherwise different copies
 	// will step on each other
 	var logFile *rotateWriter
@@ -156,17 +146,12 @@ func newLogWriter(s service.Service) func(string, logAnnotator) (io.Writer, erro
 	return func(format string, annotate logAnnotator) (io.Writer, error) {
 		var mainWriter io.Writer
 		var err error
-		if !service.Interactive() && s != nil {
-			mainWriter, err = logging.NewServiceLogger(s, format)
-			check(err)
-		} else {
-			mainWriter = os.Stderr
-			if annotate != nil {
-				mainWriter = annotate(mainWriter, format, true)
-			}
-			mainWriter, err = logging.NewConsoleWriterWith(mainWriter, format)
-			check(err)
+		mainWriter = os.Stderr
+		if annotate != nil {
+			mainWriter = annotate(mainWriter, format, true)
 		}
+		mainWriter, err = logging.NewConsoleWriterWith(mainWriter, format)
+		check(err)
 
 		var writers multiWriter
 		writers = append(writers, mainWriter)

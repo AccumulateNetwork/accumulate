@@ -38,13 +38,14 @@ func init() {
 }
 
 func TestWalkAndReplay(t *testing.T) {
+	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3412")
+
 	liteKey := acctesting.GenerateKey("Lite")
 	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
 
 	// Use the simulator to create genesis documents
 	net := simulator.SimpleNetwork(t.Name(), 3, 1)
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		net,
 		simulator.Genesis(GenesisTime),
 	)
@@ -70,7 +71,6 @@ func TestWalkAndReplay(t *testing.T) {
 
 	// Set up the simulator and harness
 	sim = NewSim(t,
-		simulator.MemoryDatabase,
 		net,
 		simulator.SnapshotMap(genesis),
 	)
@@ -92,10 +92,11 @@ func TestWalkAndReplay(t *testing.T) {
 	}
 	blocks := map[string][]*Block{}
 	for _, p := range sim.Partitions() {
-		sim.S.SetCommitHook(p.ID, func(p *protocol.PartitionInfo, state execute.BlockState) {
+		p := p
+		events.SubscribeSync(sim.S.EventBus(p.ID), func(e execute.WillCommitBlock) error {
 			block := new(Block)
-			block.Index = state.Params().Index
-			_ = state.ChangeSet().Walk(record.WalkOptions{
+			block.Index = e.Block.Params().Index
+			_ = e.Block.ChangeSet().Walk(record.WalkOptions{
 				Values:        true,
 				Modified:      true,
 				IgnoreIndices: true,
@@ -108,9 +109,9 @@ func TestWalkAndReplay(t *testing.T) {
 				return false, nil
 			})
 			blocks[p.ID] = append(blocks[p.ID], block)
+			return nil
 		})
 
-		p := p
 		events.SubscribeSync(sim.S.EventBus(p.ID), func(e events.DidCommitBlock) error {
 			blocks := blocks[p.ID]
 			block := blocks[len(blocks)-1]

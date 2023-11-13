@@ -17,8 +17,8 @@ var tsSrc string
 var _ = Templates.Register(tsSrc, "typescript", template.FuncMap{
 	"valueName": func(v *TypeValue) string {
 		if flags.ShortNames {
-			return v.Name
+			return v.Key
 		}
-		return v.Type.Name + v.Name
+		return v.Type.Name + v.Key
 	},
 }, "TypeScript")
