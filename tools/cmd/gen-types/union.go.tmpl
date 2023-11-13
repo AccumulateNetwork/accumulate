@@ -18,12 +18,14 @@ import (
 )
 
 {{ $lud := .LongUnionDiscriminator }}
+{{ $skipNew := .UnionSkipNew }}
 {{- range .Unions}}{{if not (eq .Type "result")}}
 
 {{- if .Registry}}
 var {{lcName .Name}}Registry = new(encoding.UnionRegistry[{{.Enumeration}}, {{.Interface}}])
 {{- end}}
 
+{{ if not $skipNew }}
 // {{unionMethod . "New"}} creates a new {{.Interface}} for the specified {{.Enumeration}}.
 func {{unionMethod . "New"}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 	switch typ {
@@ -39,6 +41,7 @@ func {{unionMethod . "New"}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 	{{- end}}
 	return nil, fmt.Errorf("unknown {{natural .Type}} %v", typ)
 }
+{{ end }}
 
 {{if (index .Members 0).IsComparable}}
 // {{unionMethod . "Equal"}} is used to compare the values of the union

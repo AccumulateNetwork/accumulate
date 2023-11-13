@@ -9,8 +9,10 @@ package bsn
 import (
 	"strings"
 
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -106,11 +108,27 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 	}
 
 	// Process the message
-	err = x.process(batch, ctx, msg)
+	ctx2 := &SummaryContext{MessageContext: ctx, summary: msg}
+	err = x.process(batch, ctx2)
 	switch {
 	case err == nil:
 		// Ok
+		ctx.executor.logger.Info("Processed block summary",
+			"source", msg.Partition,
+			"block", msg.Index,
+			"previous-block", msg.PreviousBlock,
+			"hash", logging.AsHex(msg.StateTreeHash).Slice(0, 4),
+			"updates", len(msg.RecordUpdates))
+
 	case errors.Code(err).IsClientError():
+		ctx.executor.logger.Info("Processing block summary failed",
+			"error", err,
+			"source", msg.Partition,
+			"block", msg.Index,
+			"previous-block", msg.PreviousBlock,
+			"hash", logging.AsHex(msg.StateTreeHash).Slice(0, 4),
+			"updates", len(msg.RecordUpdates))
+
 		ctx.recordErrorStatus(err)
 		return nil
 	default:
@@ -123,6 +141,12 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 		if err != nil {
 			return errors.UnknownError.WithFormat("load globals: %w", err)
 		}
+	}
+
+	// Apply indexing
+	err = x.applyIndexing(batch, ctx2)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Is there a pending update for the next block?
@@ -144,50 +168,17 @@ func (x BlockSummary) Process(batch *ChangeSet, ctx *MessageContext) (err error)
 	return nil
 }
 
-func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messaging.BlockSummary) (err error) {
-	// This is hacky because the main database's BPT support fits badly into the
-	// data model. The data model collects pending BPT updates in a map; when a
-	// sub-batch is committed, it's BPT updates are pushed to its parent. Only
-	// the root batch actually updates the BPT, and that is done directly
-	// through the key-value store. Thus we have to create a root batch and
-	// commit it, but without actually changing the database.
-
-	ctx.executor.logger.Info("Processing block summary",
-		"source", msg.Partition,
-		"block", msg.Index,
-		"previous-block", msg.PreviousBlock,
-		"hash", logging.AsHex(msg.StateTreeHash).Slice(0, 4),
-		"updates", len(msg.RecordUpdates))
-
-	storeTxn := batch.kvstore.Begin(nil, true)
-	defer func() { commitOrDiscard(storeTxn, &err) }()
-
-	batch = NewChangeSet(storeTxn, ctx.executor.logger)
-	defer batch.Discard()
+func (x BlockSummary) process(batch *ChangeSet, ctx *SummaryContext) (err error) {
+	batch = batch.Begin()
+	defer func() { commitOrDiscard(batch, &err) }()
+	msg := ctx.summary
 	part := batch.Partition(msg.Partition)
 
 	// Execute all the record updates
-	for _, v := range msg.RecordUpdates {
-		w, err := values.Resolve[record.ValueWriter](part, v.Key)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store record update: %w", err)
-		}
-		err = w.LoadBytes(v.Value, true)
-		if err != nil {
-			return errors.UnknownError.WithFormat("store record update: %w", err)
-		}
-	}
-
-	// Commit the batch
-	err = batch.Commit()
+	err = x.executeUpdates(part, ctx)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-
-	// Create a new batch
-	batch = NewChangeSet(storeTxn, ctx.executor.logger)
-	defer batch.Discard()
-	part = batch.Partition(msg.Partition)
 
 	// Verify the root hash is the same
 	hash, err := part.GetBptRootHash()
@@ -208,5 +199,79 @@ func (BlockSummary) process(batch *ChangeSet, ctx *MessageContext, msg *messagin
 		return errors.UnknownError.WithFormat("invalid summary: index does not match: summary says %d but ledger says %d", msg.Index, ledger.Index)
 	}
 
+	return nil
+}
+
+func (x BlockSummary) executeUpdates(batch *coredb.Batch, ctx *SummaryContext) (err error) {
+	// Use a child batch and commit to force the BPT to update
+	batch = batch.Begin(true)
+	defer func() { commitOrDiscard(batch, &err) }()
+
+	for _, v := range ctx.summary.RecordUpdates {
+		w, err := values.Resolve[database.Value](batch, v.Key)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store record update: %w", err)
+		}
+
+		err = x.willUpdate(batch, ctx, v, w)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		err = w.LoadBytes(v.Value, true)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store record update: %w", err)
+		}
+	}
+	return nil
+}
+
+func (BlockSummary) willUpdate(batch *coredb.Batch, ctx *SummaryContext, update *messaging.RecordUpdate, value database.Value) error {
+	// Resolve the value
+	var r database.Record = batch
+	var key = update.Key
+	var err error
+	for key.Len() > 0 {
+		r, key, err = r.Resolve(key)
+		if err != nil {
+			return errors.UnknownError.WithFormat("resolve: %w", err)
+		}
+
+		for _, f := range indexerFactories {
+			err = f(ctx, update, r, key)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+		}
+	}
+	return nil
+}
+
+func (BlockSummary) applyIndexing(batch *ChangeSet, ctx *SummaryContext) error {
+	part := batch.Partition(ctx.summary.Partition)
+
+	for _, idx := range ctx.indexers {
+		// Resolve the value
+		var r record.Record = part
+		var key = idx.Key()
+		var err error
+		for key.Len() > 0 {
+			r, key, err = r.Resolve(key)
+			if err != nil {
+				return errors.UnknownError.WithFormat("resolve: %w", err)
+			}
+		}
+
+		// Some values require an additional resolve
+		if s, _, err := r.Resolve(nil); err == nil {
+			r = s
+		}
+
+		// Apply the indexer
+		err = idx.Apply(batch, ctx, r)
+		if err != nil {
+			return errors.UnknownError.WithFormat("apply %v indexer: %w", idx.Key(), err)
+		}
+	}
 	return nil
 }

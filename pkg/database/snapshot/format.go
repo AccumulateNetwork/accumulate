@@ -9,16 +9,18 @@ package snapshot
 import (
 	"bufio"
 	"io"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 const Version2 = 2
 
 type rawWriter = ioutil.SegmentedWriter[SectionType, *SectionType]
 type sectionReader = ioutil.Segment[SectionType, *SectionType]
-type sectionWriter = ioutil.SegmentWriter[SectionType, *SectionType]
 
 func GetVersion(file ioutil.SectionReader) (uint64, error) {
 	r, err := open(file)
@@ -93,23 +95,52 @@ type Reader struct {
 	Header   *Header
 }
 
-func (r *Reader) open(i int, typ SectionType) (ioutil.SectionReader, error) {
-	if i < 0 || i >= len(r.Sections) {
-		return nil, errors.NotFound.WithFormat("section %d not found", i)
-	}
-	if r.Sections[i].Type() != typ {
-		return nil, errors.BadRequest.WithFormat("section %d's type is %v not %v", i, r.Sections[i].Type(), typ)
+func (r *Reader) open(i int, typ ...SectionType) (ioutil.SectionReader, *sectionReader, error) {
+	if i < 0 {
+		for _, s := range r.Sections {
+			if s.Type().isOneOf(typ...) {
+				rd, err := s.Open()
+				if err != nil {
+					return nil, nil, errors.UnknownError.Wrap(err)
+				}
+				return rd, s, nil
+			}
+		}
+		var s []string
+		for _, typ := range typ {
+			s = append(s, typ.String())
+		}
+		return nil, nil, errors.NotFound.WithFormat("%v section not found", strings.Join(s, "|"))
 	}
 
-	rd, err := r.Sections[i].Open()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	if i < 0 || i >= len(r.Sections) {
+		return nil, nil, errors.NotFound.WithFormat("section %d not found", i)
 	}
-	return rd, nil
+
+	s := r.Sections[i]
+	if !s.Type().isOneOf(typ...) {
+		return nil, nil, errors.BadRequest.WithFormat("section %d's type is %v not %v", i, s.Type(), typ)
+	}
+
+	rd, err := s.Open()
+	if err != nil {
+		return nil, nil, errors.UnknownError.Wrap(err)
+	}
+	return rd, s, nil
+}
+
+// Open opens the first section of the given type
+func (r *Reader) Open(typ ...SectionType) (ioutil.SectionReader, error) {
+	for _, s := range r.Sections {
+		if s.Type().isOneOf(typ...) {
+			return s.Open()
+		}
+	}
+	return nil, errors.NotFound.WithFormat("%v section not found", typ)
 }
 
 func (r *Reader) OpenIndex(i int) (*IndexReader, error) {
-	rd, err := r.open(i, SectionTypeRecordIndex)
+	rd, _, err := r.open(i, SectionTypeRecordIndex)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -120,13 +151,24 @@ func (r *Reader) OpenIndex(i int) (*IndexReader, error) {
 	return &IndexReader{rd, int(size / indexEntrySize)}, nil
 }
 
-func (r *Reader) OpenRecords(i int) (*RecordReader, error) {
-	rd, err := r.open(i, SectionTypeRecords)
+func (r *Reader) OpenRecords(i int) (RecordReader, error) {
+	rd, _, err := r.open(i, SectionTypeRecords)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	bufio.NewReader(rd)
-	return &RecordReader{rd}, nil
+	return recordReader{rd}, nil
+}
+
+func (r *Reader) OpenBPT(i int) (RecordReader, error) {
+	rd, s, err := r.open(i, SectionTypeRawBPT, SectionTypeBPT)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if s.Type() == SectionTypeRawBPT {
+		return rawBptReader{rd}, nil
+	}
+	return recordReader{rd}, nil
 }
 
 type IndexReader struct {
@@ -140,18 +182,58 @@ func (i *IndexReader) Read(n int) (*RecordIndexEntry, error) {
 	return v, errors.UnknownError.Wrap(err)
 }
 
-type RecordReader struct {
-	rd ioutil.SectionReader
+type RecordReader interface {
+	io.Seeker
+	Read() (*RecordEntry, error)
+	ReadAt(offset int64) (*RecordEntry, error)
 }
 
-func (r *RecordReader) Seek(offset int64, whence int) (int64, error) {
-	return r.rd.Seek(offset, whence)
+// recordReader reads length-prefixed record entries.
+type recordReader struct {
+	ioutil.SectionReader
 }
 
-func (r *RecordReader) Read() (*RecordEntry, error) {
+func (r recordReader) Read() (*RecordEntry, error) {
 	v := new(RecordEntry)
-	_, err := readValue(r.rd, v)
+	_, err := readValue(r.SectionReader, v)
 	return v, err
+}
+
+func (r recordReader) ReadAt(offset int64) (*RecordEntry, error) {
+	v := new(RecordEntry)
+	_, err := readValueAt(r.SectionReader, offset, v)
+	return v, err
+}
+
+// rawBptReader reads (key hash, value) BPT pairs.
+type rawBptReader struct {
+	ioutil.SectionReader
+}
+
+func (r rawBptReader) Read() (*RecordEntry, error) {
+	var b [64]byte
+	_, err := io.ReadFull(r.SectionReader, b[:])
+	if err != nil {
+		return nil, err
+	}
+
+	return &RecordEntry{
+		Key:   record.KeyFromHash(*(*[32]byte)(b[:32])),
+		Value: b[32:],
+	}, nil
+}
+
+func (r rawBptReader) ReadAt(offset int64) (*RecordEntry, error) {
+	var b [64]byte
+	_, err := readFullAt(r.SectionReader, offset, b[:])
+	if err != nil {
+		return nil, err
+	}
+
+	return &RecordEntry{
+		Key:   record.KeyFromHash(*(*[32]byte)(b[:32])),
+		Value: b[32:],
+	}, nil
 }
 
 type Writer struct {
@@ -179,11 +261,28 @@ func (w *Writer) WriteHeader(header *Header) error {
 	return nil
 }
 
-func (w *Writer) OpenRaw(typ SectionType) (*sectionWriter, error) {
+func (w *Writer) OpenRaw(typ SectionType) (*SectionWriter, error) {
 	if typ != SectionTypeHeader && !w.wroteHeader {
 		return nil, errors.NotReady.WithFormat("header has not been written")
 	}
+	no := w.sections
 	w.sections++
 	w.wroteHeader = true
-	return w.wr.Open(typ)
+	sw, err := w.wr.Open(typ)
+	if err != nil {
+		return nil, err
+	}
+	return &SectionWriter{no, *sw}, nil
+}
+
+type SectionWriter struct {
+	no int
+	ioutil.SegmentWriter[SectionType, *SectionType]
+}
+
+func (c *SectionWriter) SectionNumber() int { return c.no }
+
+func (c *SectionWriter) WriteValue(r encoding.BinaryValue) error {
+	_, err := writeValue(c, r)
+	return err
 }

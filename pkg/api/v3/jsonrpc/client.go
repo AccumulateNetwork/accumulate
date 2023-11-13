@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -42,23 +43,23 @@ func NewClient(server string) *Client {
 	return c
 }
 
-func (c *Client) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
+func (c *Client) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
 	return sendRequestUnmarshalAs[*api.NodeInfo](c, ctx, "node-info", &message.NodeInfoRequest{NodeInfoOptions: opts})
 }
 
-func (c *Client) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+func (c *Client) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
 	return sendRequestUnmarshalAs[[]*api.FindServiceResult](c, ctx, "find-service", &message.FindServiceRequest{FindServiceOptions: opts})
 }
 
-func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	return sendRequestUnmarshalAs[*api.ConsensusStatus](c, ctx, "consensus-status", &message.ConsensusStatusRequest{ConsensusStatusOptions: opts})
 }
 
-func (c *Client) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
+func (c *Client) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return sendRequestUnmarshalAs[*api.NetworkStatus](c, ctx, "network-status", &message.NetworkStatusRequest{NetworkStatusOptions: opts})
 }
 
-func (c *Client) Metrics(ctx context.Context, opts MetricsOptions) (*api.Metrics, error) {
+func (c *Client) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	return sendRequestUnmarshalAs[*api.Metrics](c, ctx, "metrics", &message.MetricsRequest{MetricsOptions: opts})
 }
 
@@ -80,6 +81,19 @@ func (c *Client) Validate(ctx context.Context, envelope *messaging.Envelope, opt
 func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
 	req := &message.FaucetRequest{Account: account, FaucetOptions: opts}
 	return sendRequestUnmarshalAs[*api.Submission](c, ctx, "faucet", req)
+}
+
+type PrivateClient Client
+
+var _ private.Sequencer = (*PrivateClient)(nil)
+
+func (c *Client) Private() *PrivateClient {
+	return (*PrivateClient)(c)
+}
+
+func (c *PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	req := &message.PrivateSequenceRequest{Source: src, Destination: dst, SequenceNumber: num, SequenceOptions: opts}
+	return sendRequestUnmarshalAs[*api.MessageRecord[messaging.Message]]((*Client)(c), ctx, "private-sequence", req)
 }
 
 func (c *Client) sendRequest(ctx context.Context, method string, req, resp interface{}) error {

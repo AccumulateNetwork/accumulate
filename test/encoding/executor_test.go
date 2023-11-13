@@ -47,15 +47,13 @@ func TestExecutorConsistency(t *testing.T) {
 
 	// Start the simulator
 	sim, err := simulator.New(
-		acctesting.NewTestLogger(t),
-		simulator.MemoryDatabase,
-		testData.Network,
+		simulator.WithLogger(acctesting.NewTestLogger(t)),
+		simulator.WithNetwork(testData.Network),
 		simulator.SnapshotMap(testData.Genesis),
+		simulator.DropDispatchedMessages,
+		simulator.InitialAcmeSupply(nil),
 	)
 	require.NoError(t, err)
-
-	// Drop everything
-	sim.DropDispatchedMessages = true
 
 	// Step the simulator in step with the gold file
 	for _, step := range testData.Steps {
@@ -123,7 +121,11 @@ func (v *snapVisitor) VisitAccount(a *snapshot.Account, i int) error {
 
 	b, err := snapshot.CollectAccount(v.batch.Account(a.Url), true)
 	require.NoError(v, err)
-	assert.Equalf(v, a.Copy(), b.Copy(), "Account %v", a.Url)
+	c, err := json.MarshalIndent(a, "", "  ")
+	require.NoError(v, err)
+	d, err := json.MarshalIndent(b, "", "  ")
+	require.NoError(v, err)
+	assert.Equalf(v, string(c), string(d), "Account %v", a.Url)
 
 	return nil
 }

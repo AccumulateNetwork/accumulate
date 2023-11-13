@@ -142,6 +142,7 @@ func (v *PartitionList) Copy() *PartitionList {
 
 	u.Partitions = make([]string, len(v.Partitions))
 	for i, v := range v.Partitions {
+		v := v
 		u.Partitions[i] = v
 	}
 	if len(v.extraData) > 0 {
@@ -224,6 +225,7 @@ func (v *SeedList) Copy() *SeedList {
 	u.Type = v.Type
 	u.Addresses = make([]string, len(v.Addresses))
 	for i, v := range v.Addresses {
+		v := v
 		u.Addresses[i] = v
 	}
 	if len(v.extraData) > 0 {

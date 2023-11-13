@@ -27,7 +27,7 @@ import (
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
-	if x.globals.Active.ExecutorVersion.V2() {
+	if x.globals.Active.ExecutorVersion.V2Enabled() {
 		return errors.Conflict.WithFormat("executor v1 is incompatible with version %v", x.globals.Active.ExecutorVersion)
 	}
 
@@ -459,7 +459,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 			signatures = append(signatures, dnReceipt)
 		}
 
-		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, txn, status.DestinationNetwork)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -480,7 +480,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 
 func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destPartUrl := protocol.PartitionUrl(destPart)
-	env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
+	env, err := shared.PrepareBlockAnchor(x.Describe.PartitionUrl().URL, x.globals.Active.Network, x.Key, anchor, sequenceNumber, destPartUrl)
 	if err != nil {
 		return errors.InternalError.Wrap(err)
 	}

@@ -32,8 +32,6 @@ type V3 interface {
 	api.Querier
 	api.Submitter
 	api.Validator
-	api.Faucet
-	Private() private.Sequencer
 }
 
 type Options struct {
@@ -43,7 +41,6 @@ type Options struct {
 	LocalV3       V3
 	Querier       api.Querier
 	Submitter     api.Submitter
-	Network       api.NetworkService
 	Faucet        api.Faucet
 	Validator     api.Validator
 	Sequencer     private.Sequencer

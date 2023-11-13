@@ -14,6 +14,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/gobeam/stringy"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
@@ -28,6 +29,9 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types,
 	ttypes.Package = pkgName
 	ttypes.GoInclude = flags.GoInclude
 	ttypes.LongUnionDiscriminator = flags.LongUnionDiscriminator
+	ttypes.UnionSkipNew = flags.UnionSkipNew
+	ttypes.UnionSkipType = flags.UnionSkipType
+	ttypes.GenericSkipAs = flags.GenericSkipAs
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
 
@@ -200,8 +204,11 @@ type Types struct {
 	Package                string
 	GoInclude              []string
 	LongUnionDiscriminator bool
+	UnionSkipNew           bool
+	UnionSkipType          bool
 	Types                  []*Type
 	Unions                 []*UnionSpec
+	GenericSkipAs          bool
 }
 
 type SingleTypeFile struct {
@@ -209,7 +216,7 @@ type SingleTypeFile struct {
 	*Type
 }
 
-func (f *SingleTypeFile) IsUnion() bool { return false }
+func (f *SingleTypeFile) IsUnion() bool { return f.Union.Type != "" }
 
 type SingleUnionFile struct {
 	Package string
@@ -334,10 +341,16 @@ func (f *Field) EffectiveMarshalType() typegen.TypeCode {
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"lcName":              typegen.LowerFirstWord,
 	"upper":               strings.ToUpper,
+	"lower":               strings.ToLower,
 	"underscoreUpperCase": typegen.UnderscoreUpperCase,
 	"title":               typegen.TitleCase,
 	"map":                 typegen.MakeMap,
 	"natural":             typegen.Natural,
 	"hasSuffix":           strings.HasSuffix,
 	"debug":               fmt.Printf,
+	"snake": func(s string) string {
+		str := stringy.New(s)
+		snakeStr := str.SnakeCase()
+		return snakeStr.ToLower()
+	},
 })

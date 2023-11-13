@@ -165,12 +165,14 @@ func (v *BlockSummary) Copy() *BlockSummary {
 	u.PreviousBlock = v.PreviousBlock
 	u.RecordUpdates = make([]*RecordUpdate, len(v.RecordUpdates))
 	for i, v := range v.RecordUpdates {
+		v := v
 		if v != nil {
 			u.RecordUpdates[i] = (v).Copy()
 		}
 	}
 	u.StateTreeUpdates = make([]*StateTreeUpdate, len(v.StateTreeUpdates))
 	for i, v := range v.StateTreeUpdates {
+		v := v
 		if v != nil {
 			u.StateTreeUpdates[i] = (v).Copy()
 		}
@@ -214,6 +216,7 @@ func (v *Envelope) Copy() *Envelope {
 
 	u.Signatures = make([]protocol.Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
+		v := v
 		if v != nil {
 			u.Signatures[i] = protocol.CopySignature(v)
 		}
@@ -221,12 +224,14 @@ func (v *Envelope) Copy() *Envelope {
 	u.TxHash = encoding.BytesCopy(v.TxHash)
 	u.Transaction = make([]*protocol.Transaction, len(v.Transaction))
 	for i, v := range v.Transaction {
+		v := v
 		if v != nil {
 			u.Transaction[i] = (v).Copy()
 		}
 	}
 	u.Messages = make([]Message, len(v.Messages))
 	for i, v := range v.Messages {
+		v := v
 		if v != nil {
 			u.Messages[i] = CopyMessage(v)
 		}

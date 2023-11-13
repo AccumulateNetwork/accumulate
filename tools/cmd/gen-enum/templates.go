@@ -15,6 +15,7 @@ import (
 	"text/template"
 	"unicode"
 
+	"github.com/gobeam/stringy"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
@@ -37,7 +38,7 @@ type Type struct {
 }
 
 type TypeValue struct {
-	Name string
+	Key  string
 	Type *Type
 	typegen.EnumValue
 }
@@ -50,6 +51,11 @@ var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"underscoreUpperCase": typegen.UnderscoreUpperCase,
 	"lowerCamel":          func(s string) string { return reCamel.ReplaceAllStringFunc(s, strings.ToLower) },
 	"natural":             natural,
+	"snake": func(s string) string {
+		str := stringy.New(s)
+		snakeStr := str.SnakeCase()
+		return snakeStr.ToLower()
+	},
 })
 
 func convert(types map[string]typegen.Enum, pkgName, subPkgName string) *Types {
@@ -65,7 +71,7 @@ func convert(types map[string]typegen.Enum, pkgName, subPkgName string) *Types {
 			tval := new(TypeValue)
 			tval.Type = ttyp
 			ttyp.Values = append(ttyp.Values, tval)
-			tval.Name = name
+			tval.Key = name
 			tval.EnumValue = *val
 		}
 		sort.Slice(ttyp.Values, func(i, j int) bool {

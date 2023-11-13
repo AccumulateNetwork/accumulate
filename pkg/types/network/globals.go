@@ -79,8 +79,8 @@ func NewGlobals(g *GlobalValues) *GlobalValues {
 	return g
 }
 
-type getStateFunc func(accountUrl *url.URL, target interface{}) error
-type putStateFunc func(account protocol.Account) error
+type getStateFunc = func(accountUrl *url.URL, target interface{}) error
+type putStateFunc = func(account protocol.Account) error
 
 const labelOracle = "oracle"
 const labelGlobals = "network globals"
@@ -237,7 +237,7 @@ func (g *GlobalValues) formatEntry(value encoding.BinaryValue) protocol.DataEntr
 		panic(err) // Should be impossible
 	}
 
-	if g.ExecutorVersion.V2() {
+	if g.ExecutorVersion.V2Enabled() {
 		return &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
 	}
 	return &protocol.AccumulateDataEntry{Data: [][]byte{data}}
