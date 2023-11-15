@@ -35,6 +35,10 @@ type Conductor struct {
 	Querier      api.Querier2
 	Submitter    api.Submitter
 
+	// Ready can be used to pause the conductor, for example to stop it from
+	// sending anchors while the node is catching up.
+	Ready func(execute.WillBeginBlock) bool
+
 	// RunTask launches a background task. The caller may use this to wait for
 	// completion of launched tasks.
 	RunTask func(func())
@@ -69,6 +73,10 @@ func (c *Conductor) willChangeGlobals(e events.WillChangeGlobals) error {
 func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 	// Skip for v1
 	if !c.Globals.Load().ExecutorVersion.V2Enabled() {
+		return nil
+	}
+
+	if c.Ready != nil && !c.Ready(e) {
 		return nil
 	}
 
