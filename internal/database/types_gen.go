@@ -18,7 +18,6 @@ import (
 	"io"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -94,14 +93,6 @@ type VoteEntry struct {
 	extraData []byte
 }
 
-type recordIndexEntry struct {
-	fieldsSet []bool
-	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Section   uint64      `json:"section,omitempty" form:"section" query:"section" validate:"required"`
-	Offset    uint64      `json:"offset,omitempty" form:"offset" query:"offset" validate:"required"`
-	extraData []byte
-}
-
 type sigSetData struct {
 	fieldsSet []bool
 	Version   uint64        `json:"version,omitempty" form:"version" query:"version" validate:"required"`
@@ -135,6 +126,7 @@ func (v *ReceiptList) Copy() *ReceiptList {
 	}
 	u.Elements = make([][]byte, len(v.Elements))
 	for i, v := range v.Elements {
+		v := v
 		u.Elements[i] = encoding.BytesCopy(v)
 	}
 	if v.Receipt != nil {
@@ -202,6 +194,7 @@ func (v *SignatureSetEntry) Copy() *SignatureSetEntry {
 	u.Version = v.Version
 	u.Path = make([]*url.URL, len(v.Path))
 	for i, v := range v.Path {
+		v := v
 		if v != nil {
 			u.Path[i] = v
 		}
@@ -253,30 +246,13 @@ func (v *VoteEntry) Copy() *VoteEntry {
 
 func (v *VoteEntry) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *recordIndexEntry) Copy() *recordIndexEntry {
-	u := new(recordIndexEntry)
-
-	if v.Key != nil {
-		u.Key = (v.Key).Copy()
-	}
-	u.Section = v.Section
-	u.Offset = v.Offset
-	if len(v.extraData) > 0 {
-		u.extraData = make([]byte, len(v.extraData))
-		copy(u.extraData, v.extraData)
-	}
-
-	return u
-}
-
-func (v *recordIndexEntry) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *sigSetData) Copy() *sigSetData {
 	u := new(sigSetData)
 
 	u.Version = v.Version
 	u.Entries = make([]SigSetEntry, len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		u.Entries[i] = *(&v).Copy()
 	}
 	if len(v.extraData) > 0 {
@@ -445,25 +421,6 @@ func (v *VoteEntry) Equal(u *VoteEntry) bool {
 		return false
 	}
 	if !(v.Hash == u.Hash) {
-		return false
-	}
-
-	return true
-}
-
-func (v *recordIndexEntry) Equal(u *recordIndexEntry) bool {
-	switch {
-	case v.Key == u.Key:
-		// equal
-	case v.Key == nil || u.Key == nil:
-		return false
-	case !((v.Key).Equal(u.Key)):
-		return false
-	}
-	if !(v.Section == u.Section) {
-		return false
-	}
-	if !(v.Offset == u.Offset) {
 		return false
 	}
 
@@ -940,67 +897,6 @@ func (v *VoteEntry) IsValid() error {
 	}
 }
 
-var fieldNames_recordIndexEntry = []string{
-	1: "Key",
-	2: "Section",
-	3: "Offset",
-}
-
-func (v *recordIndexEntry) MarshalBinary() ([]byte, error) {
-	if v == nil {
-		return []byte{encoding.EmptyObject}, nil
-	}
-
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Key == nil) {
-		writer.WriteValue(1, v.Key.MarshalBinary)
-	}
-	if !(v.Section == 0) {
-		writer.WriteUint(2, v.Section)
-	}
-	if !(v.Offset == 0) {
-		writer.WriteUint(3, v.Offset)
-	}
-
-	_, _, err := writer.Reset(fieldNames_recordIndexEntry)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *recordIndexEntry) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Key is missing")
-	} else if v.Key == nil {
-		errs = append(errs, "field Key is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Section is missing")
-	} else if v.Section == 0 {
-		errs = append(errs, "field Section is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Offset is missing")
-	} else if v.Offset == 0 {
-		errs = append(errs, "field Offset is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_sigSetData = []string{
 	1: "Version",
 	2: "Entries",
@@ -1268,35 +1164,6 @@ func (v *VoteEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_VoteEntry)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *recordIndexEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *recordIndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(record.Key); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
-		v.Key = x
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Section = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Offset = x
-	}
-
-	seen, err := reader.Reset(fieldNames_recordIndexEntry)
 	if err != nil {
 		return encoding.Error{E: err}
 	}

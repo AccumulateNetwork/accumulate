@@ -524,7 +524,7 @@ func (x *Executor) sendBlockAnchor(block *Block, anchor protocol.AnchorBody, seq
 	// will still be running v1
 	destPartUrl := protocol.PartitionUrl(destPart)
 	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && didUpdateToV2(anchor) && !strings.EqualFold(destPart, protocol.Directory) {
-		env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, block.Batch, anchor, sequenceNumber, destPartUrl)
+		env, err := shared.PrepareBlockAnchor(x.Describe.PartitionUrl().URL, x.globals.Active.Network, x.Key, anchor, sequenceNumber, destPartUrl)
 		if err != nil {
 			return errors.InternalError.Wrap(err)
 		}
@@ -580,7 +580,7 @@ func didUpdateToV2(anchor protocol.AnchorBody) bool {
 
 	for _, update := range dir.Updates {
 		update, ok := update.Body.(*protocol.ActivateProtocolVersion)
-		if ok && update.Version.V2() {
+		if ok && update.Version.V2Enabled() {
 			return true
 		}
 	}

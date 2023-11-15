@@ -125,7 +125,7 @@ func (d *memdb) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			return e.Value, nil
 		}
 		return nil, errors.NotFound
-	}, commit)
+	}, commit, nil)
 }
 
 func (d memdb) Copy() memdb {

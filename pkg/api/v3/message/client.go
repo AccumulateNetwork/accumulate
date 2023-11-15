@@ -55,22 +55,22 @@ func (c *Client) ForPeer(peer peer.ID) AddressedClient {
 }
 
 // NodeInfo implements [api.NodeService.NodeInfo].
-func (c *Client) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
+func (c *Client) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
 	return c.ForAddress(nil).NodeInfo(ctx, opts)
 }
 
 // FindService implements [api.NodeService.FindService].
-func (c *Client) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+func (c *Client) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
 	return c.ForAddress(nil).FindService(ctx, opts)
 }
 
 // ConsensusStatus implements [api.NodeService.ConsensusStatus].
-func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	return c.ForAddress(nil).ConsensusStatus(ctx, opts)
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
-func (c *Client) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
+func (c *Client) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return c.ForAddress(nil).NetworkStatus(ctx, opts)
 }
 
@@ -100,28 +100,28 @@ func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOp
 }
 
 // NodeInfo implements [api.NodeService.NodeInfo].
-func (c AddressedClient) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
+func (c AddressedClient) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a NodeInfo
 	return typedRequest[*NodeInfoResponse, *api.NodeInfo](c, ctx, &NodeInfoRequest{NodeInfoOptions: opts})
 }
 
 // FindService implements [api.NodeService.FindService].
-func (c AddressedClient) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+func (c AddressedClient) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a FindServiceResult
 	return typedRequest[*FindServiceResponse, []*api.FindServiceResult](c, ctx, &FindServiceRequest{FindServiceOptions: opts})
 }
 
 // ConsensusStatus implements [api.NodeService.ConsensusStatus].
-func (c AddressedClient) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+func (c AddressedClient) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a ConsensusStatus
 	return typedRequest[*ConsensusStatusResponse, *api.ConsensusStatus](c, ctx, &ConsensusStatusRequest{ConsensusStatusOptions: opts})
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
-func (c AddressedClient) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
+func (c AddressedClient) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	// Wrap the request as a NetworkStatusRequest and expect a
 	// NetworkStatusResponse, which is unpacked into a NetworkStatus
 	return typedRequest[*NetworkStatusResponse, *api.NetworkStatus](c, ctx, &NetworkStatusRequest{NetworkStatusOptions: opts})
@@ -204,17 +204,26 @@ type response[T any] interface {
 	rval() T
 }
 
-func (r *NodeInfoResponse) rval() *api.NodeInfo               { return r.Value } //nolint:unused
-func (r *FindServiceResponse) rval() []*api.FindServiceResult { return r.Value } //nolint:unused
-func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus { return r.Value } //nolint:unused
-func (r *NetworkStatusResponse) rval() *api.NetworkStatus     { return r.Value } //nolint:unused
-func (r *MetricsResponse) rval() *api.Metrics                 { return r.Value } //nolint:unused
-func (r *RecordResponse) rval() api.Record                    { return r.Value } //nolint:unused
-func (r *SubmitResponse) rval() []*api.Submission             { return r.Value } //nolint:unused
-func (r *ValidateResponse) rval() []*api.Submission           { return r.Value } //nolint:unused
-func (r *FaucetResponse) rval() *api.Submission               { return r.Value } //nolint:unused
-func (r *EventMessage) rval() []api.Event                     { return r.Value } //nolint:unused
+func (r *NodeInfoResponse) rval() *api.NodeInfo               { return r.Value }             //nolint:unused
+func (r *FindServiceResponse) rval() []*api.FindServiceResult { return unNilArray(r.Value) } //nolint:unused
+func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus { return r.Value }             //nolint:unused
+func (r *NetworkStatusResponse) rval() *api.NetworkStatus     { return r.Value }             //nolint:unused
+func (r *MetricsResponse) rval() *api.Metrics                 { return r.Value }             //nolint:unused
+func (r *RecordResponse) rval() api.Record                    { return r.Value }             //nolint:unused
+func (r *SubmitResponse) rval() []*api.Submission             { return unNilArray(r.Value) } //nolint:unused
+func (r *ValidateResponse) rval() []*api.Submission           { return unNilArray(r.Value) } //nolint:unused
+func (r *FaucetResponse) rval() *api.Submission               { return r.Value }             //nolint:unused
+func (r *EventMessage) rval() []api.Event                     { return unNilArray(r.Value) } //nolint:unused
 
 func (r *PrivateSequenceResponse) rval() *api.MessageRecord[messaging.Message] { //nolint:unused
 	return r.Value
+}
+
+func unNilArray[T any, L ~[]T](l L) L { //nolint:unused
+	// Make the array not nil - returning an empty array instead of nil/null is
+	// better for most languages that aren't Go
+	if l != nil {
+		return l
+	}
+	return L{}
 }

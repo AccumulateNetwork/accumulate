@@ -63,12 +63,14 @@ func (v *recordBlock) Copy() *recordBlock {
 	u.Evidence = encoding.BytesCopy(v.Evidence)
 	u.Submissions = make([]*messaging.Envelope, len(v.Submissions))
 	for i, v := range v.Submissions {
+		v := v
 		if v != nil {
 			u.Submissions[i] = (v).Copy()
 		}
 	}
 	u.Changes = make([]*recordChange, len(v.Changes))
 	for i, v := range v.Changes {
+		v := v
 		if v != nil {
 			u.Changes[i] = (v).Copy()
 		}

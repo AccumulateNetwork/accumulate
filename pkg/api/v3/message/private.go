@@ -27,7 +27,7 @@ func (s *Sequencer) methods() serviceMethodMap {
 }
 
 func (s *Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
-	res, err := s.Sequencer.Sequence(c.context, c.params.Source, c.params.Destination, c.params.SequenceNumber)
+	res, err := s.Sequencer.Sequence(c.context, c.params.Source, c.params.Destination, c.params.SequenceNumber, c.params.SequenceOptions)
 	if err != nil {
 		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
 		return
@@ -49,7 +49,7 @@ func (c AddressedClient) Private() private.Sequencer {
 }
 
 // Sequence implements [private.Sequencer.Sequence].
-func (c PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
-	req := &PrivateSequenceRequest{Source: src, Destination: dst, SequenceNumber: num}
+func (c PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	req := &PrivateSequenceRequest{Source: src, Destination: dst, SequenceNumber: num, SequenceOptions: opts}
 	return typedRequest[*PrivateSequenceResponse, *api.MessageRecord[messaging.Message]](AddressedClient(c), ctx, req)
 }

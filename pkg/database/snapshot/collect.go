@@ -26,7 +26,7 @@ func (w *Writer) OpenRecords() (*Collector, error) {
 }
 
 type Collector struct {
-	wr     *sectionWriter
+	wr     *SectionWriter
 	number int
 }
 
@@ -86,7 +86,7 @@ func (c *Collector) Collect(r database.Record, opts CollectOptions) error {
 		}
 
 		// Write the record and its size
-		_, err = writeValue(c.wr, &RecordEntry{Key: v.Key(), Value: b})
+		err = c.wr.WriteValue(&RecordEntry{Key: v.Key(), Value: b})
 		if err != nil {
 			return false, errors.InternalError.WithFormat("write record: %w", err)
 		}

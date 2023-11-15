@@ -26,13 +26,17 @@ var flags struct {
 	SubPackage             string
 	Out                    string
 	Language               string
+	LanguageUnion          string
 	Reference              []string
 	FilePerType            bool
 	ExpandEmbedded         bool
 	LongUnionDiscriminator bool
+	UnionSkipNew           bool
+	UnionSkipType          bool
 	ElidePackageType       bool
 	GoInclude              []string
 	Header                 string
+	GenericSkipAs          bool
 }
 
 func main() {
@@ -43,13 +47,17 @@ func main() {
 	}
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
+	cmd.Flags().StringVarP(&flags.LanguageUnion, "language-union", "u", "go-union", "Output language or template file for a union")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Subpackage name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
 	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
+	cmd.Flags().BoolVar(&flags.UnionSkipNew, "union-skip-new", false, "Don't generate a new func for unions")
+	cmd.Flags().BoolVar(&flags.UnionSkipType, "union-skip-type", false, "Don't generate a type method for union members")
 	cmd.Flags().BoolVar(&flags.ElidePackageType, "elide-package-type", false, "If there is a union type that has the same name as the package, elide it")
+	cmd.Flags().BoolVar(&flags.GenericSkipAs, "skip-generic-as", false, "Do not create {Type}As methods for generic types")
 	cmd.Flags().StringSliceVar(&flags.GoInclude, "go-include", nil, "Additional Go packages to include")
 	cmd.Flags().StringVar(&flags.Header, "header", "", "Add a header to each file")
 	flags.files.SetFlags(cmd.Flags(), "types")
@@ -110,9 +118,10 @@ func getPackagePath(dir string) string {
 
 func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
-	case "java", "Java":
+	case "java", "Java", "c-source", "c-header":
 		flags.FilePerType = true
 		flags.ExpandEmbedded = true
+		flags.LanguageUnion = flags.Language + "-union"
 	}
 
 	types := read(args, true)
@@ -148,6 +157,7 @@ func run(_ *cobra.Command, args []string) {
 			err := fileTmpl.Execute(w, typ)
 			check(err)
 			filename := SafeClassName(w.String())
+			fmt.Printf("types filename: %s\n", filename)
 
 			w.Reset()
 			err = Templates.Execute(w, flags.Language, &SingleTypeFile{flags.Package, typ})
@@ -160,12 +170,16 @@ func run(_ *cobra.Command, args []string) {
 		for _, typ := range ttypes.Unions {
 			w.Reset()
 			w.WriteString(flags.Header)
-			err := fileTmpl.Execute(w, typ)
+			typ2 := *typ
+			typ2.Type = typ.Type + "_union"
+			typ2.Name = typ.Name + "_union"
+			err := fileTmpl.Execute(w, typ2)
 			check(err)
-			filename := w.String()
-
+			filename := SafeClassName(w.String())
 			w.Reset()
-			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, typ})
+
+			fmt.Printf("union filename: %s\n", filename)
+			err = Templates.Execute(w, flags.LanguageUnion, &SingleUnionFile{flags.Package, typ})
 			if errors.Is(err, typegen.ErrSkip) {
 				continue
 			}

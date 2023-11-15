@@ -29,6 +29,10 @@ func NewKey(v ...any) *Key {
 	return &Key{v}
 }
 
+func KeyFromHash(kh KeyHash) *Key {
+	return NewKey(kh)
+}
+
 func (k *Key) Len() int {
 	if k == nil {
 		return 0
@@ -87,10 +91,13 @@ func (k *Key) Hash() KeyHash {
 	}
 
 	// If the first value is a KeyHash, append to that
+	var kh KeyHash
 	if h, ok := k.values[0].(KeyHash); ok {
-		return h.Append(k.values[1:]...)
+		kh = h.Append(k.values[1:]...)
+	} else {
+		kh = (KeyHash{}).Append(k.values...)
 	}
-	return (KeyHash{}).Append(k.values...)
+	return kh
 }
 
 // String returns a human-readable string for the key.
@@ -129,7 +136,7 @@ func (k *Key) Copy() *Key {
 	}
 	l := make([]any, len(k.values))
 	copy(l, k.values)
-	return &Key{l}
+	return &Key{values: l}
 }
 
 // CopyAsInterface implements [encoding.BinaryValue].

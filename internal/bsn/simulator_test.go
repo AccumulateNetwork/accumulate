@@ -29,37 +29,42 @@ func init() {
 	acctesting.EnableDebugFeatures()
 }
 
+func simpleNetwork(name string, bvnCount, nodeCount int) simulator.Option {
+	net := simulator.NewSimpleNetwork(name, bvnCount, nodeCount)
+	net.Bsn = &accumulated.BvnInit{
+		Id: "BSN",
+		Nodes: []*accumulated.NodeInit{{
+			BsnnType:   config.NodeTypeValidator,
+			PrivValKey: acctesting.GenerateKey(name, "BSN", 0, "val"),
+			BsnNodeKey: acctesting.GenerateKey(name, "BSN", 0, "node"),
+		}},
+	}
+	return simulator.WithNetwork(net)
+}
+
+func captureBsnStore(db **memory.Database) simulator.Option {
+	return simulator.WithDatabase(func(partition *PartitionInfo, node int, logger log.Logger) keyvalue.Beginner {
+		if partition.Type == PartitionTypeBlockSummary && node == 0 {
+			*db = memory.New(nil)
+			return *db
+		}
+		return memory.New(nil)
+	})
+}
+
 func TestSimulator(t *testing.T) {
-	acctesting.SkipCI(t, "Flaky")
+	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3412")
 
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	g.ExecutorVersion = ExecutorVersionLatest
 
-	net := simulator.SimpleNetwork(t.Name(), 1, 1)
-	net.Bsn = &accumulated.BvnInit{
-		Id: "BSN",
-		Nodes: []*accumulated.NodeInit{{
-			BsnnType:   config.NodeTypeValidator,
-			PrivValKey: acctesting.GenerateKey(t.Name(), "BSN", 0, "val"),
-			BsnNodeKey: acctesting.GenerateKey(t.Name(), "BSN", 0, "node"),
-		}},
-	}
-
-	var bsnStore *memory.Database
-	openDb := func(partition string, node int, logger log.Logger) keyvalue.Beginner {
-		if partition == net.Bsn.Id && node == 0 {
-			bsnStore = memory.New(nil)
-			return bsnStore
-		}
-		return memory.New(nil)
-	}
-
 	// Initialize
+	var bsnStore *memory.Database
 	sim := NewSim(t,
-		openDb,
-		net,
+		captureBsnStore(&bsnStore),
+		simpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
 	)
 
