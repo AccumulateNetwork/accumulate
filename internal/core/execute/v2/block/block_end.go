@@ -632,6 +632,23 @@ func (x *Executor) prepareAnchor(block *Block) error {
 		}
 
 		bvns := x.globals.Active.BvnNames()
+		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+			// From Baikonur forward, sort this list so changes in the
+			// implementation of BvnNames don't break it
+			sort.Strings(bvns)
+
+		} else {
+			// Use the ordering of routes to sort the BVN list since that preserves
+			// the order used prior to 1.3
+			routes := map[string]int{}
+			for i, r := range x.globals.Active.Routing.Routes {
+				routes[strings.ToLower(r.Partition)] = i
+			}
+			sort.Slice(bvns, func(i, j int) bool {
+				return routes[strings.ToLower(bvns[i])] < routes[strings.ToLower(bvns[j])]
+			})
+		}
+
 		ledger.MajorBlockIndex++
 		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
