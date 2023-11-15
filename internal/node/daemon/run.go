@@ -65,6 +65,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/exp/slog"
 )
 
 type Daemon struct {
@@ -241,14 +242,16 @@ func (d *Daemon) startValidator() (err error) {
 		}
 	}
 
+	caughtUp := make(chan struct{})
+
 	// Start the executor and ABCI
-	app, err := d.startApp()
+	app, err := d.startApp(caughtUp)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Start Tendermint
-	err = d.startConsensus(app)
+	err = d.startConsensus(app, caughtUp)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -327,7 +330,7 @@ func (d *Daemon) loadKeys() error {
 	return nil
 }
 
-func (d *Daemon) startApp() (types.Application, error) {
+func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 	dialer := d.p2pnode.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: d.Config.Accumulate.Network.Id,
@@ -366,6 +369,16 @@ func (d *Daemon) startApp() (types.Application, error) {
 		Querier:      v3.Querier2{Querier: client},
 		Submitter:    client,
 		RunTask:      execOpts.BackgroundTaskLauncher,
+
+		Ready: func(execute.WillBeginBlock) bool {
+			// Pause the conductor until the node has caught up
+			select {
+			case <-caughtUp:
+				return true
+			default:
+				return false
+			}
+		},
 	}
 	err := conductor.Start(d.eventBus)
 	if err != nil {
@@ -389,7 +402,7 @@ func (d *Daemon) startApp() (types.Application, error) {
 	return app, nil
 }
 
-func (d *Daemon) startConsensus(app types.Application) error {
+func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{}) error {
 	// Create node
 	tmn, err := tmnode.NewNode(
 		&d.Config.Config,
@@ -433,6 +446,25 @@ func (d *Daemon) startConsensus(app types.Application) error {
 
 	// Create a local client
 	d.localTm = local.New(d.node.Node)
+
+	// Signal once the node is caught up
+	if caughtUp != nil {
+		go func() {
+			t := time.NewTicker(time.Second)
+			defer t.Stop()
+			for range t.C {
+				st, err := d.localTm.Status(context.Background())
+				if err != nil {
+					slog.Error("Querying consensus status", "error", err)
+					continue
+				}
+				if !st.SyncInfo.CatchingUp {
+					close(caughtUp)
+					return
+				}
+			}
+		}()
+	}
 
 	return nil
 }
