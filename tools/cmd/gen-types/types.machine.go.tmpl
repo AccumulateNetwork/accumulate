@@ -75,7 +75,7 @@ var machine_{{.Name}} = &encoding.Machine[*{{.Name}}]{
 		encoding.ReadOnlyAccessor[*{{$typ.FullName true false}}, {{resolveElemType . false}}, {{accessor .}}]((*{{$typ.FullName true false}}).{{.Name}}) },
 		{{-     else -}}
 		{{-       if .Repeatable -}}
-		encoding.SliceField[*{{$typ.FullName true false}}, *{{resolveElemType . true}}, {{accessor .}}]
+		encoding.SliceField[*{{$typ.FullName true false}}, {{resolveElemType . false}}, {{accessor .}}]
 		{{-       else -}}
 		{{accessor .}}
 		{{-       end -}}

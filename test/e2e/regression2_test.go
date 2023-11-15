@@ -8,7 +8,6 @@ package e2e
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"math/big"
@@ -19,7 +18,6 @@ import (
 
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
-	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -39,6 +37,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -47,7 +46,6 @@ func TestBadOperatorPageUpdate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -76,7 +74,6 @@ func TestBadOracleUpdate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -117,7 +114,6 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -166,19 +162,12 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 		require.NotNil(t, receiptHash)
 	})
 
-	req := new(v2.GeneralQuery)
-	req.Url = bob.WithTxID(*receiptHash).AsUrl()
-	resp := new(v2.TransactionQueryResponse)
-	part, err := sim.Router().RouteAccount(bob)
-	require.NoError(t, err)
-	err = sim.Router().RequestAPIv2(context.Background(), part, "query", req, resp)
-	require.NoError(t, err)
+	sim.QueryMessage(bob.WithTxID(*receiptHash), nil)
 }
 
 func TestSendDirectToWrongPartition(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -232,7 +221,6 @@ func TestAnchoring(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -299,7 +287,6 @@ func TestSignatureChainAnchoring(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, values),
 	)
@@ -395,7 +382,6 @@ func TestProtocolVersionReactivation(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, values),
 	)
@@ -418,7 +404,6 @@ func TestUpdateKeyWithDelegate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -461,7 +446,6 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *messaging.Envelope) {
 		// Initialize with V1+sig
 		sim := NewSim(t,
-			simulator.MemoryDatabase,
 			simulator.SimpleNetwork(t.Name(), 3, 1),
 			simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: v}),
 		)
@@ -622,7 +606,6 @@ func TestSignerOverwritten(t *testing.T) {
 
 	// Initialize with V1+sig
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: ExecutorVersionV1SignatureAnchoring}),
 	)
@@ -668,7 +651,6 @@ func TestMissingPrincipal(t *testing.T) {
 
 	// Initialize with V1+sig
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -702,7 +684,6 @@ func TestOldExec(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -738,7 +719,6 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	g.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -765,10 +745,7 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 // reflected in the transaction results, which causes a consensus failure
 // (manually disabled here), but they really should be reflected in the BPT.
 func TestDifferentValidatorSignaturesV1(t *testing.T) {
-	// This test requires that the simulator's dispatch of transactions is
-	// extremely predictable. That appears to no longer be the case so this test
-	// won't work until that has been fixed.
-	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3322")
+	t.Skip("Flakey")
 
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -776,11 +753,10 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
+		simulator.IgnoreDeliverResults,
 	)
-	sim.S.IgnoreDeliverResults = true
 
 	sim.StepN(10)
 
@@ -801,9 +777,6 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 			} else {
 				other = append(other, env)
 			}
-		}
-		if len(anchors) > 0 {
-			print("")
 		}
 		sort.Slice(anchors, func(i, j int) bool {
 			a, b := anchors[i].Signatures[1].(protocol.KeySignature), anchors[j].Signatures[1].(protocol.KeySignature)
@@ -835,11 +808,10 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV2
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
+		simulator.IgnoreDeliverResults,
 	)
-	sim.S.IgnoreDeliverResults = true
 
 	sim.StepN(10)
 
@@ -886,7 +858,7 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 		err = sim.S.Step()
 	}
 	require.Error(t, err, "Expected consensus failure within 50 blocks")
-	require.IsType(t, (simulator.CommitConsensusError)(nil), err)
+	require.IsType(t, (consensus.CommitConsensusError)(nil), err)
 }
 
 func TestMessageCompat(t *testing.T) {
@@ -899,9 +871,9 @@ func TestMessageCompat(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
+		// simulator.UseABCI,
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -944,7 +916,6 @@ func TestProofOverride(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -1053,13 +1024,18 @@ func TestProofOverride(t *testing.T) {
 //
 // https://gitlab.com/accumulatenetwork/accumulate/-/issues/3370
 func TestChainUpdateAnchor(t *testing.T) {
+	// Disabling this test is not great but it is causing intermittent failures,
+	// since it assumes the credit payment and signature request are processed
+	// in the same block but that's not always the case. For example:
+	// https://gitlab.com/accumulatenetwork/accumulate/-/jobs/4795348613.
+	t.Skip("Too fragile")
+
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	bob := AccountUrl("bob")
 	bobKey := acctesting.GenerateKey(bob)
 
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)

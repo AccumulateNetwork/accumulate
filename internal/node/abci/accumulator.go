@@ -21,7 +21,6 @@ import (
 	"github.com/cometbft/cometbft/crypto"
 	"github.com/cometbft/cometbft/libs/log"
 	protocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
-	"github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -32,6 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -233,7 +233,7 @@ func (app *Accumulator) Info(context.Context, *abci.RequestInfo) (*abci.Response
 	}
 
 	// Check the genesis document
-	genDoc, err := types.GenesisDocFromFile(app.Config.GenesisFile())
+	genDoc, err := genesis.DocProvider(app.Config)()
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +297,9 @@ func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}
-	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, &app.Accumulate.Describe)
+	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, config.NetworkUrl{
+		URL: protocol.PartitionUrl(app.Accumulate.PartitionId),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}

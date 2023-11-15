@@ -9,6 +9,7 @@ package p2p
 import (
 	"context"
 	"runtime/debug"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -105,15 +106,70 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 			addr = addr.Encapsulate(c)
 		}
 	}
+	if addr == nil {
+		return nil, errors.BadRequest.With("no network or service specified")
+	}
 
-	ch, err := n.peermgr.getPeers(ctx, addr, 100)
+	var results []*api.FindServiceResult
+	if opts.Known {
+		// Find known peers
+		results = n.getKnownPeers(ctx, addr)
+
+	} else {
+		// Discover peers using the DHT
+		var err error
+		results, err = n.discoverPeers(ctx, addr, opts.Timeout)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Return an empty array, not nil, because JSON-RPC handles that better
+	if results == nil {
+		return []*api.FindServiceResult{}, nil
+	}
+
+	// Add addresses
+	for _, r := range results {
+		r.Addresses = n.host.Peerstore().Addrs(r.PeerID)
+	}
+	return results, nil
+}
+
+func (n *nodeService) getKnownPeers(ctx context.Context, addr multiaddr.Multiaddr) []*api.FindServiceResult {
+	// Find known peers
+	var results []*api.FindServiceResult
+	for _, peer := range n.tracker.All(addr, api.PeerStatusIsKnownGood) {
+		results = append(results, &api.FindServiceResult{
+			PeerID: peer,
+			Status: api.PeerStatusIsKnownGood,
+		})
+	}
+	for _, peer := range n.tracker.All(addr, api.PeerStatusIsKnownBad) {
+		results = append(results, &api.FindServiceResult{
+			PeerID: peer,
+			Status: api.PeerStatusIsKnownBad,
+		})
+	}
+	return results
+}
+
+func (n *nodeService) discoverPeers(ctx context.Context, addr multiaddr.Multiaddr, timeout time.Duration) ([]*api.FindServiceResult, error) {
+	if timeout == 0 {
+		timeout = 2 * time.Second
+	}
+
+	ch, err := n.peermgr.getPeers(ctx, addr, 100, timeout)
 	if err != nil {
 		return nil, err
 	}
 
-	var results []*api.FindServiceResult
+	results := []*api.FindServiceResult{}
 	for peer := range ch {
-		results = append(results, &api.FindServiceResult{PeerID: peer.ID})
+		results = append(results, &api.FindServiceResult{
+			PeerID: peer.ID,
+			Status: n.tracker.Status(peer.ID, addr),
+		})
 	}
 	return results, nil
 }

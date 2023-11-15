@@ -29,7 +29,7 @@ func TestCreate(t *testing.T) {
 	db := database.OpenInMemory(nil)
 	db.SetObserver(execute.NewDatabaseObserver())
 
-	err = db.Restore(ioutil.NewBuffer(snap), &database.RestoreOptions{
+	err = database.Restore(db, ioutil.NewBuffer(snap), &database.RestoreOptions{
 		BatchRecordLimit: 50_000,
 		SkipHashCheck:    true,
 	})
