@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -80,6 +81,8 @@ func (n *nodeService) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*
 	info.PeerID = n.host.ID()
 	info.Network = n.peermgr.network
 	info.Services = make([]*api.ServiceAddress, len(n.services))
+	info.Version = accumulate.Version
+	info.Commit = accumulate.Commit
 	for i, s := range n.services {
 		info.Services[i] = s.address
 	}
