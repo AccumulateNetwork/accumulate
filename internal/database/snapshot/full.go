@@ -67,7 +67,7 @@ func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl)
 }
 
 // FullRestore restores the snapshot and rebuilds indices.
-func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger, network *config.Describe) error {
+func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger, network config.NetworkUrl) error {
 	v, err := v2.GetVersion(file)
 	if err != nil {
 		return errors.UnknownError.WithFormat("check snapshot version: %w", err)
@@ -82,11 +82,7 @@ func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Lo
 		// Ok
 
 	case v2.Version2:
-		db, ok := db.(*database.Database)
-		if !ok {
-			return errors.BadRequest.With("executor does not support v2 snapshots")
-		}
-		err = db.Restore(file, nil)
+		err = database.Restore(db, file, nil)
 		return errors.UnknownError.Wrap(err)
 
 	default:
@@ -120,7 +116,7 @@ func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Lo
 			return errors.InternalError.WithFormat("unmarshal synthetic index chain entry %d: %w", i, err)
 		}
 
-		err = batch.SystemData(network.PartitionId).SyntheticIndexIndex(entry.BlockIndex).Put(uint64(i))
+		err = batch.SystemData(network.PartitionID()).SyntheticIndexIndex(entry.BlockIndex).Put(uint64(i))
 		if err != nil {
 			return errors.UnknownError.WithFormat("store synthetic transaction index index %d for block: %w", i, err)
 		}

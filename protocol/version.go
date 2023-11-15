@@ -28,7 +28,7 @@ func (v ExecutorVersion) HaltV1() bool {
 	return v >= ExecutorVersionV1Halt
 }
 
-// V2 checks if the version is at least V2.
-func (v ExecutorVersion) V2() bool {
+// V2Enabled checks if the version is at least V2Enabled.
+func (v ExecutorVersion) V2Enabled() bool {
 	return v >= ExecutorVersionV2
 }

@@ -17,7 +17,7 @@ import (
 //go:embed types.java.tmpl
 var javaSrc string
 
-var _ = Templates.Register(javaSrc, "java", javaFuncs, "Java")
+var _ = Templates.Register(javaSrc, "java", javaFuncs, "Java", "java-union", "Java-union")
 
 var javaFuncs = template.FuncMap{
 	"resolveType": func(field *Field) string {
