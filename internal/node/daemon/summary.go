@@ -109,7 +109,7 @@ func (d *Daemon) startSummary() error {
 	}
 
 	// Start Tendermint
-	err = d.startConsensus(app)
+	err = d.startConsensus(app, nil)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
