@@ -11,3 +11,12 @@ package snapshot
 
 // SectionType is the type of a snapshot section.
 type SectionType uint64
+
+func (t SectionType) isOneOf(u ...SectionType) bool {
+	for _, u := range u {
+		if t == u {
+			return true
+		}
+	}
+	return false
+}

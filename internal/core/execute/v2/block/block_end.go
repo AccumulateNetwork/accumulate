@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -345,7 +346,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		x.logger.Info(message, "seq-num", seqNum, "source", partition.Url)
 
 		// Request the transaction by sequence number
-		resp, err := x.Sequencer.Sequence(ctx, src, dest, seqNum)
+		resp, err := x.Sequencer.Sequence(ctx, src, dest, seqNum, private.SequenceOptions{})
 		if err != nil {
 			x.logger.Error("Failed to request sequenced transaction", "error", err, "from", src, "seq-num", seqNum)
 			continue

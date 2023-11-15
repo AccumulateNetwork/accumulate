@@ -128,10 +128,64 @@ func readRecord(rd io.Reader) ([]byte, int64, error) {
 	return b, int64(n), nil
 }
 
+// readRecordAt reads a length-prefixed record
+func readRecordAt(rd io.ReaderAt, off int64) ([]byte, int64, error) {
+	// Read the length
+	var v [8]byte
+	n, err := readFullAt(rd, off, v[:])
+	if err != nil {
+		return nil, int64(n), err
+	}
+	l := binary.BigEndian.Uint64(v[:])
+
+	// Read the data
+	b := make([]byte, l)
+	m, err := readFullAt(rd, off+int64(len(v)), b)
+	n += m
+	if err != nil {
+		return nil, int64(n), err
+	}
+
+	return b, int64(n), nil
+}
+
+func readFullAt(rd io.ReaderAt, off int64, b []byte) (int, error) {
+	var m int
+	for len(b) > 0 {
+		n, err := rd.ReadAt(b, off)
+		m += n
+		if err != nil {
+			return m, err
+		}
+		if n == 0 {
+			return m, errors.InternalError.With("read nothing")
+		}
+		b = b[n:]
+	}
+	return m, nil
+}
+
 // readValue unmarshals a length-prefixed record into the value.
 func readValue(rd io.Reader, v encoding.BinaryValue) (int64, error) {
 	// Read the record
 	b, n, err := readRecord(rd)
+	if err != nil {
+		return n, err
+	}
+
+	// Unmarshal the header
+	err = v.UnmarshalBinary(b)
+	if err != nil {
+		return n, errors.EncodingError.WithFormat("unmarshal: %w", err)
+	}
+
+	return n, nil
+}
+
+// readValueAt unmarshals a length-prefixed record into the value.
+func readValueAt(rd io.ReaderAt, off int64, v encoding.BinaryValue) (int64, error) {
+	// Read the record
+	b, n, err := readRecordAt(rd, off)
 	if err != nil {
 		return n, err
 	}
