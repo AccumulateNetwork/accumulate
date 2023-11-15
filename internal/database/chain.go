@@ -99,6 +99,15 @@ func (c *Chain) Anchor() []byte {
 	return c.head.Anchor()
 }
 
+// Anchor calculates the anchor of the current Merkle state.
+func (c *Chain2) Anchor() ([]byte, error) {
+	head, err := c.Head().Get()
+	if err != nil {
+		return nil, err
+	}
+	return head.Anchor(), nil
+}
+
 // AnchorAt calculates the anchor of the chain at the given height.
 func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 	ms, err := c.State(int64(height))

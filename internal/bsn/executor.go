@@ -97,7 +97,7 @@ func (x *Executor) LastBlock() (*execute.BlockParams, [32]byte, error) {
 	return p, [32]byte{}, nil
 }
 
-func (x *Executor) LoadSnapshot(file ioutil2.SectionReader) error {
+func LoadSnapshot(file ioutil2.SectionReader, store keyvalue.Beginner, logger log.Logger) error {
 	header, rd, err := snapshot.Open(file)
 	if err != nil {
 		return errors.UnknownError.WithFormat("open snapshot: %w", err)
@@ -107,7 +107,7 @@ func (x *Executor) LoadSnapshot(file ioutil2.SectionReader) error {
 	}
 
 	// Initialize the database
-	batch := NewChangeSet(x.store, x.logger)
+	batch := NewChangeSet(store, logger)
 	defer batch.Discard()
 	err = batch.LastBlock().Put(&LastBlock{
 		Index: header.Height,
@@ -144,11 +144,11 @@ func (x *Executor) LoadSnapshot(file ioutil2.SectionReader) error {
 		}
 
 		id := strings.ToLower(header.PartitionSnapshotIDs[i])
-		pb := &partitionBeginner{x.logger, x.store, id}
+		pb := &partitionBeginner{logger, store, id}
 		i++
 
-		err = snapshot.FullRestore(pb, rd, x.logger, &config.Describe{
-			PartitionId: id,
+		err = snapshot.FullRestore(pb, rd, logger, config.NetworkUrl{
+			URL: protocol.PartitionUrl(id),
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("restore %s: %w", id, err)
