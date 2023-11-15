@@ -1,0 +1,1063 @@
+openapi: 3.0.0
+
+info:
+  version: "1.0.0"
+  title: Accumulate JSON-RPC
+  license:
+    name: MIT
+  schemes:
+    - https
+  consumes:
+    - application/json
+  produces:
+    - application/json
+
+servers:
+  - url: https://mainnet.accumulatenetwork.io
+    description: MainNet
+  - url: https://kermit.accumulatenetwork.io
+    description: Kermit TestNet
+  - url: https://fozzie.accumulatenetwork.io
+    description: Fozzie TestNet
+
+paths:
+  /query/:id:
+    parameters:
+      - name: id
+        description: The ID of the account or message
+        in: path
+        required: true
+      - name: include_receipt
+        description: Whether to include a receipt
+        in: query
+    get:
+      summary: Query an account or message
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/accountRecord'
+                  - $ref: '#/components/schemas/messageRecord'
+
+  /query/:id/chain:
+    parameters:
+      - name: id
+        description: The ID of the account or message
+        in: path
+        required: true
+    get:
+      summary: Query an account or message's chains
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/chainRecord' } }
+
+  /query/:id/chain/:name:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: name
+        description: The chain name
+        in: path
+        required: true
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: expand
+        description: Whether to resolve chain values
+        in: query
+    get:
+      summary: Query an account's chain
+      description: Queries the state or range of entries of the given chain
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/chainRecord'
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
+
+  /query/:id/chain/:name/index/:index:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: name
+        description: The chain name
+        in: path
+        required: true
+      - name: index
+        description: The entry index
+        in: path
+        required: true
+      - name: include_receipt
+        description: Whether to include a receipt
+        in: query
+    get:
+      summary: Query a chain entry by index
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chainEntryRecord'
+
+  /query/:id/chain/:name/entry/:value:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: name
+        description: The chain name
+        in: path
+        required: true
+      - name: value
+        description: The entry value
+        in: path
+        required: true
+      - name: include_receipt
+        description: Whether to include a receipt
+        in: query
+    get:
+      summary: Look up a chain entry by value
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/chainEntryRecord'
+
+  /query/:id/data:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: expand
+        description: Whether to resolve chain values
+        in: query
+    get:
+      summary: Query a data account
+      description: Queries the latest entry or a range of entries of the given data account
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/chainEntryRecord'
+                      - type: object
+                        properties:
+                          # TODO the message is a transaction
+                          value: { $ref: '#/components/schemas/messageRecord' }
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
+
+  /query/:id/data/index/:index:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: index
+        description: The entry index
+        in: path
+        required: true
+    get:
+      summary: Query a data entry by index
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/chainEntryRecord'
+                  - type: object
+                    properties:
+                      # TODO the message is a transaction
+                      value: { $ref: '#/components/schemas/messageRecord' }
+
+  /query/:id/data/entry/:hash:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: hash
+        description: The entry hash
+        in: path
+        required: true
+    get:
+      summary: Look up a data entry by hash
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/chainEntryRecord'
+                  - type: object
+                    properties:
+                      # TODO the message is a transaction
+                      value: { $ref: '#/components/schemas/messageRecord' }
+
+  /query/:id/directory:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: expand
+        description: Whether to resolve accounts
+        in: query
+    get:
+      summary: Query an identity's directory entries
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/urlRecord' } }
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/accountRecord' } }
+
+  /query/:id/pending:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: expand
+        description: Whether to resolve transactions
+        in: query
+    get:
+      summary: Query an account's pending transactions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          records: { type: array, items: { $ref: '#/components/schemas/txidRecord' } }
+                  - allOf:
+                      - $ref: '#/components/schemas/recordRange'
+                      - type: object
+                        properties:
+                          # TODO the message is a transaction
+                          records: { type: array, items: { $ref: '#/components/schemas/messageRecord' } }
+
+  /block/minor:
+    parameters:
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: omit_empty
+        description: Whether to omit or include empty blocks
+        in: query
+    get:
+      summary: List minor blocks
+      responses:
+        '200':
+          description: OK
+
+  /block/major:
+    parameters:
+      - name: start
+        description: The start of the range
+        in: query
+      - name: count
+        description: The size of the range
+        in: query
+      - name: from_end
+        description: Whether to start querying from the beginning or end
+        in: query
+      - name: omit_empty
+        description: Whether to omit or include empty blocks
+        in: query
+    get:
+      summary: List major blocks
+      responses:
+        '200':
+          description: OK
+
+  /block/minor/:index:
+    parameters:
+      - name: index
+        description: The minor block index
+        in: path
+        required: true
+      - name: entry_start
+        description: The start of the entry range
+        in: query
+      - name: entry_count
+        description: The size of the entry range
+        in: query
+      - name: entry_from_end
+        description: Whether to start querying entries from the beginning or end
+        in: query
+    get:
+      summary: Query a minor block
+      responses:
+        '200':
+          description: OK
+
+  /block/major/:index:
+    parameters:
+      - name: index
+        description: The major block index
+        in: path
+        required: true
+      - name: minor_start
+        description: The start of the minor block range
+        in: query
+      - name: minor_count
+        description: The size of the minor block range
+        in: query
+      - name: minor_from_end
+        description: Whether to start querying minor blocks from the beginning or end
+        in: query
+      - name: omit_empty
+        description: Whether to omit or include empty blocks
+        in: query
+    get:
+      summary: Query a major block
+      responses:
+        '200':
+          description: OK
+
+  /search/:id/anchor/:value:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: value
+        description: The anchor value
+        in: path
+        required: true
+      - name: include_receipt
+        description: Whether to include a receipt
+        in: query
+    get:
+      summary: Search an account for an anchor
+      responses:
+        '200':
+          description: OK
+
+  /search/:id/publicKey/:value:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: value
+        description: An address, public key, or public key hash
+        in: path
+        required: true
+      - name: type
+        description: The type of the public key
+        in: query
+    get:
+      summary: Search an account for a public key
+      responses:
+        '200':
+          description: OK
+
+  /search/:id/delegate/:value:
+    parameters:
+      - name: id
+        description: The account ID
+        in: path
+        required: true
+      - name: value
+        description: The delegate URL
+        in: path
+        required: true
+    get:
+      summary: Search an account for a delegate
+      responses:
+        '200':
+          description: OK
+
+  /v3:
+    post:
+      summary: API v3 (query)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jsonrpc: { const: "2.0" }
+                method: { const: query }
+                id: { type: integer }
+                params:
+                  type: object
+                  properties:
+                    scope: { $ref: '#/components/schemas/url' }
+                    query: { $ref: '#/components/schemas/query' }
+            examples:
+              queryAccount:
+                summary: Query an account
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: query
+                  params:
+                    scope: acc://accumulate.acme
+              queryTransaction:
+                summary: Query a transaction
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: query
+                  params:
+                    scope: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@unknown
+              querySignature:
+                summary: Query a signature
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: query
+                  params:
+                    scope: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jsonrpc: { const: "2.0" }
+                  id: { type: integer }
+                  result: { $ref: '#/components/schemas/record' }
+              examples:
+                queryAccount:
+                  summary: Query an account
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      recordType: account
+                      account:
+                        type: identity
+                        url: acc://accumulate.acme
+                        authorities:
+                          - url: acc://accumulate.acme/book
+                      directory:
+                        recordType: range
+                        records:
+                          - { recordType: url, value: acc://accumulate.acme/business }
+                          - { recordType: url, value: acc://accumulate.acme/committee-members }
+                          - { recordType: url, value: acc://accumulate.acme/core-dev }
+                          - { recordType: url, value: acc://accumulate.acme/dev-block }
+                          - { recordType: url, value: acc://accumulate.acme/ecosystem }
+                          - { recordType: url, value: acc://accumulate.acme/factom-block }
+                          - { recordType: url, value: acc://accumulate.acme/governance }
+                          - { recordType: url, value: acc://accumulate.acme/grant-block }
+                          - { recordType: url, value: acc://accumulate.acme/stake }
+                          - { recordType: url, value: acc://accumulate.acme/treasury-book }
+                        start: 0
+                        total: 10
+                      pending:
+                        recordType: range
+                        start: 0
+                        total: 0
+                queryTransaction:
+                  summary: Query a transaction
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      recordType: message
+                      id: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                      message:
+                        type: transaction
+                        transaction:
+                          header:
+                            principal: acc://staking.acme/governance/1
+                            initiator: bf54d5df5e3a692255c4cc8fc3f17e38e2da1a7134af9099d7a3115e0d7a3066
+                          body:
+                            type: burnCredits
+                            amount: 100
+                      status: delivered
+                      statusNo: 201
+                      result:
+                        type: unknown
+                      produced:
+                        recordType: range
+                        start: 0
+                        total: 0
+                      cause:
+                        recordType: range
+                        records:
+                        - recordType: txID
+                          value: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
+                        - recordType: txID
+                          value: acc://bc47e584d150c2a4837f86c036939def7d0cfe6bde7b85a1a9ce26af571bda42@staking.acme/governance
+                        start: 0
+                        total: 2
+                      signatures:
+                        recordType: range
+                        records:
+                        - recordType: signatureSet
+                          account:
+                            type: keyBook
+                            url: acc://staking.acme/governance
+                            authorities:
+                            - url: acc://staking.acme/governance
+                            pageCount: 2
+                          signatures:
+                            recordType: range
+                            records:
+                            - recordType: message
+                              id: acc://bc47e584d150c2a4837f86c036939def7d0cfe6bde7b85a1a9ce26af571bda42@staking.acme/governance
+                              message:
+                                type: signatureRequest
+                                authority: acc://staking.acme/governance
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                                cause: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
+                              historical: true
+                            start: 0
+                            total: 1
+                        - recordType: signatureSet
+                          account:
+                            type: keyPage
+                            keyBook: acc://staking.acme/governance
+                            url: acc://staking.acme/governance/1
+                            creditBalance: 197774
+                            version: 6
+                            keys:
+                            - delegate: acc://paul.acme/book
+                            - delegate: acc://staking.acme/book
+                            - publicKeyHash: 5d451373b966a4c95e4df30023b75ce75509a3bed1a9898f2f76df9ba414e6fa
+                              publicKey: 5d451373b966a4c95e4df30023b75ce75509a3bed1a9898f2f76df9ba414e6fa
+                              lastUsedOn: 1696867800137
+                              delegate: acc://ethan.acme/book
+                          signatures:
+                            recordType: range
+                            records:
+                            - recordType: message
+                              id: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                              message:
+                                type: signature
+                                signature:
+                                  type: ed25519
+                                  publicKey: 4ff2d22133c0ddac02f7645cf3bb286fa9e6035caeda46198839f912f39a6457
+                                  signature: a8a5f1fef6e8ee1bea890ca15a221c2c042bd0659cc930a64d1c8531c73bb9937faeeed7a233ba9751e94a2e5e2753762b010fd0a166f8cf499acf1c6521ea0a
+                                  signer: acc://staking.acme/governance/1
+                                  signerVersion: 6
+                                  timestamp: 1696867800137
+                                  transactionHash: bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                              historical: true
+                            - recordType: message
+                              id: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
+                              message:
+                                type: signatureRequest
+                                authority: acc://staking.acme/governance/1
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                                cause: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                              historical: true
+                            - recordType: message
+                              id: acc://c5f05f0ee8d49df98836e923e15fd0c73ac20a6ca6f296ba3e9f8f4ec5a2c0d6@staking.acme/governance/1
+                              message:
+                                type: creditPayment
+                                payer: acc://staking.acme/governance/1
+                                initiator: true
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                                cause: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                              historical: true
+                            - recordType: message
+                              id: acc://9f8c0acf755ac74c7aad472d429d586c33100e33b023eae539f67eb3218b4ff6@staking.acme/governance/1
+                              message:
+                                type: signature
+                                signature:
+                                  type: authority
+                                  origin: acc://staking.acme/governance/1
+                                  authority: acc://staking.acme/governance
+                                  txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                                  cause: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                                txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                              historical: true
+                            start: 0
+                            total: 4
+                        start: 0
+                        total: 2
+                querySignature:
+                  summary: Query a signature
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      recordType: message
+                      id: acc://5f1b4e7bd166fe11362a307e7a42d8357b56898dc220e4a9e92a456c4434bcc2@staking.acme/governance/1
+                      message:
+                        type: signature
+                        signature:
+                          type: ed25519
+                          publicKey: 4ff2d22133c0ddac02f7645cf3bb286fa9e6035caeda46198839f912f39a6457
+                          signature: a8a5f1fef6e8ee1bea890ca15a221c2c042bd0659cc930a64d1c8531c73bb9937faeeed7a233ba9751e94a2e5e2753762b010fd0a166f8cf499acf1c6521ea0a
+                          signer: acc://staking.acme/governance/1
+                          signerVersion: 6
+                          timestamp: 1696867800137
+                          transactionHash: bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f
+                        txID: acc://bbcea39f9c5cc8175fd5b12ab4b1173adf7c00755386f8a9db0801682034c67f@staking.acme/governance/1
+                      status: delivered
+                      statusNo: 201
+                      result:
+                        type: unknown
+                      received: 14207881
+                      produced:
+                        recordType: range
+                        records:
+                        - recordType: txID
+                          value: acc://9f8c0acf755ac74c7aad472d429d586c33100e33b023eae539f67eb3218b4ff6@staking.acme/governance/1
+                        - recordType: txID
+                          value: acc://b1c73b4a2f28f02fcc28949ac8f105eae705d429a6ac105eaae73f9edbb4246b@staking.acme/governance/1
+                        - recordType: txID
+                          value: acc://c5f05f0ee8d49df98836e923e15fd0c73ac20a6ca6f296ba3e9f8f4ec5a2c0d6@staking.acme/governance/1
+                        start: 0
+                        total: 6
+
+components:
+  schemas:
+    query:
+      oneOf:
+        - type: object
+          properties:
+            queryType: { const: default, required: true }
+            includeReceipt: { type: boolean }
+
+        - type: object
+          properties:
+            queryType: { const: chain, required: true }
+            index: { type: integer, min: 0 }
+            entry: { $ref: '#/components/schemas/hash' }
+            range: { $ref: '#/components/schemas/rangeOptions' }
+            includeReceipt: { type: boolean }
+
+        - type: object
+          properties:
+            queryType: { const: data, required: true }
+            index: { type: integer, min: 0 }
+            entry: { $ref: '#/components/schemas/hash' }
+            range: { $ref: '#/components/schemas/rangeOptions' }
+
+        - type: object
+          properties:
+            queryType: { const: directory, required: true }
+            range: { $ref: '#/components/schemas/rangeOptions' }
+
+        - type: object
+          properties:
+            queryType: { const: pending, required: true }
+            range: { $ref: '#/components/schemas/rangeOptions' }
+
+        - type: object
+          properties:
+            queryType: { const: block, required: true }
+            minor: { type: integer, min: 1 }
+            major: { type: integer, min: 1 }
+            minorRange: { $ref: '#/components/schemas/rangeOptions' }
+            majorRange: { $ref: '#/components/schemas/rangeOptions' }
+            entryRange: { $ref: '#/components/schemas/rangeOptions' }
+            omitEmpty: { type: boolean }
+
+        - type: object
+          properties:
+            queryType: { const: anchorSearch, required: true }
+            anchor: { $ref: '#/components/schemas/hash' }
+            includeReceipt: { type: boolean }
+
+        - type: object
+          properties:
+            queryType: { const: publicKeySearch, required: true }
+            publicKey: { $ref: '#/components/schemas/bytes' }
+            type: { $ref: '#/components/schemas/signatureType' }
+
+        - type: object
+          properties:
+            queryType: { const: publicKeyHashSearch, required: true }
+            publicKeyHash: { $ref: '#/components/schemas/hash' }
+
+        - type: object
+          properties:
+            queryType: { const: delegateSearch, required: true }
+            delegate: { $ref: '#/components/schemas/url' }
+
+        - type: object
+          properties:
+            queryType: { const: messageHashSearch, required: true }
+            hash: { $ref: '#/components/schemas/hash' }
+
+    record:
+      oneOf:
+        - $ref: '#/components/schemas/recordRange'
+
+    # Request options
+    rangeOptions:
+      type: object
+      properties:
+        start: { type: integer, min: 0 }
+        count: { type: integer, min: 0 }
+        expand: { type: boolean }
+        fromEnd: { type: boolean }
+
+    # Record types
+    recordRange:
+      type: object
+      properties:
+        recordType: { const: record }
+        records: { type: array, items: { $ref: '#/components/schemas/record' } }
+        start: { type: integer, min: 0 }
+        total: { type: integer, min: 0 }
+
+    accountRecord:
+      type: object
+      properties:
+        recordType: { const: account }
+        account: { $ref: '#/components/schemas/account' }
+        directory:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/urlRecord' } }
+        pending:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/txidRecord' } }
+        receipt: { $ref: '#/components/schemas/receipt' }
+
+    chainRecord:
+      type: object
+      properties:
+        recordType: { const: chain }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/chainType' }
+        count: { type: integer, min: 0 }
+        state: { type: array, items: { $ref: '#/components/schemas/hash' } }
+
+    chainEntryRecord:
+      type: object
+      properties:
+        recordType: { const: chainEntry }
+        account: { $ref: '#/components/schemas/url' }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/chainType' }
+        index: { type: integer, min: 0 }
+        entry: { $ref: '#/components/schemas/hash' }
+        value: { type: any }
+        receipt: { $ref: '#/components/schemas/receipt' }
+        state: { type: array, items: { $ref: '#/components/schemas/hash' } }
+
+
+    keyRecord:
+      type: object
+      properties:
+        recordType: { const: key }
+        authority: { $ref: '#/components/schemas/url' }
+        signer: { $ref: '#/components/schemas/url' }
+        version: { type: integer, min: 1 }
+        index: { type: integer, min: 0 }
+        entry:
+          type: object
+          properties:
+            publicKeyHash: { $ref: '#/components/schemas/bytes' }
+            lastUsedOn: { type: integer, min: 0 }
+            delegate: { $ref: '#/components/schemas/url' }
+
+    messageRecord:
+      type: object
+      properties:
+        recordType: { const: message }
+        id: { $ref: '#/components/schemas/url' }
+        message: { $ref: '#/components/schemas/message' }
+        status: { $ref: '#/components/schemas/statusCode' }
+        statusNo: { type: integer, min: 0 }
+        error: { $ref: '#/components/schemas/error' }
+        result: { type: object }
+        received: { type: number, min: 1 }
+        produced:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/txidRecord' } }
+        cause:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/txidRecord' } }
+
+        # For transactions
+        pending:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/signatureSetRecord' } }
+
+        # For a signature's record within a transaction's record
+        historical: { type: boolean }
+
+        # For sequenced messages
+        sequence: { type: object }
+
+        # For synthetic messages
+        sourceReceipt: { $ref: '#/components/schemas/receipt' }
+
+    signatureSetRecord:
+      type: object
+      properties:
+        recordType: { const: signatureSet }
+        account: { $ref: '#/components/schemas/account' }
+        signatures:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/messageRecord' } }
+
+    minorBlockRecord:
+      type: object
+      properties:
+        recordType: { const: minorBlock }
+        index: { type: integer, min: 0 }
+        time: { $ref: '#/components/schemas/time' }
+        source: { $ref: '#/components/schemas/url' }
+        entries:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/chainEntryRecord' } }
+        anchored:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/minorBlockRecord' } }
+
+    majorBlockRecord:
+      type: object
+      properties:
+        recordType: { const: majorBlock }
+        index: { type: integer, min: 0 }
+        time: { $ref: '#/components/schemas/time' }
+        minorBlocks:
+          allOf:
+            - $ref: '#/components/schemas/recordRange'
+            - type: object
+              properties:
+                records: { type: array, items: { $ref: '#/components/schemas/minorBlockRecord' } }
+
+    urlRecord:
+      type: object
+      properties:
+        recordType: { const: url }
+        value: { $ref: '#/components/schemas/url' }
+
+    txidRecord:
+      type: object
+      properties:
+        recordType: { const: txID }
+        value: { $ref: '#/components/schemas/url' }
+
+    indexEntryRecord:
+      type: object
+      properties:
+        recordType: { const: indexEntry }
+        value:
+          type: object
+          properties:
+            source: { type: integer, min: 0 }
+            anchor: { type: integer, min: 0 }
+            blockIndex: { type: integer, min: 0 }
+            blockTime: { $ref: '#/components/schemas/time' }
+            rootIndexIndex: { type: integer, min: 0 }
+
+    errorRecord:
+      type: object
+      properties:
+        recordType: { const: error }
+        value: { $ref: '#/components/schemas/error' }
+
+
+    # Protocol objects
+    account:
+      type: object
+
+    message:
+      type: object
+
+    receipt:
+      type: object
+
+    # Protocol enumerations
+    signatureType:
+      enum:
+        - legacyED25519
+        - ed25519
+        - rcd1
+        - btc
+        - btclegacy
+        - eth
+        - delegated
+        - authority
+
+    chainType:
+      enum:
+        - transaction
+        - anchor
+        - index
+
+    statusCode:
+      enum:
+        - ok
+        - delivered
+        - pending
+        - remote
+        - wrongPartition
+        - badRequest
+        - unauthenticated
+        - insufficientCredits
+        - unauthorized
+        - notFound
+        - notAllowed
+        - rejected
+        - expired
+        - conflict
+        - badSignerVersion
+        - badTimestamp
+        - badUrlLength
+        - incompleteChain
+        - insufficientBalance
+        - internalError
+        - unknownError
+        - encodingError
+        - fatalError
+        - notReady
+        - wrongType
+        - noPeer
+        - peerMisbehaved
+        - invalidRecord
+
+    # Basic data types
+    error:
+      type: object
+      properties:
+        message: { type: string }
+        code: { $ref: '#/components/schemas/statusCode' }
+        codeID: { type: integer }
+        cause: { $ref: '#/components/schemas/error' }
+        dat: { type: any }
+
+    url:
+      type: string
+      pattern: '^(?<scheme>acc:\/\/)?(?<hash>[0-9a-fA-F]+@)?(?<domain>[-\w]+(\.acme)?)$'
+
+    time:
+      type: string
+
+    bytes:
+      type: string
+      pattern: '^[0-9a-fA-F]+$'
+
+    hash:
+      allOf: [{ $ref: '#/components/schemas/bytes' }]
+      minLength: 64
+      maxLength: 64

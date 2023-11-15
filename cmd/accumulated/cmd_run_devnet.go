@@ -98,7 +98,7 @@ func runDevNet(*cobra.Command, []string) {
 	didStop := make(chan struct{}, len(vals)*2+len(bsns))
 	done := new(sync.WaitGroup)
 
-	logWriter := newLogWriter(nil)
+	logWriter := newLogWriter()
 
 	var daemons []*accumulated.Daemon
 	started := new(sync.WaitGroup)
@@ -379,6 +379,9 @@ func newNodeWriter(w io.Writer, format, partition string, node int, color bool) 
 	switch format {
 	case tmconfig.LogFormatPlain:
 		id := fmt.Sprintf("%s.%d", partition, node)
+		if nodeIdLen < len(id) {
+			nodeIdLen = len(id)
+		}
 		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen-len(id)+1)
 		if !color {
 			return &plainNodeWriter{s, w}

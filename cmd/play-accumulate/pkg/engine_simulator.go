@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -43,8 +44,7 @@ func (s *Session) UseSimulator(bvnCount int) {
 	}
 
 	sim, err := simulator.New(
-		logger,
-		simulator.MemoryDatabase,
+		simulator.WithLogger(logger),
 		simulator.SimpleNetwork("Play", bvnCount, 1),
 		simulator.Genesis(time.Now()),
 	)
@@ -102,24 +102,12 @@ func (s *SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error)
 }
 
 func (s *SimEngine) Submit(envelope *messaging.Envelope) (*protocol.TransactionStatus, error) {
-	envelope = envelope.Copy()
-	partition, err := s.Router().Route(envelope)
+	sub, err := s.Services().Submit(context.Background(), envelope, api.SubmitOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := s.Router().Submit(context.Background(), partition, envelope, false, false)
-	if err != nil {
-		return nil, err
-	}
-
-	rset := new(protocol.TransactionResultSet)
-	err = rset.UnmarshalBinary(resp.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	return rset.Results[0], nil
+	return sub[0].Status, nil
 }
 
 func (s *SimEngine) WaitFor(hash [32]byte, delivered bool) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {

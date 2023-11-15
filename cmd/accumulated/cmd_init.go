@@ -31,8 +31,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -468,6 +470,10 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
 	}
 
+	if description.NetworkType == protocol.PartitionTypeBlockValidator {
+		netPort -= config.PortOffsetBlockValidator
+	}
+
 	genDoc, err := getGenesis(args[0], tmClient)
 	if err != nil {
 		return 0, nil, nil, err
@@ -679,7 +685,12 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		return "", fmt.Errorf("load/generate node key files, %v", err)
 	}
 
-	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
+	config.Genesis = "config/genesis.snap"
+	genDocBytes, err := genesis.ConvertJsonToSnapshot(genDoc)
+	if err != nil {
+		return "", fmt.Errorf("write node files, %v", err)
+	}
+	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDocBytes)
 	if err != nil {
 		return "", fmt.Errorf("write node files, %v", err)
 	}
