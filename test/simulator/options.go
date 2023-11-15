@@ -170,8 +170,6 @@ func NewLocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePo
 }
 
 // MemoryDatabase configures the simulator to use in-memory databases.
-//
-// Deprecated: This is a no-op
 func MemoryDatabase(*simFactory) error { return nil }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) Option {

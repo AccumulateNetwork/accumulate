@@ -4,6 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+//go:build debug
+
 package internal
 
 import (
@@ -81,12 +83,6 @@ func (h hashableMemo) String() string {
 		return fmt.Sprintf("%s\t%v", s, h.memo)
 	}
 	return fmt.Sprintf("%s\t%v%s", s[:i], h.memo, s[i:])
-}
-
-type stringfn func() string
-
-func (f stringfn) String() string {
-	return f()
 }
 
 type stringers []any

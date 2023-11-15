@@ -1240,6 +1240,7 @@ func (v *AccountAuth) Copy() *AccountAuth {
 
 	u.Authorities = make([]AuthorityEntry, len(v.Authorities))
 	for i, v := range v.Authorities {
+		v := v
 		u.Authorities[i] = *(&v).Copy()
 	}
 	if len(v.extraData) > 0 {
@@ -1257,6 +1258,7 @@ func (v *AccumulateDataEntry) Copy() *AccumulateDataEntry {
 
 	u.Data = make([][]byte, len(v.Data))
 	for i, v := range v.Data {
+		v := v
 		u.Data[i] = encoding.BytesCopy(v)
 	}
 	if len(v.extraData) > 0 {
@@ -1388,12 +1390,14 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = make([]*url.URL, len(v.PendingMajorBlockAnchors))
 	for i, v := range v.PendingMajorBlockAnchors {
+		v := v
 		if v != nil {
 			u.PendingMajorBlockAnchors[i] = v
 		}
 	}
 	u.Sequence = make([]*PartitionSyntheticLedger, len(v.Sequence))
 	for i, v := range v.Sequence {
+		v := v
 		if v != nil {
 			u.Sequence[i] = (v).Copy()
 		}
@@ -1483,6 +1487,7 @@ func (v *AuthoritySignature) Copy() *AuthoritySignature {
 	}
 	u.Delegator = make([]*url.URL, len(v.Delegator))
 	for i, v := range v.Delegator {
+		v := v
 		if v != nil {
 			u.Delegator[i] = v
 		}
@@ -1569,6 +1574,7 @@ func (v *BlockLedger) Copy() *BlockLedger {
 	u.Time = v.Time
 	u.Entries = make([]*BlockEntry, len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		if v != nil {
 			u.Entries[i] = (v).Copy()
 		}
@@ -1678,6 +1684,7 @@ func (v *CreateDataAccount) Copy() *CreateDataAccount {
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
+		v := v
 		if v != nil {
 			u.Authorities[i] = v
 		}
@@ -1704,6 +1711,7 @@ func (v *CreateIdentity) Copy() *CreateIdentity {
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
+		v := v
 		if v != nil {
 			u.Authorities[i] = v
 		}
@@ -1727,6 +1735,7 @@ func (v *CreateKeyBook) Copy() *CreateKeyBook {
 	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
+		v := v
 		if v != nil {
 			u.Authorities[i] = v
 		}
@@ -1746,6 +1755,7 @@ func (v *CreateKeyPage) Copy() *CreateKeyPage {
 
 	u.Keys = make([]*KeySpecParams, len(v.Keys))
 	for i, v := range v.Keys {
+		v := v
 		if v != nil {
 			u.Keys[i] = (v).Copy()
 		}
@@ -1789,6 +1799,7 @@ func (v *CreateToken) Copy() *CreateToken {
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
+		v := v
 		if v != nil {
 			u.Authorities[i] = v
 		}
@@ -1814,6 +1825,7 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
+		v := v
 		if v != nil {
 			u.Authorities[i] = v
 		}
@@ -1893,10 +1905,12 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	u.PartitionAnchor = *v.PartitionAnchor.Copy()
 	u.Updates = make([]NetworkAccountUpdate, len(v.Updates))
 	for i, v := range v.Updates {
+		v := v
 		u.Updates[i] = *(&v).Copy()
 	}
 	u.Receipts = make([]*PartitionAnchorReceipt, len(v.Receipts))
 	for i, v := range v.Receipts {
+		v := v
 		if v != nil {
 			u.Receipts[i] = (v).Copy()
 		}
@@ -1934,6 +1948,7 @@ func (v *DoubleHashDataEntry) Copy() *DoubleHashDataEntry {
 
 	u.Data = make([][]byte, len(v.Data))
 	for i, v := range v.Data {
+		v := v
 		u.Data[i] = encoding.BytesCopy(v)
 	}
 	if len(v.extraData) > 0 {
@@ -2026,6 +2041,7 @@ func (v *FactomDataEntry) Copy() *FactomDataEntry {
 	u.Data = encoding.BytesCopy(v.Data)
 	u.ExtIds = make([][]byte, len(v.ExtIds))
 	for i, v := range v.ExtIds {
+		v := v
 		u.ExtIds[i] = encoding.BytesCopy(v)
 	}
 
@@ -2053,6 +2069,7 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 
 	u.CreateIdentitySliding = make([]Fee, len(v.CreateIdentitySliding))
 	for i, v := range v.CreateIdentitySliding {
+		v := v
 		u.CreateIdentitySliding[i] = v
 	}
 	if len(v.extraData) > 0 {
@@ -2110,6 +2127,7 @@ func (v *IssueTokens) Copy() *IssueTokens {
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.To = make([]*TokenRecipient, len(v.To))
 	for i, v := range v.To {
+		v := v
 		if v != nil {
 			u.To[i] = (v).Copy()
 		}
@@ -2157,6 +2175,7 @@ func (v *KeyPage) Copy() *KeyPage {
 	u.Version = v.Version
 	u.Keys = make([]*KeySpec, len(v.Keys))
 	for i, v := range v.Keys {
+		v := v
 		if v != nil {
 			u.Keys[i] = (v).Copy()
 		}
@@ -2340,12 +2359,14 @@ func (v *NetworkDefinition) Copy() *NetworkDefinition {
 	u.Version = v.Version
 	u.Partitions = make([]*PartitionInfo, len(v.Partitions))
 	for i, v := range v.Partitions {
+		v := v
 		if v != nil {
 			u.Partitions[i] = (v).Copy()
 		}
 	}
 	u.Validators = make([]*ValidatorInfo, len(v.Validators))
 	for i, v := range v.Validators {
+		v := v
 		if v != nil {
 			u.Validators[i] = (v).Copy()
 		}
@@ -2409,6 +2430,7 @@ func (v *Object) Copy() *Object {
 	u.Type = v.Type
 	u.Chains = make([]ChainMetadata, len(v.Chains))
 	for i, v := range v.Chains {
+		v := v
 		u.Chains[i] = *(&v).Copy()
 	}
 	u.Pending = *(&v.Pending).Copy()
@@ -2509,6 +2531,7 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 	u.Delivered = v.Delivered
 	u.Pending = make([]*url.TxID, len(v.Pending))
 	for i, v := range v.Pending {
+		v := v
 		if v != nil {
 			u.Pending[i] = v
 		}
@@ -2589,6 +2612,7 @@ func (v *RemoteSignature) Copy() *RemoteSignature {
 	}
 	u.Cause = make([][32]byte, len(v.Cause))
 	for i, v := range v.Cause {
+		v := v
 		u.Cause[i] = v
 	}
 	if len(v.extraData) > 0 {
@@ -2683,10 +2707,12 @@ func (v *RoutingTable) Copy() *RoutingTable {
 
 	u.Overrides = make([]RouteOverride, len(v.Overrides))
 	for i, v := range v.Overrides {
+		v := v
 		u.Overrides[i] = *(&v).Copy()
 	}
 	u.Routes = make([]Route, len(v.Routes))
 	for i, v := range v.Routes {
+		v := v
 		u.Routes[i] = *(&v).Copy()
 	}
 	if len(v.extraData) > 0 {
@@ -2706,6 +2732,7 @@ func (v *SendTokens) Copy() *SendTokens {
 	u.Meta = encoding.BytesCopy(v.Meta)
 	u.To = make([]*TokenRecipient, len(v.To))
 	for i, v := range v.To {
+		v := v
 		if v != nil {
 			u.To[i] = (v).Copy()
 		}
@@ -2772,6 +2799,7 @@ func (v *SignatureSet) Copy() *SignatureSet {
 	u.TransactionHash = v.TransactionHash
 	u.Signatures = make([]Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
+		v := v
 		if v != nil {
 			u.Signatures[i] = CopySignature(v)
 		}
@@ -2811,6 +2839,7 @@ func (v *SyntheticCreateIdentity) Copy() *SyntheticCreateIdentity {
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
 	u.Accounts = make([]Account, len(v.Accounts))
 	for i, v := range v.Accounts {
+		v := v
 		if v != nil {
 			u.Accounts[i] = CopyAccount(v)
 		}
@@ -2869,6 +2898,7 @@ func (v *SyntheticForwardTransaction) Copy() *SyntheticForwardTransaction {
 
 	u.Signatures = make([]RemoteSignature, len(v.Signatures))
 	for i, v := range v.Signatures {
+		v := v
 		u.Signatures[i] = *(&v).Copy()
 	}
 	if v.Transaction != nil {
@@ -2892,6 +2922,7 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 	}
 	u.Sequence = make([]*PartitionSyntheticLedger, len(v.Sequence))
 	for i, v := range v.Sequence {
+		v := v
 		if v != nil {
 			u.Sequence[i] = (v).Copy()
 		}
@@ -2967,6 +2998,7 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
 	u.PendingUpdates = make([]NetworkAccountUpdate, len(v.PendingUpdates))
 	for i, v := range v.PendingUpdates {
+		v := v
 		u.PendingUpdates[i] = *(&v).Copy()
 	}
 	if v.Anchor != nil {
@@ -3127,6 +3159,7 @@ func (v *TransactionResultSet) Copy() *TransactionResultSet {
 
 	u.Results = make([]*TransactionStatus, len(v.Results))
 	for i, v := range v.Results {
+		v := v
 		if v != nil {
 			u.Results[i] = (v).Copy()
 		}
@@ -3160,6 +3193,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	}
 	u.Signers = make([]Signer, len(v.Signers))
 	for i, v := range v.Signers {
+		v := v
 		if v != nil {
 			u.Signers[i] = CopySigner(v)
 		}
@@ -3177,6 +3211,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	}
 	u.AnchorSigners = make([][]byte, len(v.AnchorSigners))
 	for i, v := range v.AnchorSigners {
+		v := v
 		u.AnchorSigners[i] = encoding.BytesCopy(v)
 	}
 	if len(v.extraData) > 0 {
@@ -3194,6 +3229,7 @@ func (v *TransferCredits) Copy() *TransferCredits {
 
 	u.To = make([]*CreditRecipient, len(v.To))
 	for i, v := range v.To {
+		v := v
 		if v != nil {
 			u.To[i] = (v).Copy()
 		}
@@ -3213,6 +3249,7 @@ func (v *TxIdSet) Copy() *TxIdSet {
 
 	u.Entries = make([]*url.TxID, len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		if v != nil {
 			u.Entries[i] = v
 		}
@@ -3265,6 +3302,7 @@ func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 
 	u.Operations = make([]AccountAuthOperation, len(v.Operations))
 	for i, v := range v.Operations {
+		v := v
 		if v != nil {
 			u.Operations[i] = CopyAccountAuthOperation(v)
 		}
@@ -3284,10 +3322,12 @@ func (v *UpdateAllowedKeyPageOperation) Copy() *UpdateAllowedKeyPageOperation {
 
 	u.Allow = make([]TransactionType, len(v.Allow))
 	for i, v := range v.Allow {
+		v := v
 		u.Allow[i] = v
 	}
 	u.Deny = make([]TransactionType, len(v.Deny))
 	for i, v := range v.Deny {
+		v := v
 		u.Deny[i] = v
 	}
 	if len(v.extraData) > 0 {
@@ -3334,6 +3374,7 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 
 	u.Operation = make([]KeyPageOperation, len(v.Operation))
 	for i, v := range v.Operation {
+		v := v
 		if v != nil {
 			u.Operation[i] = CopyKeyPageOperation(v)
 		}
@@ -3358,6 +3399,7 @@ func (v *ValidatorInfo) Copy() *ValidatorInfo {
 	}
 	u.Partitions = make([]*ValidatorPartitionInfo, len(v.Partitions))
 	for i, v := range v.Partitions {
+		v := v
 		if v != nil {
 			u.Partitions[i] = (v).Copy()
 		}
