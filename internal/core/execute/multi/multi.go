@@ -47,7 +47,7 @@ func NewExecutor(opts Options) (Executor, error) {
 	}
 
 	// If the version is V2, create a V2 executor
-	if ledger != nil && ledger.ExecutorVersion.V2() {
+	if ledger != nil && ledger.ExecutorVersion.V2Enabled() {
 		exec, err := v2.NewExecutor(opts)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("create v2 executor: %w", err)
@@ -81,12 +81,12 @@ func (m *Multi) setActive(exec Executor) {
 }
 
 func (m *Multi) willChangeGlobals(e events.WillChangeGlobals) error {
-	if !e.New.ExecutorVersion.V2() {
+	if !e.New.ExecutorVersion.V2Enabled() {
 		return nil
 	}
 
 	// No need to update
-	if m.version.V2() {
+	if m.version.V2Enabled() {
 		return nil
 	}
 

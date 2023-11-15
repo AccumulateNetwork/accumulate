@@ -105,14 +105,3 @@ ReceiptList:
       type: merkle.Receipt
       marshal-as: reference
       pointer: true
-
-recordIndexEntry:
-  fields:
-  - name: Key
-    type: record.Key
-    pointer: true
-    marshal-as: reference
-  - name: Section
-    type: uint
-  - name: Offset
-    type: uint

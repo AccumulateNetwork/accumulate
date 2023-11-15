@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"golang.org/x/exp/slog"
 )
 
 type LogAsHex interface {
@@ -20,10 +22,17 @@ type LogAsHex interface {
 
 type LogAsHexValue []byte
 
+var _ json.Marshaler = LogAsHexValue{}
+var _ slog.LogValuer = LogAsHexValue{}
+
 func (v LogAsHexValue) MarshalJSON() ([]byte, error) {
 	b := make([]byte, hex.EncodedLen(len(v)))
 	hex.Encode(b, v)
 	return json.Marshal(strings.ToUpper(string(b)))
+}
+
+func (v LogAsHexValue) LogValue() slog.Value {
+	return slog.StringValue(hex.EncodeToString(v))
 }
 
 func (v LogAsHexValue) Slice(i, j int) LogAsHex {

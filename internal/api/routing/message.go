@@ -171,6 +171,19 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 			return nil, errors.BadRequest.WithFormat("%v is not a partition URL", msg.Source)
 		}
 
+		if msg.NodeID == "" {
+			return service.Multiaddr(), nil
+		}
+
+		// Send the request to /p2p/{id}/acc-svc/{service}:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID.String())
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		c2 := service.Multiaddr()
+
+		return c1.Encapsulate(c2), nil
+
 	default:
 		return nil, errors.BadRequest.WithFormat("%v is not routable", msg.Type())
 	}
