@@ -80,6 +80,10 @@ func (b *BlockState) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 	return 0, time.Time{}, false
 }
 
+func (b *BlockState) DidUpdateValidators() ([]*execute.ValidatorUpdate, bool) {
+	return nil, false // TODO Track validators
+}
+
 func (b *BlockState) Commit() error {
 	if b.IsEmpty() {
 		b.Discard()

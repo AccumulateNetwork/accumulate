@@ -85,12 +85,6 @@ func (h hashableMemo) String() string {
 	return fmt.Sprintf("%s\t%v%s", s[:i], h.memo, s[i:])
 }
 
-type stringfn func() string
-
-func (f stringfn) String() string {
-	return f()
-}
-
 type stringers []any
 
 func (s stringers) String() string {

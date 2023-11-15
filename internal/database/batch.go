@@ -54,7 +54,7 @@ func (d *Database) Begin(writable bool) *Batch {
 	return b
 }
 
-func NewBatch(id string, store keyvalue.ChangeSet, writable bool, logger log.Logger) *Batch {
+func NewBatch(id string, store keyvalue.Store, writable bool, logger log.Logger) *Batch {
 	b := new(Batch)
 	b.id = id
 	b.writable = writable

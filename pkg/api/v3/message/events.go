@@ -42,7 +42,7 @@ func (s EventService) Subscribe(c *call[*SubscribeRequest]) {
 	}
 }
 
-func (c *Client) Subscribe(ctx context.Context, opts SubscribeOptions) (<-chan api.Event, error) {
+func (c *Client) Subscribe(ctx context.Context, opts api.SubscribeOptions) (<-chan api.Event, error) {
 	req := &SubscribeRequest{SubscribeOptions: opts}
 	var errRes *ErrorResponse
 	s, err := c.Transport.OpenStream(ctx, req, func(res, _ Message) error {

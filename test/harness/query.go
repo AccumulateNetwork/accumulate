@@ -24,6 +24,23 @@ func (h *Harness) NetworkStatus(opts api.NetworkStatusOptions) *api.NetworkStatu
 	return ns
 }
 
+// ConsensusStatus calls the Harness's service, failing if the call returns an
+// error.
+func (h *Harness) ConsensusStatus(opts api.ConsensusStatusOptions) *api.ConsensusStatus {
+	if opts.NodeID == "" {
+		nodes, err := h.services.FindService(context.Background(), api.FindServiceOptions{
+			Service: api.ServiceTypeConsensus.AddressFor(opts.Partition),
+		})
+		require.NoError(h.TB, err)
+		require.NotEmpty(h.TB, nodes)
+		opts.NodeID = nodes[0].PeerID.String()
+	}
+
+	ns, err := h.services.ConsensusStatus(context.Background(), opts)
+	require.NoError(h.TB, err)
+	return ns
+}
+
 // QueryAccountAs calls Harness.QueryAccountAs with a new T and returns that
 // value.
 func QueryAccountAs[T protocol.Account](h *Harness, scope *url.URL) T {
