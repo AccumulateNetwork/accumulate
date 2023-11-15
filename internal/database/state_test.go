@@ -74,7 +74,7 @@ func TestState(t *testing.T) {
 	db := database.OpenInMemory(nil)
 	db.SetObserver(hashes)
 	require.NoError(t, db.Update(func(b *database.Batch) error {
-		return snapshot.FullRestore(b, f, nil, &bvn.Executor.Describe)
+		return snapshot.FullRestore(b, f, nil, bvn.Executor.Describe.PartitionUrl())
 	}))
 	require.NoError(t, db.View(func(b *database.Batch) error {
 		// Does it match?
