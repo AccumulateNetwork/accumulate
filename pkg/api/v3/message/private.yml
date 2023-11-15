@@ -9,6 +9,8 @@ PrivateSequenceRequest:
       pointer: true
     - name: SequenceNumber
       type: uint
+    - type: private.SequenceOptions
+      marshal-as: reference
 
 PrivateSequenceResponse:
   union: { type: message }

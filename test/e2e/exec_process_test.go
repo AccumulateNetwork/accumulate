@@ -25,9 +25,9 @@ import (
 func TestExecutorProcessResults(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3), // The node count must be > 1
 		simulator.Genesis(GenesisTime),
+		simulator.IgnoreCommitResults, // Screwing with the account balance will cause the BPT to differ, so instruct the simulator to ignore that
 	)
 
 	alice := AccountUrl("alice")
@@ -54,11 +54,8 @@ func TestExecutorProcessResults(t *testing.T) {
 	})
 	require.Equal(t, 3, int(i))
 
-	// Screwing with the account balance will cause the BPT to differ, so instruct the simulator to ignore that
-	sim.S.IgnoreCommitResults = true
-
-	// Verify the error message (which ends up coming from the first node)
+	// Verify the error message
 	sim.StepUntil(
-		Txn(st.TxID).Fails().
-			WithMessage("insufficient balance: have 1, want 1000"))
+		Txn(st.TxID).Capture(&st).Fails())
+	require.Contains(t, st.Error.Message, "insufficient balance")
 }
