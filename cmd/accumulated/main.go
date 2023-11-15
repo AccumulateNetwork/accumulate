@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2023 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -81,19 +81,5 @@ func warnf(format string, args ...interface{}) {
 		fmt.Fprint(os.Stderr, color.RedString(format, args...))
 	} else {
 		fmt.Fprintf(os.Stderr, format, args...)
-	}
-}
-
-func composeArgs(fn cobra.PositionalArgs, fns ...cobra.PositionalArgs) cobra.PositionalArgs {
-	if len(fns) == 0 {
-		return fn
-	}
-
-	rest := composeArgs(fns[0], fns[1:]...)
-	return func(cmd *cobra.Command, args []string) error {
-		if err := fn(cmd, args); err != nil {
-			return err
-		}
-		return rest(cmd, args)
 	}
 }

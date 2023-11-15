@@ -50,12 +50,12 @@ func TestGenerateDbTestdata(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		func(partition string, _ int, logger log.Logger) keyvalue.Beginner {
-			if strings.EqualFold(partition, protocol.Directory) {
+		simulator.WithDatabase(func(partition *protocol.PartitionInfo, _ int, logger log.Logger) keyvalue.Beginner {
+			if strings.EqualFold(partition.ID, protocol.Directory) {
 				return memory.New(nil)
 			}
 			return store
-		},
+		}),
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)

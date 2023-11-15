@@ -68,6 +68,7 @@ func syncToSnapshot(_ *cobra.Command, args []string) {
 
 	if tmblock == nil {
 		fatalf("Block not found")
+		panic("unreachable") // For static check
 	}
 
 	if tmblock.Block.LastCommit.Height != height {

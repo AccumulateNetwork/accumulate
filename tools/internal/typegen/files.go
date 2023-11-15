@@ -48,6 +48,12 @@ func (f *FileReader) SetFlags(flags *pflag.FlagSet, label string) {
 func ReadRaw[V any](files []string, recordFile func(string, V)) (map[string]V, error) {
 	all := map[string]V{}
 	for _, file := range files {
+		var importPath string
+		i := strings.IndexByte(file, ':')
+		if i >= 0 {
+			importPath, file = file[:i], file[i+1:]
+		}
+
 		f, err := os.Open(file)
 		if err != nil {
 			return nil, fmt.Errorf("opening %q: %v", file, err)
@@ -63,6 +69,9 @@ func ReadRaw[V any](files []string, recordFile func(string, V)) (map[string]V, e
 		}
 
 		for k, v := range values {
+			if importPath != "" {
+				k = importPath + "." + k
+			}
 			if _, ok := all[k]; ok {
 				return nil, fmt.Errorf("duplicate entries for %s", k)
 			}

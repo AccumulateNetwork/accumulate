@@ -69,8 +69,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 
 	var err error
 	s.sim, err = simulator.New(
-		acctesting.NewTestLogger(s.T()),
-		simulator.MemoryDatabase,
+		simulator.WithLogger(acctesting.NewTestLogger(s.T())),
 		simulator.SimpleNetwork(s.T().Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -344,7 +343,6 @@ func (s *QuerierTestSuite) TestQueryMinorBlock() {
 }
 
 func (s *QuerierTestSuite) TestQueryDirectoryMinorBlock() {
-	s.T().Skip("Flaky")
 	r, err := s.QuerierFor(DnUrl()).QueryMinorBlock(context.Background(), DnUrl(), &api.BlockQuery{Minor: uintp(4)})
 	s.Require().NoError(err)
 	s.Require().NotEmpty(r.Anchored.Records)

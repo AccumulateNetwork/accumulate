@@ -7,6 +7,8 @@ retract (
 
 go 1.19
 
+replace github.com/julienschmidt/httprouter v1.3.0 => github.com/firelizzard18/httprouter v0.0.0-20231019203155-74063b4f447c
+
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
 	github.com/FactomProject/factom v0.4.0
@@ -17,7 +19,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fatih/color v1.15.0
 	github.com/go-playground/validator/v10 v10.9.0
-	github.com/golang/mock v1.6.0
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/golangci/golangci-lint v1.52.2
 	github.com/kardianos/service v1.2.0
 	github.com/pelletier/go-toml v1.9.5
@@ -45,9 +47,13 @@ require (
 	github.com/FactomProject/factomd v1.13.0
 	github.com/chzyer/readline v1.5.1
 	github.com/cometbft/cometbft v0.38.0-rc3
+	github.com/cosmos/gogoproto v1.4.6
+	github.com/edsrzf/mmap-go v1.0.0
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/ghodss/yaml v1.0.0
+	github.com/gobeam/stringy v0.0.6
+	github.com/julienschmidt/httprouter v1.3.0
 	github.com/libp2p/go-libp2p v0.25.1
 	github.com/libp2p/go-libp2p-kad-dht v0.21.1
 	github.com/libp2p/go-libp2p-pubsub v0.9.1
@@ -85,7 +91,6 @@ require (
 	github.com/chigopher/pathlib v0.12.0 // indirect
 	github.com/cometbft/cometbft-db v0.7.0 // indirect
 	github.com/containerd/cgroups v1.0.4 // indirect
-	github.com/cosmos/gogoproto v1.4.6 // indirect
 	github.com/curioswitch/go-reassign v0.2.0 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect

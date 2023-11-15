@@ -26,3 +26,7 @@ RecordEntry:
     pointer: true
   - name: Value
     type: bytes
+  - name: Receipt
+    type: merkle.Receipt
+    pointer: true
+    marshal-as: reference

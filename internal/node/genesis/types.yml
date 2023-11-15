@@ -1,0 +1,27 @@
+consensusDoc:
+  fields:
+    - name: ChainID
+      type: string
+    - name: Params
+      type: consensusParams
+      marshal-as: reference
+      pointer: true
+    - name: Validators
+      type: genesisValidator
+      marshal-as: reference
+      repeatable: true
+      pointer: true
+
+genesisValidator:
+  fields:
+    - name: Address
+      type: bytes
+    - name: Type
+      type: protocol.SignatureType
+      marshal-as: enum
+    - name: PubKey
+      type: bytes
+    - name: Power
+      type: int
+    - name: Name
+      type: string

@@ -51,6 +51,11 @@ issues:
     linters:
     - noprint
 
+  - path: _gen.go$
+    linters:
+    - goheader
+    - gosimple
+
 linters-settings:
   goheader:
     values:
