@@ -68,7 +68,7 @@ func NewConsensusService(params ConsensusServiceParams) *ConsensusService {
 
 func (s *ConsensusService) Type() api.ServiceType { return api.ServiceTypeConsensus }
 
-func (s *ConsensusService) ConsensusStatus(ctx context.Context, _ api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+func (s *ConsensusService) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	// Basic data
 	res := new(api.ConsensusStatus)
 	res.Ok = true
@@ -81,7 +81,7 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, _ api.ConsensusS
 
 	// Load values from the database
 	res.LastBlock = new(api.LastBlock)
-	if s.db != nil {
+	if s.db != nil && boolOpt(opts.IncludeAccumulate, true) {
 		err := s.db.View(func(batch *database.Batch) error {
 			c, err := batch.Account(s.partition.Ledger()).RootChain().Get()
 			if err != nil {
@@ -116,6 +116,10 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, _ api.ConsensusS
 		return nil, errors.InternalError.WithFormat("invalid block hash returned from Tendermint")
 	}
 
+	if !boolOpt(opts.IncludePeers, true) {
+		return res, nil
+	}
+
 	// Get peers from Tendermint
 	netInfo, err := s.local.NetInfo(ctx)
 	if err != nil {
@@ -147,4 +151,11 @@ func (s *ConsensusService) ConsensusStatus(ctx context.Context, _ api.ConsensusS
 	}
 
 	return res, nil
+}
+
+func boolOpt(v *bool, def bool) bool {
+	if v == nil {
+		return def
+	}
+	return *v
 }

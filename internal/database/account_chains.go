@@ -45,7 +45,7 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.K
 		"SignatureChain",
 		"ScratchChain",
 		"AnchorSequenceChain",
-		"SyntheticSequenceChain":
+		"SyntheticSequenceChain": // Bug, this is actually an index chain
 		typ = merkle.ChainTypeTransaction
 	case "RootChain",
 		"AnchorChain":
@@ -313,11 +313,13 @@ func (c *Account) getAnchorKeys() ([]accountAnchorChainKey, error) {
 
 	// Find chains matching the pattern `anchor(:id)`
 	keys := make([]accountAnchorChainKey, 0, len(chains))
+	seen := map[string]bool{}
 	for _, c := range chains {
 		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
-		if !ok || first != "anchor" {
+		if !ok || first != "anchor" || seen[arg] {
 			continue
 		}
+		seen[arg] = true
 		keys = append(keys, accountAnchorChainKey{arg})
 	}
 

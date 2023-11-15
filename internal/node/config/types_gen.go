@@ -84,6 +84,7 @@ func (v *Network) Copy() *Network {
 	u.Id = v.Id
 	u.Partitions = make([]Partition, len(v.Partitions))
 	for i, v := range v.Partitions {
+		v := v
 		u.Partitions[i] = *(&v).Copy()
 	}
 	if len(v.extraData) > 0 {
@@ -116,12 +117,14 @@ func (v *P2P) Copy() *P2P {
 
 	u.Listen = make([]p2p.Multiaddr, len(v.Listen))
 	for i, v := range v.Listen {
+		v := v
 		if v != nil {
 			u.Listen[i] = p2p.CopyMultiaddr(v)
 		}
 	}
 	u.BootstrapPeers = make([]p2p.Multiaddr, len(v.BootstrapPeers))
 	for i, v := range v.BootstrapPeers {
+		v := v
 		if v != nil {
 			u.BootstrapPeers[i] = p2p.CopyMultiaddr(v)
 		}
@@ -144,6 +147,7 @@ func (v *Partition) Copy() *Partition {
 	u.BasePort = v.BasePort
 	u.Nodes = make([]Node, len(v.Nodes))
 	for i, v := range v.Nodes {
+		v := v
 		u.Nodes[i] = *(&v).Copy()
 	}
 	if len(v.extraData) > 0 {

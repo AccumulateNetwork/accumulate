@@ -65,7 +65,16 @@ func NewSequencer(params SequencerParams) *Sequencer {
 
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
-func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
+func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	if src == nil {
+		return nil, errors.BadRequest.With("missing source")
+	}
+	if dst == nil {
+		return nil, errors.BadRequest.With("missing destination")
+	}
+	if num == 0 {
+		return nil, errors.BadRequest.With("missing sequence number")
+	}
 	if !s.partition.URL.ParentOf(src) {
 		return nil, errors.BadRequest.WithFormat("requested source is %s but this partition is %s", src.RootIdentity(), s.partitionID)
 	}
@@ -126,7 +135,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 
 	var signatures []protocol.Signature
 	r := new(api.MessageRecord[messaging.Message])
-	if globals.ExecutorVersion.V2() {
+	if globals.ExecutorVersion.V2Enabled() {
 		r.Sequence = new(messaging.SequencedMessage)
 		r.Sequence.Message = &messaging.TransactionMessage{Transaction: txn}
 		r.Sequence.Source = s.partition.URL
@@ -158,7 +167,7 @@ func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues,
 		SetPrivateKey(s.valKey).
 		SetUrl(signer.Url).
 		SetVersion(globals.Network.Version).
-		SetTimestamp(1).
+		SetTimestampToNow().
 		Sign(hash)
 	if err != nil {
 		return nil, errors.InternalError.Wrap(err)
@@ -221,7 +230,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 	}
 
 	// Load the transaction
-	if globals.ExecutorVersion.V2() {
+	if globals.ExecutorVersion.V2Enabled() {
 		var seq *messaging.SequencedMessage
 		err = batch.Message2(hash).Main().GetAs(&seq)
 		if err != nil {
@@ -308,7 +317,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 
 	} else {
 		// We're on a BVN, get the latest directory anchor receipt
-		dirReceipt, err := s.getLatestDirectoryReceipt(batch)
+		dirReceipt, err := s.getDirectoryReceiptForBlock(batch, mainAnchorEntry.BlockIndex)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
@@ -326,7 +335,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		}
 	}
 
-	if globals.ExecutorVersion.V2() {
+	if globals.ExecutorVersion.V2Enabled() {
 		r.SourceReceipt = receipt
 
 		sigMsg := &messaging.SignatureMessage{
@@ -438,26 +447,38 @@ func (s *Sequencer) getRootReceipt(batch *database.Batch, from, to uint64) (*mer
 	return receipt, nil
 }
 
-// getLatestDirectoryReceipt returns the latest partition anchor receipt from the DN for this partition.
-func (s *Sequencer) getLatestDirectoryReceipt(batch *database.Batch) (*protocol.PartitionAnchorReceipt, error) {
+// getDirectoryReceiptForBlock returns the partition anchor receipt from the DN
+// for the given block of this partition.
+func (s *Sequencer) getDirectoryReceiptForBlock(batch *database.Batch, block uint64) (*protocol.PartitionAnchorReceipt, error) {
+	// Find the anchor chain index entry for (or after) the block
 	chain := batch.Account(s.partition.AnchorPool()).MainChain()
-	head, err := chain.Head().Get()
+	head, err := chain.Index().Head().Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load DN anchor chain head: %w", err)
+		return nil, errors.UnknownError.WithFormat("load anchor index chain head: %w", err)
 	}
 	if head.Count == 0 {
-		return nil, errors.NotFound.With("DN anchor chain is empty")
+		return nil, errors.NotFound.With("anchor chain is empty")
+	}
+	_, entry, err := indexing.SearchIndexChain2(chain.Index(), uint64(head.Count-1), indexing.MatchAfter, indexing.SearchIndexChainByBlock(block))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("locate anchor index chain entry for block %d: %w", block, err)
 	}
 
-	for i := head.Count - 1; i >= 0; i-- {
+	// Find the DN anchor for the block
+	head, err = chain.Head().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor chain head: %w", err)
+	}
+
+	for i := int64(entry.Source); i < head.Count; i++ {
 		entry, err := chain.Inner().Get(i)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load DN anchor chain entry %d: %w", i, err)
+			return nil, errors.UnknownError.WithFormat("load anchor chain entry %d: %w", i, err)
 		}
 		var msg messaging.MessageWithTransaction
 		err = batch.Message2(entry).Main().GetAs(&msg)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load DN anchor #%d: %w", i, err)
+			return nil, errors.UnknownError.WithFormat("load anchor #%d: %w", i, err)
 		}
 
 		anchor, ok := msg.GetTransaction().Body.(*protocol.DirectoryAnchor)
@@ -466,10 +487,10 @@ func (s *Sequencer) getLatestDirectoryReceipt(batch *database.Batch) (*protocol.
 		}
 
 		for _, r := range anchor.Receipts {
-			if r.Anchor.Source.Equal(s.partition.URL) {
+			if r.Anchor.Source.Equal(s.partition.URL) && r.Anchor.MinorBlockIndex >= block {
 				return r, nil
 			}
 		}
 	}
-	return nil, errors.UnknownError.WithFormat("unable to locate a DN anchor for %v", s.partition.URL)
+	return nil, errors.UnknownError.WithFormat("unable to locate a DN anchor for %v block %d", s.partition.URL, block)
 }
