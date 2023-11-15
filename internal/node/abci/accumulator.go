@@ -12,6 +12,8 @@ import (
 	_ "crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime/debug"
 	"sort"
 	"sync/atomic"
@@ -27,11 +29,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	snap2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -67,7 +71,7 @@ type AccumulatorOptions struct {
 	Executor execute.Executor
 	EventBus *events.Bus
 	Logger   log.Logger
-	Database database.Beginner
+	Database coredb.Beginner
 	Address  crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 }
 
@@ -414,6 +418,11 @@ func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 			return nil, err
 		}
 		res.AppHash = root[:]
+
+		// Collect the changeset
+		if false {
+			app.collectBlock(req.Height, root)
+		}
 	}
 
 	return res, nil
@@ -741,4 +750,47 @@ func (app *Accumulator) actualCommit() error {
 	duration := time.Since(app.timer)
 	app.logger.Debug("Committed", "minor", app.block.Params().Index, "major", major, "duration", duration, "count", app.txct)
 	return nil
+}
+
+func (app *Accumulator) collectBlock(height int64, rootHash [32]byte) {
+	dir := filepath.Join(app.RootDir, "blocks")
+	err := os.MkdirAll(dir, 0700)
+	if err != nil {
+		panic(err)
+	}
+
+	f, err := os.Create(filepath.Join(dir, fmt.Sprintf("%d.block", height)))
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	s, err := snap2.Create(f)
+	if err != nil {
+		panic(err)
+	}
+
+	err = s.WriteHeader(&snap2.Header{
+		Version:  snap2.Version2,
+		RootHash: rootHash,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	c, err := s.OpenRecords()
+	if err != nil {
+		panic(err)
+	}
+	defer c.Close()
+
+	err = c.Collect(app.blockState.ChangeSet(), snap2.CollectOptions{
+		Walk: database.WalkOptions{
+			Values:   true,
+			Modified: true,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
 }
