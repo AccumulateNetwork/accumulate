@@ -211,6 +211,9 @@ func listSnapshots(dir string) ([]*snapshotInfo, error) {
 		default:
 			return nil, errors.InternalError.WithFormat("unsupported snapshot version %d", ver)
 		}
+		if err != nil {
+			return nil, err
+		}
 
 		// Hash the file
 		_, err = f.Seek(0, io.SeekStart)
