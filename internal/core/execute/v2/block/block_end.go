@@ -642,7 +642,11 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			// the order used prior to 1.3
 			routes := map[string]int{}
 			for i, r := range x.globals.Active.Routing.Routes {
-				routes[strings.ToLower(r.Partition)] = i
+				id := strings.ToLower(r.Partition)
+				if _, ok := routes[id]; ok {
+					continue
+				}
+				routes[id] = i
 			}
 			sort.Slice(bvns, func(i, j int) bool {
 				return routes[strings.ToLower(bvns[i])] < routes[strings.ToLower(bvns[j])]
