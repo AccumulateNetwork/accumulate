@@ -354,7 +354,7 @@ func (d *Daemon) startApp() (types.Application, error) {
 	}
 
 	if _, ok := d.local["directory"]; !ok ||
-		!d.Config.Accumulate.DisableDirectDispatch {
+		d.Config.Accumulate.DisableDirectDispatch {
 		// If we are not attached to a DN node, or direct dispatch is disabled,
 		// use the API dispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
