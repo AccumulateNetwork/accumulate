@@ -9,7 +9,7 @@ ChunkMetadata:
     - name: Hash
       type: hash
 
-SnapshotMetadata:
+FileMetadata:
   fields:
     - name: Chunks
       type: ChunkMetadata

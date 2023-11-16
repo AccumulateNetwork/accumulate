@@ -4,6 +4,8 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package snapshot
+package torrent
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package snapshot --language go-alt types.yml
+import "errors"
+
+var ErrBadHash = errors.New("hash does not match")

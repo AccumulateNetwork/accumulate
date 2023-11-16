@@ -16,7 +16,7 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	snap2 "gitlab.com/accumulatenetwork/accumulate/exp/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/exp/torrent"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -154,12 +154,14 @@ func (app *Accumulator) finishedLoadingSnapshot(assembled ioutil.SectionReader) 
 }
 
 type snapshotInfo struct {
-	md       snap2.SnapshotMetadata
+	md       torrent.FileMetadata
 	version  uint64
 	height   uint64
 	hash     [32]byte
 	rootHash [32]byte
 }
+
+const chunkSize = 10 << 20
 
 // listSnapshots finds snapshots in the given directory and reads metadata from
 // each.
@@ -227,7 +229,7 @@ func listSnapshots(dir string) ([]*snapshotInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		err = getSnapshotChunks(f, info)
+		info.md.Chunks, err = torrent.ChunksBySize(f, chunkSize)
 		if err != nil {
 			return nil, err
 		}
@@ -263,32 +265,6 @@ func snapshotInfoV2(f *os.File) (*snapshotInfo, error) {
 	}, nil
 }
 
-const chunkSize = 10 << 20
-
-// getSnapshotChunks returns the number of chunks that the snapshot will be
-// split into for transfer.
-func getSnapshotChunks(snapshot *os.File, info *snapshotInfo) error {
-	st, err := snapshot.Stat()
-	if err != nil {
-		return err
-	}
-	var buf [chunkSize]byte
-	for i := 0; int64(i)*chunkSize < st.Size(); i++ {
-		_, err = io.ReadFull(snapshot, buf[:])
-		if err != nil {
-			return err
-		}
-
-		info.md.Chunks = append(info.md.Chunks, &snap2.ChunkMetadata{
-			Index:  uint64(i),
-			Size:   chunkSize,
-			Offset: chunkSize * uint64(i),
-			Hash:   sha256.Sum256(buf[:]),
-		})
-	}
-	return nil
-}
-
 // getSnapshotChunk returns the given chunk of the snapshot.
 func (*Accumulator) getSnapshotChunk(snapshot *os.File, chunk uint32) ([]byte, error) {
 	_, err := snapshot.Seek(int64(chunk)*chunkSize, io.SeekStart)
@@ -307,7 +283,7 @@ func (*Accumulator) getSnapshotChunk(snapshot *os.File, chunk uint32) ([]byte, e
 
 // startSnapshotSync initializes the snapshot sync state.
 func (app *Accumulator) startSnapshotSync(snapshot *abci.Snapshot, bptHash []byte) (abci.ResponseOfferSnapshot_Result, error) {
-	md := new(snap2.SnapshotMetadata)
+	md := new(torrent.FileMetadata)
 	err := md.UnmarshalBinary(snapshot.Metadata)
 	if err != nil {
 		return abci.ResponseOfferSnapshot_REJECT, nil
@@ -327,9 +303,59 @@ func (app *Accumulator) acceptSnapshotChunk(chunk uint32, data []byte) (abci.Res
 	switch {
 	case err == nil:
 		return abci.ResponseApplySnapshotChunk_ACCEPT, nil
-	case errors.Is(err, snap2.ErrBadHash):
+	case errors.Is(err, torrent.ErrBadHash):
 		return abci.ResponseApplySnapshotChunk_RETRY, nil
 	default:
 		return 0, err
 	}
+}
+
+type snapshotManager struct {
+	active *torrent.DownloadJob
+}
+
+func (m *snapshotManager) Start(snapshot *torrent.FileMetadata) error {
+	if m.active != nil {
+		return errors.BadRequest.With("already started")
+	}
+
+	j, err := torrent.NewDownloadJob(snapshot)
+	if err != nil {
+		return err
+	}
+
+	m.active = j
+	return nil
+}
+
+func (m *snapshotManager) Reset() error {
+	if m.active == nil {
+		return nil
+	}
+
+	err := m.active.Reset()
+	m.active = nil
+	return err
+}
+
+func (m *snapshotManager) Apply(index int, chunk []byte) error {
+	if m.active == nil {
+		return errors.BadRequest.With("not started")
+	}
+
+	return m.active.RecordChunk(index, chunk)
+}
+
+func (m *snapshotManager) Done() bool {
+	if m.active == nil {
+		return false
+	}
+	return m.active.Done()
+}
+
+func (m *snapshotManager) WriteTo(wr io.WriteSeeker) error {
+	if m.active == nil {
+		return errors.BadRequest.With("not started")
+	}
+	return m.active.WriteTo(wr)
 }
