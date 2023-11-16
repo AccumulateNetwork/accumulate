@@ -19,7 +19,6 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -215,9 +214,3 @@ func getAndPrintValue[T any](cmd *cobra.Command, v Getter[T]) error {
 	}
 	return printValue(cmd, u)
 }
-
-type fakeChangeSet struct{ keyvalue.Store }
-
-func (fakeChangeSet) Begin(*record.Key, bool) keyvalue.ChangeSet { panic("shim") }
-func (fakeChangeSet) Commit() error                              { panic("shim") }
-func (fakeChangeSet) Discard()                                   {}
