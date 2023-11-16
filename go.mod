@@ -23,7 +23,7 @@ require (
 	github.com/golangci/golangci-lint v1.52.2
 	github.com/kardianos/service v1.2.0
 	github.com/pelletier/go-toml v1.9.5
-	github.com/prometheus/client_golang v1.14.0 // indirect
+	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/rinchsan/gosimports v0.1.5
 	github.com/rs/zerolog v1.29.0

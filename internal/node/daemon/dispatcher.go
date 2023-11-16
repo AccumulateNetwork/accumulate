@@ -9,11 +9,8 @@ package accumulated
 import (
 	"context"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/cometbft/cometbft/mempool"
-	jrpc "github.com/cometbft/cometbft/rpc/jsonrpc/types"
+	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -72,47 +69,6 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 	return nil
 }
 
-var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), mempool.ErrTxInCache).Error
-var errTxInCache2 = jsonrpc2.NewError(jsonrpc2.ErrorCode(errTxInCache1.Code), errTxInCache1.Message, errTxInCache1.Data)
-var errTxInCacheAcc = jsonrpc2.NewError(v2.ErrCodeAccumulate, "Accumulate Error", errTxInCache1.Data)
-
-// checkDispatchError ignores errors we don't care about.
-func checkDispatchError(err error, errs chan<- error) {
-	if err == nil {
-		return
-	}
-
-	// TODO This may be unnecessary once this issue is fixed:
-	// https://github.com/tendermint/tendermint/issues/7185.
-
-	// Is the error "tx already exists in cache"?
-	if err.Error() == mempool.ErrTxInCache.Error() {
-		return
-	}
-
-	// Or RPC error "tx already exists in cache"?
-	var rpcErr1 *jrpc.RPCError
-	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
-		return
-	}
-
-	var rpcErr2 jsonrpc2.Error
-	if errors.As(err, &rpcErr2) && (rpcErr2 == errTxInCache2 || rpcErr2 == errTxInCacheAcc) {
-		return
-	}
-
-	var errorsErr *errors.Error
-	if errors.As(err, &errorsErr) {
-		// This probably should not be necessary
-		if errorsErr.Code == errors.Delivered {
-			return
-		}
-	}
-
-	// It's a real error
-	errs <- err
-}
-
 // Send sends all of the batches asynchronously using one connection per
 // partition.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
@@ -138,14 +94,14 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			switch res := res.(type) {
 			case *message.ErrorResponse:
 				// Handle error
-				checkDispatchError(res.Error, errs)
+				tendermint.CheckDispatchError(res.Error, errs)
 				return nil
 
 			case *message.SubmitResponse:
 				// Check for failed submissions
 				for _, sub := range res.Value {
 					if sub.Status != nil {
-						checkDispatchError(sub.Status.AsError(), errs)
+						tendermint.CheckDispatchError(sub.Status.AsError(), errs)
 					}
 				}
 				return nil
