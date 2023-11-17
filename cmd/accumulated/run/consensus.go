@@ -7,6 +7,7 @@
 package run
 
 import (
+	"crypto/sha256"
 	"path/filepath"
 
 	"github.com/cometbft/cometbft/abci/types"
@@ -17,11 +18,14 @@ import (
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
-	"github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/spf13/viper"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	tmapi "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -30,20 +34,34 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
+	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
+)
+
+var (
+	consensusProvidesEventBus  = provides[*events.Bus](func(c *ConsensusService) string { return c.App.partition().ID })
+	consensusProvidesService   = provides[v3.ConsensusService](func(c ConsensusApp) string { return c.partition().ID })
+	consensusProvidesSubmitter = provides[v3.Submitter](func(c ConsensusApp) string { return c.partition().ID })
+	consensusProvidesValidator = provides[v3.Validator](func(c ConsensusApp) string { return c.partition().ID })
+
+	coreConsensusNeedsStorage      = needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Partition.ID })
+	coreConsensusProvidesSequencer = provides[private.Sequencer](func(c *CoreConsensusApp) string { return c.Partition.ID })
 )
 
 type ConsensusApp interface {
 	Type() ConsensusAppType
 	CopyAsInterface() any
 
-	name() string
+	partition() *protocol.PartitionInfo
 	needs() []ServiceDescriptor
+	provides() []ServiceDescriptor
 	start(*Instance, *tendermint) (types.Application, error)
+	register(*Instance, *tendermint, *tmnode.Node) error
 }
 
 type tendermint struct {
@@ -52,21 +70,20 @@ type tendermint struct {
 	nodeKey  *tmp2p.NodeKey
 	logger   log.Logger
 	eventBus *events.Bus
+	globals  chan *network.GlobalValues
 }
-
-var consensusProvides = provides[client.Client](func(c *ConsensusService) string { return c.App.name() })
 
 func (c *ConsensusService) needs() []ServiceDescriptor {
 	return c.App.needs()
 }
 
 func (c *ConsensusService) provides() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		consensusProvides.describe(c),
-	}
+	return append(c.App.provides(),
+		consensusProvidesEventBus.describe(c),
+	)
 }
 
-func (s *ConsensusService) start(inst *Instance) error {
+func (c *ConsensusService) start(inst *Instance) error {
 	d := new(tendermint)
 	d.logger = (*logging.Slogger)(inst.logger)
 	d.eventBus = events.NewBus(d.logger.With("module", "events"))
@@ -77,7 +94,7 @@ func (s *ConsensusService) start(inst *Instance) error {
 	})
 
 	// Load config. Use Viper because that's what Tendermint does.{
-	nodeDir := inst.path(s.NodeDir)
+	nodeDir := inst.path(c.NodeDir)
 	v := viper.New()
 	v.SetConfigFile(filepath.Join(nodeDir, "config", "tendermint.toml"))
 	v.AddConfigPath(filepath.Join(nodeDir, "config"))
@@ -104,16 +121,16 @@ func (s *ConsensusService) start(inst *Instance) error {
 		d.config.PrivValidatorStateFile(),
 	)
 	if err != nil {
-		return errors.UnknownError.WithFormat("load private validator key: %v", err)
+		return errors.UnknownError.WithFormat("load private validator key: %w", err)
 	}
 
 	d.nodeKey, err = tmp2p.LoadNodeKey(d.config.NodeKeyFile())
 	if err != nil {
-		return errors.UnknownError.WithFormat("load node key: %v", err)
+		return errors.UnknownError.WithFormat("load node key: %w", err)
 	}
 
 	// Start the application
-	app, err := s.App.start(inst, d)
+	app, err := c.App.start(inst, d)
 	if err != nil {
 		return err
 	}
@@ -130,12 +147,12 @@ func (s *ConsensusService) start(inst *Instance) error {
 		d.logger,
 	)
 	if err != nil {
-		return errors.UnknownError.WithFormat("initialize consensus: %v", err)
+		return errors.UnknownError.WithFormat("initialize consensus: %w", err)
 	}
 
 	err = node.Start()
 	if err != nil {
-		return errors.UnknownError.WithFormat("start consensus: %v", err)
+		return errors.UnknownError.WithFormat("start consensus: %w", err)
 	}
 
 	inst.cleanup(func() {
@@ -146,11 +163,12 @@ func (s *ConsensusService) start(inst *Instance) error {
 		node.Wait()
 	})
 
-	// Register a local client
-	return consensusProvides.register(inst, s, local.New(node))
+	err = consensusProvidesEventBus.register(inst, c, d.eventBus)
+
+	return c.App.register(inst, d, node)
 }
 
-var coreConsensusNeedsStorage = needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Storage })
+func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partition }
 
 func (c *CoreConsensusApp) needs() []ServiceDescriptor {
 	return []ServiceDescriptor{
@@ -158,8 +176,13 @@ func (c *CoreConsensusApp) needs() []ServiceDescriptor {
 	}
 }
 
-func (c *CoreConsensusApp) name() string {
-	return c.Partition.ID
+func (c *CoreConsensusApp) provides() []ServiceDescriptor {
+	return []ServiceDescriptor{
+		consensusProvidesService.describe(c),
+		consensusProvidesSubmitter.describe(c),
+		consensusProvidesValidator.describe(c),
+		coreConsensusProvidesSequencer.describe(c),
+	}
 }
 
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
@@ -194,14 +217,39 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		},
 	}
 
+	// Setup globals
+	d.globals = make(chan *network.GlobalValues, 1)
+	events.SubscribeSync(d.eventBus, func(e events.WillChangeGlobals) error {
+		select {
+		case d.globals <- e.New:
+		default:
+		}
+		return nil
+	})
+
 	// On DNs initialize the major block scheduler
 	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
 	}
 
+	// This must happen before creating the executor since it needs to receive
+	// the initial WillChangeGlobals event
+	conductor := &crosschain.Conductor{
+		Partition:    c.Partition,
+		ValidatorKey: execOpts.Key,
+		Database:     execOpts.Database,
+		Querier:      v3.Querier2{Querier: client},
+		Submitter:    client,
+		RunTask:      execOpts.BackgroundTaskLauncher,
+	}
+	err = conductor.Start(d.eventBus)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
+	}
+
 	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("initialize chain executor: %v", err)
+		return nil, errors.UnknownError.WithFormat("initialize chain executor: %w", err)
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
@@ -215,4 +263,68 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		RootDir:   d.config.RootDir,
 	})
 	return app, nil
+}
+
+func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.Node) error {
+	store, err := coreConsensusNeedsStorage.get(inst, c)
+	if err != nil {
+		return err
+	}
+
+	// Register the consensus service
+	local := local.New(node)
+	svcImpl := tmapi.NewConsensusService(tmapi.ConsensusServiceParams{
+		Logger:           d.logger.With("module", "api"),
+		Local:            local,
+		Database:         database.New(store, d.logger),
+		PartitionID:      c.Partition.ID,
+		PartitionType:    c.Partition.Type,
+		EventBus:         d.eventBus,
+		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
+		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
+	})
+	registerRpcService(inst, svcImpl.Type().AddressFor(c.Partition.ID), message.ConsensusService{ConsensusService: svcImpl})
+	err = consensusProvidesService.register(inst, c, svcImpl)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Register the submitter
+	subImpl := tmapi.NewSubmitter(tmapi.SubmitterParams{
+		Logger: d.logger.With("module", "api"),
+		Local:  local,
+	})
+	registerRpcService(inst, subImpl.Type().AddressFor(c.Partition.ID), message.Submitter{Submitter: subImpl})
+	err = consensusProvidesSubmitter.register(inst, c, subImpl)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Register the validator
+	valImpl := tmapi.NewValidator(tmapi.ValidatorParams{
+		Logger: d.logger.With("module", "api"),
+		Local:  local,
+	})
+	registerRpcService(inst, valImpl.Type().AddressFor(c.Partition.ID), message.Validator{Validator: valImpl})
+	err = consensusProvidesValidator.register(inst, c, valImpl)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Register the sequencer
+	seqImpl := api.NewSequencer(api.SequencerParams{
+		Logger:       d.logger.With("module", "api"),
+		Database:     database.New(store, d.logger),
+		EventBus:     d.eventBus,
+		Globals:      <-d.globals,
+		Partition:    c.Partition.ID,
+		ValidatorKey: d.privVal.Key.PrivKey.Bytes(),
+	})
+	registerRpcService(inst, seqImpl.Type().AddressFor(c.Partition.ID), message.Sequencer{Sequencer: seqImpl})
+	err = coreConsensusProvidesSequencer.register(inst, c, seqImpl)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	return nil
 }

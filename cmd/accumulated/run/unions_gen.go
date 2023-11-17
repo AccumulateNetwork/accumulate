@@ -178,6 +178,14 @@ func NewService(typ ServiceType) (Service, error) {
 	switch typ {
 	case ServiceTypeConsensus:
 		return new(ConsensusService), nil
+	case ServiceTypeEvents:
+		return new(EventsService), nil
+	case ServiceTypeMetrics:
+		return new(MetricsService), nil
+	case ServiceTypeNetwork:
+		return new(NetworkService), nil
+	case ServiceTypeQuerier:
+		return new(Querier), nil
 	case ServiceTypeStorage:
 		return new(StorageService), nil
 	}
@@ -196,6 +204,30 @@ func EqualService(a, b Service) bool {
 		}
 		b, ok := b.(*ConsensusService)
 		return ok && a.Equal(b)
+	case *EventsService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*EventsService)
+		return ok && a.Equal(b)
+	case *MetricsService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MetricsService)
+		return ok && a.Equal(b)
+	case *NetworkService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*NetworkService)
+		return ok && a.Equal(b)
+	case *Querier:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*Querier)
+		return ok && a.Equal(b)
 	case *StorageService:
 		if a == nil {
 			return b == nil
@@ -210,6 +242,14 @@ func EqualService(a, b Service) bool {
 func CopyService(v Service) Service {
 	switch v := v.(type) {
 	case *ConsensusService:
+		return v.Copy()
+	case *EventsService:
+		return v.Copy()
+	case *MetricsService:
+		return v.Copy()
+	case *NetworkService:
+		return v.Copy()
+	case *Querier:
 		return v.Copy()
 	case *StorageService:
 		return v.Copy()

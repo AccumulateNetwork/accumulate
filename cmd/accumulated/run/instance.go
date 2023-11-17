@@ -82,7 +82,9 @@ func (c *Config) startServices(inst *Instance) error {
 	}
 
 	// Determine the order of initialization
-	unsatisfied := c.Services
+	unsatisfied := make([]Service, 0, len(c.Apps)+len(c.Services))
+	unsatisfied = append(unsatisfied, c.Apps...)
+	unsatisfied = append(unsatisfied, c.Services...)
 	var satisfied [][]Service
 	for len(unsatisfied) > 0 {
 		var unsatisfied2, satisfied2 []Service

@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
@@ -31,24 +30,31 @@ func TestRun(t *testing.T) {
 		P2P: &P2P{
 			Network: "DevNet",
 			// BootstrapPeers: accumulate.BootstrapServers,
-			Key: &PrivateKeySeed{Seed: record.NewKey("foo")},
+			Key: &CometNodeKeyFile{Path: "node-1/dnn/config/node_key.json"},
+		},
+		Apps: []Service{
+			&ConsensusService{
+				NodeDir: "node-1/dnn",
+				App: &CoreConsensusApp{
+					EnableHealing: true,
+					Partition: &protocol.PartitionInfo{
+						ID:   protocol.Directory,
+						Type: protocol.PartitionTypeDirectory,
+					},
+				},
+			},
 		},
 		Services: []Service{
 			&StorageService{
-				Name:    "foo",
-				Storage: &MemoryStorage{},
-			},
-			&ConsensusService{
-				NodeDir: "dnn",
-				App: &CoreConsensusApp{
-					Partition: &protocol.PartitionInfo{
-						ID:   "foo",
-						Type: protocol.PartitionTypeBlockValidator,
-					},
-					Storage:       "foo",
-					EnableHealing: true,
+				Name: "directory",
+				Storage: &BadgerStorage{
+					Path: "node-1/dnn/data/accumulate.db",
 				},
 			},
+			&Querier{Partition: protocol.Directory},
+			&NetworkService{Partition: protocol.Directory},
+			&MetricsService{Partition: protocol.Directory},
+			&EventsService{Partition: protocol.Directory},
 		},
 	}
 

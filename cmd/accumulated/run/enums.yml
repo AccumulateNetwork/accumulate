@@ -3,6 +3,14 @@ ServiceType:
     value: 1
   Consensus:
     value: 2
+  Querier:
+    value: 3
+  Network:
+    value: 4
+  Metrics:
+    value: 5
+  Events:
+    value: 6
 
 StorageType:
   Memory:
