@@ -1,0 +1,79 @@
+Config:
+  non-binary: true
+  fields:
+    - name: file
+      type: string
+      marshal-as: none
+    - name: Logging
+      type: Logging
+      marshal-as: reference
+      pointer: true
+    - name: P2P
+      type: P2P
+      marshal-as: reference
+      pointer: true
+
+Logging:
+  non-binary: true
+  fields:
+    - name: Format
+      type: string
+    - name: Rules
+      type: LoggingRule
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+LoggingRule:
+  non-binary: true
+  fields:
+    - name: Level
+      type: slog.Level
+      marshal-as: value
+      zero-value: '0'
+      keep-empty: true
+    - name: Module
+      type: string
+
+P2P:
+  non-binary: true
+  fields:
+    - name: Network
+      type: string
+    - name: Listen
+      type: p2p.Multiaddr
+      toml: listen
+      marshal-as: union
+      repeatable: true
+    - name: BootstrapPeers
+      type: p2p.Multiaddr
+      toml: bootstrap-peers
+      marshal-as: union
+      repeatable: true
+    - name: Key
+      type: PrivateKey
+      marshal-as: union
+    - name: PeerDB
+      type: string
+    - name: EnablePeerTracking
+      type: bool
+
+TransientPrivateKey:
+  union: { type: privateKey }
+  non-binary: true
+  fields:
+    - name: key
+      type: address.Address
+      marshal-as: none
+
+PrivateKeySeed:
+  union: { type: privateKey, value: Seed }
+  non-binary: true
+  fields:
+    - name: key
+      type: address.Address
+      marshal-as: none
+    - name: Seed
+      type: record.Key
+      marshal-as: reference
+      pointer: true

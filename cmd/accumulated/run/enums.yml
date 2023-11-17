@@ -1,0 +1,5 @@
+PrivateKeyType:
+  Transient:
+    value: 1
+  Seed:
+    value: 2
