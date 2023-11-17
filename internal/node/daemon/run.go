@@ -374,13 +374,16 @@ func (d *Daemon) startApp() (types.Application, error) {
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		Address:  d.Key().PubKey().Address(),
-		Executor: exec,
-		Logger:   d.Logger,
-		EventBus: d.eventBus,
-		Config:   d.Config,
-		Tracer:   d.tracer,
-		Database: d.db,
+		Address:     d.Key().PubKey().Address(),
+		Executor:    exec,
+		Logger:      d.Logger,
+		EventBus:    d.eventBus,
+		Tracer:      d.tracer,
+		Database:    d.db,
+		Genesis:     genesis.DocProvider(&d.Config.Config),
+		Partition:   d.Config.Accumulate.PartitionId,
+		RootDir:     d.Config.RootDir,
+		AnalysisLog: d.Config.Accumulate.AnalysisLog,
 	})
 	return app, nil
 }
@@ -392,7 +395,7 @@ func (d *Daemon) startConsensus(app types.Application) error {
 		d.privVal,
 		d.nodeKey,
 		proxy.NewLocalClientCreator(app),
-		genesis.DocProvider(d.Config),
+		genesis.DocProvider(&d.Config.Config),
 		tmcfg.DefaultDBProvider,
 		tmnode.DefaultMetricsProvider(d.Config.Instrumentation),
 		d.Logger,
@@ -598,7 +601,7 @@ func (d *Daemon) startMonitoringAndCleanup() {
 		color.HiMagenta("Syncing ....")
 		time.Sleep(time.Second * 1)
 	}
-	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.API.ListenAddress)
+	color.HiBlue(" %s node running at %s :", d.Config.Accumulate.NetworkType, d.Config.Accumulate.API.ListenAddress)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
