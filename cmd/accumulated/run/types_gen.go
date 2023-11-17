@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
 )
 
@@ -49,6 +50,25 @@ type Config struct {
 	P2P            *P2P            `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
 	Configurations []Configuration `json:"configurations,omitempty" form:"configurations" query:"configurations" validate:"required"`
 	Services       []Service       `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+}
+
+type ConsensusService struct {
+	NodeDir string       `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
+	App     ConsensusApp `json:"app,omitempty" form:"app" query:"app" validate:"required"`
+}
+
+type CoreConsensusApp struct {
+	Partition            *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	EnableHealing        *bool                   `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+}
+
+type CoreValidatorConfiguration struct {
+	Listen               p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	BVN                  string        `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
+	EnableHealing        *bool         `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	EnableDirectDispatch *bool         `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	StorageType          *StorageType  `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
 type EventsService struct {
@@ -176,6 +196,12 @@ func (*CometNodeKeyFile) Type() PrivateKeyType { return PrivateKeyTypeCometNodeK
 
 func (*CometPrivValFile) Type() PrivateKeyType { return PrivateKeyTypeCometPrivValFile }
 
+func (*ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
+
+func (*CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
+
+func (*CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
+
 func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
 
 func (*FaucetService) Type() ServiceType { return ServiceTypeFaucet }
@@ -263,6 +289,64 @@ func (v *Config) Copy() *Config {
 }
 
 func (v *Config) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ConsensusService) Copy() *ConsensusService {
+	u := new(ConsensusService)
+
+	u.NodeDir = v.NodeDir
+	if v.App != nil {
+		u.App = CopyConsensusApp(v.App)
+	}
+
+	return u
+}
+
+func (v *ConsensusService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CoreConsensusApp) Copy() *CoreConsensusApp {
+	u := new(CoreConsensusApp)
+
+	if v.Partition != nil {
+		u.Partition = (v.Partition).Copy()
+	}
+	if v.EnableHealing != nil {
+		u.EnableHealing = new(bool)
+		*u.EnableHealing = *v.EnableHealing
+	}
+	if v.EnableDirectDispatch != nil {
+		u.EnableDirectDispatch = new(bool)
+		*u.EnableDirectDispatch = *v.EnableDirectDispatch
+	}
+
+	return u
+}
+
+func (v *CoreConsensusApp) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
+	u := new(CoreValidatorConfiguration)
+
+	if v.Listen != nil {
+		u.Listen = p2p.CopyMultiaddr(v.Listen)
+	}
+	u.BVN = v.BVN
+	if v.EnableHealing != nil {
+		u.EnableHealing = new(bool)
+		*u.EnableHealing = *v.EnableHealing
+	}
+	if v.EnableDirectDispatch != nil {
+		u.EnableDirectDispatch = new(bool)
+		*u.EnableDirectDispatch = *v.EnableDirectDispatch
+	}
+	if v.StorageType != nil {
+		u.StorageType = new(StorageType)
+		*u.StorageType = *v.StorageType
+	}
+
+	return u
+}
+
+func (v *CoreValidatorConfiguration) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *EventsService) Copy() *EventsService {
 	u := new(EventsService)
@@ -628,6 +712,81 @@ func (v *Config) Equal(u *Config) bool {
 		if !(EqualService(v.Services[i], u.Services[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *ConsensusService) Equal(u *ConsensusService) bool {
+	if !(v.NodeDir == u.NodeDir) {
+		return false
+	}
+	if !(EqualConsensusApp(v.App, u.App)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
+	switch {
+	case v.Partition == u.Partition:
+		// equal
+	case v.Partition == nil || u.Partition == nil:
+		return false
+	case !((v.Partition).Equal(u.Partition)):
+		return false
+	}
+	switch {
+	case v.EnableHealing == u.EnableHealing:
+		// equal
+	case v.EnableHealing == nil || u.EnableHealing == nil:
+		return false
+	case !(*v.EnableHealing == *u.EnableHealing):
+		return false
+	}
+	switch {
+	case v.EnableDirectDispatch == u.EnableDirectDispatch:
+		// equal
+	case v.EnableDirectDispatch == nil || u.EnableDirectDispatch == nil:
+		return false
+	case !(*v.EnableDirectDispatch == *u.EnableDirectDispatch):
+		return false
+	}
+
+	return true
+}
+
+func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
+	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
+		return false
+	}
+	if !(v.BVN == u.BVN) {
+		return false
+	}
+	switch {
+	case v.EnableHealing == u.EnableHealing:
+		// equal
+	case v.EnableHealing == nil || u.EnableHealing == nil:
+		return false
+	case !(*v.EnableHealing == *u.EnableHealing):
+		return false
+	}
+	switch {
+	case v.EnableDirectDispatch == u.EnableDirectDispatch:
+		// equal
+	case v.EnableDirectDispatch == nil || u.EnableDirectDispatch == nil:
+		return false
+	case !(*v.EnableDirectDispatch == *u.EnableDirectDispatch):
+		return false
+	}
+	switch {
+	case v.StorageType == u.StorageType:
+		// equal
+	case v.StorageType == nil || u.StorageType == nil:
+		return false
+	case !(*v.StorageType == *u.StorageType):
+		return false
 	}
 
 	return true
@@ -1226,6 +1385,70 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ConsensusService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    ServiceType                               `json:"type"`
+		NodeDir string                                    `json:"nodeDir,omitempty"`
+		App     *encoding.JsonUnmarshalWith[ConsensusApp] `json:"app,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.NodeDir) == 0) {
+		u.NodeDir = v.NodeDir
+	}
+	if !(EqualConsensusApp(v.App, nil)) {
+		u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type                 ConsensusAppType        `json:"type"`
+		Partition            *protocol.PartitionInfo `json:"partition,omitempty"`
+		EnableHealing        *bool                   `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Partition == nil) {
+		u.Partition = v.Partition
+	}
+	if !(v.EnableHealing == nil) {
+		u.EnableHealing = v.EnableHealing
+	}
+	if !(v.EnableDirectDispatch == nil) {
+		u.EnableDirectDispatch = v.EnableDirectDispatch
+	}
+	return json.Marshal(&u)
+}
+
+func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type                 ConfigurationType                          `json:"type"`
+		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BVN                  string                                     `json:"bvn,omitempty"`
+		EnableHealing        *bool                                      `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                                      `json:"enableDirectDispatch,omitempty"`
+		StorageType          *StorageType                               `json:"storageType,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
+		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(len(v.BVN) == 0) {
+		u.BVN = v.BVN
+	}
+	if !(v.EnableHealing == nil) {
+		u.EnableHealing = v.EnableHealing
+	}
+	if !(v.EnableDirectDispatch == nil) {
+		u.EnableDirectDispatch = v.EnableDirectDispatch
+	}
+	if !(v.StorageType == nil) {
+		u.StorageType = v.StorageType
+	}
+	return json.Marshal(&u)
+}
+
 func (v *EventsService) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      ServiceType `json:"type"`
@@ -1612,6 +1835,84 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 			v.Services[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *ConsensusService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    ServiceType                               `json:"type"`
+		NodeDir string                                    `json:"nodeDir,omitempty"`
+		App     *encoding.JsonUnmarshalWith[ConsensusApp] `json:"app,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NodeDir = v.NodeDir
+	u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.NodeDir = u.NodeDir
+	if u.App != nil {
+		v.App = u.App.Value
+	}
+
+	return nil
+}
+
+func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type                 ConsensusAppType        `json:"type"`
+		Partition            *protocol.PartitionInfo `json:"partition,omitempty"`
+		EnableHealing        *bool                   `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.EnableHealing = v.EnableHealing
+	u.EnableDirectDispatch = v.EnableDirectDispatch
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.EnableHealing = u.EnableHealing
+	v.EnableDirectDispatch = u.EnableDirectDispatch
+	return nil
+}
+
+func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type                 ConfigurationType                          `json:"type"`
+		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BVN                  string                                     `json:"bvn,omitempty"`
+		EnableHealing        *bool                                      `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                                      `json:"enableDirectDispatch,omitempty"`
+		StorageType          *StorageType                               `json:"storageType,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.BVN = v.BVN
+	u.EnableHealing = v.EnableHealing
+	u.EnableDirectDispatch = v.EnableDirectDispatch
+	u.StorageType = v.StorageType
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Listen != nil {
+		v.Listen = u.Listen.Value
+	}
+
+	v.BVN = u.BVN
+	v.EnableHealing = u.EnableHealing
+	v.EnableDirectDispatch = u.EnableDirectDispatch
+	v.StorageType = u.StorageType
 	return nil
 }
 

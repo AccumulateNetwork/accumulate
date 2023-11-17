@@ -22,9 +22,14 @@ import (
 )
 
 var (
+	portDir = portOffset(config.PortOffsetDirectory)
+	portBVN = portOffset(config.PortOffsetBlockValidator)
+
 	portAccAPI = portOffset(config.PortOffsetAccumulateApi)
 	portAccP2P = portOffset(config.PortOffsetAccumulateP2P)
 )
+
+func ptr[T any](v T) *T { return &v }
 
 func setDefaultPtr[V any](ptr **V, def V) {
 	if *ptr == nil {
