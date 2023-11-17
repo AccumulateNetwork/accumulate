@@ -20,8 +20,15 @@ func (p *P2P) start(inst *Instance) error {
 	if p.Key == nil {
 		p.Key = new(TransientPrivateKey)
 	}
+	if p.Network == "" {
+		p.Network = "Unknown"
+	}
+	inst.network = p.Network
 
-	addr := p.Key.get()
+	addr, err := p.Key.get(inst)
+	if err != nil {
+		return err
+	}
 	if addr.GetType() != protocol.SignatureTypeED25519 {
 		return errors.BadRequest.WithFormat("key type %v not supported", addr.GetType())
 	}

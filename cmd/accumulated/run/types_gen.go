@@ -18,10 +18,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
 )
 
 type BadgerStorage struct {
+	Path string `json:"path,omitempty" form:"path" query:"path" validate:"required"`
+}
+
+type CometNodeKeyFile struct {
+	key  address.Address
+	Path string `json:"path,omitempty" form:"path" query:"path" validate:"required"`
+}
+
+type CometPrivValFile struct {
+	key  address.Address
 	Path string `json:"path,omitempty" form:"path" query:"path" validate:"required"`
 }
 
@@ -30,6 +41,17 @@ type Config struct {
 	Logging  *Logging  `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
 	P2P      *P2P      `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
 	Services []Service `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+}
+
+type ConsensusService struct {
+	NodeDir string       `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
+	App     ConsensusApp `json:"app,omitempty" form:"app" query:"app" validate:"required"`
+}
+
+type CoreConsensusApp struct {
+	Partition     *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Storage       string                  `json:"storage,omitempty" form:"storage" query:"storage"`
+	EnableHealing bool                    `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
 }
 
 type Logging struct {
@@ -70,6 +92,14 @@ type TransientPrivateKey struct {
 
 func (*BadgerStorage) Type() StorageType { return StorageTypeBadger }
 
+func (*CometNodeKeyFile) Type() PrivateKeyType { return PrivateKeyTypeCometNodeKeyFile }
+
+func (*CometPrivValFile) Type() PrivateKeyType { return PrivateKeyTypeCometPrivValFile }
+
+func (*ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
+
+func (*CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
+
 func (*MemoryStorage) Type() StorageType { return StorageTypeMemory }
 
 func (*PrivateKeySeed) Type() PrivateKeyType { return PrivateKeyTypeSeed }
@@ -88,6 +118,26 @@ func (v *BadgerStorage) Copy() *BadgerStorage {
 
 func (v *BadgerStorage) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *CometNodeKeyFile) Copy() *CometNodeKeyFile {
+	u := new(CometNodeKeyFile)
+
+	u.Path = v.Path
+
+	return u
+}
+
+func (v *CometNodeKeyFile) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CometPrivValFile) Copy() *CometPrivValFile {
+	u := new(CometPrivValFile)
+
+	u.Path = v.Path
+
+	return u
+}
+
+func (v *CometPrivValFile) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *Config) Copy() *Config {
 	u := new(Config)
 
@@ -100,13 +150,42 @@ func (v *Config) Copy() *Config {
 	u.Services = make([]Service, len(v.Services))
 	for i, v := range v.Services {
 		v := v
-		u.Services[i] = v
+		if v != nil {
+			u.Services[i] = CopyService(v)
+		}
 	}
 
 	return u
 }
 
 func (v *Config) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ConsensusService) Copy() *ConsensusService {
+	u := new(ConsensusService)
+
+	u.NodeDir = v.NodeDir
+	if v.App != nil {
+		u.App = CopyConsensusApp(v.App)
+	}
+
+	return u
+}
+
+func (v *ConsensusService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CoreConsensusApp) Copy() *CoreConsensusApp {
+	u := new(CoreConsensusApp)
+
+	if v.Partition != nil {
+		u.Partition = (v.Partition).Copy()
+	}
+	u.Storage = v.Storage
+	u.EnableHealing = v.EnableHealing
+
+	return u
+}
+
+func (v *CoreConsensusApp) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Logging) Copy() *Logging {
 	u := new(Logging)
@@ -214,6 +293,22 @@ func (v *BadgerStorage) Equal(u *BadgerStorage) bool {
 	return true
 }
 
+func (v *CometNodeKeyFile) Equal(u *CometNodeKeyFile) bool {
+	if !(v.Path == u.Path) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CometPrivValFile) Equal(u *CometPrivValFile) bool {
+	if !(v.Path == u.Path) {
+		return false
+	}
+
+	return true
+}
+
 func (v *Config) Equal(u *Config) bool {
 	switch {
 	case v.Logging == u.Logging:
@@ -235,9 +330,39 @@ func (v *Config) Equal(u *Config) bool {
 		return false
 	}
 	for i := range v.Services {
-		if !(v.Services[i] == u.Services[i]) {
+		if !(EqualService(v.Services[i], u.Services[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *ConsensusService) Equal(u *ConsensusService) bool {
+	if !(v.NodeDir == u.NodeDir) {
+		return false
+	}
+	if !(EqualConsensusApp(v.App, u.App)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
+	switch {
+	case v.Partition == u.Partition:
+		// equal
+	case v.Partition == nil || u.Partition == nil:
+		return false
+	case !((v.Partition).Equal(u.Partition)):
+		return false
+	}
+	if !(v.Storage == u.Storage) {
+		return false
+	}
+	if !(v.EnableHealing == u.EnableHealing) {
+		return false
 	}
 
 	return true
@@ -349,11 +474,35 @@ func (v *BadgerStorage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *CometNodeKeyFile) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type PrivateKeyType `json:"type"`
+		Path string         `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Path) == 0) {
+		u.Path = v.Path
+	}
+	return json.Marshal(&u)
+}
+
+func (v *CometPrivValFile) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type PrivateKeyType `json:"type"`
+		Path string         `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Path) == 0) {
+		u.Path = v.Path
+	}
+	return json.Marshal(&u)
+}
+
 func (v *Config) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Logging  *Logging                   `json:"logging,omitempty"`
-		P2P      *P2P                       `json:"p2P,omitempty"`
-		Services encoding.JsonList[Service] `json:"services,omitempty"`
+		Logging  *Logging                                 `json:"logging,omitempty"`
+		P2P      *P2P                                     `json:"p2P,omitempty"`
+		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
 	}{}
 	if !(v.Logging == nil) {
 		u.Logging = v.Logging
@@ -362,7 +511,43 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 		u.P2P = v.P2P
 	}
 	if !(len(v.Services) == 0) {
-		u.Services = v.Services
+		u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *ConsensusService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    ServiceType                               `json:"type"`
+		NodeDir string                                    `json:"nodeDir,omitempty"`
+		App     *encoding.JsonUnmarshalWith[ConsensusApp] `json:"app,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.NodeDir) == 0) {
+		u.NodeDir = v.NodeDir
+	}
+	if !(EqualConsensusApp(v.App, nil)) {
+		u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type          ConsensusAppType        `json:"type"`
+		Partition     *protocol.PartitionInfo `json:"partition,omitempty"`
+		Storage       string                  `json:"storage,omitempty"`
+		EnableHealing bool                    `json:"enableHealing,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Partition == nil) {
+		u.Partition = v.Partition
+	}
+	if !(len(v.Storage) == 0) {
+		u.Storage = v.Storage
+	}
+	if !(!v.EnableHealing) {
+		u.EnableHealing = v.EnableHealing
 	}
 	return json.Marshal(&u)
 }
@@ -472,21 +657,106 @@ func (v *BadgerStorage) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *CometNodeKeyFile) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type PrivateKeyType `json:"type"`
+		Path string         `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Path = v.Path
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Path = u.Path
+	return nil
+}
+
+func (v *CometPrivValFile) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type PrivateKeyType `json:"type"`
+		Path string         `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Path = v.Path
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Path = u.Path
+	return nil
+}
+
 func (v *Config) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Logging  *Logging                   `json:"logging,omitempty"`
-		P2P      *P2P                       `json:"p2P,omitempty"`
-		Services encoding.JsonList[Service] `json:"services,omitempty"`
+		Logging  *Logging                                 `json:"logging,omitempty"`
+		P2P      *P2P                                     `json:"p2P,omitempty"`
+		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
 	}{}
 	u.Logging = v.Logging
 	u.P2P = v.P2P
-	u.Services = v.Services
+	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Logging = u.Logging
 	v.P2P = u.P2P
-	v.Services = u.Services
+	if u.Services != nil {
+		v.Services = make([]Service, len(u.Services.Value))
+		for i, x := range u.Services.Value {
+			v.Services[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *ConsensusService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    ServiceType                               `json:"type"`
+		NodeDir string                                    `json:"nodeDir,omitempty"`
+		App     *encoding.JsonUnmarshalWith[ConsensusApp] `json:"app,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NodeDir = v.NodeDir
+	u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.NodeDir = u.NodeDir
+	if u.App != nil {
+		v.App = u.App.Value
+	}
+
+	return nil
+}
+
+func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type          ConsensusAppType        `json:"type"`
+		Partition     *protocol.PartitionInfo `json:"partition,omitempty"`
+		Storage       string                  `json:"storage,omitempty"`
+		EnableHealing bool                    `json:"enableHealing,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Storage = v.Storage
+	u.EnableHealing = v.EnableHealing
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Storage = u.Storage
+	v.EnableHealing = u.EnableHealing
 	return nil
 }
 

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -99,16 +100,25 @@ func (c *Config) SaveTo(file string) error {
 }
 
 func remap(v any, fn func(string) string) any {
-	m, ok := v.(map[string]any)
-	if !ok {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice:
+		u := make([]any, rv.Len())
+		for i := range u {
+			u[i] = remap(rv.Index(i).Interface(), fn)
+		}
+		return u
+
+	case reflect.Map:
+		u := make(map[string]any, rv.Len())
+		for it := rv.MapRange(); it.Next(); {
+			u[fn(it.Key().String())] = remap(it.Value().Interface(), fn)
+		}
+		return u
+
+	default:
 		return v
 	}
-
-	n := make(map[string]any, len(m))
-	for k, v := range m {
-		n[fn(k)] = remap(v, fn)
-	}
-	return n
 }
 
 var reKebab = regexp.MustCompile(`-[a-z]`)

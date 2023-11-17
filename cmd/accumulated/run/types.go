@@ -11,7 +11,8 @@ package run
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package run --language go-union --out unions_gen.go config.yml
 
 type (
-	ServiceType    int
-	StorageType    int
-	PrivateKeyType int
+	ConsensusAppType int
+	ServiceType      int
+	StorageType      int
+	PrivateKeyType   int
 )

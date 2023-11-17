@@ -344,7 +344,7 @@ func (d *Daemon) startApp() (types.Application, error) {
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,
 		},
 		NewDispatcher: func() execute.Dispatcher {
-			return newDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
+			return NewDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
 		},
 	}
 

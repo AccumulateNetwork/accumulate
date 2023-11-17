@@ -32,8 +32,8 @@ type dispatcher struct {
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
-// newDispatcher creates a new dispatcher.
-func newDispatcher(network string, router routing.Router, dialer message.Dialer) *dispatcher {
+// NewDispatcher creates a new dispatcher.
+func NewDispatcher(network string, router routing.Router, dialer message.Dialer) *dispatcher {
 	d := new(dispatcher)
 	d.network = network
 	d.router = router

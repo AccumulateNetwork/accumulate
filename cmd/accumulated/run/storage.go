@@ -33,7 +33,7 @@ func (s *MemoryStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 }
 
 func (s *BadgerStorage) open(inst *Instance) (keyvalue.Beginner, error) {
-	db, err := badger.New(s.Path)
+	db, err := badger.New(inst.path(s.Path))
 	if err != nil {
 		return nil, err
 	}
