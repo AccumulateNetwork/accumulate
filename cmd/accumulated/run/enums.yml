@@ -1,3 +1,13 @@
+ServiceType:
+  Storage:
+    value: 1
+
+StorageType:
+  Memory:
+    value: 1
+  Badger:
+    value: 2
+
 PrivateKeyType:
   Transient:
     value: 1

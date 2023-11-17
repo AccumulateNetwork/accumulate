@@ -12,6 +12,10 @@ Config:
       type: P2P
       marshal-as: reference
       pointer: true
+    - name: Services
+      type: Service
+      marshal-as: enum
+      repeatable: true
 
 Logging:
   non-binary: true
@@ -57,6 +61,29 @@ P2P:
       type: string
     - name: EnablePeerTracking
       type: bool
+
+StorageService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+      optional: true
+    - name: Storage
+      type: Storage
+      marshal-as: union
+
+MemoryStorage:
+  union: { type: storage }
+  non-binary: true
+  fields: ~
+
+BadgerStorage:
+  union: { type: storage }
+  non-binary: true
+  fields:
+    - name: Path
+      type: string
 
 TransientPrivateKey:
   union: { type: privateKey }

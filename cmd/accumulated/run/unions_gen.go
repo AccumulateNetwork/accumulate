@@ -13,6 +13,76 @@ import (
 	"fmt"
 )
 
+// NewStorage creates a new Storage for the specified StorageType.
+func NewStorage(typ StorageType) (Storage, error) {
+	switch typ {
+	case StorageTypeBadger:
+		return new(BadgerStorage), nil
+	case StorageTypeMemory:
+		return new(MemoryStorage), nil
+	}
+	return nil, fmt.Errorf("unknown storage %v", typ)
+}
+
+// EqualStorage is used to compare the values of the union
+func EqualStorage(a, b Storage) bool {
+	if a == b {
+		return true
+	}
+	switch a := a.(type) {
+	case *BadgerStorage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*BadgerStorage)
+		return ok && a.Equal(b)
+	case *MemoryStorage:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*MemoryStorage)
+		return ok && a.Equal(b)
+	}
+	return false
+}
+
+// CopyStorage copies a Storage.
+func CopyStorage(v Storage) Storage {
+	switch v := v.(type) {
+	case *BadgerStorage:
+		return v.Copy()
+	case *MemoryStorage:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(Storage)
+	}
+}
+
+// UnmarshalStorageJson unmarshals a Storage.
+func UnmarshalStorageJSON(data []byte) (Storage, error) {
+	var typ *struct{ Type StorageType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
+	}
+
+	acnt, err := NewStorage(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
 // NewPrivateKey creates a new PrivateKey for the specified PrivateKeyType.
 func NewPrivateKey(typ PrivateKeyType) (PrivateKey, error) {
 	switch typ {
@@ -71,6 +141,66 @@ func UnmarshalPrivateKeyJSON(data []byte) (PrivateKey, error) {
 	}
 
 	acnt, err := NewPrivateKey(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
+// NewService creates a new Service for the specified ServiceType.
+func NewService(typ ServiceType) (Service, error) {
+	switch typ {
+	case ServiceTypeStorage:
+		return new(StorageService), nil
+	}
+	return nil, fmt.Errorf("unknown service %v", typ)
+}
+
+// EqualService is used to compare the values of the union
+func EqualService(a, b Service) bool {
+	if a == b {
+		return true
+	}
+	switch a := a.(type) {
+	case *StorageService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*StorageService)
+		return ok && a.Equal(b)
+	}
+	return false
+}
+
+// CopyService copies a Service.
+func CopyService(v Service) Service {
+	switch v := v.(type) {
+	case *StorageService:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(Service)
+	}
+}
+
+// UnmarshalServiceJson unmarshals a Service.
+func UnmarshalServiceJSON(data []byte) (Service, error) {
+	var typ *struct{ Type ServiceType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
+	}
+
+	acnt, err := NewService(typ.Type)
 	if err != nil {
 		return nil, err
 	}

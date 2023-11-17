@@ -32,6 +32,12 @@ func TestRun(t *testing.T) {
 			// BootstrapPeers: accumulate.BootstrapServers,
 			Key: &PrivateKeySeed{Seed: record.NewKey("foo")},
 		},
+		Services: []Service{
+			&StorageService{
+				Name:    "foo",
+				Storage: &MemoryStorage{},
+			},
+		},
 	}
 
 	c.SaveTo("../../../.nodes/test.toml")
