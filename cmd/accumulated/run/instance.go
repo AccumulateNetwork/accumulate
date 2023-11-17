@@ -8,6 +8,8 @@ package run
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 
@@ -17,6 +19,9 @@ import (
 )
 
 type Instance struct {
+	network string
+	rootDir string
+
 	running  *sync.WaitGroup
 	context  context.Context
 	cancel   context.CancelFunc
@@ -28,12 +33,27 @@ type Instance struct {
 type nameAndType struct {
 }
 
-func Start(ctx context.Context, cfg *Config) (*Instance, error) {
+func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	inst := new(Instance)
 	inst.running = new(sync.WaitGroup)
 	inst.context, inst.cancel = context.WithCancel(ctx)
 
-	err := cfg.Logging.start(inst)
+	defer func() {
+		if err != nil {
+			inst.cancel()
+		}
+	}()
+
+	if cfg.file != "" {
+		inst.rootDir, err = filepath.Abs(filepath.Dir(cfg.file))
+	} else {
+		inst.rootDir, err = os.Getwd()
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	err = cfg.Logging.start(inst)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start logging: %w", err)
 	}
@@ -66,4 +86,14 @@ func (i *Instance) cleanup(fn func()) {
 		<-i.context.Done()
 		fn()
 	}()
+}
+
+func (i *Instance) path(path ...string) string {
+	if len(path) == 0 {
+		return i.rootDir
+	}
+	if filepath.IsAbs(path[0]) {
+		return filepath.Join(path...)
+	}
+	return filepath.Join(append([]string{i.rootDir}, path...)...)
 }

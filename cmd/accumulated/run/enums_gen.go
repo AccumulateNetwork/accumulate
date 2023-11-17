@@ -14,20 +14,85 @@ import (
 	"strings"
 )
 
+// ConsensusAppTypeCore .
+const ConsensusAppTypeCore ConsensusAppType = 1
+
 // PrivateKeyTypeTransient .
 const PrivateKeyTypeTransient PrivateKeyType = 1
 
 // PrivateKeyTypeSeed .
 const PrivateKeyTypeSeed PrivateKeyType = 2
 
+// PrivateKeyTypeCometPrivValFile .
+const PrivateKeyTypeCometPrivValFile PrivateKeyType = 3
+
+// PrivateKeyTypeCometNodeKeyFile .
+const PrivateKeyTypeCometNodeKeyFile PrivateKeyType = 4
+
 // ServiceTypeStorage .
 const ServiceTypeStorage ServiceType = 1
+
+// ServiceTypeConsensus .
+const ServiceTypeConsensus ServiceType = 2
 
 // StorageTypeMemory .
 const StorageTypeMemory StorageType = 1
 
 // StorageTypeBadger .
 const StorageTypeBadger StorageType = 2
+
+// GetEnumValue returns the value of the Consensus App Type
+func (v ConsensusAppType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ConsensusAppType) SetEnumValue(id uint64) bool {
+	u := ConsensusAppType(id)
+	switch u {
+	case ConsensusAppTypeCore:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Consensus App Type.
+func (v ConsensusAppType) String() string {
+	switch v {
+	case ConsensusAppTypeCore:
+		return "core"
+	}
+	return fmt.Sprintf("ConsensusAppType:%d", v)
+}
+
+// ConsensusAppTypeByName returns the named Consensus App Type.
+func ConsensusAppTypeByName(name string) (ConsensusAppType, bool) {
+	switch strings.ToLower(name) {
+	case "core":
+		return ConsensusAppTypeCore, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Consensus App Type to JSON as a string.
+func (v ConsensusAppType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Consensus App Type from JSON as a string.
+func (v *ConsensusAppType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = ConsensusAppTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Consensus App Type %q", s)
+	}
+	return nil
+}
 
 // GetEnumValue returns the value of the Private Key Type
 func (v PrivateKeyType) GetEnumValue() uint64 { return uint64(v) }
@@ -36,7 +101,7 @@ func (v PrivateKeyType) GetEnumValue() uint64 { return uint64(v) }
 func (v *PrivateKeyType) SetEnumValue(id uint64) bool {
 	u := PrivateKeyType(id)
 	switch u {
-	case PrivateKeyTypeTransient, PrivateKeyTypeSeed:
+	case PrivateKeyTypeTransient, PrivateKeyTypeSeed, PrivateKeyTypeCometPrivValFile, PrivateKeyTypeCometNodeKeyFile:
 		*v = u
 		return true
 	}
@@ -50,6 +115,10 @@ func (v PrivateKeyType) String() string {
 		return "transient"
 	case PrivateKeyTypeSeed:
 		return "seed"
+	case PrivateKeyTypeCometPrivValFile:
+		return "cometPrivValFile"
+	case PrivateKeyTypeCometNodeKeyFile:
+		return "cometNodeKeyFile"
 	}
 	return fmt.Sprintf("PrivateKeyType:%d", v)
 }
@@ -61,6 +130,10 @@ func PrivateKeyTypeByName(name string) (PrivateKeyType, bool) {
 		return PrivateKeyTypeTransient, true
 	case "seed":
 		return PrivateKeyTypeSeed, true
+	case "cometprivvalfile":
+		return PrivateKeyTypeCometPrivValFile, true
+	case "cometnodekeyfile":
+		return PrivateKeyTypeCometNodeKeyFile, true
 	}
 	return 0, false
 }
@@ -93,7 +166,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeStorage:
+	case ServiceTypeStorage, ServiceTypeConsensus:
 		*v = u
 		return true
 	}
@@ -105,6 +178,8 @@ func (v ServiceType) String() string {
 	switch v {
 	case ServiceTypeStorage:
 		return "storage"
+	case ServiceTypeConsensus:
+		return "consensus"
 	}
 	return fmt.Sprintf("ServiceType:%d", v)
 }
@@ -114,6 +189,8 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 	switch strings.ToLower(name) {
 	case "storage":
 		return ServiceTypeStorage, true
+	case "consensus":
+		return ServiceTypeConsensus, true
 	}
 	return 0, false
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
 )
 
@@ -37,10 +38,35 @@ func TestRun(t *testing.T) {
 				Name:    "foo",
 				Storage: &MemoryStorage{},
 			},
+			&ConsensusService{
+				NodeDir: "dnn",
+				App: &CoreConsensusApp{
+					Partition: &protocol.PartitionInfo{
+						ID:   "foo",
+						Type: protocol.PartitionTypeBlockValidator,
+					},
+					Storage:       "foo",
+					EnableHealing: true,
+				},
+			},
 		},
 	}
 
-	c.SaveTo("../../../.nodes/test.toml")
+	require.NoError(t, c.SaveTo("../../../.nodes/test.toml"))
+
+	ctx = logging.With(ctx, "test", t.Name())
+	inst, err := Start(ctx, c)
+	require.NoError(t, err)
+
+	require.NoError(t, inst.Stop())
+}
+
+func TestRun2(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	c := new(Config)
+	require.NoError(t, c.LoadFrom("../../../.nodes/test2.toml"))
 
 	ctx = logging.With(ctx, "test", t.Name())
 	inst, err := Start(ctx, c)

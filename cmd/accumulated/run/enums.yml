@@ -1,6 +1,8 @@
 ServiceType:
   Storage:
     value: 1
+  Consensus:
+    value: 2
 
 StorageType:
   Memory:
@@ -13,3 +15,11 @@ PrivateKeyType:
     value: 1
   Seed:
     value: 2
+  CometPrivValFile:
+    value: 3
+  CometNodeKeyFile:
+    value: 4
+
+ConsensusAppType:
+  Core:
+    value: 1

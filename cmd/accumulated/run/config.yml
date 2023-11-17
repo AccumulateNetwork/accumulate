@@ -14,7 +14,7 @@ Config:
       pointer: true
     - name: Services
       type: Service
-      marshal-as: enum
+      marshal-as: union
       repeatable: true
 
 Logging:
@@ -62,6 +62,31 @@ P2P:
     - name: EnablePeerTracking
       type: bool
 
+ConsensusService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: NodeDir
+      type: string
+    - name: App
+      type: ConsensusApp
+      marshal-as: union
+
+CoreConsensusApp:
+  union: { type: consensusApp }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: protocol.PartitionInfo
+      marshal-as: reference
+      pointer: true
+    - name: Storage
+      type: string
+      optional: true
+    - name: EnableHealing
+      type: bool
+      optional: true
+
 StorageService:
   union: { type: service }
   non-binary: true
@@ -94,7 +119,7 @@ TransientPrivateKey:
       marshal-as: none
 
 PrivateKeySeed:
-  union: { type: privateKey, value: Seed }
+  union: { type: privateKey, value: seed }
   non-binary: true
   fields:
     - name: key
@@ -104,3 +129,23 @@ PrivateKeySeed:
       type: record.Key
       marshal-as: reference
       pointer: true
+
+CometPrivValFile:
+  union: { type: privateKey }
+  non-binary: true
+  fields:
+    - name: key
+      type: address.Address
+      marshal-as: none
+    - name: Path
+      type: string
+
+CometNodeKeyFile:
+  union: { type: privateKey }
+  non-binary: true
+  fields:
+    - name: key
+      type: address.Address
+      marshal-as: none
+    - name: Path
+      type: string

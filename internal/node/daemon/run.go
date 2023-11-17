@@ -365,7 +365,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		// If we are not attached to a DN node, or direct dispatch is disabled,
 		// use the API dispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return newDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
+			return NewDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
 		}
 
 	} else {

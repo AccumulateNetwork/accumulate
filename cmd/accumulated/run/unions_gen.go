@@ -86,6 +86,10 @@ func UnmarshalStorageJSON(data []byte) (Storage, error) {
 // NewPrivateKey creates a new PrivateKey for the specified PrivateKeyType.
 func NewPrivateKey(typ PrivateKeyType) (PrivateKey, error) {
 	switch typ {
+	case PrivateKeyTypeCometNodeKeyFile:
+		return new(CometNodeKeyFile), nil
+	case PrivateKeyTypeCometPrivValFile:
+		return new(CometPrivValFile), nil
 	case PrivateKeyTypeSeed:
 		return new(PrivateKeySeed), nil
 	case PrivateKeyTypeTransient:
@@ -100,6 +104,18 @@ func EqualPrivateKey(a, b PrivateKey) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *CometNodeKeyFile:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*CometNodeKeyFile)
+		return ok && a.Equal(b)
+	case *CometPrivValFile:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*CometPrivValFile)
+		return ok && a.Equal(b)
 	case *PrivateKeySeed:
 		if a == nil {
 			return b == nil
@@ -119,6 +135,10 @@ func EqualPrivateKey(a, b PrivateKey) bool {
 // CopyPrivateKey copies a PrivateKey.
 func CopyPrivateKey(v PrivateKey) PrivateKey {
 	switch v := v.(type) {
+	case *CometNodeKeyFile:
+		return v.Copy()
+	case *CometPrivValFile:
+		return v.Copy()
 	case *PrivateKeySeed:
 		return v.Copy()
 	case *TransientPrivateKey:
@@ -156,6 +176,8 @@ func UnmarshalPrivateKeyJSON(data []byte) (PrivateKey, error) {
 // NewService creates a new Service for the specified ServiceType.
 func NewService(typ ServiceType) (Service, error) {
 	switch typ {
+	case ServiceTypeConsensus:
+		return new(ConsensusService), nil
 	case ServiceTypeStorage:
 		return new(StorageService), nil
 	}
@@ -168,6 +190,12 @@ func EqualService(a, b Service) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *ConsensusService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ConsensusService)
+		return ok && a.Equal(b)
 	case *StorageService:
 		if a == nil {
 			return b == nil
@@ -181,6 +209,8 @@ func EqualService(a, b Service) bool {
 // CopyService copies a Service.
 func CopyService(v Service) Service {
 	switch v := v.(type) {
+	case *ConsensusService:
+		return v.Copy()
 	case *StorageService:
 		return v.Copy()
 	default:
@@ -201,6 +231,66 @@ func UnmarshalServiceJSON(data []byte) (Service, error) {
 	}
 
 	acnt, err := NewService(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
+// NewConsensusApp creates a new ConsensusApp for the specified ConsensusAppType.
+func NewConsensusApp(typ ConsensusAppType) (ConsensusApp, error) {
+	switch typ {
+	case ConsensusAppTypeCore:
+		return new(CoreConsensusApp), nil
+	}
+	return nil, fmt.Errorf("unknown consensus app %v", typ)
+}
+
+// EqualConsensusApp is used to compare the values of the union
+func EqualConsensusApp(a, b ConsensusApp) bool {
+	if a == b {
+		return true
+	}
+	switch a := a.(type) {
+	case *CoreConsensusApp:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*CoreConsensusApp)
+		return ok && a.Equal(b)
+	}
+	return false
+}
+
+// CopyConsensusApp copies a ConsensusApp.
+func CopyConsensusApp(v ConsensusApp) ConsensusApp {
+	switch v := v.(type) {
+	case *CoreConsensusApp:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(ConsensusApp)
+	}
+}
+
+// UnmarshalConsensusAppJson unmarshals a ConsensusApp.
+func UnmarshalConsensusAppJSON(data []byte) (ConsensusApp, error) {
+	var typ *struct{ Type ConsensusAppType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
+	}
+
+	acnt, err := NewConsensusApp(typ.Type)
 	if err != nil {
 		return nil, err
 	}
