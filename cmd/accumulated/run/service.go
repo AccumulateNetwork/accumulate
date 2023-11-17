@@ -8,6 +8,7 @@ package run
 
 import (
 	"reflect"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -31,11 +32,11 @@ type dependency[A, B any] struct {
 }
 
 func needs[B, A any](name func(A) string) *dependency[A, B] {
-	return &dependency[A, B]{name}
+	return &dependency[A, B]{func(a A) string { return strings.ToLower(name(a)) }}
 }
 
 func provides[B, A any](name func(A) string) *dependency[A, B] {
-	return &dependency[A, B]{name}
+	return &dependency[A, B]{func(a A) string { return strings.ToLower(name(a)) }}
 }
 
 func (d *dependency[A, B]) describe(a A) ServiceDescriptor {

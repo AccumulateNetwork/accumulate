@@ -40,6 +40,7 @@ type Config struct {
 	file     string
 	Logging  *Logging  `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
 	P2P      *P2P      `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
+	Apps     []Service `json:"apps,omitempty" form:"apps" query:"apps" validate:"required"`
 	Services []Service `json:"services,omitempty" form:"services" query:"services" validate:"required"`
 }
 
@@ -50,8 +51,11 @@ type ConsensusService struct {
 
 type CoreConsensusApp struct {
 	Partition     *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-	Storage       string                  `json:"storage,omitempty" form:"storage" query:"storage"`
 	EnableHealing bool                    `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+}
+
+type EventsService struct {
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 }
 
 type Logging struct {
@@ -67,6 +71,14 @@ type LoggingRule struct {
 type MemoryStorage struct {
 }
 
+type MetricsService struct {
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
+type NetworkService struct {
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
 type P2P struct {
 	Network            string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Listen             []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required" toml:"listen" mapstructure:"listen"`
@@ -79,6 +91,10 @@ type P2P struct {
 type PrivateKeySeed struct {
 	key  address.Address
 	Seed *record.Key `json:"seed,omitempty" form:"seed" query:"seed" validate:"required"`
+}
+
+type Querier struct {
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 }
 
 type StorageService struct {
@@ -100,9 +116,17 @@ func (*ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
 
 func (*CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
 
+func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
+
 func (*MemoryStorage) Type() StorageType { return StorageTypeMemory }
 
+func (*MetricsService) Type() ServiceType { return ServiceTypeMetrics }
+
+func (*NetworkService) Type() ServiceType { return ServiceTypeNetwork }
+
 func (*PrivateKeySeed) Type() PrivateKeyType { return PrivateKeyTypeSeed }
+
+func (*Querier) Type() ServiceType { return ServiceTypeQuerier }
 
 func (*StorageService) Type() ServiceType { return ServiceTypeStorage }
 
@@ -147,6 +171,13 @@ func (v *Config) Copy() *Config {
 	if v.P2P != nil {
 		u.P2P = (v.P2P).Copy()
 	}
+	u.Apps = make([]Service, len(v.Apps))
+	for i, v := range v.Apps {
+		v := v
+		if v != nil {
+			u.Apps[i] = CopyService(v)
+		}
+	}
 	u.Services = make([]Service, len(v.Services))
 	for i, v := range v.Services {
 		v := v
@@ -179,13 +210,22 @@ func (v *CoreConsensusApp) Copy() *CoreConsensusApp {
 	if v.Partition != nil {
 		u.Partition = (v.Partition).Copy()
 	}
-	u.Storage = v.Storage
 	u.EnableHealing = v.EnableHealing
 
 	return u
 }
 
 func (v *CoreConsensusApp) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EventsService) Copy() *EventsService {
+	u := new(EventsService)
+
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *EventsService) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Logging) Copy() *Logging {
 	u := new(Logging)
@@ -222,6 +262,26 @@ func (v *MemoryStorage) Copy() *MemoryStorage {
 }
 
 func (v *MemoryStorage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MetricsService) Copy() *MetricsService {
+	u := new(MetricsService)
+
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *MetricsService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NetworkService) Copy() *NetworkService {
+	u := new(NetworkService)
+
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *NetworkService) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *P2P) Copy() *P2P {
 	u := new(P2P)
@@ -263,6 +323,16 @@ func (v *PrivateKeySeed) Copy() *PrivateKeySeed {
 }
 
 func (v *PrivateKeySeed) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Querier) Copy() *Querier {
+	u := new(Querier)
+
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *Querier) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *StorageService) Copy() *StorageService {
 	u := new(StorageService)
@@ -326,6 +396,14 @@ func (v *Config) Equal(u *Config) bool {
 	case !((v.P2P).Equal(u.P2P)):
 		return false
 	}
+	if len(v.Apps) != len(u.Apps) {
+		return false
+	}
+	for i := range v.Apps {
+		if !(EqualService(v.Apps[i], u.Apps[i])) {
+			return false
+		}
+	}
 	if len(v.Services) != len(u.Services) {
 		return false
 	}
@@ -358,10 +436,15 @@ func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
 	case !((v.Partition).Equal(u.Partition)):
 		return false
 	}
-	if !(v.Storage == u.Storage) {
+	if !(v.EnableHealing == u.EnableHealing) {
 		return false
 	}
-	if !(v.EnableHealing == u.EnableHealing) {
+
+	return true
+}
+
+func (v *EventsService) Equal(u *EventsService) bool {
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 
@@ -396,6 +479,22 @@ func (v *LoggingRule) Equal(u *LoggingRule) bool {
 }
 
 func (v *MemoryStorage) Equal(u *MemoryStorage) bool {
+
+	return true
+}
+
+func (v *MetricsService) Equal(u *MetricsService) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NetworkService) Equal(u *NetworkService) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
 
 	return true
 }
@@ -440,6 +539,14 @@ func (v *PrivateKeySeed) Equal(u *PrivateKeySeed) bool {
 	case v.Seed == nil || u.Seed == nil:
 		return false
 	case !((v.Seed).Equal(u.Seed)):
+		return false
+	}
+
+	return true
+}
+
+func (v *Querier) Equal(u *Querier) bool {
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 
@@ -502,6 +609,7 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Logging  *Logging                                 `json:"logging,omitempty"`
 		P2P      *P2P                                     `json:"p2P,omitempty"`
+		Apps     *encoding.JsonUnmarshalListWith[Service] `json:"apps,omitempty"`
 		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
 	}{}
 	if !(v.Logging == nil) {
@@ -509,6 +617,9 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.P2P == nil) {
 		u.P2P = v.P2P
+	}
+	if !(len(v.Apps) == 0) {
+		u.Apps = &encoding.JsonUnmarshalListWith[Service]{Value: v.Apps, Func: UnmarshalServiceJSON}
 	}
 	if !(len(v.Services) == 0) {
 		u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
@@ -536,18 +647,26 @@ func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type          ConsensusAppType        `json:"type"`
 		Partition     *protocol.PartitionInfo `json:"partition,omitempty"`
-		Storage       string                  `json:"storage,omitempty"`
 		EnableHealing bool                    `json:"enableHealing,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Partition == nil) {
 		u.Partition = v.Partition
 	}
-	if !(len(v.Storage) == 0) {
-		u.Storage = v.Storage
-	}
 	if !(!v.EnableHealing) {
 		u.EnableHealing = v.EnableHealing
+	}
+	return json.Marshal(&u)
+}
+
+func (v *EventsService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
 	}
 	return json.Marshal(&u)
 }
@@ -571,6 +690,30 @@ func (v *MemoryStorage) MarshalJSON() ([]byte, error) {
 		Type StorageType `json:"type"`
 	}{}
 	u.Type = v.Type()
+	return json.Marshal(&u)
+}
+
+func (v *MetricsService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	return json.Marshal(&u)
+}
+
+func (v *NetworkService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
 	return json.Marshal(&u)
 }
 
@@ -612,6 +755,18 @@ func (v *PrivateKeySeed) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Seed == nil) {
 		u.Seed = v.Seed
+	}
+	return json.Marshal(&u)
+}
+
+func (v *Querier) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
 	}
 	return json.Marshal(&u)
 }
@@ -695,16 +850,24 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Logging  *Logging                                 `json:"logging,omitempty"`
 		P2P      *P2P                                     `json:"p2P,omitempty"`
+		Apps     *encoding.JsonUnmarshalListWith[Service] `json:"apps,omitempty"`
 		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
 	}{}
 	u.Logging = v.Logging
 	u.P2P = v.P2P
+	u.Apps = &encoding.JsonUnmarshalListWith[Service]{Value: v.Apps, Func: UnmarshalServiceJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Logging = u.Logging
 	v.P2P = u.P2P
+	if u.Apps != nil {
+		v.Apps = make([]Service, len(u.Apps.Value))
+		for i, x := range u.Apps.Value {
+			v.Apps[i] = x
+		}
+	}
 	if u.Services != nil {
 		v.Services = make([]Service, len(u.Services.Value))
 		for i, x := range u.Services.Value {
@@ -741,12 +904,10 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type          ConsensusAppType        `json:"type"`
 		Partition     *protocol.PartitionInfo `json:"partition,omitempty"`
-		Storage       string                  `json:"storage,omitempty"`
 		EnableHealing bool                    `json:"enableHealing,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
-	u.Storage = v.Storage
 	u.EnableHealing = v.EnableHealing
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -755,8 +916,24 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Partition = u.Partition
-	v.Storage = u.Storage
 	v.EnableHealing = u.EnableHealing
+	return nil
+}
+
+func (v *EventsService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
 	return nil
 }
 
@@ -786,6 +963,40 @@ func (v *MemoryStorage) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
+	return nil
+}
+
+func (v *MetricsService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	return nil
+}
+
+func (v *NetworkService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
 	return nil
 }
 
@@ -843,6 +1054,23 @@ func (v *PrivateKeySeed) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Seed = u.Seed
+	return nil
+}
+
+func (v *Querier) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
 	return nil
 }
 

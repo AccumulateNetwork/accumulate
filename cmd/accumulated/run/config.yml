@@ -12,6 +12,10 @@ Config:
       type: P2P
       marshal-as: reference
       pointer: true
+    - name: Apps
+      type: Service
+      marshal-as: union
+      repeatable: true
     - name: Services
       type: Service
       marshal-as: union
@@ -80,9 +84,6 @@ CoreConsensusApp:
       type: protocol.PartitionInfo
       marshal-as: reference
       pointer: true
-    - name: Storage
-      type: string
-      optional: true
     - name: EnableHealing
       type: bool
       optional: true
@@ -97,6 +98,34 @@ StorageService:
     - name: Storage
       type: Storage
       marshal-as: union
+
+Querier:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string
+
+NetworkService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string
+
+MetricsService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string
+
+EventsService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string
 
 MemoryStorage:
   union: { type: storage }
