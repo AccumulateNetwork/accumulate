@@ -21,10 +21,15 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+type BadgerStorage struct {
+	Path string `json:"path,omitempty" form:"path" query:"path" validate:"required"`
+}
+
 type Config struct {
-	file    string
-	Logging *Logging `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
-	P2P     *P2P     `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
+	file     string
+	Logging  *Logging  `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
+	P2P      *P2P      `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
+	Services []Service `json:"services,omitempty" form:"services" query:"services" validate:"required"`
 }
 
 type Logging struct {
@@ -35,6 +40,9 @@ type Logging struct {
 type LoggingRule struct {
 	Level  slog.Level `json:"level" form:"level" query:"level" validate:"required"`
 	Module string     `json:"module,omitempty" form:"module" query:"module" validate:"required"`
+}
+
+type MemoryStorage struct {
 }
 
 type P2P struct {
@@ -51,13 +59,34 @@ type PrivateKeySeed struct {
 	Seed *record.Key `json:"seed,omitempty" form:"seed" query:"seed" validate:"required"`
 }
 
+type StorageService struct {
+	Name    string  `json:"name,omitempty" form:"name" query:"name"`
+	Storage Storage `json:"storage,omitempty" form:"storage" query:"storage" validate:"required"`
+}
+
 type TransientPrivateKey struct {
 	key address.Address
 }
 
+func (*BadgerStorage) Type() StorageType { return StorageTypeBadger }
+
+func (*MemoryStorage) Type() StorageType { return StorageTypeMemory }
+
 func (*PrivateKeySeed) Type() PrivateKeyType { return PrivateKeyTypeSeed }
 
+func (*StorageService) Type() ServiceType { return ServiceTypeStorage }
+
 func (*TransientPrivateKey) Type() PrivateKeyType { return PrivateKeyTypeTransient }
+
+func (v *BadgerStorage) Copy() *BadgerStorage {
+	u := new(BadgerStorage)
+
+	u.Path = v.Path
+
+	return u
+}
+
+func (v *BadgerStorage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Config) Copy() *Config {
 	u := new(Config)
@@ -67,6 +96,11 @@ func (v *Config) Copy() *Config {
 	}
 	if v.P2P != nil {
 		u.P2P = (v.P2P).Copy()
+	}
+	u.Services = make([]Service, len(v.Services))
+	for i, v := range v.Services {
+		v := v
+		u.Services[i] = v
 	}
 
 	return u
@@ -101,6 +135,14 @@ func (v *LoggingRule) Copy() *LoggingRule {
 }
 
 func (v *LoggingRule) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MemoryStorage) Copy() *MemoryStorage {
+	u := new(MemoryStorage)
+
+	return u
+}
+
+func (v *MemoryStorage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *P2P) Copy() *P2P {
 	u := new(P2P)
@@ -143,6 +185,19 @@ func (v *PrivateKeySeed) Copy() *PrivateKeySeed {
 
 func (v *PrivateKeySeed) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *StorageService) Copy() *StorageService {
+	u := new(StorageService)
+
+	u.Name = v.Name
+	if v.Storage != nil {
+		u.Storage = CopyStorage(v.Storage)
+	}
+
+	return u
+}
+
+func (v *StorageService) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *TransientPrivateKey) Copy() *TransientPrivateKey {
 	u := new(TransientPrivateKey)
 
@@ -150,6 +205,14 @@ func (v *TransientPrivateKey) Copy() *TransientPrivateKey {
 }
 
 func (v *TransientPrivateKey) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BadgerStorage) Equal(u *BadgerStorage) bool {
+	if !(v.Path == u.Path) {
+		return false
+	}
+
+	return true
+}
 
 func (v *Config) Equal(u *Config) bool {
 	switch {
@@ -167,6 +230,14 @@ func (v *Config) Equal(u *Config) bool {
 		return false
 	case !((v.P2P).Equal(u.P2P)):
 		return false
+	}
+	if len(v.Services) != len(u.Services) {
+		return false
+	}
+	for i := range v.Services {
+		if !(v.Services[i] == u.Services[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -195,6 +266,11 @@ func (v *LoggingRule) Equal(u *LoggingRule) bool {
 	if !(v.Module == u.Module) {
 		return false
 	}
+
+	return true
+}
+
+func (v *MemoryStorage) Equal(u *MemoryStorage) bool {
 
 	return true
 }
@@ -245,9 +321,50 @@ func (v *PrivateKeySeed) Equal(u *PrivateKeySeed) bool {
 	return true
 }
 
+func (v *StorageService) Equal(u *StorageService) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(EqualStorage(v.Storage, u.Storage)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *TransientPrivateKey) Equal(u *TransientPrivateKey) bool {
 
 	return true
+}
+
+func (v *BadgerStorage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type StorageType `json:"type"`
+		Path string      `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Path) == 0) {
+		u.Path = v.Path
+	}
+	return json.Marshal(&u)
+}
+
+func (v *Config) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Logging  *Logging                   `json:"logging,omitempty"`
+		P2P      *P2P                       `json:"p2P,omitempty"`
+		Services encoding.JsonList[Service] `json:"services,omitempty"`
+	}{}
+	if !(v.Logging == nil) {
+		u.Logging = v.Logging
+	}
+	if !(v.P2P == nil) {
+		u.P2P = v.P2P
+	}
+	if !(len(v.Services) == 0) {
+		u.Services = v.Services
+	}
+	return json.Marshal(&u)
 }
 
 func (v *Logging) MarshalJSON() ([]byte, error) {
@@ -261,6 +378,14 @@ func (v *Logging) MarshalJSON() ([]byte, error) {
 	if !(len(v.Rules) == 0) {
 		u.Rules = v.Rules
 	}
+	return json.Marshal(&u)
+}
+
+func (v *MemoryStorage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type StorageType `json:"type"`
+	}{}
+	u.Type = v.Type()
 	return json.Marshal(&u)
 }
 
@@ -306,12 +431,63 @@ func (v *PrivateKeySeed) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *StorageService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    ServiceType                          `json:"type"`
+		Name    string                               `json:"name,omitempty"`
+		Storage *encoding.JsonUnmarshalWith[Storage] `json:"storage,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(EqualStorage(v.Storage, nil)) {
+		u.Storage = &encoding.JsonUnmarshalWith[Storage]{Value: v.Storage, Func: UnmarshalStorageJSON}
+	}
+	return json.Marshal(&u)
+}
+
 func (v *TransientPrivateKey) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type PrivateKeyType `json:"type"`
 	}{}
 	u.Type = v.Type()
 	return json.Marshal(&u)
+}
+
+func (v *BadgerStorage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type StorageType `json:"type"`
+		Path string      `json:"path,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Path = v.Path
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Path = u.Path
+	return nil
+}
+
+func (v *Config) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Logging  *Logging                   `json:"logging,omitempty"`
+		P2P      *P2P                       `json:"p2P,omitempty"`
+		Services encoding.JsonList[Service] `json:"services,omitempty"`
+	}{}
+	u.Logging = v.Logging
+	u.P2P = v.P2P
+	u.Services = v.Services
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Logging = u.Logging
+	v.P2P = u.P2P
+	v.Services = u.Services
+	return nil
 }
 
 func (v *Logging) UnmarshalJSON(data []byte) error {
@@ -326,6 +502,20 @@ func (v *Logging) UnmarshalJSON(data []byte) error {
 	}
 	v.Format = u.Format
 	v.Rules = u.Rules
+	return nil
+}
+
+func (v *MemoryStorage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type StorageType `json:"type"`
+	}{}
+	u.Type = v.Type()
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	return nil
 }
 
@@ -383,6 +573,29 @@ func (v *PrivateKeySeed) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Seed = u.Seed
+	return nil
+}
+
+func (v *StorageService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    ServiceType                          `json:"type"`
+		Name    string                               `json:"name,omitempty"`
+		Storage *encoding.JsonUnmarshalWith[Storage] `json:"storage,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Name = v.Name
+	u.Storage = &encoding.JsonUnmarshalWith[Storage]{Value: v.Storage, Func: UnmarshalStorageJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Name = u.Name
+	if u.Storage != nil {
+		v.Storage = u.Storage.Value
+	}
+
 	return nil
 }
 

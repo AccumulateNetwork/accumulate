@@ -8,6 +8,7 @@ package run
 
 import (
 	"context"
+	"reflect"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -16,11 +17,12 @@ import (
 )
 
 type Instance struct {
-	running *sync.WaitGroup
-	context context.Context
-	cancel  context.CancelFunc
-	logger  *slog.Logger
-	p2p     *p2p.Node
+	running  *sync.WaitGroup
+	context  context.Context
+	cancel   context.CancelFunc
+	logger   *slog.Logger
+	p2p      *p2p.Node
+	services map[reflect.Type]map[string]any
 }
 
 type nameAndType struct {
@@ -39,6 +41,13 @@ func Start(ctx context.Context, cfg *Config) (*Instance, error) {
 	err = cfg.P2P.start(inst)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start p2p: %w", err)
+	}
+
+	for i, svc := range cfg.Services {
+		err = svc.start(inst)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("start service %d: %w", i, err)
+		}
 	}
 
 	return inst, nil
