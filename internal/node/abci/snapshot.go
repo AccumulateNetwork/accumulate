@@ -7,6 +7,7 @@
 package abci
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -86,12 +87,18 @@ func (app *Accumulator) LoadSnapshotChunk(_ context.Context, req *abci.RequestLo
 	}
 	defer f.Close()
 
-	chunk, err := app.getSnapshotChunk(f, req.Chunk)
+	_, err = f.Seek(int64(req.Chunk)*chunkSize, io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
 
-	return &abci.ResponseLoadSnapshotChunk{Chunk: chunk}, nil
+	var buf [chunkSize]byte
+	_, err = io.ReadFull(f, buf[:])
+	if err != nil {
+		return nil, err
+	}
+
+	return &abci.ResponseLoadSnapshotChunk{Chunk: buf[:]}, nil
 }
 
 // OfferSnapshot offers a snapshot to this node. This initiates the snapshot
@@ -107,11 +114,14 @@ func (app *Accumulator) OfferSnapshot(_ context.Context, req *abci.RequestOfferS
 		return &abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT_FORMAT}, nil
 	}
 
-	r, err := app.startSnapshotSync(req.Snapshot, req.AppHash)
+	ok, err := app.snapshots.Start(req)
+	if !ok {
+		return &abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	return &abci.ResponseOfferSnapshot{Result: r}, nil
+	return &abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ACCEPT}, nil
 }
 
 // ApplySnapshotChunk applies a snapshot to this node. This is called for each
@@ -121,36 +131,47 @@ func (app *Accumulator) OfferSnapshot(_ context.Context, req *abci.RequestOfferS
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
 func (app *Accumulator) ApplySnapshotChunk(_ context.Context, req *abci.RequestApplySnapshotChunk) (*abci.ResponseApplySnapshotChunk, error) {
-	r, err := app.acceptSnapshotChunk(req.Index, req.Chunk)
-	if err != nil || r != abci.ResponseApplySnapshotChunk_ACCEPT || !app.snapshots.Done() {
+	err := app.snapshots.Apply(int(req.Index), req.Chunk)
+	switch {
+	case errors.Is(err, torrent.ErrBadHash):
+		return &abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_RETRY}, nil
+	case err != nil:
 		return nil, err
+	case !app.snapshots.Done():
+		return &abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}, nil
 	}
 
 	// Assemble the snapshot
+	bptHash := app.snapshots.request.AppHash
 	buf := new(ioutil.Buffer)
 	e1 := app.snapshots.WriteTo(buf)
 	e2 := app.snapshots.Reset() // Reset regardless of success
 	switch {
 	case e1 != nil:
+		if errors.Is(err, torrent.ErrBadHash) {
+			return &abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_RETRY_SNAPSHOT}, nil
+		}
 		return nil, e1
 	case e2 != nil:
 		return nil, e2
 	}
 
-	// TODO Check hash
-
-	err = app.finishedLoadingSnapshot(buf)
+	err = snapshot.FullRestore(app.Database, buf, app.logger, app.Accumulate.PartitionUrl())
 	if err != nil {
 		return nil, err
 	}
+	batch := app.Database.Begin(false)
+	defer batch.Discard()
+	root, err := batch.GetBptRootHash()
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(root[:], bptHash) {
+		// TODO Can we reset the database?
+		return &abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_REJECT_SNAPSHOT}, nil
+	}
 
-	return &abci.ResponseApplySnapshotChunk{Result: r}, nil
-}
-
-// finishedLoadingSnapshot should be called once the complete snapshot has been
-// assembled.
-func (app *Accumulator) finishedLoadingSnapshot(assembled ioutil.SectionReader) error {
-	return snapshot.FullRestore(app.Database, assembled, app.logger, app.Accumulate.PartitionUrl())
+	return &abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}, nil
 }
 
 type snapshotInfo struct {
@@ -268,67 +289,30 @@ func snapshotInfoV2(f *os.File) (*snapshotInfo, error) {
 	}, nil
 }
 
-// getSnapshotChunk returns the given chunk of the snapshot.
-func (*Accumulator) getSnapshotChunk(snapshot *os.File, chunk uint32) ([]byte, error) {
-	_, err := snapshot.Seek(int64(chunk)*chunkSize, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	var buf [chunkSize]byte
-	_, err = io.ReadFull(snapshot, buf[:])
-	if err != nil {
-		return nil, err
-	}
-
-	return buf[:], nil
-}
-
-// startSnapshotSync initializes the snapshot sync state.
-func (app *Accumulator) startSnapshotSync(snapshot *abci.Snapshot, bptHash []byte) (abci.ResponseOfferSnapshot_Result, error) {
-	md := new(torrent.FileMetadata)
-	err := md.UnmarshalBinary(snapshot.Metadata)
-	if err != nil {
-		return abci.ResponseOfferSnapshot_REJECT, nil
-	}
-
-	err = app.snapshots.Start(md)
-	if err != nil {
-		return 0, err
-	}
-	return abci.ResponseOfferSnapshot_ACCEPT, nil
-}
-
-// acceptSnapshotChunk accepts a chunk of a snapshot. acceptSnapshotChunk must
-// call finishedLoadingSnapshot once all the chunks have been received.
-func (app *Accumulator) acceptSnapshotChunk(chunk uint32, data []byte) (abci.ResponseApplySnapshotChunk_Result, error) {
-	err := app.snapshots.Apply(int(chunk), data)
-	switch {
-	case err == nil:
-		return abci.ResponseApplySnapshotChunk_ACCEPT, nil
-	case errors.Is(err, torrent.ErrBadHash):
-		return abci.ResponseApplySnapshotChunk_RETRY, nil
-	default:
-		return 0, err
-	}
-}
-
 type snapshotManager struct {
-	active *torrent.DownloadJob
+	active  *torrent.DownloadJob
+	request *abci.RequestOfferSnapshot
 }
 
-func (m *snapshotManager) Start(snapshot *torrent.FileMetadata) error {
+func (m *snapshotManager) Start(req *abci.RequestOfferSnapshot) (bool, error) {
 	if m.active != nil {
-		return errors.BadRequest.With("already started")
+		return false, errors.BadRequest.With("already started")
 	}
 
-	j, err := torrent.NewDownloadJob(snapshot)
+	md := new(torrent.FileMetadata)
+	err := md.UnmarshalBinary(req.Snapshot.Metadata)
 	if err != nil {
-		return err
+		return false, nil // Reject
+	}
+
+	j, err := torrent.NewDownloadJob(md)
+	if err != nil {
+		return false, err
 	}
 
 	m.active = j
-	return nil
+	m.request = req
+	return true, nil
 }
 
 func (m *snapshotManager) Reset() error {
@@ -338,6 +322,7 @@ func (m *snapshotManager) Reset() error {
 
 	err := m.active.Reset()
 	m.active = nil
+	m.request = nil
 	return err
 }
 
@@ -356,9 +341,33 @@ func (m *snapshotManager) Done() bool {
 	return m.active.Done()
 }
 
-func (m *snapshotManager) WriteTo(wr io.WriteSeeker) error {
+func (m *snapshotManager) WriteTo(f io.ReadWriteSeeker) error {
 	if m.active == nil {
 		return errors.BadRequest.With("not started")
 	}
-	return m.active.WriteTo(wr)
+
+	// Write
+	_, err := f.Seek(0, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	err = m.active.WriteTo(f)
+	if err != nil {
+		return err
+	}
+
+	// Verify
+	_, err = f.Seek(0, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(h.Sum(nil), m.request.Snapshot.Hash) {
+		return torrent.ErrBadHash
+	}
+	return nil
 }

@@ -38,13 +38,15 @@ func readAll(file io.Reader, buf []byte) (int, error) {
 		nn, err := file.Read(buf[n:])
 		switch {
 		case errors.Is(err, io.EOF):
+			n += nn
 			return n, nil
 		case err != nil:
 			return n, err
 		case nn == 0:
 			panic("read nothing")
+		default:
+			n += nn
 		}
-		n += nn
 	}
 	return n, nil
 }
