@@ -10,7 +10,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -27,7 +26,7 @@ type Instance struct {
 	cancel   context.CancelFunc
 	logger   *slog.Logger
 	p2p      *p2p.Node
-	services map[reflect.Type]map[string]any
+	services map[ServiceDescriptor]any
 }
 
 type nameAndType struct {
@@ -63,14 +62,58 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, errors.UnknownError.WithFormat("start p2p: %w", err)
 	}
 
-	for i, svc := range cfg.Services {
-		err = svc.start(inst)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("start service %d: %w", i, err)
-		}
+	err = cfg.startServices(inst)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return inst, nil
+}
+
+func (c *Config) startServices(inst *Instance) error {
+	got := map[ServiceDescriptor]bool{}
+	haveNeeded := func(s Service) bool {
+		for _, n := range s.needs() {
+			if !got[n] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Determine the order of initialization
+	unsatisfied := c.Services
+	var satisfied [][]Service
+	for len(unsatisfied) > 0 {
+		var unsatisfied2, satisfied2 []Service
+		for _, s := range unsatisfied {
+			if !haveNeeded(s) {
+				unsatisfied2 = append(unsatisfied2, s)
+				continue
+			}
+
+			satisfied2 = append(satisfied2, s)
+			for _, p := range s.provides() {
+				got[p] = true
+			}
+		}
+		if len(satisfied2) == 0 {
+			return errors.FatalError.With("unresolvable service dependency loop")
+		}
+		satisfied = append(satisfied, satisfied2)
+		unsatisfied = unsatisfied2
+	}
+
+	// Start services
+	for _, services := range satisfied {
+		for _, svc := range services {
+			err := svc.start(inst)
+			if err != nil {
+				return errors.UnknownError.WithFormat("start service: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 func (i *Instance) Stop() error {
