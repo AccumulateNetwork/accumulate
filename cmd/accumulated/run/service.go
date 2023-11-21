@@ -7,7 +7,6 @@
 package run
 
 import (
-	"fmt"
 	"reflect"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -17,37 +16,54 @@ type Service interface {
 	Type() ServiceType
 	CopyAsInterface() any
 
+	needs() []ServiceDescriptor
+	provides() []ServiceDescriptor
 	start(inst *Instance) error
 }
 
-func registerService[T any](inst *Instance, name string, service any) error {
+type ServiceDescriptor struct {
+	Name string
+	Type reflect.Type
+}
+
+type dependency[A, B any] struct {
+	name func(A) string
+}
+
+func needs[B, A any](name func(A) string) *dependency[A, B] {
+	return &dependency[A, B]{name}
+}
+
+func provides[B, A any](name func(A) string) *dependency[A, B] {
+	return &dependency[A, B]{name}
+}
+
+func (d *dependency[A, B]) describe(a A) ServiceDescriptor {
+	return ServiceDescriptor{
+		Name: d.name(a),
+		Type: reflect.TypeOf(new(B)).Elem(),
+	}
+}
+
+func (d *dependency[A, B]) register(inst *Instance, a A, service B) error {
 	if inst.services == nil {
-		inst.services = map[reflect.Type]map[string]any{}
+		inst.services = map[ServiceDescriptor]any{}
 	}
 
-	typ := reflect.TypeOf(new(T)).Elem()
-	if inst.services[typ] == nil {
-		inst.services[typ] = map[string]any{}
+	desc := d.describe(a)
+	if inst.services[desc] != nil {
+		return errors.InternalError.WithFormat("service %s (%v) already registered", desc.Name, desc.Type)
 	}
-
-	if _, ok := service.(T); !ok {
-		panic(fmt.Errorf("%T is not %v", service, typ))
-	}
-
-	m := inst.services[typ]
-	if m[name] != nil {
-		return errors.InternalError.WithFormat("service %s (%v) already registered", name, typ)
-	}
-	m[name] = service
+	inst.services[desc] = service
 	return nil
 }
 
-func getService[T any](inst *Instance, name string) (T, error) {
-	typ := reflect.TypeOf(new(T)).Elem()
-	v, ok := inst.services[typ][name]
+func (d *dependency[A, B]) get(inst *Instance, a A) (B, error) {
+	desc := d.describe(a)
+	v, ok := inst.services[desc]
 	if !ok {
-		var z T
-		return z, errors.InternalError.WithFormat("service %s (%v) not registered", name, typ)
+		var z B
+		return z, errors.InternalError.WithFormat("service %s (%v) not registered", desc.Name, desc.Type)
 	}
-	return v.(T), nil
+	return v.(B), nil
 }

@@ -13,12 +13,24 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+var storageProvides = provides[keyvalue.Beginner](func(c *StorageService) string { return c.Name })
+
+func (c *StorageService) needs() []ServiceDescriptor {
+	return nil
+}
+
+func (c *StorageService) provides() []ServiceDescriptor {
+	return []ServiceDescriptor{
+		storageProvides.describe(c),
+	}
+}
+
 func (s *StorageService) start(inst *Instance) error {
 	store, err := s.Storage.open(inst)
 	if err != nil {
 		return err
 	}
-	return registerService[keyvalue.Beginner](inst, s.Name, store)
+	return storageProvides.register(inst, s, store)
 }
 
 type Storage interface {

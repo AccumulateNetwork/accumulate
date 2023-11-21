@@ -41,7 +41,9 @@ type ConsensusApp interface {
 	Type() ConsensusAppType
 	CopyAsInterface() any
 
-	start(*Instance, *tendermint) (string, types.Application, error)
+	name() string
+	needs() []ServiceDescriptor
+	start(*Instance, *tendermint) (types.Application, error)
 }
 
 type tendermint struct {
@@ -50,6 +52,18 @@ type tendermint struct {
 	nodeKey  *tmp2p.NodeKey
 	logger   log.Logger
 	eventBus *events.Bus
+}
+
+var consensusProvides = provides[client.Client](func(c *ConsensusService) string { return c.App.name() })
+
+func (c *ConsensusService) needs() []ServiceDescriptor {
+	return c.App.needs()
+}
+
+func (c *ConsensusService) provides() []ServiceDescriptor {
+	return []ServiceDescriptor{
+		consensusProvides.describe(c),
+	}
 }
 
 func (s *ConsensusService) start(inst *Instance) error {
@@ -99,7 +113,7 @@ func (s *ConsensusService) start(inst *Instance) error {
 	}
 
 	// Start the application
-	name, app, err := s.App.start(inst, d)
+	app, err := s.App.start(inst, d)
 	if err != nil {
 		return err
 	}
@@ -133,13 +147,25 @@ func (s *ConsensusService) start(inst *Instance) error {
 	})
 
 	// Register a local client
-	return registerService[client.Client](inst, name, local.New(node))
+	return consensusProvides.register(inst, s, local.New(node))
 }
 
-func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (string, types.Application, error) {
-	store, err := getService[keyvalue.Beginner](inst, c.Storage)
+var coreConsensusNeedsStorage = needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Storage })
+
+func (c *CoreConsensusApp) needs() []ServiceDescriptor {
+	return []ServiceDescriptor{
+		coreConsensusNeedsStorage.describe(c),
+	}
+}
+
+func (c *CoreConsensusApp) name() string {
+	return c.Partition.ID
+}
+
+func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
+	store, err := coreConsensusNeedsStorage.get(inst, c)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	router := routing.NewRouter(d.eventBus, d.logger)
@@ -175,7 +201,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (string, types.A
 
 	exec, err := execute.NewExecutor(execOpts)
 	if err != nil {
-		return "", nil, errors.UnknownError.WithFormat("initialize chain executor: %v", err)
+		return nil, errors.UnknownError.WithFormat("initialize chain executor: %v", err)
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
@@ -188,5 +214,5 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (string, types.A
 		Partition: c.Partition.ID,
 		RootDir:   d.config.RootDir,
 	})
-	return c.Partition.ID, app, nil
+	return app, nil
 }
