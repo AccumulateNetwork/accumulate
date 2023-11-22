@@ -8,23 +8,23 @@ package run
 
 import (
 	"encoding/json"
-	"reflect"
 
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"golang.org/x/exp/slog"
 )
 
-var storageProvides = provides[keyvalue.Beginner](func(c *StorageService) string { return c.Name })
+var storageProvides = ioc.Provides[keyvalue.Beginner](func(c *StorageService) string { return c.Name })
 
-func (c *StorageService) needs() []ServiceDescriptor {
+func (c *StorageService) Requires() []ioc.Requirement {
 	return nil
 }
 
-func (c *StorageService) provides() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		storageProvides.with(c),
+func (c *StorageService) Provides() []ioc.Provided {
+	return []ioc.Provided{
+		storageProvides.Provided(c),
 	}
 }
 
@@ -33,7 +33,7 @@ func (s *StorageService) start(inst *Instance) error {
 	if err != nil {
 		return err
 	}
-	return storageProvides.register(inst, s, store)
+	return storageProvides.Register(inst.services, s, store)
 }
 
 type Storage interface {
@@ -55,19 +55,12 @@ func (s *StorageOrRef) refOr(def string) string {
 	return def
 }
 
-func (*StorageOrRef) Type() reflect.Type {
-	return reflect.TypeOf(new(keyvalue.Beginner)).Elem()
-}
-
-func (s *StorageOrRef) needs(def string) []ServiceDescriptor {
+func (s *StorageOrRef) Required(def string) []ioc.Requirement {
 	if s != nil && s.storage != nil {
 		return nil
 	}
-	return []ServiceDescriptor{
-		&simpleDescriptor{
-			name: s.refOr(def),
-			typ:  s.Type(),
-		},
+	return []ioc.Requirement{
+		{Descriptor: ioc.NewDescriptorOf[keyvalue.Beginner](s.refOr(def))},
 	}
 }
 
@@ -75,10 +68,7 @@ func (s *StorageOrRef) open(inst *Instance, def string) (keyvalue.Beginner, erro
 	if s != nil && s.storage != nil {
 		return s.storage.open(inst)
 	}
-	return getService[keyvalue.Beginner](inst, &simpleDescriptor{
-		name: s.refOr(def),
-		typ:  s.Type(),
-	})
+	return ioc.Get[keyvalue.Beginner](inst.services, s.refOr(def))
 }
 
 func (s *StorageOrRef) MarshalJSON() ([]byte, error) {
