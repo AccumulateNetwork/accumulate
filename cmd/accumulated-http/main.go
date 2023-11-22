@@ -145,7 +145,11 @@ func run(_ *cobra.Command, args []string) {
 
 	fmt.Printf("We are %v\n", node.ID())
 
-	router, err := apiutil.InitRouter(ctx, node, args[0])
+	router, err := apiutil.InitRouter(apiutil.RouterOptions{
+		Context: ctx,
+		Node:    node,
+		Network: args[0],
+	})
 	Check(err)
 
 	apiOpts := nodehttp.Options{

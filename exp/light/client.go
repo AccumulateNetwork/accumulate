@@ -80,12 +80,7 @@ func RouterFromStore() ClientOption {
 			return errors.UnknownError.WithFormat("load globals: %w", err)
 		}
 
-		router, err := routing.NewStaticRouter(g.Routing, nil)
-		if err != nil {
-			return errors.UnknownError.WithFormat("construct router: %w", err)
-		}
-
-		c.router = router
+		c.router = routing.NewRouter(routing.RouterOptions{Initial: g.Routing})
 		return nil
 	}
 }
@@ -152,6 +147,20 @@ func (c *Client) Close() error {
 		return c.Close()
 	}
 	return nil
+}
+
+// router loads the global values and creates a static router.
+func (c *Client) xrouter(batch *DB) (routing.Router, error) {
+	g := new(core.GlobalValues)
+	err := g.Load(protocol.DnUrl(), func(accountUrl *url.URL, target interface{}) error {
+		return batch.Account(accountUrl).Main().GetAs(target)
+	})
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load globals: %w", err)
+	}
+
+	router := routing.NewRouter(routing.RouterOptions{Initial: g.Routing})
+	return router, nil
 }
 
 // OpenDB opens a [DB].

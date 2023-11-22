@@ -165,8 +165,7 @@ func networkStatus(_ *cobra.Command, args []string) {
 
 	ns, err := public.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	check(err)
-	router, err := routing.NewStaticRouter(ns.Routing, nil)
-	check(err)
+	router := routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 
 	// Check for a cached scan
 	var network *healing.NetworkInfo

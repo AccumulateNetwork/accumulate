@@ -69,10 +69,7 @@ func NewClientWith(node *Node) (*ClientNode, error) {
 	}
 
 	// Create a router
-	mr.Router, err = routing.NewStaticRouter(ns.Routing, nil)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("initialize router: %w", err)
-	}
+	mr.Router = routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 
 	return &ClientNode{node, client}, nil
 }

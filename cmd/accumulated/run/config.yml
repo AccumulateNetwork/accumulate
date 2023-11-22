@@ -130,6 +130,17 @@ HttpService:
       optional: true
       pointer: true
 
+RouterService:
+  union: { type: service }
+  fields:
+    - name: Name
+      type: string
+      optional: true
+    - name: Events
+      description: may specify an event bus to use for routing table updates
+      type: string
+      optional: true
+
 StorageService:
   union: { type: service }
   non-binary: true

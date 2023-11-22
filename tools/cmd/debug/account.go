@@ -69,9 +69,7 @@ func accountId(_ *cobra.Command, args []string) {
 	ns, err := dclient.NetworkStatus(context.Background(), api.NetworkStatusOptions{Partition: protocol.Directory})
 	check(err)
 
-	router, err := routing.NewStaticRouter(ns.Routing, nil)
-	check(err)
-
+	router := routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 	partition, err := router.RouteAccount(u)
 	check(err)
 	fmt.Printf("Method:         prefix routing table\n")

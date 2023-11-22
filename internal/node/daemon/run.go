@@ -609,7 +609,10 @@ func (d *Daemon) StartP2P() error {
 }
 
 func (d *Daemon) startAPI() error {
-	d.router = routing.NewRouter(d.eventBus, d.Logger)
+	d.router = routing.NewRouter(routing.RouterOptions{
+		Events: d.eventBus,
+		Logger: d.Logger,
+	})
 
 	// Setup the p2p node
 	err := d.StartP2P()

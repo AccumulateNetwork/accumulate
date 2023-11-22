@@ -88,8 +88,7 @@ func sequence(cmd *cobra.Command, args []string) {
 	fmt.Println("Network status")
 	ns, err := c.NetworkStatus(ctx, api.NetworkStatusOptions{Partition: protocol.Directory})
 	check(err)
-	router.Router, err = routing.NewStaticRouter(ns.Routing, nil)
-	check(err)
+	router.Router = routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 
 	var scanSynth, scanAnchors bool
 	switch only {

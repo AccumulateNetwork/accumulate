@@ -13,6 +13,8 @@ ServiceType:
     value: 6
   Http:
     value: 7
+  Router:
+    value: 8
 
 StorageType:
   Memory:

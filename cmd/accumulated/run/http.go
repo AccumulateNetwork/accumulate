@@ -43,7 +43,11 @@ func (h *HttpService) start(inst *Instance) error {
 		return errors.BadRequest.With("must have at least one address to listen on")
 	}
 
-	router, err := apiutil.InitRouter(inst.context, inst.p2p, inst.network)
+	router, err := apiutil.InitRouter(apiutil.RouterOptions{
+		Context: inst.context,
+		Node:    inst.p2p,
+		Network: inst.network,
+	})
 	if err != nil {
 		return err
 	}

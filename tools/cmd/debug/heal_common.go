@@ -125,7 +125,11 @@ func (h *healer) heal(args []string) {
 		check(json.Unmarshal(data, &h.net))
 	}
 
-	h.router, err = apiutil.InitRouter(ctx, node, args[0])
+	h.router, err = apiutil.InitRouter(apiutil.RouterOptions{
+		Context: ctx,
+		Node:    node,
+		Network: args[0],
+	})
 	check(err)
 
 	dialer := node.DialNetwork()

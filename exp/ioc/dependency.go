@@ -7,6 +7,7 @@
 package ioc
 
 import (
+	"errors"
 	"reflect"
 )
 
@@ -53,5 +54,9 @@ func (d *Dependency[A, B]) Register(reg Registry, a A, service B) error {
 }
 
 func (d *Dependency[A, B]) Get(reg Registry, a A) (B, error) {
-	return Get[B](reg, d.ns(a))
+	v, err := Get[B](reg, d.ns(a))
+	if d.optional && errors.Is(err, ErrNotRegistered) {
+		return v, nil
+	}
+	return v, err
 }

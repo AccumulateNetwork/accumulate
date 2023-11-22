@@ -11,8 +11,12 @@ package run
 //lint:file-ignore S1001,S1002,S1008,SA4013 generated code
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
@@ -118,6 +122,14 @@ type Querier struct {
 	Storage   *StorageOrRef `json:"storage,omitempty" form:"storage" query:"storage"`
 }
 
+type RouterService struct {
+	fieldsSet []bool
+	Name      string `json:"name,omitempty" form:"name" query:"name"`
+	// Events may specify an event bus to use for routing table updates.
+	Events    string `json:"events,omitempty" form:"events" query:"events"`
+	extraData []byte
+}
+
 type StorageService struct {
 	Name    string  `json:"name,omitempty" form:"name" query:"name"`
 	Storage Storage `json:"storage,omitempty" form:"storage" query:"storage" validate:"required"`
@@ -150,6 +162,8 @@ func (*NetworkService) Type() ServiceType { return ServiceTypeNetwork }
 func (*PrivateKeySeed) Type() PrivateKeyType { return PrivateKeyTypeSeed }
 
 func (*Querier) Type() ServiceType { return ServiceTypeQuerier }
+
+func (*RouterService) Type() ServiceType { return ServiceTypeRouter }
 
 func (*StorageService) Type() ServiceType { return ServiceTypeStorage }
 
@@ -399,6 +413,21 @@ func (v *Querier) Copy() *Querier {
 }
 
 func (v *Querier) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RouterService) Copy() *RouterService {
+	u := new(RouterService)
+
+	u.Name = v.Name
+	u.Events = v.Events
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *RouterService) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *StorageService) Copy() *StorageService {
 	u := new(StorageService)
@@ -686,6 +715,17 @@ func (v *Querier) Equal(u *Querier) bool {
 	return true
 }
 
+func (v *RouterService) Equal(u *RouterService) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.Events == u.Events) {
+		return false
+	}
+
+	return true
+}
+
 func (v *StorageService) Equal(u *StorageService) bool {
 	if !(v.Name == u.Name) {
 		return false
@@ -700,6 +740,91 @@ func (v *StorageService) Equal(u *StorageService) bool {
 func (v *TransientPrivateKey) Equal(u *TransientPrivateKey) bool {
 
 	return true
+}
+
+var fieldNames_RouterService = []string{
+	1: "Type",
+	2: "Name",
+	3: "Events",
+}
+
+func (v *RouterService) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Name) == 0) {
+		writer.WriteString(2, v.Name)
+	}
+	if !(len(v.Events) == 0) {
+		writer.WriteString(3, v.Events)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RouterService)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *RouterService) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+func (v *RouterService) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RouterService) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType ServiceType
+	if x := new(ServiceType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *RouterService) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadString(2); ok {
+		v.Name = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Events = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RouterService)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *BadgerStorage) MarshalJSON() ([]byte, error) {
@@ -946,6 +1071,22 @@ func (v *Querier) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Storage == nil) {
 		u.Storage = v.Storage
+	}
+	return json.Marshal(&u)
+}
+
+func (v *RouterService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   ServiceType `json:"type"`
+		Name   string      `json:"name,omitempty"`
+		Events string      `json:"events,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(len(v.Events) == 0) {
+		u.Events = v.Events
 	}
 	return json.Marshal(&u)
 }
@@ -1302,6 +1443,26 @@ func (v *Querier) UnmarshalJSON(data []byte) error {
 	}
 	v.Partition = u.Partition
 	v.Storage = u.Storage
+	return nil
+}
+
+func (v *RouterService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   ServiceType `json:"type"`
+		Name   string      `json:"name,omitempty"`
+		Events string      `json:"events,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Name = v.Name
+	u.Events = v.Events
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Name = u.Name
+	v.Events = u.Events
 	return nil
 }
 

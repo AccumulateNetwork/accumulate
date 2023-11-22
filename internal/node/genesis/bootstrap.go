@@ -99,14 +99,10 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	b.db.SetObserver(execute.NewDatabaseObserver())
 
 	// Create the router
-	var err error
-	b.router, err = routing.NewStaticRouter(gg.Routing, b.Logger)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+	b.router = routing.NewRouter(routing.RouterOptions{Initial: gg.Routing, Logger: b.Logger})
 
 	// Unpack snapshots
-	err = b.unpackSnapshots()
+	err := b.unpackSnapshots()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

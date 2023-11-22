@@ -100,8 +100,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 			return batch.Account(u).Main().GetAs(target)
 		}))
 	}
-	router, err := routing.NewStaticRouter(g.Routing, logger)
-	Check(err)
+	router := routing.NewRouter(routing.RouterOptions{Initial: g.Routing, Logger: logger})
 
 	// Make a querier for each partition
 	Q := &Querier{

@@ -192,7 +192,10 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		return nil, err
 	}
 
-	router := routing.NewRouter(d.eventBus, d.logger)
+	router := routing.NewRouter(routing.RouterOptions{
+		Events: d.eventBus,
+		Logger: d.logger,
+	})
 
 	dialer := inst.p2p.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{

@@ -10,7 +10,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -19,7 +21,17 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-func InitRouter(ctx context.Context, node *p2p.Node, network string) (routing.Router, error) {
+type RouterOptions struct {
+	Context context.Context
+	Node    *p2p.Node
+	Network string
+	Events  *events.Bus
+	Logger  log.Logger
+}
+
+func InitRouter(opts RouterOptions) (routing.Router, error) {
+	ctx, node := opts.Context, opts.Node
+
 	// Address of the network service for the directory partition
 	dirNetSvc := api.ServiceTypeNetwork.AddressFor(protocol.Directory)
 
@@ -28,7 +40,7 @@ func InitRouter(ctx context.Context, node *p2p.Node, network string) (routing.Ro
 	if !ok {
 		// If we're not using a persistent tracker, wait for the service
 		slog.InfoCtx(ctx, "Waiting for a live network service")
-		svcAddr, err := dirNetSvc.MultiaddrFor(network)
+		svcAddr, err := dirNetSvc.MultiaddrFor(opts.Network)
 		if err != nil {
 			return nil, err
 		}
@@ -42,7 +54,7 @@ func InitRouter(ctx context.Context, node *p2p.Node, network string) (routing.Ro
 		// Check if we know of a suitable peer
 		var found bool
 		for _, peer := range tr.DB().Peers.Load() {
-			if peer.Network(network).Service(dirNetSvc).Last.Success != nil {
+			if peer.Network(opts.Network).Service(dirNetSvc).Last.Success != nil {
 				found = true
 			}
 		}
@@ -57,7 +69,7 @@ func InitRouter(ctx context.Context, node *p2p.Node, network string) (routing.Ro
 	slog.InfoCtx(ctx, "Fetching routing information")
 	client := &message.Client{
 		Transport: &message.RoutedTransport{
-			Network: network,
+			Network: opts.Network,
 			Dialer:  node.DialNetwork(),
 			Router:  new(routing.MessageRouter),
 		},
@@ -68,10 +80,9 @@ func InitRouter(ctx context.Context, node *p2p.Node, network string) (routing.Ro
 		return nil, err
 	}
 
-	router, err := routing.NewStaticRouter(ns.Routing, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return router, nil
+	return routing.NewRouter(routing.RouterOptions{
+		Initial: ns.Routing,
+		Events:  opts.Events,
+		Logger:  opts.Logger,
+	}), nil
 }

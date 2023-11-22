@@ -100,8 +100,7 @@ func run(_ *cobra.Command, args []string) {
 	}
 	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	Check(err)
-	router.Router, err = routing.NewStaticRouter(ns.Routing, logger)
-	Check(err)
+	router.Router = routing.NewRouter(routing.RouterOptions{Initial: ns.Routing, Logger: logger})
 
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
 		Logger:    logger.With("module", "faucet"),
