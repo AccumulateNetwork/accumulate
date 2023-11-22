@@ -8,7 +8,6 @@ package run
 
 import (
 	"reflect"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -22,49 +21,86 @@ type Service interface {
 	start(inst *Instance) error
 }
 
-type ServiceDescriptor struct {
-	Name string
-	Type reflect.Type
+type ServiceDescriptor interface {
+	Name() string
+	Type() reflect.Type
+	Optional() bool
 }
 
+type simpleDescriptor struct {
+	name     string
+	typ      reflect.Type
+	optional bool
+}
+
+func (s *simpleDescriptor) Name() string       { return s.name }
+func (s *simpleDescriptor) Type() reflect.Type { return s.typ }
+func (s *simpleDescriptor) Optional() bool     { return s.optional }
+
 type dependency[A, B any] struct {
-	name func(A) string
+	name     func(A) string
+	optional bool
+}
+
+type dependencyFor[A, B any] struct {
+	*dependency[A, B]
+	a A
 }
 
 func needs[B, A any](name func(A) string) *dependency[A, B] {
-	return &dependency[A, B]{func(a A) string { return strings.ToLower(name(a)) }}
+	return &dependency[A, B]{name: name}
+}
+
+func wants[B, A any](name func(A) string) *dependency[A, B] {
+	return &dependency[A, B]{name: name, optional: true}
 }
 
 func provides[B, A any](name func(A) string) *dependency[A, B] {
-	return &dependency[A, B]{func(a A) string { return strings.ToLower(name(a)) }}
+	return &dependency[A, B]{name: name}
 }
 
-func (d *dependency[A, B]) describe(a A) ServiceDescriptor {
-	return ServiceDescriptor{
-		Name: d.name(a),
-		Type: reflect.TypeOf(new(B)).Elem(),
-	}
+func (d *dependency[A, B]) Type() reflect.Type {
+	return reflect.TypeOf(new(B)).Elem()
+}
+
+func (d *dependency[A, B]) Optional() bool {
+	return d.optional
+}
+
+func (d *dependency[A, B]) with(a A) dependencyFor[A, B] {
+	return dependencyFor[A, B]{d, a}
+}
+
+func (d dependencyFor[A, B]) Name() string {
+	return d.name(d.a)
 }
 
 func (d *dependency[A, B]) register(inst *Instance, a A, service B) error {
 	if inst.services == nil {
-		inst.services = map[ServiceDescriptor]any{}
+		inst.services = map[serviceKey]any{}
 	}
 
-	desc := d.describe(a)
-	if inst.services[desc] != nil {
-		return errors.InternalError.WithFormat("service %s (%v) already registered", desc.Name, desc.Type)
+	key := desc2key(d.with(a))
+	if inst.services[key] != nil {
+		return errors.InternalError.WithFormat("service %s (%v) already registered", key.Name, key.Type)
 	}
-	inst.services[desc] = service
+	inst.services[key] = service
 	return nil
 }
 
 func (d *dependency[A, B]) get(inst *Instance, a A) (B, error) {
-	desc := d.describe(a)
-	v, ok := inst.services[desc]
-	if !ok {
-		var z B
-		return z, errors.InternalError.WithFormat("service %s (%v) not registered", desc.Name, desc.Type)
+	return getService[B](inst, d.with(a))
+}
+
+func getService[T any](inst *Instance, desc ServiceDescriptor) (T, error) {
+	key := desc2key(desc)
+	v, ok := inst.services[key]
+	if ok {
+		return v.(T), nil
 	}
-	return v.(B), nil
+	var z T
+	if desc.Optional() {
+		return z, nil
+	}
+	return z, errors.InternalError.WithFormat("service %s (%v) not registered", key.Name, key.Type)
 }

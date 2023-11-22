@@ -10,6 +10,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -26,7 +28,12 @@ type Instance struct {
 	cancel   context.CancelFunc
 	logger   *slog.Logger
 	p2p      *p2p.Node
-	services map[ServiceDescriptor]any
+	services map[serviceKey]any
+}
+
+type serviceKey struct {
+	Name string
+	Type reflect.Type
 }
 
 type nameAndType struct {
@@ -52,6 +59,11 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, err
 	}
 
+	services, err := cfg.orderServices()
+	if err != nil {
+		return nil, err
+	}
+
 	err = cfg.Logging.start(inst)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start logging: %w", err)
@@ -62,19 +74,39 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, errors.UnknownError.WithFormat("start p2p: %w", err)
 	}
 
-	err = cfg.startServices(inst)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	// Start services
+	for _, services := range services {
+		for _, svc := range services {
+			err := svc.start(inst)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("start service %T: %w", svc, err)
+			}
+		}
 	}
 
 	return inst, nil
 }
 
-func (c *Config) startServices(inst *Instance) error {
-	got := map[ServiceDescriptor]bool{}
+func desc2key(d ServiceDescriptor) serviceKey {
+	return serviceKey{
+		Name: strings.ToLower(d.Name()),
+		Type: d.Type(),
+	}
+}
+
+func (c *Config) orderServices() ([][]Service, error) {
+	got := map[serviceKey]bool{}
 	haveNeeded := func(s Service) bool {
 		for _, n := range s.needs() {
-			if !got[n] {
+			if !n.Optional() && !got[desc2key(n)] {
+				return false
+			}
+		}
+		return true
+	}
+	haveWanted := func(s Service) bool {
+		for _, n := range s.needs() {
+			if n.Optional() && !got[desc2key(n)] {
 				return false
 			}
 		}
@@ -87,35 +119,38 @@ func (c *Config) startServices(inst *Instance) error {
 	unsatisfied = append(unsatisfied, c.Services...)
 	var satisfied [][]Service
 	for len(unsatisfied) > 0 {
-		var unsatisfied2, satisfied2 []Service
+		var unsatisfied2, satisfied2, maybe []Service
 		for _, s := range unsatisfied {
-			if !haveNeeded(s) {
+			switch {
+			case !haveNeeded(s):
 				unsatisfied2 = append(unsatisfied2, s)
-				continue
+			case !haveWanted(s):
+				maybe = append(maybe, s)
+			default:
+				satisfied2 = append(satisfied2, s)
 			}
+		}
 
-			satisfied2 = append(satisfied2, s)
+		switch {
+		case len(satisfied2) > 0:
+			unsatisfied2 = append(unsatisfied2, maybe...)
+		case len(maybe) > 0:
+			satisfied2 = maybe
+		default:
+			return nil, errors.FatalError.With("unresolvable service dependency loop")
+		}
+
+		for _, s := range satisfied2 {
 			for _, p := range s.provides() {
-				got[p] = true
+				got[desc2key(p)] = true
 			}
 		}
-		if len(satisfied2) == 0 {
-			return errors.FatalError.With("unresolvable service dependency loop")
-		}
+
 		satisfied = append(satisfied, satisfied2)
 		unsatisfied = unsatisfied2
 	}
 
-	// Start services
-	for _, services := range satisfied {
-		for _, svc := range services {
-			err := svc.start(inst)
-			if err != nil {
-				return errors.UnknownError.WithFormat("start service: %w", err)
-			}
-		}
-	}
-	return nil
+	return satisfied, nil
 }
 
 func (i *Instance) Stop() error {

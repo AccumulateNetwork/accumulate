@@ -94,7 +94,8 @@ type PrivateKeySeed struct {
 }
 
 type Querier struct {
-	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Partition string        `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Storage   *StorageOrRef `json:"storage,omitempty" form:"storage" query:"storage"`
 }
 
 type StorageService struct {
@@ -328,6 +329,9 @@ func (v *Querier) Copy() *Querier {
 	u := new(Querier)
 
 	u.Partition = v.Partition
+	if v.Storage != nil {
+		u.Storage = (v.Storage).Copy()
+	}
 
 	return u
 }
@@ -549,6 +553,14 @@ func (v *Querier) Equal(u *Querier) bool {
 	if !(v.Partition == u.Partition) {
 		return false
 	}
+	switch {
+	case v.Storage == u.Storage:
+		// equal
+	case v.Storage == nil || u.Storage == nil:
+		return false
+	case !((v.Storage).Equal(u.Storage)):
+		return false
+	}
 
 	return true
 }
@@ -761,12 +773,16 @@ func (v *PrivateKeySeed) MarshalJSON() ([]byte, error) {
 
 func (v *Querier) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      ServiceType `json:"type"`
-		Partition string      `json:"partition,omitempty"`
+		Type      ServiceType   `json:"type"`
+		Partition string        `json:"partition,omitempty"`
+		Storage   *StorageOrRef `json:"storage,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Partition) == 0) {
 		u.Partition = v.Partition
+	}
+	if !(v.Storage == nil) {
+		u.Storage = v.Storage
 	}
 	return json.Marshal(&u)
 }
@@ -1059,11 +1075,13 @@ func (v *PrivateKeySeed) UnmarshalJSON(data []byte) error {
 
 func (v *Querier) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      ServiceType `json:"type"`
-		Partition string      `json:"partition,omitempty"`
+		Type      ServiceType   `json:"type"`
+		Partition string        `json:"partition,omitempty"`
+		Storage   *StorageOrRef `json:"storage,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
+	u.Storage = v.Storage
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1071,6 +1089,7 @@ func (v *Querier) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Partition = u.Partition
+	v.Storage = u.Storage
 	return nil
 }
 

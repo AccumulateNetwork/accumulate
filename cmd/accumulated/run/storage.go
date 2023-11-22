@@ -7,6 +7,9 @@
 package run
 
 import (
+	"encoding/json"
+	"reflect"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -21,7 +24,7 @@ func (c *StorageService) needs() []ServiceDescriptor {
 
 func (c *StorageService) provides() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		storageProvides.describe(c),
+		storageProvides.with(c),
 	}
 }
 
@@ -38,6 +41,83 @@ type Storage interface {
 	CopyAsInterface() any
 
 	open(*Instance) (keyvalue.Beginner, error)
+}
+
+type StorageOrRef struct {
+	reference *string
+	storage   Storage
+}
+
+func (s *StorageOrRef) refOr(def string) string {
+	if s != nil && s.reference != nil {
+		return *s.reference
+	}
+	return def
+}
+
+func (*StorageOrRef) Type() reflect.Type {
+	return reflect.TypeOf(new(keyvalue.Beginner)).Elem()
+}
+
+func (s *StorageOrRef) needs(def string) []ServiceDescriptor {
+	if s != nil && s.storage != nil {
+		return nil
+	}
+	return []ServiceDescriptor{
+		&simpleDescriptor{
+			name: s.refOr(def),
+			typ:  s.Type(),
+		},
+	}
+}
+
+func (s *StorageOrRef) open(inst *Instance, def string) (keyvalue.Beginner, error) {
+	if s != nil && s.storage != nil {
+		return s.storage.open(inst)
+	}
+	return getService[keyvalue.Beginner](inst, &simpleDescriptor{
+		name: s.refOr(def),
+		typ:  s.Type(),
+	})
+}
+
+func (s *StorageOrRef) MarshalJSON() ([]byte, error) {
+	if s.storage != nil {
+		return json.Marshal(s.storage)
+	}
+	return json.Marshal(s.reference)
+}
+
+func (s *StorageOrRef) UnmarshalJSON(b []byte) error {
+	if json.Unmarshal(b, &s.reference) == nil {
+		return nil
+	}
+	ss, err := UnmarshalStorageJSON(b)
+	if err != nil {
+		return err
+	}
+	s.storage = ss
+	return nil
+}
+
+func (s *StorageOrRef) Copy() *StorageOrRef {
+	if s.storage != nil {
+		return &StorageOrRef{storage: s.storage.CopyAsInterface().(Storage)}
+	}
+	return s // Reference is immutable
+}
+
+func (s *StorageOrRef) Equal(t *StorageOrRef) bool {
+	if s.reference != t.reference {
+		return false
+	}
+	if s.storage == t.storage {
+		return true
+	}
+	if s.storage == nil || t.storage == nil {
+		return false
+	}
+	return EqualStorage(s.storage, t.storage)
 }
 
 func (s *MemoryStorage) open(inst *Instance) (keyvalue.Beginner, error) {
