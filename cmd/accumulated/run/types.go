@@ -31,14 +31,13 @@ type Service interface {
 	start(inst *Instance) error
 }
 
-func setDefault[V any](ptr *V, def V) {
-	var z V
-	if any(*ptr) == any(z) {
+func setDefaultS[V any](ptr *[]V, def []V) {
+	if len(*ptr) == 0 {
 		*ptr = def
 	}
 }
 
-func setDefault2[V any](ptr **V, def V) {
+func setDefault[V any](ptr **V, def V) {
 	if *ptr == nil {
 		*ptr = &def
 	}

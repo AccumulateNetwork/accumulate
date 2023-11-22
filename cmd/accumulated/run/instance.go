@@ -8,6 +8,7 @@ package run
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -73,6 +74,7 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	// Start services
 	for _, services := range services {
 		for _, svc := range services {
+			slog.InfoCtx(inst.context, "Starting", "service", fmt.Sprintf("%T", svc))
 			err := svc.start(inst)
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("start service %T: %w", svc, err)

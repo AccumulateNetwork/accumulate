@@ -78,8 +78,9 @@ type HttpService struct {
 	// ConnectionLimit limits the number of concurrent connections.
 	ConnectionLimit *int64 `json:"connectionLimit,omitempty" form:"connectionLimit" query:"connectionLimit"`
 	// ReadHeaderTimeout protects against slow-loris attacks.
-	ReadHeaderTimeout *time.Duration `json:"readHeaderTimeout,omitempty" form:"readHeaderTimeout" query:"readHeaderTimeout"`
-	DebugJsonRpc      *bool          `json:"debugJsonRpc,omitempty" form:"debugJsonRpc" query:"debugJsonRpc"`
+	ReadHeaderTimeout *time.Duration                `json:"readHeaderTimeout,omitempty" form:"readHeaderTimeout" query:"readHeaderTimeout"`
+	DebugJsonRpc      *bool                         `json:"debugJsonRpc,omitempty" form:"debugJsonRpc" query:"debugJsonRpc"`
+	Router            *ServiceOrRef[*RouterService] `json:"router,omitempty" form:"router" query:"router" validate:"required"`
 }
 
 type Logging struct {
@@ -297,6 +298,9 @@ func (v *HttpService) Copy() *HttpService {
 	if v.DebugJsonRpc != nil {
 		u.DebugJsonRpc = new(bool)
 		*u.DebugJsonRpc = *v.DebugJsonRpc
+	}
+	if v.Router != nil {
+		u.Router = (v.Router).Copy()
 	}
 
 	return u
@@ -599,6 +603,14 @@ func (v *HttpService) Equal(u *HttpService) bool {
 	case v.DebugJsonRpc == nil || u.DebugJsonRpc == nil:
 		return false
 	case !(*v.DebugJsonRpc == *u.DebugJsonRpc):
+		return false
+	}
+	switch {
+	case v.Router == u.Router:
+		// equal
+	case v.Router == nil || u.Router == nil:
+		return false
+	case !((v.Router).Equal(u.Router)):
 		return false
 	}
 
@@ -940,6 +952,7 @@ func (v *HttpService) MarshalJSON() ([]byte, error) {
 		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
 		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		DebugJsonRpc      *bool                                          `json:"debugJsonRpc,omitempty"`
+		Router            *ServiceOrRef[*RouterService]                  `json:"router,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.Listen) == 0) {
@@ -967,6 +980,9 @@ func (v *HttpService) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.DebugJsonRpc == nil) {
 		u.DebugJsonRpc = v.DebugJsonRpc
+	}
+	if !(v.Router == nil) {
+		u.Router = v.Router
 	}
 	return json.Marshal(&u)
 }
@@ -1268,6 +1284,7 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
 		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		DebugJsonRpc      *bool                                          `json:"debugJsonRpc,omitempty"`
+		Router            *ServiceOrRef[*RouterService]                  `json:"router,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
@@ -1280,6 +1297,7 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 		u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
 	}
 	u.DebugJsonRpc = v.DebugJsonRpc
+	u.Router = v.Router
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1297,12 +1315,15 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 	v.CorsOrigins = u.CorsOrigins
 	v.LetsEncrypt = u.LetsEncrypt
 	v.ConnectionLimit = u.ConnectionLimit
-	if x, err := encoding.DurationFromJSON(u.ReadHeaderTimeout); err != nil {
-		return fmt.Errorf("error decoding ReadHeaderTimeout: %w", err)
-	} else {
-		v.ReadHeaderTimeout = &x
+	if u.ReadHeaderTimeout != nil {
+		if x, err := encoding.DurationFromJSON(u.ReadHeaderTimeout); err != nil {
+			return fmt.Errorf("error decoding ReadHeaderTimeout: %w", err)
+		} else {
+			v.ReadHeaderTimeout = &x
+		}
 	}
 	v.DebugJsonRpc = u.DebugJsonRpc
+	v.Router = u.Router
 	return nil
 }
 

@@ -10,77 +10,116 @@ import (
 	"encoding/json"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
-type ServiceOrRef[T interface {
-	~*U
-	Service
-	encoding.BinaryValue
-	Copy() T
-	Equal(T) bool
-}, U any] struct {
-	reference *string
-	service   T
+type baseRef[T comparable] struct {
+	ref   *string
+	value T
 }
 
-func (s *ServiceOrRef[T, U]) refOr(def string) string {
-	if s != nil && s.reference != nil {
-		return *s.reference
+func (s *baseRef[T]) hasValue() bool {
+	var z T
+	return s != nil && s.value != z
+}
+
+func (s *baseRef[T]) refOr(def string) string {
+	if s != nil && s.ref != nil {
+		return *s.ref
 	}
 	return def
 }
 
-func (s *ServiceOrRef[T, U]) Required(def string) []ioc.Requirement {
-	if s == nil {
-		return nil
-	}
-	if s.service == nil {
-		return []ioc.Requirement{
-			{Descriptor: ioc.NewDescriptorOf[keyvalue.Beginner](s.refOr(def))},
-		}
-	}
-	return s.service.Requires()
-}
-
-func (s *ServiceOrRef[T, U]) MarshalJSON() ([]byte, error) {
+func (s *baseRef[T]) copyWith(copy func(T) T) *baseRef[T] {
 	var z T
-	if s.service != z {
-		return json.Marshal(s.service)
-	}
-	return json.Marshal(s.reference)
-}
-
-func (s *ServiceOrRef[T, U]) UnmarshalJSON(b []byte) error {
-	if json.Unmarshal(b, &s.reference) == nil {
-		return nil
-	}
-	ss := T(new(U))
-	err := ss.UnmarshalBinary(b)
-	if err != nil {
-		return err
-	}
-	s.service = ss
-	return nil
-}
-
-func (s *ServiceOrRef[T, U]) Copy() *ServiceOrRef[T, U] {
-	if s.service != nil {
-		return &ServiceOrRef[T, U]{service: s.service.Copy()}
+	if s.value != z {
+		return &baseRef[T]{value: copy(s.value)}
 	}
 	return s // Reference is immutable
 }
 
-func (s *ServiceOrRef[T, U]) Equal(t *ServiceOrRef[T, U]) bool {
-	if s.reference != t.reference {
+func (s *baseRef[T]) equalWith(t *baseRef[T], equal func(T, T) bool) bool {
+	if s.ref != t.ref {
 		return false
 	}
-	if s.service == t.service {
+	if s.value == t.value {
 		return true
 	}
-	if s.service == nil || t.service == nil {
+	var z T
+	if s.value == z || t.value == z {
 		return false
 	}
-	return s.service.Equal(t.service)
+	return equal(s.value, t.value)
+}
+
+func (s *baseRef[T]) marshal() ([]byte, error) {
+	var z T
+	if s.value != z {
+		return json.Marshal(s.value)
+	}
+	return json.Marshal(s.ref)
+}
+
+func (s *baseRef[T]) unmarshal(b []byte) error {
+	if json.Unmarshal(b, &s.ref) == nil {
+		return nil
+	}
+	return json.Unmarshal(b, &s.value)
+}
+
+func (s *baseRef[T]) unmarshalWith(b []byte, unmarshal func([]byte) (T, error)) error {
+	if json.Unmarshal(b, &s.ref) == nil {
+		return nil
+	}
+	ss, err := unmarshal(b)
+	if err != nil {
+		return err
+	}
+	s.value = ss
+	return nil
+}
+
+type ServiceOrRef[T serviceType[T]] baseRef[T]
+
+type serviceType[T any] interface {
+	Service
+	encoding.BinaryValue
+	Copy() T
+	Equal(T) bool
+	comparable
+}
+
+func ServiceValue[T serviceType[T]](service T) *ServiceOrRef[T] {
+	return &ServiceOrRef[T]{value: service}
+}
+
+func ServiceReference[T serviceType[T]](ref string) *ServiceOrRef[T] {
+	return &ServiceOrRef[T]{ref: &ref}
+}
+
+func (s *ServiceOrRef[T]) base() *baseRef[T] {
+	return (*baseRef[T])(s)
+}
+
+func (s *ServiceOrRef[T]) RequiresOr(def ...ioc.Requirement) []ioc.Requirement {
+	if s.base().hasValue() {
+		return s.value.Requires()
+	}
+	return def
+}
+
+func (s *ServiceOrRef[T]) Copy() *ServiceOrRef[T] {
+	return (*ServiceOrRef[T])(s.base().copyWith((T).Copy))
+}
+
+func (s *ServiceOrRef[T]) Equal(t *ServiceOrRef[T]) bool {
+	return s.base().equalWith(t.base(), (T).Equal)
+}
+
+func (s *ServiceOrRef[T]) marshal() ([]byte, error) {
+	return s.base().marshal()
+}
+
+func (s *ServiceOrRef[T]) unmarshal(b []byte) error {
+	return s.base().unmarshal(b)
 }

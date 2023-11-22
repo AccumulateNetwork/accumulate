@@ -56,6 +56,7 @@ func TestRun(t *testing.T) {
 			&NetworkService{Partition: protocol.Directory},
 			&MetricsService{Partition: protocol.Directory},
 			&EventsService{Partition: protocol.Directory},
+			&HttpService{Router: ServiceReference[*RouterService]("directory")},
 		},
 	}
 
@@ -130,6 +131,60 @@ func TestReferenceStorage(t *testing.T) {
 			[services.storage]
 				type = "memory"
 	`), toml.Unmarshal))
+
+	ctx = logging.With(ctx, "test", t.Name())
+	inst, err := Start(ctx, c)
+	require.NoError(t, err)
+
+	require.NoError(t, inst.Stop())
+}
+
+func TestEmbededRouter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	c := new(Config)
+	require.NoError(t, c.Load([]byte(`
+		[p2p]
+			network = "DevNet"
+			[p2p.key]
+				type = "transient"
+
+		[[services]]
+			type = "http"
+			[services.router]
+	`), toml.Unmarshal))
+
+	t.Skip("Hangs forever since the network doesn't have the required services")
+
+	ctx = logging.With(ctx, "test", t.Name())
+	inst, err := Start(ctx, c)
+	require.NoError(t, err)
+
+	require.NoError(t, inst.Stop())
+}
+
+func TestReferenceRouter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	c := new(Config)
+	require.NoError(t, c.Load([]byte(`
+		[p2p]
+			network = "DevNet"
+			[p2p.key]
+				type = "transient"
+
+		[[services]]
+			type = "http"
+			router = "router"
+
+		[[services]]
+			type = "router"
+			name = "router"
+	`), toml.Unmarshal))
+
+	t.Skip("Hangs forever since the network doesn't have the required services")
 
 	ctx = logging.With(ctx, "test", t.Name())
 	inst, err := Start(ctx, c)

@@ -7,8 +7,6 @@
 package run
 
 import (
-	"encoding/json"
-
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
@@ -43,71 +41,42 @@ type Storage interface {
 	open(*Instance) (keyvalue.Beginner, error)
 }
 
-type StorageOrRef struct {
-	reference *string
-	storage   Storage
-}
+type StorageOrRef baseRef[Storage]
 
-func (s *StorageOrRef) refOr(def string) string {
-	if s != nil && s.reference != nil {
-		return *s.reference
-	}
-	return def
+func (s *StorageOrRef) base() *baseRef[Storage] {
+	return (*baseRef[Storage])(s)
 }
 
 func (s *StorageOrRef) Required(def string) []ioc.Requirement {
-	if s != nil && s.storage != nil {
+	if s.base().hasValue() {
 		return nil
 	}
 	return []ioc.Requirement{
-		{Descriptor: ioc.NewDescriptorOf[keyvalue.Beginner](s.refOr(def))},
+		{Descriptor: ioc.NewDescriptorOf[keyvalue.Beginner](s.base().refOr(def))},
 	}
 }
 
 func (s *StorageOrRef) open(inst *Instance, def string) (keyvalue.Beginner, error) {
-	if s != nil && s.storage != nil {
-		return s.storage.open(inst)
+	if s != nil && s.value != nil {
+		return s.value.open(inst)
 	}
-	return ioc.Get[keyvalue.Beginner](inst.services, s.refOr(def))
-}
-
-func (s *StorageOrRef) MarshalJSON() ([]byte, error) {
-	if s.storage != nil {
-		return json.Marshal(s.storage)
-	}
-	return json.Marshal(s.reference)
-}
-
-func (s *StorageOrRef) UnmarshalJSON(b []byte) error {
-	if json.Unmarshal(b, &s.reference) == nil {
-		return nil
-	}
-	ss, err := UnmarshalStorageJSON(b)
-	if err != nil {
-		return err
-	}
-	s.storage = ss
-	return nil
+	return ioc.Get[keyvalue.Beginner](inst.services, s.base().refOr(def))
 }
 
 func (s *StorageOrRef) Copy() *StorageOrRef {
-	if s.storage != nil {
-		return &StorageOrRef{storage: s.storage.CopyAsInterface().(Storage)}
-	}
-	return s // Reference is immutable
+	return (*StorageOrRef)(s.base().copyWith(CopyStorage))
 }
 
 func (s *StorageOrRef) Equal(t *StorageOrRef) bool {
-	if s.reference != t.reference {
-		return false
-	}
-	if s.storage == t.storage {
-		return true
-	}
-	if s.storage == nil || t.storage == nil {
-		return false
-	}
-	return EqualStorage(s.storage, t.storage)
+	return s.base().equalWith(t.base(), EqualStorage)
+}
+
+func (s *StorageOrRef) MarshalJSON() ([]byte, error) {
+	return s.base().marshal()
+}
+
+func (s *StorageOrRef) UnmarshalJSON(b []byte) error {
+	return s.base().unmarshalWith(b, UnmarshalStorageJSON)
 }
 
 func (s *MemoryStorage) open(inst *Instance) (keyvalue.Beginner, error) {

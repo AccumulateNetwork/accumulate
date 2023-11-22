@@ -33,19 +33,23 @@ func (r *RouterService) Provides() []ioc.Provided {
 	}
 }
 
-func (r *RouterService) start(inst *Instance) error {
+func (r *RouterService) create(inst *Instance) (routing.Router, error) {
 	events, err := routerWantsEvents.Get(inst.services, r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	router, err := apiutil.InitRouter(apiutil.RouterOptions{
+	return apiutil.InitRouter(apiutil.RouterOptions{
 		Context: inst.context,
 		Node:    inst.p2p,
 		Network: inst.network,
 		Events:  events,
 		Logger:  (*logging.Slogger)(inst.logger),
 	})
+}
+
+func (r *RouterService) start(inst *Instance) error {
+	router, err := r.create(inst)
 	if err != nil {
 		return err
 	}

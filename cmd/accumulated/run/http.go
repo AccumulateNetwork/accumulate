@@ -31,23 +31,30 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-func (h *HttpService) Requires() []ioc.Requirement { return nil }
-func (h *HttpService) Provides() []ioc.Provided    { return nil }
+var (
+	httpRefRouter = ioc.Needs[routing.Router](func(h *HttpService) string { return h.Router.base().refOr("") })
+)
+
+func (h *HttpService) Requires() []ioc.Requirement {
+	return h.Router.RequiresOr(
+		httpRefRouter.Requirement(h),
+	)
+}
+
+func (h *HttpService) Provides() []ioc.Provided { return nil }
 
 func (h *HttpService) start(inst *Instance) error {
-	setDefault(&h.Listen, []multiaddr.Multiaddr{mustParseMulti("/ip4/0.0.0.0/tcp/8080/http")})
-	setDefault2(&h.ReadHeaderTimeout, 10*time.Second)
-	setDefault2(&h.ConnectionLimit, 500)
+	setDefaultS(&h.Listen, []multiaddr.Multiaddr{mustParseMulti("/ip4/0.0.0.0/tcp/8080/http")})
+	setDefault(&h.ReadHeaderTimeout, 10*time.Second)
+	setDefault(&h.ConnectionLimit, 500)
 
-	if len(h.Listen) == 0 {
-		return errors.BadRequest.With("must have at least one address to listen on")
+	var router routing.Router
+	var err error
+	if h.Router.base().hasValue() {
+		router, err = h.Router.value.create(inst)
+	} else {
+		router, err = httpRefRouter.Get(inst.services, h)
 	}
-
-	router, err := apiutil.InitRouter(apiutil.RouterOptions{
-		Context: inst.context,
-		Node:    inst.p2p,
-		Network: inst.network,
-	})
 	if err != nil {
 		return err
 	}
@@ -189,8 +196,13 @@ func (h *HttpService) serve(inst *Instance, server *http.Server, l net.Listener,
 
 	if *h.ConnectionLimit > 0 {
 		pool := make(chan struct{}, *h.ConnectionLimit)
-		for i := *h.ConnectionLimit; i >= 0; i-- {
-			pool <- struct{}{}
+		for {
+			select {
+			case pool <- struct{}{}:
+				continue
+			default:
+			}
+			break
 		}
 		l = &accumulated.RateLimitedListener{Listener: l, Pool: pool}
 	}

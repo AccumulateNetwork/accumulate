@@ -52,6 +52,7 @@ var (
 
 	coreConsensusNeedsStorage      = ioc.Needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Partition.ID })
 	coreConsensusProvidesSequencer = ioc.Provides[private.Sequencer](func(c *CoreConsensusApp) string { return c.Partition.ID })
+	coreConsensusProvidesRouter    = ioc.Provides[routing.Router](func(c *CoreConsensusApp) string { return c.Partition.ID })
 )
 
 type ConsensusApp interface {
@@ -183,6 +184,7 @@ func (c *CoreConsensusApp) Provides() []ioc.Provided {
 		consensusProvidesSubmitter.Provided(c),
 		consensusProvidesValidator.Provided(c),
 		coreConsensusProvidesSequencer.Provided(c),
+		coreConsensusProvidesRouter.Provided(c),
 	}
 }
 
@@ -196,6 +198,10 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Events: d.eventBus,
 		Logger: d.logger,
 	})
+	err = coreConsensusProvidesRouter.Register(inst.services, c, router)
+	if err != nil {
+		return nil, err
+	}
 
 	dialer := inst.p2p.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{
@@ -203,9 +209,10 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Dialer:  dialer,
 		Router:  routing.MessageRouter{Router: router},
 	}}
+	db := database.New(store, d.logger)
 	execOpts := execute.Options{
 		Logger:        d.logger.With("module", "executor"),
-		Database:      database.New(store, d.logger),
+		Database:      db,
 		Key:           d.privVal.Key.PrivKey.Bytes(),
 		Router:        router,
 		EventBus:      d.eventBus,
@@ -261,7 +268,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Executor:  exec,
 		Logger:    d.logger.With("module", "abci"),
 		EventBus:  d.eventBus,
-		Database:  database.New(store, d.logger),
+		Database:  db,
 		Genesis:   genesis.DocProvider(d.config),
 		Partition: c.Partition.ID,
 		RootDir:   d.config.RootDir,

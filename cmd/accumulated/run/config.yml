@@ -129,6 +129,10 @@ HttpService:
       type: bool
       optional: true
       pointer: true
+    - name: Router
+      type: { name: ServiceOrRef, parameters: [{ type: RouterService, pointer: true }] }
+      marshal-as: reference
+      pointer: true
 
 RouterService:
   union: { type: service }

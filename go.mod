@@ -5,7 +5,7 @@ retract (
 	v1.1.0 // Causes consensus failure when run alongside v1.0.x
 )
 
-go 1.19
+go 1.20
 
 replace github.com/julienschmidt/httprouter v1.3.0 => github.com/firelizzard18/httprouter v0.0.0-20231019203155-74063b4f447c
 
