@@ -8,6 +8,7 @@ package run
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -46,20 +47,29 @@ func (l *Logging) start(inst *Instance) error {
 	case "", "text", "plain":
 		// Use zerolog's console writer to write pretty logs
 		opts.ReplaceAttr = func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == "msg" {
+			if a.Key != "msg" {
+				return a
+			}
+			if a.Value.Kind() == slog.KindString {
 				return slog.Any("message", a.Value)
 			}
-			return a
+			return slog.String("message", fmt.Sprint(a.Value.Any()))
 		}
 		h = slog.NewJSONHandler(&zerolog.ConsoleWriter{
-			Out: os.Stderr,
-			// NoColor:    true,
+			Out:        os.Stderr,
 			TimeFormat: time.RFC3339,
 			FormatLevel: func(i interface{}) string {
 				if ll, ok := i.(string); ok {
 					return strings.ToUpper(ll)
 				}
 				return "????"
+			},
+			FormatMessage: func(i interface{}) string {
+				s, ok := i.(string)
+				if ok {
+					return s
+				}
+				return fmt.Sprint(i)
 			},
 		}, opts)
 	case "json":
