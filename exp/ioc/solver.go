@@ -41,25 +41,25 @@ func Solve[T Factory, S ~[]T](inputs ...S) ([]S, error) {
 			default:
 				satisfied = append(satisfied, f)
 			}
-
-			switch {
-			case len(satisfied) > 0:
-				// Some factories are satisfied, defer maybes to the next pass
-				unsatisfied = append(unsatisfied, maybe...)
-			case len(maybe) > 0:
-				// No factories are fully satisfied so initialize the maybes
-				satisfied = maybe
-			default:
-				return nil, errors.New("unresolvable dependency loop")
-			}
-
-			for _, f := range satisfied {
-				got.add(f)
-			}
-
-			solved = append(solved, satisfied)
-			factories = unsatisfied
 		}
+
+		switch {
+		case len(satisfied) > 0:
+			// Some factories are satisfied, defer maybes to the next pass
+			unsatisfied = append(unsatisfied, maybe...)
+		case len(maybe) > 0:
+			// No factories are fully satisfied so initialize the maybes
+			satisfied = maybe
+		default:
+			return nil, errors.New("unresolvable dependency loop")
+		}
+
+		for _, f := range satisfied {
+			got.add(f)
+		}
+
+		solved = append(solved, satisfied)
+		factories = unsatisfied
 	}
 
 	return solved, nil
