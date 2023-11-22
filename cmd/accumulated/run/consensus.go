@@ -20,6 +20,7 @@ import (
 	"github.com/cometbft/cometbft/proxy"
 	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/spf13/viper"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
@@ -44,13 +45,13 @@ import (
 )
 
 var (
-	consensusProvidesEventBus  = provides[*events.Bus](func(c *ConsensusService) string { return c.App.partition().ID })
-	consensusProvidesService   = provides[v3.ConsensusService](func(c ConsensusApp) string { return c.partition().ID })
-	consensusProvidesSubmitter = provides[v3.Submitter](func(c ConsensusApp) string { return c.partition().ID })
-	consensusProvidesValidator = provides[v3.Validator](func(c ConsensusApp) string { return c.partition().ID })
+	consensusProvidesEventBus  = ioc.Provides[*events.Bus](func(c *ConsensusService) string { return c.App.partition().ID })
+	consensusProvidesService   = ioc.Provides[v3.ConsensusService](func(c ConsensusApp) string { return c.partition().ID })
+	consensusProvidesSubmitter = ioc.Provides[v3.Submitter](func(c ConsensusApp) string { return c.partition().ID })
+	consensusProvidesValidator = ioc.Provides[v3.Validator](func(c ConsensusApp) string { return c.partition().ID })
 
-	coreConsensusNeedsStorage      = needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Partition.ID })
-	coreConsensusProvidesSequencer = provides[private.Sequencer](func(c *CoreConsensusApp) string { return c.Partition.ID })
+	coreConsensusNeedsStorage      = ioc.Needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Partition.ID })
+	coreConsensusProvidesSequencer = ioc.Provides[private.Sequencer](func(c *CoreConsensusApp) string { return c.Partition.ID })
 )
 
 type ConsensusApp interface {
@@ -58,8 +59,8 @@ type ConsensusApp interface {
 	CopyAsInterface() any
 
 	partition() *protocol.PartitionInfo
-	needs() []ServiceDescriptor
-	provides() []ServiceDescriptor
+	Requires() []ioc.Requirement
+	Provides() []ioc.Provided
 	start(*Instance, *tendermint) (types.Application, error)
 	register(*Instance, *tendermint, *tmnode.Node) error
 }
@@ -73,13 +74,13 @@ type tendermint struct {
 	globals  chan *network.GlobalValues
 }
 
-func (c *ConsensusService) needs() []ServiceDescriptor {
-	return c.App.needs()
+func (c *ConsensusService) Requires() []ioc.Requirement {
+	return c.App.Requires()
 }
 
-func (c *ConsensusService) provides() []ServiceDescriptor {
-	return append(c.App.provides(),
-		consensusProvidesEventBus.with(c),
+func (c *ConsensusService) Provides() []ioc.Provided {
+	return append(c.App.Provides(),
+		consensusProvidesEventBus.Provided(c),
 	)
 }
 
@@ -163,30 +164,30 @@ func (c *ConsensusService) start(inst *Instance) error {
 		node.Wait()
 	})
 
-	err = consensusProvidesEventBus.register(inst, c, d.eventBus)
+	err = consensusProvidesEventBus.Register(inst.services, c, d.eventBus)
 
 	return c.App.register(inst, d, node)
 }
 
 func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partition }
 
-func (c *CoreConsensusApp) needs() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		coreConsensusNeedsStorage.with(c),
+func (c *CoreConsensusApp) Requires() []ioc.Requirement {
+	return []ioc.Requirement{
+		coreConsensusNeedsStorage.Requirement(c),
 	}
 }
 
-func (c *CoreConsensusApp) provides() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		consensusProvidesService.with(c),
-		consensusProvidesSubmitter.with(c),
-		consensusProvidesValidator.with(c),
-		coreConsensusProvidesSequencer.with(c),
+func (c *CoreConsensusApp) Provides() []ioc.Provided {
+	return []ioc.Provided{
+		consensusProvidesService.Provided(c),
+		consensusProvidesSubmitter.Provided(c),
+		consensusProvidesValidator.Provided(c),
+		coreConsensusProvidesSequencer.Provided(c),
 	}
 }
 
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
-	store, err := coreConsensusNeedsStorage.get(inst, c)
+	store, err := coreConsensusNeedsStorage.Get(inst.services, c)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +267,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 }
 
 func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.Node) error {
-	store, err := coreConsensusNeedsStorage.get(inst, c)
+	store, err := coreConsensusNeedsStorage.Get(inst.services, c)
 	if err != nil {
 		return err
 	}
@@ -284,7 +285,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
 	})
 	registerRpcService(inst, svcImpl.Type().AddressFor(c.Partition.ID), message.ConsensusService{ConsensusService: svcImpl})
-	err = consensusProvidesService.register(inst, c, svcImpl)
+	err = consensusProvidesService.Register(inst.services, c, svcImpl)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -295,7 +296,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		Local:  local,
 	})
 	registerRpcService(inst, subImpl.Type().AddressFor(c.Partition.ID), message.Submitter{Submitter: subImpl})
-	err = consensusProvidesSubmitter.register(inst, c, subImpl)
+	err = consensusProvidesSubmitter.Register(inst.services, c, subImpl)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -306,7 +307,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		Local:  local,
 	})
 	registerRpcService(inst, valImpl.Type().AddressFor(c.Partition.ID), message.Validator{Validator: valImpl})
-	err = consensusProvidesValidator.register(inst, c, valImpl)
+	err = consensusProvidesValidator.Register(inst.services, c, valImpl)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -321,7 +322,7 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		ValidatorKey: d.privVal.Key.PrivKey.Bytes(),
 	})
 	registerRpcService(inst, seqImpl.Type().AddressFor(c.Partition.ID), message.Sequencer{Sequencer: seqImpl})
-	err = coreConsensusProvidesSequencer.register(inst, c, seqImpl)
+	err = coreConsensusProvidesSequencer.Register(inst.services, c, seqImpl)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

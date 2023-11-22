@@ -7,6 +7,7 @@
 package run
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -17,33 +18,33 @@ import (
 )
 
 var (
-	querierWantsConsensus = wants[v3.ConsensusService](func(q *Querier) string { return q.Partition })
-	querierProvides       = provides[v3.Querier](func(q *Querier) string { return q.Partition })
+	querierWantsConsensus = ioc.Wants[v3.ConsensusService](func(q *Querier) string { return q.Partition })
+	querierProvides       = ioc.Provides[v3.Querier](func(q *Querier) string { return q.Partition })
 
-	networkNeedsEvents  = needs[*events.Bus](func(n *NetworkService) string { return n.Partition })
-	networkNeedsStorage = needs[keyvalue.Beginner](func(n *NetworkService) string { return n.Partition })
-	networkProvides     = provides[v3.NetworkService](func(n *NetworkService) string { return n.Partition })
+	networkNeedsEvents  = ioc.Needs[*events.Bus](func(n *NetworkService) string { return n.Partition })
+	networkNeedsStorage = ioc.Needs[keyvalue.Beginner](func(n *NetworkService) string { return n.Partition })
+	networkProvides     = ioc.Provides[v3.NetworkService](func(n *NetworkService) string { return n.Partition })
 
-	metricsNeedsConsensus = needs[v3.ConsensusService](func(m *MetricsService) string { return m.Partition })
-	metricsNeedsQuerier   = needs[v3.Querier](func(m *MetricsService) string { return m.Partition })
-	metricsProvides       = provides[v3.MetricsService](func(m *MetricsService) string { return m.Partition })
+	metricsNeedsConsensus = ioc.Needs[v3.ConsensusService](func(m *MetricsService) string { return m.Partition })
+	metricsNeedsQuerier   = ioc.Needs[v3.Querier](func(m *MetricsService) string { return m.Partition })
+	metricsProvides       = ioc.Provides[v3.MetricsService](func(m *MetricsService) string { return m.Partition })
 
-	eventsNeedsStorage = needs[keyvalue.Beginner](func(e *EventsService) string { return e.Partition })
-	eventsNeedsEvents  = needs[*events.Bus](func(e *EventsService) string { return e.Partition })
-	eventsProvides     = provides[v3.EventService](func(e *EventsService) string { return e.Partition })
+	eventsNeedsStorage = ioc.Needs[keyvalue.Beginner](func(e *EventsService) string { return e.Partition })
+	eventsNeedsEvents  = ioc.Needs[*events.Bus](func(e *EventsService) string { return e.Partition })
+	eventsProvides     = ioc.Provides[v3.EventService](func(e *EventsService) string { return e.Partition })
 )
 
-func (q *Querier) needs() []ServiceDescriptor {
-	desc := []ServiceDescriptor{
-		querierWantsConsensus.with(q),
+func (q *Querier) Requires() []ioc.Requirement {
+	desc := []ioc.Requirement{
+		querierWantsConsensus.Requirement(q),
 	}
-	desc = append(desc, q.Storage.needs(q.Partition)...)
+	desc = append(desc, q.Storage.Required(q.Partition)...)
 	return desc
 }
 
-func (q *Querier) provides() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		querierProvides.with(q),
+func (q *Querier) Provides() []ioc.Provided {
+	return []ioc.Provided{
+		querierProvides.Provided(q),
 	}
 }
 
@@ -53,7 +54,7 @@ func (q *Querier) start(inst *Instance) error {
 		return err
 	}
 
-	consensus, err := querierWantsConsensus.get(inst, q)
+	consensus, err := querierWantsConsensus.Get(inst.services, q)
 	if err != nil {
 		return err
 	}
@@ -65,29 +66,29 @@ func (q *Querier) start(inst *Instance) error {
 		Consensus: consensus,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
-	return querierProvides.register(inst, q, impl)
+	return querierProvides.Register(inst.services, q, impl)
 }
 
-func (n *NetworkService) needs() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		networkNeedsEvents.with(n),
-		networkNeedsStorage.with(n),
+func (n *NetworkService) Requires() []ioc.Requirement {
+	return []ioc.Requirement{
+		networkNeedsEvents.Requirement(n),
+		networkNeedsStorage.Requirement(n),
 	}
 }
 
-func (n *NetworkService) provides() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		networkProvides.with(n),
+func (n *NetworkService) Provides() []ioc.Provided {
+	return []ioc.Provided{
+		networkProvides.Provided(n),
 	}
 }
 
 func (n *NetworkService) start(inst *Instance) error {
-	events, err := networkNeedsEvents.get(inst, n)
+	events, err := networkNeedsEvents.Get(inst.services, n)
 	if err != nil {
 		return err
 	}
 
-	store, err := networkNeedsStorage.get(inst, n)
+	store, err := networkNeedsStorage.Get(inst.services, n)
 	if err != nil {
 		return err
 	}
@@ -99,29 +100,29 @@ func (n *NetworkService) start(inst *Instance) error {
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(n.Partition), message.NetworkService{NetworkService: impl})
-	return networkProvides.register(inst, n, impl)
+	return networkProvides.Register(inst.services, n, impl)
 }
 
-func (m *MetricsService) needs() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		metricsNeedsConsensus.with(m),
-		metricsNeedsQuerier.with(m),
+func (m *MetricsService) Requires() []ioc.Requirement {
+	return []ioc.Requirement{
+		metricsNeedsConsensus.Requirement(m),
+		metricsNeedsQuerier.Requirement(m),
 	}
 }
 
-func (m *MetricsService) provides() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		metricsProvides.with(m),
+func (m *MetricsService) Provides() []ioc.Provided {
+	return []ioc.Provided{
+		metricsProvides.Provided(m),
 	}
 }
 
 func (m *MetricsService) start(inst *Instance) error {
-	consensus, err := metricsNeedsConsensus.get(inst, m)
+	consensus, err := metricsNeedsConsensus.Get(inst.services, m)
 	if err != nil {
 		return err
 	}
 
-	querier, err := metricsNeedsQuerier.get(inst, m)
+	querier, err := metricsNeedsQuerier.Get(inst.services, m)
 	if err != nil {
 		return err
 	}
@@ -132,29 +133,29 @@ func (m *MetricsService) start(inst *Instance) error {
 		Querier: querier,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(m.Partition), message.MetricsService{MetricsService: impl})
-	return metricsProvides.register(inst, m, impl)
+	return metricsProvides.Register(inst.services, m, impl)
 }
 
-func (e *EventsService) needs() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		eventsNeedsStorage.with(e),
-		eventsNeedsEvents.with(e),
+func (e *EventsService) Requires() []ioc.Requirement {
+	return []ioc.Requirement{
+		eventsNeedsStorage.Requirement(e),
+		eventsNeedsEvents.Requirement(e),
 	}
 }
 
-func (e *EventsService) provides() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		eventsProvides.with(e),
+func (e *EventsService) Provides() []ioc.Provided {
+	return []ioc.Provided{
+		eventsProvides.Provided(e),
 	}
 }
 
 func (e *EventsService) start(inst *Instance) error {
-	store, err := eventsNeedsStorage.get(inst, e)
+	store, err := eventsNeedsStorage.Get(inst.services, e)
 	if err != nil {
 		return err
 	}
 
-	events, err := eventsNeedsEvents.get(inst, e)
+	events, err := eventsNeedsEvents.Get(inst.services, e)
 	if err != nil {
 		return err
 	}
@@ -166,7 +167,7 @@ func (e *EventsService) start(inst *Instance) error {
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(e.Partition), message.EventService{EventService: impl})
-	return eventsProvides.register(inst, e, impl)
+	return eventsProvides.Register(inst.services, e, impl)
 }
 
 func registerRpcService(inst *Instance, addr *v3.ServiceAddress, service message.Service) {

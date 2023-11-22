@@ -6,6 +6,8 @@
 
 package run
 
+import "gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum  --package run enums.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package run config.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package run --language go-union --out unions_gen.go config.yml
@@ -16,3 +18,12 @@ type (
 	StorageType      int
 	PrivateKeyType   int
 )
+
+type Service interface {
+	ioc.Factory
+
+	Type() ServiceType
+	CopyAsInterface() any
+
+	start(inst *Instance) error
+}
