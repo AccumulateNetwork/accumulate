@@ -1586,7 +1586,7 @@ func (v *Header) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Version              uint64                    `json:"version,omitempty"`
 		Height               uint64                    `json:"height,omitempty"`
-		RootHash             string                    `json:"rootHash,omitempty"`
+		RootHash             *string                   `json:"rootHash,omitempty"`
 		Timestamp            time.Time                 `json:"timestamp,omitempty"`
 		ExecutorVersion      protocol.ExecutorVersion  `json:"executorVersion,omitempty"`
 		PartitionSnapshotIDs encoding.JsonList[string] `json:"partitionSnapshotIDs,omitempty"`
@@ -1598,7 +1598,7 @@ func (v *Header) MarshalJSON() ([]byte, error) {
 		u.Height = v.Height
 	}
 	if !(v.RootHash == ([32]byte{})) {
-		u.RootHash = encoding.ChainToJSON(v.RootHash)
+		u.RootHash = encoding.ChainToJSON(&v.RootHash)
 	}
 	if !(v.Timestamp == (time.Time{})) {
 		u.Timestamp = v.Timestamp
@@ -1772,14 +1772,14 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Version              uint64                    `json:"version,omitempty"`
 		Height               uint64                    `json:"height,omitempty"`
-		RootHash             string                    `json:"rootHash,omitempty"`
+		RootHash             *string                   `json:"rootHash,omitempty"`
 		Timestamp            time.Time                 `json:"timestamp,omitempty"`
 		ExecutorVersion      protocol.ExecutorVersion  `json:"executorVersion,omitempty"`
 		PartitionSnapshotIDs encoding.JsonList[string] `json:"partitionSnapshotIDs,omitempty"`
 	}{}
 	u.Version = v.Version
 	u.Height = v.Height
-	u.RootHash = encoding.ChainToJSON(v.RootHash)
+	u.RootHash = encoding.ChainToJSON(&v.RootHash)
 	u.Timestamp = v.Timestamp
 	u.ExecutorVersion = v.ExecutorVersion
 	u.PartitionSnapshotIDs = v.PartitionSnapshotIDs
@@ -1791,7 +1791,7 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.RootHash); err != nil {
 		return fmt.Errorf("error decoding RootHash: %w", err)
 	} else {
-		v.RootHash = x
+		v.RootHash = *x
 	}
 	v.Timestamp = u.Timestamp
 	v.ExecutorVersion = u.ExecutorVersion

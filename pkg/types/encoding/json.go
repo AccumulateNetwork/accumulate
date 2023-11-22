@@ -35,8 +35,9 @@ func BytesToJSON(v []byte) *string {
 	return &s
 }
 
-func ChainToJSON(v [32]byte) string {
-	return hex.EncodeToString(v[:])
+func ChainToJSON(v *[32]byte) *string {
+	s := hex.EncodeToString(v[:])
+	return &s
 }
 
 type DurationFields struct {
@@ -68,16 +69,19 @@ func BytesFromJSON(s *string) ([]byte, error) {
 	return hex.DecodeString(*s)
 }
 
-func ChainFromJSON(s string) ([32]byte, error) {
+func ChainFromJSON(s *string) (*[32]byte, error) {
+	if s == nil {
+		return nil, nil
+	}
 	var v [32]byte
-	b, err := hex.DecodeString(s)
+	b, err := hex.DecodeString(*s)
 	if err != nil {
-		return v, err
+		return &v, err
 	}
 	if copy(v[:], b) < 32 {
-		return v, ErrNotEnoughData
+		return &v, ErrNotEnoughData
 	}
-	return v, nil
+	return &v, nil
 }
 
 func DurationFromJSON(v interface{}) (time.Duration, error) {

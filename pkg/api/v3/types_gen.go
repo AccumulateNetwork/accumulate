@@ -7373,7 +7373,7 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 		Name          string                         `json:"name,omitempty"`
 		Type          merkle.ChainType               `json:"type,omitempty"`
 		Index         uint64                         `json:"index"`
-		Entry         string                         `json:"entry,omitempty"`
+		Entry         *string                        `json:"entry,omitempty"`
 		Value         *encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
 		Receipt       *Receipt                       `json:"receipt,omitempty"`
 		State         encoding.JsonList[*string]     `json:"state,omitempty"`
@@ -7391,7 +7391,7 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 	}
 	u.Index = v.Index
 	if !(v.Entry == ([32]byte{})) {
-		u.Entry = encoding.ChainToJSON(v.Entry)
+		u.Entry = encoding.ChainToJSON(&v.Entry)
 	}
 	if !(EqualRecord(v.Value, nil)) {
 		u.Value = &encoding.JsonUnmarshalWith[T]{Value: v.Value, Func: func(b []byte) (T, error) { return encoding.Cast[T](UnmarshalRecordJSON(b)) }}
@@ -7476,8 +7476,8 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		LastBlock        *LastBlock                            `json:"lastBlock,omitempty"`
 		Version          string                                `json:"version,omitempty"`
 		Commit           string                                `json:"commit,omitempty"`
-		NodeKeyHash      string                                `json:"nodeKeyHash,omitempty"`
-		ValidatorKeyHash string                                `json:"validatorKeyHash,omitempty"`
+		NodeKeyHash      *string                               `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash *string                               `json:"validatorKeyHash,omitempty"`
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
@@ -7495,10 +7495,10 @@ func (v *ConsensusStatus) MarshalJSON() ([]byte, error) {
 		u.Commit = v.Commit
 	}
 	if !(v.NodeKeyHash == ([32]byte{})) {
-		u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
+		u.NodeKeyHash = encoding.ChainToJSON(&v.NodeKeyHash)
 	}
 	if !(v.ValidatorKeyHash == ([32]byte{})) {
-		u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+		u.ValidatorKeyHash = encoding.ChainToJSON(&v.ValidatorKeyHash)
 	}
 	if !(len(v.PartitionID) == 0) {
 		u.PartitionID = v.PartitionID
@@ -7692,8 +7692,8 @@ func (v *LastBlock) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Height                int64     `json:"height,omitempty"`
 		Time                  time.Time `json:"time,omitempty"`
-		ChainRoot             string    `json:"chainRoot,omitempty"`
-		StateRoot             string    `json:"stateRoot,omitempty"`
+		ChainRoot             *string   `json:"chainRoot,omitempty"`
+		StateRoot             *string   `json:"stateRoot,omitempty"`
 		DirectoryAnchorHeight uint64    `json:"directoryAnchorHeight,omitempty"`
 	}{}
 	if !(v.Height == 0) {
@@ -7703,10 +7703,10 @@ func (v *LastBlock) MarshalJSON() ([]byte, error) {
 		u.Time = v.Time
 	}
 	if !(v.ChainRoot == ([32]byte{})) {
-		u.ChainRoot = encoding.ChainToJSON(v.ChainRoot)
+		u.ChainRoot = encoding.ChainToJSON(&v.ChainRoot)
 	}
 	if !(v.StateRoot == ([32]byte{})) {
-		u.StateRoot = encoding.ChainToJSON(v.StateRoot)
+		u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
 	}
 	if !(v.DirectoryAnchorHeight == 0) {
 		u.DirectoryAnchorHeight = v.DirectoryAnchorHeight
@@ -7741,11 +7741,11 @@ func (v *MajorBlockRecord) MarshalJSON() ([]byte, error) {
 func (v *MessageHashSearchQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType QueryType `json:"queryType"`
-		Hash      string    `json:"hash,omitempty"`
+		Hash      *string   `json:"hash,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	if !(v.Hash == ([32]byte{})) {
-		u.Hash = encoding.ChainToJSON(v.Hash)
+		u.Hash = encoding.ChainToJSON(&v.Hash)
 	}
 	return json.Marshal(&u)
 }
@@ -8154,7 +8154,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 		Name          string                         `json:"name,omitempty"`
 		Type          merkle.ChainType               `json:"type,omitempty"`
 		Index         uint64                         `json:"index"`
-		Entry         string                         `json:"entry,omitempty"`
+		Entry         *string                        `json:"entry,omitempty"`
 		Value         *encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
 		Receipt       *Receipt                       `json:"receipt,omitempty"`
 		State         encoding.JsonList[*string]     `json:"state,omitempty"`
@@ -8165,7 +8165,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 	u.Name = v.Name
 	u.Type = v.Type
 	u.Index = v.Index
-	u.Entry = encoding.ChainToJSON(v.Entry)
+	u.Entry = encoding.ChainToJSON(&v.Entry)
 	u.Value = &encoding.JsonUnmarshalWith[T]{Value: v.Value, Func: func(b []byte) (T, error) { return encoding.Cast[T](UnmarshalRecordJSON(b)) }}
 	u.Receipt = v.Receipt
 	u.State = make(encoding.JsonList[*string], len(v.State))
@@ -8186,7 +8186,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.Entry); err != nil {
 		return fmt.Errorf("error decoding Entry: %w", err)
 	} else {
-		v.Entry = x
+		v.Entry = *x
 	}
 	if u.Value != nil {
 		v.Value = u.Value.Value
@@ -8283,8 +8283,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 		LastBlock        *LastBlock                            `json:"lastBlock,omitempty"`
 		Version          string                                `json:"version,omitempty"`
 		Commit           string                                `json:"commit,omitempty"`
-		NodeKeyHash      string                                `json:"nodeKeyHash,omitempty"`
-		ValidatorKeyHash string                                `json:"validatorKeyHash,omitempty"`
+		NodeKeyHash      *string                               `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash *string                               `json:"validatorKeyHash,omitempty"`
 		PartitionID      string                                `json:"partitionID,omitempty"`
 		PartitionType    protocol.PartitionType                `json:"partitionType,omitempty"`
 		Peers            encoding.JsonList[*ConsensusPeerInfo] `json:"peers,omitempty"`
@@ -8293,8 +8293,8 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	u.LastBlock = v.LastBlock
 	u.Version = v.Version
 	u.Commit = v.Commit
-	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
-	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+	u.NodeKeyHash = encoding.ChainToJSON(&v.NodeKeyHash)
+	u.ValidatorKeyHash = encoding.ChainToJSON(&v.ValidatorKeyHash)
 	u.PartitionID = v.PartitionID
 	u.PartitionType = v.PartitionType
 	u.Peers = v.Peers
@@ -8308,12 +8308,12 @@ func (v *ConsensusStatus) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.NodeKeyHash); err != nil {
 		return fmt.Errorf("error decoding NodeKeyHash: %w", err)
 	} else {
-		v.NodeKeyHash = x
+		v.NodeKeyHash = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.ValidatorKeyHash); err != nil {
 		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
 	} else {
-		v.ValidatorKeyHash = x
+		v.ValidatorKeyHash = *x
 	}
 	v.PartitionID = u.PartitionID
 	v.PartitionType = u.PartitionType
@@ -8554,14 +8554,14 @@ func (v *LastBlock) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Height                int64     `json:"height,omitempty"`
 		Time                  time.Time `json:"time,omitempty"`
-		ChainRoot             string    `json:"chainRoot,omitempty"`
-		StateRoot             string    `json:"stateRoot,omitempty"`
+		ChainRoot             *string   `json:"chainRoot,omitempty"`
+		StateRoot             *string   `json:"stateRoot,omitempty"`
 		DirectoryAnchorHeight uint64    `json:"directoryAnchorHeight,omitempty"`
 	}{}
 	u.Height = v.Height
 	u.Time = v.Time
-	u.ChainRoot = encoding.ChainToJSON(v.ChainRoot)
-	u.StateRoot = encoding.ChainToJSON(v.StateRoot)
+	u.ChainRoot = encoding.ChainToJSON(&v.ChainRoot)
+	u.StateRoot = encoding.ChainToJSON(&v.StateRoot)
 	u.DirectoryAnchorHeight = v.DirectoryAnchorHeight
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -8571,12 +8571,12 @@ func (v *LastBlock) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.ChainRoot); err != nil {
 		return fmt.Errorf("error decoding ChainRoot: %w", err)
 	} else {
-		v.ChainRoot = x
+		v.ChainRoot = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.StateRoot); err != nil {
 		return fmt.Errorf("error decoding StateRoot: %w", err)
 	} else {
-		v.StateRoot = x
+		v.StateRoot = *x
 	}
 	v.DirectoryAnchorHeight = u.DirectoryAnchorHeight
 	return nil
@@ -8611,10 +8611,10 @@ func (v *MajorBlockRecord) UnmarshalJSON(data []byte) error {
 func (v *MessageHashSearchQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		QueryType QueryType `json:"queryType"`
-		Hash      string    `json:"hash,omitempty"`
+		Hash      *string   `json:"hash,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Hash = encoding.ChainToJSON(&v.Hash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8624,7 +8624,7 @@ func (v *MessageHashSearchQuery) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
-		v.Hash = x
+		v.Hash = *x
 	}
 	return nil
 }
