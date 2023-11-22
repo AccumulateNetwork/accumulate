@@ -6,7 +6,10 @@
 
 package ioc
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 type Factory interface {
 	Requires() []Requirement
@@ -51,7 +54,17 @@ func Solve[T Factory, S ~[]T](inputs ...S) ([]S, error) {
 			// No factories are fully satisfied so initialize the maybes
 			satisfied = maybe
 		default:
-			return nil, errors.New("unresolvable dependency loop")
+			msg := "cannot satisfy dependencies"
+			for _, f := range unsatisfied {
+				for _, n := range f.Requires() {
+					s := fmt.Sprintf("%T requires %v", f, n.Descriptor.Type())
+					if ns := n.Descriptor.Namespace(); ns != "" {
+						s = fmt.Sprintf("%s (%s)", s, ns)
+					}
+					msg += "\n\t" + s
+				}
+			}
+			return nil, errors.New(msg)
 		}
 
 		for _, f := range satisfied {
