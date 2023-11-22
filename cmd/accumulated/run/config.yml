@@ -133,6 +133,26 @@ HttpService:
       type: { name: ServiceOrRef, parameters: [{ type: RouterService, pointer: true }] }
       marshal-as: reference
       pointer: true
+    - name: PeerMap
+      description: hard-codes the peer map
+      type: HttpPeerMapEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+HttpPeerMapEntry:
+  fields:
+    - name: ID
+      type: p2p.PeerID
+      marshal-as: union
+      zero-value: '""'
+    - name: Partitions
+      type: string
+      repeatable: true
+    - name: Addresses
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
 
 RouterService:
   union: { type: service }

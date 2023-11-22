@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
@@ -76,15 +77,19 @@ func (h *HttpService) start(inst *Instance) error {
 		Cache:   memory.New(nil),
 	}
 
-	// if strings.EqualFold(inst.network, "MainNet") {
-	// 	// Hard code the peers used for the MainNet as a hack for stability
-	// 	apiOpts.PeerMap = map[string][]peer.AddrInfo{
-	// 		"apollo":      {nodeMainnetApollo},
-	// 		"yutu":        {nodeMainnetYutu},
-	// 		"chandrayaan": {nodeMainnetChandrayaan},
-	// 		"directory":   {nodeMainnetApollo, nodeMainnetYutu, nodeMainnetChandrayaan},
-	// 	}
-	// }
+	if len(h.PeerMap) > 0 {
+		m := map[string][]peer.AddrInfo{}
+		apiOpts.PeerMap = m
+		for _, p := range h.PeerMap {
+			for _, part := range p.Partitions {
+				part = strings.ToLower(part)
+				m[part] = append(m[part], peer.AddrInfo{
+					ID:    p.ID,
+					Addrs: p.Addresses,
+				})
+			}
+		}
+	}
 
 	api, err := nodehttp.NewHandler(apiOpts)
 	if err != nil {

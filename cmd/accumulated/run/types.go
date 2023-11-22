@@ -7,6 +7,7 @@
 package run
 
 import (
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 )
@@ -41,6 +42,14 @@ func setDefault[V any](ptr **V, def V) {
 	if *ptr == nil {
 		*ptr = &def
 	}
+}
+
+func mustParsePeer(s string) peer.ID {
+	id, err := peer.Decode(s)
+	if err != nil {
+		panic(err)
+	}
+	return id
 }
 
 func mustParseMulti(s string) multiaddr.Multiaddr {
