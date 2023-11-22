@@ -158,9 +158,9 @@ func run(_ *cobra.Command, args []string) {
 		Router:  routing.MessageRouter{Router: router},
 		Dialer:  node.DialNetwork(),
 	}}
-	timestamps := &TimestampService{
-		querier: &api.Collator{Querier: client, Network: client},
-		cache:   memory.New(nil),
+	timestamps := &apiutil.TimestampService{
+		Querier: &api.Collator{Querier: client, Network: client},
+		Cache:   memory.New(nil),
 	}
 
 	if strings.EqualFold(args[0], "MainNet") {

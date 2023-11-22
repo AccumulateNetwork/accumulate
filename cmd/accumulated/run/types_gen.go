@@ -13,6 +13,7 @@ package run
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -56,6 +57,25 @@ type CoreConsensusApp struct {
 
 type EventsService struct {
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
+type HttpService struct {
+
+	// Listen are the addresses and schemes to listen on.
+	Listen []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	// TlsCertPath is the path of the TLS certificate.
+	TlsCertPath string `json:"tlsCertPath,omitempty" form:"tlsCertPath" query:"tlsCertPath"`
+	// TlsKeyPath is the path of the TLS key.
+	TlsKeyPath string `json:"tlsKeyPath,omitempty" form:"tlsKeyPath" query:"tlsKeyPath"`
+	// CorsOrigins is a list of allowed CORS origins.
+	CorsOrigins []string `json:"corsOrigins,omitempty" form:"corsOrigins" query:"corsOrigins"`
+	// LetsEncrypt automatically retrieves a certificate from Let's Encrypt for the specified domains.
+	LetsEncrypt []string `json:"letsEncrypt,omitempty" form:"letsEncrypt" query:"letsEncrypt"`
+	// ConnectionLimit limits the number of concurrent connections.
+	ConnectionLimit *int64 `json:"connectionLimit,omitempty" form:"connectionLimit" query:"connectionLimit"`
+	// ReadHeaderTimeout protects against slow-loris attacks.
+	ReadHeaderTimeout *time.Duration `json:"readHeaderTimeout,omitempty" form:"readHeaderTimeout" query:"readHeaderTimeout"`
+	DebugJsonRpc      *bool          `json:"debugJsonRpc,omitempty" form:"debugJsonRpc" query:"debugJsonRpc"`
 }
 
 type Logging struct {
@@ -118,6 +138,8 @@ func (*ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
 func (*CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
 
 func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
+
+func (*HttpService) Type() ServiceType { return ServiceTypeHttp }
 
 func (*MemoryStorage) Type() StorageType { return StorageTypeMemory }
 
@@ -227,6 +249,46 @@ func (v *EventsService) Copy() *EventsService {
 }
 
 func (v *EventsService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *HttpService) Copy() *HttpService {
+	u := new(HttpService)
+
+	u.Listen = make([]p2p.Multiaddr, len(v.Listen))
+	for i, v := range v.Listen {
+		v := v
+		if v != nil {
+			u.Listen[i] = p2p.CopyMultiaddr(v)
+		}
+	}
+	u.TlsCertPath = v.TlsCertPath
+	u.TlsKeyPath = v.TlsKeyPath
+	u.CorsOrigins = make([]string, len(v.CorsOrigins))
+	for i, v := range v.CorsOrigins {
+		v := v
+		u.CorsOrigins[i] = v
+	}
+	u.LetsEncrypt = make([]string, len(v.LetsEncrypt))
+	for i, v := range v.LetsEncrypt {
+		v := v
+		u.LetsEncrypt[i] = v
+	}
+	if v.ConnectionLimit != nil {
+		u.ConnectionLimit = new(int64)
+		*u.ConnectionLimit = *v.ConnectionLimit
+	}
+	if v.ReadHeaderTimeout != nil {
+		u.ReadHeaderTimeout = new(time.Duration)
+		*u.ReadHeaderTimeout = *v.ReadHeaderTimeout
+	}
+	if v.DebugJsonRpc != nil {
+		u.DebugJsonRpc = new(bool)
+		*u.DebugJsonRpc = *v.DebugJsonRpc
+	}
+
+	return u
+}
+
+func (v *HttpService) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Logging) Copy() *Logging {
 	u := new(Logging)
@@ -449,6 +511,65 @@ func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
 
 func (v *EventsService) Equal(u *EventsService) bool {
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
+func (v *HttpService) Equal(u *HttpService) bool {
+	if len(v.Listen) != len(u.Listen) {
+		return false
+	}
+	for i := range v.Listen {
+		if !(p2p.EqualMultiaddr(v.Listen[i], u.Listen[i])) {
+			return false
+		}
+	}
+	if !(v.TlsCertPath == u.TlsCertPath) {
+		return false
+	}
+	if !(v.TlsKeyPath == u.TlsKeyPath) {
+		return false
+	}
+	if len(v.CorsOrigins) != len(u.CorsOrigins) {
+		return false
+	}
+	for i := range v.CorsOrigins {
+		if !(v.CorsOrigins[i] == u.CorsOrigins[i]) {
+			return false
+		}
+	}
+	if len(v.LetsEncrypt) != len(u.LetsEncrypt) {
+		return false
+	}
+	for i := range v.LetsEncrypt {
+		if !(v.LetsEncrypt[i] == u.LetsEncrypt[i]) {
+			return false
+		}
+	}
+	switch {
+	case v.ConnectionLimit == u.ConnectionLimit:
+		// equal
+	case v.ConnectionLimit == nil || u.ConnectionLimit == nil:
+		return false
+	case !(*v.ConnectionLimit == *u.ConnectionLimit):
+		return false
+	}
+	switch {
+	case v.ReadHeaderTimeout == u.ReadHeaderTimeout:
+		// equal
+	case v.ReadHeaderTimeout == nil || u.ReadHeaderTimeout == nil:
+		return false
+	case !(*v.ReadHeaderTimeout == *u.ReadHeaderTimeout):
+		return false
+	}
+	switch {
+	case v.DebugJsonRpc == u.DebugJsonRpc:
+		// equal
+	case v.DebugJsonRpc == nil || u.DebugJsonRpc == nil:
+		return false
+	case !(*v.DebugJsonRpc == *u.DebugJsonRpc):
 		return false
 	}
 
@@ -679,6 +800,48 @@ func (v *EventsService) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(len(v.Partition) == 0) {
 		u.Partition = v.Partition
+	}
+	return json.Marshal(&u)
+}
+
+func (v *HttpService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type              ServiceType                                    `json:"type"`
+		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
+		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+		CorsOrigins       encoding.JsonList[string]                      `json:"corsOrigins,omitempty"`
+		LetsEncrypt       encoding.JsonList[string]                      `json:"letsEncrypt,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
+		DebugJsonRpc      *bool                                          `json:"debugJsonRpc,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Listen) == 0) {
+		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(len(v.TlsCertPath) == 0) {
+		u.TlsCertPath = v.TlsCertPath
+	}
+	if !(len(v.TlsKeyPath) == 0) {
+		u.TlsKeyPath = v.TlsKeyPath
+	}
+	if !(len(v.CorsOrigins) == 0) {
+		u.CorsOrigins = v.CorsOrigins
+	}
+	if !(len(v.LetsEncrypt) == 0) {
+		u.LetsEncrypt = v.LetsEncrypt
+	}
+	if !(v.ConnectionLimit == nil) {
+		u.ConnectionLimit = v.ConnectionLimit
+	}
+	if !(v.ReadHeaderTimeout == nil) {
+		if v.ReadHeaderTimeout != nil {
+			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
+		}
+	}
+	if !(v.DebugJsonRpc == nil) {
+		u.DebugJsonRpc = v.DebugJsonRpc
 	}
 	return json.Marshal(&u)
 }
@@ -950,6 +1113,55 @@ func (v *EventsService) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Partition = u.Partition
+	return nil
+}
+
+func (v *HttpService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type              ServiceType                                    `json:"type"`
+		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
+		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+		CorsOrigins       encoding.JsonList[string]                      `json:"corsOrigins,omitempty"`
+		LetsEncrypt       encoding.JsonList[string]                      `json:"letsEncrypt,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
+		DebugJsonRpc      *bool                                          `json:"debugJsonRpc,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.TlsCertPath = v.TlsCertPath
+	u.TlsKeyPath = v.TlsKeyPath
+	u.CorsOrigins = v.CorsOrigins
+	u.LetsEncrypt = v.LetsEncrypt
+	u.ConnectionLimit = v.ConnectionLimit
+	if v.ReadHeaderTimeout != nil {
+		u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
+	}
+	u.DebugJsonRpc = v.DebugJsonRpc
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Listen != nil {
+		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
+		for i, x := range u.Listen.Value {
+			v.Listen[i] = x
+		}
+	}
+	v.TlsCertPath = u.TlsCertPath
+	v.TlsKeyPath = u.TlsKeyPath
+	v.CorsOrigins = u.CorsOrigins
+	v.LetsEncrypt = u.LetsEncrypt
+	v.ConnectionLimit = u.ConnectionLimit
+	if x, err := encoding.DurationFromJSON(u.ReadHeaderTimeout); err != nil {
+		return fmt.Errorf("error decoding ReadHeaderTimeout: %w", err)
+	} else {
+		v.ReadHeaderTimeout = &x
+	}
+	v.DebugJsonRpc = u.DebugJsonRpc
 	return nil
 }
 

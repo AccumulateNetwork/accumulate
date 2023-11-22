@@ -6,7 +6,10 @@
 
 package run
 
-import "gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+import (
+	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+)
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum  --package run enums.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package run config.yml
@@ -26,4 +29,25 @@ type Service interface {
 	CopyAsInterface() any
 
 	start(inst *Instance) error
+}
+
+func setDefault[V any](ptr *V, def V) {
+	var z V
+	if any(*ptr) == any(z) {
+		*ptr = def
+	}
+}
+
+func setDefault2[V any](ptr **V, def V) {
+	if *ptr == nil {
+		*ptr = &def
+	}
+}
+
+func mustParseMulti(s string) multiaddr.Multiaddr {
+	addr, err := multiaddr.NewMultiaddr(s)
+	if err != nil {
+		panic(err)
+	}
+	return addr
 }

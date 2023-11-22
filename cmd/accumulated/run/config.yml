@@ -88,6 +88,48 @@ CoreConsensusApp:
       type: bool
       optional: true
 
+HttpService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Listen
+      description: are the addresses and schemes to listen on
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
+    - name: TlsCertPath
+      description: is the path of the TLS certificate
+      type: string
+      optional: true
+    - name: TlsKeyPath
+      description: is the path of the TLS key
+      type: string
+      optional: true
+    - name: CorsOrigins
+      description: is a list of allowed CORS origins
+      type: string
+      repeatable: true
+      optional: true
+    - name: LetsEncrypt
+      description: automatically retrieves a certificate from Let's Encrypt for the specified domains
+      type: string
+      repeatable: true
+      optional: true
+    - name: ConnectionLimit
+      description: limits the number of concurrent connections
+      type: int
+      optional: true
+      pointer: true
+    - name: ReadHeaderTimeout
+      description: protects against slow-loris attacks
+      type: duration
+      optional: true
+      pointer: true
+    - name: DebugJsonRpc
+      type: bool
+      optional: true
+      pointer: true
+
 StorageService:
   union: { type: service }
   non-binary: true
