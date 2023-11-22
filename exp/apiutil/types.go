@@ -4,6 +4,6 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package main
+package apiutil
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package main --language go-alt types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package apiutil --language go-alt types.yml

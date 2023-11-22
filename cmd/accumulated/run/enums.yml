@@ -11,6 +11,8 @@ ServiceType:
     value: 5
   Events:
     value: 6
+  Http:
+    value: 7
 
 StorageType:
   Memory:
