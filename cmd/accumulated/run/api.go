@@ -17,8 +17,7 @@ import (
 )
 
 var (
-	querierNeedsStorage   = needs[keyvalue.Beginner](func(q *Querier) string { return q.Partition })
-	querierNeedsConsensus = needs[v3.ConsensusService](func(q *Querier) string { return q.Partition })
+	querierWantsConsensus = wants[v3.ConsensusService](func(q *Querier) string { return q.Partition })
 	querierProvides       = provides[v3.Querier](func(q *Querier) string { return q.Partition })
 
 	networkNeedsEvents  = needs[*events.Bus](func(n *NetworkService) string { return n.Partition })
@@ -34,26 +33,27 @@ var (
 	eventsProvides     = provides[v3.EventService](func(e *EventsService) string { return e.Partition })
 )
 
-
-func (s *Querier) needs() []ServiceDescriptor {
-	return []ServiceDescriptor{
-		querierNeedsStorage.describe(s),
+func (q *Querier) needs() []ServiceDescriptor {
+	desc := []ServiceDescriptor{
+		querierWantsConsensus.with(q),
 	}
+	desc = append(desc, q.Storage.needs(q.Partition)...)
+	return desc
 }
 
-func (s *Querier) provides() []ServiceDescriptor {
+func (q *Querier) provides() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		querierProvides.describe(s),
+		querierProvides.with(q),
 	}
 }
 
 func (q *Querier) start(inst *Instance) error {
-	store, err := querierNeedsStorage.get(inst, q)
+	store, err := q.Storage.open(inst, q.Partition)
 	if err != nil {
 		return err
 	}
 
-	consensus, err := querierNeedsConsensus.get(inst, q)
+	consensus, err := querierWantsConsensus.get(inst, q)
 	if err != nil {
 		return err
 	}
@@ -70,14 +70,14 @@ func (q *Querier) start(inst *Instance) error {
 
 func (n *NetworkService) needs() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		networkNeedsEvents.describe(n),
-		networkNeedsStorage.describe(n),
+		networkNeedsEvents.with(n),
+		networkNeedsStorage.with(n),
 	}
 }
 
 func (n *NetworkService) provides() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		networkProvides.describe(n),
+		networkProvides.with(n),
 	}
 }
 
@@ -104,14 +104,14 @@ func (n *NetworkService) start(inst *Instance) error {
 
 func (m *MetricsService) needs() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		metricsNeedsConsensus.describe(m),
-		metricsNeedsQuerier.describe(m),
+		metricsNeedsConsensus.with(m),
+		metricsNeedsQuerier.with(m),
 	}
 }
 
 func (m *MetricsService) provides() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		metricsProvides.describe(m),
+		metricsProvides.with(m),
 	}
 }
 
@@ -137,14 +137,14 @@ func (m *MetricsService) start(inst *Instance) error {
 
 func (e *EventsService) needs() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		eventsNeedsStorage.describe(e),
-		eventsNeedsEvents.describe(e),
+		eventsNeedsStorage.with(e),
+		eventsNeedsEvents.with(e),
 	}
 }
 
 func (e *EventsService) provides() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		eventsProvides.describe(e),
+		eventsProvides.with(e),
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -58,7 +59,8 @@ func TestRun(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, c.SaveTo("../../../.nodes/test.toml"))
+	c.file = "../../../.nodes/test.toml"
+	require.NoError(t, c.Save())
 
 	ctx = logging.With(ctx, "test", t.Name())
 	inst, err := Start(ctx, c)
@@ -73,6 +75,61 @@ func TestRun2(t *testing.T) {
 
 	c := new(Config)
 	require.NoError(t, c.LoadFrom("../../../.nodes/test2.toml"))
+
+	ctx = logging.With(ctx, "test", t.Name())
+	inst, err := Start(ctx, c)
+	require.NoError(t, err)
+
+	require.NoError(t, inst.Stop())
+}
+
+func TestEmbededStorage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	c := new(Config)
+	require.NoError(t, c.Load([]byte(`
+		[p2p]
+			network = "DevNet"
+			[p2p.key]
+				type = "transient"
+
+		[[services]]
+			type = "querier"
+			partition = "foo"
+			[services.storage]
+				type = "memory"
+	`), toml.Unmarshal))
+
+	ctx = logging.With(ctx, "test", t.Name())
+	inst, err := Start(ctx, c)
+	require.NoError(t, err)
+
+	require.NoError(t, inst.Stop())
+}
+
+func TestReferenceStorage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	c := new(Config)
+	require.NoError(t, c.Load([]byte(`
+		[p2p]
+			network = "DevNet"
+			[p2p.key]
+				type = "transient"
+
+		[[services]]
+			type = "querier"
+			partition = "foo"
+			storage = "bar"
+
+		[[services]]
+			type = "storage"
+			name = "bar"
+			[services.storage]
+				type = "memory"
+	`), toml.Unmarshal))
 
 	ctx = logging.With(ctx, "test", t.Name())
 	inst, err := Start(ctx, c)

@@ -21,14 +21,14 @@ import (
 )
 
 func (c *Config) LoadFrom(file string) error {
-	var decode func([]byte, any) error
+	var format func([]byte, any) error
 	switch s := filepath.Ext(file); s {
 	case ".toml", ".tml", ".ini":
-		decode = toml.Unmarshal
+		format = toml.Unmarshal
 	case ".yaml", ".yml":
-		decode = yaml.Unmarshal
+		format = yaml.Unmarshal
 	case ".json":
-		decode = json.Unmarshal
+		format = json.Unmarshal
 	default:
 		return errors.BadRequest.WithFormat("unknown file type %s", s)
 	}
@@ -38,8 +38,13 @@ func (c *Config) LoadFrom(file string) error {
 		return err
 	}
 
+	c.file = file
+	return c.Load(b, format)
+}
+
+func (c *Config) Load(b []byte, format func([]byte, any) error) error {
 	var v any
-	err = decode(b, &v)
+	err := format(b, &v)
 	if err != nil {
 		return err
 	}
@@ -50,7 +55,6 @@ func (c *Config) LoadFrom(file string) error {
 		return err
 	}
 
-	c.file = file
 	return json.Unmarshal(b, c)
 }
 

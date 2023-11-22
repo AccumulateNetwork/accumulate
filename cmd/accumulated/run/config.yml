@@ -105,6 +105,11 @@ Querier:
   fields:
     - name: Partition
       type: string
+    - name: Storage
+      type: StorageOrRef
+      marshal-as: reference
+      pointer: true
+      optional: true
 
 NetworkService:
   union: { type: service }

@@ -79,7 +79,7 @@ func (c *ConsensusService) needs() []ServiceDescriptor {
 
 func (c *ConsensusService) provides() []ServiceDescriptor {
 	return append(c.App.provides(),
-		consensusProvidesEventBus.describe(c),
+		consensusProvidesEventBus.with(c),
 	)
 }
 
@@ -172,16 +172,16 @@ func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partit
 
 func (c *CoreConsensusApp) needs() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		coreConsensusNeedsStorage.describe(c),
+		coreConsensusNeedsStorage.with(c),
 	}
 }
 
 func (c *CoreConsensusApp) provides() []ServiceDescriptor {
 	return []ServiceDescriptor{
-		consensusProvidesService.describe(c),
-		consensusProvidesSubmitter.describe(c),
-		consensusProvidesValidator.describe(c),
-		coreConsensusProvidesSequencer.describe(c),
+		consensusProvidesService.with(c),
+		consensusProvidesSubmitter.with(c),
+		consensusProvidesValidator.with(c),
+		coreConsensusProvidesSequencer.with(c),
 	}
 }
 
