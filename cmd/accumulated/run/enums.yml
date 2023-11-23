@@ -1,3 +1,7 @@
+ConfigurationType:
+  CoreValidator:
+    value: 1
+
 ServiceType:
   Storage:
     value: 1

@@ -20,10 +20,6 @@ func (p *P2P) start(inst *Instance) error {
 	if p.Key == nil {
 		p.Key = new(TransientPrivateKey)
 	}
-	if p.Network == "" {
-		p.Network = "Unknown"
-	}
-	inst.network = p.Network
 
 	addr, err := p.Key.get(inst)
 	if err != nil {
@@ -39,7 +35,7 @@ func (p *P2P) start(inst *Instance) error {
 
 	node, err := p2p.New(p2p.Options{
 		Key:               sk,
-		Network:           p.Network,
+		Network:           inst.network,
 		Listen:            p.Listen,
 		BootstrapPeers:    p.BootstrapPeers,
 		PeerDatabase:      p.PeerDB,

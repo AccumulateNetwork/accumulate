@@ -36,6 +36,7 @@ type nameAndType struct {
 
 func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	inst := new(Instance)
+	inst.network = cfg.Network
 	inst.running = new(sync.WaitGroup)
 	inst.context, inst.cancel = context.WithCancel(ctx)
 	inst.services = ioc.Registry{}
@@ -53,6 +54,14 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply configurations
+	for _, c := range cfg.Configurations {
+		err = c.apply(cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Determine initialization order

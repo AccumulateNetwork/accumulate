@@ -42,11 +42,13 @@ type CometPrivValFile struct {
 }
 
 type Config struct {
-	file     string
-	Logging  *Logging  `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
-	P2P      *P2P      `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
-	Apps     []Service `json:"apps,omitempty" form:"apps" query:"apps" validate:"required"`
-	Services []Service `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+	file           string
+	Network        string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Logging        *Logging        `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
+	P2P            *P2P            `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
+	Configurations []Configuration `json:"configurations,omitempty" form:"configurations" query:"configurations" validate:"required"`
+	Apps           []Service       `json:"apps,omitempty" form:"apps" query:"apps" validate:"required"`
+	Services       []Service       `json:"services,omitempty" form:"services" query:"services" validate:"required"`
 }
 
 type ConsensusService struct {
@@ -57,6 +59,14 @@ type ConsensusService struct {
 type CoreConsensusApp struct {
 	Partition     *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	EnableHealing bool                    `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+}
+
+type CoreValidatorConfiguration struct {
+	Network       string        `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Listen        p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	BVN           string        `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
+	EnableHealing *bool         `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	StorageType   *StorageType  `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
 type EventsService struct {
@@ -115,7 +125,6 @@ type NetworkService struct {
 }
 
 type P2P struct {
-	Network            string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Listen             []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required" toml:"listen" mapstructure:"listen"`
 	BootstrapPeers     []p2p.Multiaddr `json:"bootstrapPeers,omitempty" form:"bootstrapPeers" query:"bootstrapPeers" validate:"required" toml:"bootstrap-peers" mapstructure:"bootstrap-peers"`
 	Key                PrivateKey      `json:"key,omitempty" form:"key" query:"key" validate:"required"`
@@ -159,6 +168,8 @@ func (*CometPrivValFile) Type() PrivateKeyType { return PrivateKeyTypeCometPrivV
 func (*ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
 
 func (*CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
+
+func (*CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
 
 func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
 
@@ -213,11 +224,19 @@ func (v *CometPrivValFile) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Config) Copy() *Config {
 	u := new(Config)
 
+	u.Network = v.Network
 	if v.Logging != nil {
 		u.Logging = (v.Logging).Copy()
 	}
 	if v.P2P != nil {
 		u.P2P = (v.P2P).Copy()
+	}
+	u.Configurations = make([]Configuration, len(v.Configurations))
+	for i, v := range v.Configurations {
+		v := v
+		if v != nil {
+			u.Configurations[i] = CopyConfiguration(v)
+		}
 	}
 	u.Apps = make([]Service, len(v.Apps))
 	for i, v := range v.Apps {
@@ -264,6 +283,28 @@ func (v *CoreConsensusApp) Copy() *CoreConsensusApp {
 }
 
 func (v *CoreConsensusApp) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
+	u := new(CoreValidatorConfiguration)
+
+	u.Network = v.Network
+	if v.Listen != nil {
+		u.Listen = p2p.CopyMultiaddr(v.Listen)
+	}
+	u.BVN = v.BVN
+	if v.EnableHealing != nil {
+		u.EnableHealing = new(bool)
+		*u.EnableHealing = *v.EnableHealing
+	}
+	if v.StorageType != nil {
+		u.StorageType = new(StorageType)
+		*u.StorageType = *v.StorageType
+	}
+
+	return u
+}
+
+func (v *CoreValidatorConfiguration) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *EventsService) Copy() *EventsService {
 	u := new(EventsService)
@@ -412,7 +453,6 @@ func (v *NetworkService) CopyAsInterface() interface{} { return v.Copy() }
 func (v *P2P) Copy() *P2P {
 	u := new(P2P)
 
-	u.Network = v.Network
 	u.Listen = make([]p2p.Multiaddr, len(v.Listen))
 	for i, v := range v.Listen {
 		v := v
@@ -524,6 +564,9 @@ func (v *CometPrivValFile) Equal(u *CometPrivValFile) bool {
 }
 
 func (v *Config) Equal(u *Config) bool {
+	if !(v.Network == u.Network) {
+		return false
+	}
 	switch {
 	case v.Logging == u.Logging:
 		// equal
@@ -539,6 +582,14 @@ func (v *Config) Equal(u *Config) bool {
 		return false
 	case !((v.P2P).Equal(u.P2P)):
 		return false
+	}
+	if len(v.Configurations) != len(u.Configurations) {
+		return false
+	}
+	for i := range v.Configurations {
+		if !(EqualConfiguration(v.Configurations[i], u.Configurations[i])) {
+			return false
+		}
 	}
 	if len(v.Apps) != len(u.Apps) {
 		return false
@@ -581,6 +632,36 @@ func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
 		return false
 	}
 	if !(v.EnableHealing == u.EnableHealing) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
+	if !(v.Network == u.Network) {
+		return false
+	}
+	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
+		return false
+	}
+	if !(v.BVN == u.BVN) {
+		return false
+	}
+	switch {
+	case v.EnableHealing == u.EnableHealing:
+		// equal
+	case v.EnableHealing == nil || u.EnableHealing == nil:
+		return false
+	case !(*v.EnableHealing == *u.EnableHealing):
+		return false
+	}
+	switch {
+	case v.StorageType == u.StorageType:
+		// equal
+	case v.StorageType == nil || u.StorageType == nil:
+		return false
+	case !(*v.StorageType == *u.StorageType):
 		return false
 	}
 
@@ -743,9 +824,6 @@ func (v *NetworkService) Equal(u *NetworkService) bool {
 }
 
 func (v *P2P) Equal(u *P2P) bool {
-	if !(v.Network == u.Network) {
-		return false
-	}
 	if len(v.Listen) != len(u.Listen) {
 		return false
 	}
@@ -1065,16 +1143,24 @@ func (v *CometPrivValFile) MarshalJSON() ([]byte, error) {
 
 func (v *Config) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Logging  *Logging                                 `json:"logging,omitempty"`
-		P2P      *P2P                                     `json:"p2P,omitempty"`
-		Apps     *encoding.JsonUnmarshalListWith[Service] `json:"apps,omitempty"`
-		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
+		Network        string                                         `json:"network,omitempty"`
+		Logging        *Logging                                       `json:"logging,omitempty"`
+		P2P            *P2P                                           `json:"p2P,omitempty"`
+		Configurations *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
+		Apps           *encoding.JsonUnmarshalListWith[Service]       `json:"apps,omitempty"`
+		Services       *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
+	if !(len(v.Network) == 0) {
+		u.Network = v.Network
+	}
 	if !(v.Logging == nil) {
 		u.Logging = v.Logging
 	}
 	if !(v.P2P == nil) {
 		u.P2P = v.P2P
+	}
+	if !(len(v.Configurations) == 0) {
+		u.Configurations = &encoding.JsonUnmarshalListWith[Configuration]{Value: v.Configurations, Func: UnmarshalConfigurationJSON}
 	}
 	if !(len(v.Apps) == 0) {
 		u.Apps = &encoding.JsonUnmarshalListWith[Service]{Value: v.Apps, Func: UnmarshalServiceJSON}
@@ -1113,6 +1199,34 @@ func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.EnableHealing) {
 		u.EnableHealing = v.EnableHealing
+	}
+	return json.Marshal(&u)
+}
+
+func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type          ConfigurationType                          `json:"type"`
+		Network       string                                     `json:"network,omitempty"`
+		Listen        *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BVN           string                                     `json:"bvn,omitempty"`
+		EnableHealing *bool                                      `json:"enableHealing,omitempty"`
+		StorageType   *StorageType                               `json:"storageType,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Network) == 0) {
+		u.Network = v.Network
+	}
+	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
+		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(len(v.BVN) == 0) {
+		u.BVN = v.BVN
+	}
+	if !(v.EnableHealing == nil) {
+		u.EnableHealing = v.EnableHealing
+	}
+	if !(v.StorageType == nil) {
+		u.StorageType = v.StorageType
 	}
 	return json.Marshal(&u)
 }
@@ -1245,16 +1359,12 @@ func (v *NetworkService) MarshalJSON() ([]byte, error) {
 
 func (v *P2P) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Network            string                                         `json:"network,omitempty"`
 		Listen             *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
 		BootstrapPeers     *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
 		Key                *encoding.JsonUnmarshalWith[PrivateKey]        `json:"key,omitempty"`
 		PeerDB             string                                         `json:"peerDB,omitempty"`
 		EnablePeerTracking bool                                           `json:"enablePeerTracking,omitempty"`
 	}{}
-	if !(len(v.Network) == 0) {
-		u.Network = v.Network
-	}
 	if !(len(v.Listen) == 0) {
 		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
@@ -1394,20 +1504,31 @@ func (v *CometPrivValFile) UnmarshalJSON(data []byte) error {
 
 func (v *Config) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Logging  *Logging                                 `json:"logging,omitempty"`
-		P2P      *P2P                                     `json:"p2P,omitempty"`
-		Apps     *encoding.JsonUnmarshalListWith[Service] `json:"apps,omitempty"`
-		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
+		Network        string                                         `json:"network,omitempty"`
+		Logging        *Logging                                       `json:"logging,omitempty"`
+		P2P            *P2P                                           `json:"p2P,omitempty"`
+		Configurations *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
+		Apps           *encoding.JsonUnmarshalListWith[Service]       `json:"apps,omitempty"`
+		Services       *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
+	u.Network = v.Network
 	u.Logging = v.Logging
 	u.P2P = v.P2P
+	u.Configurations = &encoding.JsonUnmarshalListWith[Configuration]{Value: v.Configurations, Func: UnmarshalConfigurationJSON}
 	u.Apps = &encoding.JsonUnmarshalListWith[Service]{Value: v.Apps, Func: UnmarshalServiceJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.Network = u.Network
 	v.Logging = u.Logging
 	v.P2P = u.P2P
+	if u.Configurations != nil {
+		v.Configurations = make([]Configuration, len(u.Configurations.Value))
+		for i, x := range u.Configurations.Value {
+			v.Configurations[i] = x
+		}
+	}
 	if u.Apps != nil {
 		v.Apps = make([]Service, len(u.Apps.Value))
 		for i, x := range u.Apps.Value {
@@ -1463,6 +1584,38 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 	}
 	v.Partition = u.Partition
 	v.EnableHealing = u.EnableHealing
+	return nil
+}
+
+func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type          ConfigurationType                          `json:"type"`
+		Network       string                                     `json:"network,omitempty"`
+		Listen        *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BVN           string                                     `json:"bvn,omitempty"`
+		EnableHealing *bool                                      `json:"enableHealing,omitempty"`
+		StorageType   *StorageType                               `json:"storageType,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Network = v.Network
+	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.BVN = v.BVN
+	u.EnableHealing = v.EnableHealing
+	u.StorageType = v.StorageType
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Network = u.Network
+	if u.Listen != nil {
+		v.Listen = u.Listen.Value
+	}
+
+	v.BVN = u.BVN
+	v.EnableHealing = u.EnableHealing
+	v.StorageType = u.StorageType
 	return nil
 }
 
@@ -1631,14 +1784,12 @@ func (v *NetworkService) UnmarshalJSON(data []byte) error {
 
 func (v *P2P) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Network            string                                         `json:"network,omitempty"`
 		Listen             *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
 		BootstrapPeers     *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
 		Key                *encoding.JsonUnmarshalWith[PrivateKey]        `json:"key,omitempty"`
 		PeerDB             string                                         `json:"peerDB,omitempty"`
 		EnablePeerTracking bool                                           `json:"enablePeerTracking,omitempty"`
 	}{}
-	u.Network = v.Network
 	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.Key = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.Key, Func: UnmarshalPrivateKeyJSON}
@@ -1647,7 +1798,6 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Network = u.Network
 	if u.Listen != nil {
 		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {

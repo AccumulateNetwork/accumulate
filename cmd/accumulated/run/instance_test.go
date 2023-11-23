@@ -8,6 +8,7 @@ package run
 
 import (
 	"context"
+	"fmt"
 	"os/user"
 	"path/filepath"
 	"testing"
@@ -23,11 +24,51 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+func TestFoo(t *testing.T) {
+	fmt.Println(isZero(0))
+	fmt.Println(isZero[*struct{}](nil))
+
+	var x *struct{}
+	setDefaultVal(&x, new(struct{}))
+	fmt.Println(x)
+}
+
+func isZero[T comparable](v T) bool {
+	var z T
+	return z == v
+}
+
+func TestCoreValidatorConfig(t *testing.T) {
+	c := &Config{
+		Configurations: []Configuration{
+			&CoreValidatorConfiguration{
+				Network:       "MainNet",
+				Listen:        mustParseMulti("/tcp/16591"),
+				BVN:           "Apollo",
+				EnableHealing: ptr(true),
+				StorageType:   ptr(StorageTypeBadger),
+			},
+		},
+	}
+
+	// Apply configurations
+	for _, d := range c.Configurations {
+		require.NoError(t, d.apply(c))
+	}
+
+	c.Configurations = nil
+	b, err := c.Marshal(MarshalTOML)
+	require.NoError(t, err)
+
+	fmt.Printf("%s", b)
+}
+
 func TestRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
 	c := &Config{
+		Network: "DevNet",
 		Logging: &Logging{
 			Format: "plain",
 			Rules: []*LoggingRule{
@@ -35,7 +76,6 @@ func TestRun(t *testing.T) {
 			},
 		},
 		P2P: &P2P{
-			Network: "DevNet",
 			// BootstrapPeers: accumulate.BootstrapServers,
 			Key: &CometNodeKeyFile{Path: "node-1/dnn/config/node_key.json"},
 		},
@@ -91,7 +131,7 @@ func TestRun2(t *testing.T) {
 }
 
 func TestMainNetHttp(t *testing.T) {
-	t.Skip("Manual")
+	// t.Skip("Manual")
 
 	cu, err := user.Current()
 	require.NoError(t, err)
@@ -100,6 +140,7 @@ func TestMainNetHttp(t *testing.T) {
 	t.Cleanup(cancel)
 
 	c := &Config{
+		Network: "MainNet",
 		Logging: &Logging{
 			Format: "plain",
 			Rules: []*LoggingRule{
@@ -107,7 +148,6 @@ func TestMainNetHttp(t *testing.T) {
 			},
 		},
 		P2P: &P2P{
-			Network:        "MainNet",
 			BootstrapPeers: accumulate.BootstrapServers,
 			Key:            &PrivateKeySeed{Seed: record.NewKey(t.Name())},
 			PeerDB:         filepath.Join(cu.HomeDir, ".accumulate", "cache", "peerdb.json"),

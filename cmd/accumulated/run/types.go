@@ -7,6 +7,8 @@
 package run
 
 import (
+	"reflect"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
@@ -17,10 +19,11 @@ import (
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package run --language go-union --out unions_gen.go config.yml
 
 type (
-	ConsensusAppType int
-	ServiceType      int
-	StorageType      int
-	PrivateKeyType   int
+	ConfigurationType int
+	ServiceType       int
+	StorageType       int
+	PrivateKeyType    int
+	ConsensusAppType  int
 )
 
 type Service interface {
@@ -32,15 +35,15 @@ type Service interface {
 	start(inst *Instance) error
 }
 
-func setDefaultS[V any](ptr *[]V, def []V) {
-	if len(*ptr) == 0 {
-		*ptr = def
+func setDefaultPtr[V any](ptr **V, def V) {
+	if *ptr == nil {
+		*ptr = &def
 	}
 }
 
-func setDefault[V any](ptr **V, def V) {
-	if *ptr == nil {
-		*ptr = &def
+func setDefaultVal[V any](ptr *V, def V) {
+	if reflect.ValueOf(ptr).Elem().IsZero() {
+		*ptr = def
 	}
 }
 

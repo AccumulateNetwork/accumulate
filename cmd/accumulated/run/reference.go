@@ -116,10 +116,10 @@ func (s *ServiceOrRef[T]) Equal(t *ServiceOrRef[T]) bool {
 	return s.base().equalWith(t.base(), (T).Equal)
 }
 
-func (s *ServiceOrRef[T]) marshal() ([]byte, error) {
+func (s *ServiceOrRef[T]) MarshalJSON() ([]byte, error) {
 	return s.base().marshal()
 }
 
-func (s *ServiceOrRef[T]) unmarshal(b []byte) error {
+func (s *ServiceOrRef[T]) UnmarshalJSON(b []byte) error {
 	return s.base().unmarshal(b)
 }

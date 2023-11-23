@@ -66,41 +66,47 @@ func (c *Config) Save() error {
 }
 
 func (c *Config) SaveTo(file string) error {
-	var encode func(any) ([]byte, error)
+	var format func(any) ([]byte, error)
 	switch s := filepath.Ext(file); s {
 	case ".toml", ".tml", ".ini":
-		encode = func(a any) ([]byte, error) {
-			b := new(bytes.Buffer)
-			e := toml.NewEncoder(b)
-			err := e.Encode(a)
-			return b.Bytes(), err
-		}
+		format = MarshalTOML
 	case ".yaml", ".yml":
-		encode = yaml.Marshal
+		format = yaml.Marshal
 	case ".json":
-		encode = json.Marshal
+		format = json.Marshal
 	default:
 		return errors.BadRequest.WithFormat("unknown file type %s", s)
 	}
 
-	b, err := json.Marshal(c)
-	if err != nil {
-		return err
-	}
-
-	var v any
-	err = json.Unmarshal(b, &v)
-	if err != nil {
-		return err
-	}
-
-	v = remap(v, camel2kebab)
-	b, err = encode(v)
+	b, err := c.Marshal(format)
 	if err != nil {
 		return err
 	}
 
 	return os.WriteFile(file, b, 0700)
+}
+
+func MarshalTOML(a any) ([]byte, error) {
+	b := new(bytes.Buffer)
+	e := toml.NewEncoder(b)
+	err := e.Encode(a)
+	return b.Bytes(), err
+}
+
+func (c *Config) Marshal(format func(any) ([]byte, error)) ([]byte, error) {
+	b, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+
+	var v any
+	err = json.Unmarshal(b, &v)
+	if err != nil {
+		return nil, err
+	}
+
+	v = remap(v, camel2kebab)
+	return format(v)
 }
 
 func remap(v any, fn func(string) string) any {

@@ -45,9 +45,13 @@ func (h *HttpService) Requires() []ioc.Requirement {
 func (h *HttpService) Provides() []ioc.Provided { return nil }
 
 func (h *HttpService) start(inst *Instance) error {
-	setDefaultS(&h.Listen, []multiaddr.Multiaddr{mustParseMulti("/ip4/0.0.0.0/tcp/8080/http")})
-	setDefault(&h.ReadHeaderTimeout, 10*time.Second)
-	setDefault(&h.ConnectionLimit, 500)
+	setDefaultVal(&h.Listen, []multiaddr.Multiaddr{mustParseMulti("/ip4/0.0.0.0/tcp/8080/http")})
+	setDefaultPtr(&h.ReadHeaderTimeout, 10*time.Second)
+	setDefaultPtr(&h.ConnectionLimit, 500)
+
+	if len(h.Listen) == 0 {
+		return errors.BadRequest.With("no listen addresses specified")
+	}
 
 	var router routing.Router
 	var err error
