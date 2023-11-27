@@ -82,8 +82,8 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 
 func (c *CoreValidatorConfiguration) applyPart(cfg *Config, partID string, partType protocol.PartitionType, dir string) error {
 	// Consensus
-	if !haveService[*ConsensusService](cfg, func(c *ConsensusService) bool { return strings.EqualFold(c.App.partition().ID, partID) }) {
-		cfg.Apps = append(cfg.Apps, &ConsensusService{
+	addService(cfg,
+		&ConsensusService{
 			NodeDir: dir,
 			App: &CoreConsensusApp{
 				EnableHealing: *c.EnableHealing,
@@ -92,11 +92,11 @@ func (c *CoreValidatorConfiguration) applyPart(cfg *Config, partID string, partT
 					Type: partType,
 				},
 			},
-		})
-	}
+		},
+		func(c *ConsensusService) string { return c.App.partition().ID })
 
 	// Storage
-	if !haveService[*StorageService](cfg, func(c *StorageService) bool { return strings.EqualFold(c.Name, partID) }) {
+	if !haveService2[*StorageService](cfg, partID, func(s *StorageService) string { return s.Name }) {
 		switch *c.StorageType {
 		case StorageTypeMemory:
 			cfg.Services = append(cfg.Services, &StorageService{
@@ -117,13 +117,19 @@ func (c *CoreValidatorConfiguration) applyPart(cfg *Config, partID string, partT
 		}
 	}
 
+	// Snapshots
+	addService(cfg,
+		&SnapshotService{
+			Partition: partID,
+			Directory: filepath.Join(dir, "snapshots"),
+		},
+		func(s *SnapshotService) string { return s.Partition })
+
 	// Services
-	cfg.Services = append(cfg.Services,
-		&Querier{Partition: partID},
-		&NetworkService{Partition: partID},
-		&MetricsService{Partition: partID},
-		&EventsService{Partition: partID},
-	)
+	addService(cfg, &Querier{Partition: partID}, func(s *Querier) string { return s.Partition })
+	addService(cfg, &NetworkService{Partition: partID}, func(s *NetworkService) string { return s.Partition })
+	addService(cfg, &MetricsService{Partition: partID}, func(s *MetricsService) string { return s.Partition })
+	addService(cfg, &EventsService{Partition: partID}, func(s *EventsService) string { return s.Partition })
 
 	return nil
 }
@@ -150,4 +156,16 @@ func haveService[T any](cfg *Config, predicate func(T) bool) bool {
 		}
 	}
 	return false
+}
+
+func haveService2[T any](cfg *Config, wantID string, getID func(T) string) bool {
+	return haveService(cfg, func(s T) bool {
+		return strings.EqualFold(wantID, getID(s))
+	})
+}
+
+func addService[T Service](cfg *Config, s T, getID func(T) string) {
+	if !haveService2(cfg, getID(s), getID) {
+		cfg.Services = append(cfg.Services, s)
+	}
 }

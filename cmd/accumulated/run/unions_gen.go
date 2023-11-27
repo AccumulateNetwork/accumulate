@@ -190,6 +190,8 @@ func NewService(typ ServiceType) (Service, error) {
 		return new(Querier), nil
 	case ServiceTypeRouter:
 		return new(RouterService), nil
+	case ServiceTypeSnapshot:
+		return new(SnapshotService), nil
 	case ServiceTypeStorage:
 		return new(StorageService), nil
 	}
@@ -244,6 +246,12 @@ func EqualService(a, b Service) bool {
 		}
 		b, ok := b.(*RouterService)
 		return ok && a.Equal(b)
+	case *SnapshotService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SnapshotService)
+		return ok && a.Equal(b)
 	case *StorageService:
 		if a == nil {
 			return b == nil
@@ -270,6 +278,8 @@ func CopyService(v Service) Service {
 	case *Querier:
 		return v.Copy()
 	case *RouterService:
+		return v.Copy()
+	case *SnapshotService:
 		return v.Copy()
 	case *StorageService:
 		return v.Copy()

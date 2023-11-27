@@ -30,6 +30,10 @@ import (
 // ListSnapshots queries the node for available snapshots.
 func ListSnapshots(cfg *config.Config) ([]*snapshot.Header, error) {
 	snapDir := config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Snapshots.Directory)
+	return ListSnapshots2(snapDir)
+}
+
+func ListSnapshots2(snapDir string) ([]*snapshot.Header, error) {
 	info, err := listSnapshots(snapDir)
 	if err != nil {
 		return nil, err

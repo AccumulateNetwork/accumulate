@@ -190,6 +190,38 @@ RouterService:
       type: string
       optional: true
 
+SnapshotService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string
+    - name: Storage
+      type: StorageOrRef
+      marshal-as: reference
+      pointer: true
+      optional: true
+
+    - name: Directory
+      description: is the directory to store snapshots in
+      type: string
+    - name: Schedule
+      description: is the schedule for capturing snapshots
+      type: network.CronSchedule
+      marshal-as: reference
+      pointer: true
+      optional: true
+    - name: RetainCount
+      description:  is the number of snapshots to retain
+      type: uint
+      optional: true
+      pointer: true
+    - name: EnableIndexing
+      description: enables indexing of snapshots
+      type: bool
+      optional: true
+      pointer: true
+
 StorageService:
   union: { type: service }
   non-binary: true

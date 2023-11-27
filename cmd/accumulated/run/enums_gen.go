@@ -56,6 +56,9 @@ const ServiceTypeHttp ServiceType = 7
 // ServiceTypeRouter .
 const ServiceTypeRouter ServiceType = 8
 
+// ServiceTypeSnapshot .
+const ServiceTypeSnapshot ServiceType = 9
+
 // StorageTypeMemory .
 const StorageTypeMemory StorageType = 1
 
@@ -240,7 +243,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeStorage, ServiceTypeConsensus, ServiceTypeQuerier, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeEvents, ServiceTypeHttp, ServiceTypeRouter:
+	case ServiceTypeStorage, ServiceTypeConsensus, ServiceTypeQuerier, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeEvents, ServiceTypeHttp, ServiceTypeRouter, ServiceTypeSnapshot:
 		*v = u
 		return true
 	}
@@ -266,6 +269,8 @@ func (v ServiceType) String() string {
 		return "http"
 	case ServiceTypeRouter:
 		return "router"
+	case ServiceTypeSnapshot:
+		return "snapshot"
 	}
 	return fmt.Sprintf("ServiceType:%d", v)
 }
@@ -289,6 +294,8 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 		return ServiceTypeHttp, true
 	case "router":
 		return ServiceTypeRouter, true
+	case "snapshot":
+		return ServiceTypeSnapshot, true
 	}
 	return 0, false
 }
