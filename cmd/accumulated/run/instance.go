@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -31,8 +32,7 @@ type Instance struct {
 	services ioc.Registry
 }
 
-type nameAndType struct {
-}
+const minDiskSpace = 0.05
 
 func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	inst := new(Instance)
@@ -55,6 +55,15 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Ensure the disk does not fill up (and is not currently full)
+	free, err := diskUsage(inst.rootDir)
+	if err != nil {
+		return nil, err
+	} else if free < minDiskSpace {
+		return nil, errors.FatalError.With("disk is full")
+	}
+	go inst.checkDiskSpace()
 
 	// Apply configurations
 	for _, c := range cfg.Configurations {
@@ -125,4 +134,23 @@ func (i *Instance) path(path ...string) string {
 		return filepath.Join(path...)
 	}
 	return filepath.Join(append([]string{i.rootDir}, path...)...)
+}
+
+func (i *Instance) checkDiskSpace() {
+	for {
+		free, err := diskUsage(i.rootDir)
+		if err != nil {
+			i.logger.Error("Failed to get disk size, shutting down", "error", err, "module", "node")
+			return
+		}
+
+		if free < 0.05 {
+			i.logger.Error("Less than 5% disk space available, shutting down", "free", free, "module", "node")
+			return
+		}
+
+		i.logger.Info("Disk usage", "free", free, "module", "node")
+
+		time.Sleep(10 * time.Minute)
+	}
 }

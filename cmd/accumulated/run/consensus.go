@@ -19,6 +19,7 @@ import (
 	"github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
 	"github.com/cometbft/cometbft/rpc/client/local"
+	"github.com/fatih/color"
 	"github.com/spf13/viper"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -337,5 +338,6 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		return errors.UnknownError.Wrap(err)
 	}
 
+	color.HiBlue("Node is running (%v, %v)", c.Partition.ID, c.Partition.Type)
 	return nil
 }
