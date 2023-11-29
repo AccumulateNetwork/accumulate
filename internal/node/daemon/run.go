@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,7 +31,6 @@ import (
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
-	tmclient "github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/fatih/color"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -39,6 +39,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
@@ -51,14 +52,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
-	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/node/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
@@ -72,21 +70,21 @@ type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
-	done              chan struct{}
-	db                *database.Database
-	node              *node.Node
-	apiServer         *http.Server
-	privVal           *privval.FilePV
-	p2pnode           *p2p.Node
-	api               *nodeapi.Handler
-	nodeKey           *tmp2p.NodeKey
-	connectionManager connections.ConnectionInitializer
-	router            routing.Router
-	eventBus          *events.Bus
-	localTm           tmclient.Client
-	snapshotSchedule  cron.Schedule
-	snapshotLock      *sync.Mutex
-	tracer            trace.Tracer
+	done             chan struct{}
+	db               *database.Database
+	node             *node.Node
+	apiServer        *http.Server
+	privVal          *privval.FilePV
+	p2pnode          *p2p.Node
+	api              *nodeapi.Handler
+	nodeKey          *tmp2p.NodeKey
+	router           routing.Router
+	eventBus         *events.Bus
+	localTm          *tendermint.DeferredClient
+	snapshotSchedule cron.Schedule
+	snapshotLock     *sync.Mutex
+	tracer           trace.Tracer
+	local            map[string]tendermint.DispatcherClient
 
 	// knobs for tests
 	// IsTest   bool
@@ -106,6 +104,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 	var daemon Daemon
 	daemon.snapshotLock = new(sync.Mutex)
 	daemon.Config = cfg
+	daemon.localTm = tendermint.NewDeferredClient()
 
 	if newWriter == nil {
 		newWriter = func(c *config.Config) (io.Writer, error) {
@@ -144,13 +143,22 @@ func (d *Daemon) EventBus() *events.Bus           { return d.eventBus }
 
 // StartSecondary starts this daemon as a secondary process of the given daemon
 // (which must already be running).
-func (d *Daemon) StartSecondary(e *Daemon) error {
+func (d *Daemon) StartSecondary(e *Daemon, others ...*Daemon) error {
 	// Reuse the P2P node. Otherwise, start everything normally.
 	d.p2pnode = e.p2pnode
-	return d.Start()
+	return d.Start(append(others, e)...)
 }
 
-func (d *Daemon) Start() (err error) {
+func (d *Daemon) Start(others ...*Daemon) (err error) {
+	d.local = map[string]tendermint.DispatcherClient{}
+	d.local[strings.ToLower(d.Config.Accumulate.PartitionId)] = d.localTm
+	for _, e := range others {
+		part := strings.ToLower(e.Config.Accumulate.PartitionId)
+		if d.local[part] == nil {
+			d.local[part] = e.localTm
+		}
+	}
+
 	if d.Config.Accumulate.API.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
 	}
@@ -345,9 +353,21 @@ func (d *Daemon) startApp() (types.Application, error) {
 		Sequencer:     client.Private(),
 		Querier:       client,
 		EnableHealing: d.Config.Accumulate.Healing.Enable,
-		NewDispatcher: func() execute.Dispatcher {
+	}
+
+	if _, ok := d.local["directory"]; !ok ||
+		d.Config.Accumulate.DisableDirectDispatch {
+		// If we are not attached to a DN node, or direct dispatch is disabled,
+		// use the API dispatcher
+		execOpts.NewDispatcher = func() execute.Dispatcher {
 			return newDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
-		},
+		}
+
+	} else {
+		// Otherwise, use the Tendermint dispatcher
+		execOpts.NewDispatcher = func() execute.Dispatcher {
+			return tendermint.NewDispatcher(d.router, d.local)
+		}
 	}
 
 	// On DNs initialize the major block scheduler
@@ -415,19 +435,12 @@ func (d *Daemon) startConsensus(app types.Application) error {
 	})
 
 	// Create a local client
-	d.localTm = local.New(d.node.Node)
+	d.localTm.Set(local.New(d.node.Node))
 
 	return nil
 }
 
 func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
-	// Let the connection manager create and assign clients
-	statusChecker := statuschk.NewNodeStatusChecker()
-	err := d.connectionManager.InitClients(d.localTm, statusChecker)
-	if err != nil {
-		return errors.UnknownError.WithFormat("initialize the connection manager: %v", err)
-	}
-
 	// Wait for the executor to finish loading everything
 	globals := <-chGlobals
 
@@ -539,9 +552,6 @@ func (d *Daemon) StartP2P() error {
 }
 
 func (d *Daemon) startAPI() error {
-	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
-		return client.New(server)
-	})
 	d.router = routing.NewRouter(d.eventBus, d.Logger)
 
 	// Setup the p2p node
@@ -634,15 +644,6 @@ func (d *Daemon) startMonitoringAndCleanup() {
 	}()
 }
 
-func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.Config.Accumulate.PartitionId, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return ctx.GetABCIClient(), nil
-}
-
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
 	if d.nodeKey.PrivKey.Equals(e.nodeKey.PrivKey) {
 		return errors.Conflict.With("cannot connect nodes directly as they have the same node key")
@@ -653,21 +654,7 @@ func (d *Daemon) ConnectDirectly(e *Daemon) error {
 		return err
 	}
 
-	err = e.p2pnode.ConnectDirectly(d.p2pnode)
-	if err != nil {
-		return err
-	}
-
-	if d.connectionManager == nil {
-		return nil
-	}
-
-	err = d.connectionManager.ConnectDirectly(e.connectionManager)
-	if err != nil {
-		return err
-	}
-
-	return e.connectionManager.ConnectDirectly(d.connectionManager)
+	return e.p2pnode.ConnectDirectly(d.p2pnode)
 }
 
 func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {

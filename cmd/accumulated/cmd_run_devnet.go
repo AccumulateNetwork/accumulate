@@ -219,7 +219,7 @@ func startDevNetNode(primary, secondary *accumulated.Daemon, started, done *sync
 		defer started.Done()
 
 		// Start it
-		check(primary.Start())
+		check(primary.Start(secondary))
 		if secondary != nil {
 			check(secondary.StartSecondary(primary))
 		}
