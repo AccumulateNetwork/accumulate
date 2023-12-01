@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -104,4 +105,37 @@ func TestGetBptRootHash(t *testing.T) {
 	hashAfter2, err = batch.GetBptRootHash()
 	require.NoError(t, err)
 	assert.Equal(t, hashAfter, hashAfter2)
+}
+
+func TestResolveAccountKey(t *testing.T) {
+	// Setup
+	db := OpenInMemory(nil)
+	db.SetObserver(acctesting.NullObserver{})
+	account := protocol.AccountUrl("foo")
+	require.NoError(t, db.Update(func(batch *Batch) error {
+		return batch.Account(account).Main().Put(&protocol.UnknownAccount{
+			Url: account,
+		})
+	}))
+
+	noChange := func(key *record.Key, message string, args ...any) {
+		batch := db.Begin(false)
+		defer batch.Discard()
+		resolved := batch.ResolveAccountKey(key)
+		require.Equalf(t, key.String(), resolved.String(), message, args...)
+	}
+
+	didChange := func(key, expected *record.Key, message string, args ...any) {
+		batch := db.Begin(false)
+		defer batch.Discard()
+		resolved := batch.ResolveAccountKey(key)
+		require.Equalf(t, expected.String(), resolved.String(), message, args...)
+	}
+
+	kh := record.NewKey("Account", account).Hash()
+
+	noChange(record.NewKey("Transaction", [32]byte{1}), "transaction key does not change")
+	noChange(record.NewKey("Account", account, "Main"), "resolved account key does not change")
+	didChange(record.NewKey(kh), record.NewKey("Account", account), "base account key is resolved")
+	didChange(record.NewKey(kh, "Main"), record.NewKey("Account", account, "Main"), "main state account key is resolved")
 }
