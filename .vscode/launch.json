@@ -539,11 +539,14 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/resend-anchor",
+      "program": "${workspaceFolder}/tools/cmd/debug",
       "cwd": "${workspaceFolder}",
       "args": [
         "heal",
-        "https://mainnet.accumulatenetwork.io/v3",
+        "anchor",
+        "MainNet",
+        "--cached-scan=${env:HOME}/.accumulate/cache/mainnet.json",
+        "Directory → Apollo", "70911"
       ]
     },
     {
@@ -557,9 +560,11 @@
       "program": "${workspaceFolder}/tools/cmd/debug",
       "cwd": "${workspaceFolder}",
       "args": [
-        "heal-synth",
+        "heal",
+        "synth",
         "mainnet",
-        "mainnet",
+        "--cached-scan=${env:HOME}/.accumulate/cache/mainnet.json",
+        // "Apollo → Yutu", "912"
       ]
     },
     {
