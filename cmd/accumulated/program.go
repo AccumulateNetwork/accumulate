@@ -11,14 +11,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -53,7 +52,7 @@ func singleNodeWorkDir(cmd *cobra.Command) (string, error) {
 }
 
 func (p *Program) Run() error {
-	ctx := contextForMainProcess(context.Background())
+	ctx := cmdutil.ContextForMainProcess(context.Background())
 
 	err := p.Start()
 	if err != nil {
@@ -183,18 +182,4 @@ func stopDual(primary, secondary *accumulated.Daemon) error {
 	errg.Go(primary.Stop)
 	errg.Go(secondary.Stop)
 	return errg.Wait()
-}
-
-func contextForMainProcess(ctx context.Context) context.Context {
-	ctx, cancel := context.WithCancel(ctx)
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		<-sigs
-		signal.Stop(sigs)
-		cancel()
-	}()
-
-	return ctx
 }

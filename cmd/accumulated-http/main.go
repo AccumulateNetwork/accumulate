@@ -15,8 +15,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -34,6 +32,7 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -109,14 +108,7 @@ var nodeMainnetChandrayaan = peer.AddrInfo{
 
 func run(_ *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
-
-	go func() {
-		<-sigs
-		signal.Stop(sigs)
-		cancel()
-	}()
+	ctx = cmdutil.ContextForMainProcess(ctx)
 
 	if len(flag.HttpListen) == 0 && len(flag.LetsEncrypt) == 0 {
 		// Default listen address
