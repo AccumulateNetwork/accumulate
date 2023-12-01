@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/libs/log"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cometbft/cometbft/types"
@@ -34,7 +35,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -685,8 +685,8 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		return "", fmt.Errorf("load/generate node key files, %v", err)
 	}
 
-	config.Genesis = "config/genesis.snap"
-	genDocBytes, err := genesis.ConvertJsonToSnapshot(genDoc)
+	// TODO If AppData contains a consensus section, convert to binary genesis
+	genDocBytes, err := cmtjson.MarshalIndent(genDoc, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("write node files, %v", err)
 	}
