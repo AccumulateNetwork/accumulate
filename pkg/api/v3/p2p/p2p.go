@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -66,7 +67,9 @@ type Options struct {
 	// mis-configured peers. This is currently experimental.
 	EnablePeerTracker bool
 
-	PeerDatabase string
+	PeerDatabase         string
+	PeerScanFrequency    time.Duration
+	PeerPersistFrequency time.Duration
 }
 
 // New creates a node with the given [Options].
@@ -152,10 +155,12 @@ func New(opts Options) (_ *Node, err error) {
 	// Set up the peer tracker
 	if opts.PeerDatabase != "" {
 		n.tracker, err = dial.NewPersistentTracker(n.context, dial.PersistentTrackerOptions{
-			Network:  opts.Network,
-			Filename: opts.PeerDatabase,
-			Host:     (*connector)(n),
-			Peers:    (*dhtDiscoverer)(n),
+			Network:          opts.Network,
+			Filename:         opts.PeerDatabase,
+			Host:             (*connector)(n),
+			Peers:            (*dhtDiscoverer)(n),
+			ScanFrequency:    opts.PeerScanFrequency,
+			PersistFrequency: opts.PeerPersistFrequency,
 		})
 		if err != nil {
 			return nil, err
@@ -226,7 +231,10 @@ func (n *Node) getPeerService(ctx context.Context, peerID peer.ID, service *api.
 		}
 	}
 
-	s, err := n.host.NewStream(ctx, peerID, idRpc(service))
+	connCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	s, err := n.host.NewStream(connCtx, peerID, idRpc(service))
 	if err != nil {
 		return nil, err
 	}
