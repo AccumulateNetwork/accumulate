@@ -11,6 +11,7 @@ import (
 	"io/fs"
 )
 
+// Buffer is an [io.ReadWriteSeeker] and [io.ReaderAt] backed by a byte array.
 type Buffer struct {
 	buf []byte
 	pos int
