@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -131,7 +132,9 @@ func dumpV2(f ioutil.SectionReader) {
 					check(err)
 				}
 
-				fmt.Printf("  %v\n", re.Key)
+				h := sha256.Sum256(re.Value)
+
+				fmt.Printf("  %x  %v\n", h[:4], re.Key)
 			}
 
 		case sv2.SectionTypeRecordIndex:
