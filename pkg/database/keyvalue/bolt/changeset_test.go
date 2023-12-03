@@ -4,38 +4,40 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package memory
+package bolt
 
 import (
+	"path/filepath"
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest"
 )
 
-func open() kvtest.Opener {
-	// Reuse the same in-memory database each time
-	db := New(nil)
-	return func() (keyvalue.Beginner, error) { return db, nil }
+func open(t *testing.T) kvtest.Opener {
+	dir := t.TempDir()
+	return func() (keyvalue.Beginner, error) {
+		return Open(filepath.Join(dir, "bolt.db"))
+	}
 }
 
 func TestDatabase(t *testing.T) {
-	kvtest.TestDatabase(t, open())
+	kvtest.TestDatabase(t, open(t))
 }
 
 func TestIsolation(t *testing.T) {
-	t.Skip("Isolation not supported")
-	kvtest.TestIsolation(t, open())
+	t.Skip("Deadlocks due to database locks")
+	kvtest.TestIsolation(t, open(t))
 }
 
 func TestSubBatch(t *testing.T) {
-	kvtest.TestSubBatch(t, open())
+	kvtest.TestSubBatch(t, open(t))
 }
 
 func TestPrefix(t *testing.T) {
-	kvtest.TestPrefix(t, open())
+	kvtest.TestPrefix(t, open(t))
 }
 
 func TestDelete(t *testing.T) {
-	kvtest.TestDelete(t, open())
+	kvtest.TestDelete(t, open(t))
 }
