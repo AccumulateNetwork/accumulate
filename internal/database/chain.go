@@ -84,6 +84,11 @@ func (c *Chain) State(height int64) (*merkle.State, error) {
 	return c.merkle.GetAnyState(height)
 }
 
+// State returns the state of the chain at the given height.
+func (c *Chain2) State(height int64) (*merkle.State, error) {
+	return c.Inner().GetAnyState(height)
+}
+
 // CurrentState returns the current state of the chain.
 func (c *Chain) CurrentState() *merkle.State {
 	return c.head

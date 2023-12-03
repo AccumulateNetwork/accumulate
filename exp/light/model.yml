@@ -1,10 +1,8 @@
 - name: IndexDB
   type: entity
-  interface: true
   attributes:
   - name: Account
     type: entity
-    interface: true
     parameters:
     - name: Url
       type: url
@@ -20,7 +18,6 @@
       collection: set
     - name: Chain
       type: entity
-      interface: true
       parameters:
       - name: Name
         type: string
@@ -29,25 +26,34 @@
         type: index
         dataType: protocol.IndexEntry
         pointer: true
+        private: true
         collection: list
 
   - name: Partition
     type: entity
-    interface: true
     parameters:
     - name: Url
       type: url
       pointer: true
     attributes:
     - name: Anchors
-      type: state
-      dataType: AnchorMetadata
-      pointer: true
-      collection: list
+      type: entity
+      attributes:
+      - name: Produced
+        type: state
+        dataType: AnchorMetadata
+        pointer: true
+        collection: list
+        private: true
+      - name: Received
+        type: state
+        dataType: AnchorMetadata
+        pointer: true
+        collection: list
+        private: true
 
   - name: Transaction
     type: entity
-    interface: true
     parameters:
     - name: Hash
       type: hash

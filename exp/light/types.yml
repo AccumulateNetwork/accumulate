@@ -8,6 +8,10 @@ AnchorMetadata:
     type: protocol.PartitionAnchor
     marshal-as: reference
     pointer: true
+  - name: Transaction
+    type: protocol.Transaction
+    marshal-as: reference
+    pointer: true
 
 EventMetadata:
   fields:
