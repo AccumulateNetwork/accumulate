@@ -17,6 +17,7 @@ import (
 	"time"
 
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
@@ -24,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -35,6 +37,17 @@ var cmdInitNetwork = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 }
 
+var cmdInitGenesis = &cobra.Command{
+	Use:   "genesis <network configuration file>",
+	Short: "Generate genesis files for a network",
+	Run:   initGenesis,
+	Args:  cobra.ExactArgs(1),
+}
+
+func init() {
+	cmdInit.AddCommand(cmdInitGenesis)
+}
+
 func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err error) {
 	jsonFile, err := os.Open(file)
 	defer func() { _ = jsonFile.Close() }()
@@ -44,6 +57,26 @@ func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err er
 	}
 	data, _ := io.ReadAll(jsonFile)
 	err = json.Unmarshal(data, &ret)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, bvn := range ret.Bvns {
+		for _, node := range bvn.Nodes {
+			if node.PrivValKey == nil {
+				node.PrivValKey = tmed25519.GenPrivKey()
+			}
+			if node.DnNodeKey == nil {
+				node.DnNodeKey = tmed25519.GenPrivKey()
+			}
+			if node.BvnNodeKey == nil {
+				node.BvnNodeKey = tmed25519.GenPrivKey()
+			}
+			if node.ListenAddress == "" {
+				node.ListenAddress = "0.0.0.0"
+			}
+		}
+	}
 	return ret, err
 }
 
@@ -59,20 +92,27 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 
-	for _, bvn := range network.Bvns {
-		for _, node := range bvn.Nodes {
-			// TODO Check for existing keys?
-			node.PrivValKey = tmed25519.GenPrivKey()
-			node.DnNodeKey = tmed25519.GenPrivKey()
-			node.BvnNodeKey = tmed25519.GenPrivKey()
-
-			if node.ListenAddress == "" {
-				node.ListenAddress = "0.0.0.0"
-			}
-		}
-	}
-
 	initNetworkLocalFS(cmd, network)
+}
+
+func initGenesis(cmd *cobra.Command, args []string) {
+	networkConfigFile := args[0]
+	network, err := loadNetworkConfiguration(networkConfigFile)
+	check(err)
+
+	// Generate genesis docs
+	genDocs := buildGenesis(network)
+
+	// Write documents, as binary and as JSON
+	check(os.MkdirAll(flagMain.WorkDir, 0755))
+	for part, snap := range genDocs {
+		check(os.WriteFile(filepath.Join(flagMain.WorkDir, part+".snap"), snap, 0600))
+		doc, err := genesis.ConvertSnapshotToJson(snap)
+		check(err)
+		snap, err = cmtjson.MarshalIndent(doc, "", "  ")
+		check(err)
+		check(os.WriteFile(filepath.Join(flagMain.WorkDir, part+".json"), snap, 0600))
+	}
 }
 
 func verifyInitFlags(cmd *cobra.Command, count int) {
@@ -113,30 +153,6 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 	check(enc.Encode(netInit))
 	check(netFile.Close())
 
-	var factomAddresses func() (io.Reader, error)
-	var snapshots []func() (ioutil2.SectionReader, error)
-	if flagInit.FactomAddresses != "" {
-		factomAddresses = func() (io.Reader, error) { return os.Open(flagInit.FactomAddresses) }
-	}
-	for _, filename := range flagInit.Snapshots {
-		filename := filename // See docs/developer/rangevarref.md
-		snapshots = append(snapshots, func() (ioutil2.SectionReader, error) { return os.Open(filename) })
-	}
-	if flagInit.FaucetSeed != "" {
-		b := createFaucet(strings.Split(flagInit.FaucetSeed, " "))
-		snapshots = append(snapshots, func() (ioutil2.SectionReader, error) {
-			return ioutil2.NewBuffer(b), nil
-		})
-	}
-
-	values := new(core.GlobalValues)
-	if flagInitDevnet.Globals != "" {
-		checkf(yaml.Unmarshal([]byte(flagInitDevnet.Globals), values), "--globals")
-	}
-
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), newLogger(), factomAddresses, snapshots)
-	checkf(err, "build genesis documents")
-
 	configs := accumulated.BuildNodesConfig(netInit, nil)
 	for _, configs := range configs {
 		for _, configs := range configs {
@@ -156,6 +172,7 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 	}
 
 	var count int
+	genDocs := buildGenesis(netInit)
 	dnGenDoc := genDocs[protocol.Directory]
 	for i, bvn := range netInit.Bvns {
 		bvnGenDoc := genDocs[bvn.Id]
@@ -195,6 +212,33 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 		err = accumulated.WriteNodeFiles(configs[i][0][0], nil, netInit.Bootstrap.PrivValKey, nil)
 		checkf(err, "write bootstrap files")
 	}
+}
+
+func buildGenesis(network *accumulated.NetworkInit) map[string][]byte {
+	var factomAddresses func() (io.Reader, error)
+	var snapshots []func() (ioutil2.SectionReader, error)
+	if flagInit.FactomAddresses != "" {
+		factomAddresses = func() (io.Reader, error) { return os.Open(flagInit.FactomAddresses) }
+	}
+	for _, filename := range flagInit.Snapshots {
+		filename := filename // See docs/developer/rangevarref.md
+		snapshots = append(snapshots, func() (ioutil2.SectionReader, error) { return os.Open(filename) })
+	}
+	if flagInit.FaucetSeed != "" {
+		b := createFaucet(strings.Split(flagInit.FaucetSeed, " "))
+		snapshots = append(snapshots, func() (ioutil2.SectionReader, error) {
+			return ioutil2.NewBuffer(b), nil
+		})
+	}
+
+	values := new(core.GlobalValues)
+	if flagInitDevnet.Globals != "" {
+		checkf(yaml.Unmarshal([]byte(flagInitDevnet.Globals), values), "--globals")
+	}
+
+	genDocs, err := accumulated.BuildGenesisDocs(network, values, time.Now(), newLogger(), factomAddresses, snapshots)
+	checkf(err, "build genesis documents")
+	return genDocs
 }
 
 func createFaucet(seedStrs []string) []byte {
