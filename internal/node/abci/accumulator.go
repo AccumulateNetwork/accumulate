@@ -47,6 +47,7 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
+	snapshots      snapshotManager
 	block          execute.Block
 	blockState     execute.BlockState
 	blockSpan      trace.Span
