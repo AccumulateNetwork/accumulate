@@ -7,21 +7,19 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/spf13/cobra"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -57,62 +55,48 @@ func setFlagsForInit() error {
 	return nil
 }
 
-func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
-	s := strings.Split(args[0], ".")
-	if len(s) != 2 {
-		fatalf("network must be in the form of <network-name>.<partition-name>, e.g. mainnet.bvn0")
-	}
-	partitionName := s[0]
-	networkName := s[1]
-	if partitionName == "Directory" {
-		return fmt.Errorf("cannot specify \"Directory\" partition, please specify a block validator name for init dual node")
-	}
-	_ = networkName
+// func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
+// 	s := strings.Split(args[0], ".")
+// 	if len(s) != 2 {
+// 		fatalf("network must be in the form of <network-name>.<partition-name>, e.g. mainnet.bvn0")
+// 	}
+// 	partitionName := s[0]
+// 	networkName := s[1]
+// 	if partitionName == "Directory" {
+// 		return fmt.Errorf("cannot specify \"Directory\" partition, please specify a block validator name for init dual node")
+// 	}
+// 	_ = networkName
 
-	err := setFlagsForInit()
-	if err != nil {
-		return err
-	}
+// 	err := setFlagsForInit()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// configure the Directory first so we know how to setup the bvn.
-	args = []string{args[0]}
+// 	// configure the Directory first so we know how to setup the bvn.
+// 	args = []string{args[0]}
 
-	flagInitNode.GenesisDoc = flagInitDualNode.DnGenesis
-	_, err = initNode(cmd, args)
-	if err != nil {
-		return fmt.Errorf("cannot configure the directory node, %v", err)
-	}
+// 	flagInitNode.GenesisDoc = flagInitDualNode.DnGenesis
+// 	_, err = initNode(cmd, args)
+// 	if err != nil {
+// 		return fmt.Errorf("cannot configure the directory node, %v", err)
+// 	}
 
-	c, err := finalizeDnn(partitionName)
-	if err != nil {
-		return err
-	}
+// 	_, err = finalizeDnn(partitionName)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	partition, _, err := findInDescribe("", partitionName, &c.Accumulate.Network)
-	if err != nil {
-		return fmt.Errorf("cannot find partition %s in network configuration, %v", partitionName, err)
-	}
+// 	args = []string{fmt.Sprintf("tcp://%s:%d", bvnHost, partition.BasePort)}
 
-	if partition.Type != protocol.PartitionTypeBlockValidator {
-		return fmt.Errorf("network partition of second node configuration must be a block validator. Please specify {network-name}.{bvn-partition-id} first parameter to init dual")
-	}
+// 	flagInitNode.GenesisDoc = flagInitDualNode.BvnGenesis
+// 	_, err = initNode(cmd, args)
+// 	if err != nil {
+// 		return fmt.Errorf("cannot configure the directory node, %v", err)
+// 	}
 
-	bvnHost, err := findHealthyNodeOnPartition(partition)
-	if err != nil {
-		return fmt.Errorf("cannot find a healthy node on partition %s, %v", partitionName, err)
-	}
-
-	args = []string{fmt.Sprintf("tcp://%s:%d", bvnHost, partition.BasePort)}
-
-	flagInitNode.GenesisDoc = flagInitDualNode.BvnGenesis
-	_, err = initNode(cmd, args)
-	if err != nil {
-		return fmt.Errorf("cannot configure the directory node, %v", err)
-	}
-
-	_, err = finalizeBvnn()
-	return err
-}
+// 	_, err = finalizeBvnn()
+// 	return err
+// }
 
 func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 	u, err := url.Parse(args[0])
@@ -191,16 +175,6 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 	// 	c.P2P.PersistentPeers = ""
 	// }
 
-	bvn := c.Accumulate.Network.GetPartitionByID(bvnId)
-	if bvn == nil {
-		return nil, fmt.Errorf("bvn partition not found in configuration, %s", bvnId)
-	}
-
-	_, err = ensureNodeOnPartition(bvn, c.Accumulate.LocalAddress, cfg.NodeTypeValidator)
-	if err != nil {
-		return nil, err
-	}
-
 	err = cfg.Store(c)
 	if err != nil {
 		return nil, fmt.Errorf("cannot store configuration file for node, %v", err)
@@ -232,16 +206,6 @@ func finalizeBvnn() (*cfg.Config, error) {
 	// 	c.P2P.PersistentPeers = ""
 	// }
 
-	dn := c.Accumulate.Network.GetPartitionByID(protocol.Directory)
-	if dn == nil {
-		return nil, fmt.Errorf("cannot find directory parition on network in configuration")
-	}
-
-	_, err = ensureNodeOnPartition(dn, c.Accumulate.LocalAddress, cfg.NodeTypeValidator)
-	if err != nil {
-		return nil, err
-	}
-
 	return c, cfg.Store(c)
 }
 
@@ -254,7 +218,8 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	var err error
 	if flagInitDualNode.SeedProxy != "" {
-		err = initDualNodeFromSeed(cmd, args)
+		fmt.Fprintln(os.Stderr, "Starting from a seed proxy is not currently supported")
+		// err = initDualNodeFromSeed(cmd, args)
 	} else {
 		err = initDualNodeFromPeer(cmd, args)
 	}
@@ -281,63 +246,4 @@ func resolvePublicIp() (string, error) {
 		return "", err
 	}
 	return ip.Query, nil
-}
-
-func findHealthyNodeOnPartition(partition *cfg.Partition) (string, error) {
-	for _, p := range partition.Nodes {
-		addr, err := resolveAddr(p.Address)
-		if err != nil {
-			continue
-		}
-
-		accClient, err := client.New(fmt.Sprintf("http://%s:%d", addr, partition.BasePort+int64(cfg.PortOffsetAccumulateApi)))
-		if err != nil {
-			continue
-		}
-		saddr := fmt.Sprintf("tcp://%s:%d", addr, partition.BasePort+int64(cfg.PortOffsetTendermintRpc))
-		tmClient, err := rpchttp.New(saddr, saddr+"/websocket")
-		if err != nil {
-			continue
-		}
-
-		_, err = accClient.Describe(context.Background())
-		if err != nil {
-			continue
-		}
-
-		_, err = tmClient.Status(context.Background())
-		if err != nil {
-			continue
-		}
-		//if we get here, assume we have a viable node
-		return addr, nil
-	}
-	return "", fmt.Errorf("no viable node found on partition %s", partition.Id)
-}
-
-func ensureNodeOnPartition(partition *cfg.Partition, addr string, t cfg.NodeType) (*url.URL, error) {
-	testAddr, err := resolveIp(addr)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, n := range partition.Nodes {
-		nodeAddr, err := resolveAddr(n.Address)
-		if err != nil {
-			return nil, err
-		}
-
-		if strings.EqualFold(nodeAddr, testAddr) {
-			return url.Parse(testAddr)
-		}
-	}
-
-	//set port on url for partition, we need to add it to keep the connection mgr sane
-	u, err := cfg.OffsetPort(testAddr, int(partition.BasePort), int(cfg.PortOffsetTendermintP2P))
-	if err != nil {
-		return nil, err
-	}
-
-	partition.Nodes = append(partition.Nodes, cfg.Node{Address: u.String(), Type: t})
-	return u, nil
 }

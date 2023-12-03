@@ -598,7 +598,7 @@ func (d *Daemon) startMonitoringAndCleanup() {
 		color.HiMagenta("Syncing ....")
 		time.Sleep(time.Second * 1)
 	}
-	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
+	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.API.ListenAddress)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
