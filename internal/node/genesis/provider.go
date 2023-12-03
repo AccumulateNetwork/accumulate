@@ -12,11 +12,11 @@ import (
 	"os"
 	"path/filepath"
 
+	tm "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/node"
 	"github.com/cometbft/cometbft/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -31,10 +31,10 @@ func ConvertJsonToSnapshot(doc *types.GenesisDoc) ([]byte, error) {
 }
 
 // DocProvider reads the genesis document.
-func DocProvider(config *config.Config) node.GenesisDocProvider {
+func DocProvider(config *tm.Config) node.GenesisDocProvider {
 	// If it's a JSON file, fallback to the default
 	if filepath.Ext(config.Genesis) == ".json" {
-		return node.DefaultGenesisDocProviderFunc(&config.Config)
+		return node.DefaultGenesisDocProviderFunc(config)
 	}
 
 	return func() (*types.GenesisDoc, error) {
