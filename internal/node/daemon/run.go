@@ -50,14 +50,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
-	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/node/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
@@ -71,21 +68,20 @@ type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
-	done              chan struct{}
-	db                *database.Database
-	node              *node.Node
-	apiServer         *http.Server
-	privVal           *privval.FilePV
-	p2pnode           *p2p.Node
-	api               *nodeapi.Handler
-	nodeKey           *tmp2p.NodeKey
-	connectionManager connections.ConnectionInitializer
-	router            routing.Router
-	eventBus          *events.Bus
-	localTm           tmclient.Client
-	snapshotSchedule  cron.Schedule
-	snapshotLock      *sync.Mutex
-	tracer            trace.Tracer
+	done             chan struct{}
+	db               *database.Database
+	node             *node.Node
+	apiServer        *http.Server
+	privVal          *privval.FilePV
+	p2pnode          *p2p.Node
+	api              *nodeapi.Handler
+	nodeKey          *tmp2p.NodeKey
+	router           routing.Router
+	eventBus         *events.Bus
+	localTm          tmclient.Client
+	snapshotSchedule cron.Schedule
+	snapshotLock     *sync.Mutex
+	tracer           trace.Tracer
 
 	// knobs for tests
 	// IsTest   bool
@@ -438,13 +434,6 @@ func (d *Daemon) startConsensus(app types.Application) error {
 }
 
 func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
-	// Let the connection manager create and assign clients
-	statusChecker := statuschk.NewNodeStatusChecker()
-	err := d.connectionManager.InitClients(d.localTm, statusChecker)
-	if err != nil {
-		return errors.UnknownError.WithFormat("initialize the connection manager: %v", err)
-	}
-
 	// Wait for the executor to finish loading everything
 	globals := <-chGlobals
 
@@ -556,9 +545,6 @@ func (d *Daemon) StartP2P() error {
 }
 
 func (d *Daemon) startAPI() error {
-	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
-		return client.New(server)
-	})
 	d.router = routing.NewRouter(d.eventBus, d.Logger)
 
 	// Setup the p2p node
@@ -643,15 +629,6 @@ func (d *Daemon) startMonitoringAndCleanup() {
 	}()
 }
 
-func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.Config.Accumulate.PartitionId, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return ctx.GetABCIClient(), nil
-}
-
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
 	if d.nodeKey.PrivKey.Equals(e.nodeKey.PrivKey) {
 		return errors.Conflict.With("cannot connect nodes directly as they have the same node key")
@@ -662,21 +639,7 @@ func (d *Daemon) ConnectDirectly(e *Daemon) error {
 		return err
 	}
 
-	err = e.p2pnode.ConnectDirectly(d.p2pnode)
-	if err != nil {
-		return err
-	}
-
-	if d.connectionManager == nil {
-		return nil
-	}
-
-	err = d.connectionManager.ConnectDirectly(e.connectionManager)
-	if err != nil {
-		return err
-	}
-
-	return e.connectionManager.ConnectDirectly(d.connectionManager)
+	return e.p2pnode.ConnectDirectly(d.p2pnode)
 }
 
 func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {
