@@ -277,25 +277,6 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 	return u, nil
 }
 
-func (n *Network) GetBvnNames() []string {
-	var names []string
-	for _, partition := range n.Partitions {
-		if partition.Type == protocol.PartitionTypeBlockValidator {
-			names = append(names, partition.Id)
-		}
-	}
-	return names
-}
-
-func (n *Network) GetPartitionByID(partitionID string) *Partition {
-	for i, partition := range n.Partitions {
-		if strings.EqualFold(partition.Id, partitionID) {
-			return &n.Partitions[i]
-		}
-	}
-	return nil
-}
-
 func LoadFilePV(keyFilePath, stateFilePath string) (*privval.FilePV, error) {
 	// TODO Submit an MR to CometBFT to fix their bull**** (calling os.Exit if
 	// the config file load fails)
