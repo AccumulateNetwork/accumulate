@@ -11,12 +11,14 @@ import (
 	"sync/atomic"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"golang.org/x/exp/slog"
 )
 
 type Viewer interface {
@@ -193,6 +195,30 @@ func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	return v, nil
+}
+
+// resolveAccountKey resolves a key beginning with a KeyHash. If the key does
+// not begin with a key hash, it is returned unchanged. If it does,
+// resolveAccountKey looks up the account URL and constructs a resolved key by
+// replacing the first component (the KeyHash) with two components, "Account"
+// and the account URL.
+func (b *Batch) resolveAccountKey(key *record.Key) *record.Key {
+	if key.Len() < 1 {
+		return key
+	}
+
+	kh, ok := key.Get(0).(record.KeyHash)
+	if !ok {
+		return key
+	}
+
+	u, err := b.getAccountUrl(key.SliceJ(1))
+	if err != nil {
+		slog.Error("Unable to resolve account", "key-hash", logging.AsHex(kh), "error", err)
+		return key
+	}
+
+	return record.NewKey("Account", u).AppendKey(key.SliceI(1))
 }
 
 func keyIsAccountUrl(key *record.Key) bool {
