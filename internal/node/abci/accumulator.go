@@ -22,6 +22,7 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/crypto"
 	"github.com/cometbft/cometbft/libs/log"
+	"github.com/cometbft/cometbft/node"
 	protocrypto "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	"github.com/cometbft/cometbft/version"
 	"gitlab.com/accumulatenetwork/accumulate"
@@ -33,7 +34,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	snap2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -67,20 +67,24 @@ type Accumulator struct {
 }
 
 type AccumulatorOptions struct {
-	*config.Config
-	Tracer   trace.Tracer
-	Executor execute.Executor
-	EventBus *events.Bus
-	Logger   log.Logger
-	Database coredb.Beginner
-	Address  crypto.Address // This is the address of this node, and is used to determine if the node is the leader
+	Tracer      trace.Tracer
+	Executor    execute.Executor
+	EventBus    *events.Bus
+	Logger      log.Logger
+	Snapshots   *config.Snapshots
+	Database    coredb.Beginner
+	Address     crypto.Address // This is the address of this node, and is used to determine if the node is the leader
+	Genesis     node.GenesisDocProvider
+	Partition   string
+	RootDir     string
+	AnalysisLog config.AnalysisLog
 }
 
 // NewAccumulator returns a new Accumulator.
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
-		logger:             opts.Logger.With("module", "accumulate", "partition", opts.Accumulate.PartitionId),
+		logger:             opts.Logger.With("module", "accumulate", "partition", opts.Partition),
 	}
 
 	if app.Tracer == nil {
@@ -89,8 +93,8 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 
 	events.SubscribeSync(opts.EventBus, app.willChangeGlobals)
 
-	if app.Accumulate.AnalysisLog.Enabled {
-		app.Accumulate.AnalysisLog.Init(app.RootDir, app.Accumulate.PartitionId)
+	if app.AnalysisLog.Enabled {
+		app.AnalysisLog.Init(app.RootDir, app.Partition)
 	}
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
@@ -158,7 +162,7 @@ func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
 	}
 
 	// Compare the old and new partition definitions
-	updates, err := core.DiffValidators(e.Old, e.New, app.Accumulate.PartitionId)
+	updates, err := core.DiffValidators(e.Old, e.New, app.Partition)
 	if err != nil {
 		return err
 	}
@@ -198,9 +202,9 @@ func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
 func (app *Accumulator) Info(context.Context, *abci.RequestInfo) (*abci.ResponseInfo, error) {
 	defer app.recover()
 
-	if app.Accumulate.AnalysisLog.Enabled {
-		app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
-		app.Accumulate.AnalysisLog.InitDataSet("executor", logging.DefaultOptions())
+	if app.AnalysisLog.Enabled {
+		app.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
+		app.AnalysisLog.InitDataSet("executor", logging.DefaultOptions())
 		app.Executor.EnableTimers()
 	}
 
@@ -247,7 +251,7 @@ func (app *Accumulator) Info(context.Context, *abci.RequestInfo) (*abci.Response
 	}
 
 	// Check the genesis document
-	genDoc, err := genesis.DocProvider(app.Config)()
+	genDoc, err := app.Genesis()
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +315,9 @@ func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}
-	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, app.Accumulate.Describe.PartitionUrl())
+	err = snapshot.FullRestore(app.Database, ioutil.NewBuffer(snap), app.logger, config.NetworkUrl{
+		URL: protocol.PartitionUrl(app.Partition),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to init chain: %+v", err)
 	}
@@ -614,7 +620,7 @@ func (app *Accumulator) discardBlock() {
 	defer app.cleanupBlock()
 
 	timeSinceAppStart := time.Since(app.startTime).Seconds()
-	ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
+	ds := app.AnalysisLog.GetDataSet("accumulator")
 	if ds != nil {
 		blockTime := time.Since(app.timer).Seconds()
 		aveBlockTime := 0.0
@@ -638,14 +644,14 @@ func (app *Accumulator) discardBlock() {
 		)
 	}
 
-	ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
+	ds = app.AnalysisLog.GetDataSet("executor")
 	if ds != nil {
 		ds.Save("height", app.block.Params().Index, 10, true)
 		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 		app.Executor.StoreBlockTimers(ds)
 	}
 
-	go app.Accumulate.AnalysisLog.Flush()
+	go app.AnalysisLog.Flush()
 
 	// Discard changes
 	app.blockState.Discard()
@@ -711,7 +717,7 @@ func (app *Accumulator) actualCommit() error {
 	publishEventTime := time.Since(tick).Seconds()
 
 	timeSinceAppStart := time.Since(app.startTime).Seconds()
-	ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
+	ds := app.AnalysisLog.GetDataSet("accumulator")
 	if ds != nil {
 		blockTime := time.Since(app.timer).Seconds()
 		aveBlockTime := 0.0
@@ -740,14 +746,14 @@ func (app *Accumulator) actualCommit() error {
 
 	}
 
-	ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
+	ds = app.AnalysisLog.GetDataSet("executor")
 	if ds != nil {
 		ds.Save("height", app.block.Params().Index, 10, true)
 		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 		app.Executor.StoreBlockTimers(ds)
 	}
 
-	go app.Accumulate.AnalysisLog.Flush()
+	go app.AnalysisLog.Flush()
 	duration := time.Since(app.timer)
 	app.logger.Debug("Committed", "minor", app.block.Params().Index, "major", major, "duration", duration, "count", app.txct)
 	return nil
