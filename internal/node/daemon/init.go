@@ -46,7 +46,6 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 		mkcfg = config.Default
 	}
 
-	netConfig := config.Network{Id: network.Id, Partitions: make([]config.Partition, 1)}
 	dnConfig := config.Partition{
 		Id:       protocol.Directory,
 		Type:     protocol.PartitionTypeDirectory,
@@ -133,9 +132,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 			bvnConfigs = append(bvnConfigs, []*config.Config{dnn, bvnn})
 		}
 		allConfigs = append(allConfigs, bvnConfigs)
-		netConfig.Partitions = append(netConfig.Partitions, bvnConfig)
 	}
-	netConfig.Partitions[0] = dnConfig
 
 	if network.Bsn != nil {
 		var bsnConfigs [][]*config.Config
@@ -171,7 +168,6 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 			bsnConfigs = append(bsnConfigs, []*config.Config{bsnn})
 		}
 		allConfigs = append(allConfigs, bsnConfigs)
-		netConfig.Partitions = append(netConfig.Partitions, bsnConfig)
 	}
 
 	if network.Bootstrap != nil {
@@ -185,14 +181,6 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 		allConfigs = append(allConfigs, [][]*config.Config{{cfg}})
 	}
 
-	for _, configs := range allConfigs {
-		for _, configs := range configs {
-			for _, config := range configs {
-				config.Accumulate.Network = netConfig
-			}
-		}
-	}
-
 	return allConfigs
 }
 
@@ -201,9 +189,6 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 	cfg.RPC.ListenAddress = node.Listen().Scheme("tcp").PartitionType(part).TendermintRPC().String()
 
 	cfg.Instrumentation.PrometheusListenAddr = node.Listen().PartitionType(part).Prometheus().String()
-	if cfg.Accumulate.LocalAddress == "" {
-		cfg.Accumulate.LocalAddress = node.Advertize().PartitionType(part).TendermintP2P().String()
-	}
 	cfg.Accumulate.P2P.Listen = []multiaddr.Multiaddr{
 		node.Listen().Scheme("tcp").PartitionType(part).AccumulateP2P().Multiaddr(),
 		node.Listen().Scheme("udp").PartitionType(part).AccumulateP2P().Multiaddr(),

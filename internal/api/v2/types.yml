@@ -555,7 +555,7 @@ DescriptionResponse:
       type: protocol.PartitionType
       marshal-as: enum
     - name: Network
-      type: config.Network
+      type: NetworkDescription
       marshal-as: reference
     - name: NetworkAnchor
       type: hash
@@ -583,3 +583,43 @@ SyntheticTransactionRequest:
     - name: Anchor
       type: bool
       optional: true
+
+NetworkDescription:
+  fields:
+    - name: Id
+      toml: id
+      type: string
+    - name: Partitions
+      alternative: Subnets
+      toml: partitions
+      type: PartitionDescription
+      marshal-as: reference
+      repeatable: true
+
+PartitionDescription:
+  fields:
+    - name: Id
+      toml: id
+      type: string
+    - name: Type
+      toml: type
+      type: protocol.PartitionType
+      marshal-as: enum
+    - name: BasePort
+      toml: port
+      type: int
+    - name: Nodes
+      toml: nodes
+      type: NodeDescription
+      marshal-as: reference
+      repeatable: true
+
+NodeDescription:
+  fields:
+    - name: Address
+      toml: address
+      type: string
+    - name: Type
+      toml: type
+      type: config.NodeType
+      marshal-as: enum
