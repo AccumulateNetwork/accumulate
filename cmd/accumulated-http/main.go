@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	_ "net/http/pprof" //nolint:gosec
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -68,6 +69,7 @@ var flag = struct {
 	TlsCert      string
 	TlsKey       string
 	PeerDatabase string
+	Pprof        string
 }{
 	Peers: accumulate.BootstrapServers,
 }
@@ -91,6 +93,7 @@ func init() {
 	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
 	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", flag.PeerDatabase, "Track peers using a persistent database.")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
+	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
 }
 
 var nodeMainnetApollo = peer.AddrInfo{
@@ -107,6 +110,13 @@ var nodeMainnetChandrayaan = peer.AddrInfo{
 }
 
 func run(_ *cobra.Command, args []string) {
+	if flag.Pprof != "" {
+		s := new(http.Server)
+		s.Addr = flag.Pprof
+		s.ReadHeaderTimeout = time.Minute
+		go func() { Check(s.ListenAndServe()) }() //nolint:gosec
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = cmdutil.ContextForMainProcess(ctx)
 
