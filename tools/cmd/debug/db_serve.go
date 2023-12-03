@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +26,7 @@ import (
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -62,14 +61,7 @@ func init() {
 
 func serveDatabases(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
-
-	go func() {
-		<-sigs
-		signal.Stop(sigs)
-		cancel()
-	}()
+	ctx = cmdutil.ContextForMainProcess(ctx)
 
 	if len(flagDbServe.HttpListen) == 0 {
 		// Default listen address
