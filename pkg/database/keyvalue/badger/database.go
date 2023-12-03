@@ -32,12 +32,24 @@ import (
 var TruncateBadger = false
 
 type Database struct {
+	opts
 	badger *badger.DB
 	ready  bool
 	mu     sync.RWMutex
 }
 
-func New(filepath string) (*Database, error) {
+type opts struct {
+	plainKeys bool
+}
+
+type Option func(*opts) error
+
+func WithPlainKeys(o *opts) error {
+	o.plainKeys = true
+	return nil
+}
+
+func New(filepath string, o ...Option) (*Database, error) {
 	// Make sure all directories exist
 	err := os.MkdirAll(filepath, 0700)
 	if err != nil {
@@ -53,6 +65,13 @@ func New(filepath string) (*Database, error) {
 	}
 
 	d := new(Database)
+	for _, o := range o {
+		err = o(&d.opts)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
 	d.ready = true
 
 	// Open Badger
@@ -67,42 +86,51 @@ func New(filepath string) (*Database, error) {
 	return d, nil
 }
 
+func (d *Database) key(key *record.Key) []byte {
+	if d.plainKeys {
+		b, err := key.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+		return b
+	}
+	h := key.Hash()
+	return h[:]
+}
+
 // Begin begins a change set.
 func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	// Use a read-only transaction for reading
 	rd := d.badger.NewTransaction(false)
 
-	// The memory changeset caches entries in a map so Get will see values
-	// updated with Put, regardless of the underlying transaction and write
-	// batch behavior
-	return memory.NewChangeSet(prefix,
-		// Read from the transaction
-		func(key *record.Key) ([]byte, error) {
-			kh := key.Hash()
-			item, err := rd.Get(kh[:])
-			switch {
-			case err == nil:
-				// Ok
-			case errors.Is(err, badger.ErrKeyNotFound):
-				return nil, (*database.NotFoundError)(key)
-			default:
-				return nil, err
-			}
+	// Read from the transaction
+	get := func(key *record.Key) ([]byte, error) {
+		item, err := rd.Get(d.key(key))
+		switch {
+		case err == nil:
+			// Ok
+		case errors.Is(err, badger.ErrKeyNotFound):
+			return nil, (*database.NotFoundError)(key)
+		default:
+			return nil, err
+		}
 
-			// If we didn't find the value, return ErrNotFound
-			v, err := item.ValueCopy(nil)
-			switch {
-			case err == nil:
-				return v, nil
-			case errors.Is(err, badger.ErrKeyNotFound):
-				return nil, (*database.NotFoundError)(key)
-			default:
-				return nil, errors.UnknownError.WithFormat("get %v: %w", key, err)
-			}
-		},
+		// If we didn't find the value, return ErrNotFound
+		v, err := item.ValueCopy(nil)
+		switch {
+		case err == nil:
+			return v, nil
+		case errors.Is(err, badger.ErrKeyNotFound):
+			return nil, (*database.NotFoundError)(key)
+		default:
+			return nil, errors.UnknownError.WithFormat("get %v: %w", key, err)
+		}
+	}
 
-		// Commit to the write batch
-		func(entries map[[32]byte]memory.Entry) error {
+	// Commit to the write batch
+	var commit memory.CommitFunc
+	if writable {
+		commit = func(entries map[[32]byte]memory.Entry) error {
 			l, err := d.lock(false)
 			if err != nil {
 				return err
@@ -113,11 +141,10 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			wr := d.badger.NewWriteBatch()
 
 			for _, e := range entries {
-				kh := e.Key.Hash()
 				if e.Delete {
-					err = wr.Delete(kh[:])
+					err = wr.Delete(d.key(e.Key))
 				} else {
-					err = wr.Set(kh[:], e.Value)
+					err = wr.Set(d.key(e.Key), e.Value)
 				}
 				if err != nil {
 					return err
@@ -125,13 +152,19 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			}
 
 			return wr.Flush()
-		},
+		}
+	}
 
-		// Discard the transaction
-		func() {
-			// Fix https://discuss.dgraph.io/t/badgerdb-consume-too-much-disk-space/17070?
-			rd.Discard()
-		})
+	// Discard the transaction
+	discard := func() {
+		// Fix https://discuss.dgraph.io/t/badgerdb-consume-too-much-disk-space/17070?
+		rd.Discard()
+	}
+
+	// The memory changeset caches entries in a map so Get will see values
+	// updated with Put, regardless of the underlying transaction and write
+	// batch behavior
+	return memory.NewChangeSet(prefix, get, commit, discard)
 }
 
 // Close
