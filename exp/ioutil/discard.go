@@ -11,6 +11,7 @@ import (
 	"io"
 )
 
+// Discard is an [io.WriteSeeker] that discards all data written to it.
 type Discard struct {
 	offset int64
 	end    int64
