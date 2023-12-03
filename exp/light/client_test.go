@@ -54,6 +54,7 @@ func TestClient(t *testing.T) {
 	c := new(Client)
 	c.store = memory.New(nil)
 	c.v2 = sim.S.ClientV2(protocol.Directory)
+	c.query.Querier = sim.Query()
 
 	// Pull the globals accounts
 	fmt.Println("Load globals")
@@ -99,7 +100,7 @@ func TestClient(t *testing.T) {
 		require.NoError(t, err)
 
 		// Index the anchors
-		err = c.IndexAnchors(ctx, u)
+		err = c.IndexProducedAnchors(ctx, u)
 		require.NoError(t, err)
 	}
 
