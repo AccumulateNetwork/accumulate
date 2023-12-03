@@ -7,14 +7,16 @@
 package light
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -22,10 +24,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 // PullAccount fetches the latest version of the account and its chains.
 func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
+	return c.PullAccountWithChains(ctx, acctUrl, func(*api.ChainRecord) bool { return true })
+}
+
+func (c *Client) PullAccountWithChains(ctx context.Context, acctUrl *url.URL, predicate func(*api.ChainRecord) bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -33,77 +40,106 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 	defer batch.Discard()
 
 	// Update the account
-	var raw json.RawMessage
-	chains, err := c.v2.QueryAccountAs(ctx, &client.GeneralQuery{UrlQuery: client.UrlQuery{Url: acctUrl}}, &raw)
+	r1, err := c.query.QueryAccount(ctx, acctUrl, nil)
 	if err != nil {
-		var jerr jsonrpc2.Error
-		if errors.As(err, &jerr) && jerr.Code == client.ErrCodeNotFound {
-			return errors.NotFound.Wrap(err)
-		}
 		return errors.UnknownError.WithFormat("query account: %w", err)
 	}
 
-	account, err := protocol.UnmarshalAccountJSON(raw)
-	if err != nil {
-		return errors.UnknownError.WithFormat("unmarshal request: %w", err)
-	}
-
-	err = batch.Account(acctUrl).Main().Put(account)
+	err = batch.Account(acctUrl).Main().Put(r1.Account)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store account: %w", err)
 	}
 
 	// Read current chain heights
+	r2, err := c.query.QueryAccountChains(ctx, acctUrl, nil)
+	if err != nil {
+		return errors.UnknownError.WithFormat("query account chains: %w", err)
+	}
+
 	starts := map[string]uint64{}
-	for _, state := range chains.Chains {
-		c, err := batch.Account(acctUrl).ChainByName(state.Name)
+	total := map[string]uint64{}
+	for _, state := range r2.Records {
+		if !predicate(state) {
+			continue
+		}
+
+		chain, err := batch.Account(acctUrl).ChainByName(state.Name)
 		if err != nil {
 			return errors.UnknownError.WithFormat("load %s chain: %w", state.Name, err)
 		}
 
-		head, err := c.Head().Get()
+		head, err := chain.Head().Get()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load %s chain head: %w", state.Name, err)
 		}
 
-		if head.Count < int64(state.Height) {
-			starts[strings.ToLower(c.Name())] = uint64(head.Count)
+		if head.Count < int64(state.Count) {
+			starts[strings.ToLower(chain.Name())] = uint64(head.Count)
+			total[strings.ToLower(chain.Name())] = state.Count
+			continue
+		}
+
+		remote := &merkle.State{
+			Count:   int64(state.Count),
+			Pending: state.State,
+		}
+		if bytes.Equal(head.Anchor(), remote.Anchor()) {
+			continue
+		}
+
+		err = c.identifyBadEntry(ctx, batch, chain, head, remote)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
+	// Commit account data
+	err = batch.Commit()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	batch = c.OpenDB(true)
+	defer func() { batch.Discard() }()
+
 	// Update chains, 1000 entries at a time
 	const N = 1000
-	first := true
+	var i int
 	for len(starts) > 0 {
-		// Commit and reopen the batch to ensure Badger doesn't explode
-		if !first {
+		if i > 0 && i%20 == 0 {
+			// Create a new batch
 			err = batch.Commit()
 			if err != nil {
-				return errors.UnknownError.Wrap(err)
+				return err
 			}
 			batch = c.OpenDB(true)
-			defer batch.Discard()
 		}
-		first = false
+		i++
 
 		// For each chain that needs to be updated
+		var count uint64 = N
+		var failed error
 		for name, start := range starts {
 			// Query the next 1000 entries
-			var res *client.MultiResponse
-			u := acctUrl.WithFragment(fmt.Sprintf("chain/%s", name)).WithQuery(fmt.Sprintf("start=%d&count=%d", start, N))
-			c.logger.Debug("Request", "url", u)
-			err = c.v2.RequestAPIv2(ctx, "query", &client.GeneralQuery{UrlQuery: client.UrlQuery{Url: u}}, &res)
+			slog.InfoCtx(ctx, "Pull chain entries", "account", acctUrl, "chain", name, "start", start, "of", total[name])
+			r, err := c.query.QueryChainEntries(ctx, acctUrl, &api.ChainQuery{
+				Name: name,
+				Range: &api.RangeOptions{
+					Start: start,
+					Count: &count,
+				},
+			})
 			if err != nil {
 				return errors.UnknownError.WithFormat("load %s chain entries [%d, %d): %w", name, start, start+N, err)
 			}
 
 			// If there are no more entries...
-			if start+uint64(len(res.Items)) >= res.Total {
+			if start+uint64(len(r.Records)) >= r.Total {
 				// Remove the chain from the map
 				delete(starts, name)
 			} else {
 				// Otherwise update the start position
-				starts[name] += uint64(len(res.Items))
+				starts[name] += uint64(len(r.Records))
 			}
 
 			chain, err := batch.Account(acctUrl).ChainByName(name)
@@ -112,61 +148,102 @@ func (c *Client) PullAccount(ctx context.Context, acctUrl *url.URL) error {
 			}
 
 			// For each entry
-			for _, raw := range res.Items {
-				b, err := json.Marshal(raw)
-				if err != nil {
-					return errors.InternalError.WithFormat("unable to remarshal response: %w", err)
-				}
-
-				// Unmarshal the entry; API v2 has a bug, so index entries have
-				// to be unmarshalled and remarshalled
-				if chain.Type() == merkle.ChainTypeIndex {
-					var entry *protocol.IndexEntry
-					err = json.Unmarshal(b, &entry)
-					if err != nil {
-						return errors.UnknownError.WithFormat("unmarshal response: %w", err)
-					}
-
-					b, err = entry.MarshalBinary()
-					if err != nil {
-						return errors.InternalError.WithFormat("unable to remarshal response: %w", err)
-					}
-
-					if len(b) < 32 {
-						padding := make([]byte, 32-len(b))
-						// Fake field number to make unmarshalling work
-						padding[0] = 32
-						b = append(b, padding...)
-					}
-
-				} else {
-					var res *client.ChainQueryResponse
-					err = json.Unmarshal(b, &res)
-					if err != nil {
-						return errors.UnknownError.WithFormat("unmarshal response: %w", err)
-					}
-
-					str, ok := res.Data.(string)
-					if !ok {
-						return errors.UnknownError.WithFormat("invalid chain response: want %T, got %T", "", res.Data)
-					}
-					b, err = hex.DecodeString(str)
-					if err != nil {
-						return errors.UnknownError.WithFormat("unmarshal response: %w", err)
-					}
-				}
-
+			for _, r := range r.Records {
 				// Add it to the chain
-				err = chain.Inner().AddHash(b, false)
+				err = chain.Inner().AddHash(r.Entry[:], false)
 				if err != nil {
 					return errors.UnknownError.WithFormat("add entry to %s chain: %w", name, err)
 				}
 			}
+
+			// Validate
+			head, err := chain.Head().Get()
+			if err != nil {
+				return errors.UnknownError.WithFormat("load %s chain head: %w", name, err)
+			}
+			target := uint64(head.Count) - 1
+			r2, err := c.query.QueryChainEntry(ctx, acctUrl, &api.ChainQuery{
+				Name:  name,
+				Index: &target,
+			})
+			if err != nil {
+				return errors.UnknownError.WithFormat("query %s chain entry %d: %w", name, target, err)
+			}
+			remote := &merkle.State{
+				Count:   head.Count,
+				Pending: r2.State,
+			}
+			if !bytes.Equal(head.Anchor(), remote.Anchor()) {
+				failed = errors.Conflict.WithFormat("checksum failed while pulling %v %v chain", acctUrl, name)
+				slog.ErrorCtx(ctx, "Checksum failed while pulling chain", "account", acctUrl, "chain", name)
+			}
+		}
+		if failed != nil {
+			return failed
 		}
 	}
 
 	err = batch.Commit()
 	return errors.UnknownError.Wrap(err)
+}
+
+func (c *Client) identifyBadEntry(ctx context.Context, batch *DB, chain *database.Chain2, local, remote *merkle.State) error {
+	wrong, ok := heightOfMismatch(local, remote)
+	if !ok {
+		panic("state does not match but cannot find the error")
+	}
+	if wrong == 0 {
+		return errors.FatalError.WithFormat("%v %v chain entry %d is invalid", chain.Account(), chain.Name(), local.Count-1)
+	}
+
+	target := uint64(local.Count) & ^(1<<wrong) | ((1 << wrong) - 1) - 1
+	local2, err := chain.State(int64(target))
+	if err != nil {
+		return errors.UnknownError.WithFormat("load %v %v chain state at %d: %w", chain.Account(), chain.Name(), target, err)
+	}
+
+	r, err := c.query.QueryChainEntry(ctx, chain.Account(), &api.ChainQuery{
+		Name:  chain.Name(),
+		Index: &target,
+	})
+	if err != nil {
+		return errors.UnknownError.WithFormat("load %v %v chain state at %d: %w", chain.Account(), chain.Name(), target, err)
+	}
+	remote2 := &merkle.State{
+		Count:   int64(target) + 1,
+		Pending: r.State,
+	}
+
+	if local2.Count != remote2.Count {
+		panic("height does not match")
+	}
+
+	if bytes.Equal(local2.Anchor(), remote2.Anchor()) {
+		return errors.FatalError.WithFormat("%v %v chain entry %d is invalid", chain.Account(), chain.Name(), target+1)
+	}
+
+	return c.identifyBadEntry(ctx, batch, chain, local2, remote2)
+}
+
+func heightOfMismatch(a, b *merkle.State) (int, bool) {
+	if a.Count != b.Count {
+		panic("height does not match")
+	}
+	if len(a.Pending) != len(b.Pending) {
+		panic("invalid state")
+	}
+
+	for i := len(a.Pending) - 1; i >= 0; i-- {
+		a, b := a.Pending[i], b.Pending[i]
+		switch {
+		case bytes.Equal(a, b):
+			continue
+		case a == nil || b == nil:
+			panic("invalid state")
+		}
+		return i, true
+	}
+	return 0, false
 }
 
 func (c *Client) PullPendingTransactionsForAccount(ctx context.Context, account *url.URL) error {
@@ -217,6 +294,7 @@ func (c *Client) PullPendingTransactionsForAccount(ctx context.Context, account 
 			missing[hash] = false
 		case errors.Is(err, errors.NotFound):
 			missing[hash] = true
+			continue
 		default:
 			return errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", b, err)
 		}
@@ -247,7 +325,7 @@ func (c *Client) PullPendingTransactionsForAccount(ctx context.Context, account 
 	}
 
 	// Pull the transactions
-	c.logger.Info("Pulling transactions", "count", len(txids), "account", account)
+	slog.InfoCtx(ctx, "Pulling transactions", "count", len(txids), "account", account)
 	err = c.pullTransactions(ctx, batch, txids)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -277,9 +355,37 @@ func (c *Client) PullPendingTransactionsForAccount(ctx context.Context, account 
 	return errors.UnknownError.Wrap(err)
 }
 
-func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []string) ([]*url.TxID, error) {
+type missingMessage struct {
+	ID    *url.TxID
+	Chain string
+	Index uint64
+}
+
+func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []string, since *time.Time) ([]*missingMessage, error) {
+	var sinceMinor uint64
+	if since != nil {
+		if c.router == nil {
+			return nil, errors.BadRequest.With("cannot determine major blocks without a router")
+		}
+
+		// Find the block
+		part, err := c.router.RouteAccount(account)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("route %v: %w", account, err)
+		}
+		partU := protocol.PartitionUrl(part)
+		_, block, err := batch.Index().Account(partU.JoinPath(protocol.Ledger)).Chain("root").Index().Find(ByIndexTime(*since))
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load anchor metadata: %w", err)
+		}
+
+		// Include chain entries since the given minor block
+		sinceMinor = block.BlockIndex
+	}
+
 	// For each chain
 	missing := map[[32]byte]bool{}
+	data := map[[32]byte]*missingMessage{}
 	didLoad := batch.Index().Account(account).DidLoadTransaction()
 	for _, name := range chains {
 		chain, err := batch.Account(account).ChainByName(name)
@@ -292,17 +398,31 @@ func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []stri
 			return nil, errors.UnknownError.WithFormat("load main chain head: %w", err)
 		}
 
+		start := int64(0)
+		if since != nil {
+			_, entry, err := batch.Index().Account(account).Chain(name).Index().Find(ByIndexBlock(sinceMinor))
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load %v %v chain index: %w", account, name, err)
+			}
+			start = int64(entry.Source)
+		}
+
 		// Scan all the entries
 		const N = 1 << 10
-		for i := int64(0); i < head.Count; i += N {
+		for i := start; i < head.Count; i += N {
 			entries, err := chain.Inner().GetRange(i, i+N)
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
 			}
 
 			// For each entry
-			for _, e := range entries {
+			for j, e := range entries {
 				hash := *(*[32]byte)(e)
+				data[hash] = &missingMessage{
+					ID:    account.WithTxID(hash),
+					Chain: chain.Name(),
+					Index: uint64(i) + uint64(j),
+				}
 				if _, ok := missing[hash]; ok {
 					continue
 				}
@@ -312,6 +432,7 @@ func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []stri
 				switch {
 				case err == nil:
 					missing[hash] = false
+					continue
 				case errors.Is(err, errors.NotFound):
 					// Continue
 				default:
@@ -325,6 +446,7 @@ func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []stri
 					missing[hash] = false
 				case errors.Is(err, errors.NotFound):
 					missing[hash] = true
+					continue
 				default:
 					return nil, errors.UnknownError.WithFormat("load transaction %x execution metadata: %w", e, err)
 				}
@@ -340,15 +462,19 @@ func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []stri
 
 	// Build a slice of transaction IDs. Sorting this is not necessary but makes
 	// the process less random and thus easier to debug.
-	txids := make([]*url.TxID, 0, len(missing))
+	txids := make([]*missingMessage, 0, len(missing))
 	for hash, missing := range missing {
 		if missing {
-			txids = append(txids, account.WithTxID(hash))
+			txids = append(txids, data[hash])
 		}
 	}
 	sort.Slice(txids, func(i, j int) bool {
 		a, b := txids[i], txids[j]
-		return a.Compare(b) < 0
+		c := strings.Compare(a.Chain, b.Chain)
+		if c != 0 {
+			return c < 0
+		}
+		return a.Index < b.Index
 	})
 	return txids, nil
 }
@@ -362,18 +488,22 @@ func (c *Client) PullTransactionsForAccount(ctx context.Context, account *url.UR
 	defer batch.Discard()
 
 	// Get missing transactions
-	txids, err := c.getMissingMessageIDs(batch, account, chains)
+	missing, err := c.getMissingMessageIDs(batch, account, chains, nil)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if len(txids) == 0 {
+	if len(missing) == 0 {
 		return nil
 	}
 
 	// Pull the transactions
-	c.logger.Info("Pulling transactions", "count", len(txids), "account", account)
-	err = c.pullTransactions(ctx, batch, txids)
+	slog.InfoCtx(ctx, "Pulling transactions", "count", len(missing), "account", account)
+	ids := make([]*url.TxID, len(missing))
+	for i, m := range missing {
+		ids[i] = m.ID
+	}
+	err = c.pullTransactions(ctx, batch, ids)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -439,7 +569,7 @@ func (c *Client) pullTransactions(ctx context.Context, batch *DB, txids []*url.T
 		}
 
 		// Send the batch
-		c.logger.Info("Requesting transactions", "count", len(req), "batch-num", i+1, "batch-count", (total+N-1)/N)
+		slog.InfoCtx(ctx, "Requesting transactions", "count", len(req), "batch-num", i+1, "batch-count", (total+N-1)/N)
 		var responses []*client.TransactionQueryResponse
 		err := c.v2.RequestAPIv2(ctx, "", req, &responses)
 		if err != nil {
@@ -450,7 +580,11 @@ func (c *Client) pullTransactions(ctx context.Context, batch *DB, txids []*url.T
 		for _, r := range responses {
 			err = batch.Message(r.Txid.Hash()).Main().Put(&messaging.TransactionMessage{Transaction: r.Transaction})
 			if err != nil {
-				return errors.UnknownError.WithFormat("store transaction %v: %w", r.Txid, err)
+				return errors.UnknownError.WithFormat("store transaction %v (1): %w", r.Txid, err)
+			}
+			err = batch.Index().Account(r.Txid.Account()).DidLoadTransaction().Add(r.Txid.Hash())
+			if err != nil {
+				return errors.UnknownError.WithFormat("store transaction %v (2): %w", r.Txid, err)
 			}
 		}
 	}
@@ -459,33 +593,81 @@ func (c *Client) pullTransactions(ctx context.Context, batch *DB, txids []*url.T
 }
 
 func (c *Client) PullMessagesForAccount(ctx context.Context, account *url.URL, chains ...string) error {
+	return c.pullMessagesForAccount(ctx, account, chains, nil)
+}
+
+func (c *Client) PullMessagesForAccountSince(ctx context.Context, account *url.URL, since time.Time, chains ...string) error {
+	return c.pullMessagesForAccount(ctx, account, chains, &since)
+}
+
+func (c *Client) pullMessagesForAccount(ctx context.Context, account *url.URL, chains []string, since *time.Time) error {
 	if c.query.Querier == nil {
 		return errors.BadRequest.With("client was initialized without a querier")
 	}
 
 	batch := c.OpenDB(true)
-	defer batch.Discard()
+	defer func() { batch.Discard() }()
 
 	// Reuse connections
 	ctx, cancel, _ := api.ContextWithBatchData(ctx)
 	defer cancel()
 
 	// Get missing messages
-	ids, err := c.getMissingMessageIDs(batch, account, chains)
+	slog.InfoCtx(ctx, "Checking for missing messages", "account", account, "chains", chains)
+	missing, err := c.getMissingMessageIDs(batch, account, chains, since)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
+	if len(missing) == 0 {
+		return nil
+	}
+
 	// Fetch
-	for _, id := range ids {
-		r, err := c.query.QueryMessage(ctx, id, nil)
-		if err != nil {
-			return errors.UnknownError.WithFormat("query %v: %w", id, err)
+	slog.InfoCtx(ctx, "Fetching messages", "account", account, "chains", chains, "remaining", len(missing))
+	didLoad := batch.Index().Account(account).DidLoadTransaction()
+	for i, m := range missing {
+		if i > 0 && i%100 == 0 {
+			slog.InfoCtx(ctx, "Fetching messages", "account", account, "chains", chains, "remaining", len(missing)-i)
+			err = batch.Commit()
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			batch = c.OpenDB(true)
 		}
 
-		err = batch.Message(id.Hash()).Main().Put(r.Message)
+		var msg messaging.Message
+		if m.Chain == "" {
+			r, err := c.query.QueryMessage(ctx, m.ID, nil)
+			if err != nil {
+				return errors.UnknownError.WithFormat("query %v: %w", m.ID, err)
+			}
+			msg = r.Message
+
+		} else {
+			r, err := c.query.QueryChainEntry(ctx, account, &api.ChainQuery{Name: m.Chain, Index: &m.Index})
+			if err != nil {
+				return errors.UnknownError.WithFormat("query %v: %w", m.ID, err)
+			}
+			mr, ok := r.Value.(*api.MessageRecord[messaging.Message])
+			if !ok {
+				if err, ok := r.Value.(*api.ErrorRecord); ok {
+					slog.ErrorCtx(ctx, "Pull message", "account", account, "chain", m.Chain, "index", m.Index, "error", err.Value)
+					continue
+				} else {
+					return errors.UnknownError.WithFormat("wanted %v, got %T", api.RecordTypeMessage, r.Value)
+				}
+			}
+			msg = mr.Message
+		}
+
+		err = batch.Message(m.ID.Hash()).Main().Put(msg)
 		if err != nil {
-			return errors.UnknownError.WithFormat("store transaction %v: %w", id, err)
+			return errors.UnknownError.WithFormat("store message %v (1): %w", m.ID, err)
+		}
+		err = didLoad.Add(m.ID.Hash())
+		if err != nil {
+			return errors.UnknownError.WithFormat("store message %v (2): %w", m.ID, err)
 		}
 	}
 
@@ -534,7 +716,7 @@ func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error
 			continue
 		}
 
-		c.logger.Info("Indexing an index chain", "account", acctUrl, "chain", name)
+		slog.InfoCtx(ctx, "Indexing an index chain", "account", acctUrl, "chain", name)
 
 		// Load the new entries
 		start := int64(len(index))
@@ -565,8 +747,8 @@ func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error
 	return errors.UnknownError.Wrap(err)
 }
 
-// IndexAnchors collates a partition's block anchors.
-func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
+// IndexProducedAnchors collates a partition's produced block anchors.
+func (c *Client) IndexProducedAnchors(ctx context.Context, partUrl *url.URL) error {
 	batch := c.OpenDB(true)
 	defer batch.Discard()
 
@@ -578,7 +760,7 @@ func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 		return errors.UnknownError.WithFormat("load %v anchor sequence chain head: %w", partUrl, err)
 	}
 
-	anchors, err := batch.Index().Partition(partUrl).Anchors().Get()
+	anchors, err := batch.Index().Partition(partUrl).Anchors().Produced().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load %v anchor index: %w", partUrl, err)
 	}
@@ -586,7 +768,7 @@ func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 		return nil
 	}
 
-	c.logger.Info("Indexing anchors", "account", partUrl)
+	slog.InfoCtx(ctx, "Indexing produced anchors", "account", partUrl)
 
 	// Load the new entries
 	start := int64(len(anchors))
@@ -612,13 +794,103 @@ func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 
 		// Add it to the index
 		anchors = append(anchors, &AnchorMetadata{
-			Index:  uint64(start) + uint64(i),
-			Hash:   hash,
-			Anchor: anchor.GetPartitionAnchor(),
+			Index:       uint64(start) + uint64(i),
+			Hash:        hash,
+			Anchor:      anchor.GetPartitionAnchor(),
+			Transaction: msg.Transaction,
 		})
 	}
 
-	err = batch.Index().Partition(partUrl).Anchors().Add(anchors...)
+	err = batch.Index().Partition(partUrl).Anchors().Produced().Add(anchors...)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store index of %v anchor sequence chain: %w", partUrl, err)
+	}
+
+	err = batch.Commit()
+	return errors.UnknownError.Wrap(err)
+}
+
+// IndexReceivedAnchors collates a partition's received block anchors.
+func (c *Client) IndexReceivedAnchors(ctx context.Context, partUrl *url.URL) error {
+	batch := c.OpenDB(true)
+	defer batch.Discard()
+
+	// Compare the chain head to the index to identify new entries
+	chain := batch.Account(partUrl.JoinPath(protocol.AnchorPool)).MainChain()
+	head, err := chain.Head().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load %v anchor sequence chain head: %w", partUrl, err)
+	}
+
+	anchors, err := batch.Index().Partition(partUrl).Anchors().Received().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load %v anchor index: %w", partUrl, err)
+	}
+	if len(anchors) >= int(head.Count) {
+		return nil
+	}
+
+	slog.InfoCtx(ctx, "Indexing received anchors", "account", partUrl)
+
+	// Find the first missing entry
+	var start int64
+	have := map[uint64]bool{}
+	for _, a := range anchors {
+		have[a.Index] = true
+		if a.Index == uint64(start) {
+			start++
+		}
+	}
+
+	// Load the new entries
+	entries, err := chain.Inner().GetRange(start, head.Count)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load %v anchor sequence chain entries [%d, %d): %w", partUrl, start, start+head.Count, err)
+	}
+
+	// For each entry
+	var notFound int
+	for i, e := range entries {
+		// Skip existing
+		if have[uint64(start)+uint64(i)] {
+			continue
+		}
+
+		// Load the transaction
+		hash := *(*[32]byte)(e)
+		var msg *messaging.TransactionMessage
+		err := batch.Message(hash).Main().GetAs(&msg)
+		if err != nil {
+			if errors.Is(err, errors.NotFound) {
+				slog.DebugCtx(ctx, "Anchor not found", "partition", partUrl, "hash", logging.AsHex(hash), "height", i)
+				notFound++
+				continue
+			}
+			return errors.UnknownError.WithFormat("load %v anchor %d: %w", partUrl, int64(i), err)
+		}
+		anchor, ok := msg.Transaction.Body.(protocol.AnchorBody)
+		if !ok {
+			continue
+		}
+
+		// Add it to the index
+		anchors = append(anchors, &AnchorMetadata{
+			Index:       uint64(start) + uint64(i),
+			Hash:        hash,
+			Anchor:      anchor.GetPartitionAnchor(),
+			Transaction: msg.Transaction,
+		})
+	}
+	if notFound > 0 {
+		slog.ErrorCtx(ctx, "Missing received anchors", "partition", partUrl, "count", notFound)
+	}
+
+	sort.Slice(anchors, func(i, j int) bool {
+		a, b := anchors[i], anchors[j]
+		return a.Index < b.Index
+	})
+
+	err = batch.Index().Partition(partUrl).Anchors().Received().Put(anchors)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store index of %v anchor sequence chain: %w", partUrl, err)
 	}
@@ -630,14 +902,12 @@ func (c *Client) IndexAnchors(ctx context.Context, partUrl *url.URL) error {
 // IndexAccountTransaction indexes the local and directory block index and time
 // for the accounts' main chain transactions.
 func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.URL) error {
+	if c.router == nil {
+		return errors.BadRequest.With("cannot index without a router")
+	}
+
 	batch := c.OpenDB(true)
 	defer batch.Discard()
-
-	// Get a router to determine which partition each account belongs to
-	router, err := c.router(batch)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
 
 	// Load the directory's root chain index
 	dirRootIndex, err := batch.Index().Account(protocol.DnUrl().JoinPath(protocol.Ledger)).Chain("root").Index().Get()
@@ -656,7 +926,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 	routes := map[*url.URL]string{}
 	for _, account := range accounts {
 		// For each account... route the account
-		partId, err := router.RouteAccount(account)
+		partId, err := c.router.RouteAccount(account)
 		if err != nil {
 			return errors.UnknownError.WithFormat("route account: %w", err)
 		}
@@ -678,7 +948,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 		}
 
 		// Load the partition's anchor index
-		part.AnchorIndex, err = batch.Index().Partition(protocol.PartitionUrl(partId)).Anchors().Get()
+		part.AnchorIndex, err = batch.Index().Partition(protocol.PartitionUrl(partId)).Anchors().Produced().Get()
 		if err != nil {
 			return errors.UnknownError.WithFormat("load anchor index: %w", err)
 		}
@@ -737,7 +1007,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 				}
 
 				if !didLog {
-					c.logger.Info("Indexing transactions", "account", account)
+					slog.InfoCtx(ctx, "Indexing transactions", "account", account)
 					didLog = true
 				}
 
