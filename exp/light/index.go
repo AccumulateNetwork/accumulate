@@ -8,6 +8,7 @@ package light
 
 import (
 	"sort"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -34,6 +35,12 @@ func ByIndexSource(source uint64) func(*protocol.IndexEntry) bool {
 // [protocol.IndexEntry.BlockIndex] equal to or greater than the given value.
 func ByIndexBlock(block uint64) func(*protocol.IndexEntry) bool {
 	return func(e *protocol.IndexEntry) bool { return e.BlockIndex >= block }
+}
+
+// ByIndexTime searches for an index entry with [protocol.IndexEntry.BlockTime]
+// equal to or greater than the given value.
+func ByIndexTime(t time.Time) func(*protocol.IndexEntry) bool {
+	return func(e *protocol.IndexEntry) bool { return e.BlockTime.After(t) }
 }
 
 // ByIndexRootIndexIndex searches for an index entry with
