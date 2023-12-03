@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // ListSnapshots queries the node for available snapshots.
@@ -50,7 +51,7 @@ func ListSnapshots(cfg *config.Config) ([]*snapshot.Header, error) {
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
 func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
-	info, err := listSnapshots(config.MakeAbsolute(app.Config.RootDir, app.Config.Accumulate.Snapshots.Directory))
+	info, err := listSnapshots(config.MakeAbsolute(app.RootDir, app.Snapshots.Directory))
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +81,7 @@ func (app *Accumulator) ListSnapshots(_ context.Context, req *abci.RequestListSn
 // This is one of four ABCI functions we have to implement for
 // Tendermint/CometBFT.
 func (app *Accumulator) LoadSnapshotChunk(_ context.Context, req *abci.RequestLoadSnapshotChunk) (*abci.ResponseLoadSnapshotChunk, error) {
-	snapDir := config.MakeAbsolute(app.RootDir, app.Accumulate.Snapshots.Directory)
+	snapDir := config.MakeAbsolute(app.RootDir, app.Snapshots.Directory)
 	f, err := os.Open(filepath.Join(snapDir, fmt.Sprintf(core.SnapshotMajorFormat, req.Height)))
 	if err != nil {
 		return nil, err
@@ -156,7 +157,9 @@ func (app *Accumulator) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 		return nil, e2
 	}
 
-	err = snapshot.FullRestore(app.Database, buf, app.logger, app.Accumulate.PartitionUrl())
+	err = snapshot.FullRestore(app.Database, buf, app.logger, config.NetworkUrl{
+		URL: protocol.PartitionUrl(app.Partition),
+	})
 	if err != nil {
 		return nil, err
 	}
