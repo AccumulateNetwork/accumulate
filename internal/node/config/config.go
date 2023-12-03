@@ -126,7 +126,6 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
-	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
@@ -239,13 +238,11 @@ type Storage struct {
 }
 
 type API struct {
-	TxMaxWaitTime      time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
-	PrometheusServer   string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
-	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
-	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
-	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
-	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
-	ReadHeaderTimeout  time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
+	TxMaxWaitTime     time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
+	ListenAddress     string        `toml:"listen-address" mapstructure:"listen-address"`
+	DebugJSONRPC      bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
+	ConnectionLimit   int           `toml:"connection-limit" mapstructure:"connection-limit"`
+	ReadHeaderTimeout time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
 }
 
 func MakeAbsolute(root, path string) string {
