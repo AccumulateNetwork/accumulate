@@ -19,24 +19,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type IndexDB interface {
-	record.Record
-	Account(url *url.URL) IndexDBAccount
-	Partition(url *url.URL) IndexDBPartition
-	Transaction(hash [32]byte) IndexDBTransaction
-}
-
-type indexDB struct {
+type IndexDB struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
 
-	account     map[indexDBAccountMapKey]*indexDBAccount
-	partition   map[indexDBPartitionMapKey]*indexDBPartition
-	transaction map[indexDBTransactionMapKey]*indexDBTransaction
+	account     map[indexDBAccountMapKey]*IndexDBAccount
+	partition   map[indexDBPartitionMapKey]*IndexDBPartition
+	transaction map[indexDBTransactionMapKey]*IndexDBTransaction
 }
 
-func (c *indexDB) Key() *record.Key { return c.key }
+func (c *IndexDB) Key() *record.Key { return c.key }
 
 type indexDBAccountKey struct {
 	Url *url.URL
@@ -74,12 +67,12 @@ func (k indexDBTransactionKey) ForMap() indexDBTransactionMapKey {
 	return indexDBTransactionMapKey{k.Hash}
 }
 
-func (c *indexDB) Account(url *url.URL) IndexDBAccount {
-	return values.GetOrCreateMap(c, &c.account, indexDBAccountKey{url}, (*indexDB).newAccount)
+func (c *IndexDB) Account(url *url.URL) *IndexDBAccount {
+	return values.GetOrCreateMap(c, &c.account, indexDBAccountKey{url}, (*IndexDB).newAccount)
 }
 
-func (c *indexDB) newAccount(k indexDBAccountKey) *indexDBAccount {
-	v := new(indexDBAccount)
+func (c *IndexDB) newAccount(k indexDBAccountKey) *IndexDBAccount {
+	v := new(IndexDBAccount)
 	v.logger = c.logger
 	v.store = c.store
 	v.key = c.key.Append("Account", k.Url)
@@ -87,12 +80,12 @@ func (c *indexDB) newAccount(k indexDBAccountKey) *indexDBAccount {
 	return v
 }
 
-func (c *indexDB) Partition(url *url.URL) IndexDBPartition {
-	return values.GetOrCreateMap(c, &c.partition, indexDBPartitionKey{url}, (*indexDB).newPartition)
+func (c *IndexDB) Partition(url *url.URL) *IndexDBPartition {
+	return values.GetOrCreateMap(c, &c.partition, indexDBPartitionKey{url}, (*IndexDB).newPartition)
 }
 
-func (c *indexDB) newPartition(k indexDBPartitionKey) *indexDBPartition {
-	v := new(indexDBPartition)
+func (c *IndexDB) newPartition(k indexDBPartitionKey) *IndexDBPartition {
+	v := new(IndexDBPartition)
 	v.logger = c.logger
 	v.store = c.store
 	v.key = c.key.Append("Partition", k.Url)
@@ -100,12 +93,12 @@ func (c *indexDB) newPartition(k indexDBPartitionKey) *indexDBPartition {
 	return v
 }
 
-func (c *indexDB) Transaction(hash [32]byte) IndexDBTransaction {
-	return values.GetOrCreateMap(c, &c.transaction, indexDBTransactionKey{hash}, (*indexDB).newTransaction)
+func (c *IndexDB) Transaction(hash [32]byte) *IndexDBTransaction {
+	return values.GetOrCreateMap(c, &c.transaction, indexDBTransactionKey{hash}, (*IndexDB).newTransaction)
 }
 
-func (c *indexDB) newTransaction(k indexDBTransactionKey) *indexDBTransaction {
-	v := new(indexDBTransaction)
+func (c *IndexDB) newTransaction(k indexDBTransactionKey) *IndexDBTransaction {
+	v := new(IndexDBTransaction)
 	v.logger = c.logger
 	v.store = c.store
 	v.key = c.key.Append("Transaction", k.Hash)
@@ -113,7 +106,7 @@ func (c *indexDB) newTransaction(k indexDBTransactionKey) *indexDBTransaction {
 	return v
 }
 
-func (c *indexDB) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+func (c *IndexDB) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for index db (1)")
 	}
@@ -154,7 +147,7 @@ func (c *indexDB) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	}
 }
 
-func (c *indexDB) IsDirty() bool {
+func (c *IndexDB) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -178,7 +171,7 @@ func (c *indexDB) IsDirty() bool {
 	return false
 }
 
-func (c *indexDB) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+func (c *IndexDB) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -193,7 +186,7 @@ func (c *indexDB) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	return err
 }
 
-func (c *indexDB) Commit() error {
+func (c *IndexDB) Commit() error {
 	if c == nil {
 		return nil
 	}
@@ -212,25 +205,18 @@ func (c *indexDB) Commit() error {
 	return err
 }
 
-type IndexDBAccount interface {
-	record.Record
-	DidIndexTransactionExecution() values.Set[[32]byte]
-	DidLoadTransaction() values.Set[[32]byte]
-	Chain(name string) IndexDBAccountChain
-}
-
-type indexDBAccount struct {
+type IndexDBAccount struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	parent *indexDB
+	parent *IndexDB
 
 	didIndexTransactionExecution values.Set[[32]byte]
 	didLoadTransaction           values.Set[[32]byte]
-	chain                        map[indexDBAccountChainMapKey]*indexDBAccountChain
+	chain                        map[indexDBAccountChainMapKey]*IndexDBAccountChain
 }
 
-func (c *indexDBAccount) Key() *record.Key { return c.key }
+func (c *IndexDBAccount) Key() *record.Key { return c.key }
 
 type indexDBAccountChainKey struct {
 	Name string
@@ -244,28 +230,28 @@ func (k indexDBAccountChainKey) ForMap() indexDBAccountChainMapKey {
 	return indexDBAccountChainMapKey{k.Name}
 }
 
-func (c *indexDBAccount) DidIndexTransactionExecution() values.Set[[32]byte] {
-	return values.GetOrCreate(c, &c.didIndexTransactionExecution, (*indexDBAccount).newDidIndexTransactionExecution)
+func (c *IndexDBAccount) DidIndexTransactionExecution() values.Set[[32]byte] {
+	return values.GetOrCreate(c, &c.didIndexTransactionExecution, (*IndexDBAccount).newDidIndexTransactionExecution)
 }
 
-func (c *indexDBAccount) newDidIndexTransactionExecution() values.Set[[32]byte] {
+func (c *IndexDBAccount) newDidIndexTransactionExecution() values.Set[[32]byte] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
-func (c *indexDBAccount) DidLoadTransaction() values.Set[[32]byte] {
-	return values.GetOrCreate(c, &c.didLoadTransaction, (*indexDBAccount).newDidLoadTransaction)
+func (c *IndexDBAccount) DidLoadTransaction() values.Set[[32]byte] {
+	return values.GetOrCreate(c, &c.didLoadTransaction, (*IndexDBAccount).newDidLoadTransaction)
 }
 
-func (c *indexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
+func (c *IndexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
-func (c *indexDBAccount) Chain(name string) IndexDBAccountChain {
-	return values.GetOrCreateMap(c, &c.chain, indexDBAccountChainKey{name}, (*indexDBAccount).newChain)
+func (c *IndexDBAccount) Chain(name string) *IndexDBAccountChain {
+	return values.GetOrCreateMap(c, &c.chain, indexDBAccountChainKey{name}, (*IndexDBAccount).newChain)
 }
 
-func (c *indexDBAccount) newChain(k indexDBAccountChainKey) *indexDBAccountChain {
-	v := new(indexDBAccountChain)
+func (c *IndexDBAccount) newChain(k indexDBAccountChainKey) *IndexDBAccountChain {
+	v := new(IndexDBAccountChain)
 	v.logger = c.logger
 	v.store = c.store
 	v.key = c.key.Append("Chain", k.Name)
@@ -273,7 +259,7 @@ func (c *indexDBAccount) newChain(k indexDBAccountChainKey) *indexDBAccountChain
 	return v
 }
 
-func (c *indexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+func (c *IndexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for account (1)")
 	}
@@ -298,7 +284,7 @@ func (c *indexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, e
 	}
 }
 
-func (c *indexDBAccount) IsDirty() bool {
+func (c *IndexDBAccount) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -318,7 +304,7 @@ func (c *indexDBAccount) IsDirty() bool {
 	return false
 }
 
-func (c *indexDBAccount) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+func (c *IndexDBAccount) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -333,7 +319,7 @@ func (c *indexDBAccount) Walk(opts record.WalkOptions, fn record.WalkFunc) error
 	return err
 }
 
-func (c *indexDBAccount) Commit() error {
+func (c *IndexDBAccount) Commit() error {
 	if c == nil {
 		return nil
 	}
@@ -348,44 +334,39 @@ func (c *indexDBAccount) Commit() error {
 	return err
 }
 
-type IndexDBAccountChain interface {
-	record.Record
-	Index() values.List[*protocol.IndexEntry]
-}
-
-type indexDBAccountChain struct {
+type IndexDBAccountChain struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	parent *indexDBAccount
+	parent *IndexDBAccount
 
 	index values.List[*protocol.IndexEntry]
 }
 
-func (c *indexDBAccountChain) Key() *record.Key { return c.key }
+func (c *IndexDBAccountChain) Key() *record.Key { return c.key }
 
-func (c *indexDBAccountChain) Index() values.List[*protocol.IndexEntry] {
-	return values.GetOrCreate(c, &c.index, (*indexDBAccountChain).newIndex)
+func (c *IndexDBAccountChain) getIndex() values.List[*protocol.IndexEntry] {
+	return values.GetOrCreate(c, &c.index, (*IndexDBAccountChain).newIndex)
 }
 
-func (c *indexDBAccountChain) newIndex() values.List[*protocol.IndexEntry] {
+func (c *IndexDBAccountChain) newIndex() values.List[*protocol.IndexEntry] {
 	return values.NewList(c.logger.L, c.store, c.key.Append("Index"), values.Struct[protocol.IndexEntry]())
 }
 
-func (c *indexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+func (c *IndexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for chain (1)")
 	}
 
 	switch key.Get(0) {
 	case "Index":
-		return c.Index(), key.SliceI(1), nil
+		return c.getIndex(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for chain (2)")
 	}
 }
 
-func (c *indexDBAccountChain) IsDirty() bool {
+func (c *IndexDBAccountChain) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -397,7 +378,7 @@ func (c *indexDBAccountChain) IsDirty() bool {
 	return false
 }
 
-func (c *indexDBAccountChain) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+func (c *IndexDBAccountChain) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -412,7 +393,7 @@ func (c *indexDBAccountChain) Walk(opts record.WalkOptions, fn record.WalkFunc) 
 	return err
 }
 
-func (c *indexDBAccountChain) Commit() error {
+func (c *IndexDBAccountChain) Commit() error {
 	if c == nil {
 		return nil
 	}
@@ -423,31 +404,31 @@ func (c *indexDBAccountChain) Commit() error {
 	return err
 }
 
-type IndexDBPartition interface {
-	record.Record
-	Anchors() values.List[*AnchorMetadata]
-}
-
-type indexDBPartition struct {
+type IndexDBPartition struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	parent *indexDB
+	parent *IndexDB
 
-	anchors values.List[*AnchorMetadata]
+	anchors *IndexDBPartitionAnchors
 }
 
-func (c *indexDBPartition) Key() *record.Key { return c.key }
+func (c *IndexDBPartition) Key() *record.Key { return c.key }
 
-func (c *indexDBPartition) Anchors() values.List[*AnchorMetadata] {
-	return values.GetOrCreate(c, &c.anchors, (*indexDBPartition).newAnchors)
+func (c *IndexDBPartition) Anchors() *IndexDBPartitionAnchors {
+	return values.GetOrCreate(c, &c.anchors, (*IndexDBPartition).newAnchors)
 }
 
-func (c *indexDBPartition) newAnchors() values.List[*AnchorMetadata] {
-	return values.NewList(c.logger.L, c.store, c.key.Append("Anchors"), values.Struct[AnchorMetadata]())
+func (c *IndexDBPartition) newAnchors() *IndexDBPartitionAnchors {
+	v := new(IndexDBPartitionAnchors)
+	v.logger = c.logger
+	v.store = c.store
+	v.key = c.key.Append("Anchors")
+	v.parent = c
+	return v
 }
 
-func (c *indexDBPartition) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+func (c *IndexDBPartition) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for partition (1)")
 	}
@@ -460,7 +441,7 @@ func (c *indexDBPartition) Resolve(key *record.Key) (record.Record, *record.Key,
 	}
 }
 
-func (c *indexDBPartition) IsDirty() bool {
+func (c *IndexDBPartition) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -472,7 +453,7 @@ func (c *indexDBPartition) IsDirty() bool {
 	return false
 }
 
-func (c *indexDBPartition) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+func (c *IndexDBPartition) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -485,7 +466,7 @@ func (c *indexDBPartition) Walk(opts record.WalkOptions, fn record.WalkFunc) err
 	return err
 }
 
-func (c *indexDBPartition) Commit() error {
+func (c *IndexDBPartition) Commit() error {
 	if c == nil {
 		return nil
 	}
@@ -496,31 +477,110 @@ func (c *indexDBPartition) Commit() error {
 	return err
 }
 
-type IndexDBTransaction interface {
-	record.Record
-	Executed() values.Value[*EventMetadata]
-}
-
-type indexDBTransaction struct {
+type IndexDBPartitionAnchors struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	parent *indexDB
+	parent *IndexDBPartition
+
+	produced values.List[*AnchorMetadata]
+	received values.List[*AnchorMetadata]
+}
+
+func (c *IndexDBPartitionAnchors) Key() *record.Key { return c.key }
+
+func (c *IndexDBPartitionAnchors) getProduced() values.List[*AnchorMetadata] {
+	return values.GetOrCreate(c, &c.produced, (*IndexDBPartitionAnchors).newProduced)
+}
+
+func (c *IndexDBPartitionAnchors) newProduced() values.List[*AnchorMetadata] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("Produced"), values.Struct[AnchorMetadata]())
+}
+
+func (c *IndexDBPartitionAnchors) getReceived() values.List[*AnchorMetadata] {
+	return values.GetOrCreate(c, &c.received, (*IndexDBPartitionAnchors).newReceived)
+}
+
+func (c *IndexDBPartitionAnchors) newReceived() values.List[*AnchorMetadata] {
+	return values.NewList(c.logger.L, c.store, c.key.Append("Received"), values.Struct[AnchorMetadata]())
+}
+
+func (c *IndexDBPartitionAnchors) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
+		return nil, nil, errors.InternalError.With("bad key for anchors (1)")
+	}
+
+	switch key.Get(0) {
+	case "Produced":
+		return c.getProduced(), key.SliceI(1), nil
+	case "Received":
+		return c.getReceived(), key.SliceI(1), nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for anchors (2)")
+	}
+}
+
+func (c *IndexDBPartitionAnchors) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if values.IsDirty(c.produced) {
+		return true
+	}
+	if values.IsDirty(c.received) {
+		return true
+	}
+
+	return false
+}
+
+func (c *IndexDBPartitionAnchors) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	values.WalkField(&err, c.produced, c.newProduced, opts, fn)
+	values.WalkField(&err, c.received, c.newReceived, opts, fn)
+	return err
+}
+
+func (c *IndexDBPartitionAnchors) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	values.Commit(&err, c.produced)
+	values.Commit(&err, c.received)
+
+	return err
+}
+
+type IndexDBTransaction struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    *record.Key
+	parent *IndexDB
 
 	executed values.Value[*EventMetadata]
 }
 
-func (c *indexDBTransaction) Key() *record.Key { return c.key }
+func (c *IndexDBTransaction) Key() *record.Key { return c.key }
 
-func (c *indexDBTransaction) Executed() values.Value[*EventMetadata] {
-	return values.GetOrCreate(c, &c.executed, (*indexDBTransaction).newExecuted)
+func (c *IndexDBTransaction) Executed() values.Value[*EventMetadata] {
+	return values.GetOrCreate(c, &c.executed, (*IndexDBTransaction).newExecuted)
 }
 
-func (c *indexDBTransaction) newExecuted() values.Value[*EventMetadata] {
+func (c *IndexDBTransaction) newExecuted() values.Value[*EventMetadata] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("Executed"), false, values.Struct[EventMetadata]())
 }
 
-func (c *indexDBTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+func (c *IndexDBTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for transaction (1)")
 	}
@@ -533,7 +593,7 @@ func (c *indexDBTransaction) Resolve(key *record.Key) (record.Record, *record.Ke
 	}
 }
 
-func (c *indexDBTransaction) IsDirty() bool {
+func (c *IndexDBTransaction) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -545,7 +605,7 @@ func (c *indexDBTransaction) IsDirty() bool {
 	return false
 }
 
-func (c *indexDBTransaction) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+func (c *IndexDBTransaction) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -560,7 +620,7 @@ func (c *indexDBTransaction) Walk(opts record.WalkOptions, fn record.WalkFunc) e
 	return err
 }
 
-func (c *indexDBTransaction) Commit() error {
+func (c *IndexDBTransaction) Commit() error {
 	if c == nil {
 		return nil
 	}

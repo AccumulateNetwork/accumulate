@@ -19,11 +19,12 @@ import (
 )
 
 type AnchorMetadata struct {
-	fieldsSet []bool
-	Index     uint64                    `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Hash      [32]byte                  `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
-	Anchor    *protocol.PartitionAnchor `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
-	extraData []byte
+	fieldsSet   []bool
+	Index       uint64                    `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Hash        [32]byte                  `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Anchor      *protocol.PartitionAnchor `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	Transaction *protocol.Transaction     `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	extraData   []byte
 }
 
 var machine_AnchorMetadata = &encoding.Machine[*AnchorMetadata]{
@@ -33,6 +34,7 @@ var machine_AnchorMetadata = &encoding.Machine[*AnchorMetadata]{
 		{Name: "Index", Number: 1, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.UintField[*AnchorMetadata](func(v *AnchorMetadata) *uint64 { return &v.Index })},
 		{Name: "Hash", Number: 2, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.HashField[*AnchorMetadata](func(v *AnchorMetadata) *[32]byte { return &v.Hash })},
 		{Name: "Anchor", Number: 3, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*AnchorMetadata, *protocol.PartitionAnchor, protocol.PartitionAnchor](func(v *AnchorMetadata) **protocol.PartitionAnchor { return &v.Anchor })},
+		{Name: "Transaction", Number: 4, Binary: true, OmitEmpty: true, Required: true, Accessor: encoding.StructPtrField[*AnchorMetadata, *protocol.Transaction, protocol.Transaction](func(v *AnchorMetadata) **protocol.Transaction { return &v.Transaction })},
 	},
 }
 
