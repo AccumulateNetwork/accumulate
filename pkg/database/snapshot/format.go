@@ -4,6 +4,36 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+// # File format
+//
+// Snapshots use [ioutil]'s segmented file format, with the following section
+// types:
+//
+//   - [SectionTypeHeader] - a [Header] containing metadata about the snapshot.
+//     A snapshot must always begin with this section.
+//   - [SectionTypeSnapshot] - a nested snapshot. Useful for creating
+//     multi-network snapshots. Used by the Block Summary Network
+//     (internal/bsn).
+//   - [SectionTypeRecords] - multiple [RecordEntry], usually the contents of a
+//     key-value database.
+//   - [SectionTypeRecordIndex] - an index of all of the records in a snapshot,
+//     stored in a fixed-width format and sorted by key hash. Allows random
+//     access of records within the snapshot. See [RecordIndexEntry] and
+//     [Store].
+//   - [SectionTypeBPT] - BPT entries stored as multiple [RecordEntry] where the
+//     value field is the BPT entry's hash.
+//   - [SectionTypeRawBPT] - Deprecated. BPT entries stored as a 32-byte key
+//     hash and 32-byte value hash (fixed-width).
+//   - [SectionTypeConsensus] - consensus parameters in an
+//     implementation-specific format.
+//
+// Unless otherwise stated, sections storing structured data store entries as a
+// series of length-prefixed values marshalled with standard Accumulate binary
+// encoding. For example, [SectionTypeHeader] has a 64-bit length followed by a
+// binary-encoded [Header], and [SectionTypeRecords] is a series of
+// binary-encoded [RecordEntry], each prefixed with a 64-bit length.
+//
+// Snapshot types suffixed with V1 are used for v1 snapshots (deprecated).
 package snapshot
 
 import (
