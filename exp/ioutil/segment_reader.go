@@ -25,35 +25,45 @@ type SegmentedReader[V enumGet, U enumSet[V]] struct {
 	done   bool
 }
 
+func findNext[V enumGet, U enumSet[V]](rd io.ReadSeeker, at int64) (typ U, size, next int64, _ error) {
+	_, err := rd.Seek(at, io.SeekStart)
+	if err != nil {
+		return nil, 0, 0, errors.UnknownError.WithFormat("seek to next segment: %w", err)
+	}
+
+	var header [64]byte
+	_, err = io.ReadFull(rd, header[:])
+	if err != nil {
+		return nil, 0, 0, errors.UnknownError.WithFormat("read segment header: %w", err)
+	}
+
+	typ = U(new(V))
+	v := binary.BigEndian.Uint16(header[0:])
+	if !typ.SetEnumValue(uint64(v)) {
+		return nil, 0, 0, errors.UnknownError.WithFormat("%d is not a valid segment type", v)
+	}
+
+	size = int64(binary.BigEndian.Uint64(header[8:]))
+	next = int64(binary.BigEndian.Uint64(header[16:]))
+	return typ, size, next, nil
+}
+
 // Next finds the segment.
 func (r *SegmentedReader[V, U]) Next() (*Segment[V, U], error) {
 	if r.done {
 		return nil, io.EOF
 	}
 
-	_, err := r.file.Seek(r.offset, io.SeekStart)
+	typ, size, next, err := findNext[V, U](r.file, r.offset)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("seek to next segment: %w", err)
-	}
-
-	var header [64]byte
-	_, err = io.ReadFull(r.file, header[:])
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("read segment header: %w", err)
-	}
-
-	typ := U(new(V))
-	v := binary.BigEndian.Uint16(header[0:])
-	if !typ.SetEnumValue(uint64(v)) {
-		return nil, errors.UnknownError.WithFormat("%d is not a valid segment type", v)
+		return nil, err
 	}
 
 	s := new(Segment[V, U])
 	s.file = r.file
 	s.offset = r.offset + 64
 	s.typ = *typ
-	s.size = int64(binary.BigEndian.Uint64(header[8:]))
-	next := int64(binary.BigEndian.Uint64(header[16:]))
+	s.size = size
 
 	r.offset = next
 	if next == 0 {
