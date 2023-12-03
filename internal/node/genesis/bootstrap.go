@@ -484,6 +484,11 @@ func (b *bootstrap) unpackSnapshots() error {
 						return false, nil
 					}
 
+					// Skip ACME
+					if protocol.AcmeUrl().Equal(u) {
+						return false, nil
+					}
+
 					// Track ACME issued
 					if e.Key.Len() == 3 && e.Key.Get(2) == "Main" {
 						acct, _ := protocol.UnmarshalAccount(e.Value)
