@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -28,11 +27,11 @@ import (
 
 // Client is a light client instance.
 type Client struct {
-	logger      logging.OptionalLogger
 	v2          *client.Client
 	query       api.Querier2
 	store       keyvalue.Beginner
 	storePrefix string
+	router      routing.Router
 }
 
 type ClientOption func(c *Client) error
@@ -61,9 +60,41 @@ func Store(s keyvalue.Beginner, prefix string) ClientOption {
 	}
 }
 
+func Router(r routing.Router) ClientOption {
+	return func(c *Client) error {
+		c.router = r
+		return nil
+	}
+}
+
+func RouterFromStore() ClientOption {
+	return func(c *Client) error {
+		batch := c.OpenDB(false)
+		defer batch.Discard()
+
+		g := new(core.GlobalValues)
+		err := g.Load(protocol.DnUrl(), func(accountUrl *url.URL, target interface{}) error {
+			return batch.Account(accountUrl).Main().GetAs(target)
+		})
+		if err != nil {
+			return errors.UnknownError.WithFormat("load globals: %w", err)
+		}
+
+		router, err := routing.NewStaticRouter(g.Routing, nil)
+		if err != nil {
+			return errors.UnknownError.WithFormat("construct router: %w", err)
+		}
+
+		c.router = router
+		return nil
+	}
+}
+
+// Logger sets the logger.
+//
+// Deprecated: Unused - using slog instead.
 func Logger(logger log.Logger, keyVals ...any) ClientOption {
 	return func(c *Client) error {
-		c.logger.Set(logger, keyVals...)
 		return nil
 	}
 }
@@ -108,6 +139,9 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	if c.v2 == nil {
 		return nil, errors.BadRequest.WithFormat("missing server")
 	}
+	if c.query.Querier == nil {
+		return nil, errors.BadRequest.WithFormat("missing querier")
+	}
 
 	return c, nil
 }
@@ -120,30 +154,20 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// router loads the global values and creates a static router.
-func (c *Client) router(batch *DB) (routing.Router, error) {
-	g := new(core.GlobalValues)
-	err := g.Load(protocol.DnUrl(), func(accountUrl *url.URL, target interface{}) error {
-		return batch.Account(accountUrl).Main().GetAs(target)
-	})
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load globals: %w", err)
-	}
-
-	router, err := routing.NewStaticRouter(g.Routing, nil)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("construct router: %w", err)
-	}
-
-	return router, nil
-}
-
 // OpenDB opens a [DB].
 func (c *Client) OpenDB(writable bool) *DB {
-	kvb := c.store.Begin(record.NewKey(c.storePrefix), writable)
+	var prefix *record.Key
+	if c.storePrefix != "" {
+		prefix = record.NewKey(c.storePrefix)
+	}
+	return OpenDB(c.store, prefix, writable)
+}
+
+func OpenDB(store keyvalue.Beginner, prefix *record.Key, writable bool) *DB {
+	kvb := store.Begin(prefix, writable)
 	batch := database.NewBatch("", kvb, writable, nil)
 	batch.SetObserver(testing.NullObserver{}) // Ignore the BPT
-	index := new(indexDB)
+	index := new(IndexDB)
 	index.key = record.NewKey("Light", "Index")
 	index.store = keyvalue.RecordStore{Store: kvb}
 	return &DB{batch, index}
@@ -152,10 +176,10 @@ func (c *Client) OpenDB(writable bool) *DB {
 // DB is the light client database.
 type DB struct {
 	*database.Batch
-	index IndexDB
+	index *IndexDB
 }
 
-func (db *DB) Index() IndexDB { return db.index }
+func (db *DB) Index() *IndexDB { return db.index }
 
 // Commit commits changes to the database.
 func (db *DB) Commit() error {
