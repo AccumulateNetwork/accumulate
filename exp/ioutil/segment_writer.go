@@ -18,6 +18,53 @@ func NewSegmentedWriter[V enumGet, U enumSet[V]](w io.WriteSeeker) *SegmentedWri
 	return &SegmentedWriter[V, U]{file: w}
 }
 
+func AppendToSegmented[V enumGet, U enumSet[V]](f io.ReadWriteSeeker) (*SegmentedWriter[V, U], []*Segment[V, U], error) {
+	// Start at the start
+	_, err := f.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Find the last section
+	w := &SegmentedWriter[V, U]{file: f}
+	var segments []*Segment[V, U]
+	for {
+		typ, size, next, err := findNext[V, U](f, w.prevSegment)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, nil, err
+		}
+
+		segments = append(segments, &Segment[V, U]{
+			typ:    *typ,
+			offset: w.prevSegment,
+			size:   size,
+		})
+
+		if next == 0 {
+			break
+		}
+		w.prevSegment = next
+	}
+	if len(segments) == 0 {
+		return w, nil, nil
+	}
+
+	// Seek to its end
+	lastSize := segments[len(segments)-1].size
+	if lastSize%segmentAlign > 0 {
+		lastSize += segmentAlign - lastSize%segmentAlign
+	}
+	_, err = f.Seek(lastSize, io.SeekCurrent)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return w, segments, nil
+}
+
 // SegmentedWriter writes a segmented file.
 type SegmentedWriter[V enumGet, U enumSet[V]] struct {
 	file        io.WriteSeeker
@@ -75,9 +122,10 @@ func (w *SegmentedWriter[V, U]) Open(typ V) (*SegmentWriter[V, U], error) {
 	return &SegmentWriter[V, U]{typ, offset, w, segment}, nil
 }
 
+// segmentAlign is the boundary alignment of segments
+const segmentAlign = 64
+
 func (w *SegmentedWriter[V, U]) closeSegment(s *SegmentWriter[V, U]) error {
-	// align is the boundary alignment of segments
-	const align = 64
 
 	// Get current offset
 	current, err := w.file.Seek(0, io.SeekCurrent)
@@ -107,8 +155,8 @@ func (w *SegmentedWriter[V, U]) closeSegment(s *SegmentWriter[V, U]) error {
 	}
 
 	// Pad
-	if current%align > 0 {
-		pad := align - current%align
+	if current%segmentAlign > 0 {
+		pad := segmentAlign - current%segmentAlign
 		_, err = w.file.Write(make([]byte, pad))
 		if err != nil {
 			return errors.UnknownError.WithFormat("pad end of segment: %w", err)

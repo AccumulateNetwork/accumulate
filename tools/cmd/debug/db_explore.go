@@ -19,6 +19,9 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 func init() {
@@ -32,16 +35,19 @@ var cmdDbExplore = &cobra.Command{
 }
 
 var flagExplore = struct {
-	Node   string
-	Badger string
+	Node     string
+	Badger   string
+	Snapshot string
 }{}
 
 func init() {
 	cmdDbExplore.Flags().StringVar(&flagExplore.Node, "node", "", "Explore a node's database")
 	cmdDbExplore.Flags().StringVar(&flagExplore.Badger, "badger", "", "Explore a Badger database")
+	cmdDbExplore.Flags().StringVar(&flagExplore.Snapshot, "snapshot", "", "Explore a snapshot (must be v2, must be indexed)")
 	_ = cmdDbExplore.MarkFlagDirname("node")
 	_ = cmdDbExplore.MarkFlagDirname("badger")
-	cmdDbExplore.MarkFlagsMutuallyExclusive("node", "badger")
+	_ = cmdDbExplore.MarkFlagFilename("snapshot")
+	cmdDbExplore.MarkFlagsMutuallyExclusive("node", "badger", "snapshot")
 	cmdDbExplore.MarkFlagsRequiredTogether()
 }
 
@@ -53,10 +59,24 @@ func explore(_ *cobra.Command, args []string) {
 		check(err)
 		Db, err = database.Open(daemon.Config, nil)
 		check(err)
+		defer safeClose(Db)
 
 	case flagExplore.Badger != "":
 		Db, err = database.OpenBadger(flagExplore.Badger, nil)
 		check(err)
+		defer safeClose(Db)
+
+	case flagExplore.Snapshot != "":
+		f, err := os.Open(flagExplore.Snapshot)
+		check(err)
+		defer safeClose(f)
+		rd, err := snapshot.Open(f)
+		check(err)
+		store, err := rd.AsStore()
+		check(err)
+		Db = database.New(memory.NewChangeSet(nil, func(key *record.Key) ([]byte, error) {
+			return store.Get(key)
+		}, nil, nil), nil)
 
 	default:
 		fatalf("no database specified")

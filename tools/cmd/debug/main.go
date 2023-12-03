@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -33,4 +34,8 @@ func check(err error) {
 		err = errors.UnknownError.Skip(1).Wrap(err)
 		fatalf("%+v", err)
 	}
+}
+
+func safeClose(c io.Closer) {
+	check(c.Close())
 }
