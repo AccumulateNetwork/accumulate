@@ -90,6 +90,21 @@ func Create(file io.WriteSeeker) (*Writer, error) {
 	return &Writer{wr: wr}, nil
 }
 
+// Append opens a snapshot file for appending.
+func Append(file io.ReadWriteSeeker) (*Writer, error) {
+	wr, existing, err := ioutil.AppendToSegmented[SectionType](file)
+
+	var haveHeader bool
+	for _, s := range existing {
+		if s.Type() == SectionTypeHeader {
+			haveHeader = true
+			break
+		}
+	}
+
+	return &Writer{wr: wr, sections: len(existing), wroteHeader: haveHeader}, err
+}
+
 type Reader struct {
 	Sections []*sectionReader
 	Header   *Header
