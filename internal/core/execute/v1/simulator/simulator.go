@@ -147,10 +147,8 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
 
 		network := config.Describe{
-			NetworkType:  protocol.PartitionTypeDirectory,
-			PartitionId:  protocol.Directory,
-			LocalAddress: protocol.Directory,
-			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
+			NetworkType: protocol.PartitionTypeDirectory,
+			PartitionId: protocol.Directory,
 		}
 
 		logger := sim.newLogger(opts).With("partition", protocol.Directory)
@@ -172,10 +170,8 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		bvn.Nodes = []config.Node{{Type: config.Validator, Address: bvn.Id}}
 
 		network := config.Describe{
-			NetworkType:  bvn.Type,
-			PartitionId:  bvn.Id,
-			LocalAddress: bvn.Id,
-			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
+			NetworkType: bvn.Type,
+			PartitionId: bvn.Id,
 		}
 
 		logger := sim.newLogger(opts).With("partition", bvn.Id)
