@@ -12,8 +12,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 
 	"github.com/multiformats/go-multiaddr"
@@ -23,6 +21,7 @@ import (
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
@@ -65,15 +64,7 @@ func init() {
 }
 
 func run(_ *cobra.Command, args []string) {
-	ctx, cancel := context.WithCancel(context.Background())
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
-
-	go func() {
-		<-sigs
-		signal.Stop(sigs)
-		cancel()
-	}()
+	ctx := cmdutil.ContextForMainProcess(context.Background())
 
 	lw, err := logging.NewConsoleWriter("plain")
 	Check(err)
