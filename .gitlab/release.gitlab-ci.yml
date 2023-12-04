@@ -9,6 +9,7 @@ git describe:
   script:
   - git fetch --unshallow
   - echo "GIT_DESCRIBE=$(git describe --dirty)" >> git.env
+  - echo "GIT_COMMIT=$(git rev-parse HEAD)" >> git.env
   artifacts:
     reports:
       dotenv: git.env
