@@ -44,9 +44,11 @@ build main image:
     - mv buildx ~/.docker/cli-plugins/docker-buildx
     - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
   script:
+    - GIT_DESCRIBE=$(git fetch --tags -q ; git describe --dirty)
+    - GIT_COMMIT=$(shell git rev-parse HEAD)
     - docker buildx create --use
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker buildx build --platform linux/amd64,linux/arm64 --push -t ${PRODUCTION_IMAGE} .
+    - docker buildx build --platform linux/amd64,linux/arm64 --push --build-arg "GIT_DESCRIBE=$(GIT_DESCRIBE)" --build-arg "GIT_COMMIT=$(GIT_COMMIT)" -t ${PRODUCTION_IMAGE} .
 
 build binaries:
   stage: pre deploy
