@@ -36,11 +36,11 @@ type Client struct {
 
 type ClientOption func(c *Client) error
 
-func BadgerStore(filepath string) ClientOption {
+func BadgerStore(filepath string, opts ...badger.Option) ClientOption {
 	return func(c *Client) error {
 		// Open the badger database
 		var err error
-		c.store, err = badger.New(filepath)
+		c.store, err = badger.New(filepath, opts...)
 		return errors.UnknownError.Wrap(err)
 	}
 }
