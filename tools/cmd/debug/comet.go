@@ -124,9 +124,3 @@ func downloadCometGenesis(_ *cobra.Command, args []string) {
 		check(err)
 	}
 }
-
-func checkf(err error, format string, otherArgs ...interface{}) {
-	if err != nil {
-		fatalf(format+": %v", append(otherArgs, err)...)
-	}
-}
