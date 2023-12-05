@@ -1,0 +1,19 @@
+PeerInfo:
+  non-binary: true
+  fields:
+    - name: ID
+      type: p2p.PeerID
+      marshal-as: none
+    - name: Operator
+      type: url
+      pointer: true
+    - name: Key
+      type: hash
+    - name: Status
+      type: api.ConsensusStatus
+      marshal-as: reference
+      pointer: true
+    - name: Addresses
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
