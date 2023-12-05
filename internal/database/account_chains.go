@@ -7,6 +7,7 @@
 package database
 
 import (
+	"encoding"
 	"strings"
 
 	"github.com/cometbft/cometbft/libs/log"
@@ -151,6 +152,16 @@ func (c *Chain2) Entry(height int64) ([]byte, error) {
 	return c.inner.Get(height)
 }
 
+// EntryAs loads and unmarshals the entry in the chain at the given height.
+func (c *Chain2) EntryAs(height int64, value encoding.BinaryUnmarshaler) error {
+	data, err := c.Entry(height)
+	if err != nil {
+		return err
+	}
+
+	return value.UnmarshalBinary(data)
+}
+
 // Get converts the Chain2 to a Chain, updating the account's chains index and
 // loading the chain head.
 func (c *Chain2) Get() (*Chain, error) {
@@ -168,6 +179,14 @@ func (c *Chain2) Get() (*Chain, error) {
 		}
 	}
 	return wrapChain(c.inner)
+}
+
+func (c *Chain2) Receipt(from, to uint64) (*merkle.Receipt, error) {
+	c2, err := c.Get()
+	if err != nil {
+		return nil, err
+	}
+	return c2.Receipt(int64(from), int64(to))
 }
 
 // Index returns the index chain of this chain. Index will panic if called on an
