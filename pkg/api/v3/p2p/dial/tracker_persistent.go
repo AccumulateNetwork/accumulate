@@ -98,6 +98,9 @@ func (t *PersistentTracker) runJob(fn func(time.Duration), frequency, defaultFre
 	if frequency == 0 {
 		frequency = defaultFrequency
 	}
+	if frequency < 0 {
+		return
+	}
 
 	t.stopwg.Add(1)
 

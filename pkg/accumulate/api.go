@@ -54,5 +54,6 @@ func ResolveWellKnownEndpoint(name string, version string) string {
 	if u.Path == "" {
 		addr += "/"
 	}
+	version = strings.TrimPrefix(version, "/")
 	return addr + version
 }
