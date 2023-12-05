@@ -42,16 +42,27 @@ var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
 var _ api.Faucet = (*Client)(nil)
 
+func (c AddressedClient) ForAddress(addr multiaddr.Multiaddr) AddressedClient {
+	if c.Address != nil {
+		addr = c.Address.Encapsulate(addr)
+	}
+	return AddressedClient{c.Client, addr}
+}
+
+func (c AddressedClient) ForPeer(peer peer.ID) AddressedClient {
+	addr, err := multiaddr.NewComponent("p2p", peer.String())
+	if err != nil {
+		panic(err)
+	}
+	return c.ForAddress(addr)
+}
+
 func (c *Client) ForAddress(addr multiaddr.Multiaddr) AddressedClient {
 	return AddressedClient{c, addr}
 }
 
 func (c *Client) ForPeer(peer peer.ID) AddressedClient {
-	addr, err := multiaddr.NewComponent("p2p", peer.String())
-	if err != nil {
-		panic(err)
-	}
-	return AddressedClient{c, addr}
+	return c.ForAddress(nil).ForPeer(peer)
 }
 
 // NodeInfo implements [api.NodeService.NodeInfo].

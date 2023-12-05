@@ -11,7 +11,6 @@ import (
 	"crypto/ed25519"
 	"fmt"
 	"io"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -87,7 +86,7 @@ func TestDialAddress(t *testing.T) {
 	}
 }
 
-func newPeer(t *testing.T, seed ...any) peer.ID {
+func newPeer(t testing.TB, seed ...any) peer.ID {
 	h := storage.MakeKey(seed...)
 	std := ed25519.NewKeyFromSeed(h[:])
 	k, _, err := ic.KeyPairFromStdKey(&std)
@@ -95,89 +94,6 @@ func newPeer(t *testing.T, seed ...any) peer.ID {
 	id, err := peer.IDFromPrivateKey(k)
 	require.NoError(t, err)
 	return id
-}
-
-func TestDialServices1(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	services := []*api.ServiceAddress{
-		api.ServiceTypeNode.Address(),
-		api.ServiceTypeConsensus.AddressFor("Directory"),
-		api.ServiceTypeNetwork.AddressFor("Directory"),
-		api.ServiceTypeMetrics.AddressFor("Directory"),
-		api.ServiceTypeQuery.AddressFor("Directory"),
-		api.ServiceTypeEvent.AddressFor("Directory"),
-		api.ServiceTypeSubmit.AddressFor("Directory"),
-		api.ServiceTypeValidate.AddressFor("Directory"),
-	}
-
-	// Create some random peer IDs
-	selfPeerID := newPeer(t, 1)
-	var badPeerIDs, goodPeerIDs []peer.ID
-
-	numGoodPeers := 10
-	numBadPeers := 13
-
-	peerMap := make(map[string]int)
-
-	for i := 0; i < numGoodPeers; i++ {
-		peerID := newPeer(t, i+2)
-		peerMap[peerID.String()] = i + 2
-		goodPeerIDs = append(goodPeerIDs, peerID)
-	}
-	for i := 0; i < numBadPeers; i++ {
-		peerID := newPeer(t, i+10000)
-		peerMap[peerID.String()] = i + 10000
-		badPeerIDs = append(badPeerIDs, peerID)
-	}
-
-	// Set up the host mock
-	host := newFakeHost(selfPeerID)
-	for _, addr := range services {
-		for _, gpi := range goodPeerIDs {
-			host.set(gpi.String() + "|" + addr.String())
-		}
-	}
-
-	// Setup the peers mock
-	peers := staticPeers(func(ctx context.Context, req *DiscoveryRequest) []peer.AddrInfo {
-		var all []peer.AddrInfo
-		for _, p := range goodPeerIDs {
-			all = append(all, peer.AddrInfo{ID: p})
-		}
-		for _, p := range badPeerIDs {
-			all = append(all, peer.AddrInfo{ID: p})
-		}
-		return all
-	})
-
-	tracker := new(SimpleTracker)
-	dialer := &dialer{host: host, peers: peers, tracker: tracker}
-
-	start := time.Now()
-	wg := new(sync.WaitGroup)
-	for _, service := range services {
-		for i := 0; i < numGoodPeers+numBadPeers; i++ {
-			for j := 0; j < 1; j++ {
-				fmt.Printf("loop %d-%d\n", i, j)
-				s, err := dialer.newNetworkStream(ctx, service, "MainNet", wg)
-				require.NoError(t, err)
-				p := peerMap[s.(*stream).peer.String()]
-				fmt.Printf("%10d %40s %v\n", p, service.String(), time.Since(start))
-				runtime.Gosched()
-			}
-		}
-	}
-
-	// Wait for async operations to finish
-	wg.Wait()
-
-	for _, service := range services {
-		addr, err := service.MultiaddrFor("MainNet")
-		require.NoError(t, err)
-		require.Len(t, tracker.good[addr.String()].All(), 10)
-	}
 }
 
 type staticPeers func(ctx context.Context, req *DiscoveryRequest) []peer.AddrInfo
