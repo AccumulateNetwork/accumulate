@@ -18,8 +18,8 @@ import (
 	"io"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 type DbPatch struct {

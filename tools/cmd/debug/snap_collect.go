@@ -15,6 +15,7 @@ import (
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -25,8 +26,17 @@ var cmdSnapCollect = &cobra.Command{
 	Run:   collectSnapshot,
 }
 
+var flagSnapCollect = struct {
+	SkipBPT    bool
+	SkipSystem bool
+	Indexed    bool
+}{}
+
 func init() {
 	cmdSnap.AddCommand(cmdSnapCollect)
+	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.SkipBPT, "skip-bpt", false, "Skip the BPT")
+	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.SkipSystem, "skip-system", false, "Skip system accounts")
+	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.Indexed, "indexed", false, "Make an indexed snapshot")
 }
 
 func collectSnapshot(_ *cobra.Command, args []string) {
@@ -50,16 +60,29 @@ func collectSnapshot(_ *cobra.Command, args []string) {
 	var metrics coredb.CollectMetrics
 	fmt.Println("Collecting...")
 	check(db.Collect(f, partUrl, &coredb.CollectOptions{
-		// BuildIndex: true,
-		Metrics: &metrics,
+		BuildIndex: flagSnapCollect.Indexed,
+		Metrics:    &metrics,
 		Predicate: func(r database.Record) (bool, error) {
+			// Skip the BPT
+			if flagSnapCollect.SkipBPT && r.Key().Get(0) == "BPT" {
+				return false, nil
+			}
+
+			// Skip system accounts
+			if flagSnapCollect.SkipSystem && r.Key().Get(0) == "Account" {
+				_, ok := protocol.ParsePartitionUrl(r.Key().Get(1).(*url.URL))
+				if ok {
+					return false, nil
+				}
+			}
+
 			select {
 			case <-tick.C:
 			default:
 				return true, nil
 			}
 
-			// The sole purpose of this function is to print progress
+			// Print progress
 			switch r.Key().Get(0) {
 			case "Account":
 				k := r.Key().SliceJ(2)
