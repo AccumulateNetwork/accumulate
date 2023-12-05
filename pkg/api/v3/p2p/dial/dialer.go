@@ -10,6 +10,7 @@ import (
 	"context"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -55,6 +56,7 @@ type dialer struct {
 	host    Connector
 	peers   Discoverer
 	tracker Tracker
+	lastTry sync.Map
 }
 
 var _ message.MultiDialer = (*dialer)(nil)
@@ -100,6 +102,7 @@ func (d *dialer) BadDial(ctx context.Context, addr multiaddr.Multiaddr, s messag
 	if !ok {
 		return false
 	}
+	slog.InfoCtx(ctx, "Bad dial", "peer", ss.peer, "address", addr, "error", err)
 	d.tracker.Mark(ss.peer, addr, api.PeerStatusIsKnownBad)
 	return true
 }
@@ -247,6 +250,25 @@ func (d *dialer) tryDial(peer peer.ID, service *api.ServiceAddress, addr multiad
 		wg.Add(1)
 	}
 
+	type Attempt struct {
+		count atomic.Int32
+		time  atomic.Pointer[time.Time]
+	}
+
+	// Has it been more than 1 minute since our last attempt?
+	v, didLoad := d.lastTry.LoadOrStore(peer, new(Attempt))
+	last := v.(*Attempt)
+	if didLoad && time.Since(*last.time.Load()) < backoffTime(last.count.Load()) {
+		// The last attempt was less than a minute ago
+		return
+
+	} else {
+		// Update the attempt time and count
+		t := time.Now()
+		last.count.Add(1)
+		last.time.Store(&t)
+	}
+
 	go func() {
 		// Panic protection
 		defer func() {
@@ -264,6 +286,15 @@ func (d *dialer) tryDial(peer peer.ID, service *api.ServiceAddress, addr multiad
 
 		d.dial(ctx, peer, service, addr)
 	}()
+}
+
+// backoffTime returns the smaller of 2ⁿ minutes  or 1 day.
+func backoffTime(attempts int32) time.Duration {
+	d := time.Minute << time.Duration(attempts)
+	if d > 24*time.Hour {
+		d = 24 * time.Hour
+	}
+	return d
 }
 
 func (d *dialer) dial(ctx context.Context, peer peer.ID, service *api.ServiceAddress, addr multiaddr.Multiaddr) *stream {
@@ -285,31 +316,83 @@ func (d *dialer) dial(ctx context.Context, peer peer.ID, service *api.ServiceAdd
 		return stream
 	}
 
-	// Log the error
-	var timeoutError interface{ Timeout() bool }
-	switch {
-	case errors.Is(err, context.Canceled),
-		errors.Is(err, context.DeadlineExceeded):
-		// Context was canceled, don't mark the peer
-
-	case errors.Is(err, network.ErrNoConn),
-		errors.Is(err, network.ErrNoRemoteAddrs),
-		errors.Is(err, swarm.ErrNoAddresses):
-		// Mark the peer as dead
+	// Log the error and mark the peer
+	switch classifyDialError(ctx, peer, service, addr, err) {
+	case severityMarkDead:
 		d.tracker.Mark(peer, addr, api.PeerStatusIsUnknown)
-		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
 
-	case errors.Is(err, swarm.ErrDialBackoff),
-		errors.Is(err, swarm.ErrNoGoodAddresses),
-		errors.As(err, &timeoutError) && timeoutError.Timeout():
-		// Mark the peer bad
+	case severityMarkBad:
 		d.tracker.Mark(peer, addr, api.PeerStatusIsKnownBad)
-		slog.DebugCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
-
-	default:
-		// Mark the peer bad
-		d.tracker.Mark(peer, addr, api.PeerStatusIsKnownBad)
-		slog.WarnCtx(ctx, "Unknown error while dialing peer", "peer", peer, "service", service, "error", err)
 	}
 	return nil
+}
+
+type dialErrorSeverity int
+
+const (
+	severityDontCare dialErrorSeverity = -iota
+	severityMarkBad
+	severityMarkDead
+)
+
+func classifyDialError(ctx context.Context, peer peer.ID, service *api.ServiceAddress, addr multiaddr.Multiaddr, err error) dialErrorSeverity {
+	// User canceled request, don't care
+	if errors.Is(err, context.Canceled) {
+		return severityDontCare
+	}
+
+	// Request timed out, don't care
+	if errors.Is(err, context.DeadlineExceeded) {
+		return severityDontCare
+	}
+
+	// Connection attempted timed out, mark peer bad
+	var timeoutError interface{ Timeout() bool }
+	if errors.As(err, &timeoutError) && timeoutError.Timeout() {
+		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		return severityMarkBad
+	}
+
+	// To many connection attempts failed, mark peer bad
+	if errors.Is(err, swarm.ErrDialBackoff) {
+		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		return severityMarkBad
+	}
+
+	// Unable to create a connection, mark peer dead
+	if errors.Is(err, network.ErrNoConn) {
+		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		return severityMarkDead
+	}
+
+	// No known addresses, mark peer dead
+	if errors.Is(err, network.ErrNoRemoteAddrs) ||
+		errors.Is(err, swarm.ErrNoAddresses) {
+		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		return severityMarkDead
+	}
+
+	// Failed to dial, mark peer bad
+	if errors.Is(err, swarm.ErrDialBackoff) ||
+		errors.Is(err, swarm.ErrNoGoodAddresses) {
+		slog.InfoCtx(ctx, "Unable to dial peer", "peer", peer, "service", service, "error", err)
+		return severityMarkDead
+	}
+
+	// Swarm error, take the worst severity
+	var swarmError *swarm.DialError
+	if errors.As(err, &swarmError) {
+		var s dialErrorSeverity
+		for _, err := range swarmError.DialErrors {
+			t := classifyDialError(ctx, peer, service, addr, err.Cause)
+			if t < s {
+				s = t
+			}
+		}
+		return s
+	}
+
+	// Unknown error, mark peer bad
+	slog.WarnCtx(ctx, "Unknown error while dialing peer", "peer", peer, "service", service, "error", err)
+	return severityMarkBad
 }
