@@ -193,7 +193,7 @@ func (d *dispatcher) send(ctx context.Context, queue map[string][]*messaging.Env
 
 			// Check for failed submissions
 			for _, sub := range subs {
-				if sub.Status != nil {
+				if sub.Status != nil && sub.Status.Error != nil {
 					check(sub.Status.AsError(), client.peer)
 				}
 			}
