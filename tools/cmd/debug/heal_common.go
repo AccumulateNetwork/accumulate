@@ -30,8 +30,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 var cmdHeal = &cobra.Command{
@@ -60,11 +62,12 @@ type healer struct {
 	healSingle   func(h *healer, src, dst *protocol.PartitionInfo, num uint64, txid *url.TxID)
 	healSequence func(h *healer, src, dst *protocol.PartitionInfo)
 
-	ctx   context.Context
-	C1    *jsonrpc.Client
-	C2    *message.Client
-	net   *healing.NetworkInfo
-	light *light.Client
+	ctx    context.Context
+	C1     *jsonrpc.Client
+	C2     *message.Client
+	net    *healing.NetworkInfo
+	light  *light.Client
+	router routing.Router
 
 	accounts map[[32]byte]protocol.Account
 }
@@ -110,7 +113,7 @@ func (h *healer) heal(args []string) {
 		check(json.Unmarshal(data, &h.net))
 	}
 
-	router, err := apiutil.InitRouter(ctx, node, args[0])
+	h.router, err = apiutil.InitRouter(ctx, node, args[0])
 	check(err)
 
 	dialer := node.DialNetwork()
@@ -127,7 +130,7 @@ func (h *healer) heal(args []string) {
 		Transport: &message.RoutedTransport{
 			Network: ni.Network,
 			Dialer:  dialer,
-			Router:  routing.MessageRouter{Router: router},
+			Router:  routing.MessageRouter{Router: h.router},
 		},
 	}
 
@@ -138,7 +141,7 @@ func (h *healer) heal(args []string) {
 			light.Store(db, ""),
 			light.Server(accumulate.ResolveWellKnownEndpoint(args[0], "v2")),
 			light.Querier(h.C2),
-			light.Router(router),
+			light.Router(h.router),
 		)
 		check(err)
 		defer func() { _ = h.light.Close() }()
@@ -229,4 +232,42 @@ func getAccount[T protocol.Account](h *healer, u *url.URL) T {
 		fatalf("%v is a %T not a %v", u, a, reflect.TypeOf(new(T)).Elem())
 	}
 	return b
+}
+
+func (h *healer) tryEach() api.Querier2 {
+	return api.Querier2{Querier: &tryEachQuerier{h, 10 * time.Second}}
+}
+
+type tryEachQuerier struct {
+	*healer
+	timeout time.Duration
+}
+
+func (q *tryEachQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	part, err := q.router.RouteAccount(scope)
+	if err != nil {
+		return nil, err
+	}
+
+	var lastErr error
+	for peer, info := range q.net.Peers[strings.ToLower(part)] {
+		c := q.C2.ForPeer(peer)
+		if len(info.Addresses) > 0 {
+			c = c.ForAddress(info.Addresses[0])
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, q.timeout)
+		defer cancel()
+
+		r, err := c.Query(ctx, scope, query)
+		if err == nil {
+			return r, nil
+		}
+		if errors.Code(err).IsClientError() {
+			return nil, err
+		}
+		lastErr = err
+		slog.ErrorCtx(ctx, "Failed to query", "peer", peer, "scope", scope, "error", err)
+	}
+	return nil, lastErr
 }
