@@ -141,6 +141,13 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 }
 
 func (d *dispatcher) send(ctx context.Context, queue map[string][]*messaging.Envelope, errs chan<- error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.ErrorCtx(ctx, "Panicked while dispatching", "error", r)
+			mDispatchPanics.Inc()
+		}
+	}()
+
 	mDispatchCalls.Inc()
 
 	ctx, cancel := context.WithCancel(ctx)
