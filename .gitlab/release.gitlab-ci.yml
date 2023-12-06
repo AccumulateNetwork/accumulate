@@ -17,7 +17,7 @@ git describe:
 build main image:
   stage: test
   extends: .rules release
-  needs: [git describe]
+  needs: [ git describe ]
   image: docker:24
   timeout: 2 hours
   services:
