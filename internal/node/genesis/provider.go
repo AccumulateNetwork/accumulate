@@ -8,12 +8,12 @@ package genesis
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/cometbft/cometbft/crypto/ed25519"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/node"
 	"github.com/cometbft/cometbft/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -26,7 +26,7 @@ func ConvertJsonToSnapshot(doc *types.GenesisDoc) ([]byte, error) {
 	// contains sufficient information to recreate the JSON genesis doc. So all
 	// we need to do here is extract the snapshot.
 	var b []byte
-	err := json.Unmarshal(doc.AppState, &b)
+	err := cmtjson.Unmarshal(doc.AppState, &b)
 	return b, err
 }
 
@@ -61,7 +61,7 @@ func DocProvider(config *config.Config) node.GenesisDocProvider {
 		}
 
 		// Convert
-		jsonBytes, err := json.Marshal(all)
+		jsonBytes, err := cmtjson.Marshal(all)
 		if err != nil {
 			return nil, err
 		}
