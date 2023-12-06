@@ -16,6 +16,13 @@ import (
 // getClient latency, wanted, and scanned should probably be summaries or
 // histograms, but I don't know how to use those
 var (
+	mDispatchPanics = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "tendermintDispatch",
+		Name:      "panics",
+		Help:      "The number of times dispatch has panicked",
+	})
+
 	mDispatchCalls = promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: "accumulate",
 		Subsystem: "tendermintDispatch",
