@@ -8,6 +8,7 @@ package main
 
 import (
 	"log"
+	"runtime"
 
 	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
@@ -18,7 +19,11 @@ func init() {
 	badgerCompactCmd.Run = compact
 
 	cmd.AddCommand(badgerCmd)
-	badgerCmd.AddCommand(badgerTruncateCmd, badgerCompactCmd)
+	badgerCmd.AddCommand(
+		badgerTruncateCmd,
+		badgerCompactCmd,
+		badgerFlattenCmd,
+	)
 }
 
 var badgerCmd = &cobra.Command{
@@ -36,6 +41,13 @@ var badgerCompactCmd = &cobra.Command{
 	Use:   "compact [database]",
 	Short: "Run GC on a database to compact it",
 	Args:  cobra.ExactArgs(1),
+}
+
+var badgerFlattenCmd = &cobra.Command{
+	Use:   "flatten [database]",
+	Short: "Flatten Badger's LSM",
+	Args:  cobra.ExactArgs(1),
+	Run:   badgerFlatten,
 }
 
 var compactRatio = badgerCompactCmd.Flags().Float64("ratio", 0.5, "Badger GC ratio")
@@ -73,4 +85,14 @@ func compact(_ *cobra.Command, args []string) {
 		log.Fatalf("error running value log gc: %v", err)
 	}
 	log.Printf("completed gc, ran %d times", count)
+}
+
+func badgerFlatten(_ *cobra.Command, args []string) {
+	db, err := badger.Open(badger.DefaultOptions(args[0]).
+		WithTruncate(true).
+		WithNumCompactors(0))
+	check(err)
+	defer db.Close()
+
+	check(db.Flatten(runtime.NumCPU()))
 }
