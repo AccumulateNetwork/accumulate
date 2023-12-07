@@ -87,7 +87,7 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		}
 
 		// Submit it
-		err = c.submit(ctx, env)
+		err = c.submit(ctx, destination, env)
 		if err != nil {
 			return err
 		}
