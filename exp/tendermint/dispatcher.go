@@ -132,8 +132,13 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	queue := d.queue
 	d.queue = make(map[string][]*messaging.Envelope, len(queue))
 
-	// Run asynchronously
 	errs := make(chan error)
+	if len(queue) == 0 {
+		close(errs)
+		return errs
+	}
+
+	// Run asynchronously
 	go d.send(ctx, queue, errs)
 
 	// Let the caller wait for errors

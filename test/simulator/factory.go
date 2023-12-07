@@ -586,7 +586,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		ValidatorKey:        execOpts.Key,
 		Database:            execOpts.Database,
 		Querier:             api.Querier2{Querier: f.getServices()},
-		Submitter:           f.getServices(),
+		Dispatcher:          execOpts.NewDispatcher(),
 		RunTask:             execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor:   f.dropInitialAnchor,
 		EnableAnchorHealing: &enableAnchorHealing,
