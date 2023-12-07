@@ -484,12 +484,22 @@ func (b *bootstrap) unpackSnapshots() error {
 						return false, nil
 					}
 
+					// Skip ACME
+					if protocol.AcmeUrl().Equal(u) {
+						return false, nil
+					}
+
 					// Track ACME issued
 					if e.Key.Len() == 3 && e.Key.Get(2) == "Main" {
 						acct, _ := protocol.UnmarshalAccount(e.Value)
 						if acct, ok := acct.(protocol.AccountWithTokens); ok && protocol.AcmeUrl().Equal(acct.GetTokenUrl()) {
 							b.acmeIssued.Add(b.acmeIssued, acct.TokenBalance())
 						}
+					}
+
+					// Do not preserve pending transactions
+					if e.Key.Len() == 3 && e.Key.Get(2) == "Pending" {
+						return false, nil
 					}
 
 					// Is this record for an account that belongs to this
