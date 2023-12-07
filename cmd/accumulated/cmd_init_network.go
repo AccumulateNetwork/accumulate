@@ -61,11 +61,15 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	for _, bvn := range network.Bvns {
 		for _, node := range bvn.Nodes {
-			// TODO Check for existing keys?
-			node.PrivValKey = tmed25519.GenPrivKey()
-			node.DnNodeKey = tmed25519.GenPrivKey()
-			node.BvnNodeKey = tmed25519.GenPrivKey()
-
+			if node.PrivValKey == nil {
+				node.PrivValKey = tmed25519.GenPrivKey()
+			}
+			if node.DnNodeKey == nil {
+				node.DnNodeKey = tmed25519.GenPrivKey()
+			}
+			if node.BvnNodeKey == nil {
+				node.BvnNodeKey = tmed25519.GenPrivKey()
+			}
 			if node.ListenAddress == "" {
 				node.ListenAddress = "0.0.0.0"
 			}
