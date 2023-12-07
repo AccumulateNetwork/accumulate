@@ -382,6 +382,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 
 	// This must happen before creating the executor since it needs to receive
 	// the initial WillChangeGlobals event
+	no := false
 	conductor := &crosschain.Conductor{
 		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.NetworkType},
 		ValidatorKey: execOpts.Key,
@@ -389,6 +390,9 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		Querier:      v3.Querier2{Querier: client},
 		Submitter:    client,
 		RunTask:      execOpts.BackgroundTaskLauncher,
+
+		// Disable for now
+		EnableAnchorHealing: &no,
 
 		Ready: func(execute.WillBeginBlock) bool {
 			// Pause the conductor until the node has caught up

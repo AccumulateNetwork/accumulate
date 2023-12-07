@@ -580,16 +580,17 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 
 	// Create the conductor. This must happen before creating the executor since
 	// it needs to receive the initial WillChangeGlobals event.
+	enableAnchorHealing := !f.disableAnchorHealing
 	conductor := &crosschain.Conductor{
-		Partition:            &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
-		ValidatorKey:         execOpts.Key,
-		Database:             execOpts.Database,
-		Querier:              api.Querier2{Querier: f.getServices()},
-		Submitter:            f.getServices(),
-		RunTask:              execOpts.BackgroundTaskLauncher,
-		DropInitialAnchor:    f.dropInitialAnchor,
-		DisableAnchorHealing: f.disableAnchorHealing,
-		Intercept:            f.interceptDispatchedMessages,
+		Partition:           &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
+		ValidatorKey:        execOpts.Key,
+		Database:            execOpts.Database,
+		Querier:             api.Querier2{Querier: f.getServices()},
+		Submitter:           f.getServices(),
+		RunTask:             execOpts.BackgroundTaskLauncher,
+		DropInitialAnchor:   f.dropInitialAnchor,
+		EnableAnchorHealing: &enableAnchorHealing,
+		Intercept:           f.interceptDispatchedMessages,
 	}
 	err := conductor.Start(f.getEventBus())
 	if err != nil {

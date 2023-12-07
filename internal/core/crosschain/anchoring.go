@@ -23,7 +23,7 @@ import (
 )
 
 func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, destination *url.URL, currentBlock uint64) error {
-	if c.DisableAnchorHealing {
+	if !def(c.EnableAnchorHealing, true) {
 		return nil
 	}
 

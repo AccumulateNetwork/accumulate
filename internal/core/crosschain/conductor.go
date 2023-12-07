@@ -47,9 +47,8 @@ type Conductor struct {
 	// the anchor the first time around.
 	DropInitialAnchor bool
 
-	// **FOR TESTING PURPOSES ONLY**. Disables healing of anchors after they are
-	// initially submitted.
-	DisableAnchorHealing bool
+	// Enables healing of anchors after they are initially submitted.
+	EnableAnchorHealing *bool
 
 	// **FOR TESTING PURPOSES ONLY**. Intercepts dispatched envelopes.
 	Intercept interceptor
@@ -230,4 +229,11 @@ func (c *Conductor) runTask(task func()) {
 
 		task()
 	}()
+}
+
+func def[T any](value *T, def T) T {
+	if value == nil {
+		return def
+	}
+	return *value
 }
