@@ -388,7 +388,7 @@ func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 		ValidatorKey: execOpts.Key,
 		Database:     execOpts.Database,
 		Querier:      v3.Querier2{Querier: client},
-		Submitter:    client,
+		Dispatcher:   execOpts.NewDispatcher(),
 		RunTask:      execOpts.BackgroundTaskLauncher,
 
 		// Disable for now
