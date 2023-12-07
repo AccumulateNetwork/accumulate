@@ -156,7 +156,7 @@ func startDual(primary, secondary *accumulated.Daemon) error {
 
 	errg := new(errgroup.Group)
 	errg.Go(func() error {
-		err := primary.Start()
+		err := primary.Start(secondary)
 		if err != nil {
 			return errors.UnknownError.WithFormat("start primary: %w", err)
 		}

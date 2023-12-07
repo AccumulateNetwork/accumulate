@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/util/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -25,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
