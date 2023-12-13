@@ -7,12 +7,14 @@
 package bolt
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	bolt "go.etcd.io/bbolt"
+	"golang.org/x/exp/slog"
 )
 
 type Database struct {
@@ -93,10 +95,6 @@ func (d *Database) bucket(tx *bolt.Tx, key *record.Key, create bool) (*bolt.Buck
 func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	// Use a read-only transaction for reading
 	rd, err := d.bolt.Begin(false)
-	if err != nil {
-		// Should only occur if the database is closed
-		panic(err)
-	}
 
 	// Discard the transaction
 	discard := func() {
@@ -105,56 +103,106 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 
 	// Read from the transaction
 	get := func(key *record.Key) ([]byte, error) {
-		b, k, err := d.bucket(rd, key, false)
-		if err != nil {
-			return nil, err
-		}
-		if b == nil {
-			return nil, (*database.NotFoundError)(key)
-		}
-
-		v := b.Get(k)
-		if v == nil {
-			return nil, (*database.NotFoundError)(key)
-		}
-
-		u := make([]byte, len(v))
-		copy(u, v)
-		return u, nil
+		return d.get(rd, err, key)
 	}
 
 	// Commit to the write batch
 	var commit memory.CommitFunc
 	if writable {
 		commit = func(entries map[[32]byte]memory.Entry) error {
-			// Discard the read transaction to unlock the database
-			_ = rd.Rollback()
-
-			return d.bolt.Update(func(tx *bolt.Tx) error {
-				for _, e := range entries {
-					b, k, err := d.bucket(tx, e.Key, true)
-					if err != nil {
-						return err
-					}
-
-					if e.Delete {
-						err = b.Delete(k)
-					} else {
-						err = b.Put(k, e.Value)
-					}
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			})
+			return d.commit(rd, entries)
 		}
+	}
+
+	forEach := func(fn func(*record.Key, []byte) error) error {
+		return d.forEach(rd, fn)
 	}
 
 	// The memory changeset caches entries in a map so Get will see values
 	// updated with Put, regardless of the underlying transaction and write
 	// batch behavior
-	return memory.NewChangeSet(prefix, get, commit, discard)
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix:  prefix,
+		Get:     get,
+		Commit:  commit,
+		ForEach: forEach,
+		Discard: discard,
+	})
+}
+
+func (d *Database) get(txn *bolt.Tx, err error, key *record.Key) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+
+	b, k, err := d.bucket(txn, key, false)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, (*database.NotFoundError)(key)
+	}
+
+	v := b.Get(k)
+	if v == nil {
+		return nil, (*database.NotFoundError)(key)
+	}
+
+	u := make([]byte, len(v))
+	copy(u, v)
+	return u, nil
+}
+
+func (d *Database) commit(rd *bolt.Tx, entries map[[32]byte]memory.Entry) error {
+	// Discard the read transaction to unlock the database
+	_ = rd.Rollback()
+
+	return d.bolt.Update(func(tx *bolt.Tx) error {
+		for _, e := range entries {
+			b, k, err := d.bucket(tx, e.Key, true)
+			if err != nil {
+				return err
+			}
+
+			if e.Delete {
+				err = b.Delete(k)
+			} else {
+				err = b.Put(k, e.Value)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (d *Database) forEach(txn *bolt.Tx, fn func(*record.Key, []byte) error) error {
+	if !d.plainKeys {
+		// This driver uses buckets, and a compressed key cannot be prefixed
+		// (with a bucket name), hence the error
+		return errors.NotAllowed.With("cannot iterate over a database that is using compressed keys")
+	}
+
+	return txn.ForEach(func(name []byte, b *bolt.Bucket) error {
+		return b.ForEach(func(k, v []byte) error {
+			// Decode key
+			key := new(record.Key)
+			if err := key.UnmarshalBinary(k); err != nil {
+				slog.Error("Cannot unmarshal database key; does this database use uncompressed keys?", "key", logging.AsHex(k), "error", err)
+				return errors.InternalError.WithFormat("cannot unmarshal key: %w", err)
+			}
+
+			// Add bucket
+			key = record.NewKey(string(name)).AppendKey(key)
+
+			// Copy value
+			u := make([]byte, len(v))
+			copy(u, v)
+
+			return fn(key, u)
+		})
+	})
 }
 
 func (d *Database) Close() error {

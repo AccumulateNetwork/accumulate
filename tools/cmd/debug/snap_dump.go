@@ -49,10 +49,12 @@ func init() {
 var enUsTitle = cases.Title(language.AmericanEnglish)
 
 func dumpSnapshot(_ *cobra.Command, args []string) {
-	rd, ver := openSnapshotFile(args[0])
+	rd := openSnapshotFile(args[0])
 	if c, ok := rd.(io.Closer); ok {
 		defer c.Close()
 	}
+	ver, err := sv2.GetVersion(rd)
+	check(err)
 
 	switch ver {
 	case sv1.Version1:
@@ -64,8 +66,7 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 	}
 }
 
-func openSnapshotFile(filename string) (ioutil.SectionReader, uint64) {
-	var rd ioutil.SectionReader
+func openSnapshotFile(filename string) ioutil.SectionReader {
 	if filepath.Ext(filename) == ".json" {
 		fmt.Fprintf(os.Stderr, "Loading %s\n", filename)
 		genDoc, err := types.GenesisDocFromFile(filename)
@@ -73,17 +74,13 @@ func openSnapshotFile(filename string) (ioutil.SectionReader, uint64) {
 
 		var b []byte
 		check(json.Unmarshal(genDoc.AppState, &b))
-		rd = bytes.NewReader(b)
+		return bytes.NewReader(b)
 
 	} else {
 		f, err := os.Open(filename)
 		checkf(err, "open snapshot %s", filename)
-		rd = f
+		return f
 	}
-
-	ver, err := sv2.GetVersion(rd)
-	check(err)
-	return rd, ver
 }
 
 func dumpV2(f ioutil.SectionReader) {

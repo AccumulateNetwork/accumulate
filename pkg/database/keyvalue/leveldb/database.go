@@ -62,49 +62,80 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 
 	// Read from the transaction
 	get := func(key *record.Key) ([]byte, error) {
-		if err != nil {
-			return nil, err
-		}
-
-		v, err := snap.Get(d.key(key), nil)
-		switch {
-		case err == nil:
-			u := make([]byte, len(v))
-			copy(u, v)
-			return u, nil
-		case errors.Is(err, leveldb.ErrNotFound):
-			return nil, (*database.NotFoundError)(key)
-		default:
-			return nil, err
-		}
+		return d.get(snap, err, key)
 	}
 
 	// Commit to the write batch
 	var commit memory.CommitFunc
 	if writable {
-		commit = func(entries map[[32]byte]memory.Entry) error {
-			batch := new(leveldb.Batch)
-			for _, e := range entries {
-				if e.Delete {
-					batch.Delete(d.key(e.Key))
-				} else {
-					batch.Put(d.key(e.Key), e.Value)
-				}
-			}
-
-			return d.leveldb.Write(batch, nil)
-		}
+		commit = d.commit
 	}
 
-	// Discard the transaction
-	discard := func() {
-		snap.Release()
+	forEach := func(fn func(*record.Key, []byte) error) error {
+		return d.forEach(snap, err, fn)
 	}
 
 	// The memory changeset caches entries in a map so Get will see values
 	// updated with Put, regardless of the underlying transaction and write
 	// batch behavior
-	return memory.NewChangeSet(prefix, get, commit, discard)
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix:  prefix,
+		Get:     get,
+		Commit:  commit,
+		ForEach: forEach,
+		Discard: snap.Release,
+	})
+}
+
+func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
+	batch := new(leveldb.Batch)
+	for _, e := range entries {
+		if e.Delete {
+			batch.Delete(d.key(e.Key))
+		} else {
+			batch.Put(d.key(e.Key), e.Value)
+		}
+	}
+
+	return d.leveldb.Write(batch, nil)
+}
+
+func (d *Database) get(snap *leveldb.Snapshot, err error, key *record.Key) ([]byte, error) {
+	if err != nil {
+		return nil, err
+	}
+
+	v, err := snap.Get(d.key(key), nil)
+	switch {
+	case err == nil:
+		u := make([]byte, len(v))
+		copy(u, v)
+		return u, nil
+	case errors.Is(err, leveldb.ErrNotFound):
+		return nil, (*database.NotFoundError)(key)
+	default:
+		return nil, err
+	}
+}
+
+func (d *Database) forEach(snap *leveldb.Snapshot, err error, fn func(*record.Key, []byte) error) error {
+	if err != nil {
+		return err
+	}
+
+	it := snap.NewIterator(nil, nil)
+	defer it.Release()
+	for it.Next() {
+		key := record.KeyFromHash(*(*[32]byte)(it.Key()))
+		value := make([]byte, len(it.Value()))
+		copy(value, it.Value())
+		err = fn(key, value)
+		if err != nil {
+			return err
+		}
+	}
+	it.Release()
+	return it.Error()
 }
 
 // Close

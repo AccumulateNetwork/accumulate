@@ -61,8 +61,12 @@ func TestDatabase(t *testing.T, open Opener) {
 	require.ErrorAs(t, err, new(*database.NotFoundError))
 
 	// Write
+	values := map[record.KeyHash]string{}
 	for i := 0; i < N; i++ {
-		err := batch.Put(record.NewKey("answer", i), []byte(fmt.Sprintf("%x this much data ", i)))
+		key := record.NewKey("answer", i)
+		value := fmt.Sprintf("%x this much data ", i)
+		values[key.Hash()] = value
+		err := batch.Put(key, []byte(value))
 		require.NoError(t, err, "Put")
 	}
 
@@ -93,6 +97,16 @@ func TestDatabase(t *testing.T, open Opener) {
 		require.NoError(t, err, "Get")
 		require.Equal(t, fmt.Sprintf("%x this much data ", i), string(val))
 	}
+
+	// Verify ForEach
+	require.NoError(t, batch.ForEach(func(key *record.Key, value []byte) error {
+		expect, ok := values[key.Hash()]
+		require.Truef(t, ok, "%v should exist", key)
+		require.Equalf(t, expect, string(value), "%v should match", key)
+		delete(values, key.Hash())
+		return nil
+	}))
+	require.Empty(t, values, "All values should be iterated over")
 }
 
 func TestIsolation(t *testing.T, open Opener) {

@@ -21,7 +21,6 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 func init() {
@@ -74,9 +73,9 @@ func explore(_ *cobra.Command, args []string) {
 		check(err)
 		store, err := rd.AsStore()
 		check(err)
-		Db = database.New(memory.NewChangeSet(nil, func(key *record.Key) ([]byte, error) {
-			return store.Get(key)
-		}, nil, nil), nil)
+		Db = database.New(memory.NewChangeSet(memory.ChangeSetOptions{
+			Get: store.Get,
+		}), nil)
 
 	default:
 		fatalf("no database specified")

@@ -47,6 +47,10 @@ func (b *Bucket) Read(i byte) ([]Entry, error) {
 	return entries, nil
 }
 
+func (f *File) ReadAt(buf []byte, off int64) (int, error) {
+	return f.file.ReadAt(buf, off)
+}
+
 func (b *Bucket) Write(hash [32]byte, value []byte) error {
 	if len(value) != b.valueSize {
 		return errors.New("value does not match expected size")
@@ -61,10 +65,14 @@ func (b *Bucket) Write(hash [32]byte, value []byte) error {
 	return err
 }
 
-func (f *bucketFile) close(valueSize int) error {
+func (f *File) Close() error {
 	err := f.file.Close()
 	if err != nil {
 		slog.Error("Error closing bucket", "error", err)
 	}
 	return err
+}
+
+func (f *File) Write(data []byte) (int, error) {
+	return f.file.Write(data)
 }
