@@ -75,8 +75,16 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	messages := d.messages
 	d.messages = nil
 
-	// Run asynchronously
 	errs := make(chan error)
+	check := func(err error) {
+		err = tendermint.CheckDispatchError(err)
+		if err != nil {
+			return
+		}
+		errs <- err
+	}
+
+	// Run asynchronously
 	go func() {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -94,14 +102,14 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			switch res := res.(type) {
 			case *message.ErrorResponse:
 				// Handle error
-				tendermint.CheckDispatchError(res.Error, errs)
+				check(res.Error)
 				return nil
 
 			case *message.SubmitResponse:
 				// Check for failed submissions
 				for _, sub := range res.Value {
 					if sub.Status != nil {
-						tendermint.CheckDispatchError(sub.Status.AsError(), errs)
+						check(sub.Status.AsError())
 					}
 				}
 				return nil
