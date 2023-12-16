@@ -27,6 +27,7 @@ var (
 	peerDb            string
 	lightDb           string
 	only              string
+	pprof             string
 	healSinceDuration time.Duration
 )
 
