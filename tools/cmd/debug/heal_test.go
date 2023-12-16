@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
+	"gitlab.com/accumulatenetwork/accumulate/exp/light"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
@@ -37,11 +38,63 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func TestIndexReceivedAnchors(t *testing.T) {
+	t.Skip("Manual")
+
+	const network = "kermit"
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	node, err := p2p.New(p2p.Options{
+		Network:           network,
+		BootstrapPeers:    accumulate.BootstrapServers,
+		PeerDatabase:      peerDb,
+		EnablePeerTracker: true,
+
+		// Use the peer tracker, but don't update it between reboots
+		PeerScanFrequency:    -1,
+		PeerPersistFrequency: -1,
+	})
+	checkf(err, "start p2p node")
+	t.Cleanup(func() { require.NoError(t, node.Close()) })
+
+	router, err := apiutil.InitRouter(ctx, node, network)
+	check(err)
+
+	dialer := node.DialNetwork()
+	mc := &message.Client{
+		Transport: &message.RoutedTransport{
+			Network: network,
+			Dialer:  dialer,
+			Router:  routing.MessageRouter{Router: router},
+		},
+	}
+
+	cu, err := user.Current()
+	require.NoError(t, err)
+	db, err := bolt.Open(filepath.Join(cu.HomeDir, ".accumulate", "cache", network+".db"), bolt.WithPlainKeys)
+	require.NoError(t, err)
+
+	lc, err := light.NewClient(
+		light.Store(db, ""),
+		light.Server(accumulate.ResolveWellKnownEndpoint(network, "v2")),
+		light.Querier(mc),
+		light.Router(router),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = lc.Close() })
+
+	// Profile this
+	err = lc.IndexReceivedAnchors(ctx, url.MustParse("dn.acme"))
+	require.NoError(t, err)
+}
 
 func TestSyntheticSequence(t *testing.T) {
 	b, err := hex.DecodeString("01e35b2000000000000000000000000000000000000000000000000000000000")
