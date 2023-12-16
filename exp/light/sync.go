@@ -355,6 +355,32 @@ func (c *Client) PullPendingTransactionsForAccount(ctx context.Context, account 
 	return errors.UnknownError.Wrap(err)
 }
 
+func (c *Client) GetBlockForTime(account *url.URL, time time.Time) (uint64, error) {
+	batch := c.OpenDB(false)
+	defer batch.Discard()
+	return c.getBlockForTime(batch, account, time)
+}
+
+func (c *Client) getBlockForTime(batch *DB, account *url.URL, time time.Time) (uint64, error) {
+	if c.router == nil {
+		return 0, errors.BadRequest.With("cannot determine major blocks without a router")
+	}
+
+	// Find the block
+	part, err := c.router.RouteAccount(account)
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("route %v: %w", account, err)
+	}
+	partU := protocol.PartitionUrl(part)
+	_, block, err := batch.Index().Account(partU.JoinPath(protocol.Ledger)).Chain("root").Index().Find(ByIndexTime(time))
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load anchor metadata: %w", err)
+	}
+
+	// Include chain entries since the given minor block
+	return block.BlockIndex, nil
+}
+
 type missingMessage struct {
 	ID    *url.TxID
 	Chain string
@@ -363,24 +389,13 @@ type missingMessage struct {
 
 func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []string, since *time.Time) ([]*missingMessage, error) {
 	var sinceMinor uint64
+	var err error
 	if since != nil {
-		if c.router == nil {
-			return nil, errors.BadRequest.With("cannot determine major blocks without a router")
-		}
-
-		// Find the block
-		part, err := c.router.RouteAccount(account)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("route %v: %w", account, err)
-		}
-		partU := protocol.PartitionUrl(part)
-		_, block, err := batch.Index().Account(partU.JoinPath(protocol.Ledger)).Chain("root").Index().Find(ByIndexTime(*since))
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load anchor metadata: %w", err)
-		}
-
 		// Include chain entries since the given minor block
-		sinceMinor = block.BlockIndex
+		sinceMinor, err = c.getBlockForTime(batch, account, *since)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
 	}
 
 	// For each chain
