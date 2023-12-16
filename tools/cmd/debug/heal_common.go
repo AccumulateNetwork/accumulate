@@ -10,6 +10,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -49,6 +51,7 @@ func init() {
 	cmdHeal.PersistentFlags().BoolVar(&waitForTxn, "wait", false, "Wait for the message to finalize (defaults to true for heal synth)")
 	cmdHeal.PersistentFlags().BoolVar(&healContinuous, "continuous", false, "Run healing in a loop every minute")
 	cmdHeal.PersistentFlags().StringVar(&peerDb, "peer-db", peerDb, "Track peers using a persistent database")
+	cmdHeal.PersistentFlags().StringVar(&pprof, "pprof", "", "Address to run net/http/pprof on")
 	cmdHealSynth.PersistentFlags().StringVar(&lightDb, "light-db", lightDb, "Light client database for persisting chain data")
 
 	_ = cmdHeal.MarkFlagFilename("cached-scan", ".json")
@@ -80,6 +83,15 @@ func (h *healer) heal(args []string) {
 	defer cancel()
 	h.ctx = ctx
 	h.accounts = map[[32]byte]protocol.Account{}
+
+	if pprof != "" {
+		l, err := net.Listen("tcp", pprof)
+		check(err)
+		s := new(http.Server)
+		s.ReadHeaderTimeout = time.Minute
+		go func() { check(s.Serve(l)) }()
+		go func() { <-ctx.Done(); _ = s.Shutdown(context.Background()) }()
+	}
 
 	// We should be able to use only the p2p client but it doesn't work well for
 	// some reason

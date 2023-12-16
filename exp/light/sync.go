@@ -850,6 +850,8 @@ func (c *Client) IndexReceivedAnchors(ctx context.Context, partUrl *url.URL) err
 
 	// For each entry
 	var notFound int
+	rdBatch := c.OpenDB(false)
+	defer func() { rdBatch.Discard() }()
 	for i, e := range entries {
 		// Skip existing
 		if have[uint64(start)+uint64(i)] {
@@ -859,7 +861,7 @@ func (c *Client) IndexReceivedAnchors(ctx context.Context, partUrl *url.URL) err
 		// Load the transaction
 		hash := *(*[32]byte)(e)
 		var msg *messaging.TransactionMessage
-		err := batch.Message(hash).Main().GetAs(&msg)
+		err := rdBatch.Message(hash).Main().GetAs(&msg)
 		if err != nil {
 			if errors.Is(err, errors.NotFound) {
 				slog.DebugCtx(ctx, "Anchor not found", "partition", partUrl, "hash", logging.AsHex(hash), "height", i)
@@ -871,6 +873,12 @@ func (c *Client) IndexReceivedAnchors(ctx context.Context, partUrl *url.URL) err
 		anchor, ok := msg.Transaction.Body.(protocol.AnchorBody)
 		if !ok {
 			continue
+		}
+
+		// Limit how much is held in the cache
+		if (i+1)%1000 == 0 {
+			rdBatch.Discard()
+			rdBatch = c.OpenDB(false)
 		}
 
 		// Add it to the index
