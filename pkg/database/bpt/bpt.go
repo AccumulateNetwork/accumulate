@@ -16,7 +16,7 @@ import (
 
 type KeyValuePair struct {
 	Key   *record.Key
-	Value [32]byte
+	Value []byte
 }
 
 // New returns a new BPT.
@@ -142,19 +142,19 @@ func (b *BPT) newRoot() *rootRecord {
 }
 
 // Get retrieves the latest hash associated with the given key.
-func (b *BPT) Get(key *record.Key) ([32]byte, error) {
+func (b *BPT) Get(key *record.Key) ([]byte, error) {
 	if v, ok := b.pending[key.Hash()]; ok {
 		if v.delete {
-			return [32]byte{}, errors.NotFound
+			return nil, errors.NotFound
 		}
 		return v.value, nil
 	}
 
 	e, err := b.getRoot().getLeaf(key.Hash())
 	if err != nil {
-		return [32]byte{}, errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	return e.Hash, nil
+	return e.Value, nil
 }
 
 // getLeaf walks the tree and returns the leaf node for the given key.

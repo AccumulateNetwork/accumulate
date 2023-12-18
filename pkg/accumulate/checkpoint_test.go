@@ -78,7 +78,7 @@ func TestCreateCheckpoint(t *testing.T) {
 					break
 				}
 				require.NoError(t, err)
-				require.NoError(t, temp.BPT().Insert(rec.Key, *(*[32]byte)(rec.Value)))
+				require.NoError(t, temp.BPT().Insert(rec.Key, rec.Value))
 			}
 
 		case snapshot.SectionTypeRecords:

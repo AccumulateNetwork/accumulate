@@ -29,6 +29,12 @@ const nodeTypeBoundary nodeType = 4
 // nodeTypeLeafWithExpandedKey is a leaf node with an expanded key.
 const nodeTypeLeafWithExpandedKey nodeType = 5
 
+// nodeTypeLeafWithValue is a leaf node with a non-hash value.
+const nodeTypeLeafWithValue nodeType = 6
+
+// nodeTypeLeafWithExpandedKeyAndValue is a leaf node with an expanded key and non-hash value.
+const nodeTypeLeafWithExpandedKeyAndValue nodeType = 7
+
 // GetEnumValue returns the value of the node Type
 func (v nodeType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -36,7 +42,7 @@ func (v nodeType) GetEnumValue() uint64 { return uint64(v) }
 func (v *nodeType) SetEnumValue(id uint64) bool {
 	u := nodeType(id)
 	switch u {
-	case nodeTypeEmpty, nodeTypeBranch, nodeTypeLeaf, nodeTypeBoundary, nodeTypeLeafWithExpandedKey:
+	case nodeTypeEmpty, nodeTypeBranch, nodeTypeLeaf, nodeTypeBoundary, nodeTypeLeafWithExpandedKey, nodeTypeLeafWithValue, nodeTypeLeafWithExpandedKeyAndValue:
 		*v = u
 		return true
 	}
@@ -56,6 +62,10 @@ func (v nodeType) String() string {
 		return "boundary"
 	case nodeTypeLeafWithExpandedKey:
 		return "leaf+key"
+	case nodeTypeLeafWithValue:
+		return "leaf+value"
+	case nodeTypeLeafWithExpandedKeyAndValue:
+		return "leaf+key+value"
 	}
 	return fmt.Sprintf("nodeType:%d", v)
 }
@@ -75,6 +85,14 @@ func nodeTypeByName(name string) (nodeType, bool) {
 		return nodeTypeLeafWithExpandedKey, true
 	case "leaf+key":
 		return nodeTypeLeafWithExpandedKey, true
+	case "leafwithvalue":
+		return nodeTypeLeafWithValue, true
+	case "leaf+value":
+		return nodeTypeLeafWithValue, true
+	case "leafwithexpandedkeyandvalue":
+		return nodeTypeLeafWithExpandedKeyAndValue, true
+	case "leaf+key+value":
+		return nodeTypeLeafWithExpandedKeyAndValue, true
 	}
 	return 0, false
 }

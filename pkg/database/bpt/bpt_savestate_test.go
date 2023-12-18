@@ -47,7 +47,7 @@ func TestSaveState(t *testing.T) {
 		hash := sha256.Sum256(value)
 		err := storeTx.Put(record.KeyFromHash(hash), value)
 		require.NoError(t, err)
-		err = bpt.Insert(record.KeyFromHash(chainID), hash) //      Insert the Key with the value into the BPT
+		err = bpt.Insert(record.KeyFromHash(chainID), hash[:]) //      Insert the Key with the value into the BPT
 		require.NoError(t, err)
 	}
 	require.NoError(t, bpt.Commit())

@@ -109,10 +109,18 @@ func (*emptyNode) Type() nodeType { return nodeTypeEmpty }
 func (*branch) Type() nodeType { return nodeTypeBranch }
 
 func (v *leaf) Type() nodeType {
-	if isExpandedKey(v.Key) {
+	key := isExpandedKey(v.Key)
+	value := len(v.Value) != 32
+	switch {
+	case !key && !value:
+		return nodeTypeLeaf
+	case key:
 		return nodeTypeLeafWithExpandedKey
+	case value:
+		return nodeTypeLeafWithValue
+	default:
+		return nodeTypeLeafWithExpandedKeyAndValue
 	}
-	return nodeTypeLeaf
 }
 
 // isExpandedKey returns true if the key is an expanded key. A compressed key
@@ -144,8 +152,17 @@ func (v *leaf) writeTo(wr io.Writer) (err error) {
 		tryWrite(&err, wr, kh[:])
 	}
 
-	// Write the value hash
-	tryWrite(&err, wr, v.Hash[:])
+	if len(v.Value) == 32 {
+		// Write the value hash
+		tryWrite(&err, wr, v.Value[:])
+
+	} else {
+		// Write the length then the value
+		var buf [10]byte
+		n := binary.PutUvarint(buf[:], uint64(len(v.Value)))
+		tryWrite(&err, wr, buf[:n])
+		tryWrite(&err, wr, v.Value)
+	}
 	return err
 }
 
@@ -159,7 +176,7 @@ func (v *leaf) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 
 		// Read the key
 		b := make([]byte, l)
-		_, err = rd.Read(b)
+		_, err = io.ReadFull(rd, b)
 		if err != nil {
 			return err
 		}
@@ -171,21 +188,38 @@ func (v *leaf) readFrom(rd *bytes.Buffer, o marshalOpts) error {
 			return err
 		}
 
-		// Read the hash
-		_, err = rd.Read(v.Hash[:])
-		return err
+	} else {
+		// Read the key hash
+		var kh [32]byte
+		_, err := io.ReadFull(rd, kh[:])
+		if err != nil {
+			return err
+		}
+		v.Key = record.KeyFromHash(kh)
 	}
 
-	// Read leafStateSize bytes
-	var buf [leafStateSize]byte
-	_, err := io.ReadFull(rd, buf[:])
-	if err != nil {
-		return err
-	}
+	if o.varWidthVal {
+		// Read the value size
+		l, err := binary.ReadUvarint(rd)
+		if err != nil {
+			return err
+		}
 
-	// Read the fields
-	v.Key = record.NewKey(*(*record.KeyHash)(buf[:]))
-	v.Hash = *(*[32]byte)(buf[32:])
+		// Read the value
+		v.Value = make([]byte, l)
+		_, err = io.ReadFull(rd, v.Value)
+		if err != nil {
+			return err
+		}
+
+	} else {
+		// Read the value hash
+		v.Value = make([]byte, 32)
+		_, err := io.ReadFull(rd, v.Value)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -219,6 +253,7 @@ func writeBlock(err *error, wr io.Writer, e node, mask uint64) {
 
 type marshalOpts struct {
 	expandedKey bool
+	varWidthVal bool
 }
 
 // newNodeWithOpts creates a new node for the specified nodeType.
@@ -232,6 +267,10 @@ func newNodeWithOpts(typ nodeType) (node, marshalOpts, error) {
 		return new(leaf), marshalOpts{}, nil
 	case nodeTypeLeafWithExpandedKey:
 		return new(leaf), marshalOpts{expandedKey: true}, nil
+	case nodeTypeLeafWithValue:
+		return new(leaf), marshalOpts{varWidthVal: true}, nil
+	case nodeTypeLeafWithExpandedKeyAndValue:
+		return new(leaf), marshalOpts{expandedKey: true, varWidthVal: true}, nil
 	}
 	return nil, marshalOpts{}, fmt.Errorf("unknown node %v", typ)
 }

@@ -15,3 +15,11 @@ nodeType:
     description: is a leaf node with an expanded key
     label: leaf+key
     value: 5
+  LeafWithValue:
+    description: is a leaf node with a non-hash value
+    label: leaf+value
+    value: 6
+  LeafWithExpandedKeyAndValue:
+    description: is a leaf node with an expanded key and non-hash value
+    label: leaf+key+value
+    value: 7

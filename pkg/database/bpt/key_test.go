@@ -60,7 +60,7 @@ func TestOldBptStillWorks(t *testing.T) {
 	for _, entry := range testEntries {
 		value, err := model.BPT().Get(entry.Key)
 		require.NoError(t, err)
-		require.Equal(t, entry.Hash, value)
+		require.Equal(t, entry.Hash[:], value)
 	}
 
 	testEntryMap := map[[32]byte][32]byte{}
@@ -70,7 +70,8 @@ func TestOldBptStillWorks(t *testing.T) {
 
 	for it := model.BPT().Iterate(100); it.Next(); {
 		for _, leaf := range it.Value() {
-			require.Equal(t, testEntryMap[leaf.Key.Hash()], leaf.Value)
+			h := testEntryMap[leaf.Key.Hash()]
+			require.Equal(t, h[:], leaf.Value)
 		}
 	}
 }
@@ -91,7 +92,8 @@ func TestSwitchKeyType(t *testing.T) {
 
 	// Insert entries using compressed keys
 	for _, e := range entries {
-		require.NoError(t, bpt.Insert(record.KeyFromHash(e.Hash()), e.Hash()))
+		h := e.Hash()
+		require.NoError(t, bpt.Insert(record.KeyFromHash(e.Hash()), h[:]))
 	}
 	require.NoError(t, bpt.Commit())
 	before := allBptKeys(bpt)
@@ -99,7 +101,8 @@ func TestSwitchKeyType(t *testing.T) {
 	// Reload the tree and update using expanded keys
 	bpt = newBPT(nil, nil, store, nil, "BPT")
 	for _, e := range entries[:len(entries)/2] {
-		require.NoError(t, bpt.Insert(e, e.Append("foo").Hash()))
+		h := e.Append("foo").Hash()
+		require.NoError(t, bpt.Insert(e, h[:]))
 	}
 	require.NoError(t, bpt.Commit())
 
