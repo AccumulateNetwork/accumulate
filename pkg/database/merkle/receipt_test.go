@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package database
+package merkle
 
 import (
 	"bytes"
@@ -21,10 +21,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func GetHash(i int) Hash {
+func GetHash(i int) []byte {
 	return doSha([]byte(fmt.Sprint(i)))
 }
 
@@ -81,7 +80,7 @@ func TestReceipt(t *testing.T) {
 
 // String
 // Convert the receipt to a string
-func PrintReceipt(r *merkle.Receipt) string {
+func PrintReceipt(r *Receipt) string {
 	var b bytes.Buffer
 	b.WriteString(fmt.Sprintf("\nStart      %x\n", r.Start))    // Start of proof
 	b.WriteString(fmt.Sprintf("StartIndex %d\n", r.StartIndex)) // Start of proof

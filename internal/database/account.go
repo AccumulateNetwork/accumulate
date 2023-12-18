@@ -129,8 +129,8 @@ func (a *Account) Commit() error {
 	var chains []*protocol.ChainMetadata
 	for _, c := range a.dirtyChains() {
 		chains = append(chains, &protocol.ChainMetadata{
-			Name: c.name,
-			Type: c.typ,
+			Name: c.Name(),
+			Type: c.Type(),
 		})
 	}
 	err := a.Chains().Add(chains...)
