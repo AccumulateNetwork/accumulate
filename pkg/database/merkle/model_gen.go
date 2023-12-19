@@ -17,7 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-type MerkleManager struct {
+type Chain struct {
 	logger    logging.OptionalLogger
 	store     record.Store
 	key       *record.Key
@@ -28,84 +28,84 @@ type MerkleManager struct {
 	markMask  int64
 
 	head         values.Value[*State]
-	states       map[merkleManagerStatesMapKey]values.Value[*State]
-	elementIndex map[merkleManagerElementIndexMapKey]values.Value[uint64]
-	element      map[merkleManagerElementMapKey]values.Value[[]byte]
+	states       map[chainStatesMapKey]values.Value[*State]
+	elementIndex map[chainElementIndexMapKey]values.Value[uint64]
+	element      map[chainElementMapKey]values.Value[[]byte]
 }
 
-func (c *MerkleManager) Key() *record.Key { return c.key }
+func (c *Chain) Key() *record.Key { return c.key }
 
-type merkleManagerStatesKey struct {
+type chainStatesKey struct {
 	Index uint64
 }
 
-type merkleManagerStatesMapKey struct {
+type chainStatesMapKey struct {
 	Index uint64
 }
 
-func (k merkleManagerStatesKey) ForMap() merkleManagerStatesMapKey {
-	return merkleManagerStatesMapKey{k.Index}
+func (k chainStatesKey) ForMap() chainStatesMapKey {
+	return chainStatesMapKey{k.Index}
 }
 
-type merkleManagerElementIndexKey struct {
+type chainElementIndexKey struct {
 	Hash []byte
 }
 
-type merkleManagerElementIndexMapKey struct {
+type chainElementIndexMapKey struct {
 	Hash [32]byte
 }
 
-func (k merkleManagerElementIndexKey) ForMap() merkleManagerElementIndexMapKey {
-	return merkleManagerElementIndexMapKey{values.MapKeyBytes(k.Hash)}
+func (k chainElementIndexKey) ForMap() chainElementIndexMapKey {
+	return chainElementIndexMapKey{values.MapKeyBytes(k.Hash)}
 }
 
-type merkleManagerElementKey struct {
+type chainElementKey struct {
 	Index uint64
 }
 
-type merkleManagerElementMapKey struct {
+type chainElementMapKey struct {
 	Index uint64
 }
 
-func (k merkleManagerElementKey) ForMap() merkleManagerElementMapKey {
-	return merkleManagerElementMapKey{k.Index}
+func (k chainElementKey) ForMap() chainElementMapKey {
+	return chainElementMapKey{k.Index}
 }
 
-func (c *MerkleManager) Head() values.Value[*State] {
-	return values.GetOrCreate(c, &c.head, (*MerkleManager).newHead)
+func (c *Chain) Head() values.Value[*State] {
+	return values.GetOrCreate(c, &c.head, (*Chain).newHead)
 }
 
-func (c *MerkleManager) newHead() values.Value[*State] {
+func (c *Chain) newHead() values.Value[*State] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("Head"), true, values.Struct[State]())
 }
 
-func (c *MerkleManager) States(index uint64) values.Value[*State] {
-	return values.GetOrCreateMap(c, &c.states, merkleManagerStatesKey{index}, (*MerkleManager).newStates)
+func (c *Chain) States(index uint64) values.Value[*State] {
+	return values.GetOrCreateMap(c, &c.states, chainStatesKey{index}, (*Chain).newStates)
 }
 
-func (c *MerkleManager) newStates(k merkleManagerStatesKey) values.Value[*State] {
+func (c *Chain) newStates(k chainStatesKey) values.Value[*State] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("States", k.Index), false, values.Struct[State]())
 }
 
-func (c *MerkleManager) ElementIndex(hash []byte) values.Value[uint64] {
-	return values.GetOrCreateMap(c, &c.elementIndex, merkleManagerElementIndexKey{hash}, (*MerkleManager).newElementIndex)
+func (c *Chain) ElementIndex(hash []byte) values.Value[uint64] {
+	return values.GetOrCreateMap(c, &c.elementIndex, chainElementIndexKey{hash}, (*Chain).newElementIndex)
 }
 
-func (c *MerkleManager) newElementIndex(k merkleManagerElementIndexKey) values.Value[uint64] {
+func (c *Chain) newElementIndex(k chainElementIndexKey) values.Value[uint64] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", k.Hash), false, values.Wrapped(values.UintWrapper))
 }
 
-func (c *MerkleManager) Element(index uint64) values.Value[[]byte] {
-	return values.GetOrCreateMap(c, &c.element, merkleManagerElementKey{index}, (*MerkleManager).newElement)
+func (c *Chain) Element(index uint64) values.Value[[]byte] {
+	return values.GetOrCreateMap(c, &c.element, chainElementKey{index}, (*Chain).newElement)
 }
 
-func (c *MerkleManager) newElement(k merkleManagerElementKey) values.Value[[]byte] {
+func (c *Chain) newElement(k chainElementKey) values.Value[[]byte] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("Element", k.Index), false, values.Wrapped(values.BytesWrapper))
 }
 
-func (c *MerkleManager) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+func (c *Chain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for merkle manager (1)")
+		return nil, nil, errors.InternalError.With("bad key for chain (1)")
 	}
 
 	switch key.Get(0) {
@@ -113,40 +113,40 @@ func (c *MerkleManager) Resolve(key *record.Key) (record.Record, *record.Key, er
 		return c.Head(), key.SliceI(1), nil
 	case "States":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (2)")
+			return nil, nil, errors.InternalError.With("bad key for chain (2)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (3)")
+			return nil, nil, errors.InternalError.With("bad key for chain (3)")
 		}
 		v := c.States(index)
 		return v, key.SliceI(2), nil
 	case "ElementIndex":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (4)")
+			return nil, nil, errors.InternalError.With("bad key for chain (4)")
 		}
 		hash, okHash := key.Get(1).([]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (5)")
+			return nil, nil, errors.InternalError.With("bad key for chain (5)")
 		}
 		v := c.ElementIndex(hash)
 		return v, key.SliceI(2), nil
 	case "Element":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (6)")
+			return nil, nil, errors.InternalError.With("bad key for chain (6)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (7)")
+			return nil, nil, errors.InternalError.With("bad key for chain (7)")
 		}
 		v := c.Element(index)
 		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for merkle manager (8)")
+		return nil, nil, errors.InternalError.With("bad key for chain (8)")
 	}
 }
 
-func (c *MerkleManager) IsDirty() bool {
+func (c *Chain) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -173,7 +173,7 @@ func (c *MerkleManager) IsDirty() bool {
 	return false
 }
 
-func (c *MerkleManager) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+func (c *Chain) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if c == nil {
 		return nil
 	}
@@ -193,7 +193,7 @@ func (c *MerkleManager) Walk(opts record.WalkOptions, fn record.WalkFunc) error 
 	return err
 }
 
-func (c *MerkleManager) Commit() error {
+func (c *Chain) Commit() error {
 	if c == nil {
 		return nil
 	}

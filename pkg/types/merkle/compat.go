@@ -22,7 +22,3 @@ type (
 	ReceiptEntry    = merkle.ReceiptEntry
 	ValidateOptions = merkle.ValidateOptions
 )
-
-func CombineReceipts(receipts ...*Receipt) (*Receipt, error) {
-	return merkle.CombineReceipts(receipts...)
-}

@@ -72,7 +72,7 @@ func export(_ *cobra.Command, args []string) {
 	partUrl := config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.PartitionId)}
 	check(batch.Account(partUrl.Ledger()).Main().GetAs(&ledger))
 
-	genesisTx, err := batch.Account(partUrl.Ledger()).MainChain().Inner().Get(0)
+	genesisTx, err := batch.Account(partUrl.Ledger()).MainChain().Inner().Entry(0)
 	check(err)
 
 	globals := new(core.GlobalValues)

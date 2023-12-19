@@ -150,7 +150,7 @@ func (c *Client) PullAccountWithChains(ctx context.Context, acctUrl *url.URL, pr
 			// For each entry
 			for _, r := range r.Records {
 				// Add it to the chain
-				err = chain.Inner().AddHash(r.Entry[:], false)
+				err = chain.Inner().AddEntry(r.Entry[:], false)
 				if err != nil {
 					return errors.UnknownError.WithFormat("add entry to %s chain: %w", name, err)
 				}
@@ -425,7 +425,7 @@ func (c *Client) getMissingMessageIDs(batch *DB, account *url.URL, chains []stri
 		// Scan all the entries
 		const N = 1 << 10
 		for i := start; i < head.Count; i += N {
-			entries, err := chain.Inner().GetRange(i, i+N)
+			entries, err := chain.Inner().Entries(i, i+N)
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
 			}
@@ -735,7 +735,7 @@ func (c *Client) IndexAccountChains(ctx context.Context, acctUrl *url.URL) error
 
 		// Load the new entries
 		start := int64(len(index))
-		entries, err := chain.Inner().GetRange(start, start+head.Count)
+		entries, err := chain.Inner().Entries(start, start+head.Count)
 		if err != nil {
 			return errors.UnknownError.WithFormat("load %s index chain entries [%d, %d): %w", name, start, start+head.Count, err)
 		}
@@ -787,7 +787,7 @@ func (c *Client) IndexProducedAnchors(ctx context.Context, partUrl *url.URL) err
 
 	// Load the new entries
 	start := int64(len(anchors))
-	entries, err := chain.Inner().GetRange(start, start+head.Count)
+	entries, err := chain.Inner().Entries(start, start+head.Count)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load %v anchor sequence chain entries [%d, %d): %w", partUrl, start, start+head.Count, err)
 	}
@@ -858,7 +858,7 @@ func (c *Client) IndexReceivedAnchors(ctx context.Context, partUrl *url.URL) err
 	}
 
 	// Load the new entries
-	entries, err := chain.Inner().GetRange(start, head.Count)
+	entries, err := chain.Inner().Entries(start, head.Count)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load %v anchor sequence chain entries [%d, %d): %w", partUrl, start, start+head.Count, err)
 	}
@@ -1004,7 +1004,7 @@ func (c *Client) IndexAccountTransactions(ctx context.Context, accounts ...*url.
 		didIndex := batch.Index().Account(account).DidIndexTransactionExecution()
 		var didLog bool
 		for i := int64(0); i < head.Count; i += N {
-			entries, err := batch.Account(account).MainChain().Inner().GetRange(i, i+N)
+			entries, err := batch.Account(account).MainChain().Inner().Entries(i, i+N)
 			if err != nil {
 				return errors.UnknownError.WithFormat("load main chain entries [%d, %d): %w", i, i+N, err)
 			}

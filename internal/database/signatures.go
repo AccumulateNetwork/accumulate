@@ -95,7 +95,7 @@ func (c *AccountTransaction) RecordHistory(msg messaging.Message) error {
 
 	// Add the chain entry
 	h := msg.Hash()
-	err = c.parent.SignatureChain().Inner().AddHash(h[:], false)
+	err = c.parent.SignatureChain().Inner().AddEntry(h[:], false)
 	if err != nil {
 		return errors.UnknownError.WithFormat("add to chain: %w", err)
 	}

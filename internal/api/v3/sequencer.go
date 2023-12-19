@@ -310,7 +310,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		}
 
 		// Build the complete receipt
-		receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt)
+		receipt, err = synthReceipt.Combine(rootReceipt)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
 		}
@@ -329,7 +329,7 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		}
 
 		// Build the complete receipt
-		receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt, dirReceipt.RootChainReceipt)
+		receipt, err = synthReceipt.Combine(rootReceipt, dirReceipt.RootChainReceipt)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
 		}
@@ -471,7 +471,7 @@ func (s *Sequencer) getDirectoryReceiptForBlock(batch *database.Batch, block uin
 	}
 
 	for i := int64(entry.Source); i < head.Count; i++ {
-		entry, err := chain.Inner().Get(i)
+		entry, err := chain.Inner().Entry(i)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("load anchor chain entry %d: %w", i, err)
 		}

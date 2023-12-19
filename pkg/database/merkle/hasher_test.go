@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package hash
+package merkle_test
 
 import (
 	"crypto/sha256"
@@ -14,7 +14,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/test/testdata"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"gopkg.in/yaml.v3"
 )
+
+func TestMerkleCascade(t *testing.T) {
+	var cases []*acctesting.MerkleTestCase
+	require.NoError(t, yaml.Unmarshal([]byte(testdata.Merkle), &cases))
+
+	for _, c := range cases {
+		var entries [][]byte
+		for _, e := range c.Entries {
+			entries = append(entries, e)
+		}
+		var result [][]byte
+		for _, e := range c.Cascade {
+			result = append(result, e)
+		}
+		t.Run(fmt.Sprintf("%X", c.Root[:4]), func(t *testing.T) {
+			cascade := merkle.Cascade(nil, entries, -1)
+			require.Equal(t, result, cascade)
+		})
+	}
+}
 
 func getHash(v ...interface{}) [32]byte {
 	return storage.MakeKey(v...)
@@ -43,7 +67,7 @@ func TestHasher_Receipt(t *testing.T) {
 	fmt.Printf("        %x          %x          %x\n", e01[:3], e23[:3], e45[:3])
 	fmt.Printf("                        %x\n", e0123[:3])
 
-	hasher := make(Hasher, 0, 7)
+	hasher := make(merkle.Hasher, 0, 7)
 	hasher.AddHash(&e0)
 	hasher.AddHash(&e1)
 	hasher.AddHash(&e2)

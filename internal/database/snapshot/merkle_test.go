@@ -132,7 +132,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 		c := merkle.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main")
 
 		for i := 0; i < n; i++ {
-			hash, err := c.Get(int64(i))
+			hash, err := c.Entry(int64(i))
 			require.NoError(t, err)
 			require.Equalf(t, rh.List[i], hash, "Entry %d", i)
 		}
@@ -141,7 +141,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 
 func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *database.MerkleManager, start, end int64) {
 	t.Helper()
-	hashes, err := chain.GetRange(start, end)
+	hashes, err := chain.Entries(start, end)
 	if err != nil {
 		return
 	}

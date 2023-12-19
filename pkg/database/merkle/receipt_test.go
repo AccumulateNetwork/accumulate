@@ -18,6 +18,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/exp/lxrand"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
@@ -37,7 +38,7 @@ func TestReceipt(t *testing.T) {
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
-		require.NoError(t, manager.AddHash(v, false))
+		require.NoError(t, manager.AddEntry(v, false))
 		fmt.Printf("e%-6d %x %v\n", i, v, v[:3])
 	}
 	e0 := GetHash(0)
@@ -68,7 +69,7 @@ func TestReceipt(t *testing.T) {
 	element := GetHash(0)
 	anchor := GetHash(3)
 
-	r, err1 := GetReceipt(manager, element, anchor)
+	r, err1 := getReceipt(manager, element, anchor)
 	if err1 != nil {
 		t.Fatal("Failed to generate receipt")
 	}
@@ -109,7 +110,7 @@ func TestReceiptAll(t *testing.T) {
 	manager := testChain(store, 2, "one")     // Populate a database
 	var rh common.RandHash                    // A source of random hashes
 	for i := 0; i < testMerkleTreeSize; i++ { // Then for all the hashes for our test
-		require.NoError(t, manager.AddHash(rh.NextList(), false)) // Add a hash
+		require.NoError(t, manager.AddEntry(rh.NextList(), false)) // Add a hash
 	}
 
 	for i := 0; i < testMerkleTreeSize; i++ {
@@ -125,7 +126,7 @@ func TestReceiptAll(t *testing.T) {
 			}
 
 			cnt++
-			r, err := GetReceipt(manager, element, anchor)
+			r, err := getReceipt(manager, element, anchor)
 
 			if i < 0 || i >= testMerkleTreeSize || //       If i is out of range
 				j < 0 || j >= testMerkleTreeSize || //        Or j is out of range
@@ -149,18 +150,18 @@ func TestReceiptAll(t *testing.T) {
 	fmt.Println("Ran ", cnt, " tests")
 }
 
-func PopulateDatabase(t *testing.T, manager *MerkleManager, treeSize int64) {
+func PopulateDatabase(t *testing.T, manager *Chain, treeSize int64) {
 	// populate the database
 	head, err := manager.Head().Get()
 	require.NoError(t, err)
 	startCount := head.Count
 	for i := startCount; i < treeSize; i++ {
 		v := GetHash(int(i))
-		require.NoError(t, manager.AddHash(v, false))
+		require.NoError(t, manager.AddEntry(v, false))
 	}
 }
 
-func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) {
+func GenerateReceipts(manager *Chain, receiptCount int64, t *testing.T) {
 	start := time.Now()
 	total := new(int64)
 	atomic.StoreInt64(total, 0)
@@ -175,7 +176,7 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 			element := GetHash(i)
 			anchor := GetHash(j)
 
-			r, _ := GetReceipt(manager, element, anchor)
+			r, _ := getReceipt(manager, element, anchor)
 			if i < 0 || i >= int(head.Count) || //       If (i) is out of range
 				j < 0 || j >= int(head.Count) || //        Or j is out of range
 				j < i { //                                    Or if the anchor is before the element
@@ -248,40 +249,40 @@ func TestReceipt_Combine(t *testing.T) {
 	m2 := testChain(store, 2, "m2")
 
 	for i := int64(0); i < testCnt; i++ {
-		require.NoError(t, m1.AddHash(rh.NextList(), false))
+		require.NoError(t, m1.AddEntry(rh.NextList(), false))
 		head, err := m1.Head().Get()
 		require.NoError(t, err)
 		root1 := head.Anchor()
-		require.NoError(t, m2.AddHash(root1, false))
+		require.NoError(t, m2.AddEntry(root1, false))
 	}
 	for i := int64(0); i < testCnt; i++ {
 		for j := i; j < testCnt; j++ {
-			element, _ := m1.Get(i)
-			anchor, _ := m1.Get(j)
-			r, _ := GetReceipt(m1, element, anchor)
-			state, _ := m1.GetAnyState(j)
+			element, _ := m1.Entry(i)
+			anchor, _ := m1.Entry(j)
+			r, _ := getReceipt(m1, element, anchor)
+			state, _ := m1.StateAt(j)
 			mdRoot := state.Anchor()
 
 			require.Truef(t, bytes.Equal(r.Anchor, mdRoot), "m1 MDRoot not right %d %d", i, j)
-			element, _ = m2.Get(i)
-			anchor, _ = m2.Get(j)
-			r, _ = GetReceipt(m2, element, anchor)
-			state, _ = m2.GetAnyState(j)
+			element, _ = m2.Entry(i)
+			anchor, _ = m2.Entry(j)
+			r, _ = getReceipt(m2, element, anchor)
+			state, _ = m2.StateAt(j)
 			mdRoot = state.Anchor()
 			require.Truef(t, bytes.Equal(r.Anchor, mdRoot), "m2 MDRoot not right %d %d", i, j)
 		}
 	}
 	for i := int64(0); i < testCnt; i++ {
 		for j := i + 1; j < testCnt; j++ {
-			element, _ := m1.Get(i)
-			anchor, _ := m1.Get(j)
-			r1, _ := GetReceipt(m1, element, anchor)
+			element, _ := m1.Entry(i)
+			anchor, _ := m1.Entry(j)
+			r1, _ := getReceipt(m1, element, anchor)
 			require.Truef(t, r1.Validate(nil), "receipt failed %d %d", i, j)
 			require.NotNilf(t, r1, "test case i %d j %d failed to create r1", i, j)
 			for k := j; k < testCnt; k++ {
-				element, _ = m2.Get(j)
-				anchor, _ = m2.Get(k)
-				r2, _ := GetReceipt(m2, element, anchor)
+				element, _ = m2.Entry(j)
+				anchor, _ = m2.Entry(k)
+				r2, _ := getReceipt(m2, element, anchor)
 				require.Truef(t, r2.Validate(nil), "receipt failed %d %d", i, j, k)
 				require.NotNilf(t, r2, "test case i %d j %d k %d failed to create r2", i, j, k)
 				r3, err := r1.Combine(r2)
@@ -309,12 +310,39 @@ func TestReceiptSimple(t *testing.T) {
 	m := testChain(store, 2) //
 
 	for _, v := range list { //                Put all the values into the SMT
-		require.NoError(t, m.AddHash(v, false), "Error") //
+		require.NoError(t, m.AddEntry(v, false), "Error") //
 	}
 
 	// We can now generate a receipt
-	receipt, err := GetReceipt(m, list[0], list[cnt-1])
+	receipt, err := getReceipt(m, list[0], list[cnt-1])
 	require.Nil(t, err, "fail GetReceipt")
 	require.True(t, receipt.Validate(nil), "Receipt failed")
 
+}
+
+func TestReceipt_Combine_Multiple(t *testing.T) {
+	var rand lxrand.Sequence
+
+	r1 := &Receipt{
+		Start:   rand.Slice(32),
+		Entries: []*ReceiptEntry{{Hash: rand.Slice(32)}},
+	}
+	r1.Anchor = r1.Entries[0].apply(r1.Start)
+
+	r2 := &Receipt{
+		Start:   r1.Anchor,
+		Entries: []*ReceiptEntry{{Hash: rand.Slice(32)}},
+	}
+	r2.Anchor = r2.Entries[0].apply(r2.Start)
+
+	r3 := &Receipt{
+		Start:   r2.Anchor,
+		Entries: []*ReceiptEntry{{Hash: rand.Slice(32)}},
+	}
+	r3.Anchor = r3.Entries[0].apply(r3.Start)
+
+	r, err := r1.Combine(r2, r3)
+	require.NoError(t, err)
+	require.Equal(t, r1.Start, r.Start)
+	require.Equal(t, r3.Anchor, r.Anchor)
 }
