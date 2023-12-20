@@ -89,33 +89,56 @@ const labelRouting = "routing table"
 
 func (g *GlobalValues) Load(net *url.URL, getState getStateFunc) error {
 	// Load the oracle
-	if err := loadAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+	e1 := g.LoadOracle(net, getState)
 
 	// Load network globals
-	if err := loadAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, new(protocol.NetworkGlobals), &g.Globals); err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+	e2 := g.LoadGlobals(net, getState)
 
 	// Load the network definition
-	if err := loadAccount(net.JoinPath(protocol.Network), labelNetwork, getState, new(protocol.NetworkDefinition), &g.Network); err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+	e3 := g.LoadNetwork(net, getState)
 
 	// Load the routing table
-	if err := loadAccount(net.JoinPath(protocol.Routing), labelRouting, getState, new(protocol.RoutingTable), &g.Routing); err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+	e4 := g.LoadRouting(net, getState)
 
 	// Load the executor version
+	e5 := g.loadFromLedger(net, getState)
+
+	switch {
+	case e1 != nil:
+		return e1
+	case e2 != nil:
+		return e2
+	case e3 != nil:
+		return e3
+	case e4 != nil:
+		return e4
+	}
+	return e5
+}
+
+func (g *GlobalValues) LoadOracle(net *url.URL, getState getStateFunc) error {
+	return loadAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle)
+}
+
+func (g *GlobalValues) LoadGlobals(net *url.URL, getState getStateFunc) error {
+	return loadAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, new(protocol.NetworkGlobals), &g.Globals)
+}
+
+func (g *GlobalValues) LoadNetwork(net *url.URL, getState getStateFunc) error {
+	return loadAccount(net.JoinPath(protocol.Network), labelNetwork, getState, new(protocol.NetworkDefinition), &g.Network)
+}
+
+func (g *GlobalValues) LoadRouting(net *url.URL, getState getStateFunc) error {
+	return loadAccount(net.JoinPath(protocol.Routing), labelRouting, getState, new(protocol.RoutingTable), &g.Routing)
+}
+
+func (g *GlobalValues) loadFromLedger(net *url.URL, getState getStateFunc) error {
 	var ledger *protocol.SystemLedger
 	if err := getState(net.JoinPath(protocol.Ledger), &ledger); err != nil {
 		return errors.BadRequest.WithFormat("load system ledger: %w", err)
 	} else {
 		g.ExecutorVersion = ledger.ExecutorVersion
 	}
-
 	return nil
 }
 

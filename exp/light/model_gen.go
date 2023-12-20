@@ -16,13 +16,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type IndexDB struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
+	parent *DB
 
 	account     map[indexDBAccountMapKey]*IndexDBAccount
 	partition   map[indexDBPartitionMapKey]*IndexDBPartition
@@ -212,7 +212,6 @@ type IndexDBAccount struct {
 	parent *IndexDB
 
 	didIndexTransactionExecution values.Set[[32]byte]
-	didLoadTransaction           values.Set[[32]byte]
 	chain                        map[indexDBAccountChainMapKey]*IndexDBAccountChain
 }
 
@@ -238,14 +237,6 @@ func (c *IndexDBAccount) newDidIndexTransactionExecution() values.Set[[32]byte] 
 	return values.NewSet(c.logger.L, c.store, c.key.Append("DidIndexTransactionExecution"), values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
-func (c *IndexDBAccount) DidLoadTransaction() values.Set[[32]byte] {
-	return values.GetOrCreate(c, &c.didLoadTransaction, (*IndexDBAccount).newDidLoadTransaction)
-}
-
-func (c *IndexDBAccount) newDidLoadTransaction() values.Set[[32]byte] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("DidLoadTransaction"), values.Wrapped(values.HashWrapper), values.CompareHash)
-}
-
 func (c *IndexDBAccount) Chain(name string) *IndexDBAccountChain {
 	return values.GetOrCreateMap(c, &c.chain, indexDBAccountChainKey{name}, (*IndexDBAccount).newChain)
 }
@@ -267,8 +258,6 @@ func (c *IndexDBAccount) Resolve(key *record.Key) (record.Record, *record.Key, e
 	switch key.Get(0) {
 	case "DidIndexTransactionExecution":
 		return c.DidIndexTransactionExecution(), key.SliceI(1), nil
-	case "DidLoadTransaction":
-		return c.DidLoadTransaction(), key.SliceI(1), nil
 	case "Chain":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (2)")
@@ -292,9 +281,6 @@ func (c *IndexDBAccount) IsDirty() bool {
 	if values.IsDirty(c.didIndexTransactionExecution) {
 		return true
 	}
-	if values.IsDirty(c.didLoadTransaction) {
-		return true
-	}
 	for _, v := range c.chain {
 		if v.IsDirty() {
 			return true
@@ -314,7 +300,6 @@ func (c *IndexDBAccount) Walk(opts record.WalkOptions, fn record.WalkFunc) error
 		return errors.UnknownError.Wrap(err)
 	}
 	values.WalkField(&err, c.didIndexTransactionExecution, c.newDidIndexTransactionExecution, opts, fn)
-	values.WalkField(&err, c.didLoadTransaction, c.newDidLoadTransaction, opts, fn)
 	values.WalkMap(&err, c.chain, c.newChain, nil, opts, fn)
 	return err
 }
@@ -326,7 +311,6 @@ func (c *IndexDBAccount) Commit() error {
 
 	var err error
 	values.Commit(&err, c.didIndexTransactionExecution)
-	values.Commit(&err, c.didLoadTransaction)
 	for _, v := range c.chain {
 		values.Commit(&err, v)
 	}
@@ -340,17 +324,44 @@ type IndexDBAccountChain struct {
 	key    *record.Key
 	parent *IndexDBAccount
 
-	index values.List[*protocol.IndexEntry]
+	didLoad     values.Value[*rangeSet]
+	sourceIndex *ChainIndexUint
+	blockIndex  *ChainIndexUint
+	blockTime   *ChainIndexTime
 }
 
 func (c *IndexDBAccountChain) Key() *record.Key { return c.key }
 
-func (c *IndexDBAccountChain) getIndex() values.List[*protocol.IndexEntry] {
-	return values.GetOrCreate(c, &c.index, (*IndexDBAccountChain).newIndex)
+func (c *IndexDBAccountChain) getDidLoad() values.Value[*rangeSet] {
+	return values.GetOrCreate(c, &c.didLoad, (*IndexDBAccountChain).newDidLoad)
 }
 
-func (c *IndexDBAccountChain) newIndex() values.List[*protocol.IndexEntry] {
-	return values.NewList(c.logger.L, c.store, c.key.Append("Index"), values.Struct[protocol.IndexEntry]())
+func (c *IndexDBAccountChain) newDidLoad() values.Value[*rangeSet] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("DidLoad"), true, values.Struct[rangeSet]())
+}
+
+func (c *IndexDBAccountChain) SourceIndex() *ChainIndexUint {
+	return values.GetOrCreate(c, &c.sourceIndex, (*IndexDBAccountChain).newSourceIndex)
+}
+
+func (c *IndexDBAccountChain) newSourceIndex() *ChainIndexUint {
+	return newChainIndexUint(c, c.logger.L, c.store, c.key.Append("SourceIndex"), "index-db-account(%[3]v)-(%[5]v)-source-index")
+}
+
+func (c *IndexDBAccountChain) BlockIndex() *ChainIndexUint {
+	return values.GetOrCreate(c, &c.blockIndex, (*IndexDBAccountChain).newBlockIndex)
+}
+
+func (c *IndexDBAccountChain) newBlockIndex() *ChainIndexUint {
+	return newChainIndexUint(c, c.logger.L, c.store, c.key.Append("BlockIndex"), "index-db-account(%[3]v)-(%[5]v)-block-index")
+}
+
+func (c *IndexDBAccountChain) BlockTime() *ChainIndexTime {
+	return values.GetOrCreate(c, &c.blockTime, (*IndexDBAccountChain).newBlockTime)
+}
+
+func (c *IndexDBAccountChain) newBlockTime() *ChainIndexTime {
+	return newChainIndexTime(c, c.logger.L, c.store, c.key.Append("BlockTime"), "index-db-account(%[3]v)-(%[5]v)-block-time")
 }
 
 func (c *IndexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -359,8 +370,14 @@ func (c *IndexDBAccountChain) Resolve(key *record.Key) (record.Record, *record.K
 	}
 
 	switch key.Get(0) {
-	case "Index":
-		return c.getIndex(), key.SliceI(1), nil
+	case "DidLoad":
+		return c.getDidLoad(), key.SliceI(1), nil
+	case "SourceIndex":
+		return c.SourceIndex(), key.SliceI(1), nil
+	case "BlockIndex":
+		return c.BlockIndex(), key.SliceI(1), nil
+	case "BlockTime":
+		return c.BlockTime(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for chain (2)")
 	}
@@ -371,7 +388,16 @@ func (c *IndexDBAccountChain) IsDirty() bool {
 		return false
 	}
 
-	if values.IsDirty(c.index) {
+	if values.IsDirty(c.didLoad) {
+		return true
+	}
+	if values.IsDirty(c.sourceIndex) {
+		return true
+	}
+	if values.IsDirty(c.blockIndex) {
+		return true
+	}
+	if values.IsDirty(c.blockTime) {
 		return true
 	}
 
@@ -387,9 +413,10 @@ func (c *IndexDBAccountChain) Walk(opts record.WalkOptions, fn record.WalkFunc) 
 	if skip || err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	if !opts.IgnoreIndices {
-		values.WalkField(&err, c.index, c.newIndex, opts, fn)
-	}
+	values.WalkField(&err, c.didLoad, c.newDidLoad, opts, fn)
+	values.WalkField(&err, c.sourceIndex, c.newSourceIndex, opts, fn)
+	values.WalkField(&err, c.blockIndex, c.newBlockIndex, opts, fn)
+	values.WalkField(&err, c.blockTime, c.newBlockTime, opts, fn)
 	return err
 }
 
@@ -399,7 +426,10 @@ func (c *IndexDBAccountChain) Commit() error {
 	}
 
 	var err error
-	values.Commit(&err, c.index)
+	values.Commit(&err, c.didLoad)
+	values.Commit(&err, c.sourceIndex)
+	values.Commit(&err, c.blockIndex)
+	values.Commit(&err, c.blockTime)
 
 	return err
 }
@@ -484,10 +514,22 @@ type IndexDBPartitionAnchors struct {
 	parent *IndexDBPartition
 
 	produced values.List[*AnchorMetadata]
-	received values.List[*AnchorMetadata]
+	received map[indexDBPartitionAnchorsReceivedMapKey]*ChainIndexUint
 }
 
 func (c *IndexDBPartitionAnchors) Key() *record.Key { return c.key }
+
+type indexDBPartitionAnchorsReceivedKey struct {
+	Url *url.URL
+}
+
+type indexDBPartitionAnchorsReceivedMapKey struct {
+	Url [32]byte
+}
+
+func (k indexDBPartitionAnchorsReceivedKey) ForMap() indexDBPartitionAnchorsReceivedMapKey {
+	return indexDBPartitionAnchorsReceivedMapKey{values.MapKeyUrl(k.Url)}
+}
 
 func (c *IndexDBPartitionAnchors) getProduced() values.List[*AnchorMetadata] {
 	return values.GetOrCreate(c, &c.produced, (*IndexDBPartitionAnchors).newProduced)
@@ -497,12 +539,12 @@ func (c *IndexDBPartitionAnchors) newProduced() values.List[*AnchorMetadata] {
 	return values.NewList(c.logger.L, c.store, c.key.Append("Produced"), values.Struct[AnchorMetadata]())
 }
 
-func (c *IndexDBPartitionAnchors) getReceived() values.List[*AnchorMetadata] {
-	return values.GetOrCreate(c, &c.received, (*IndexDBPartitionAnchors).newReceived)
+func (c *IndexDBPartitionAnchors) Received(url *url.URL) *ChainIndexUint {
+	return values.GetOrCreateMap(c, &c.received, indexDBPartitionAnchorsReceivedKey{url}, (*IndexDBPartitionAnchors).newReceived)
 }
 
-func (c *IndexDBPartitionAnchors) newReceived() values.List[*AnchorMetadata] {
-	return values.NewList(c.logger.L, c.store, c.key.Append("Received"), values.Struct[AnchorMetadata]())
+func (c *IndexDBPartitionAnchors) newReceived(k indexDBPartitionAnchorsReceivedKey) *ChainIndexUint {
+	return newChainIndexUint(c, c.logger.L, c.store, c.key.Append("Received", k.Url), "index-db-partition(%[3]v)-anchors-received(%[6]v)")
 }
 
 func (c *IndexDBPartitionAnchors) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -514,9 +556,17 @@ func (c *IndexDBPartitionAnchors) Resolve(key *record.Key) (record.Record, *reco
 	case "Produced":
 		return c.getProduced(), key.SliceI(1), nil
 	case "Received":
-		return c.getReceived(), key.SliceI(1), nil
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for anchors (2)")
+		}
+		url, okUrl := key.Get(1).(*url.URL)
+		if !okUrl {
+			return nil, nil, errors.InternalError.With("bad key for anchors (3)")
+		}
+		v := c.Received(url)
+		return v, key.SliceI(2), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for anchors (2)")
+		return nil, nil, errors.InternalError.With("bad key for anchors (4)")
 	}
 }
 
@@ -528,8 +578,10 @@ func (c *IndexDBPartitionAnchors) IsDirty() bool {
 	if values.IsDirty(c.produced) {
 		return true
 	}
-	if values.IsDirty(c.received) {
-		return true
+	for _, v := range c.received {
+		if v.IsDirty() {
+			return true
+		}
 	}
 
 	return false
@@ -545,7 +597,7 @@ func (c *IndexDBPartitionAnchors) Walk(opts record.WalkOptions, fn record.WalkFu
 		return errors.UnknownError.Wrap(err)
 	}
 	values.WalkField(&err, c.produced, c.newProduced, opts, fn)
-	values.WalkField(&err, c.received, c.newReceived, opts, fn)
+	values.WalkMap(&err, c.received, c.newReceived, nil, opts, fn)
 	return err
 }
 
@@ -556,7 +608,9 @@ func (c *IndexDBPartitionAnchors) Commit() error {
 
 	var err error
 	values.Commit(&err, c.produced)
-	values.Commit(&err, c.received)
+	for _, v := range c.received {
+		values.Commit(&err, v)
+	}
 
 	return err
 }
