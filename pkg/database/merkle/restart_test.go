@@ -119,13 +119,17 @@ func (d *memdb) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			return nil
 		}
 	}
-	return memory.NewChangeSet(prefix, func(k *record.Key) ([]byte, error) {
-		e, ok := (*d)[k.Hash()]
-		if ok {
-			return e.Value, nil
-		}
-		return nil, errors.NotFound
-	}, commit, nil)
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix: prefix,
+		Commit: commit,
+		Get: func(k *record.Key) ([]byte, error) {
+			e, ok := (*d)[k.Hash()]
+			if ok {
+				return e.Value, nil
+			}
+			return nil, errors.NotFound
+		},
+	})
 }
 
 func (d memdb) Copy() memdb {

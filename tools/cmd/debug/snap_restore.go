@@ -26,14 +26,14 @@ var cmdSnapRestore = &cobra.Command{
 	Use:   "restore [snapshot] [database]",
 	Short: "Restores a database from a snapshot",
 	Args:  cobra.ExactArgs(2),
-	Run:   restoreSnapshot,
+	Run:   restoreSnapshotCmd,
 }
 
 func init() {
 	cmdSnap.AddCommand(cmdSnapRestore)
 }
 
-func restoreSnapshot(cmd *cobra.Command, args []string) {
+func restoreSnapshotCmd(cmd *cobra.Command, args []string) {
 	// Verify that the target does not exist
 	if _, err := os.Stat(args[1]); err == nil {
 		fatalf("cannot restore snapshot into an existing database")
@@ -42,13 +42,15 @@ func restoreSnapshot(cmd *cobra.Command, args []string) {
 	}
 
 	// Open the snapshot
-	rd, ver := openSnapshotFile(args[0])
+	rd := openSnapshotFile(args[0])
 	if c, ok := rd.(io.Closer); ok {
 		defer c.Close()
 	}
+	ver, err := sv2.GetVersion(rd)
+	check(err)
 
 	// Rewind to the start
-	_, err := rd.Seek(0, io.SeekStart)
+	_, err = rd.Seek(0, io.SeekStart)
 	check(err)
 
 	// Open the database
