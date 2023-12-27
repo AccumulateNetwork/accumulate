@@ -60,25 +60,36 @@ func openStreamFor(ctx context.Context, host Connector, req *ConnectionRequest) 
 
 func (s *stream) Read() (message.Message, error) {
 	m, err := s.stream.Read()
-	return m, streamError(err)
+	return m, streamError(err, s.peer)
 }
 
 func (s *stream) Write(msg message.Message) error {
 	err := s.stream.Write(msg)
-	return streamError(err)
+	return streamError(err, s.peer)
 }
 
 // streamError converts network reset and canceled context errors into
 // [io.EOF].
-func streamError(err error) error {
+func streamError(err error, peer peer.ID) error {
 	switch {
 	case err == nil:
 		return nil
 	case errors.Is(err, io.EOF),
 		errors.Is(err, network.ErrReset),
 		errors.Is(err, context.Canceled):
-		return io.EOF
+		return &peerError{io.EOF, peer}
 	default:
-		return err
+		return &peerError{err, peer}
 	}
 }
+
+// peerError attaches a peer ID to an error, to support better tracking and
+// logging.
+type peerError struct {
+	err  error
+	peer peer.ID
+}
+
+func (p *peerError) Peer() peer.ID { return p.peer }
+func (p *peerError) Error() string { return p.err.Error() }
+func (p *peerError) Unwrap() error { return p.err }
