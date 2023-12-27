@@ -11,6 +11,10 @@ NodeInfo:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
 
 FindServiceResult:
   fields:
