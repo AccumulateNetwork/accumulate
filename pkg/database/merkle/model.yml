@@ -1,4 +1,4 @@
-- name: MerkleManager
+- name: Chain
   type: entity
   fields:
   - name: typ
