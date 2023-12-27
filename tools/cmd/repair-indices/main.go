@@ -201,7 +201,7 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 			}
 
 			for i := prev; i <= entry.Source; i++ {
-				txnHash, err := chain.Inner().Get(int64(i))
+				txnHash, err := chain.Inner().Entry(int64(i))
 				if err != nil {
 					return nil, errors.UnknownError.WithFormat("get %v %s chain entry %d: %w", e.Account, e.Chain, i, err)
 				}

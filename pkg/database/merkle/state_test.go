@@ -28,7 +28,7 @@ func TestMerkleState_Equal(t *testing.T) {
 		ms2.Pending = append(ms2.Pending, nil, nil)
 		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 
-		ms1.Add(rh.Next())
+		ms1.AddEntry(rh.Next())
 
 		require.Falsef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms1.Pending = append(ms1.Pending, nil)
@@ -36,7 +36,7 @@ func TestMerkleState_Equal(t *testing.T) {
 		ms2.Pending = append(ms2.Pending, nil, nil)
 		require.Falsef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 
-		ms2.Add(rh1.Next())
+		ms2.AddEntry(rh1.Next())
 		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms1.Pending = append(ms1.Pending, nil)
 		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
@@ -50,9 +50,9 @@ func TestCopy(t *testing.T) {
 	ms1 := new(State)
 	for i := 0; i < 15; i++ {
 		hash := doSha([]byte(fmt.Sprintf("%x", i*i*i*i)))
-		ms1.Add(hash)
+		ms1.AddEntry(hash)
 	}
-	ms1.Add(doSha([]byte{1, 2, 3, 4, 5}))
+	ms1.AddEntry(doSha([]byte{1, 2, 3, 4, 5}))
 	ms2 := ms1
 	if !ms1.Equal(ms2) {
 		t.Error("ms1 should be equal ms2")
@@ -63,7 +63,7 @@ func TestCopy(t *testing.T) {
 		t.Error("ms1 ms2 and ms3 should all be equal")
 	}
 
-	ms1.Add(doSha([]byte{1, 2, 3, 4, 5}))
+	ms1.AddEntry(doSha([]byte{1, 2, 3, 4, 5}))
 	if ms1.Equal(ms2) {
 		t.Error("ms1 should not equal ms2")
 	}
@@ -75,14 +75,14 @@ func TestUnmarshalMemorySafety(t *testing.T) {
 	// Create a Merkle state and add entries
 	MS1 := new(State)
 	for i := 0; i < 10; i++ {
-		MS1.Add(doSha([]byte(fmt.Sprintf("%8d", i))))
+		MS1.AddEntry(doSha([]byte(fmt.Sprintf("%8d", i))))
 	}
 
 	// Marshal and unmarshal into a new state
-	data, err := MS1.Marshal()
+	data, err := MS1.marshal()
 	require.NoError(t, err)
 	MS2 := new(State)
-	require.NoError(t, MS2.UnMarshal(data))
+	require.NoError(t, MS2.unmarshal(data))
 
 	// Overwrite the data array with garbage
 	_, _ = rand.Read(data)
@@ -95,12 +95,12 @@ func TestMarshal(t *testing.T) {
 	MS1 := new(State)
 	MS2 := new(State)
 
-	data1, err := MS1.Marshal()
+	data1, err := MS1.marshal()
 	if err != nil {
 		t.Fatal("marshal should not fail")
 	}
-	require.NoError(t, MS2.UnMarshal(data1))
-	data2, err2 := MS2.Marshal()
+	require.NoError(t, MS2.unmarshal(data1))
+	data2, err2 := MS2.marshal()
 	if err2 != nil {
 		t.Fatal("marshal should not fail")
 	}
@@ -109,15 +109,15 @@ func TestMarshal(t *testing.T) {
 		t.Error("Should be the same")
 	}
 
-	MS1.Add(doSha([]byte{1, 2, 3, 4, 5}))
+	MS1.AddEntry(doSha([]byte{1, 2, 3, 4, 5}))
 
-	data1, err = MS1.Marshal()
+	data1, err = MS1.marshal()
 	if err != nil {
 		t.Fatal("marshal should not fail")
 	}
 
-	require.NoError(t, MS2.UnMarshal(data1))
-	data2, err = MS2.Marshal()
+	require.NoError(t, MS2.unmarshal(data1))
+	data2, err = MS2.marshal()
 	if err != nil {
 		t.Fatal("marshal should not fail")
 	}
@@ -130,14 +130,14 @@ func TestMarshal(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
-		MS1.Add(doSha([]byte(fmt.Sprintf("%8d", i))))
+		MS1.AddEntry(doSha([]byte(fmt.Sprintf("%8d", i))))
 
-		data1, err = MS1.Marshal()
+		data1, err = MS1.marshal()
 		if err != nil {
 			t.Fatal("marshal should not fail")
 		}
-		require.NoError(t, MS2.UnMarshal(data1))
-		data2, err = MS2.Marshal()
+		require.NoError(t, MS2.unmarshal(data1))
+		data2, err = MS2.marshal()
 		if err != nil {
 			t.Fatal("marshal should not fail")
 		}
