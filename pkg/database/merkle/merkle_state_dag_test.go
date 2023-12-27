@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package database_test
+package merkle_test
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/test/testdata"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	"gopkg.in/yaml.v3"

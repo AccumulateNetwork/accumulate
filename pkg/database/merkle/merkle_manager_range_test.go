@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package database
+package merkle
 
 import (
 	"bytes"
@@ -14,7 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 )
 
-func b2i(b Hash) int64 {
+func b2i(b []byte) int64 {
 	i := int64(b[0])<<24 + int64(b[1])<<16 + int64(b[2])<<8 + int64(b[3])
 	return i
 }

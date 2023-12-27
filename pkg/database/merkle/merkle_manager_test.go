@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package database
+package merkle
 
 import (
 	"bytes"
@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 func begin() database.Store {
@@ -29,7 +28,7 @@ func begin() database.Store {
 }
 
 func testChain(store record.Store, markPower int64, key ...interface{}) *MerkleManager {
-	return NewChain(nil, store, record.NewKey(key...), markPower, merkle.ChainTypeUnknown, "chain")
+	return NewChain(nil, store, record.NewKey(key...), markPower, ChainTypeUnknown, "chain")
 }
 
 func TestMerkleManager_GetChainState(t *testing.T) {
@@ -37,7 +36,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	var randHash common.RandHash
 	store := begin()
 	m := testChain(store, 8, "try")
-	err := m.Head().Put(new(merkle.State))
+	err := m.Head().Put(new(State))
 	require.NoError(t, err, "should be able to write to the chain head")
 	_, err = m.Head().Get()
 	require.NoError(t, err, "should be able to read the chain head")
@@ -47,10 +46,10 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 		head, err := m.Head().Get()
 		require.NoError(t, err)
 		mState, err := head.Marshal()
-		require.NoError(t, err, "must be able to marshal a merkle.State")
-		ms := new(merkle.State)
+		require.NoError(t, err, "must be able to marshal a State")
+		ms := new(State)
 		err = ms.UnMarshal(mState)
-		require.NoError(t, err, "must be able to unmarshal a merkle.State")
+		require.NoError(t, err, "must be able to unmarshal a State")
 		require.True(t, ms.Equal(head), " should get the same state back")
 		cState, e2 := m.Head().Get()
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
@@ -63,7 +62,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 	var randHash common.RandHash
 	store := begin()
 	m := testChain(store, 2, "try")
-	var States []*merkle.State
+	var States []*State
 	for i := 0; i < testnum; i++ {
 		require.NoError(t, m.AddHash(randHash.Next(), false))
 		head, err := m.Head().Get()
@@ -167,7 +166,7 @@ func TestMerkleManager(t *testing.T) {
 	}
 }
 
-func GenerateTestData(prt bool) [10][]Hash {
+func GenerateTestData(prt bool) [10][][]byte {
 	spaces := func(i int) {
 		n := int(math.Pow(2, float64(i+1))) - 1
 		for i := 0; i < n; i++ {
@@ -175,7 +174,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 		}
 	}
 	var rp common.RandHash
-	var hashes [10][]Hash
+	var hashes [10][][]byte
 	row := 0
 	for i := 0; i < 20; i++ {
 		v := rp.Next()
@@ -193,7 +192,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 	fmt.Println()
 	for len(hashes[row]) > 1 {
 		for i := 0; i+1 < len(hashes[row]); i += 2 {
-			v := hashes[row][i].Combine(hashes[row][i+1])
+			v := combineHashes(hashes[row][i], hashes[row][i+1])
 			hashes[row+1] = append(hashes[row+1], v)
 			spaces(row)
 			fmt.Printf("%3v ", v[:2])
@@ -201,7 +200,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 		row++
 		println()
 	}
-	ms := new(merkle.State)
+	ms := new(State)
 	for _, v := range hashes[0] {
 		ms.Add(v)
 		mdr := ms.Anchor()
@@ -216,7 +215,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 	row = 0
 	for len(hashes[row]) > 1 {
 		for i := 0; i+1 < len(hashes[row]); i += 2 {
-			v := hashes[row][i].Combine(hashes[row][i+1])
+			v := combineHashes(hashes[row][i], hashes[row][i+1])
 			hashes[row+1][(i+1)/2] = v
 			spaces(row)
 			fmt.Printf("%x  ", v[:4])
@@ -224,7 +223,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 		row++
 		println()
 	}
-	ms = new(merkle.State)
+	ms = new(State)
 	for _, v := range hashes[0] {
 		ms.Add(v)
 		mdr := ms.Anchor()
@@ -257,9 +256,9 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 				factor := int64(math.Pow(2, float64(row)))
 				fmt.Printf("Row %d Col %d Left %x + Right %x == %x == Result %x\n",
 					row, col, left[:4], right[:4],
-					left.Combine(right)[:4],
+					combineHashes(left, right)[:4],
 					hashes[row][col/factor][:4])
-				require.True(t, bytes.Equal(left.Combine(right), hashes[row][col/factor]), "should be equal")
+				require.True(t, bytes.Equal(combineHashes(left, right), hashes[row][col/factor]), "should be equal")
 			}
 		}
 	}
@@ -294,8 +293,8 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 }
 
 // String
-// convert the merkle.State to a human readable string
-func PrintMerkleState(m *merkle.State) string {
+// convert the State to a human readable string
+func PrintMerkleState(m *State) string {
 	var b bytes.Buffer
 	b.WriteString(fmt.Sprintf("%20s %d\n", "Count", m.Count))
 	b.WriteString(fmt.Sprintf("%20s %d\n", "Pending[] length:", len(m.Pending)))
