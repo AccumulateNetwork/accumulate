@@ -56,7 +56,7 @@ func (c *chainElemIndexer) Apply(batch *ChangeSet, ctx *SummaryContext, r record
 		return errors.UnknownError.WithFormat("load new chain head: %w", err)
 	}
 
-	hashes, err := chain.Inner().GetRange(int64(c.oldHeight), head.Count)
+	hashes, err := chain.Inner().Entries(int64(c.oldHeight), head.Count)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load new chain entries: %w", err)
 	}
