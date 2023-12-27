@@ -81,7 +81,7 @@ func TestFindMissingTxns(t *testing.T) {
 						switch re.Key.Get(3) {
 						case "Head", "States":
 							ms := new(merkle.State)
-							require.NoError(t, ms.UnMarshal(re.Value))
+							require.NoError(t, ms.UnmarshalBinary(re.Value))
 							for _, h := range ms.HashList {
 								wantMsg[*(*[32]byte)(h)] = true
 							}

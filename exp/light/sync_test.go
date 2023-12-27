@@ -57,7 +57,7 @@ func TestPartialIndexReceivedAnchors(t *testing.T) {
 			defer batch.Discard()
 			chain := batch.Account(part.JoinPath(protocol.AnchorPool)).MainChain()
 			for _, txn := range entries {
-				require.NoError(t, chain.Inner().AddHash(txn.GetHash(), false))
+				require.NoError(t, chain.Inner().AddEntry(txn.GetHash(), false))
 			}
 
 			// Populate transactions
