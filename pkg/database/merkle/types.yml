@@ -42,3 +42,22 @@ ReceiptEntry:
       type: bool
     - name: Hash
       type: bytes
+
+ReceiptList:
+  fields:
+    - name: MerkleState
+      description: merkle.State at the beginning of the list
+      type: State
+      marshal-as: reference
+      pointer: true
+    - name: Elements
+      type: bytes
+      repeatable: true
+    - name: Receipt
+      type: Receipt
+      marshal-as: reference
+      pointer: true
+    - name: ContinuedReceipt
+      type: Receipt
+      marshal-as: reference
+      pointer: true
