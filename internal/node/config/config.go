@@ -153,9 +153,10 @@ type Config struct {
 }
 
 type Accumulate struct {
-	Describe         `toml:"describe" mapstructure:"describe"`
-	BatchReplayLimit int    `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
-	SummaryNetwork   string `toml:"summary-network" mapstructure:"summary-network"`
+	Describe              `toml:"describe" mapstructure:"describe"`
+	BatchReplayLimit      int    `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
+	SummaryNetwork        string `toml:"summary-network" mapstructure:"summary-network"`
+	DisableDirectDispatch bool   `toml:"disable-direct-dispatch" mapstructure:"disable-direct-dispatch"`
 
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`

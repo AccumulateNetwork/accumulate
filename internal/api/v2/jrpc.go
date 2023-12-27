@@ -68,7 +68,7 @@ func (m *JrpcMethods) Register(r *httprouter.Router) error {
 	return nil
 }
 
-func (m *JrpcMethods) NewMux() http.Handler {
+func (m *JrpcMethods) NewMux() *httprouter.Router {
 	mux := httprouter.New()
 	_ = m.Register(mux)
 	return mux

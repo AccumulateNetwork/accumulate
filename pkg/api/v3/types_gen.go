@@ -316,6 +316,8 @@ type NodeInfo struct {
 	PeerID    p2p.PeerID        `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
 	Network   string            `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Services  []*ServiceAddress `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+	Version   string            `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit    string            `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
 	extraData []byte
 }
 
@@ -1222,6 +1224,8 @@ func (v *NodeInfo) Copy() *NodeInfo {
 			u.Services[i] = (v).Copy()
 		}
 	}
+	u.Version = v.Version
+	u.Commit = v.Commit
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2305,6 +2309,12 @@ func (v *NodeInfo) Equal(u *NodeInfo) bool {
 		if !((v.Services[i]).Equal(u.Services[i])) {
 			return false
 		}
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Commit == u.Commit) {
+		return false
 	}
 
 	return true
@@ -4624,6 +4634,8 @@ var fieldNames_NodeInfo = []string{
 	1: "PeerID",
 	2: "Network",
 	3: "Services",
+	4: "Version",
+	5: "Commit",
 }
 
 func (v *NodeInfo) MarshalBinary() ([]byte, error) {
@@ -4644,6 +4656,12 @@ func (v *NodeInfo) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Services {
 			writer.WriteValue(3, v.MarshalBinary)
 		}
+	}
+	if !(len(v.Version) == 0) {
+		writer.WriteString(4, v.Version)
+	}
+	if !(len(v.Commit) == 0) {
+		writer.WriteString(5, v.Commit)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NodeInfo)
@@ -4671,6 +4689,16 @@ func (v *NodeInfo) IsValid() error {
 		errs = append(errs, "field Services is missing")
 	} else if len(v.Services) == 0 {
 		errs = append(errs, "field Services is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Version is missing")
+	} else if len(v.Version) == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Commit is missing")
+	} else if len(v.Commit) == 0 {
+		errs = append(errs, "field Commit is not set")
 	}
 
 	switch len(errs) {
@@ -6723,6 +6751,12 @@ func (v *NodeInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadString(4); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadString(5); ok {
+		v.Commit = x
+	}
 
 	seen, err := reader.Reset(fieldNames_NodeInfo)
 	if err != nil {
@@ -7817,6 +7851,8 @@ func (v *NodeInfo) MarshalJSON() ([]byte, error) {
 		PeerID   *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
 		Network  string                                  `json:"network,omitempty"`
 		Services encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
+		Version  string                                  `json:"version,omitempty"`
+		Commit   string                                  `json:"commit,omitempty"`
 	}{}
 	if !(v.PeerID == ("")) {
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
@@ -7826,6 +7862,12 @@ func (v *NodeInfo) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Services) == 0) {
 		u.Services = v.Services
+	}
+	if !(len(v.Version) == 0) {
+		u.Version = v.Version
+	}
+	if !(len(v.Commit) == 0) {
+		u.Commit = v.Commit
 	}
 	return json.Marshal(&u)
 }
@@ -8685,10 +8727,14 @@ func (v *NodeInfo) UnmarshalJSON(data []byte) error {
 		PeerID   *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
 		Network  string                                  `json:"network,omitempty"`
 		Services encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
+		Version  string                                  `json:"version,omitempty"`
+		Commit   string                                  `json:"commit,omitempty"`
 	}{}
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Network = v.Network
 	u.Services = v.Services
+	u.Version = v.Version
+	u.Commit = v.Commit
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8698,6 +8744,8 @@ func (v *NodeInfo) UnmarshalJSON(data []byte) error {
 
 	v.Network = u.Network
 	v.Services = u.Services
+	v.Version = u.Version
+	v.Commit = u.Commit
 	return nil
 }
 
