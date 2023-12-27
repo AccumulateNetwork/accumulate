@@ -17,11 +17,23 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-func open(t *testing.T) kvtest.Opener {
+func open(t testing.TB) kvtest.Opener {
 	dir := t.TempDir()
 	return func() (keyvalue.Beginner, error) {
 		return New(dir)
 	}
+}
+
+func BenchmarkCommit(b *testing.B) {
+	kvtest.BenchmarkCommit(b, open(b))
+}
+
+func BenchmarkOpen(b *testing.B) {
+	kvtest.BenchmarkOpen(b, open(b))
+}
+
+func BenchmarkReadRandom(b *testing.B) {
+	kvtest.BenchmarkReadRandom(b, open(b))
 }
 
 func TestWriteLimit(t *testing.T) {
