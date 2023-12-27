@@ -215,7 +215,7 @@ func (batch *Batch) collectMessages(w *snapshot.Writer, index, hashes *indexing.
 
 	copts := collectOptions(index, opts)
 
-	for i := 0; i < 256; i++ {
+	for i := 0; i < indexing.BucketCount; i++ {
 		hashes, err := hashes.Read(byte(i))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
@@ -535,7 +535,7 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 			return nil
 		}
 
-		entries, err := c.Inner().GetRange(0, head.Count)
+		entries, err := c.Inner().Entries(0, head.Count)
 		if err != nil {
 			return errors.UnknownError.WithFormat("load %s chain entries: %w", c.Name(), err)
 		}
@@ -578,7 +578,7 @@ func writeSnapshotIndex(w *snapshot.Writer, index *indexing.Bucket, opts *Collec
 		return errors.UnknownError.Wrap(err)
 	}
 
-	for i := 0; i < 256; i++ {
+	for i := 0; i < indexing.BucketCount; i++ {
 		entries, err := index.Read(byte(i))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
