@@ -7,14 +7,10 @@
 package main
 
 import (
-	"context"
 	"errors"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
@@ -35,7 +31,7 @@ func healAnchor(_ *cobra.Command, args []string) {
 	lightDb = ""
 	h := &healer{
 		healSingle: func(h *healer, src, dst *protocol.PartitionInfo, num uint64, txid *url.TxID) {
-			healSingleAnchor(h.ctx, h.C1, h.C2, h.net, src.ID, dst.ID, num, txid, nil)
+			h.healSingleAnchor(src.ID, dst.ID, num, txid, nil)
 		},
 		healSequence: func(h *healer, src, dst *protocol.PartitionInfo) {
 			// Skip BVN to BVN anchors
@@ -49,14 +45,14 @@ func healAnchor(_ *cobra.Command, args []string) {
 			dstLedger := getAccount[*protocol.AnchorLedger](h, dstUrl.JoinPath(protocol.AnchorPool))
 			src2dst := dstLedger.Partition(srcUrl)
 
-			ids, txns := findPendingAnchors(h.ctx, h.C2, api.Querier2{Querier: h.C2}, h.net, srcUrl, dstUrl, true)
+			ids, txns := findPendingAnchors(h.ctx, h.C2, h.tryEach(), h.net, srcUrl, dstUrl, true)
 
 			var all []*url.TxID
 			all = append(all, src2dst.Pending...)
 			all = append(all, ids...)
 
 			for i, txid := range all {
-				healSingleAnchor(h.ctx, h.C1, h.C2, h.net, src.ID, dst.ID, src2dst.Delivered+1+uint64(i), txid, txns)
+				h.healSingleAnchor(src.ID, dst.ID, src2dst.Delivered+1+uint64(i), txid, txns)
 			}
 		},
 	}
@@ -64,14 +60,14 @@ func healAnchor(_ *cobra.Command, args []string) {
 	h.heal(args)
 }
 
-func healSingleAnchor(ctx context.Context, C1 *jsonrpc.Client, C2 *message.Client, net *healing.NetworkInfo, srcId, dstId string, seqNum uint64, txid *url.TxID, txns map[[32]byte]*protocol.Transaction) {
+func (h *healer) healSingleAnchor(srcId, dstId string, seqNum uint64, txid *url.TxID, txns map[[32]byte]*protocol.Transaction) {
 	var count int
 retry:
-	err := healing.HealAnchor(ctx, healing.HealAnchorArgs{
-		Client:    C2.ForAddress(nil),
-		Querier:   C2,
-		Submitter: C2,
-		NetInfo:   net,
+	err := healing.HealAnchor(h.ctx, healing.HealAnchorArgs{
+		Client:    h.C2.ForAddress(nil),
+		Querier:   h.tryEach(),
+		Submitter: h.C2,
+		NetInfo:   h.net,
 		Known:     txns,
 		Pretend:   pretend,
 		Wait:      waitForTxn,

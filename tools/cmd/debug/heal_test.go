@@ -625,3 +625,15 @@ func printTxResult(t *testing.T, prefix string, r *abci.ExecTxResult) {
 		fmt.Printf("  %s %s\n", prefix, b)
 	}
 }
+
+func TestCheckForZombie(t *testing.T) {
+	t.Skip("Manual")
+
+	base := "http://35.183.112.161:16692"
+	c, err := http.New(base, base+"/ws")
+	require.NoError(t, err)
+
+	ok, err := nodeIsZombie(context.Background(), c)
+	require.NoError(t, err)
+	fmt.Println("Zombie:", ok)
+}
