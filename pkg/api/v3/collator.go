@@ -110,49 +110,23 @@ func (c *Collator) messageHashSearch(ctx context.Context, scope *url.URL, query 
 }
 
 func (c *Collator) queryMessage(ctx context.Context, scope *url.URL, query *DefaultQuery) (Record, error) {
-	// Scope must be unknown
-	if scope == nil || !protocol.IsUnknown(scope) {
-		return nil, nil
-	}
-
-	// Scope must have a transaction ID
-	txid, err := scope.AsTxID()
-	if err != nil {
-		return nil, nil
-	}
-
-	// List partitions
-	ns, err := c.Network.NetworkStatus(ctx, NetworkStatusOptions{Partition: protocol.Directory})
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("query network status: %w", err)
-	}
-
 	// Query each partition
 	var all *MessageRecord[messaging.Message]
-
-	// For each partition
-	for _, part := range ns.Network.Partitions {
-		// Don't query the summary network
-		if part.Type == protocol.PartitionTypeBlockSummary {
-			continue
-		}
-
-		// Query the partition
-		scope := protocol.PartitionUrl(part.ID).WithTxID(txid.Hash())
+	txid, err := c.collateTxn(ctx, scope, func(scope *url.TxID) error {
 		r, err := Querier2{c.Querier}.QueryMessage(ctx, scope, query)
 		switch {
 		case err == nil:
 			// Ok
 		case errors.Is(err, errors.NotFound):
-			continue
+			return nil
 		default:
-			return nil, errors.UnknownError.Wrap(err)
+			return errors.UnknownError.Wrap(err)
 		}
 
 		// Collate the response
 		if all == nil {
 			all = r
-			continue
+			return nil
 		}
 
 		if r.Error != nil {
@@ -167,8 +141,11 @@ func (c *Collator) queryMessage(ctx context.Context, scope *url.URL, query *Defa
 		all.Produced.Append(r.Produced)
 		all.Cause.Append(r.Cause)
 		all.Signatures.Append(r.Signatures)
+		return nil
+	})
+	if err != nil || txid == nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
-
 	if all == nil {
 		return nil, errors.NotFound.WithFormat("message %x not found", txid.Hash())
 	}
@@ -185,13 +162,38 @@ func (c *Collator) queryMessage(ctx context.Context, scope *url.URL, query *Defa
 }
 
 func (c *Collator) queryChain(ctx context.Context, scope *url.URL, query *ChainQuery) (Record, error) {
-	// Scope must be unknown
-	if scope == nil || !protocol.IsUnknown(scope) {
+	// Query each partition
+	all := new(RecordRange[*ChainEntryRecord[Record]])
+	txid, err := c.collateTxn(ctx, scope, func(scope *url.TxID) error {
+		r, err := Querier2{c.Querier}.QueryTransactionChains(ctx, scope, query)
+		switch {
+		case err == nil:
+			// Ok
+		case errors.Is(err, errors.NotFound):
+			return nil
+		default:
+			return errors.UnknownError.Wrap(err)
+		}
+
+		// Collate the response
+		all.Records = append(all.Records, r.Records...)
+		all.Total += r.Total
+		return nil
+	})
+	if err != nil || txid == nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return all, nil
+}
+
+func (c *Collator) collateTxn(ctx context.Context, scope *url.URL, fn func(*url.TxID) error) (*url.TxID, error) {
+	// Sanity check
+	if scope == nil {
 		return nil, nil
 	}
 
 	// Scope must have a transaction ID
-	txid, err := scope.AsTxID()
+	id, err := scope.AsTxID()
 	if err != nil {
 		return nil, nil
 	}
@@ -202,9 +204,6 @@ func (c *Collator) queryChain(ctx context.Context, scope *url.URL, query *ChainQ
 		return nil, errors.UnknownError.WithFormat("query network status: %w", err)
 	}
 
-	// Query each partition
-	all := new(RecordRange[*ChainEntryRecord[Record]])
-
 	// For each partition
 	for _, part := range ns.Network.Partitions {
 		// Don't query the summary network
@@ -213,22 +212,12 @@ func (c *Collator) queryChain(ctx context.Context, scope *url.URL, query *ChainQ
 		}
 
 		// Query the partition
-		scope := protocol.PartitionUrl(part.ID).WithTxID(txid.Hash())
-		r, err := Querier2{c.Querier}.QueryTransactionChains(ctx, scope, query)
-		switch {
-		case err == nil:
-			// Ok
-		case errors.Is(err, errors.NotFound):
-			continue
-		default:
+		err := fn(protocol.PartitionUrl(part.ID).WithTxID(id.Hash()))
+		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
-
-		// Collate the response
-		all.Records = append(all.Records, r.Records...)
-		all.Total += r.Total
 	}
-	return all, nil
+	return id, nil
 }
 
 func (c *Collator) visitBlockResponse(ctx context.Context, r Record) error {

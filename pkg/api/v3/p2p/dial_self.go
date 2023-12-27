@@ -26,12 +26,15 @@ func (n *Node) DialSelf() message.Dialer { return (*selfDialer)(n) }
 // Dial returns a stream for the current node.
 func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
 	// Parse the address
-	_, peer, sa, _, err := api.UnpackAddress(addr)
+	_, peer, sa, addr, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	if sa == nil {
+		return nil, errors.BadRequest.With("missing service address")
+	}
 	if peer != "" && peer != d.host.ID() {
-		return nil, errors.BadRequest.With("attempted to dial a different node")
+		return (*Node)(d).getPeerService(ctx, peer, sa, addr)
 	}
 
 	// Check if we provide the service
