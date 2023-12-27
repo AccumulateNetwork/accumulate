@@ -17,7 +17,7 @@ import (
 func open(t *testing.T) kvtest.Opener {
 	dir := t.TempDir()
 	return func() (keyvalue.Beginner, error) {
-		return Open(filepath.Join(dir, "bolt.db"))
+		return Open(filepath.Join(dir, "bolt.db"), WithPlainKeys)
 	}
 }
 
