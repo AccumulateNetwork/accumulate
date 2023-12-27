@@ -121,13 +121,19 @@ func (f Factory[Status]) convert(err error) *ErrorBase[Status] {
 	if x := (*ErrorBase[Status])(nil); errors.As(err, &x) {
 		return x
 	}
+	var msg string
+	if err == nil {
+		msg = "(nil)"
+	} else {
+		msg = err.Error()
+	}
 	if x := Status(0); errors.As(err, &x) {
-		return &ErrorBase[Status]{Code: x, Message: err.Error()}
+		return &ErrorBase[Status]{Code: x, Message: msg}
 	}
 
 	e := &ErrorBase[Status]{
 		Code:    f.UnknownCode,
-		Message: err.Error(),
+		Message: msg,
 	}
 
 	var encErr encoding.Error

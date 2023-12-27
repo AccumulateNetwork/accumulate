@@ -9,19 +9,10 @@ package light
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-func (c *IndexDBAccountChain) Index() *IndexedList[*protocol.IndexEntry] {
-	return &IndexedList[*protocol.IndexEntry]{c.getIndex()}
-}
 
 func (c *IndexDBPartitionAnchors) Produced() *IndexedList[*AnchorMetadata] {
 	return &IndexedList[*AnchorMetadata]{c.getProduced()}
-}
-
-func (c *IndexDBPartitionAnchors) Received() *IndexedList[*AnchorMetadata] {
-	return &IndexedList[*AnchorMetadata]{c.getReceived()}
 }
 
 type IndexedList[T any] struct {

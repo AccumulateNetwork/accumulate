@@ -24,8 +24,27 @@ func NewChainIndex(logger log.Logger, store database.Store, key *record.Key) *Ch
 	x.logger.Set(logger)
 	x.store = store
 	x.key = key
-	x.blockSize = 1 << 8
+	x.blockSize = 1 << 12 // 4096
 	return x
+}
+
+// Last returns the last index entry.
+func (x *ChainIndex) Last() (*record.Key, uint64, error) {
+	b, err := x.getHead().Get()
+	if err != nil {
+		return nil, 0, notFoundIsNotOk(err)
+	}
+	if len(b.Entries) == 0 {
+		return nil, 0, errors.NotFound.With("index is empty")
+	}
+	for b.Level > 0 {
+		b, err = x.getBlock(b.Level-1, b.Entries[len(b.Entries)-1].Index).Get()
+		if err != nil {
+			return nil, 0, notFoundIsNotOk(err)
+		}
+	}
+	e := b.Entries[len(b.Entries)-1]
+	return e.Key, e.Index, nil
 }
 
 // Append appends a (key, index) entry into the chain index. Append returns an
@@ -39,7 +58,7 @@ func (x *ChainIndex) Append(key *record.Key, index uint64) error {
 	// We need a new layer
 	old, err := x.getHead().Get()
 	if err != nil {
-		return err
+		return notFoundIsNotOk(err)
 	}
 
 	// Move the old head
@@ -63,11 +82,11 @@ func (x *ChainIndex) append1(record values.Value[*chainIndexBlock], e *chainInde
 	// Load the block
 	b, err := record.Get()
 	if err != nil {
-		return nil, err
+		return nil, notFoundIsNotOk(err)
 	}
 
 	// Can't go backwards
-	if len(b.Entries) > 0 && e.Key.Compare(b.Entries[len(b.Entries)-1].Key) <= 0 {
+	if len(b.Entries) > 0 && e.Key.Compare(b.Entries[len(b.Entries)-1].Key) < 0 {
 		return nil, errors.NotAllowed.With("cannot index past entries")
 	}
 
@@ -90,7 +109,7 @@ func (x *ChainIndex) append1(record values.Value[*chainIndexBlock], e *chainInde
 func (x *ChainIndex) append2(record values.Value[*chainIndexBlock], e *chainIndexEntry) (*chainIndexBlock, error) {
 	b, err := record.Get()
 	if err != nil {
-		return nil, err
+		return nil, notFoundIsNotOk(err)
 	}
 
 	// Add to this block?
@@ -112,7 +131,7 @@ func (x *ChainIndex) append2(record values.Value[*chainIndexBlock], e *chainInde
 func (x *ChainIndex) Find(target *record.Key) ChainSearchResult {
 	b, err := x.getHead().Get()
 	if err != nil {
-		return errorResult{err}
+		return errorResult{notFoundIsNotOk(err)}
 	}
 
 	flat := b.Level == 0
@@ -148,9 +167,20 @@ func (x *ChainIndex) Find(target *record.Key) ChainSearchResult {
 		// We need to go down a level
 		b, err = x.getBlock(b.Level-1, b.Entries[i].Index).Get()
 		if err != nil {
-			return errorResult{err}
+			return errorResult{notFoundIsNotOk(err)}
 		}
 	}
+}
+
+func notFoundIsNotOk(err error) error {
+	if !errors.Is(err, errors.NotFound) {
+		return err
+	}
+
+	// Escalate NotFound to InternalError in cases where NotFound indicates a
+	// corrupted index. For example, if the head references a block and that
+	// block doesn't exist, that's a problem.
+	return errors.InternalError.WithFormat("corrupted index: %w", err)
 }
 
 type ChainSearchResult interface {
@@ -173,9 +203,6 @@ type ChainSearchResult2 interface {
 
 	// Index returns the index of the target entry.
 	Index() (uint64, error)
-
-	// Entry returns the target entry.
-	Entry(c *Chain) ([]byte, error)
 }
 
 type beforeResult struct {
@@ -203,7 +230,7 @@ func (r *beforeResult) After() ChainSearchResult2 {
 		b, err = r.x.getBlock(0, 0).Get()
 	}
 	if err != nil {
-		return errorResult{err}
+		return errorResult{notFoundIsNotOk(err)}
 	}
 
 	// If there are no entries, return not found
@@ -223,9 +250,8 @@ func (r *exactResult) Before() ChainSearchResult2 { return r }
 func (r *exactResult) Exact() ChainSearchResult2  { return r }
 func (r *exactResult) After() ChainSearchResult2  { return r }
 
-func (r *exactResult) Err() error                     { return nil }
-func (r *exactResult) Index() (uint64, error)         { return r.entry.Index, nil }
-func (r *exactResult) Entry(c *Chain) ([]byte, error) { return c.Entry(int64(r.entry.Index)) }
+func (r *exactResult) Err() error             { return nil }
+func (r *exactResult) Index() (uint64, error) { return r.entry.Index, nil }
 
 type closestResult struct {
 	x      *ChainIndex
@@ -278,6 +304,5 @@ func (r errorResult) Before() ChainSearchResult2 { return r }
 func (r errorResult) Exact() ChainSearchResult2  { return r }
 func (r errorResult) After() ChainSearchResult2  { return r }
 
-func (r errorResult) Err() error                     { return r.err }
-func (r errorResult) Index() (uint64, error)         { return 0, r.err }
-func (r errorResult) Entry(c *Chain) ([]byte, error) { return nil, r.err }
+func (r errorResult) Err() error             { return r.err }
+func (r errorResult) Index() (uint64, error) { return 0, r.err }
