@@ -11,22 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/edsrzf/mmap-go"
 )
 
-const pageSize = 1 << 10 // 1024 entries
+const BucketCount = 256
 
 // Bucket is a collection of 256 files.
 type Bucket struct {
-	files     [256]*bucketFile
+	files     [BucketCount]*File
 	valueSize int
-}
-
-type bucketFile struct {
-	file  *os.File
-	mmap  mmap.MMap
-	count int
 }
 
 type Entry struct {
@@ -49,19 +41,12 @@ func OpenBucket(prefix string, valueSize int, create bool) (*Bucket, error) {
 	b.valueSize = valueSize
 
 	// Create a file for every byte prefix
-	for i := 0; i < 256; i++ {
+	for i := 0; i < BucketCount; i++ {
 		name := fmt.Sprintf("%s%02x", prefix, i)
-
-		var file *os.File
-		if create {
-			file, err = os.Create(name)
-		} else {
-			file, err = os.Open(name)
-		}
+		b.files[i], err = OpenFile(name, valueSize+32, create)
 		if err != nil {
 			return nil, err
 		}
-		b.files[i] = &bucketFile{file: file}
 	}
 
 	return b, nil
@@ -70,7 +55,7 @@ func OpenBucket(prefix string, valueSize int, create bool) (*Bucket, error) {
 func (b *Bucket) Close() error {
 	var err error
 	for _, f := range b.files {
-		e := f.close(b.valueSize)
+		e := f.Close()
 		if e != nil {
 			err = e
 		}

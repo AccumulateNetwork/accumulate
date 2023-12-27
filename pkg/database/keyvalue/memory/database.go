@@ -28,7 +28,12 @@ func New(prefix *record.Key) *Database {
 
 // Begin begins a change set.
 func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
-	return NewChangeSet(prefix, d.get, d.put, nil)
+	return NewChangeSet(ChangeSetOptions{
+		Prefix:  prefix,
+		Get:     d.get,
+		Commit:  d.commit,
+		ForEach: d.forEach,
+	})
 }
 
 // Export exports the database as a set of entries. Behavior is undefined if the
@@ -52,7 +57,7 @@ func (d *Database) Import(entries []Entry) error {
 	for _, e := range entries {
 		m[e.Key.Hash()] = e
 	}
-	return d.put(m)
+	return d.commit(m)
 }
 
 func (d *Database) get(key *record.Key) ([]byte, error) {
@@ -70,7 +75,7 @@ func (d *Database) get(key *record.Key) ([]byte, error) {
 	return nil, (*database.NotFoundError)(key)
 }
 
-func (d *Database) put(entries map[[32]byte]Entry) error {
+func (d *Database) commit(entries map[[32]byte]Entry) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -86,6 +91,22 @@ func (d *Database) put(entries map[[32]byte]Entry) error {
 			delete(d.entries, key.Hash())
 		} else {
 			d.entries[key.Hash()] = e
+		}
+	}
+	return nil
+}
+
+func (d *Database) forEach(fn func(*record.Key, []byte) error) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, e := range d.entries {
+		if e.Delete {
+			continue
+		}
+		err := fn(e.Key, e.Value)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
