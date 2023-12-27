@@ -557,7 +557,7 @@ func (b *bootstrap) unpackSnapshots() error {
 				return nil
 			}
 
-			entries, err := c.Inner().GetRange(0, head.Count)
+			entries, err := c.Inner().Entries(0, head.Count)
 			if err != nil {
 				return errors.UnknownError.WithFormat("load %v %s chain entries: %w", u, c.Name(), err)
 			}
