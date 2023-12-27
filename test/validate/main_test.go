@@ -292,6 +292,13 @@ func (s *ValidationTestSuite) TestMain() {
 			s.NotEmpty(r.Records)
 	}
 	{
+		// Verify that [hash]@dn.acme is collated
+		r, err := c.QueryMessage(context.Background(), protocol.DnUrl().WithTxID(st1.TxID.Hash()), nil)
+		_ = s.NoError(err) &&
+			s.NotNil(r) &&
+			s.NotEmpty(r.Signatures.Records)
+	}
+	{
 		// TODO Make this smarter than hard coding a height
 		var block uint64 = 4
 		r, err := c.QueryMinorBlock(context.Background(), DnUrl(), &api.BlockQuery{Minor: &block})
