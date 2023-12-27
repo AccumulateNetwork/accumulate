@@ -22,6 +22,9 @@ type Store interface {
 
 	// Delete deletes a key-value pair.
 	Delete(*record.Key) error
+
+	// ForEach iterates over each value.
+	ForEach(func(*record.Key, []byte) error) error
 }
 
 // RecordStore implements [database.Store].
