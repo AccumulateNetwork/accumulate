@@ -55,8 +55,9 @@ const (
 type StorageType string
 
 const (
-	MemoryStorage StorageType = "memory"
-	BadgerStorage StorageType = "badger"
+	MemoryStorage  StorageType = "memory"
+	BadgerStorage  StorageType = "badger"
+	LevelDBStorage StorageType = "leveldb"
 )
 
 // LogLevel defines the default and per-module log level for Accumulate's
