@@ -13,12 +13,15 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	merkle2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+type MerkleManager = merkle2.MerkleManager
 
 // Chain2 is a wrapper for Chain.
 type Chain2 struct {
@@ -57,7 +60,7 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.K
 		panic("unknown chain key") // Will be removed once chains are completely integrated into the model
 	}
 
-	c := NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt)
+	c := merkle2.NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt)
 	return &Chain2{account, key, c, nil}
 }
 
@@ -121,7 +124,7 @@ func (c *Chain2) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 func (c *Chain2) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	var err error
 	values.Walk(&err, c.inner, opts, fn)
-	if c.inner.typ != merkle.ChainTypeIndex {
+	if c.inner.Type() != merkle.ChainTypeIndex {
 		values.WalkField(&err, c.index, c.newIndex, opts, fn)
 	}
 	return err
@@ -200,7 +203,7 @@ func (c *Chain2) newIndex() *Chain2 {
 		panic("cannot index an index chain")
 	}
 	key := c.key.Append("Index")
-	m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index")
+	m := merkle2.NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index")
 	return &Chain2{c.account, key, m, nil}
 }
 
