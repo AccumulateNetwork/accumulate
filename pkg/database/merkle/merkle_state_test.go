@@ -4,23 +4,23 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package database
+package merkle
 
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 func TestMerkleState_Equal(t *testing.T) {
 	var rh, rh1 common.RandHash
-	ms1 := new(merkle.State)
-	ms2 := new(merkle.State)
+	ms1 := new(State)
+	ms2 := new(State)
 	for i := 0; i < 100; i++ {
 		require.Truef(t, ms1.Equal(ms2), "Should be equal (%d)", i)
 		ms1.Pending = append(ms1.Pending, nil)
@@ -47,7 +47,7 @@ func TestMerkleState_Equal(t *testing.T) {
 }
 
 func TestCopy(t *testing.T) {
-	ms1 := new(merkle.State)
+	ms1 := new(State)
 	for i := 0; i < 15; i++ {
 		hash := doSha([]byte(fmt.Sprintf("%x", i*i*i*i)))
 		ms1.Add(hash)
@@ -73,7 +73,7 @@ func TestCopy(t *testing.T) {
 
 func TestUnmarshalMemorySafety(t *testing.T) {
 	// Create a Merkle state and add entries
-	MS1 := new(merkle.State)
+	MS1 := new(State)
 	for i := 0; i < 10; i++ {
 		MS1.Add(doSha([]byte(fmt.Sprintf("%8d", i))))
 	}
@@ -81,7 +81,7 @@ func TestUnmarshalMemorySafety(t *testing.T) {
 	// Marshal and unmarshal into a new state
 	data, err := MS1.Marshal()
 	require.NoError(t, err)
-	MS2 := new(merkle.State)
+	MS2 := new(State)
 	require.NoError(t, MS2.UnMarshal(data))
 
 	// Overwrite the data array with garbage
@@ -92,8 +92,8 @@ func TestUnmarshalMemorySafety(t *testing.T) {
 }
 
 func TestMarshal(t *testing.T) {
-	MS1 := new(merkle.State)
-	MS2 := new(merkle.State)
+	MS1 := new(State)
+	MS2 := new(State)
 
 	data1, err := MS1.Marshal()
 	if err != nil {
@@ -148,4 +148,9 @@ func TestMarshal(t *testing.T) {
 			t.Error("Should be the same")
 		}
 	}
+}
+
+func doSha(b []byte) []byte {
+	h := sha256.Sum256(b)
+	return h[:]
 }
