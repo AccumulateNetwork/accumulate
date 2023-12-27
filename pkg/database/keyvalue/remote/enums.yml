@@ -1,0 +1,29 @@
+callType:
+  Get:
+    value: 1
+  Put:
+    value: 2
+  Delete:
+    value: 3
+  ForEach:
+    value: 4
+  Commit:
+    value: 5
+  Batch:
+    value: 6
+
+responseType:
+  Ok:
+    value: 1
+  Error:
+    value: 2
+  NotFound:
+    value: 3
+  Value:
+    value: 4
+  Entry:
+    value: 5
+  Batch:
+    value: 6
+  UnsupportedCall:
+    value: 7

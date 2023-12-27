@@ -1,0 +1,108 @@
+getCall:
+  non-json: true
+  union: { type: call, private: true }
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+      pointer: true
+
+putCall:
+  non-json: true
+  union: { type: call, private: true }
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+      pointer: true
+    - name: Value
+      type: bytes
+
+deleteCall:
+  non-json: true
+  union: { type: call, private: true }
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+      pointer: true
+
+forEachCall:
+  non-json: true
+  union: { type: call, private: true }
+  fields:
+    - name: Hash
+      type: bool
+      optional: true
+
+commitCall:
+  non-json: true
+  union: { type: call, private: true }
+  fields: ~
+
+batchCall:
+  non-json: true
+  union: { type: call, private: true }
+  fields:
+    - name: Calls
+      type: call
+      marshal-as: union
+      repeatable: true
+
+okResponse:
+  non-json: true
+  union: { type: response, private: true }
+  fields: ~
+
+errorResponse:
+  non-json: true
+  union: { type: response, private: true }
+  fields:
+    - name: Error
+      type: errors2.Error
+      marshal-as: reference
+      pointer: true
+
+notFoundResponse:
+  non-json: true
+  union: { type: response, private: true }
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+      pointer: true
+
+valueResponse:
+  non-json: true
+  union: { type: response, private: true }
+  fields:
+    - name: Value
+      type: bytes
+
+entryResponse:
+  non-json: true
+  union: { type: response, private: true }
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+      pointer: true
+    - name: Value
+      type: bytes
+
+batchResponse:
+  non-json: true
+  union: { type: response, private: true }
+  fields:
+    - name: Responses
+      type: response
+      marshal-as: union
+      repeatable: true
+
+unsupportedCallResponse:
+  non-json: true
+  union: { type: response, private: true }
+  fields:
+    - name: CallType
+      type: callType
+      marshal-as: enum

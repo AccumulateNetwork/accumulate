@@ -37,7 +37,7 @@ func (r *ReceiptList) Validate(opts *ValidateOptions) bool {
 		if h == nil || len(h) != 32 { //      Make sure every element in Elements
 			return false //                     is a proper hash and not nil
 		} //
-		MS.Add(append([]byte{}, h...)) // Add each element to the MS
+		MS.AddEntry(append([]byte{}, h...)) // Add each element to the MS
 	} //                                      Once all elements are added, compute
 	anchor := MS.Anchor() //                 the anchor at this point.
 	if len(anchor) == 0 { //               If an anchor can't be produced, this
@@ -96,7 +96,7 @@ func NewReceiptList() *ReceiptList {
 // GetReceiptList
 // Given a merkle tree with a start point and an end point, create a ReceiptList for
 // all the elements from the start hash to the end hash, inclusive.
-func GetReceiptList(manager *MerkleManager, Start int64, End int64) (r *ReceiptList, err error) {
+func GetReceiptList(manager *Chain, Start int64, End int64) (r *ReceiptList, err error) {
 	if Start > End { // Start must be before the end
 		return nil, fmt.Errorf("start %d and end %d is invalid for ReceiptList", Start, End)
 	}
@@ -113,19 +113,19 @@ func GetReceiptList(manager *MerkleManager, Start int64, End int64) (r *ReceiptL
 	// Allocate the ReceiptList, add all the elements to the ReceiptList
 	r = NewReceiptList()
 	for i := Start; i <= End; i++ { // Get all the elements for the list
-		h, err := manager.Get(i)
+		h, err := manager.Entry(i)
 		if err != nil {
 			return nil, err
 		}
 		r.Elements = append(r.Elements, copyHash(h))
 	}
 
-	r.MerkleState, err = manager.GetAnyState(Start - 1)
+	r.MerkleState, err = manager.StateAt(Start - 1)
 	if err != nil {
 		return nil, err
 	}
 	lastElement := append([]byte{}, r.Elements[len(r.Elements)-1]...)
-	r.Receipt, err = GetReceipt(manager, lastElement, lastElement)
+	r.Receipt, err = getReceipt(manager, lastElement, lastElement)
 	if err != nil {
 		return nil, err
 	}

@@ -111,7 +111,7 @@ func fillDB(t testing.TB, db *coredb.Database, N, M int) {
 			require.NoError(t, err)
 
 			for z := 0; z < 20; z++ {
-				require.NoError(t, batch.Account(u).MainChain().Inner().AddHash(rh.Next(), false))
+				require.NoError(t, batch.Account(u).MainChain().Inner().AddEntry(rh.Next(), false))
 			}
 		}
 		require.NoError(t, batch.Commit())

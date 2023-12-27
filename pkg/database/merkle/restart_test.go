@@ -38,7 +38,7 @@ func TestRestart(t *testing.T) {
 				}
 			}
 			for rand.Int()%3 > 0 { //                                       Add 0 or more random hashes
-				require.NoError(t, MM1.AddHash(doSha(common.Int64Bytes(rand.Int63())), false)) // Generate and add one random hash
+				require.NoError(t, MM1.AddEntry(doSha(common.Int64Bytes(rand.Int63())), false)) // Generate and add one random hash
 			}
 			require.NoError(t, MM1.Commit())
 		}
@@ -64,7 +64,7 @@ func TestRestartCache(t *testing.T) {
 			for k := uint(0); k < uint(rand.Int())%4; k++ { //  Add 0 or more random hashes
 				h := rh.Next()
 				cached = append(cached, h)
-				require.NoError(t, MM1.AddHash(h, false)) // Generate and add one random hash
+				require.NoError(t, MM1.AddEntry(h, false)) // Generate and add one random hash
 			}
 
 			ended := rand.Int()%30 > 0 && len(cached) > 0 // Every so often we are going to write to disk
@@ -89,7 +89,7 @@ func TestRestartCache(t *testing.T) {
 				}
 
 				for _, h := range cached {
-					require.NoError(t, MM2.AddHash(h, false))
+					require.NoError(t, MM2.AddEntry(h, false))
 				}
 
 				if !h1.Equal(h2) { // MM2 should be the same as MM1
@@ -119,13 +119,17 @@ func (d *memdb) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			return nil
 		}
 	}
-	return memory.NewChangeSet(prefix, func(k *record.Key) ([]byte, error) {
-		e, ok := (*d)[k.Hash()]
-		if ok {
-			return e.Value, nil
-		}
-		return nil, errors.NotFound
-	}, commit, nil)
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix: prefix,
+		Commit: commit,
+		Get: func(k *record.Key) ([]byte, error) {
+			e, ok := (*d)[k.Hash()]
+			if ok {
+				return e.Value, nil
+			}
+			return nil, errors.NotFound
+		},
+	})
 }
 
 func (d memdb) Copy() memdb {

@@ -25,11 +25,9 @@ import (
 )
 
 type Healer struct {
-	receivedAnchors map[string][]*light.AnchorMetadata
 }
 
 func (h *Healer) Reset() {
-	h.receivedAnchors = nil
 }
 
 type HealSyntheticArgs struct {
@@ -61,7 +59,7 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	// Has it already been delivered?
 	Q := api.Querier2{Querier: args.Querier}
 	if r, err := Q.QueryMessage(ctx, r.ID, nil); err == nil && r.Status.Delivered() {
-		return nil
+		return errors.Delivered
 	}
 
 	slog.InfoCtx(ctx, "Resubmitting", "source", si.Source, "destination", si.Destination, "number", si.Number, "id", r.Message.ID())
@@ -210,7 +208,7 @@ func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, 
 	}
 
 	// Locate the synthetic ledger main chain index entry
-	_, mainIndex, err := batch.Index().Account(uSynth).Chain("main").Index().Find(light.ByIndexSource(seqEntry.Source))
+	mainIndex, err := batch.Index().Account(uSynth).Chain("main").SourceIndex().FindIndexEntryAfter(seqEntry.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -223,29 +221,19 @@ func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, 
 
 	// Search the DN anchors received by the *destination* partition for one
 	// that anchors the synthetic transaction
-	if h.receivedAnchors == nil {
-		h.receivedAnchors = map[string][]*light.AnchorMetadata{}
-	}
-	dnAnchors, ok := h.receivedAnchors[si.Destination]
-	if !ok {
-		dnAnchors, err = batch.Index().Partition(protocol.PartitionUrl(si.Destination)).Anchors().Received().Get()
-		if err != nil {
-			return nil, err
-		}
-		h.receivedAnchors[si.Destination] = dnAnchors
-	}
+	dnAnchors := batch.Index().Partition(protocol.PartitionUrl(si.Destination)).Anchors()
 
 	var anchoredAnchor *protocol.PartitionAnchorReceipt
 	if !strings.EqualFold(si.Source, protocol.Directory) {
 		// Find a DN anchor that anchors the source block
-		anchoredAnchor, err = getAnchorForBlockAnchor(dnAnchors, uSrc, mainIndex.BlockIndex)
+		anchoredAnchor, err = getAnchorForBlockAnchor(batch, dnAnchors, uSrc, mainIndex.BlockIndex)
 		if err != nil {
 			return nil, err
 		}
 
 	} else {
 		// Find the DN anchor for the given block
-		dnAnchor, err := getAnchorForBlock(dnAnchors, mainIndex.BlockIndex, 0)
+		dnAnchor, err := getAnchorForBlock(batch, dnAnchors, mainIndex.BlockIndex, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -261,7 +249,7 @@ func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, 
 	}
 
 	// Locate the root chain index entry
-	_, rootIndex, err := batch.Index().Account(uSys).Chain("root").Index().Find(light.ByIndexBlock(anchoredAnchor.Anchor.MinorBlockIndex))
+	rootIndex, err := batch.Index().Account(uSys).Chain("root").BlockIndex().FindExactIndexEntry(anchoredAnchor.Anchor.MinorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +262,7 @@ func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, 
 
 	// Combine the receipts
 	if args.SkipAnchors == 0 {
-		return merkle.CombineReceipts(mainReceipt, rootReceipt, anchoredAnchor.RootChainReceipt)
+		return mainReceipt.Combine(rootReceipt, anchoredAnchor.RootChainReceipt)
 	}
 
 	// Find the index entry of the source anchor's entry in the DN's
@@ -299,13 +287,13 @@ func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, 
 	}
 
 	// Find a DN anchor received by the source, after the given block
-	dnAnchor, err := getAnchorForBlock(dnAnchors, sourceRootIndex.BlockIndex, args.SkipAnchors)
+	dnAnchor, err := getAnchorForBlock(batch, dnAnchors, sourceRootIndex.BlockIndex, args.SkipAnchors)
 	if err != nil {
 		return nil, err
 	}
 
 	dnSys := protocol.DnUrl().JoinPath(protocol.Ledger)
-	_, dnRootIndex, err := batch.Index().Account(dnSys).Chain("root").Index().Find(light.ByIndexBlock(dnAnchor.MinorBlockIndex))
+	dnRootIndex, err := batch.Index().Account(dnSys).Chain("root").BlockIndex().FindIndexEntryAfter(dnAnchor.MinorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -317,38 +305,54 @@ func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, 
 	}
 
 	// Combine the receipts
-	return merkle.CombineReceipts(mainReceipt, rootReceipt, dnSourceRootReceipt, dnRootReceipt)
+	return mainReceipt.Combine(rootReceipt, dnSourceRootReceipt, dnRootReceipt)
 }
 
-func getAnchorForBlockAnchor(anchors []*light.AnchorMetadata, source *url.URL, block uint64) (*protocol.PartitionAnchorReceipt, error) {
-	for _, anchor := range anchors {
-		body, ok := anchor.Transaction.Body.(*protocol.DirectoryAnchor)
-		if !ok {
-			continue
-		}
-		for _, r := range body.Receipts {
-			if r.Anchor.Source.Equal(source) && r.Anchor.MinorBlockIndex >= block {
-				return r, nil
-			}
+func getAnchorForBlockAnchor(batch *light.DB, anchors *light.IndexDBPartitionAnchors, source *url.URL, block uint64) (*protocol.PartitionAnchorReceipt, error) {
+	index := anchors.Received(source)
+	i, err := index.Find(block).After().Index()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("locate DN anchor for %v block %d: %w", source, block, err)
+	}
+	b, err := index.Chain().Entry(int64(i))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load DN anchor chain entry for %v block %d: %w", source, block, err)
+	}
+	var msg *messaging.TransactionMessage
+	err = batch.Message2(b).Main().GetAs(&msg)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load DN anchor for %s block %d: %w", source, block, err)
+	}
+	body, ok := msg.Transaction.Body.(*protocol.DirectoryAnchor)
+	if !ok {
+		return nil, errors.InternalError.WithFormat("unable to locate DN anchor for %s block %d: not an anchor", source, block)
+	}
+	for _, r := range body.Receipts {
+		if r.Anchor.Source.Equal(source) && r.Anchor.MinorBlockIndex >= block {
+			return r, nil
 		}
 	}
-	return nil, errors.NotFound.WithFormat("unable to locate DN anchor for %v block %d or greater", source, block)
+	return nil, errors.InternalError.WithFormat("unable to locate DN anchor for %s block %d: internal error: receipt is missing", source, block)
 }
 
-func getAnchorForBlock(anchors []*light.AnchorMetadata, block uint64, skip int) (*protocol.DirectoryAnchor, error) {
-	for _, anchor := range anchors {
-		body, ok := anchor.Transaction.Body.(*protocol.DirectoryAnchor)
-		if !ok {
-			continue
-		}
-		if body.MinorBlockIndex < block {
-			continue
-		}
-		if skip > 0 {
-			skip--
-			continue
-		}
-		return body, nil
+func getAnchorForBlock(batch *light.DB, anchors *light.IndexDBPartitionAnchors, block uint64, skip int) (*protocol.DirectoryAnchor, error) {
+	index := anchors.Received(protocol.DnUrl())
+	i, err := index.Find(block).After().Index()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("locate DN anchor for block %d: %w", block, err)
 	}
-	return nil, errors.NotFound.WithFormat("unable to locate DN anchor for block %d (skip %d)", block, skip)
+	b, err := index.Chain().Entry(int64(i) + int64(skip))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load DN anchor chain entry for block %d (skip %d): %w", block, skip, err)
+	}
+	var msg *messaging.TransactionMessage
+	err = batch.Message2(b).Main().GetAs(&msg)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load DN anchor for block %d (skip %d): %w", block, skip, err)
+	}
+	body, ok := msg.Transaction.Body.(*protocol.DirectoryAnchor)
+	if !ok {
+		return nil, errors.UnknownError.WithFormat("unable to locate DN anchor for block %d (skip %d): not an anchor", block, skip)
+	}
+	return body, nil
 }

@@ -18,6 +18,7 @@ import (
 	"io"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
@@ -61,6 +62,23 @@ type State struct {
 	Pending [][]byte `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	// HashList is the hashes added to the tree.
 	HashList [][]byte `json:"hashList,omitempty" form:"hashList" query:"hashList" validate:"required"`
+}
+
+type chainIndexBlock struct {
+	fieldsSet []bool
+	Level     uint64             `json:"level,omitempty" form:"level" query:"level" validate:"required"`
+	Index     uint64             `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Entries   []*chainIndexEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
+}
+
+type chainIndexEntry struct {
+	fieldsSet []bool
+	// Index is the index of the chain entry, or the next block.
+	Index uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	// Key is the key being indexed.
+	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	extraData []byte
 }
 
 func (v *Receipt) Copy() *Receipt {
@@ -150,6 +168,45 @@ func (v *State) Copy() *State {
 
 func (v *State) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *chainIndexBlock) Copy() *chainIndexBlock {
+	u := new(chainIndexBlock)
+
+	u.Level = v.Level
+	u.Index = v.Index
+	u.Entries = make([]*chainIndexEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		v := v
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *chainIndexBlock) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *chainIndexEntry) Copy() *chainIndexEntry {
+	u := new(chainIndexEntry)
+
+	u.Index = v.Index
+	if v.Key != nil {
+		u.Key = (v.Key).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *chainIndexEntry) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *Receipt) Equal(u *Receipt) bool {
 	if !(bytes.Equal(v.Start, u.Start)) {
 		return false
@@ -220,6 +277,41 @@ func (v *ReceiptList) Equal(u *ReceiptList) bool {
 	case v.ContinuedReceipt == nil || u.ContinuedReceipt == nil:
 		return false
 	case !((v.ContinuedReceipt).Equal(u.ContinuedReceipt)):
+		return false
+	}
+
+	return true
+}
+
+func (v *chainIndexBlock) Equal(u *chainIndexBlock) bool {
+	if !(v.Level == u.Level) {
+		return false
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *chainIndexEntry) Equal(u *chainIndexEntry) bool {
+	if !(v.Index == u.Index) {
+		return false
+	}
+	switch {
+	case v.Key == u.Key:
+		// equal
+	case v.Key == nil || u.Key == nil:
+		return false
+	case !((v.Key).Equal(u.Key)):
 		return false
 	}
 
@@ -440,6 +532,121 @@ func (v *ReceiptList) IsValid() error {
 	}
 }
 
+var fieldNames_chainIndexBlock = []string{
+	1: "Level",
+	2: "Index",
+	3: "Entries",
+}
+
+func (v *chainIndexBlock) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Level == 0) {
+		writer.WriteUint(1, v.Level)
+	}
+	if !(v.Index == 0) {
+		writer.WriteUint(2, v.Index)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_chainIndexBlock)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *chainIndexBlock) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Level is missing")
+	} else if v.Level == 0 {
+		errs = append(errs, "field Level is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_chainIndexEntry = []string{
+	1: "Index",
+	2: "Key",
+}
+
+func (v *chainIndexEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Index == 0) {
+		writer.WriteUint(1, v.Index)
+	}
+	if !(v.Key == nil) {
+		writer.WriteValue(2, v.Key.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_chainIndexEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *chainIndexEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Key is missing")
+	} else if v.Key == nil {
+		errs = append(errs, "field Key is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 func (v *Receipt) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -544,6 +751,65 @@ func (v *ReceiptList) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *chainIndexBlock) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *chainIndexBlock) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Level = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Index = x
+	}
+	for {
+		if x := new(chainIndexEntry); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_chainIndexBlock)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *chainIndexEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *chainIndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Index = x
+	}
+	if x := new(record.Key); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Key = x
+	}
+
+	seen, err := reader.Reset(fieldNames_chainIndexEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Start      *string                          `json:"start,omitempty"`
@@ -633,6 +899,24 @@ func (v *State) MarshalJSON() ([]byte, error) {
 		for i, x := range v.HashList {
 			u.HashList[i] = encoding.BytesToJSON(x)
 		}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *chainIndexBlock) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Level   uint64                              `json:"level,omitempty"`
+		Index   uint64                              `json:"index,omitempty"`
+		Entries encoding.JsonList[*chainIndexEntry] `json:"entries,omitempty"`
+	}{}
+	if !(v.Level == 0) {
+		u.Level = v.Level
+	}
+	if !(v.Index == 0) {
+		u.Index = v.Index
+	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = v.Entries
 	}
 	return json.Marshal(&u)
 }
@@ -761,5 +1045,23 @@ func (v *State) UnmarshalJSON(data []byte) error {
 			v.HashList[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *chainIndexBlock) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Level   uint64                              `json:"level,omitempty"`
+		Index   uint64                              `json:"index,omitempty"`
+		Entries encoding.JsonList[*chainIndexEntry] `json:"entries,omitempty"`
+	}{}
+	u.Level = v.Level
+	u.Index = v.Index
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Level = u.Level
+	v.Index = u.Index
+	v.Entries = u.Entries
 	return nil
 }

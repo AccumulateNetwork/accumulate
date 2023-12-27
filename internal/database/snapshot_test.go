@@ -43,7 +43,7 @@ func BenchmarkCollect(b *testing.B) {
 		txn.Header.Principal = v.Url
 		binary.BigEndian.PutUint64(txn.Header.Initiator[:], uint64(i))
 		txn.Body = new(SendTokens)
-		err := account.MainChain().Inner().AddHash(txn.GetHash(), false)
+		err := account.MainChain().Inner().AddEntry(txn.GetHash(), false)
 		require.NoError(b, err)
 		require.NoError(b, batch.Message2(txn.GetHash()).Main().Put(&messaging.TransactionMessage{Transaction: txn}))
 	}
@@ -275,7 +275,7 @@ func TestPreservationOfOldTransactions(t *testing.T) {
 	batch := db.Begin(true)
 	defer batch.Discard()
 	require.NoError(t, batch.Transaction(txn.GetHash()).Main().Put(&database.SigOrTxn{Transaction: txn}))
-	require.NoError(t, batch.Account(txn.Header.Principal).MainChain().Inner().AddHash(txn.GetHash(), false))
+	require.NoError(t, batch.Account(txn.Header.Principal).MainChain().Inner().AddEntry(txn.GetHash(), false))
 	require.NoError(t, batch.Commit())
 
 	// Collect a snapshot
