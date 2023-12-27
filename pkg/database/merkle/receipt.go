@@ -92,38 +92,27 @@ func (r *Receipt) Contains(other *Receipt) bool {
 // Then we can create a receipt that proves the element in this receipt all
 // the way down to an anchor in the root receipt.
 // Note that both this receipt and the root receipt are expected to be good.
-func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
-	if !bytes.Equal(r.Anchor, rm.Start) {
-		return nil, fmt.Errorf("receipts cannot be combined: anchor %x doesn't match root merkle tree %x", r.Anchor, rm.Start)
-	}
-	nr := r.Copy()                 // Make a copy of the first Receipt
-	nr.Anchor = rm.Anchor          // The MDRoot will be the one from the appended receipt
-	for _, n := range rm.Entries { // Make a copy and append the Nodes of the appended receipt
-		nr.Entries = append(nr.Entries, n.Copy())
-	}
-	return nr, nil
-}
-
-// CombineReceipts combines multiple receipts.
-func CombineReceipts(receipts ...*Receipt) (*Receipt, error) {
-	r := receipts[0]
-	var err error
-	for _, s := range receipts[1:] {
-		r, err = r.Combine(s)
-		if err != nil {
-			return nil, fmt.Errorf("failed to combine receipts: %v", err)
+func (r *Receipt) Combine(receipts ...*Receipt) (*Receipt, error) {
+	for _, s := range receipts {
+		if !bytes.Equal(r.Anchor, s.Start) {
+			return nil, fmt.Errorf("receipts cannot be combined: anchor %x doesn't match root merkle tree %x", r.Anchor, s.Start)
 		}
+		nr := r.Copy()                // Make a copy of the first Receipt
+		nr.Anchor = s.Anchor          // The MDRoot will be the one from the appended receipt
+		for _, n := range s.Entries { // Make a copy and append the Nodes of the appended receipt
+			nr.Entries = append(nr.Entries, n.Copy())
+		}
+		r = nr
 	}
-
 	return r, nil
 }
 
-type GetIntermediateFunc func(element, height int64) (l, r []byte, err error)
+type getIntermediateFunc = func(element, height int64) (l, r []byte, err error)
 
 // BuildReceipt
 // takes the values collected by GetReceipt and flushes out the data structures
 // in the receipt to represent a fully populated version.
-func (r *Receipt) Build(getIntermediate GetIntermediateFunc, anchorState *State) error {
+func (r *Receipt) build(getIntermediate getIntermediateFunc, anchorState *State) error {
 	height := int64(1) // Start the height at 1, because the element isn't part
 	r.Anchor = r.Start // of the nodes collected.  To begin with, the element is the Merkle Dag Root
 	stay := true       // stay represents the fact that the proof is already in this column
