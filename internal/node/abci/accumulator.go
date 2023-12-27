@@ -219,9 +219,11 @@ func (app *Accumulator) Info(context.Context, *abci.RequestInfo) (*abci.Response
 
 	data, err := json.Marshal(struct {
 		Version, Commit string
+		Panicked        bool
 	}{
-		Version: accumulate.Version,
-		Commit:  accumulate.Commit,
+		Version:  accumulate.Version,
+		Commit:   accumulate.Commit,
+		Panicked: app.didPanic,
 	})
 	if err != nil {
 		app.logger.Error("Failed to marshal ABCI info", "error", err)

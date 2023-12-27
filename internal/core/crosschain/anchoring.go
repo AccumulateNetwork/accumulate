@@ -23,7 +23,7 @@ import (
 )
 
 func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, destination *url.URL, currentBlock uint64) error {
-	if c.DisableAnchorHealing {
+	if !def(c.EnableAnchorHealing, true) {
 		return nil
 	}
 
@@ -87,7 +87,7 @@ func (c *Conductor) healAnchors(ctx context.Context, batch *database.Batch, dest
 		}
 
 		// Submit it
-		err = c.submit(ctx, env)
+		err = c.submit(ctx, destination, env)
 		if err != nil {
 			return err
 		}
@@ -241,7 +241,7 @@ func (x ValidatorContext) signTransaction(hash []byte) (protocol.KeySignature, e
 		SetPrivateKey(x.ValidatorKey).
 		SetUrl(protocol.DnUrl().JoinPath(protocol.Network)).
 		SetVersion(x.Globals.Network.Version).
-		SetTimestamp(1).
+		SetTimestampToNow().
 		Sign(hash)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)

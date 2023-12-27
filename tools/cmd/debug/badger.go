@@ -8,7 +8,7 @@ package main
 
 import (
 	"log"
-	"os"
+	"runtime"
 
 	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
@@ -25,6 +25,7 @@ func init() {
 		badgerCompactCmd,
 		badgerCloneCmd,
 		badgerLsCmd,
+		badgerFlattenCmd,
 	)
 }
 
@@ -58,7 +59,12 @@ var badgerLsCmd = &cobra.Command{
 	Run:  func(_ *cobra.Command, args []string) { badgerLs(args[0]) },
 }
 
-var badgerCompactUseGC = badgerCompactCmd.Flags().Bool("use-gc", false, "Use Badger's GC instead of cloning the database")
+var badgerFlattenCmd = &cobra.Command{
+	Use:   "flatten [database]",
+	Short: "Flatten Badger's LSM",
+	Args:  cobra.ExactArgs(1),
+	Run:   badgerFlatten,
+}
 
 func truncate(_ *cobra.Command, args []string) {
 	opt := badger.DefaultOptions(args[0]).
@@ -72,50 +78,27 @@ func truncate(_ *cobra.Command, args []string) {
 }
 
 func compact(_ *cobra.Command, args []string) {
-	if *badgerCompactUseGC {
-		// Based on https://github.com/dgraph-io/badger/issues/718
-		// Credit to https://github.com/mschoch
+	// Based on https://github.com/dgraph-io/badger/issues/718
+	// Credit to https://github.com/mschoch
 
-		db, err := badger.Open(
-			badger.DefaultOptions(args[0]).
-				WithTruncate(true))
-		check(err)
-		defer db.Close()
+	db, err := badger.Open(
+		badger.DefaultOptions(args[0]).
+			WithTruncate(true))
+	check(err)
+	defer db.Close()
 
-		count := 0
-		for err == nil {
-			log.Printf("starting value log gc")
-			count++
-			err = db.RunValueLogGC(0.5)
-		}
-		if err == badger.ErrNoRewrite {
-			log.Printf("no rewrite needed")
-		} else if err != nil {
-			log.Fatalf("error running value log gc: %v", err)
-		}
-		log.Printf("completed gc, ran %d times", count)
-		return
+	count := 0
+	for err == nil {
+		log.Printf("starting value log gc")
+		count++
+		err = db.RunValueLogGC(0.5)
 	}
-
-	// Badger's compaction tools do not work. So instead we're just going to
-	// create a new database, copy the latest version of each value, and swap.
-	srcPath := args[0]
-	dstPath := srcPath + ".tmp"
-	badgerClone(srcPath, dstPath)
-
-	// Move source to a backup location
-	bak := srcPath + ".bak"
-	check(os.Rename(srcPath, bak))
-
-	// Move destination to source
-	if err := os.Rename(dstPath, srcPath); err != nil {
-		// Revert
-		log.Printf("Failed to replace %v, reverting", srcPath)
-		check(os.Rename(bak, srcPath))
+	if err == badger.ErrNoRewrite {
+		log.Printf("no rewrite needed")
+	} else {
+		log.Fatalf("error running value log gc: %v", err)
 	}
-
-	// Delete the backup
-	check(os.RemoveAll(bak))
+	log.Printf("completed gc, ran %d times", count)
 }
 
 func badgerClone(srcPath, dstPath string) {
@@ -171,4 +154,14 @@ func badgerLs(dbPath string) {
 		n.Add(k, x.EstimatedSize())
 	}
 	n.Print()
+}
+
+func badgerFlatten(_ *cobra.Command, args []string) {
+	db, err := badger.Open(badger.DefaultOptions(args[0]).
+		WithTruncate(true).
+		WithNumCompactors(0))
+	check(err)
+	defer db.Close()
+
+	check(db.Flatten(runtime.NumCPU()))
 }
