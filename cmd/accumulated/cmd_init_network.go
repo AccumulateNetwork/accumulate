@@ -92,6 +92,23 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 
+	for _, bvn := range network.Bvns {
+		for _, node := range bvn.Nodes {
+			if node.PrivValKey == nil {
+				node.PrivValKey = tmed25519.GenPrivKey()
+			}
+			if node.DnNodeKey == nil {
+				node.DnNodeKey = tmed25519.GenPrivKey()
+			}
+			if node.BvnNodeKey == nil {
+				node.BvnNodeKey = tmed25519.GenPrivKey()
+			}
+			if node.ListenAddress == "" {
+				node.ListenAddress = "0.0.0.0"
+			}
+		}
+	}
+
 	initNetworkLocalFS(cmd, network)
 }
 
