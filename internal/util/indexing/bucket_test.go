@@ -37,7 +37,7 @@ func TestBucket(t *testing.T) {
 	require.NoError(t, err)
 	defer k.Close()
 	var all [][32]byte
-	for i := 0; i < 256; i++ {
+	for i := 0; i < BucketCount; i++ {
 		e, err := k.Read(byte(i))
 		require.NoError(t, err)
 		sort.Slice(e, func(i, j int) bool {
@@ -68,7 +68,7 @@ func TestBucketWithValues(t *testing.T) {
 	})
 
 	var all []Entry
-	for i := 0; i < 256; i++ {
+	for i := 0; i < BucketCount; i++ {
 		e, err := k.Read(byte(i))
 		require.NoError(t, err)
 		sort.Slice(e, func(i, j int) bool {
