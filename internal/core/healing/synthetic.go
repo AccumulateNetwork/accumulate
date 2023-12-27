@@ -274,7 +274,7 @@ func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, 
 
 	// Combine the receipts
 	if args.SkipAnchors == 0 {
-		return merkle.CombineReceipts(mainReceipt, rootReceipt, anchoredAnchor.RootChainReceipt)
+		return mainReceipt.Combine(rootReceipt, anchoredAnchor.RootChainReceipt)
 	}
 
 	// Find the index entry of the source anchor's entry in the DN's
@@ -317,7 +317,7 @@ func (h *Healer) buildSynthReceipt(ctx context.Context, args HealSyntheticArgs, 
 	}
 
 	// Combine the receipts
-	return merkle.CombineReceipts(mainReceipt, rootReceipt, dnSourceRootReceipt, dnRootReceipt)
+	return mainReceipt.Combine(rootReceipt, dnSourceRootReceipt, dnRootReceipt)
 }
 
 func getAnchorForBlockAnchor(anchors []*light.AnchorMetadata, source *url.URL, block uint64) (*protocol.PartitionAnchorReceipt, error) {
