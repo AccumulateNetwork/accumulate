@@ -4,23 +4,21 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package database
+package merkle
 
 import (
 	"fmt"
-
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 // GetReceipt
 // Given a merkle tree and two elements, produce a proof that the element was used to derive the DAG at the anchor
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
 // after the element, or even the element itself.
-func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *merkle.Receipt, err error) {
+func GetReceipt(manager *MerkleManager, element []byte, anchor []byte) (r *Receipt, err error) {
 	// Allocate r, the receipt we are building and record our element
-	r = new(merkle.Receipt) // Allocate a r
-	r.Start = element       // Add the element to the r
-	r.End = anchor          // Add the anchor hash to the r
+	r = new(Receipt)  // Allocate a r
+	r.Start = element // Add the element to the r
+	r.End = anchor    // Add the anchor hash to the r
 	if r.StartIndex, err = manager.GetElementIndex(element); err != nil {
 		return nil, err
 	}
@@ -53,7 +51,7 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *merkle.Re
 // BuildReceipt
 // takes the values collected by GetReceipt and flushes out the data structures
 // in the receipt to represent a fully populated version.
-func (m *MerkleManager) BuildReceipt(r *merkle.Receipt) error {
+func (m *MerkleManager) BuildReceipt(r *Receipt) error {
 	state, _ := m.GetAnyState(r.EndIndex) // Get the state at the Anchor Index
 	state.Trim()                          // If Pending has any trailing nils, remove them.
 	return r.Build(func(element, height int64) ([]byte, []byte, error) {
