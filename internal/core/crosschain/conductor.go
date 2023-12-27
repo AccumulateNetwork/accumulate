@@ -9,6 +9,7 @@ package crosschain
 import (
 	"context"
 	"crypto/ed25519"
+	"fmt"
 	"runtime/debug"
 	"sync/atomic"
 
@@ -33,7 +34,11 @@ type Conductor struct {
 	ValidatorKey ed25519.PrivateKey
 	Database     database.Beginner
 	Querier      api.Querier2
-	Submitter    api.Submitter
+	Dispatcher   execute.Dispatcher
+
+	// Ready can be used to pause the conductor, for example to stop it from
+	// sending anchors while the node is catching up.
+	Ready func(execute.WillBeginBlock) bool
 
 	// RunTask launches a background task. The caller may use this to wait for
 	// completion of launched tasks.
@@ -43,9 +48,8 @@ type Conductor struct {
 	// the anchor the first time around.
 	DropInitialAnchor bool
 
-	// **FOR TESTING PURPOSES ONLY**. Disables healing of anchors after they are
-	// initially submitted.
-	DisableAnchorHealing bool
+	// Enables healing of anchors after they are initially submitted.
+	EnableAnchorHealing *bool
 
 	// **FOR TESTING PURPOSES ONLY**. Intercepts dispatched envelopes.
 	Intercept interceptor
@@ -71,6 +75,24 @@ func (c *Conductor) willBeginBlock(e execute.WillBeginBlock) error {
 	if !c.Globals.Load().ExecutorVersion.V2Enabled() {
 		return nil
 	}
+
+	if c.Ready != nil && !c.Ready(e) {
+		return nil
+	}
+
+	defer func() {
+		errs := c.Dispatcher.Send(context.Background())
+		c.runTask(func() {
+			for err := range errs {
+				switch err := err.(type) {
+				case protocol.TransactionStatusError:
+					slog.Error("Failed to dispatch transactions", "block", e.Index, "error", err, "stack", err.TransactionStatus.Error.PrintFullCallstack(), "txid", err.TxID)
+				default:
+					slog.Error("Failed to dispatch transactions", "block", e.Index, "error", fmt.Sprintf("%+v\n", err))
+				}
+			}
+		})
+	}()
 
 	// Check old anchors
 	if c.Partition.Type != protocol.PartitionTypeDirectory {
@@ -176,10 +198,10 @@ func (c *Conductor) sendBlockAnchor(ctx context.Context, anchor protocol.AnchorB
 	}
 
 	// Submit it
-	return c.submit(ctx, env)
+	return c.submit(ctx, destination, env)
 }
 
-func (c *Conductor) submit(ctx context.Context, env *messaging.Envelope) error {
+func (c *Conductor) submit(ctx context.Context, url *url.URL, env *messaging.Envelope) error {
 	if c.Intercept != nil {
 		keep, err := c.Intercept(ctx, env)
 		if !keep || err != nil {
@@ -187,25 +209,7 @@ func (c *Conductor) submit(ctx context.Context, env *messaging.Envelope) error {
 		}
 	}
 
-	c.runTask(func() {
-		ctx := context.Background()
-		sub, err := c.Submitter.Submit(ctx, env, api.SubmitOptions{})
-		if err != nil {
-			slog.ErrorCtx(ctx, "Failed to submit envelope", "module", "conductor", "error", err)
-			return
-		}
-		for _, sub := range sub {
-			switch {
-			case sub.Success:
-				// Ok
-			case sub.Status.Error != nil:
-				slog.ErrorCtx(ctx, "Failed to submit envelope", "module", "conductor", "error", sub.Status.AsError())
-			default:
-				slog.ErrorCtx(ctx, "Failed to submit envelope", "module", "conductor", "message", sub.Message)
-			}
-		}
-	})
-	return nil
+	return c.Dispatcher.Submit(ctx, url, env)
 }
 
 func (c *Conductor) runTask(task func()) {
@@ -222,4 +226,11 @@ func (c *Conductor) runTask(task func()) {
 
 		task()
 	}()
+}
+
+func def[T any](value *T, def T) T {
+	if value == nil {
+		return def
+	}
+	return *value
 }
