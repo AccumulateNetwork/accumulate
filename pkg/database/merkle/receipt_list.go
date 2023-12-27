@@ -4,13 +4,11 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package database
+package merkle
 
 import (
 	"bytes"
 	"fmt"
-
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 // ReceiptList
@@ -26,7 +24,7 @@ import (
 // Validate
 // Take a receipt and validate that the element hash progresses to the
 // Merkle Dag Root hash (MDRoot) in the receipt
-func (r *ReceiptList) Validate(opts *merkle.ValidateOptions) bool {
+func (r *ReceiptList) Validate(opts *ValidateOptions) bool {
 	// Make sure the ReceiptList isn't empty.  Avoids pointer and nil exceptions
 	if r.MerkleState == nil ||
 		r.Receipt == nil ||
@@ -91,7 +89,7 @@ func (r *ReceiptList) Included(entry []byte) bool {
 // Return a new ReceiptList with at least a MerkleState initialized
 func NewReceiptList() *ReceiptList {
 	r := new(ReceiptList)
-	r.MerkleState = new(merkle.State)
+	r.MerkleState = new(State)
 	return r
 }
 
@@ -119,7 +117,7 @@ func GetReceiptList(manager *MerkleManager, Start int64, End int64) (r *ReceiptL
 		if err != nil {
 			return nil, err
 		}
-		r.Elements = append(r.Elements, h.Copy().Bytes())
+		r.Elements = append(r.Elements, copyHash(h))
 	}
 
 	r.MerkleState, err = manager.GetAnyState(Start - 1)
