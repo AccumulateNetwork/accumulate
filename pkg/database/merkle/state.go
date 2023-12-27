@@ -30,11 +30,11 @@ import (
 // higher order bits set will correspond to where the binary roots must be kept in a Merkle state.
 
 func (m *State) MarshalBinary() ([]byte, error) {
-	return m.Marshal()
+	return m.marshal()
 }
 
 func (m *State) UnmarshalBinary(data []byte) error {
-	return m.UnMarshal(data)
+	return m.unmarshal(data)
 }
 
 func (m *State) UnmarshalBinaryFrom(rd io.Reader) error {
@@ -42,7 +42,7 @@ func (m *State) UnmarshalBinaryFrom(rd io.Reader) error {
 	if err != nil {
 		return err
 	}
-	return m.UnMarshal(data)
+	return m.unmarshal(data)
 }
 
 // Equal
@@ -94,27 +94,27 @@ func (m *State) Equal(m2 *State) (isEqual bool) {
 	return true
 }
 
-// Pad
+// pad
 // Add a nil to the end of the Pending list if one isn't there.
 // We need to be able to add an element to Pending if needed while
 // building receipts
-func (m *State) Pad() {
+func (m *State) pad() {
 	if len(m.Pending) == 0 || m.Pending[len(m.Pending)-1] != nil {
 		m.Pending = append(m.Pending, nil)
 	}
 }
 
-// Trim
+// trim
 // Remove any trailing nils from Pending hashes
-func (m *State) Trim() {
+func (m *State) trim() {
 	for len(m.Pending) > 0 && m.Pending[len(m.Pending)-1] == nil {
 		m.Pending = m.Pending[:len(m.Pending)-1]
 	}
 }
 
-// Marshal
+// marshal
 // Encodes the Merkle State so it can be embedded into the Merkle Tree
-func (m *State) Marshal() (MSBytes []byte, err error) {
+func (m *State) marshal() (MSBytes []byte, err error) {
 	MSBytes = append(MSBytes, common.Int64Bytes(m.Count)...) // Count
 
 	// Write out the pending list. Each bit set in Count indicates a Sub Merkle
@@ -131,11 +131,11 @@ func (m *State) Marshal() (MSBytes []byte, err error) {
 	return MSBytes, nil
 }
 
-// UnMarshal
+// unmarshal
 // Take the state of an MSMarshal instance defined by MSBytes, and set all the values
 // in this instance of MSMarshal to the state defined by MSBytes.  It is assumed that the
 // hash function has been set by the caller.
-func (m *State) UnMarshal(MSBytes []byte) (err error) {
+func (m *State) unmarshal(MSBytes []byte) (err error) {
 	// Unmarshal the Count
 	m.Count, err = encoding.UnmarshalInt(MSBytes)
 	if err != nil {
@@ -167,13 +167,13 @@ func (m *State) UnMarshal(MSBytes []byte) (err error) {
 	return nil
 }
 
-// Add a Hash to the merkle tree and incrementally build the ChainHead
-func (m *State) Add(hash_ []byte) {
+// AddEntry a Hash to the merkle tree and incrementally build the ChainHead
+func (m *State) AddEntry(hash_ []byte) {
 	hash := copyHash(hash_)
 
 	m.HashList = append(m.HashList, hash) // Add the new Hash to the Hash List
 	m.Count++                             // Increment our total Hash Count
-	m.Pad()                               // Pad Pending with a nil to remove corner cases
+	m.pad()                               // Pad Pending with a nil to remove corner cases
 	for i, v := range m.Pending {         // Adding the hash is like incrementing a variable
 		if v == nil { //                     Look for an empty slot, and
 			m.Pending[i] = hash //               And put the Hash there if one is found

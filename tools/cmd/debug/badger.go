@@ -7,11 +7,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"runtime"
-	"sort"
-	"strings"
 
 	"github.com/dgraph-io/badger"
 	"github.com/spf13/cobra"
@@ -157,88 +154,6 @@ func badgerLs(dbPath string) {
 		n.Add(k, x.EstimatedSize())
 	}
 	n.Print()
-}
-
-type node struct {
-	prefix   string
-	children map[string]*node
-	size     int64
-	depth    int
-	versions int
-}
-
-func (n *node) get(s *record.Key) *node {
-	if n.depth >= s.Len() {
-		return n
-	}
-
-	if n.children == nil {
-		n.children = map[string]*node{}
-	}
-	ss := s.SliceI(n.depth).SliceJ(1).String()
-	m, ok := n.children[ss]
-	if ok {
-		return m
-	}
-
-	m = &node{depth: n.depth + 1, prefix: s.SliceJ(n.depth + 1).String()}
-	n.children[ss] = m
-	return m
-}
-
-func (n *node) Versions(s *record.Key) int {
-	if n.depth >= s.Len() {
-		return n.versions
-	}
-	return n.get(s).Versions(s)
-}
-
-func (n *node) Add(s *record.Key, z int64) {
-	n.size += z
-	if n.depth >= s.Len() {
-		n.versions++
-		return
-	}
-
-	n.get(s).Add(s, z)
-}
-
-func (n *node) Print() {
-	if n.children == nil {
-		return
-	}
-
-	if n.prefix == "Message" {
-		fmt.Printf("%v   %v\n", byteCountIEC(n.size), n.prefix)
-		return
-	}
-
-	var keys []string
-	for k := range n.children {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		n.children[k].Print()
-	}
-	fmt.Printf("%v   %v   %d\n", byteCountIEC(n.size), n.prefix, n.versions)
-}
-
-func byteCountIEC(b int64) string {
-	const unit = 1024
-	if b < unit {
-		s := fmt.Sprintf("%d", b)
-		s = strings.Repeat(" ", 4-len(s)) + s
-		return fmt.Sprintf("%v   B", s)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= 9999; n /= unit {
-		div *= unit
-		exp++
-	}
-	s := fmt.Sprintf("%.0f", float64(b)/float64(div))
-	s = strings.Repeat(" ", 4-len(s)) + s
-	return fmt.Sprintf("%s %ciB", s, "KMGTPE"[exp])
 }
 
 func badgerFlatten(_ *cobra.Command, args []string) {

@@ -467,7 +467,7 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	r.Index = index
 	r.Entry = *(*[32]byte)(value)
 
-	ms, err := record.Inner().GetAnyState(int64(index))
+	ms, err := record.Inner().StateAt(int64(index))
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
