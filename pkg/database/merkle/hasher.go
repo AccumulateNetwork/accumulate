@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package hash
+package merkle
 
 import (
 	"crypto/sha256"
@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -102,7 +101,7 @@ func (h *Hasher) AddTxID(v *url.TxID) {
 		h.AddHash2([32]byte{})
 	} else {
 		u := v.Hash()
-		x := Combine(u[:], v.Account().Hash())
+		x := combine(u[:], v.Account().Hash())
 		h.AddHash((*[32]byte)(x))
 	}
 }
@@ -121,11 +120,11 @@ func (h Hasher) MerkleHash() []byte {
 	}
 
 	// Initialize a merkle state
-	merkle := merkle.State{}
+	merkle := State{}
 
 	// Add each hash
 	for _, h := range h {
-		merkle.Add(h)
+		merkle.AddEntry(h)
 	}
 
 	// Return the DAG root
@@ -134,14 +133,14 @@ func (h Hasher) MerkleHash() []byte {
 
 // Receipt returns a receipt for the numbered element. Receipt returns nil if
 // either index is out of bounds.
-func (h Hasher) Receipt(start, anchor int) *merkle.Receipt {
+func (h Hasher) Receipt(start, anchor int) *Receipt {
 	if start < 0 || start >= len(h) || anchor < 0 || anchor >= len(h) {
 		return nil
 	}
 
 	// Trivial case
 	if len(h) == 1 {
-		return &merkle.Receipt{
+		return &Receipt{
 			Start:  h[0],
 			End:    h[0],
 			Anchor: h[0],
@@ -149,21 +148,21 @@ func (h Hasher) Receipt(start, anchor int) *merkle.Receipt {
 	}
 
 	// Build a merkle state
-	anchorState := new(merkle.State)
+	anchorState := new(State)
 	for _, h := range h[:anchor+1] {
-		anchorState.Add(h)
+		anchorState.AddEntry(h)
 	}
-	anchorState.Pad()
+	anchorState.pad()
 
 	// Initialize the receipt
-	r := new(merkle.Receipt)
+	r := new(Receipt)
 	r.StartIndex = int64(start)
 	r.EndIndex = int64(anchor)
 	r.Start = h[start]
 	r.Anchor = h[start]
 
 	// Build the receipt
-	err := r.Build(h.getIntermediate, anchorState)
+	err := r.build(h.getIntermediate, anchorState)
 	if err != nil {
 		// The data is static and in memory so there should never be an error
 		panic(err)
@@ -172,17 +171,17 @@ func (h Hasher) Receipt(start, anchor int) *merkle.Receipt {
 	return r
 }
 
-func Combine(l, r []byte) []byte {
+func combine(l, r []byte) []byte {
 	digest := sha256.New()
 	_, _ = digest.Write(l)
 	_, _ = digest.Write(r)
 	return digest.Sum(nil)
 }
 
-// MerkleCascade calculates a Merkle cascade for a hash list. MerkleCascade can
-// add hashes to an existing cascade or calculate a new cascade. If maxHeight is
-// positive, MerkleCascade will stop at that height.
-func MerkleCascade(cascade, hashList [][]byte, maxHeight int64) [][]byte {
+// cascade calculates a Merkle cascade for a hash list. cascade can add hashes
+// to an existing cascade or calculate a new cascade. If maxHeight is positive,
+// cascade will stop at that height.
+func cascade(cascade, hashList [][]byte, maxHeight int64) [][]byte {
 	for _, h := range hashList {
 		for i := int64(0); maxHeight < 0 || i < maxHeight; i++ {
 			// Append at height
@@ -199,7 +198,7 @@ func MerkleCascade(cascade, hashList [][]byte, maxHeight int64) [][]byte {
 			}
 
 			// Combine hashes, carry to next height
-			h = Combine(*v, h)
+			h = combine(*v, h)
 			*v = nil
 		}
 	}
@@ -215,7 +214,7 @@ func (h Hasher) getIntermediate(element, height int64) ([]byte, []byte, error) {
 	}
 
 	// Build a Merkle cascade with the hashes up to element
-	cascade := MerkleCascade(nil, h[:element], height)
+	cascade := cascade(nil, h[:element], height)
 
 	// If height is greater than the cascade length, there is no intermediate
 	// value
@@ -235,7 +234,7 @@ func (h Hasher) getIntermediate(element, height int64) ([]byte, []byte, error) {
 		if v == nil {
 			return nil, nil, fmt.Errorf("should not encounter a nil at height %d", height)
 		}
-		right = Combine(v, right)
+		right = combine(v, right)
 	}
 
 	// Copy the left side

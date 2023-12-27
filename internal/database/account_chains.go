@@ -21,7 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type MerkleManager = merkle2.MerkleManager
+type MerkleManager = merkle2.Chain
 
 // Chain2 is a wrapper for Chain.
 type Chain2 struct {
@@ -147,12 +147,12 @@ func (c *Chain2) Head() values.Value[*merkle.State] {
 
 // IndexOf returns the index of the given entry in the chain.
 func (c *Chain2) IndexOf(hash []byte) (int64, error) {
-	return c.inner.GetElementIndex(hash)
+	return c.inner.IndexOf(hash)
 }
 
 // Entry loads the entry in the chain at the given height.
 func (c *Chain2) Entry(height int64) ([]byte, error) {
-	return c.inner.Get(height)
+	return c.inner.Entry(height)
 }
 
 // EntryAs loads and unmarshals the entry in the chain at the given height.

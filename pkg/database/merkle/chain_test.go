@@ -27,7 +27,7 @@ func begin() database.Store {
 	return keyvalue.RecordStore{Store: txn}
 }
 
-func testChain(store record.Store, markPower int64, key ...interface{}) *MerkleManager {
+func testChain(store record.Store, markPower int64, key ...interface{}) *Chain {
 	return NewChain(nil, store, record.NewKey(key...), markPower, ChainTypeUnknown, "chain")
 }
 
@@ -42,13 +42,13 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	require.NoError(t, err, "should be able to read the chain head")
 
 	for i := 0; i < numTests; i++ {
-		require.NoError(t, m.AddHash(randHash.Next(), false))
+		require.NoError(t, m.AddEntry(randHash.Next(), false))
 		head, err := m.Head().Get()
 		require.NoError(t, err)
-		mState, err := head.Marshal()
+		mState, err := head.marshal()
 		require.NoError(t, err, "must be able to marshal a State")
 		ms := new(State)
-		err = ms.UnMarshal(mState)
+		err = ms.unmarshal(mState)
 		require.NoError(t, err, "must be able to unmarshal a State")
 		require.True(t, ms.Equal(head), " should get the same state back")
 		cState, e2 := m.Head().Get()
@@ -64,16 +64,16 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 	m := testChain(store, 2, "try")
 	var States []*State
 	for i := 0; i < testnum; i++ {
-		require.NoError(t, m.AddHash(randHash.Next(), false))
+		require.NoError(t, m.AddEntry(randHash.Next(), false))
 		head, err := m.Head().Get()
 		require.NoError(t, err)
 		States = append(States, head.Copy())
 		println(PrintMerkleState(States[i]))
 	}
 	for i := int64(0); i < testnum; i++ {
-		state, err := m.GetAnyState(i)
+		state, err := m.StateAt(i)
 		if err != nil {
-			state, err = m.GetAnyState(i)
+			state, err = m.StateAt(i)
 		}
 		require.Truef(t, state.Count == i+1, "state count %d does not match %d", state.Count, i)
 		require.NoErrorf(t, err, "%d all elements should have a state: %v", i, err)
@@ -99,7 +99,7 @@ func TestIndexing2(t *testing.T) {
 	for i := 0; i < testlen; i++ {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
-		require.NoError(t, MM1.AddHash(dataHash[:], false))
+		require.NoError(t, MM1.AddEntry(dataHash[:], false))
 		di, e := MM1.ElementIndex(dataHash[:]).Get()
 		if e != nil {
 			t.Fatalf("error")
@@ -136,7 +136,7 @@ func TestMerkleManager(t *testing.T) {
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
 	for i := 0; i < testLen; i++ {
-		require.NoError(t, MM1.AddHash(hash[:], false))
+		require.NoError(t, MM1.AddEntry(hash[:], false))
 		hash = sha256.Sum256(hash[:])
 	}
 
@@ -148,7 +148,7 @@ func TestMerkleManager(t *testing.T) {
 
 	// Sort the Indexing
 	for i := int64(0); i < testLen; i++ {
-		ms := MM1.GetState(i)
+		ms := MM1.getState(i)
 		if i&MarkMask == MarkFreq-1 {
 			if ms == nil {
 				t.Fatal("should have a state at Mark point - 1 at ", i)
@@ -202,7 +202,7 @@ func GenerateTestData(prt bool) [10][][]byte {
 	}
 	ms := new(State)
 	for _, v := range hashes[0] {
-		ms.Add(v)
+		ms.AddEntry(v)
 		mdr := ms.Anchor()
 		fmt.Printf("%3v ", mdr[:2])
 	}
@@ -225,7 +225,7 @@ func GenerateTestData(prt bool) [10][][]byte {
 	}
 	ms = new(State)
 	for _, v := range hashes[0] {
-		ms.Add(v)
+		ms.AddEntry(v)
 		mdr := ms.Anchor()
 		fmt.Printf("%x  ", mdr[:4])
 	}
@@ -243,15 +243,15 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 	var r common.RandHash
 
 	for col := int64(0); col < 20; col++ {
-		require.NoError(t, m.AddHash(r.NextList(), false))
+		require.NoError(t, m.AddEntry(r.NextList(), false))
 		head, err := m.Head().Get()
 		require.NoError(t, err)
-		head.Pad()
+		head.pad()
 		if col&1 == 1 {
-			s, _ := m.GetAnyState(col - 1)
-			s.Pad()
+			s, _ := m.StateAt(col - 1)
+			s.pad()
 			for row := int64(1); s.Pending[row-1] != nil; row++ {
-				left, right, err := m.GetIntermediate(col, row)
+				left, right, err := m.getIntermediate(col, row)
 				require.Nil(t, err, err)
 				factor := int64(math.Pow(2, float64(row)))
 				fmt.Printf("Row %d Col %d Left %x + Right %x == %x == Result %x\n",
@@ -275,8 +275,8 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 		head, err := m.Head().Get()
 		require.NoError(t, err)
 
-		require.NoError(t, m.AddHash(hash, true))
-		require.NoError(t, m.AddHash(hash, true))
+		require.NoError(t, m.AddEntry(hash, true))
+		require.NoError(t, m.AddEntry(hash, true))
 		require.Equal(t, int64(1), head.Count)
 	})
 
@@ -286,8 +286,8 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 		head, err := m.Head().Get()
 		require.NoError(t, err)
 
-		require.NoError(t, m.AddHash(hash, false))
-		require.NoError(t, m.AddHash(hash, false))
+		require.NoError(t, m.AddEntry(hash, false))
+		require.NoError(t, m.AddEntry(hash, false))
 		require.Equal(t, int64(2), head.Count)
 	})
 }
@@ -311,4 +311,8 @@ func PrintMerkleState(m *State) string {
 		b.WriteString(fmt.Sprintf("%20s [%3d] %s\n", "", i, vp))
 	}
 	return b.String()
+}
+
+func Cascade(c, hashList [][]byte, maxHeight int64) [][]byte {
+	return cascade(c, hashList, maxHeight)
 }

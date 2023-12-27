@@ -115,7 +115,7 @@ func TestSyntheticAnchor(t *testing.T) {
 					AnchorChain(protocol.Directory).
 					Root().
 					Inner().
-					AddHash(syn.Proof.Receipt.Anchor, false)
+					AddEntry(syn.Proof.Receipt.Anchor, false)
 				require.NoError(t, err)
 			}
 
