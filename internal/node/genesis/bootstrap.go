@@ -497,6 +497,11 @@ func (b *bootstrap) unpackSnapshots() error {
 						}
 					}
 
+					// Do not preserve pending transactions
+					if e.Key.Len() == 3 && e.Key.Get(2) == "Pending" {
+						return false, nil
+					}
+
 					// Is this record for an account that belongs to this
 					// partition?
 					partition, err := b.router.RouteAccount(u)
