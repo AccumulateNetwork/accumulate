@@ -8,6 +8,7 @@ package snapshot
 
 import (
 	"bytes"
+	"io"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
@@ -104,6 +105,40 @@ func (s *Store) Put(*record.Key, []byte) error {
 
 func (s *Store) Delete(*record.Key) error {
 	return errors.NotAllowed.With("cannot modify a snapshot store")
+}
+
+// ForEach iterates over each value.
+func (s *Store) ForEach(fn func(*record.Key, []byte) error) error {
+	for i, ss := range s.sections {
+		if ss.Type() != SectionTypeRecords {
+			continue
+		}
+
+		rd, err := s.open(i)
+		if err != nil {
+			return err
+		}
+
+		rr := recordReader{rd}
+	readSection:
+		for {
+			entry, err := rr.Read()
+			switch {
+			case err == nil:
+				// Ok
+			case errors.Is(err, io.EOF):
+				break readSection
+			default:
+				return err
+			}
+
+			err = fn(entry.Key, entry.Value)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Store) open(i int) (ioutil.SectionReader, error) {

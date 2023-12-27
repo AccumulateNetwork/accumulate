@@ -35,11 +35,10 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-var cmdDbServe = &cobra.Command{
-	Use:   "serve [database...]",
-	Short: "Collect a snapshot",
-	Args:  cobra.MinimumNArgs(1),
-	Run:   serveDatabases,
+var cmdDbServeApi = &cobra.Command{
+	Use:  "serve-api [database...]",
+	Args: cobra.MinimumNArgs(1),
+	Run:  serveApiFromDatabases,
 }
 
 var flagDbServe = struct {
@@ -50,16 +49,16 @@ var flagDbServe = struct {
 }{}
 
 func init() {
-	cmdDb.AddCommand(cmdDbServe)
+	cmdDb.AddCommand(cmdDbServeApi)
 
-	cmdDbServe.Flags().VarP((*MultiaddrSliceFlag)(&flagDbServe.HttpListen), "http-listen", "l", "HTTP listening address(es) (default /ip4/0.0.0.0/tcp/8080/http)")
-	cmdDbServe.Flags().StringVar(&flagDbServe.LogLevel, "log-level", "error", "Log level")
-	cmdDbServe.Flags().DurationVar(&flagDbServe.Timeout, "read-header-timeout", 10*time.Second, "ReadHeaderTimeout to prevent slow loris attacks")
-	cmdDbServe.Flags().IntVar(&flagDbServe.ConnLimit, "connection-limit", 500, "Limit the number of concurrent connections (set to zero to disable)")
-	cmdDbServe.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
+	cmdDbServeApi.Flags().VarP((*MultiaddrSliceFlag)(&flagDbServe.HttpListen), "http-listen", "l", "HTTP listening address(es) (default /ip4/0.0.0.0/tcp/8080/http)")
+	cmdDbServeApi.Flags().StringVar(&flagDbServe.LogLevel, "log-level", "error", "Log level")
+	cmdDbServeApi.Flags().DurationVar(&flagDbServe.Timeout, "read-header-timeout", 10*time.Second, "ReadHeaderTimeout to prevent slow loris attacks")
+	cmdDbServeApi.Flags().IntVar(&flagDbServe.ConnLimit, "connection-limit", 500, "Limit the number of concurrent connections (set to zero to disable)")
+	cmdDbServeApi.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
 }
 
-func serveDatabases(cmd *cobra.Command, args []string) {
+func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = cmdutil.ContextForMainProcess(ctx)
 
