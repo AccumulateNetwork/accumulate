@@ -535,7 +535,7 @@ func collectMessageHashes(a *Account, hashes *indexing.Bucket, opts *CollectOpti
 			return nil
 		}
 
-		entries, err := c.Inner().GetRange(0, head.Count)
+		entries, err := c.Inner().Entries(0, head.Count)
 		if err != nil {
 			return errors.UnknownError.WithFormat("load %s chain entries: %w", c.Name(), err)
 		}
