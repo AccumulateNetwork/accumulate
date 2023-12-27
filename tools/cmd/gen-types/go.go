@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
@@ -221,10 +222,16 @@ func goUnionMethod(field *Field, name string) string {
 		}
 		return fmt.Sprintf("%s.%s", parts[0], name)
 	}
-	if len(parts) == 1 {
+	if len(parts) > 1 {
+		return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
+	}
+
+	// Is the union private?
+	if !unicode.IsLower(rune(parts[0][0])) {
 		return name + parts[0]
 	}
-	return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
+
+	return strings.ToLower(name[:1]) + name[1:] + strings.ToUpper(parts[0][:1]) + parts[0][1:]
 }
 
 func goBinaryMethod(field *Field) (methodName string, cast, wantPtr bool) {
