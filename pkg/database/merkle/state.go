@@ -14,7 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
-// merkle.State
+// State
 // A Merkle Dag State is the state kept while building a Merkle Tree.  Except where a Merkle Tree has a clean
 // power of two number of elements as leaf nodes, there will be multiple Sub Merkle Trees that make up a
 // dynamic Merkle Tree. The Merkle State is the list of the roots of these sub Merkle Trees, and the
