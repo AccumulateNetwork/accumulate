@@ -215,7 +215,7 @@ func (batch *Batch) collectMessages(w *snapshot.Writer, index, hashes *indexing.
 
 	copts := collectOptions(index, opts)
 
-	for i := 0; i < 256; i++ {
+	for i := 0; i < indexing.BucketCount; i++ {
 		hashes, err := hashes.Read(byte(i))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
@@ -578,7 +578,7 @@ func writeSnapshotIndex(w *snapshot.Writer, index *indexing.Bucket, opts *Collec
 		return errors.UnknownError.Wrap(err)
 	}
 
-	for i := 0; i < 256; i++ {
+	for i := 0; i < indexing.BucketCount; i++ {
 		entries, err := index.Read(byte(i))
 		if err != nil {
 			return errors.UnknownError.Wrap(err)

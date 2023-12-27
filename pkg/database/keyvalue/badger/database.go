@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -105,66 +106,109 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 
 	// Read from the transaction
 	get := func(key *record.Key) ([]byte, error) {
-		item, err := rd.Get(d.key(key))
-		switch {
-		case err == nil:
-			// Ok
-		case errors.Is(err, badger.ErrKeyNotFound):
-			return nil, (*database.NotFoundError)(key)
-		default:
-			return nil, err
-		}
-
-		// If we didn't find the value, return ErrNotFound
-		v, err := item.ValueCopy(nil)
-		switch {
-		case err == nil:
-			return v, nil
-		case errors.Is(err, badger.ErrKeyNotFound):
-			return nil, (*database.NotFoundError)(key)
-		default:
-			return nil, errors.UnknownError.WithFormat("get %v: %w", key, err)
-		}
+		return d.get(rd, key)
 	}
 
 	// Commit to the write batch
 	var commit memory.CommitFunc
 	if writable {
-		commit = func(entries map[[32]byte]memory.Entry) error {
-			l, err := d.lock(false)
-			if err != nil {
-				return err
-			}
-			defer l.Unlock()
-
-			// Use a write batch for writing to work around Badger's limitations
-			wr := d.badger.NewWriteBatch()
-
-			for _, e := range entries {
-				if e.Delete {
-					err = wr.Delete(d.key(e.Key))
-				} else {
-					err = wr.Set(d.key(e.Key), e.Value)
-				}
-				if err != nil {
-					return err
-				}
-			}
-
-			return wr.Flush()
-		}
-	}
-
-	// Discard the transaction
-	discard := func() {
-		// Fix https://discuss.dgraph.io/t/badgerdb-consume-too-much-disk-space/17070?
-		rd.Discard()
+		commit = d.commit
 	}
 
 	// The memory changeset caches entries in a map so Get will see values
 	// updated with Put, regardless of the underlying transaction and write
 	// batch behavior
-	return memory.NewChangeSet(prefix, get, commit, discard)
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix:  prefix,
+		Get:     get,
+		Commit:  commit,
+		ForEach: d.forEach,
+		Discard: rd.Discard,
+	})
+}
+
+func (d *Database) get(txn *badger.Txn, key *record.Key) ([]byte, error) {
+	item, err := txn.Get(d.key(key))
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, badger.ErrKeyNotFound):
+		return nil, (*database.NotFoundError)(key)
+	default:
+		return nil, err
+	}
+
+	// If we didn't find the value, return ErrNotFound
+	v, err := item.ValueCopy(nil)
+	switch {
+	case err == nil:
+		return v, nil
+	case errors.Is(err, badger.ErrKeyNotFound):
+		return nil, (*database.NotFoundError)(key)
+	default:
+		return nil, errors.UnknownError.WithFormat("get %v: %w", key, err)
+	}
+}
+
+func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
+	l, err := d.lock(false)
+	if err != nil {
+		return err
+	}
+	defer l.Unlock()
+
+	// Use a write batch for writing to work around Badger's limitations
+	wr := d.badger.NewWriteBatch()
+
+	for _, e := range entries {
+		if e.Delete {
+			err = wr.Delete(d.key(e.Key))
+		} else {
+			err = wr.Set(d.key(e.Key), e.Value)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return wr.Flush()
+}
+
+func (d *Database) forEach(fn func(*record.Key, []byte) error) error {
+	tx := d.badger.NewTransaction(false)
+	defer tx.Discard()
+
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = true
+	it := tx.NewIterator(opts)
+	defer it.Close()
+
+	for it.Seek(nil); it.Valid(); it.Next() {
+		item := it.Item()
+
+		var key *record.Key
+		if d.plainKeys {
+			key = new(record.Key)
+			if err := key.UnmarshalBinary(item.Key()); err != nil {
+				slog.Error("Cannot unmarshal database key; does this database use uncompressed keys?", "key", logging.AsHex(item.Key()), "error", err)
+				return errors.InternalError.WithFormat("cannot unmarshal key: %w", err)
+			}
+		} else {
+			key = record.KeyFromHash(*(*[32]byte)(item.Key()))
+		}
+
+		v, err := item.ValueCopy(nil)
+		if err != nil {
+			return err
+		}
+
+		err = fn(key, v)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Close
