@@ -61,7 +61,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 		}
 
 		// Record it on the BPT chain
-		err = block.Batch.Account(x.Describe.Ledger()).BptChain().Inner().AddHash(prevRootHash[:], false)
+		err = block.Batch.Account(x.Describe.Ledger()).BptChain().Inner().AddEntry(prevRootHash[:], false)
 		if err != nil {
 			return nil, err
 		}
@@ -424,9 +424,9 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		receipt.Anchor = new(protocol.AnchorMetadata)
 		receipt.Anchor.Account = protocol.DnUrl()
 		if blockReceipt == nil {
-			receipt.Receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt)
+			receipt.Receipt, err = synthReceipt.Combine(rootReceipt)
 		} else {
-			receipt.Receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt, blockReceipt.RootChainReceipt)
+			receipt.Receipt, err = synthReceipt.Combine(rootReceipt, blockReceipt.RootChainReceipt)
 		}
 		if err != nil {
 			return errors.UnknownError.WithFormat("combine receipts: %w", err)
