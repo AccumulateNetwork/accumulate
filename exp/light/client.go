@@ -164,13 +164,15 @@ func (c *Client) OpenDB(writable bool) *DB {
 }
 
 func OpenDB(store keyvalue.Beginner, prefix *record.Key, writable bool) *DB {
+	db := new(DB)
 	kvb := store.Begin(prefix, writable)
-	batch := database.NewBatch("", kvb, writable, nil)
-	batch.SetObserver(testing.NullObserver{}) // Ignore the BPT
-	index := new(IndexDB)
-	index.key = record.NewKey("Light", "Index")
-	index.store = keyvalue.RecordStore{Store: kvb}
-	return &DB{batch, index}
+	db.Batch = database.NewBatch("", kvb, writable, nil)
+	db.Batch.SetObserver(testing.NullObserver{}) // Ignore the BPT
+	db.index = new(IndexDB)
+	db.index.parent = db
+	db.index.key = record.NewKey("Light", "Index")
+	db.index.store = keyvalue.RecordStore{Store: kvb}
+	return db
 }
 
 // DB is the light client database.

@@ -7,12 +7,12 @@
 package main
 
 import (
-	"errors"
 	"time"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
@@ -62,6 +62,7 @@ func healSynth(cmd *cobra.Command, args []string) {
 			pullSynthDstChains(h, dstUrl)
 
 			// Pull accounts
+		pullAgain:
 			ab := pullSynthLedger(h, srcUrl).Partition(dstUrl)
 			ba := pullSynthLedger(h, dstUrl).Partition(srcUrl)
 
@@ -71,7 +72,10 @@ func healSynth(cmd *cobra.Command, args []string) {
 				if i < uint64(len(ba.Pending)) {
 					id = ba.Pending[i]
 				}
-				healSingleSynth(h, src.ID, dst.ID, ba.Delivered+i+1, id)
+				if healSingleSynth(h, src.ID, dst.ID, ba.Delivered+i+1, id) {
+					// If it was already delivered, recheck the ledgers
+					goto pullAgain
+				}
 			}
 		},
 	}
@@ -79,7 +83,7 @@ func healSynth(cmd *cobra.Command, args []string) {
 	h.heal(args)
 }
 
-func healSingleSynth(h *healer, source, destination string, number uint64, id *url.TxID) {
+func healSingleSynth(h *healer, source, destination string, number uint64, id *url.TxID) bool {
 	var count int
 retry:
 	err := h.HealSynthetic(h.ctx, healing.HealSyntheticArgs{
@@ -100,17 +104,20 @@ retry:
 		ID:          id,
 	})
 	if err == nil {
-		return
+		return false
+	}
+	if errors.Is(err, errors.Delivered) {
+		return true
 	}
 	if !errors.Is(err, healing.ErrRetry) {
 		slog.Error("Failed to heal", "source", source, "destination", destination, "number", number, "error", err)
-		return
+		return false
 	}
 
 	count++
 	if count >= 3 {
 		slog.Error("Message still pending, skipping", "attempts", count)
-		return
+		return false
 	}
 	slog.Error("Message still pending, trying next anchor", "attempts", count)
 	goto retry
@@ -122,6 +129,7 @@ func pullSynthDirChains(h *healer) {
 
 	check(h.light.PullAccountWithChains(ctx, protocol.DnUrl().JoinPath(protocol.Ledger), skipSigChain))
 	check(h.light.IndexAccountChains(ctx, protocol.DnUrl().JoinPath(protocol.Ledger)))
+	check(h.light.PullAccount(ctx, protocol.DnUrl().JoinPath(protocol.Network)))
 }
 
 func pullSynthSrcChains(h *healer, part *url.URL) {
