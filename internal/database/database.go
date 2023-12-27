@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -56,6 +57,14 @@ func OpenBadger(filepath string, logger log.Logger) (*Database, error) {
 	return New(store, logger), nil
 }
 
+func OpenLevelDB(filepath string, logger log.Logger) (*Database, error) {
+	store, err := leveldb.OpenFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+	return New(store, logger), nil
+}
+
 // Open opens a key-value store and creates a new database with it.
 func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 	switch cfg.Accumulate.Storage.Type {
@@ -64,6 +73,9 @@ func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 
 	case config.BadgerStorage:
 		return OpenBadger(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
+
+	case config.LevelDBStorage:
+		return OpenLevelDB(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
 
 	default:
 		return nil, fmt.Errorf("unknown storage format %q", cfg.Accumulate.Storage.Type)
