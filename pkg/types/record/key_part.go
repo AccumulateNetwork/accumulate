@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	enc "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -55,6 +56,7 @@ func (k hashKeyPart) WriteBinary(w *enc.Writer)   { w.WriteHash(uint(k.Type()), 
 func (k bytesKeyPart) WriteBinary(w *enc.Writer)  { w.WriteBytes(uint(k.Type()), k) }
 func (k urlKeyPart) WriteBinary(w *enc.Writer)    { w.WriteUrl(uint(k.Type()), k.URL) }
 func (k txidKeyPart) WriteBinary(w *enc.Writer)   { w.WriteTxid(uint(k.Type()), k.TxID) }
+func (k timeKeyPart) WriteBinary(w *enc.Writer)   { w.WriteTime(uint(k.Type()), k.Time) }
 
 func (k *intKeyPart) ReadBinary(r *enc.Reader)    { ReadBinary((*int64)(k), r.ReadInt) }
 func (k *uintKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary((*uint64)(k), r.ReadUint) }
@@ -63,6 +65,7 @@ func (k *hashKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary((*[32]byte)(k), r
 func (k *bytesKeyPart) ReadBinary(r *enc.Reader)  { ReadBinary((*[]byte)(k), r.ReadBytes) }
 func (k *urlKeyPart) ReadBinary(r *enc.Reader)    { ReadBinary(&k.URL, r.ReadUrl) }
 func (k *txidKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary(&k.TxID, r.ReadTxid) }
+func (k *timeKeyPart) ReadBinary(r *enc.Reader)   { ReadBinary(&k.Time, r.ReadTime) }
 
 // newKeyPart returns a new key part for the type code.
 func newKeyPart(typ typeCode) (keyPart, error) {
@@ -81,6 +84,8 @@ func newKeyPart(typ typeCode) (keyPart, error) {
 		return new(urlKeyPart), nil
 	case typeCodeTxid:
 		return new(txidKeyPart), nil
+	case typeCodeTime:
+		return new(timeKeyPart), nil
 	default:
 		return nil, errors.NotAllowed.WithFormat("%v is not a supported key part type", typ)
 	}
@@ -109,6 +114,8 @@ func asKeyPart(v any) (keyPart, error) {
 		return &urlKeyPart{v}, nil
 	case *url.TxID:
 		return &txidKeyPart{v}, nil
+	case time.Time:
+		return &timeKeyPart{v}, nil
 	default:
 		return nil, errors.NotAllowed.WithFormat("%T is not a supported key part type", v)
 	}
@@ -121,6 +128,7 @@ type hashKeyPart [32]byte
 type bytesKeyPart []byte
 type urlKeyPart struct{ *url.URL }
 type txidKeyPart struct{ *url.TxID }
+type timeKeyPart struct{ time.Time }
 
 func (k intKeyPart) Type() typeCode    { return typeCodeInt }
 func (k uintKeyPart) Type() typeCode   { return typeCodeUint }
@@ -129,6 +137,7 @@ func (k hashKeyPart) Type() typeCode   { return typeCodeHash }
 func (k bytesKeyPart) Type() typeCode  { return typeCodeBytes }
 func (k urlKeyPart) Type() typeCode    { return typeCodeUrl }
 func (k txidKeyPart) Type() typeCode   { return typeCodeTxid }
+func (k timeKeyPart) Type() typeCode   { return typeCodeTime }
 
 func (k intKeyPart) Value() any    { return int64(k) }
 func (k uintKeyPart) Value() any   { return uint64(k) }
@@ -137,6 +146,7 @@ func (k hashKeyPart) Value() any   { return [32]byte(k) }
 func (k bytesKeyPart) Value() any  { return []byte(k) }
 func (k urlKeyPart) Value() any    { return k.URL }
 func (k txidKeyPart) Value() any   { return k.TxID }
+func (k timeKeyPart) Value() any   { return k.Time }
 
 func ReadBinary[V any](v *V, read func(uint) (V, bool)) {
 	// Read with field = 0 to tell the reader to skip the field number
@@ -192,6 +202,10 @@ func (k *txidKeyPart) UnmarshalJSON(b []byte) error {
 	return k.TxID.UnmarshalJSON(b)
 }
 
+func (k *timeKeyPart) UnmarshalJSON(b []byte) error {
+	return json.Unmarshal(b, &k.Time)
+}
+
 // keyPartsEqual returns true if U and V are the same.
 func keyPartsEqual(v, u any) bool {
 	switch v := v.(type) {
@@ -229,6 +243,12 @@ func keyPartsEqual(v, u any) bool {
 		return v.Equal(u)
 	case *url.TxID:
 		u, ok := u.(*url.TxID)
+		if !ok {
+			return false
+		}
+		return v.Equal(u)
+	case time.Time:
+		u, ok := u.(time.Time)
 		if !ok {
 			return false
 		}
@@ -273,6 +293,9 @@ func keyPartsCompare(v, u any) int {
 	case *txidKeyPart:
 		u := b.(*txidKeyPart)
 		return v.Compare(u.TxID)
+	case *timeKeyPart:
+		u := b.(*timeKeyPart)
+		return v.Compare(u.Time)
 	default:
 		panic("unknown type")
 	}
