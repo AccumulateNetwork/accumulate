@@ -212,3 +212,114 @@ func (c *Chain) Commit() error {
 
 	return err
 }
+
+type ChainIndex struct {
+	logger    logging.OptionalLogger
+	store     record.Store
+	key       *record.Key
+	blockSize uint64
+
+	head  values.Value[*chainIndexBlock]
+	block map[chainIndexBlockMapKey]values.Value[*chainIndexBlock]
+}
+
+func (c *ChainIndex) Key() *record.Key { return c.key }
+
+type chainIndexBlockKey struct {
+	Level uint64
+	Index uint64
+}
+
+type chainIndexBlockMapKey struct {
+	Level uint64
+	Index uint64
+}
+
+func (k chainIndexBlockKey) ForMap() chainIndexBlockMapKey {
+	return chainIndexBlockMapKey{k.Level, k.Index}
+}
+
+func (c *ChainIndex) getHead() values.Value[*chainIndexBlock] {
+	return values.GetOrCreate(c, &c.head, (*ChainIndex).newHead)
+}
+
+func (c *ChainIndex) newHead() values.Value[*chainIndexBlock] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Head"), true, values.Struct[chainIndexBlock]())
+}
+
+func (c *ChainIndex) getBlock(level uint64, index uint64) values.Value[*chainIndexBlock] {
+	return values.GetOrCreateMap(c, &c.block, chainIndexBlockKey{level, index}, (*ChainIndex).newBlock)
+}
+
+func (c *ChainIndex) newBlock(k chainIndexBlockKey) values.Value[*chainIndexBlock] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Block", k.Level, k.Index), false, values.Struct[chainIndexBlock]())
+}
+
+func (c *ChainIndex) Resolve(key *record.Key) (record.Record, *record.Key, error) {
+	if key.Len() == 0 {
+		return nil, nil, errors.InternalError.With("bad key for chain index (1)")
+	}
+
+	switch key.Get(0) {
+	case "Head":
+		return c.getHead(), key.SliceI(1), nil
+	case "Block":
+		if key.Len() < 3 {
+			return nil, nil, errors.InternalError.With("bad key for chain index (2)")
+		}
+		level, okLevel := key.Get(1).(uint64)
+		index, okIndex := key.Get(2).(uint64)
+		if !okLevel || !okIndex {
+			return nil, nil, errors.InternalError.With("bad key for chain index (3)")
+		}
+		v := c.getBlock(level, index)
+		return v, key.SliceI(3), nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for chain index (4)")
+	}
+}
+
+func (c *ChainIndex) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if values.IsDirty(c.head) {
+		return true
+	}
+	for _, v := range c.block {
+		if v.IsDirty() {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *ChainIndex) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
+	if c == nil {
+		return nil
+	}
+
+	skip, err := values.WalkComposite(c, opts, fn)
+	if skip || err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	values.WalkField(&err, c.head, c.newHead, opts, fn)
+	values.WalkMap(&err, c.block, c.newBlock, nil, opts, fn)
+	return err
+}
+
+func (c *ChainIndex) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	values.Commit(&err, c.head)
+	for _, v := range c.block {
+		values.Commit(&err, v)
+	}
+
+	return err
+}
