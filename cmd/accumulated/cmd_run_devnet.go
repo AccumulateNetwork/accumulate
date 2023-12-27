@@ -83,12 +83,14 @@ func runDevNet(*cobra.Command, []string) {
 	}
 
 	vals, bsns, hasBS := getNodeDirs(flagMain.WorkDir)
-	for _, nodes := range [][]int{vals, bsns} {
-		for _, node := range nodes {
-			id := fmt.Sprint(node)
-			if len(id) > nodeIdLen {
-				nodeIdLen = len(id)
-			}
+	for _, node := range vals {
+		name := fmt.Sprintf("node-%d", node)
+		c, err := config.Load(filepath.Join(flagMain.WorkDir, name, "bvnn"))
+		check(err)
+
+		id := fmt.Sprintf("%s.%d", c.Accumulate.PartitionId, node)
+		if len(id) > nodeIdLen {
+			nodeIdLen = len(id)
 		}
 	}
 
@@ -167,7 +169,13 @@ func runDevNet(*cobra.Command, []string) {
 	// Connect every node to every other node
 	for i, d := range daemons {
 		for _, e := range daemons[i+1:] {
-			check(d.ConnectDirectly(e))
+			err := d.ConnectDirectly(e)
+			if err == nil {
+				continue
+			}
+			if err.Error() != "cannot connect nodes directly as they have the same node key" {
+				check(err)
+			}
 		}
 	}
 
@@ -211,7 +219,7 @@ func startDevNetNode(primary, secondary *accumulated.Daemon, started, done *sync
 		defer started.Done()
 
 		// Start it
-		check(primary.Start())
+		check(primary.Start(secondary))
 		if secondary != nil {
 			check(secondary.StartSecondary(primary))
 		}
@@ -371,7 +379,10 @@ func newNodeWriter(w io.Writer, format, partition string, node int, color bool) 
 	switch format {
 	case tmconfig.LogFormatPlain:
 		id := fmt.Sprintf("%s.%d", partition, node)
-		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen+len("bvnxx")-len(id)+1)
+		if nodeIdLen < len(id) {
+			nodeIdLen = len(id)
+		}
+		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen-len(id)+1)
 		if !color {
 			return &plainNodeWriter{s, w}
 		}
