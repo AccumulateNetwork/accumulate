@@ -8,7 +8,9 @@ package message
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -98,7 +100,13 @@ func (c *RoutedTransport) RoundTrip(ctx context.Context, requests []Message, cal
 			// Wait for the response
 			res, err := s.Read()
 			if err != nil {
-				return errors.PeerMisbehaved.WithFormat("read request: %w", err)
+				// Add peer ID
+				p, ok := err.(interface{ Peer() peer.ID })
+				err := errors.PeerMisbehaved.WithFormat("read request: %w", err)
+				if ok {
+					err.Data, _ = json.Marshal(struct{ Peer peer.ID }{Peer: p.Peer()})
+				}
+				return err
 			}
 
 			// Call the callback
