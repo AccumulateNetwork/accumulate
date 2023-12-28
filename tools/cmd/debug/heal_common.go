@@ -57,6 +57,15 @@ func init() {
 	cmdHealSynth.PersistentFlags().StringVar(&lightDb, "light-db", lightDb, "Light client database for persisting chain data")
 
 	_ = cmdHeal.MarkFlagFilename("cached-scan", ".json")
+
+	cmdHeal.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if !cmd.Flag("cached-scan").Changed {
+			cachedScan = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".json")
+		}
+		if !cmd.Flag("light-db").Changed {
+			lightDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".db")
+		}
+	}
 }
 
 type healer struct {

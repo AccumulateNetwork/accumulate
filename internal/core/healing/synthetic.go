@@ -71,7 +71,7 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	}
 
 	// Submit the synthetic transaction directly to the destination partition
-	msg := &messaging.BadSyntheticMessage{
+	msg := &messaging.SyntheticMessage{
 		Message: r.Sequence,
 		Proof: &protocol.AnnotatedReceipt{
 			Receipt: receipt,
@@ -104,7 +104,16 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 
 	dontWait := map[[32]byte]bool{}
 	env := new(messaging.Envelope)
-	env.Messages = []messaging.Message{msg}
+
+	if args.NetInfo.Status.ExecutorVersion.V2BaikonurEnabled() {
+		env.Messages = []messaging.Message{msg}
+	} else {
+		env.Messages = []messaging.Message{&messaging.BadSyntheticMessage{
+			Message:   msg.Message,
+			Signature: msg.Signature,
+			Proof:     msg.Proof,
+		}}
+	}
 	if msg, ok := r.Message.(messaging.MessageForTransaction); ok {
 		hash := msg.GetTxID().Hash()
 		dontWait[hash] = true
