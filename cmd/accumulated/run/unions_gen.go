@@ -180,6 +180,8 @@ func NewService(typ ServiceType) (Service, error) {
 		return new(ConsensusService), nil
 	case ServiceTypeEvents:
 		return new(EventsService), nil
+	case ServiceTypeFaucet:
+		return new(FaucetService), nil
 	case ServiceTypeHttp:
 		return new(HttpService), nil
 	case ServiceTypeMetrics:
@@ -215,6 +217,12 @@ func EqualService(a, b Service) bool {
 			return b == nil
 		}
 		b, ok := b.(*EventsService)
+		return ok && a.Equal(b)
+	case *FaucetService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*FaucetService)
 		return ok && a.Equal(b)
 	case *HttpService:
 		if a == nil {
@@ -268,6 +276,8 @@ func CopyService(v Service) Service {
 	case *ConsensusService:
 		return v.Copy()
 	case *EventsService:
+		return v.Copy()
+	case *FaucetService:
 		return v.Copy()
 	case *HttpService:
 		return v.Copy()

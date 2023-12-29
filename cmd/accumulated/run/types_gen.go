@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
 )
@@ -72,6 +73,12 @@ type CoreValidatorConfiguration struct {
 
 type EventsService struct {
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
+type FaucetService struct {
+	Account    *url.URL                      `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	SigningKey PrivateKey                    `json:"signingKey,omitempty" form:"signingKey" query:"signingKey" validate:"required"`
+	Router     *ServiceOrRef[*RouterService] `json:"router,omitempty" form:"router" query:"router" validate:"required"`
 }
 
 type GatewayConfiguration struct {
@@ -190,6 +197,8 @@ func (*CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
 func (*CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
 
 func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
+
+func (*FaucetService) Type() ServiceType { return ServiceTypeFaucet }
 
 func (*GatewayConfiguration) Type() ConfigurationType { return ConfigurationTypeGateway }
 
@@ -337,6 +346,24 @@ func (v *EventsService) Copy() *EventsService {
 }
 
 func (v *EventsService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FaucetService) Copy() *FaucetService {
+	u := new(FaucetService)
+
+	if v.Account != nil {
+		u.Account = v.Account
+	}
+	if v.SigningKey != nil {
+		u.SigningKey = CopyPrivateKey(v.SigningKey)
+	}
+	if v.Router != nil {
+		u.Router = (v.Router).Copy()
+	}
+
+	return u
+}
+
+func (v *FaucetService) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *GatewayConfiguration) Copy() *GatewayConfiguration {
 	u := new(GatewayConfiguration)
@@ -729,6 +756,30 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 
 func (v *EventsService) Equal(u *EventsService) bool {
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
+func (v *FaucetService) Equal(u *FaucetService) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(EqualPrivateKey(v.SigningKey, u.SigningKey)) {
+		return false
+	}
+	switch {
+	case v.Router == u.Router:
+		// equal
+	case v.Router == nil || u.Router == nil:
+		return false
+	case !((v.Router).Equal(u.Router)):
 		return false
 	}
 
@@ -1353,6 +1404,26 @@ func (v *EventsService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *FaucetService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       ServiceType                             `json:"type"`
+		Account    *url.URL                                `json:"account,omitempty"`
+		SigningKey *encoding.JsonUnmarshalWith[PrivateKey] `json:"signingKey,omitempty"`
+		Router     *ServiceOrRef[*RouterService]           `json:"router,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Account == nil) {
+		u.Account = v.Account
+	}
+	if !(EqualPrivateKey(v.SigningKey, nil)) {
+		u.SigningKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.SigningKey, Func: UnmarshalPrivateKeyJSON}
+	}
+	if !(v.Router == nil) {
+		u.Router = v.Router
+	}
+	return json.Marshal(&u)
+}
+
 func (v *GatewayConfiguration) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type   ConfigurationType                          `json:"type"`
@@ -1787,6 +1858,32 @@ func (v *EventsService) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Partition = u.Partition
+	return nil
+}
+
+func (v *FaucetService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       ServiceType                             `json:"type"`
+		Account    *url.URL                                `json:"account,omitempty"`
+		SigningKey *encoding.JsonUnmarshalWith[PrivateKey] `json:"signingKey,omitempty"`
+		Router     *ServiceOrRef[*RouterService]           `json:"router,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	u.SigningKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.SigningKey, Func: UnmarshalPrivateKeyJSON}
+	u.Router = v.Router
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Account = u.Account
+	if u.SigningKey != nil {
+		v.SigningKey = u.SigningKey.Value
+	}
+
+	v.Router = u.Router
 	return nil
 }
 

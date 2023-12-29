@@ -8,8 +8,6 @@ package run
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
 )
 
@@ -21,16 +19,9 @@ func (p *P2P) start(inst *Instance) error {
 		p.Key = new(TransientPrivateKey)
 	}
 
-	addr, err := p.Key.get(inst)
+	sk, err := getPrivateKey(p.Key, inst)
 	if err != nil {
 		return err
-	}
-	if addr.GetType() != protocol.SignatureTypeED25519 {
-		return errors.BadRequest.WithFormat("key type %v not supported", addr.GetType())
-	}
-	sk, ok := addr.GetPrivateKey()
-	if !ok {
-		return errors.BadRequest.WithFormat("missing private key")
 	}
 
 	node, err := p2p.New(p2p.Options{

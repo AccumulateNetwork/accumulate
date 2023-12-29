@@ -325,3 +325,18 @@ CometNodeKeyFile:
       marshal-as: none
     - name: Path
       type: string
+
+FaucetService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: SigningKey
+      type: PrivateKey
+      marshal-as: union
+    - name: Router
+      type: { name: ServiceOrRef, parameters: [{ type: RouterService, pointer: true }] }
+      marshal-as: reference
+      pointer: true

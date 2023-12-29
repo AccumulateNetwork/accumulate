@@ -23,6 +23,8 @@ ServiceType:
     value: 8
   Snapshot:
     value: 9
+  Faucet:
+    value: 10
 
 StorageType:
   Memory:
