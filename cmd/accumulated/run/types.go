@@ -31,6 +31,10 @@ type Service interface {
 	start(inst *Instance) error
 }
 
+type prestarter interface {
+	prestart(inst *Instance) error
+}
+
 type Configuration interface {
 	Type() ConfigurationType
 	CopyAsInterface() any

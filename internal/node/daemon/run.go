@@ -473,7 +473,7 @@ func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{})
 	})
 
 	// Create a local client
-	d.localTm.Set(local.New(d.node.Node))
+	d.localTm.Resolve(local.New(d.node.Node))
 
 	// Signal once the node is caught up
 	if caughtUp != nil {

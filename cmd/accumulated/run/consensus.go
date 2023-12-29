@@ -18,10 +18,12 @@ import (
 	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
+	"github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/fatih/color"
 	"github.com/spf13/viper"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	tmlib "gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
@@ -54,6 +56,7 @@ var (
 	coreConsensusNeedsStorage      = ioc.Needs[keyvalue.Beginner](func(c *CoreConsensusApp) string { return c.Partition.ID })
 	coreConsensusProvidesSequencer = ioc.Provides[private.Sequencer](func(c *CoreConsensusApp) string { return c.Partition.ID })
 	coreConsensusProvidesRouter    = ioc.Provides[routing.Router](func(c *CoreConsensusApp) string { return c.Partition.ID })
+	coreConsensusProvidesClient    = ioc.Provides[client.Client](func(c *CoreConsensusApp) string { return c.Partition.ID })
 )
 
 type ConsensusApp interface {
@@ -63,6 +66,7 @@ type ConsensusApp interface {
 	partition() *protocol.PartitionInfo
 	Requires() []ioc.Requirement
 	Provides() []ioc.Provided
+	prestart(*Instance) error
 	start(*Instance, *tendermint) (types.Application, error)
 	register(*Instance, *tendermint, *tmnode.Node) error
 }
@@ -76,6 +80,8 @@ type tendermint struct {
 	globals  chan *network.GlobalValues
 }
 
+var _ prestarter = (*ConsensusService)(nil)
+
 func (c *ConsensusService) Requires() []ioc.Requirement {
 	return c.App.Requires()
 }
@@ -84,6 +90,10 @@ func (c *ConsensusService) Provides() []ioc.Provided {
 	return append(c.App.Provides(),
 		consensusProvidesEventBus.Provided(c),
 	)
+}
+
+func (c *ConsensusService) prestart(inst *Instance) error {
+	return c.App.prestart(inst)
 }
 
 func (c *ConsensusService) start(inst *Instance) error {
@@ -186,7 +196,12 @@ func (c *CoreConsensusApp) Provides() []ioc.Provided {
 		consensusProvidesValidator.Provided(c),
 		coreConsensusProvidesSequencer.Provided(c),
 		coreConsensusProvidesRouter.Provided(c),
+		coreConsensusProvidesClient.Provided(c),
 	}
+}
+
+func (c *CoreConsensusApp) prestart(inst *Instance) error {
+	return coreConsensusProvidesClient.Register(inst.services, c, tmlib.NewDeferredClient())
 }
 
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
@@ -225,6 +240,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 			PartitionId: c.Partition.ID,
 		},
 		NewDispatcher: func() execute.Dispatcher {
+			// tmlib.NewDispatcher()
 			return accumulated.NewDispatcher(inst.network, router, dialer)
 		},
 	}
@@ -283,8 +299,14 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		return err
 	}
 
-	// Register the consensus service
+	// Register the tendermint node
 	local := local.New(node)
+	err = coreConsensusProvidesClient.Register(inst.services, c, local)
+	if err != nil {
+		return err
+	}
+
+	// Register the consensus service
 	svcImpl := tmapi.NewConsensusService(tmapi.ConsensusServiceParams{
 		Logger:           d.logger.With("module", "api"),
 		Local:            local,

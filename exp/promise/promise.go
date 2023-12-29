@@ -154,6 +154,18 @@ func slogNilResult(callers []uintptr) {
 	slog.Error("nil promise result", "func", "unknown")
 }
 
+// New returns a Promise that behaves more like traditional promises, returning
+// resolve and reject callbacks.
+func New[T any]() (_ Promise[T], resolve func(T), reject func(error)) {
+	// Allocate a channel for the result and a [sync.Once] to avoid races.
+	ch := make(chan Result[T], 1)
+	var once sync.Once
+
+	return &chanPromise[T]{ch: ch},
+		func(v T) { once.Do(func() { ch <- Value[T]{v} }) },
+		func(err error) { once.Do(func() { ch <- Error[T]{err} }) }
+}
+
 // Call spawns a concurrent process that calls the function.
 func Call[T any](fn func() Result[T]) Promise[T] {
 	// Get the caller's PC now, since doing so within the goroutine will not get

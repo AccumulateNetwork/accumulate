@@ -92,6 +92,20 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, errors.UnknownError.WithFormat("start p2p: %w", err)
 	}
 
+	// Prestart
+	for _, services := range services {
+		for _, svc := range services {
+			svc, ok := svc.(prestarter)
+			if !ok {
+				continue
+			}
+			err = svc.prestart(inst)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("prestart service %T: %w", svc, err)
+			}
+		}
+	}
+
 	// Start services
 	for _, services := range services {
 		for _, svc := range services {
