@@ -68,6 +68,14 @@ func Get[T any](r Registry, namespace string) (T, error) {
 	return v.(T), nil
 }
 
+func ForEach[T any](r Registry, fn func(desc Descriptor, value T)) {
+	for key, value := range r {
+		if v, ok := value.(T); ok {
+			fn(key, v)
+		}
+	}
+}
+
 type regKey struct {
 	typ reflect.Type
 	ns  string

@@ -36,9 +36,9 @@ func isZero[T comparable](v T) bool {
 
 func TestCoreValidatorConfig(t *testing.T) {
 	c := &Config{
+		Network: "MainNet",
 		Configurations: []Configuration{
 			&CoreValidatorConfiguration{
-				Network:       "MainNet",
 				Listen:        mustParseMulti("/tcp/16591"),
 				BVN:           "Apollo",
 				EnableHealing: ptr(true),
@@ -79,10 +79,20 @@ func TestRun(t *testing.T) {
 			&ConsensusService{
 				NodeDir: "node-1/dnn",
 				App: &CoreConsensusApp{
-					EnableHealing: true,
+					EnableHealing: ptr(true),
 					Partition: &protocol.PartitionInfo{
 						ID:   protocol.Directory,
 						Type: protocol.PartitionTypeDirectory,
+					},
+				},
+			},
+			&ConsensusService{
+				NodeDir: "node-1/bvnn",
+				App: &CoreConsensusApp{
+					EnableHealing: ptr(true),
+					Partition: &protocol.PartitionInfo{
+						ID:   "BVN1",
+						Type: protocol.PartitionTypeBlockValidator,
 					},
 				},
 			},
@@ -99,6 +109,17 @@ func TestRun(t *testing.T) {
 			&MetricsService{Partition: protocol.Directory},
 			&EventsService{Partition: protocol.Directory},
 			&HttpService{Router: ServiceReference[*RouterService]("directory")},
+
+			&StorageService{
+				Name: "BVN1",
+				Storage: &BadgerStorage{
+					Path: "node-1/bvnn/data/accumulate.db",
+				},
+			},
+			&Querier{Partition: "BVN1"},
+			&NetworkService{Partition: "BVN1"},
+			&MetricsService{Partition: "BVN1"},
+			&EventsService{Partition: "BVN1"},
 		},
 	}
 

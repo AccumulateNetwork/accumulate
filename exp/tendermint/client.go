@@ -28,6 +28,7 @@ type DeferredClient ioc.PromisedOf[client.Client]
 
 var _ ioc.Promised = (*DeferredClient)(nil)
 var _ client.Client = (*DeferredClient)(nil)
+var _ DispatcherClient = (*DeferredClient)(nil)
 
 func NewDeferredClient() *DeferredClient {
 	return (*DeferredClient)(ioc.NewPromisedOf[client.Client]())

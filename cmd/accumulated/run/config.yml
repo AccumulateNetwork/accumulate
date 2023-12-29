@@ -74,8 +74,6 @@ CoreValidatorConfiguration:
   union: { type: configuration }
   non-binary: true
   fields:
-    - name: Network
-      type: string
     - name: Listen
       type: p2p.Multiaddr
       marshal-as: union
@@ -85,6 +83,10 @@ CoreValidatorConfiguration:
       type: bool
       pointer: true
       optional: true
+    - name: EnableDirectDispatch
+      type: bool
+      optional: true
+      pointer: true
     - name: StorageType
       type: StorageType
       marshal-as: enum
@@ -120,6 +122,11 @@ CoreConsensusApp:
     - name: EnableHealing
       type: bool
       optional: true
+      pointer: true
+    - name: EnableDirectDispatch
+      type: bool
+      optional: true
+      pointer: true
 
 HttpService:
   union: { type: service }

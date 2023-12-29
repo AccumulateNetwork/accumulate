@@ -9,6 +9,7 @@ package run
 import (
 	"crypto/sha256"
 	"path/filepath"
+	"strings"
 
 	"github.com/cometbft/cometbft/abci/types"
 	tm "github.com/cometbft/cometbft/config"
@@ -205,6 +206,9 @@ func (c *CoreConsensusApp) prestart(inst *Instance) error {
 }
 
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
+	setDefaultPtr(&c.EnableHealing, false)
+	setDefaultPtr(&c.EnableDirectDispatch, true)
+
 	store, err := coreConsensusNeedsStorage.Get(inst.services, c)
 	if err != nil {
 		return nil, err
@@ -234,15 +238,31 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		EventBus:      d.eventBus,
 		Sequencer:     client.Private(),
 		Querier:       client,
-		EnableHealing: c.EnableHealing,
+		EnableHealing: *c.EnableHealing,
 		Describe: execute.DescribeShim{
 			NetworkType: c.Partition.Type,
 			PartitionId: c.Partition.ID,
 		},
-		NewDispatcher: func() execute.Dispatcher {
-			// tmlib.NewDispatcher()
+	}
+
+	clients := map[string]tmlib.DispatcherClient{}
+	ioc.ForEach(inst.services, func(desc ioc.Descriptor, svc tmlib.Client) {
+		clients[strings.ToLower(desc.Namespace())] = svc
+	})
+
+	if _, ok := clients["directory"]; !ok ||
+		!*c.EnableDirectDispatch {
+		// If we are not attached to a DN node, or direct dispatch is disabled,
+		// use the API dispatcher
+		execOpts.NewDispatcher = func() execute.Dispatcher {
 			return accumulated.NewDispatcher(inst.network, router, dialer)
-		},
+		}
+
+	} else {
+		// Otherwise, use the Tendermint dispatcher
+		execOpts.NewDispatcher = func() execute.Dispatcher {
+			return tmlib.NewDispatcher(router, clients)
+		}
 	}
 
 	// Setup globals

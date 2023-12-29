@@ -59,16 +59,17 @@ type ConsensusService struct {
 }
 
 type CoreConsensusApp struct {
-	Partition     *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-	EnableHealing bool                    `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	Partition            *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	EnableHealing        *bool                   `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
 }
 
 type CoreValidatorConfiguration struct {
-	Network       string        `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Listen        p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
-	BVN           string        `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
-	EnableHealing *bool         `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
-	StorageType   *StorageType  `json:"storageType,omitempty" form:"storageType" query:"storageType"`
+	Listen               p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	BVN                  string        `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
+	EnableHealing        *bool         `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	EnableDirectDispatch *bool         `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	StorageType          *StorageType  `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
 type EventsService struct {
@@ -308,7 +309,14 @@ func (v *CoreConsensusApp) Copy() *CoreConsensusApp {
 	if v.Partition != nil {
 		u.Partition = (v.Partition).Copy()
 	}
-	u.EnableHealing = v.EnableHealing
+	if v.EnableHealing != nil {
+		u.EnableHealing = new(bool)
+		*u.EnableHealing = *v.EnableHealing
+	}
+	if v.EnableDirectDispatch != nil {
+		u.EnableDirectDispatch = new(bool)
+		*u.EnableDirectDispatch = *v.EnableDirectDispatch
+	}
 
 	return u
 }
@@ -318,7 +326,6 @@ func (v *CoreConsensusApp) CopyAsInterface() interface{} { return v.Copy() }
 func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 	u := new(CoreValidatorConfiguration)
 
-	u.Network = v.Network
 	if v.Listen != nil {
 		u.Listen = p2p.CopyMultiaddr(v.Listen)
 	}
@@ -326,6 +333,10 @@ func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 	if v.EnableHealing != nil {
 		u.EnableHealing = new(bool)
 		*u.EnableHealing = *v.EnableHealing
+	}
+	if v.EnableDirectDispatch != nil {
+		u.EnableDirectDispatch = new(bool)
+		*u.EnableDirectDispatch = *v.EnableDirectDispatch
 	}
 	if v.StorageType != nil {
 		u.StorageType = new(StorageType)
@@ -717,7 +728,20 @@ func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
 	case !((v.Partition).Equal(u.Partition)):
 		return false
 	}
-	if !(v.EnableHealing == u.EnableHealing) {
+	switch {
+	case v.EnableHealing == u.EnableHealing:
+		// equal
+	case v.EnableHealing == nil || u.EnableHealing == nil:
+		return false
+	case !(*v.EnableHealing == *u.EnableHealing):
+		return false
+	}
+	switch {
+	case v.EnableDirectDispatch == u.EnableDirectDispatch:
+		// equal
+	case v.EnableDirectDispatch == nil || u.EnableDirectDispatch == nil:
+		return false
+	case !(*v.EnableDirectDispatch == *u.EnableDirectDispatch):
 		return false
 	}
 
@@ -725,9 +749,6 @@ func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
 }
 
 func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
-	if !(v.Network == u.Network) {
-		return false
-	}
 	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
 		return false
 	}
@@ -740,6 +761,14 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 	case v.EnableHealing == nil || u.EnableHealing == nil:
 		return false
 	case !(*v.EnableHealing == *u.EnableHealing):
+		return false
+	}
+	switch {
+	case v.EnableDirectDispatch == u.EnableDirectDispatch:
+		// equal
+	case v.EnableDirectDispatch == nil || u.EnableDirectDispatch == nil:
+		return false
+	case !(*v.EnableDirectDispatch == *u.EnableDirectDispatch):
 		return false
 	}
 	switch {
@@ -1350,33 +1379,34 @@ func (v *ConsensusService) MarshalJSON() ([]byte, error) {
 
 func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          ConsensusAppType        `json:"type"`
-		Partition     *protocol.PartitionInfo `json:"partition,omitempty"`
-		EnableHealing bool                    `json:"enableHealing,omitempty"`
+		Type                 ConsensusAppType        `json:"type"`
+		Partition            *protocol.PartitionInfo `json:"partition,omitempty"`
+		EnableHealing        *bool                   `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Partition == nil) {
 		u.Partition = v.Partition
 	}
-	if !(!v.EnableHealing) {
+	if !(v.EnableHealing == nil) {
 		u.EnableHealing = v.EnableHealing
+	}
+	if !(v.EnableDirectDispatch == nil) {
+		u.EnableDirectDispatch = v.EnableDirectDispatch
 	}
 	return json.Marshal(&u)
 }
 
 func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          ConfigurationType                          `json:"type"`
-		Network       string                                     `json:"network,omitempty"`
-		Listen        *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		BVN           string                                     `json:"bvn,omitempty"`
-		EnableHealing *bool                                      `json:"enableHealing,omitempty"`
-		StorageType   *StorageType                               `json:"storageType,omitempty"`
+		Type                 ConfigurationType                          `json:"type"`
+		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BVN                  string                                     `json:"bvn,omitempty"`
+		EnableHealing        *bool                                      `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                                      `json:"enableDirectDispatch,omitempty"`
+		StorageType          *StorageType                               `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if !(len(v.Network) == 0) {
-		u.Network = v.Network
-	}
 	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
 		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
@@ -1385,6 +1415,9 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.EnableHealing == nil) {
 		u.EnableHealing = v.EnableHealing
+	}
+	if !(v.EnableDirectDispatch == nil) {
+		u.EnableDirectDispatch = v.EnableDirectDispatch
 	}
 	if !(v.StorageType == nil) {
 		u.StorageType = v.StorageType
@@ -1794,13 +1827,15 @@ func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 
 func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          ConsensusAppType        `json:"type"`
-		Partition     *protocol.PartitionInfo `json:"partition,omitempty"`
-		EnableHealing bool                    `json:"enableHealing,omitempty"`
+		Type                 ConsensusAppType        `json:"type"`
+		Partition            *protocol.PartitionInfo `json:"partition,omitempty"`
+		EnableHealing        *bool                   `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
 	u.EnableHealing = v.EnableHealing
+	u.EnableDirectDispatch = v.EnableDirectDispatch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1809,23 +1844,24 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 	}
 	v.Partition = u.Partition
 	v.EnableHealing = u.EnableHealing
+	v.EnableDirectDispatch = u.EnableDirectDispatch
 	return nil
 }
 
 func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          ConfigurationType                          `json:"type"`
-		Network       string                                     `json:"network,omitempty"`
-		Listen        *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		BVN           string                                     `json:"bvn,omitempty"`
-		EnableHealing *bool                                      `json:"enableHealing,omitempty"`
-		StorageType   *StorageType                               `json:"storageType,omitempty"`
+		Type                 ConfigurationType                          `json:"type"`
+		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BVN                  string                                     `json:"bvn,omitempty"`
+		EnableHealing        *bool                                      `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                                      `json:"enableDirectDispatch,omitempty"`
+		StorageType          *StorageType                               `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Network = v.Network
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.BVN = v.BVN
 	u.EnableHealing = v.EnableHealing
+	u.EnableDirectDispatch = v.EnableDirectDispatch
 	u.StorageType = v.StorageType
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1833,13 +1869,13 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Network = u.Network
 	if u.Listen != nil {
 		v.Listen = u.Listen.Value
 	}
 
 	v.BVN = u.BVN
 	v.EnableHealing = u.EnableHealing
+	v.EnableDirectDispatch = u.EnableDirectDispatch
 	v.StorageType = u.StorageType
 	return nil
 }

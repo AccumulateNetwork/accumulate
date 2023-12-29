@@ -17,22 +17,18 @@ import (
 
 func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 	// Set core validator defaults
-	setDefaultPtr(&c.EnableHealing, false)
 	setDefaultPtr(&c.StorageType, StorageTypeBadger)
 
 	// Validate
 	if c.Listen == nil {
 		return errors.BadRequest.With("must specify a listen address")
 	}
+	if cfg.Network != "" {
+		return errors.BadRequest.With("must specify the network")
+	}
 	if !addrHasOneOf(c.Listen, "tcp", "udp") {
 		return errors.BadRequest.With("listen address must specify a port")
 	}
-
-	// Set the network
-	if cfg.Network != "" && cfg.Network != c.Network {
-		return errors.Conflict.WithFormat("network ID mismatch")
-	}
-	cfg.Network = c.Network
 
 	var dnnNodeKey PrivateKey = &CometNodeKeyFile{Path: filepath.Join("dnn", "config", "node_key.json")}
 
@@ -78,7 +74,8 @@ func (c *CoreValidatorConfiguration) applyPart(cfg *Config, partID string, partT
 		&ConsensusService{
 			NodeDir: dir,
 			App: &CoreConsensusApp{
-				EnableHealing: *c.EnableHealing,
+				EnableHealing:        c.EnableHealing,
+				EnableDirectDispatch: c.EnableDirectDispatch,
 				Partition: &protocol.PartitionInfo{
 					ID:   partID,
 					Type: partType,
