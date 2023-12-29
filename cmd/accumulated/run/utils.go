@@ -7,11 +7,17 @@
 package run
 
 import (
+	"crypto/ed25519"
 	"fmt"
+	"reflect"
 	"strconv"
+	"strings"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var (
@@ -23,6 +29,49 @@ var (
 )
 
 func ptr[T any](v T) *T { return &v }
+
+func setDefaultPtr[V any](ptr **V, def V) {
+	if *ptr == nil {
+		*ptr = &def
+	}
+}
+
+func setDefaultVal[V any](ptr *V, def V) {
+	if reflect.ValueOf(ptr).Elem().IsZero() {
+		*ptr = def
+	}
+}
+
+func mustParsePeer(s string) peer.ID {
+	id, err := peer.Decode(s)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func mustParseMulti(s string) multiaddr.Multiaddr {
+	addr, err := multiaddr.NewMultiaddr(s)
+	if err != nil {
+		panic(err)
+	}
+	return addr
+}
+
+func getPrivateKey(key PrivateKey, inst *Instance) (ed25519.PrivateKey, error) {
+	addr, err := key.get(inst)
+	if err != nil {
+		return nil, err
+	}
+	if addr.GetType() != protocol.SignatureTypeED25519 {
+		return nil, errors.BadRequest.WithFormat("key type %v not supported", addr.GetType())
+	}
+	sk, ok := addr.GetPrivateKey()
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("missing private key")
+	}
+	return sk, nil
+}
 
 func addrHasOneOf(addr multiaddr.Multiaddr, components ...string) bool {
 	var found bool
@@ -43,6 +92,13 @@ func ensureHost(addr multiaddr.Multiaddr, defaultHost string) multiaddr.Multiadd
 		return addr
 	}
 	return multiaddr.StringCast(defaultHost).Encapsulate(addr)
+}
+
+func listen(addr multiaddr.Multiaddr, defaultHost string, transform ...addrTransform) multiaddr.Multiaddr {
+	if defaultHost != "" {
+		addr = ensureHost(addr, defaultHost)
+	}
+	return applyAddrTransforms(addr, transform...)
 }
 
 type addrTransform interface {
@@ -149,4 +205,32 @@ func (useHTTP) Apply(c multiaddr.Component) ([]multiaddr.Component, bool) {
 		panic(err)
 	}
 	return []multiaddr.Component{*d}, true
+}
+
+func haveService[T any](cfg *Config, predicate func(T) bool, existing *T) bool {
+	for _, s := range [][]Service{cfg.Apps, cfg.Services} {
+		for _, s := range s {
+			t, ok := s.(T)
+			if ok && (predicate == nil || predicate(t)) {
+				if existing != nil {
+					*existing = t
+				}
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func haveService2[T any](cfg *Config, wantID string, getID func(T) string, existing *T) bool {
+	return haveService(cfg, func(s T) bool {
+		return strings.EqualFold(wantID, getID(s))
+	}, existing)
+}
+
+func addService[T Service](cfg *Config, s T, getID func(T) string) T {
+	if !haveService2(cfg, getID(s), getID, &s) {
+		cfg.Services = append(cfg.Services, s)
+	}
+	return s
 }
