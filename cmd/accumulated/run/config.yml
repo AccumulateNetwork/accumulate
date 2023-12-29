@@ -91,6 +91,14 @@ CoreValidatorConfiguration:
       pointer: true
       optional: true
 
+GatewayConfiguration:
+  union: { type: configuration }
+  non-binary: true
+  fields:
+    - name: Listen
+      type: p2p.Multiaddr
+      marshal-as: union
+
 ConsensusService:
   union: { type: service }
   non-binary: true

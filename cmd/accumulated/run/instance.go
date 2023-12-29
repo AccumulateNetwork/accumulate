@@ -56,15 +56,6 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, err
 	}
 
-	// Ensure the disk does not fill up (and is not currently full)
-	free, err := diskUsage(inst.rootDir)
-	if err != nil {
-		return nil, err
-	} else if free < minDiskSpace {
-		return nil, errors.FatalError.With("disk is full")
-	}
-	go inst.checkDiskSpace()
-
 	// Apply configurations
 	for _, c := range cfg.Configurations {
 		err = c.apply(cfg)
@@ -79,11 +70,23 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, err
 	}
 
+	// Setup logging
 	err = cfg.Logging.start(inst)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start logging: %w", err)
 	}
 
+	// Ensure the disk does not fill up (and is not currently full; requires
+	// logging)
+	free, err := diskUsage(inst.rootDir)
+	if err != nil {
+		return nil, err
+	} else if free < minDiskSpace {
+		return nil, errors.FatalError.With("disk is full")
+	}
+	go inst.checkDiskSpace()
+
+	// Start the P2P node
 	err = cfg.P2P.start(inst)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start p2p: %w", err)

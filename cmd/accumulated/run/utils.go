@@ -130,3 +130,23 @@ func (useQUIC) Apply(c multiaddr.Component) ([]multiaddr.Component, bool) {
 	}
 	return []multiaddr.Component{*d1, *d2}, true
 }
+
+type useHTTP struct{}
+
+func (useHTTP) Apply(c multiaddr.Component) ([]multiaddr.Component, bool) {
+	switch c.Protocol().Code {
+	case multiaddr.P_TCP,
+		multiaddr.P_UDP,
+		multiaddr.P_HTTP,
+		multiaddr.P_HTTPS:
+		// Ok
+	default:
+		return nil, false
+	}
+
+	d, err := multiaddr.NewComponent("http", c.Value())
+	if err != nil {
+		panic(err)
+	}
+	return []multiaddr.Component{*d}, true
+}

@@ -74,6 +74,10 @@ type EventsService struct {
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 }
 
+type GatewayConfiguration struct {
+	Listen p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+}
+
 type HttpPeerMapEntry struct {
 	fieldsSet  []bool
 	ID         p2p.PeerID      `json:"id,omitempty" form:"id" query:"id" validate:"required"`
@@ -186,6 +190,8 @@ func (*CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
 func (*CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
 
 func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
+
+func (*GatewayConfiguration) Type() ConfigurationType { return ConfigurationTypeGateway }
 
 func (*HttpService) Type() ServiceType { return ServiceTypeHttp }
 
@@ -331,6 +337,18 @@ func (v *EventsService) Copy() *EventsService {
 }
 
 func (v *EventsService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GatewayConfiguration) Copy() *GatewayConfiguration {
+	u := new(GatewayConfiguration)
+
+	if v.Listen != nil {
+		u.Listen = p2p.CopyMultiaddr(v.Listen)
+	}
+
+	return u
+}
+
+func (v *GatewayConfiguration) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *HttpPeerMapEntry) Copy() *HttpPeerMapEntry {
 	u := new(HttpPeerMapEntry)
@@ -711,6 +729,14 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 
 func (v *EventsService) Equal(u *EventsService) bool {
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
+func (v *GatewayConfiguration) Equal(u *GatewayConfiguration) bool {
+	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
 		return false
 	}
 
@@ -1327,6 +1353,18 @@ func (v *EventsService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *GatewayConfiguration) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   ConfigurationType                          `json:"type"`
+		Listen *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
+		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	return json.Marshal(&u)
+}
+
 func (v *HttpPeerMapEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
@@ -1749,6 +1787,26 @@ func (v *EventsService) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Partition = u.Partition
+	return nil
+}
+
+func (v *GatewayConfiguration) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   ConfigurationType                          `json:"type"`
+		Listen *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Listen != nil {
+		v.Listen = u.Listen.Value
+	}
+
 	return nil
 }
 

@@ -9,16 +9,12 @@ package run
 import (
 	"context"
 	"fmt"
-	"os/user"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
@@ -133,9 +129,6 @@ func TestRun2(t *testing.T) {
 func TestMainNetHttp(t *testing.T) {
 	// t.Skip("Manual")
 
-	cu, err := user.Current()
-	require.NoError(t, err)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -148,31 +141,10 @@ func TestMainNetHttp(t *testing.T) {
 			},
 		},
 		P2P: &P2P{
-			BootstrapPeers: accumulate.BootstrapServers,
-			Key:            &PrivateKeySeed{Seed: record.NewKey(t.Name())},
-			PeerDB:         filepath.Join(cu.HomeDir, ".accumulate", "cache", "peerdb.json"),
+			Key: &PrivateKeySeed{Seed: record.NewKey(t.Name())},
 		},
-		Apps: []Service{
-			&HttpService{
-				Router: ServiceValue(&RouterService{}),
-				PeerMap: []*HttpPeerMapEntry{
-					{
-						ID:         mustParsePeer("12D3KooWAgrBYpWEXRViTnToNmpCoC3dvHdmR6m1FmyKjDn1NYpj"),
-						Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/apollo-mainnet.accumulate.defidevs.io")},
-						Partitions: []string{"Apollo", "Directory"},
-					},
-					{
-						ID:         mustParsePeer("12D3KooWDqFDwjHEog1bNbxai2dKSaR1aFvq2LAZ2jivSohgoSc7"),
-						Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/yutu-mainnet.accumulate.defidevs.io")},
-						Partitions: []string{"Yutu", "Directory"},
-					},
-					{
-						ID:         mustParsePeer("12D3KooWHzjkoeAqe7L55tAaepCbMbhvNu9v52ayZNVQobdEE1RL"),
-						Addresses:  []multiaddr.Multiaddr{mustParseMulti("/dns/chandrayaan-mainnet.accumulate.defidevs.io")},
-						Partitions: []string{"Chandrayaan", "Directory"},
-					},
-				},
-			},
+		Configurations: []Configuration{
+			&GatewayConfiguration{},
 		},
 	}
 

@@ -1,6 +1,8 @@
 ConfigurationType:
   CoreValidator:
     value: 1
+  Gateway:
+    value: 2
 
 ServiceType:
   Storage:

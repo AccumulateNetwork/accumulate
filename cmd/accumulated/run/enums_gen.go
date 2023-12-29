@@ -17,6 +17,9 @@ import (
 // ConfigurationTypeCoreValidator .
 const ConfigurationTypeCoreValidator ConfigurationType = 1
 
+// ConfigurationTypeGateway .
+const ConfigurationTypeGateway ConfigurationType = 2
+
 // ConsensusAppTypeCore .
 const ConsensusAppTypeCore ConsensusAppType = 1
 
@@ -72,7 +75,7 @@ func (v ConfigurationType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ConfigurationType) SetEnumValue(id uint64) bool {
 	u := ConfigurationType(id)
 	switch u {
-	case ConfigurationTypeCoreValidator:
+	case ConfigurationTypeCoreValidator, ConfigurationTypeGateway:
 		*v = u
 		return true
 	}
@@ -84,6 +87,8 @@ func (v ConfigurationType) String() string {
 	switch v {
 	case ConfigurationTypeCoreValidator:
 		return "coreValidator"
+	case ConfigurationTypeGateway:
+		return "gateway"
 	}
 	return fmt.Sprintf("ConfigurationType:%d", v)
 }
@@ -93,6 +98,8 @@ func ConfigurationTypeByName(name string) (ConfigurationType, bool) {
 	switch strings.ToLower(name) {
 	case "corevalidator":
 		return ConfigurationTypeCoreValidator, true
+	case "gateway":
+		return ConfigurationTypeGateway, true
 	}
 	return 0, false
 }
