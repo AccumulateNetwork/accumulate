@@ -14,6 +14,10 @@ Config:
       type: P2P
       marshal-as: reference
       pointer: true
+    - name: Configurations
+      type: Configuration
+      marshal-as: union
+      repeatable: true
     - name: Services
       type: Service
       marshal-as: union
@@ -57,6 +61,7 @@ P2P:
       marshal-as: union
     - name: PeerDB
       type: string
+      pointer: true
     - name: EnablePeerTracking
       type: bool
     - name: DiscoveryMode
@@ -228,3 +233,11 @@ FaucetService:
       type: { name: ServiceOrRef, parameters: [{ type: RouterService, pointer: true }] }
       marshal-as: reference
       pointer: true
+
+GatewayConfiguration:
+  union: { type: configuration }
+  non-binary: true
+  fields:
+    - name: Listen
+      type: p2p.Multiaddr
+      marshal-as: union
