@@ -183,6 +183,10 @@ func (b *Batch) Transaction2(id [32]byte) *Transaction {
 }
 
 func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
+	if key.Len() >= 2 && key.Get(0) == "Account" {
+		return key.Get(1).(*url.URL), nil
+	}
+
 	v, err := values.NewValue(
 		b.logger.L,
 		b.store,
