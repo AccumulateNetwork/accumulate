@@ -8,6 +8,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"time"
 
@@ -15,6 +17,8 @@ import (
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/remote"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -30,6 +34,7 @@ var flagSnapCollect = struct {
 	SkipBPT    bool
 	SkipSystem bool
 	Indexed    bool
+	Partition  UrlFlag
 }{}
 
 func init() {
@@ -37,15 +42,28 @@ func init() {
 	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.SkipBPT, "skip-bpt", false, "Skip the BPT")
 	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.SkipSystem, "skip-system", false, "Skip system accounts")
 	cmdSnapCollect.Flags().BoolVar(&flagSnapCollect.Indexed, "indexed", false, "Make an indexed snapshot")
+	cmdSnapCollect.Flags().Var(&flagSnapCollect.Partition, "partition", "Specify the partition instead of determining it from the database")
 }
 
 func collectSnapshot(_ *cobra.Command, args []string) {
 	// Open the database
-	db, err := coredb.OpenBadger(args[0], nil)
-	check(err)
+	var store keyvalue.Beginner
+	store, remoteAddr := openDbUrl(args[0], false)
+	if remoteAddr != nil {
+		store = remote.Connect(func() (io.ReadWriteCloser, error) {
+			return net.Dial(remoteAddr.Network(), remoteAddr.String())
+		})
+	}
+	db := coredb.New(store, nil)
 
 	// Scan for the partition account
-	partUrl := protocol.PartitionUrl(getPartition(db, args[0]))
+	var partUrl *url.URL
+	if flagSnapCollect.Partition.V != nil {
+		partUrl = flagSnapCollect.Partition.V.RootIdentity()
+	} else {
+		fmt.Println("Scanning the database for a partition's system ledger...")
+		partUrl = protocol.PartitionUrl(getPartition(db, args[0]))
+	}
 
 	// Create the snapshot file
 	f, err := os.Create(args[1])
