@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -40,11 +40,10 @@ func LoadNetworkScan(file string) (*NetworkScan, error) {
 	return net, nil
 }
 
-func NewMessageRouter(scan *NetworkScan) (message.Router, error) {
-	var err error
+func NewMessageRouter(scan *NetworkScan) message.Router {
 	router := new(routing.MessageRouter)
-	router.Router, err = routing.NewStaticRouter(scan.Status.Routing, nil)
-	return router, err
+	router.Router = routing.NewRouter(routing.RouterOptions{Initial: scan.Status.Routing})
+	return router
 }
 
 type StaticDialer struct {

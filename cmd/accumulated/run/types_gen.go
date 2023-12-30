@@ -11,8 +11,13 @@ package run
 //lint:file-ignore S1001,S1002,S1008,SA4013 generated code
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -41,6 +46,36 @@ type Config struct {
 	Logging  *Logging  `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
 	P2P      *P2P      `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
 	Services []Service `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+}
+
+type HttpPeerMapEntry struct {
+	fieldsSet  []bool
+	ID         p2p.PeerID      `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Partitions []string        `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	Addresses  []p2p.Multiaddr `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
+	extraData  []byte
+}
+
+type HttpService struct {
+
+	// Listen are the addresses and schemes to listen on.
+	Listen []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	// TlsCertPath is the path of the TLS certificate.
+	TlsCertPath string `json:"tlsCertPath,omitempty" form:"tlsCertPath" query:"tlsCertPath"`
+	// TlsKeyPath is the path of the TLS key.
+	TlsKeyPath string `json:"tlsKeyPath,omitempty" form:"tlsKeyPath" query:"tlsKeyPath"`
+	// CorsOrigins is a list of allowed CORS origins.
+	CorsOrigins []string `json:"corsOrigins,omitempty" form:"corsOrigins" query:"corsOrigins"`
+	// LetsEncrypt automatically retrieves a certificate from Let's Encrypt for the specified domains.
+	LetsEncrypt []string `json:"letsEncrypt,omitempty" form:"letsEncrypt" query:"letsEncrypt"`
+	// ConnectionLimit limits the number of concurrent connections.
+	ConnectionLimit *int64 `json:"connectionLimit,omitempty" form:"connectionLimit" query:"connectionLimit"`
+	// ReadHeaderTimeout protects against slow-loris attacks.
+	ReadHeaderTimeout *time.Duration                `json:"readHeaderTimeout,omitempty" form:"readHeaderTimeout" query:"readHeaderTimeout"`
+	DebugJsonRpc      *bool                         `json:"debugJsonRpc,omitempty" form:"debugJsonRpc" query:"debugJsonRpc"`
+	Router            *ServiceOrRef[*RouterService] `json:"router,omitempty" form:"router" query:"router" validate:"required"`
+	// PeerMap hard-codes the peer map.
+	PeerMap []*HttpPeerMapEntry `json:"peerMap,omitempty" form:"peerMap" query:"peerMap" validate:"required"`
 }
 
 type Logging struct {
@@ -75,6 +110,14 @@ type RawPrivateKey struct {
 	Address string `json:"address,omitempty" form:"address" query:"address" validate:"required"`
 }
 
+type RouterService struct {
+	fieldsSet []bool
+	Name      string `json:"name,omitempty" form:"name" query:"name"`
+	// Events may specify an event bus to use for routing table updates.
+	Events    string `json:"events,omitempty" form:"events" query:"events"`
+	extraData []byte
+}
+
 type StorageService struct {
 	Name    string  `json:"name,omitempty" form:"name" query:"name"`
 	Storage Storage `json:"storage,omitempty" form:"storage" query:"storage" validate:"required"`
@@ -90,11 +133,15 @@ func (*CometNodeKeyFile) Type() PrivateKeyType { return PrivateKeyTypeCometNodeK
 
 func (*CometPrivValFile) Type() PrivateKeyType { return PrivateKeyTypeCometPrivValFile }
 
+func (*HttpService) Type() ServiceType { return ServiceTypeHttp }
+
 func (*MemoryStorage) Type() StorageType { return StorageTypeMemory }
 
 func (*PrivateKeySeed) Type() PrivateKeyType { return PrivateKeyTypeSeed }
 
 func (*RawPrivateKey) Type() PrivateKeyType { return PrivateKeyTypeRaw }
+
+func (*RouterService) Type() ServiceType { return ServiceTypeRouter }
 
 func (*StorageService) Type() ServiceType { return ServiceTypeStorage }
 
@@ -152,6 +199,84 @@ func (v *Config) Copy() *Config {
 }
 
 func (v *Config) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *HttpPeerMapEntry) Copy() *HttpPeerMapEntry {
+	u := new(HttpPeerMapEntry)
+
+	if v.ID != "" {
+		u.ID = p2p.CopyPeerID(v.ID)
+	}
+	u.Partitions = make([]string, len(v.Partitions))
+	for i, v := range v.Partitions {
+		v := v
+		u.Partitions[i] = v
+	}
+	u.Addresses = make([]p2p.Multiaddr, len(v.Addresses))
+	for i, v := range v.Addresses {
+		v := v
+		if v != nil {
+			u.Addresses[i] = p2p.CopyMultiaddr(v)
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *HttpPeerMapEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *HttpService) Copy() *HttpService {
+	u := new(HttpService)
+
+	u.Listen = make([]p2p.Multiaddr, len(v.Listen))
+	for i, v := range v.Listen {
+		v := v
+		if v != nil {
+			u.Listen[i] = p2p.CopyMultiaddr(v)
+		}
+	}
+	u.TlsCertPath = v.TlsCertPath
+	u.TlsKeyPath = v.TlsKeyPath
+	u.CorsOrigins = make([]string, len(v.CorsOrigins))
+	for i, v := range v.CorsOrigins {
+		v := v
+		u.CorsOrigins[i] = v
+	}
+	u.LetsEncrypt = make([]string, len(v.LetsEncrypt))
+	for i, v := range v.LetsEncrypt {
+		v := v
+		u.LetsEncrypt[i] = v
+	}
+	if v.ConnectionLimit != nil {
+		u.ConnectionLimit = new(int64)
+		*u.ConnectionLimit = *v.ConnectionLimit
+	}
+	if v.ReadHeaderTimeout != nil {
+		u.ReadHeaderTimeout = new(time.Duration)
+		*u.ReadHeaderTimeout = *v.ReadHeaderTimeout
+	}
+	if v.DebugJsonRpc != nil {
+		u.DebugJsonRpc = new(bool)
+		*u.DebugJsonRpc = *v.DebugJsonRpc
+	}
+	if v.Router != nil {
+		u.Router = (v.Router).Copy()
+	}
+	u.PeerMap = make([]*HttpPeerMapEntry, len(v.PeerMap))
+	for i, v := range v.PeerMap {
+		v := v
+		if v != nil {
+			u.PeerMap[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *HttpService) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Logging) Copy() *Logging {
 	u := new(Logging)
@@ -243,6 +368,21 @@ func (v *RawPrivateKey) Copy() *RawPrivateKey {
 
 func (v *RawPrivateKey) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *RouterService) Copy() *RouterService {
+	u := new(RouterService)
+
+	u.Name = v.Name
+	u.Events = v.Events
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *RouterService) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *StorageService) Copy() *StorageService {
 	u := new(StorageService)
 
@@ -313,6 +453,105 @@ func (v *Config) Equal(u *Config) bool {
 	}
 	for i := range v.Services {
 		if !(EqualService(v.Services[i], u.Services[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *HttpPeerMapEntry) Equal(u *HttpPeerMapEntry) bool {
+	if !(p2p.EqualPeerID(v.ID, u.ID)) {
+		return false
+	}
+	if len(v.Partitions) != len(u.Partitions) {
+		return false
+	}
+	for i := range v.Partitions {
+		if !(v.Partitions[i] == u.Partitions[i]) {
+			return false
+		}
+	}
+	if len(v.Addresses) != len(u.Addresses) {
+		return false
+	}
+	for i := range v.Addresses {
+		if !(p2p.EqualMultiaddr(v.Addresses[i], u.Addresses[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *HttpService) Equal(u *HttpService) bool {
+	if len(v.Listen) != len(u.Listen) {
+		return false
+	}
+	for i := range v.Listen {
+		if !(p2p.EqualMultiaddr(v.Listen[i], u.Listen[i])) {
+			return false
+		}
+	}
+	if !(v.TlsCertPath == u.TlsCertPath) {
+		return false
+	}
+	if !(v.TlsKeyPath == u.TlsKeyPath) {
+		return false
+	}
+	if len(v.CorsOrigins) != len(u.CorsOrigins) {
+		return false
+	}
+	for i := range v.CorsOrigins {
+		if !(v.CorsOrigins[i] == u.CorsOrigins[i]) {
+			return false
+		}
+	}
+	if len(v.LetsEncrypt) != len(u.LetsEncrypt) {
+		return false
+	}
+	for i := range v.LetsEncrypt {
+		if !(v.LetsEncrypt[i] == u.LetsEncrypt[i]) {
+			return false
+		}
+	}
+	switch {
+	case v.ConnectionLimit == u.ConnectionLimit:
+		// equal
+	case v.ConnectionLimit == nil || u.ConnectionLimit == nil:
+		return false
+	case !(*v.ConnectionLimit == *u.ConnectionLimit):
+		return false
+	}
+	switch {
+	case v.ReadHeaderTimeout == u.ReadHeaderTimeout:
+		// equal
+	case v.ReadHeaderTimeout == nil || u.ReadHeaderTimeout == nil:
+		return false
+	case !(*v.ReadHeaderTimeout == *u.ReadHeaderTimeout):
+		return false
+	}
+	switch {
+	case v.DebugJsonRpc == u.DebugJsonRpc:
+		// equal
+	case v.DebugJsonRpc == nil || u.DebugJsonRpc == nil:
+		return false
+	case !(*v.DebugJsonRpc == *u.DebugJsonRpc):
+		return false
+	}
+	switch {
+	case v.Router == u.Router:
+		// equal
+	case v.Router == nil || u.Router == nil:
+		return false
+	case !((v.Router).Equal(u.Router)):
+		return false
+	}
+	if len(v.PeerMap) != len(u.PeerMap) {
+		return false
+	}
+	for i := range v.PeerMap {
+		if !((v.PeerMap[i]).Equal(u.PeerMap[i])) {
 			return false
 		}
 	}
@@ -409,6 +648,17 @@ func (v *RawPrivateKey) Equal(u *RawPrivateKey) bool {
 	return true
 }
 
+func (v *RouterService) Equal(u *RouterService) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.Events == u.Events) {
+		return false
+	}
+
+	return true
+}
+
 func (v *StorageService) Equal(u *StorageService) bool {
 	if !(v.Name == u.Name) {
 		return false
@@ -423,6 +673,202 @@ func (v *StorageService) Equal(u *StorageService) bool {
 func (v *TransientPrivateKey) Equal(u *TransientPrivateKey) bool {
 
 	return true
+}
+
+var fieldNames_HttpPeerMapEntry = []string{
+	1: "ID",
+	2: "Partitions",
+	3: "Addresses",
+}
+
+func (v *HttpPeerMapEntry) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.ID == ("")) {
+		writer.WriteValue(1, v.ID.MarshalBinary)
+	}
+	if !(len(v.Partitions) == 0) {
+		for _, v := range v.Partitions {
+			writer.WriteString(2, v)
+		}
+	}
+	if !(len(v.Addresses) == 0) {
+		for _, v := range v.Addresses {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_HttpPeerMapEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *HttpPeerMapEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field ID is missing")
+	} else if v.ID == ("") {
+		errs = append(errs, "field ID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partitions is missing")
+	} else if len(v.Partitions) == 0 {
+		errs = append(errs, "field Partitions is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Addresses is missing")
+	} else if len(v.Addresses) == 0 {
+		errs = append(errs, "field Addresses is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RouterService = []string{
+	1: "Type",
+	2: "Name",
+	3: "Events",
+}
+
+func (v *RouterService) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Name) == 0) {
+		writer.WriteString(2, v.Name)
+	}
+	if !(len(v.Events) == 0) {
+		writer.WriteString(3, v.Events)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RouterService)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *RouterService) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+func (v *HttpPeerMapEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *HttpPeerMapEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	reader.ReadValue(1, func(r io.Reader) error {
+		x, err := p2p.UnmarshalPeerIDFrom(r)
+		if err == nil {
+			v.ID = x
+		}
+		return err
+	})
+	for {
+		if x, ok := reader.ReadString(2); ok {
+			v.Partitions = append(v.Partitions, x)
+		} else {
+			break
+		}
+	}
+	for {
+		ok := reader.ReadValue(3, func(r io.Reader) error {
+			x, err := p2p.UnmarshalMultiaddrFrom(r)
+			if err == nil {
+				v.Addresses = append(v.Addresses, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_HttpPeerMapEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *RouterService) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RouterService) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType ServiceType
+	if x := new(ServiceType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *RouterService) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadString(2); ok {
+		v.Name = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Events = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RouterService)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *BadgerStorage) MarshalJSON() ([]byte, error) {
@@ -479,6 +925,74 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Services) == 0) {
 		u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *HttpPeerMapEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
+		Partitions encoding.JsonList[string]                      `json:"partitions,omitempty"`
+		Addresses  *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
+	}{}
+	if !(v.ID == ("")) {
+		u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(len(v.Partitions) == 0) {
+		u.Partitions = v.Partitions
+	}
+	if !(len(v.Addresses) == 0) {
+		u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *HttpService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type              ServiceType                                    `json:"type"`
+		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
+		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+		CorsOrigins       encoding.JsonList[string]                      `json:"corsOrigins,omitempty"`
+		LetsEncrypt       encoding.JsonList[string]                      `json:"letsEncrypt,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
+		DebugJsonRpc      *bool                                          `json:"debugJsonRpc,omitempty"`
+		Router            *ServiceOrRef[*RouterService]                  `json:"router,omitempty"`
+		PeerMap           encoding.JsonList[*HttpPeerMapEntry]           `json:"peerMap,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Listen) == 0) {
+		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(len(v.TlsCertPath) == 0) {
+		u.TlsCertPath = v.TlsCertPath
+	}
+	if !(len(v.TlsKeyPath) == 0) {
+		u.TlsKeyPath = v.TlsKeyPath
+	}
+	if !(len(v.CorsOrigins) == 0) {
+		u.CorsOrigins = v.CorsOrigins
+	}
+	if !(len(v.LetsEncrypt) == 0) {
+		u.LetsEncrypt = v.LetsEncrypt
+	}
+	if !(v.ConnectionLimit == nil) {
+		u.ConnectionLimit = v.ConnectionLimit
+	}
+	if !(v.ReadHeaderTimeout == nil) {
+		if v.ReadHeaderTimeout != nil {
+			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
+		}
+	}
+	if !(v.DebugJsonRpc == nil) {
+		u.DebugJsonRpc = v.DebugJsonRpc
+	}
+	if !(v.Router == nil) {
+		u.Router = v.Router
+	}
+	if !(len(v.PeerMap) == 0) {
+		u.PeerMap = v.PeerMap
 	}
 	return json.Marshal(&u)
 }
@@ -559,6 +1073,22 @@ func (v *RawPrivateKey) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(len(v.Address) == 0) {
 		u.Address = v.Address
+	}
+	return json.Marshal(&u)
+}
+
+func (v *RouterService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   ServiceType `json:"type"`
+		Name   string      `json:"name,omitempty"`
+		Events string      `json:"events,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(len(v.Events) == 0) {
+		u.Events = v.Events
 	}
 	return json.Marshal(&u)
 }
@@ -661,6 +1191,89 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 			v.Services[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *HttpPeerMapEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
+		Partitions encoding.JsonList[string]                      `json:"partitions,omitempty"`
+		Addresses  *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
+	}{}
+	u.ID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.ID, Func: p2p.UnmarshalPeerIDJSON}
+	u.Partitions = v.Partitions
+	u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.ID != nil {
+		v.ID = u.ID.Value
+	}
+
+	v.Partitions = u.Partitions
+	if u.Addresses != nil {
+		v.Addresses = make([]p2p.Multiaddr, len(u.Addresses.Value))
+		for i, x := range u.Addresses.Value {
+			v.Addresses[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *HttpService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type              ServiceType                                    `json:"type"`
+		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
+		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+		CorsOrigins       encoding.JsonList[string]                      `json:"corsOrigins,omitempty"`
+		LetsEncrypt       encoding.JsonList[string]                      `json:"letsEncrypt,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
+		DebugJsonRpc      *bool                                          `json:"debugJsonRpc,omitempty"`
+		Router            *ServiceOrRef[*RouterService]                  `json:"router,omitempty"`
+		PeerMap           encoding.JsonList[*HttpPeerMapEntry]           `json:"peerMap,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.TlsCertPath = v.TlsCertPath
+	u.TlsKeyPath = v.TlsKeyPath
+	u.CorsOrigins = v.CorsOrigins
+	u.LetsEncrypt = v.LetsEncrypt
+	u.ConnectionLimit = v.ConnectionLimit
+	if v.ReadHeaderTimeout != nil {
+		u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
+	}
+	u.DebugJsonRpc = v.DebugJsonRpc
+	u.Router = v.Router
+	u.PeerMap = v.PeerMap
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Listen != nil {
+		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
+		for i, x := range u.Listen.Value {
+			v.Listen[i] = x
+		}
+	}
+	v.TlsCertPath = u.TlsCertPath
+	v.TlsKeyPath = u.TlsKeyPath
+	v.CorsOrigins = u.CorsOrigins
+	v.LetsEncrypt = u.LetsEncrypt
+	v.ConnectionLimit = u.ConnectionLimit
+	if u.ReadHeaderTimeout != nil {
+		if x, err := encoding.DurationFromJSON(u.ReadHeaderTimeout); err != nil {
+			return fmt.Errorf("error decoding ReadHeaderTimeout: %w", err)
+		} else {
+			v.ReadHeaderTimeout = &x
+		}
+	}
+	v.DebugJsonRpc = u.DebugJsonRpc
+	v.Router = u.Router
+	v.PeerMap = u.PeerMap
 	return nil
 }
 
@@ -770,6 +1383,26 @@ func (v *RawPrivateKey) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Address = u.Address
+	return nil
+}
+
+func (v *RouterService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   ServiceType `json:"type"`
+		Name   string      `json:"name,omitempty"`
+		Events string      `json:"events,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Name = v.Name
+	u.Events = v.Events
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Name = u.Name
+	v.Events = u.Events
 	return nil
 }
 
