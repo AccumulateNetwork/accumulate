@@ -213,3 +213,18 @@ RouterService:
       description: may specify an event bus to use for routing table updates
       type: string
       optional: true
+
+FaucetService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: SigningKey
+      type: PrivateKey
+      marshal-as: union
+    - name: Router
+      type: { name: ServiceOrRef, parameters: [{ type: RouterService, pointer: true }] }
+      marshal-as: reference
+      pointer: true
