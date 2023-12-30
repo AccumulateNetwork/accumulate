@@ -241,3 +241,36 @@ GatewayConfiguration:
     - name: Listen
       type: p2p.Multiaddr
       marshal-as: union
+
+Querier:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string
+    - name: Storage
+      type: StorageOrRef
+      marshal-as: reference
+      pointer: true
+      optional: true
+
+NetworkService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string
+
+MetricsService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string
+
+EventsService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: string

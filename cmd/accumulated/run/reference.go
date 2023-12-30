@@ -67,6 +67,18 @@ func (s *baseRef[T]) unmarshal(b []byte) error {
 	return json.Unmarshal(b, &s.value)
 }
 
+func (s *baseRef[T]) unmarshalWith(b []byte, unmarshal func([]byte) (T, error)) error {
+	if json.Unmarshal(b, &s.ref) == nil {
+		return nil
+	}
+	ss, err := unmarshal(b)
+	if err != nil {
+		return err
+	}
+	s.value = ss
+	return nil
+}
+
 type ServiceOrRef[T serviceType[T]] baseRef[T]
 
 type serviceType[T any] interface {
