@@ -72,6 +72,14 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return &closedBlock{*block, nil}, nil
 	}
 
+	// Record the previous block's state hash it on the BPT chain
+	if block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		err := block.Batch.Account(block.Executor.Describe.Ledger()).BptChain().Inner().AddHash(block.State.PreviousStateHash[:], false)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Update active globals - **after** checking if the block is empty, because
 	// we definitely don't want to tell the ABCI that the validator set changed
 	// if the block is getting discarded, though that _should_ be impossible
