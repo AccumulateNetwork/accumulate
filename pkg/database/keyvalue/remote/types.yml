@@ -2,19 +2,15 @@ getCall:
   non-json: true
   union: { type: call, private: true }
   fields:
-    - name: Key
-      type: record.Key
+    - type: keyOrHash
       marshal-as: reference
-      pointer: true
 
 putCall:
   non-json: true
   union: { type: call, private: true }
   fields:
-    - name: Key
-      type: record.Key
+    - type: keyOrHash
       marshal-as: reference
-      pointer: true
     - name: Value
       type: bytes
 
@@ -22,10 +18,8 @@ deleteCall:
   non-json: true
   union: { type: call, private: true }
   fields:
-    - name: Key
-      type: record.Key
+    - type: keyOrHash
       marshal-as: reference
-      pointer: true
 
 forEachCall:
   non-json: true
@@ -67,10 +61,8 @@ notFoundResponse:
   non-json: true
   union: { type: response, private: true }
   fields:
-    - name: Key
-      type: record.Key
+    - type: keyOrHash
       marshal-as: reference
-      pointer: true
 
 valueResponse:
   non-json: true
@@ -83,10 +75,8 @@ entryResponse:
   non-json: true
   union: { type: response, private: true }
   fields:
-    - name: Key
-      type: record.Key
+    - type: keyOrHash
       marshal-as: reference
-      pointer: true
     - name: Value
       type: bytes
 
@@ -106,3 +96,13 @@ unsupportedCallResponse:
     - name: CallType
       type: callType
       marshal-as: enum
+
+keyOrHash:
+  non-json: true
+  fields:
+    - name: Key
+      type: record.Key
+      marshal-as: reference
+      pointer: true
+    - name: Hash
+      type: hash
