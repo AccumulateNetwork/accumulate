@@ -562,9 +562,8 @@
       "args": [
         "heal",
         "synth",
-        "mainnet",
-        "--cached-scan=${env:HOME}/.accumulate/cache/mainnet.json",
-        // "Apollo → Yutu", "912"
+        "kermit",
+        "Harpo → Groucho", "1"
       ]
     },
     {
