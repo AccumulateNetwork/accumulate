@@ -58,16 +58,16 @@ func (m *MultiaddrSliceFlag) Set(s string) error {
 }
 
 type UrlFlag struct {
-	V **url.URL
+	V *url.URL
 }
 
-func (f UrlFlag) Type() string   { return "acc-url" }
-func (f UrlFlag) String() string { return fmt.Sprint(*f.V) }
-func (f UrlFlag) Set(s string) error {
+func (f *UrlFlag) Type() string   { return "acc-url" }
+func (f *UrlFlag) String() string { return fmt.Sprint(f.V) }
+func (f *UrlFlag) Set(s string) error {
 	u, err := url.Parse(s)
 	if err != nil {
 		return err
 	}
-	*f.V = u
+	f.V = u
 	return nil
 }

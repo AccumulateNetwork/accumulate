@@ -59,7 +59,7 @@ func ConnectStore(conn io.ReadWriter) *Store {
 
 // Get implements [keyvalue.Store.Get].
 func (c *Store) Get(key *record.Key) ([]byte, error) {
-	r, err := roundTrip[*valueResponse](c.rd, c.wr, &getCall{Key: key})
+	r, err := roundTrip[*valueResponse](c.rd, c.wr, &getCall{keyOrHash: wrap(key)})
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (c *Store) Get(key *record.Key) ([]byte, error) {
 func (c *Store) GetBatch(keys []*record.Key) ([][]byte, error) {
 	calls := make([]call, 0, len(keys))
 	for _, key := range keys {
-		calls = append(calls, &getCall{Key: key})
+		calls = append(calls, &getCall{keyOrHash: wrap(key)})
 	}
 	r, err := roundTrip[*batchResponse](c.rd, c.wr, &batchCall{Calls: calls})
 	if err != nil {
@@ -91,7 +91,7 @@ func (c *Store) GetBatch(keys []*record.Key) ([][]byte, error) {
 
 // Put implements [keyvalue.Store.Put].
 func (c *Store) Put(key *record.Key, value []byte) error {
-	_, err := roundTrip[*okResponse](c.rd, c.wr, &putCall{Key: key, Value: value})
+	_, err := roundTrip[*okResponse](c.rd, c.wr, &putCall{keyOrHash: wrap(key), Value: value})
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (c *Store) Put(key *record.Key, value []byte) error {
 
 // Delete implements [keyvalue.Store.Delete].
 func (c *Store) Delete(key *record.Key) error {
-	_, err := roundTrip[*okResponse](c.rd, c.wr, &deleteCall{Key: key})
+	_, err := roundTrip[*okResponse](c.rd, c.wr, &deleteCall{keyOrHash: wrap(key)})
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func callForEach(rd *bufio.Reader, wr io.Writer, d forEachCall, fn func(*record.
 		case *errorResponse:
 			return r.Error
 		case *entryResponse:
-			err = fn(r.Key, r.Value)
+			err = fn(r.unwrap(), r.Value)
 		case *batchResponse:
 			for _, r := range r.Responses {
 				var e *entryResponse
@@ -147,7 +147,7 @@ func callForEach(rd *bufio.Reader, wr io.Writer, d forEachCall, fn func(*record.
 				if err != nil {
 					break
 				}
-				err = fn(e.Key, e.Value)
+				err = fn(e.unwrap(), e.Value)
 				if err != nil {
 					break
 				}
@@ -170,7 +170,7 @@ func callForEach(rd *bufio.Reader, wr io.Writer, d forEachCall, fn func(*record.
 func executeCall(store keyvalue.Store, rd *bufio.Reader, wr io.Writer, c call, other func(call) response) response {
 	switch c := c.(type) {
 	case *getCall:
-		v, err := store.Get(c.Key)
+		v, err := store.Get(c.unwrap())
 		if err != nil {
 			return errResp(err)
 		} else {
@@ -178,7 +178,7 @@ func executeCall(store keyvalue.Store, rd *bufio.Reader, wr io.Writer, c call, o
 		}
 
 	case *putCall:
-		err := store.Put(c.Key, c.Value)
+		err := store.Put(c.unwrap(), c.Value)
 		if err != nil {
 			return errResp(err)
 		} else {
@@ -186,7 +186,7 @@ func executeCall(store keyvalue.Store, rd *bufio.Reader, wr io.Writer, c call, o
 		}
 
 	case *deleteCall:
-		err := store.Delete(c.Key)
+		err := store.Delete(c.unwrap())
 		if err != nil {
 			return errResp(err)
 		} else {
@@ -210,7 +210,7 @@ func executeCall(store keyvalue.Store, rd *bufio.Reader, wr io.Writer, c call, o
 			// If the batch count or size (ignoring keys) is greater than the
 			// threshold, send the batch
 			size += uint64(len(value))
-			batch = append(batch, &entryResponse{Key: key, Value: value})
+			batch = append(batch, &entryResponse{keyOrHash: wrap(key), Value: value})
 			if len(batch) < N && size < S {
 				return nil
 			}
@@ -241,7 +241,7 @@ func executeCall(store keyvalue.Store, rd *bufio.Reader, wr io.Writer, c call, o
 
 func errResp(err error) response {
 	if err, ok := err.(*database.NotFoundError); ok {
-		return &notFoundResponse{Key: (*record.Key)(err)}
+		return &notFoundResponse{keyOrHash: wrap((*record.Key)(err))}
 	}
 	return &errorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)}
 }
@@ -271,7 +271,7 @@ func asResponse[T response](r response) (T, error) {
 	case T:
 		return r, nil
 	case *notFoundResponse:
-		return z, (*database.NotFoundError)(r.Key)
+		return z, (*database.NotFoundError)(r.unwrap())
 	case *errorResponse:
 		return z, r.Error
 	case *unsupportedCallResponse:
