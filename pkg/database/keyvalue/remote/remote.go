@@ -120,7 +120,7 @@ func (c *DB) Begin(prefix *database.Key, writable bool) keyvalue.ChangeSet {
 }
 
 func (c *DB) get(rd *bufio.Reader, wr io.Writer, key *record.Key) ([]byte, error) {
-	r, err := roundTrip[*valueResponse](rd, wr, &getCall{Key: key})
+	r, err := roundTrip[*valueResponse](rd, wr, &getCall{keyOrHash: wrap(key)})
 	if err != nil {
 		return nil, err
 	}
@@ -131,9 +131,9 @@ func (c *DB) commit(rd *bufio.Reader, wr io.WriteCloser, entries map[[32]byte]me
 	var err error
 	for _, e := range entries {
 		if e.Delete {
-			_, err = roundTrip[*okResponse](rd, wr, &deleteCall{Key: e.Key})
+			_, err = roundTrip[*okResponse](rd, wr, &deleteCall{keyOrHash: wrap(e.Key)})
 		} else {
-			_, err = roundTrip[*okResponse](rd, wr, &putCall{Key: e.Key, Value: e.Value})
+			_, err = roundTrip[*okResponse](rd, wr, &putCall{keyOrHash: wrap(e.Key), Value: e.Value})
 		}
 		if err != nil {
 			return err

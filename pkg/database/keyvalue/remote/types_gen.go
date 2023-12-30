@@ -41,14 +41,14 @@ type commitCall struct {
 
 type deleteCall struct {
 	fieldsSet []bool
-	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	keyOrHash
 	extraData []byte
 }
 
 type entryResponse struct {
 	fieldsSet []bool
-	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Value     []byte      `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	keyOrHash
+	Value     []byte `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -66,13 +66,20 @@ type forEachCall struct {
 
 type getCall struct {
 	fieldsSet []bool
+	keyOrHash
+	extraData []byte
+}
+
+type keyOrHash struct {
+	fieldsSet []bool
 	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Hash      [32]byte    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
 	extraData []byte
 }
 
 type notFoundResponse struct {
 	fieldsSet []bool
-	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	keyOrHash
 	extraData []byte
 }
 
@@ -83,8 +90,8 @@ type okResponse struct {
 
 type putCall struct {
 	fieldsSet []bool
-	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Value     []byte      `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	keyOrHash
+	Value     []byte `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 	extraData []byte
 }
 
@@ -182,9 +189,7 @@ func (v *commitCall) CopyAsInterface() interface{} { return v.Copy() }
 func (v *deleteCall) Copy() *deleteCall {
 	u := new(deleteCall)
 
-	if v.Key != nil {
-		u.Key = (v.Key).Copy()
-	}
+	u.keyOrHash = *v.keyOrHash.Copy()
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -198,9 +203,7 @@ func (v *deleteCall) CopyAsInterface() interface{} { return v.Copy() }
 func (v *entryResponse) Copy() *entryResponse {
 	u := new(entryResponse)
 
-	if v.Key != nil {
-		u.Key = (v.Key).Copy()
-	}
+	u.keyOrHash = *v.keyOrHash.Copy()
 	u.Value = encoding.BytesCopy(v.Value)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -245,9 +248,7 @@ func (v *forEachCall) CopyAsInterface() interface{} { return v.Copy() }
 func (v *getCall) Copy() *getCall {
 	u := new(getCall)
 
-	if v.Key != nil {
-		u.Key = (v.Key).Copy()
-	}
+	u.keyOrHash = *v.keyOrHash.Copy()
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -258,12 +259,27 @@ func (v *getCall) Copy() *getCall {
 
 func (v *getCall) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *notFoundResponse) Copy() *notFoundResponse {
-	u := new(notFoundResponse)
+func (v *keyOrHash) Copy() *keyOrHash {
+	u := new(keyOrHash)
 
 	if v.Key != nil {
 		u.Key = (v.Key).Copy()
 	}
+	u.Hash = v.Hash
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *keyOrHash) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *notFoundResponse) Copy() *notFoundResponse {
+	u := new(notFoundResponse)
+
+	u.keyOrHash = *v.keyOrHash.Copy()
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -290,9 +306,7 @@ func (v *okResponse) CopyAsInterface() interface{} { return v.Copy() }
 func (v *putCall) Copy() *putCall {
 	u := new(putCall)
 
-	if v.Key != nil {
-		u.Key = (v.Key).Copy()
-	}
+	u.keyOrHash = *v.keyOrHash.Copy()
 	u.Value = encoding.BytesCopy(v.Value)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -364,12 +378,7 @@ func (v *commitCall) Equal(u *commitCall) bool {
 }
 
 func (v *deleteCall) Equal(u *deleteCall) bool {
-	switch {
-	case v.Key == u.Key:
-		// equal
-	case v.Key == nil || u.Key == nil:
-		return false
-	case !((v.Key).Equal(u.Key)):
+	if !v.keyOrHash.Equal(&u.keyOrHash) {
 		return false
 	}
 
@@ -377,12 +386,7 @@ func (v *deleteCall) Equal(u *deleteCall) bool {
 }
 
 func (v *entryResponse) Equal(u *entryResponse) bool {
-	switch {
-	case v.Key == u.Key:
-		// equal
-	case v.Key == nil || u.Key == nil:
-		return false
-	case !((v.Key).Equal(u.Key)):
+	if !v.keyOrHash.Equal(&u.keyOrHash) {
 		return false
 	}
 	if !(bytes.Equal(v.Value, u.Value)) {
@@ -414,6 +418,14 @@ func (v *forEachCall) Equal(u *forEachCall) bool {
 }
 
 func (v *getCall) Equal(u *getCall) bool {
+	if !v.keyOrHash.Equal(&u.keyOrHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *keyOrHash) Equal(u *keyOrHash) bool {
 	switch {
 	case v.Key == u.Key:
 		// equal
@@ -422,17 +434,15 @@ func (v *getCall) Equal(u *getCall) bool {
 	case !((v.Key).Equal(u.Key)):
 		return false
 	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
 
 	return true
 }
 
 func (v *notFoundResponse) Equal(u *notFoundResponse) bool {
-	switch {
-	case v.Key == u.Key:
-		// equal
-	case v.Key == nil || u.Key == nil:
-		return false
-	case !((v.Key).Equal(u.Key)):
+	if !v.keyOrHash.Equal(&u.keyOrHash) {
 		return false
 	}
 
@@ -445,12 +455,7 @@ func (v *okResponse) Equal(u *okResponse) bool {
 }
 
 func (v *putCall) Equal(u *putCall) bool {
-	switch {
-	case v.Key == u.Key:
-		// equal
-	case v.Key == nil || u.Key == nil:
-		return false
-	case !((v.Key).Equal(u.Key)):
+	if !v.keyOrHash.Equal(&u.keyOrHash) {
 		return false
 	}
 	if !(bytes.Equal(v.Value, u.Value)) {
@@ -617,7 +622,7 @@ func (v *commitCall) IsValid() error {
 
 var fieldNames_deleteCall = []string{
 	1: "Type",
-	2: "Key",
+	2: "keyOrHash",
 }
 
 func (v *deleteCall) MarshalBinary() ([]byte, error) {
@@ -629,9 +634,7 @@ func (v *deleteCall) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Key == nil) {
-		writer.WriteValue(2, v.Key.MarshalBinary)
-	}
+	writer.WriteValue(2, v.keyOrHash.MarshalBinary)
 
 	_, _, err := writer.Reset(fieldNames_deleteCall)
 	if err != nil {
@@ -647,10 +650,8 @@ func (v *deleteCall) IsValid() error {
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Key is missing")
-	} else if v.Key == nil {
-		errs = append(errs, "field Key is not set")
+	if err := v.keyOrHash.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	switch len(errs) {
@@ -665,7 +666,7 @@ func (v *deleteCall) IsValid() error {
 
 var fieldNames_entryResponse = []string{
 	1: "Type",
-	2: "Key",
+	2: "keyOrHash",
 	3: "Value",
 }
 
@@ -678,9 +679,7 @@ func (v *entryResponse) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Key == nil) {
-		writer.WriteValue(2, v.Key.MarshalBinary)
-	}
+	writer.WriteValue(2, v.keyOrHash.MarshalBinary)
 	if !(len(v.Value) == 0) {
 		writer.WriteBytes(3, v.Value)
 	}
@@ -699,10 +698,8 @@ func (v *entryResponse) IsValid() error {
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Key is missing")
-	} else if v.Key == nil {
-		errs = append(errs, "field Key is not set")
+	if err := v.keyOrHash.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Value is missing")
@@ -813,7 +810,7 @@ func (v *forEachCall) IsValid() error {
 
 var fieldNames_getCall = []string{
 	1: "Type",
-	2: "Key",
+	2: "keyOrHash",
 }
 
 func (v *getCall) MarshalBinary() ([]byte, error) {
@@ -825,9 +822,7 @@ func (v *getCall) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Key == nil) {
-		writer.WriteValue(2, v.Key.MarshalBinary)
-	}
+	writer.WriteValue(2, v.keyOrHash.MarshalBinary)
 
 	_, _, err := writer.Reset(fieldNames_getCall)
 	if err != nil {
@@ -843,10 +838,60 @@ func (v *getCall) IsValid() error {
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if err := v.keyOrHash.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_keyOrHash = []string{
+	1: "Key",
+	2: "Hash",
+}
+
+func (v *keyOrHash) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Key == nil) {
+		writer.WriteValue(1, v.Key.MarshalBinary)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(2, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_keyOrHash)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *keyOrHash) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Key is missing")
 	} else if v.Key == nil {
 		errs = append(errs, "field Key is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
 	}
 
 	switch len(errs) {
@@ -861,7 +906,7 @@ func (v *getCall) IsValid() error {
 
 var fieldNames_notFoundResponse = []string{
 	1: "Type",
-	2: "Key",
+	2: "keyOrHash",
 }
 
 func (v *notFoundResponse) MarshalBinary() ([]byte, error) {
@@ -873,9 +918,7 @@ func (v *notFoundResponse) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Key == nil) {
-		writer.WriteValue(2, v.Key.MarshalBinary)
-	}
+	writer.WriteValue(2, v.keyOrHash.MarshalBinary)
 
 	_, _, err := writer.Reset(fieldNames_notFoundResponse)
 	if err != nil {
@@ -891,10 +934,8 @@ func (v *notFoundResponse) IsValid() error {
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Key is missing")
-	} else if v.Key == nil {
-		errs = append(errs, "field Key is not set")
+	if err := v.keyOrHash.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	switch len(errs) {
@@ -948,7 +989,7 @@ func (v *okResponse) IsValid() error {
 
 var fieldNames_putCall = []string{
 	1: "Type",
-	2: "Key",
+	2: "keyOrHash",
 	3: "Value",
 }
 
@@ -961,9 +1002,7 @@ func (v *putCall) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Key == nil) {
-		writer.WriteValue(2, v.Key.MarshalBinary)
-	}
+	writer.WriteValue(2, v.keyOrHash.MarshalBinary)
 	if !(len(v.Value) == 0) {
 		writer.WriteBytes(3, v.Value)
 	}
@@ -982,10 +1021,8 @@ func (v *putCall) IsValid() error {
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Key is missing")
-	} else if v.Key == nil {
-		errs = append(errs, "field Key is not set")
+	if err := v.keyOrHash.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Value is missing")
@@ -1238,9 +1275,7 @@ func (v *deleteCall) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *deleteCall) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(record.Key); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.Key = x
-	}
+	reader.ReadValue(2, v.keyOrHash.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_deleteCall)
 	if err != nil {
@@ -1273,9 +1308,7 @@ func (v *entryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *entryResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(record.Key); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.Key = x
-	}
+	reader.ReadValue(2, v.keyOrHash.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadBytes(3); ok {
 		v.Value = x
 	}
@@ -1381,11 +1414,35 @@ func (v *getCall) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *getCall) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(record.Key); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.Key = x
-	}
+	reader.ReadValue(2, v.keyOrHash.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_getCall)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *keyOrHash) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *keyOrHash) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(record.Key); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Key = x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_keyOrHash)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1416,9 +1473,7 @@ func (v *notFoundResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *notFoundResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(record.Key); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.Key = x
-	}
+	reader.ReadValue(2, v.keyOrHash.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_notFoundResponse)
 	if err != nil {
@@ -1483,9 +1538,7 @@ func (v *putCall) UnmarshalBinaryFrom(rd io.Reader) error {
 }
 
 func (v *putCall) UnmarshalFieldsFrom(reader *encoding.Reader) error {
-	if x := new(record.Key); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-		v.Key = x
-	}
+	reader.ReadValue(2, v.keyOrHash.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadBytes(3); ok {
 		v.Value = x
 	}
