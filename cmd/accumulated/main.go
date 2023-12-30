@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"golang.org/x/term"
 )
 
@@ -31,7 +34,8 @@ var defaultWorkDir = filepath.Join(currentUser.HomeDir, ".accumulate")
 var cmdMain = &cobra.Command{
 	Use:   "accumulated",
 	Short: "Accumulate network daemon",
-	Run:   printUsageAndExit1,
+	Args:  cobra.MaximumNArgs(1),
+	Run:   run2,
 }
 
 var flagMain struct {
@@ -44,6 +48,21 @@ func init() {
 
 func main() {
 	_ = cmdMain.Execute()
+}
+
+func run2(cmd *cobra.Command, args []string) {
+	if len(args) == 0 {
+		printUsageAndExit1(cmd, args)
+	}
+
+	ctx := cmdutil.ContextForMainProcess(context.Background())
+
+	c := new(run.Config)
+	check(c.LoadFrom(args[0]))
+	inst, err := run.Start(ctx, c)
+	check(err)
+	<-ctx.Done()
+	check(inst.Stop())
 }
 
 func printUsageAndExit1(cmd *cobra.Command, _ []string) {
