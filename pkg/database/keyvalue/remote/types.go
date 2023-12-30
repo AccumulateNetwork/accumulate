@@ -6,7 +6,10 @@
 
 package remote
 
-import "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+import (
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+)
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum  --package remote enums.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package remote types.yml
@@ -23,4 +26,24 @@ type call interface {
 type response interface {
 	encoding.UnionValue
 	Type() responseType
+}
+
+func wrap(key *record.Key) keyOrHash {
+	if key.Len() == 0 {
+		return keyOrHash{}
+	}
+
+	// If the key starts with a hash, convert the whole thing to a hash
+	if _, ok := key.Get(0).(record.KeyHash); ok {
+		return keyOrHash{Hash: key.Hash()}
+	}
+
+	return keyOrHash{Key: key}
+}
+
+func (k keyOrHash) unwrap() *record.Key {
+	if k.Key != nil {
+		return k.Key
+	}
+	return record.KeyFromHash(k.Hash)
 }
