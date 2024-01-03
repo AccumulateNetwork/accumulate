@@ -148,7 +148,7 @@ func run(_ *cobra.Command, args []string) {
 	inst, err := Start(ctx, cfg)
 	Check(err)
 	<-ctx.Done()
-	Check(inst.Stop())
+	inst.Stop()
 }
 
 func mustParsePeer(s string) peer.ID {

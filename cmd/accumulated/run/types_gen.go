@@ -53,12 +53,13 @@ type Config struct {
 }
 
 type ConsensusService struct {
-	NodeDir        string          `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
-	ValidatorKey   PrivateKey      `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
-	Genesis        string          `json:"genesis,omitempty" form:"genesis" query:"genesis" validate:"required"`
-	Listen         p2p.Multiaddr   `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
-	BootstrapPeers []p2p.Multiaddr `json:"bootstrapPeers,omitempty" form:"bootstrapPeers" query:"bootstrapPeers" validate:"required"`
-	App            ConsensusApp    `json:"app,omitempty" form:"app" query:"app" validate:"required"`
+	NodeDir          string          `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
+	ValidatorKey     PrivateKey      `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
+	Genesis          string          `json:"genesis,omitempty" form:"genesis" query:"genesis" validate:"required"`
+	Listen           p2p.Multiaddr   `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	BootstrapPeers   []p2p.Multiaddr `json:"bootstrapPeers,omitempty" form:"bootstrapPeers" query:"bootstrapPeers" validate:"required"`
+	MetricsNamespace string          `json:"metricsNamespace,omitempty" form:"metricsNamespace" query:"metricsNamespace"`
+	App              ConsensusApp    `json:"app,omitempty" form:"app" query:"app" validate:"required"`
 }
 
 type CoreConsensusApp struct {
@@ -80,6 +81,14 @@ type CoreValidatorConfiguration struct {
 	EnableDirectDispatch *bool           `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
 	MaxEnvelopesPerBlock *uint64         `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
 	StorageType          *StorageType    `json:"storageType,omitempty" form:"storageType" query:"storageType"`
+}
+
+type DevnetConfiguration struct {
+	Listen     p2p.Multiaddr         `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	Bvns       uint64                `json:"bvns,omitempty" form:"bvns" query:"bvns" validate:"required"`
+	Validators uint64                `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
+	Followers  uint64                `json:"followers,omitempty" form:"followers" query:"followers"`
+	Globals    *network.GlobalValues `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
 }
 
 type EventsService struct {
@@ -128,12 +137,13 @@ type HttpService struct {
 
 type Logging struct {
 	Format string         `json:"format,omitempty" form:"format" query:"format" validate:"required"`
+	Color  *bool          `json:"color,omitempty" form:"color" query:"color" validate:"required"`
 	Rules  []*LoggingRule `json:"rules,omitempty" form:"rules" query:"rules" validate:"required"`
 }
 
 type LoggingRule struct {
-	Level  slog.Level `json:"level" form:"level" query:"level" validate:"required"`
-	Module string     `json:"module,omitempty" form:"module" query:"module" validate:"required"`
+	Level   slog.Level `json:"level" form:"level" query:"level" validate:"required"`
+	Modules []string   `json:"modules,omitempty" form:"modules" query:"modules" validate:"required"`
 }
 
 type MemoryStorage struct {
@@ -153,7 +163,7 @@ type P2P struct {
 	Key                PrivateKey      `json:"key,omitempty" form:"key" query:"key" validate:"required"`
 	PeerDB             *string         `json:"peerDB,omitempty" form:"peerDB" query:"peerDB" validate:"required"`
 	EnablePeerTracking bool            `json:"enablePeerTracking,omitempty" form:"enablePeerTracking" query:"enablePeerTracking" validate:"required"`
-	DiscoveryMode      DhtMode         `json:"discoveryMode,omitempty" form:"discoveryMode" query:"discoveryMode" validate:"required"`
+	DiscoveryMode      *DhtMode        `json:"discoveryMode,omitempty" form:"discoveryMode" query:"discoveryMode" validate:"required"`
 	External           p2p.Multiaddr   `json:"external,omitempty" form:"external" query:"external" validate:"required"`
 }
 
@@ -197,6 +207,12 @@ type StorageService struct {
 	Storage Storage `json:"storage,omitempty" form:"storage" query:"storage" validate:"required"`
 }
 
+type SubnodeService struct {
+	Name     string     `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	NodeKey  PrivateKey `json:"nodeKey,omitempty" form:"nodeKey" query:"nodeKey" validate:"required"`
+	Services []Service  `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+}
+
 type TransientPrivateKey struct {
 	key address.Address
 }
@@ -212,6 +228,8 @@ func (*ConsensusService) Type() ServiceType { return ServiceTypeConsensus }
 func (*CoreConsensusApp) Type() ConsensusAppType { return ConsensusAppTypeCore }
 
 func (*CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
+
+func (*DevnetConfiguration) Type() ConfigurationType { return ConfigurationTypeDevnet }
 
 func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
 
@@ -238,6 +256,8 @@ func (*RouterService) Type() ServiceType { return ServiceTypeRouter }
 func (*SnapshotService) Type() ServiceType { return ServiceTypeSnapshot }
 
 func (*StorageService) Type() ServiceType { return ServiceTypeStorage }
+
+func (*SubnodeService) Type() ServiceType { return ServiceTypeSubnode }
 
 func (*TransientPrivateKey) Type() PrivateKeyType { return PrivateKeyTypeTransient }
 
@@ -319,6 +339,7 @@ func (v *ConsensusService) Copy() *ConsensusService {
 			u.BootstrapPeers[i] = p2p.CopyMultiaddr(v)
 		}
 	}
+	u.MetricsNamespace = v.MetricsNamespace
 	if v.App != nil {
 		u.App = CopyConsensusApp(v.App)
 	}
@@ -399,6 +420,24 @@ func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 }
 
 func (v *CoreValidatorConfiguration) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DevnetConfiguration) Copy() *DevnetConfiguration {
+	u := new(DevnetConfiguration)
+
+	if v.Listen != nil {
+		u.Listen = p2p.CopyMultiaddr(v.Listen)
+	}
+	u.Bvns = v.Bvns
+	u.Validators = v.Validators
+	u.Followers = v.Followers
+	if v.Globals != nil {
+		u.Globals = (v.Globals).Copy()
+	}
+
+	return u
+}
+
+func (v *DevnetConfiguration) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *EventsService) Copy() *EventsService {
 	u := new(EventsService)
@@ -522,6 +561,10 @@ func (v *Logging) Copy() *Logging {
 	u := new(Logging)
 
 	u.Format = v.Format
+	if v.Color != nil {
+		u.Color = new(bool)
+		*u.Color = *v.Color
+	}
 	u.Rules = make([]*LoggingRule, len(v.Rules))
 	for i, v := range v.Rules {
 		v := v
@@ -539,7 +582,11 @@ func (v *LoggingRule) Copy() *LoggingRule {
 	u := new(LoggingRule)
 
 	u.Level = v.Level
-	u.Module = v.Module
+	u.Modules = make([]string, len(v.Modules))
+	for i, v := range v.Modules {
+		v := v
+		u.Modules[i] = v
+	}
 
 	return u
 }
@@ -599,7 +646,10 @@ func (v *P2P) Copy() *P2P {
 		*u.PeerDB = *v.PeerDB
 	}
 	u.EnablePeerTracking = v.EnablePeerTracking
-	u.DiscoveryMode = v.DiscoveryMode
+	if v.DiscoveryMode != nil {
+		u.DiscoveryMode = new(DhtMode)
+		*u.DiscoveryMode = *v.DiscoveryMode
+	}
 	if v.External != nil {
 		u.External = p2p.CopyMultiaddr(v.External)
 	}
@@ -697,6 +747,26 @@ func (v *StorageService) Copy() *StorageService {
 
 func (v *StorageService) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SubnodeService) Copy() *SubnodeService {
+	u := new(SubnodeService)
+
+	u.Name = v.Name
+	if v.NodeKey != nil {
+		u.NodeKey = CopyPrivateKey(v.NodeKey)
+	}
+	u.Services = make([]Service, len(v.Services))
+	for i, v := range v.Services {
+		v := v
+		if v != nil {
+			u.Services[i] = CopyService(v)
+		}
+	}
+
+	return u
+}
+
+func (v *SubnodeService) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *TransientPrivateKey) Copy() *TransientPrivateKey {
 	u := new(TransientPrivateKey)
 
@@ -789,6 +859,9 @@ func (v *ConsensusService) Equal(u *ConsensusService) bool {
 		if !(p2p.EqualMultiaddr(v.BootstrapPeers[i], u.BootstrapPeers[i])) {
 			return false
 		}
+	}
+	if !(v.MetricsNamespace == u.MetricsNamespace) {
+		return false
 	}
 	if !(EqualConsensusApp(v.App, u.App)) {
 		return false
@@ -896,6 +969,31 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 	case v.StorageType == nil || u.StorageType == nil:
 		return false
 	case !(*v.StorageType == *u.StorageType):
+		return false
+	}
+
+	return true
+}
+
+func (v *DevnetConfiguration) Equal(u *DevnetConfiguration) bool {
+	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
+		return false
+	}
+	if !(v.Bvns == u.Bvns) {
+		return false
+	}
+	if !(v.Validators == u.Validators) {
+		return false
+	}
+	if !(v.Followers == u.Followers) {
+		return false
+	}
+	switch {
+	case v.Globals == u.Globals:
+		// equal
+	case v.Globals == nil || u.Globals == nil:
+		return false
+	case !((v.Globals).Equal(u.Globals)):
 		return false
 	}
 
@@ -1045,6 +1143,14 @@ func (v *Logging) Equal(u *Logging) bool {
 	if !(v.Format == u.Format) {
 		return false
 	}
+	switch {
+	case v.Color == u.Color:
+		// equal
+	case v.Color == nil || u.Color == nil:
+		return false
+	case !(*v.Color == *u.Color):
+		return false
+	}
 	if len(v.Rules) != len(u.Rules) {
 		return false
 	}
@@ -1061,8 +1167,13 @@ func (v *LoggingRule) Equal(u *LoggingRule) bool {
 	if !(v.Level == u.Level) {
 		return false
 	}
-	if !(v.Module == u.Module) {
+	if len(v.Modules) != len(u.Modules) {
 		return false
+	}
+	for i := range v.Modules {
+		if !(v.Modules[i] == u.Modules[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -1120,7 +1231,12 @@ func (v *P2P) Equal(u *P2P) bool {
 	if !(v.EnablePeerTracking == u.EnablePeerTracking) {
 		return false
 	}
-	if !(v.DiscoveryMode == u.DiscoveryMode) {
+	switch {
+	case v.DiscoveryMode == u.DiscoveryMode:
+		// equal
+	case v.DiscoveryMode == nil || u.DiscoveryMode == nil:
+		return false
+	case !(*v.DiscoveryMode == *u.DiscoveryMode):
 		return false
 	}
 	if !(p2p.EqualMultiaddr(v.External, u.External)) {
@@ -1227,6 +1343,25 @@ func (v *StorageService) Equal(u *StorageService) bool {
 	}
 	if !(EqualStorage(v.Storage, u.Storage)) {
 		return false
+	}
+
+	return true
+}
+
+func (v *SubnodeService) Equal(u *SubnodeService) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(EqualPrivateKey(v.NodeKey, u.NodeKey)) {
+		return false
+	}
+	if len(v.Services) != len(u.Services) {
+		return false
+	}
+	for i := range v.Services {
+		if !(EqualService(v.Services[i], u.Services[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -1497,13 +1632,14 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 
 func (v *ConsensusService) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           ServiceType                                    `json:"type"`
-		NodeDir        string                                         `json:"nodeDir,omitempty"`
-		ValidatorKey   *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
-		Genesis        string                                         `json:"genesis,omitempty"`
-		Listen         *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
-		BootstrapPeers *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
-		App            *encoding.JsonUnmarshalWith[ConsensusApp]      `json:"app,omitempty"`
+		Type             ServiceType                                    `json:"type"`
+		NodeDir          string                                         `json:"nodeDir,omitempty"`
+		ValidatorKey     *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
+		Genesis          string                                         `json:"genesis,omitempty"`
+		Listen           *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
+		BootstrapPeers   *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
+		MetricsNamespace string                                         `json:"metricsNamespace,omitempty"`
+		App              *encoding.JsonUnmarshalWith[ConsensusApp]      `json:"app,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.NodeDir) == 0) {
@@ -1520,6 +1656,9 @@ func (v *ConsensusService) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.BootstrapPeers) == 0) {
 		u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(len(v.MetricsNamespace) == 0) {
+		u.MetricsNamespace = v.MetricsNamespace
 	}
 	if !(EqualConsensusApp(v.App, nil)) {
 		u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
@@ -1599,6 +1738,34 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.StorageType == nil) {
 		u.StorageType = v.StorageType
+	}
+	return json.Marshal(&u)
+}
+
+func (v *DevnetConfiguration) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       ConfigurationType                          `json:"type"`
+		Listen     *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		Bvns       uint64                                     `json:"bvns,omitempty"`
+		Validators uint64                                     `json:"validators,omitempty"`
+		Followers  uint64                                     `json:"followers,omitempty"`
+		Globals    *network.GlobalValues                      `json:"globals,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
+		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(v.Bvns == 0) {
+		u.Bvns = v.Bvns
+	}
+	if !(v.Validators == 0) {
+		u.Validators = v.Validators
+	}
+	if !(v.Followers == 0) {
+		u.Followers = v.Followers
+	}
+	if !(v.Globals == nil) {
+		u.Globals = v.Globals
 	}
 	return json.Marshal(&u)
 }
@@ -1718,13 +1885,29 @@ func (v *HttpService) MarshalJSON() ([]byte, error) {
 func (v *Logging) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Format string                          `json:"format,omitempty"`
+		Color  *bool                           `json:"color,omitempty"`
 		Rules  encoding.JsonList[*LoggingRule] `json:"rules,omitempty"`
 	}{}
 	if !(len(v.Format) == 0) {
 		u.Format = v.Format
 	}
+	if !(v.Color == nil) {
+		u.Color = v.Color
+	}
 	if !(len(v.Rules) == 0) {
 		u.Rules = v.Rules
+	}
+	return json.Marshal(&u)
+}
+
+func (v *LoggingRule) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Level   slog.Level                `json:"level"`
+		Modules encoding.JsonList[string] `json:"modules,omitempty"`
+	}{}
+	u.Level = v.Level
+	if !(len(v.Modules) == 0) {
+		u.Modules = v.Modules
 	}
 	return json.Marshal(&u)
 }
@@ -1768,7 +1951,7 @@ func (v *P2P) MarshalJSON() ([]byte, error) {
 		Key                *encoding.JsonUnmarshalWith[PrivateKey]        `json:"key,omitempty"`
 		PeerDB             *string                                        `json:"peerDB,omitempty"`
 		EnablePeerTracking bool                                           `json:"enablePeerTracking,omitempty"`
-		DiscoveryMode      DhtMode                                        `json:"discoveryMode,omitempty"`
+		DiscoveryMode      *DhtMode                                       `json:"discoveryMode,omitempty"`
 		External           *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"external,omitempty"`
 	}{}
 	if !(len(v.Listen) == 0) {
@@ -1786,7 +1969,7 @@ func (v *P2P) MarshalJSON() ([]byte, error) {
 	if !(!v.EnablePeerTracking) {
 		u.EnablePeerTracking = v.EnablePeerTracking
 	}
-	if !(v.DiscoveryMode == (0)) {
+	if !(v.DiscoveryMode == nil) {
 		u.DiscoveryMode = v.DiscoveryMode
 	}
 	if !(p2p.EqualMultiaddr(v.External, nil)) {
@@ -1899,6 +2082,26 @@ func (v *StorageService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SubnodeService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type     ServiceType                              `json:"type"`
+		Name     string                                   `json:"name,omitempty"`
+		NodeKey  *encoding.JsonUnmarshalWith[PrivateKey]  `json:"nodeKey,omitempty"`
+		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(EqualPrivateKey(v.NodeKey, nil)) {
+		u.NodeKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.NodeKey, Func: UnmarshalPrivateKeyJSON}
+	}
+	if !(len(v.Services) == 0) {
+		u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
+	}
+	return json.Marshal(&u)
+}
+
 func (v *TransientPrivateKey) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type PrivateKeyType `json:"type"`
@@ -1994,13 +2197,14 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 
 func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           ServiceType                                    `json:"type"`
-		NodeDir        string                                         `json:"nodeDir,omitempty"`
-		ValidatorKey   *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
-		Genesis        string                                         `json:"genesis,omitempty"`
-		Listen         *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
-		BootstrapPeers *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
-		App            *encoding.JsonUnmarshalWith[ConsensusApp]      `json:"app,omitempty"`
+		Type             ServiceType                                    `json:"type"`
+		NodeDir          string                                         `json:"nodeDir,omitempty"`
+		ValidatorKey     *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
+		Genesis          string                                         `json:"genesis,omitempty"`
+		Listen           *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
+		BootstrapPeers   *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
+		MetricsNamespace string                                         `json:"metricsNamespace,omitempty"`
+		App              *encoding.JsonUnmarshalWith[ConsensusApp]      `json:"app,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.NodeDir = v.NodeDir
@@ -2008,6 +2212,7 @@ func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 	u.Genesis = v.Genesis
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	u.MetricsNamespace = v.MetricsNamespace
 	u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -2031,6 +2236,7 @@ func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 			v.BootstrapPeers[i] = x
 		}
 	}
+	v.MetricsNamespace = u.MetricsNamespace
 	if u.App != nil {
 		v.App = u.App.Value
 	}
@@ -2124,6 +2330,38 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	v.EnableDirectDispatch = u.EnableDirectDispatch
 	v.MaxEnvelopesPerBlock = u.MaxEnvelopesPerBlock
 	v.StorageType = u.StorageType
+	return nil
+}
+
+func (v *DevnetConfiguration) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       ConfigurationType                          `json:"type"`
+		Listen     *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		Bvns       uint64                                     `json:"bvns,omitempty"`
+		Validators uint64                                     `json:"validators,omitempty"`
+		Followers  uint64                                     `json:"followers,omitempty"`
+		Globals    *network.GlobalValues                      `json:"globals,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.Bvns = v.Bvns
+	u.Validators = v.Validators
+	u.Followers = v.Followers
+	u.Globals = v.Globals
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Listen != nil {
+		v.Listen = u.Listen.Value
+	}
+
+	v.Bvns = u.Bvns
+	v.Validators = u.Validators
+	v.Followers = u.Followers
+	v.Globals = u.Globals
 	return nil
 }
 
@@ -2276,15 +2514,33 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 func (v *Logging) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Format string                          `json:"format,omitempty"`
+		Color  *bool                           `json:"color,omitempty"`
 		Rules  encoding.JsonList[*LoggingRule] `json:"rules,omitempty"`
 	}{}
 	u.Format = v.Format
+	u.Color = v.Color
 	u.Rules = v.Rules
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Format = u.Format
+	v.Color = u.Color
 	v.Rules = u.Rules
+	return nil
+}
+
+func (v *LoggingRule) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Level   slog.Level                `json:"level"`
+		Modules encoding.JsonList[string] `json:"modules,omitempty"`
+	}{}
+	u.Level = v.Level
+	u.Modules = v.Modules
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Level = u.Level
+	v.Modules = u.Modules
 	return nil
 }
 
@@ -2343,7 +2599,7 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 		Key                *encoding.JsonUnmarshalWith[PrivateKey]        `json:"key,omitempty"`
 		PeerDB             *string                                        `json:"peerDB,omitempty"`
 		EnablePeerTracking bool                                           `json:"enablePeerTracking,omitempty"`
-		DiscoveryMode      DhtMode                                        `json:"discoveryMode,omitempty"`
+		DiscoveryMode      *DhtMode                                       `json:"discoveryMode,omitempty"`
 		External           *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"external,omitempty"`
 	}{}
 	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
@@ -2508,6 +2764,37 @@ func (v *StorageService) UnmarshalJSON(data []byte) error {
 		v.Storage = u.Storage.Value
 	}
 
+	return nil
+}
+
+func (v *SubnodeService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type     ServiceType                              `json:"type"`
+		Name     string                                   `json:"name,omitempty"`
+		NodeKey  *encoding.JsonUnmarshalWith[PrivateKey]  `json:"nodeKey,omitempty"`
+		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Name = v.Name
+	u.NodeKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.NodeKey, Func: UnmarshalPrivateKeyJSON}
+	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Name = u.Name
+	if u.NodeKey != nil {
+		v.NodeKey = u.NodeKey.Value
+	}
+
+	if u.Services != nil {
+		v.Services = make([]Service, len(u.Services.Value))
+		for i, x := range u.Services.Value {
+			v.Services[i] = x
+		}
+	}
 	return nil
 }
 

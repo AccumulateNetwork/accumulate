@@ -35,18 +35,24 @@ var (
 	portAccP2P  = portOffset(config.PortOffsetAccumulateP2P)
 )
 
-func ptr[T any](v T) *T { return &v }
+func Ptr[T any](v T) *T { return &v }
 
-func setDefaultPtr[V any](ptr **V, def V) {
+func setDefaultPtr[V any](ptr **V, def V) *V {
 	if *ptr == nil {
 		*ptr = &def
 	}
+	return *ptr
 }
 
-func setDefaultVal[V any](ptr *V, def V) {
+func setDefaultVal[V any](ptr *V, def V) V {
 	if reflect.ValueOf(ptr).Elem().IsZero() {
 		*ptr = def
 	}
+	return *ptr
+}
+
+func setDefaultSlice[V any, S ~[]V](ptr *S, def ...V) S {
+	return setDefaultVal(ptr, def)
 }
 
 func mustParseMulti(s string) multiaddr.Multiaddr {
@@ -81,6 +87,10 @@ func registerRpcService(inst *Instance, addr *api.ServiceAddress, service messag
 }
 
 func addrHasOneOf(addr multiaddr.Multiaddr, components ...string) bool {
+	if addr == nil {
+		return false
+	}
+
 	var found bool
 	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
 		for _, component := range components {
@@ -98,7 +108,11 @@ func ensureHost(addr multiaddr.Multiaddr, defaultHost string) multiaddr.Multiadd
 	if addrHasOneOf(addr, "ip4", "ip6", "dns", "dns4", "dns6") {
 		return addr
 	}
-	return multiaddr.StringCast(defaultHost).Encapsulate(addr)
+	host := multiaddr.StringCast(defaultHost)
+	if addr == nil {
+		return host
+	}
+	return host.Encapsulate(addr)
 }
 
 func listen(addr multiaddr.Multiaddr, defaultHost string, transform ...addrTransform) multiaddr.Multiaddr {
@@ -190,6 +204,36 @@ func applyAddrTransforms(addr multiaddr.Multiaddr, transforms ...addrTransform) 
 	return addr
 }
 
+type ipOffset int
+
+func (i ipOffset) Apply(c multiaddr.Component) ([]multiaddr.Component, bool) {
+	switch c.Protocol().Code {
+	case multiaddr.P_IP4:
+		// Ok
+	default:
+		return nil, false
+	}
+
+	base := net.ParseIP(c.Value())
+	if base == nil {
+		panic(fmt.Errorf("invalid IP address: %s", c.Value()))
+	}
+
+	ip := make(net.IP, len(base))
+	copy(ip, base)
+	for int(ip[15])+int(i) > 254 {
+		i -= 255 - ipOffset(ip[15])
+		ip[15] = 1
+		ip[14]++
+	}
+	ip[15] += byte(i)
+	d, err := multiaddr.NewComponent(c.Protocol().Name, ip.String())
+	if err != nil {
+		panic(err)
+	}
+	return []multiaddr.Component{*d}, true
+}
+
 type portOffset uint64
 
 func (p portOffset) Apply(c multiaddr.Component) ([]multiaddr.Component, bool) {
@@ -265,11 +309,11 @@ func (useHTTP) Apply(c multiaddr.Component) ([]multiaddr.Component, bool) {
 		return nil, false
 	}
 
-	d, err := multiaddr.NewComponent("http", c.Value())
+	d, err := multiaddr.NewComponent("http", "")
 	if err != nil {
 		panic(err)
 	}
-	return []multiaddr.Component{*d}, true
+	return []multiaddr.Component{c, *d}, true
 }
 
 func haveService[T any](cfg *Config, predicate func(T) bool, existing *T) bool {
