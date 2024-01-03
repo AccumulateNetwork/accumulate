@@ -55,7 +55,7 @@ func (f *FaucetService) start(inst *Instance) error {
 
 	client := &message.Client{
 		Transport: &message.RoutedTransport{
-			Network: inst.network,
+			Network: inst.config.Network,
 			Dialer:  inst.p2p.DialNetwork(),
 			Router:  routing.MessageRouter{Router: router},
 		},

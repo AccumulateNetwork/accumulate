@@ -53,8 +53,12 @@ type Config struct {
 }
 
 type ConsensusService struct {
-	NodeDir string       `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
-	App     ConsensusApp `json:"app,omitempty" form:"app" query:"app" validate:"required"`
+	NodeDir        string          `json:"nodeDir,omitempty" form:"nodeDir" query:"nodeDir" validate:"required"`
+	ValidatorKey   PrivateKey      `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
+	Genesis        string          `json:"genesis,omitempty" form:"genesis" query:"genesis" validate:"required"`
+	Listen         p2p.Multiaddr   `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	BootstrapPeers []p2p.Multiaddr `json:"bootstrapPeers,omitempty" form:"bootstrapPeers" query:"bootstrapPeers" validate:"required"`
+	App            ConsensusApp    `json:"app,omitempty" form:"app" query:"app" validate:"required"`
 }
 
 type CoreConsensusApp struct {
@@ -64,11 +68,16 @@ type CoreConsensusApp struct {
 }
 
 type CoreValidatorConfiguration struct {
-	Listen               p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
-	BVN                  string        `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
-	EnableHealing        *bool         `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
-	EnableDirectDispatch *bool         `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
-	StorageType          *StorageType  `json:"storageType,omitempty" form:"storageType" query:"storageType"`
+	Listen               p2p.Multiaddr   `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	BVN                  string          `json:"bvn,omitempty" form:"bvn" query:"bvn" validate:"required"`
+	ValidatorKey         PrivateKey      `json:"validatorKey,omitempty" form:"validatorKey" query:"validatorKey" validate:"required"`
+	DnGenesis            string          `json:"dnGenesis,omitempty" form:"dnGenesis" query:"dnGenesis" validate:"required"`
+	BvnGenesis           string          `json:"bvnGenesis,omitempty" form:"bvnGenesis" query:"bvnGenesis" validate:"required"`
+	DnBootstrapPeers     []p2p.Multiaddr `json:"dnBootstrapPeers,omitempty" form:"dnBootstrapPeers" query:"dnBootstrapPeers" validate:"required"`
+	BvnBootstrapPeers    []p2p.Multiaddr `json:"bvnBootstrapPeers,omitempty" form:"bvnBootstrapPeers" query:"bvnBootstrapPeers" validate:"required"`
+	EnableHealing        *bool           `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
+	EnableDirectDispatch *bool           `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	StorageType          *StorageType    `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
 type EventsService struct {
@@ -294,6 +303,20 @@ func (v *ConsensusService) Copy() *ConsensusService {
 	u := new(ConsensusService)
 
 	u.NodeDir = v.NodeDir
+	if v.ValidatorKey != nil {
+		u.ValidatorKey = CopyPrivateKey(v.ValidatorKey)
+	}
+	u.Genesis = v.Genesis
+	if v.Listen != nil {
+		u.Listen = p2p.CopyMultiaddr(v.Listen)
+	}
+	u.BootstrapPeers = make([]p2p.Multiaddr, len(v.BootstrapPeers))
+	for i, v := range v.BootstrapPeers {
+		v := v
+		if v != nil {
+			u.BootstrapPeers[i] = p2p.CopyMultiaddr(v)
+		}
+	}
 	if v.App != nil {
 		u.App = CopyConsensusApp(v.App)
 	}
@@ -330,6 +353,25 @@ func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 		u.Listen = p2p.CopyMultiaddr(v.Listen)
 	}
 	u.BVN = v.BVN
+	if v.ValidatorKey != nil {
+		u.ValidatorKey = CopyPrivateKey(v.ValidatorKey)
+	}
+	u.DnGenesis = v.DnGenesis
+	u.BvnGenesis = v.BvnGenesis
+	u.DnBootstrapPeers = make([]p2p.Multiaddr, len(v.DnBootstrapPeers))
+	for i, v := range v.DnBootstrapPeers {
+		v := v
+		if v != nil {
+			u.DnBootstrapPeers[i] = p2p.CopyMultiaddr(v)
+		}
+	}
+	u.BvnBootstrapPeers = make([]p2p.Multiaddr, len(v.BvnBootstrapPeers))
+	for i, v := range v.BvnBootstrapPeers {
+		v := v
+		if v != nil {
+			u.BvnBootstrapPeers[i] = p2p.CopyMultiaddr(v)
+		}
+	}
 	if v.EnableHealing != nil {
 		u.EnableHealing = new(bool)
 		*u.EnableHealing = *v.EnableHealing
@@ -721,6 +763,23 @@ func (v *ConsensusService) Equal(u *ConsensusService) bool {
 	if !(v.NodeDir == u.NodeDir) {
 		return false
 	}
+	if !(EqualPrivateKey(v.ValidatorKey, u.ValidatorKey)) {
+		return false
+	}
+	if !(v.Genesis == u.Genesis) {
+		return false
+	}
+	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
+		return false
+	}
+	if len(v.BootstrapPeers) != len(u.BootstrapPeers) {
+		return false
+	}
+	for i := range v.BootstrapPeers {
+		if !(p2p.EqualMultiaddr(v.BootstrapPeers[i], u.BootstrapPeers[i])) {
+			return false
+		}
+	}
 	if !(EqualConsensusApp(v.App, u.App)) {
 		return false
 	}
@@ -763,6 +822,31 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 	}
 	if !(v.BVN == u.BVN) {
 		return false
+	}
+	if !(EqualPrivateKey(v.ValidatorKey, u.ValidatorKey)) {
+		return false
+	}
+	if !(v.DnGenesis == u.DnGenesis) {
+		return false
+	}
+	if !(v.BvnGenesis == u.BvnGenesis) {
+		return false
+	}
+	if len(v.DnBootstrapPeers) != len(u.DnBootstrapPeers) {
+		return false
+	}
+	for i := range v.DnBootstrapPeers {
+		if !(p2p.EqualMultiaddr(v.DnBootstrapPeers[i], u.DnBootstrapPeers[i])) {
+			return false
+		}
+	}
+	if len(v.BvnBootstrapPeers) != len(u.BvnBootstrapPeers) {
+		return false
+	}
+	for i := range v.BvnBootstrapPeers {
+		if !(p2p.EqualMultiaddr(v.BvnBootstrapPeers[i], u.BvnBootstrapPeers[i])) {
+			return false
+		}
 	}
 	switch {
 	case v.EnableHealing == u.EnableHealing:
@@ -1387,13 +1471,29 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 
 func (v *ConsensusService) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    ServiceType                               `json:"type"`
-		NodeDir string                                    `json:"nodeDir,omitempty"`
-		App     *encoding.JsonUnmarshalWith[ConsensusApp] `json:"app,omitempty"`
+		Type           ServiceType                                    `json:"type"`
+		NodeDir        string                                         `json:"nodeDir,omitempty"`
+		ValidatorKey   *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
+		Genesis        string                                         `json:"genesis,omitempty"`
+		Listen         *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
+		BootstrapPeers *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
+		App            *encoding.JsonUnmarshalWith[ConsensusApp]      `json:"app,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.NodeDir) == 0) {
 		u.NodeDir = v.NodeDir
+	}
+	if !(EqualPrivateKey(v.ValidatorKey, nil)) {
+		u.ValidatorKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.ValidatorKey, Func: UnmarshalPrivateKeyJSON}
+	}
+	if !(len(v.Genesis) == 0) {
+		u.Genesis = v.Genesis
+	}
+	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
+		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(len(v.BootstrapPeers) == 0) {
+		u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	if !(EqualConsensusApp(v.App, nil)) {
 		u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
@@ -1423,12 +1523,17 @@ func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
 
 func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type                 ConfigurationType                          `json:"type"`
-		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		BVN                  string                                     `json:"bvn,omitempty"`
-		EnableHealing        *bool                                      `json:"enableHealing,omitempty"`
-		EnableDirectDispatch *bool                                      `json:"enableDirectDispatch,omitempty"`
-		StorageType          *StorageType                               `json:"storageType,omitempty"`
+		Type                 ConfigurationType                              `json:"type"`
+		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
+		BVN                  string                                         `json:"bvn,omitempty"`
+		ValidatorKey         *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
+		DnGenesis            string                                         `json:"dnGenesis,omitempty"`
+		BvnGenesis           string                                         `json:"bvnGenesis,omitempty"`
+		DnBootstrapPeers     *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"dnBootstrapPeers,omitempty"`
+		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
+		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
@@ -1436,6 +1541,21 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.BVN) == 0) {
 		u.BVN = v.BVN
+	}
+	if !(EqualPrivateKey(v.ValidatorKey, nil)) {
+		u.ValidatorKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.ValidatorKey, Func: UnmarshalPrivateKeyJSON}
+	}
+	if !(len(v.DnGenesis) == 0) {
+		u.DnGenesis = v.DnGenesis
+	}
+	if !(len(v.BvnGenesis) == 0) {
+		u.BvnGenesis = v.BvnGenesis
+	}
+	if !(len(v.DnBootstrapPeers) == 0) {
+		u.DnBootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.DnBootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(len(v.BvnBootstrapPeers) == 0) {
+		u.BvnBootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BvnBootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	if !(v.EnableHealing == nil) {
 		u.EnableHealing = v.EnableHealing
@@ -1840,12 +1960,20 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 
 func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    ServiceType                               `json:"type"`
-		NodeDir string                                    `json:"nodeDir,omitempty"`
-		App     *encoding.JsonUnmarshalWith[ConsensusApp] `json:"app,omitempty"`
+		Type           ServiceType                                    `json:"type"`
+		NodeDir        string                                         `json:"nodeDir,omitempty"`
+		ValidatorKey   *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
+		Genesis        string                                         `json:"genesis,omitempty"`
+		Listen         *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
+		BootstrapPeers *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
+		App            *encoding.JsonUnmarshalWith[ConsensusApp]      `json:"app,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.NodeDir = v.NodeDir
+	u.ValidatorKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.ValidatorKey, Func: UnmarshalPrivateKeyJSON}
+	u.Genesis = v.Genesis
+	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.BootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.App = &encoding.JsonUnmarshalWith[ConsensusApp]{Value: v.App, Func: UnmarshalConsensusAppJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1854,6 +1982,21 @@ func (v *ConsensusService) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.NodeDir = u.NodeDir
+	if u.ValidatorKey != nil {
+		v.ValidatorKey = u.ValidatorKey.Value
+	}
+
+	v.Genesis = u.Genesis
+	if u.Listen != nil {
+		v.Listen = u.Listen.Value
+	}
+
+	if u.BootstrapPeers != nil {
+		v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
+		for i, x := range u.BootstrapPeers.Value {
+			v.BootstrapPeers[i] = x
+		}
+	}
 	if u.App != nil {
 		v.App = u.App.Value
 	}
@@ -1886,16 +2029,26 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 
 func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type                 ConfigurationType                          `json:"type"`
-		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
-		BVN                  string                                     `json:"bvn,omitempty"`
-		EnableHealing        *bool                                      `json:"enableHealing,omitempty"`
-		EnableDirectDispatch *bool                                      `json:"enableDirectDispatch,omitempty"`
-		StorageType          *StorageType                               `json:"storageType,omitempty"`
+		Type                 ConfigurationType                              `json:"type"`
+		Listen               *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"listen,omitempty"`
+		BVN                  string                                         `json:"bvn,omitempty"`
+		ValidatorKey         *encoding.JsonUnmarshalWith[PrivateKey]        `json:"validatorKey,omitempty"`
+		DnGenesis            string                                         `json:"dnGenesis,omitempty"`
+		BvnGenesis           string                                         `json:"bvnGenesis,omitempty"`
+		DnBootstrapPeers     *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"dnBootstrapPeers,omitempty"`
+		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
+		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
+		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	u.BVN = v.BVN
+	u.ValidatorKey = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.ValidatorKey, Func: UnmarshalPrivateKeyJSON}
+	u.DnGenesis = v.DnGenesis
+	u.BvnGenesis = v.BvnGenesis
+	u.DnBootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.DnBootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	u.BvnBootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BvnBootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.EnableHealing = v.EnableHealing
 	u.EnableDirectDispatch = v.EnableDirectDispatch
 	u.StorageType = v.StorageType
@@ -1910,6 +2063,24 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	}
 
 	v.BVN = u.BVN
+	if u.ValidatorKey != nil {
+		v.ValidatorKey = u.ValidatorKey.Value
+	}
+
+	v.DnGenesis = u.DnGenesis
+	v.BvnGenesis = u.BvnGenesis
+	if u.DnBootstrapPeers != nil {
+		v.DnBootstrapPeers = make([]p2p.Multiaddr, len(u.DnBootstrapPeers.Value))
+		for i, x := range u.DnBootstrapPeers.Value {
+			v.DnBootstrapPeers[i] = x
+		}
+	}
+	if u.BvnBootstrapPeers != nil {
+		v.BvnBootstrapPeers = make([]p2p.Multiaddr, len(u.BvnBootstrapPeers.Value))
+		for i, x := range u.BvnBootstrapPeers.Value {
+			v.BvnBootstrapPeers[i] = x
+		}
+	}
 	v.EnableHealing = u.EnableHealing
 	v.EnableDirectDispatch = u.EnableDirectDispatch
 	v.StorageType = u.StorageType
