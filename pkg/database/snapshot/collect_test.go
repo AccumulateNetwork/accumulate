@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -114,6 +114,7 @@ func fillDB(t testing.TB, db *coredb.Database, N, M int) {
 				require.NoError(t, batch.Account(u).MainChain().Inner().AddEntry(rh.Next(), false))
 			}
 		}
+		require.NoError(t, batch.UpdateBPT())
 		require.NoError(t, batch.Commit())
 	}
 

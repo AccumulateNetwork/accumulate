@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -316,6 +316,12 @@ func (m *Executor) EndBlock(block *Block) ([]*execute.ValidatorUpdate, error) {
 
 	// Check if an anchor needs to be sent
 	err = m.prepareAnchor(block)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Update the BPT
+	err = block.Batch.UpdateBPT()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
