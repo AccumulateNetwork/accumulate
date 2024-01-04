@@ -68,6 +68,11 @@ func healSynth(cmd *cobra.Command, args []string) {
 
 			// Heal
 			for i := uint64(0); i+ba.Delivered < ab.Produced; i++ {
+				select {
+				case <-h.ctx.Done():
+					return
+				default:
+				}
 				var id *url.TxID
 				if i < uint64(len(ba.Pending)) {
 					id = ba.Pending[i]
