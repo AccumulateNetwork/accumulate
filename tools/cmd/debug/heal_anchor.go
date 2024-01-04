@@ -7,10 +7,9 @@
 package main
 
 import (
-	"errors"
-
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
@@ -42,6 +41,7 @@ func healAnchor(_ *cobra.Command, args []string) {
 			srcUrl := protocol.PartitionUrl(src.ID)
 			dstUrl := protocol.PartitionUrl(dst.ID)
 
+		pullAgain:
 			dstLedger := getAccount[*protocol.AnchorLedger](h, dstUrl.JoinPath(protocol.AnchorPool))
 			src2dst := dstLedger.Partition(srcUrl)
 
@@ -52,7 +52,15 @@ func healAnchor(_ *cobra.Command, args []string) {
 			all = append(all, ids...)
 
 			for i, txid := range all {
-				h.healSingleAnchor(src.ID, dst.ID, src2dst.Delivered+1+uint64(i), txid, txns)
+				select {
+				case <-h.ctx.Done():
+					return
+				default:
+				}
+				if h.healSingleAnchor(src.ID, dst.ID, src2dst.Delivered+1+uint64(i), txid, txns) {
+					// If it was already delivered, recheck the ledgers
+					goto pullAgain
+				}
 			}
 		},
 	}
@@ -60,7 +68,7 @@ func healAnchor(_ *cobra.Command, args []string) {
 	h.heal(args)
 }
 
-func (h *healer) healSingleAnchor(srcId, dstId string, seqNum uint64, txid *url.TxID, txns map[[32]byte]*protocol.Transaction) {
+func (h *healer) healSingleAnchor(srcId, dstId string, seqNum uint64, txid *url.TxID, txns map[[32]byte]*protocol.Transaction) bool {
 	var count int
 retry:
 	err := healing.HealAnchor(h.ctx, healing.HealAnchorArgs{
@@ -78,17 +86,20 @@ retry:
 		ID:          txid,
 	})
 	if err == nil {
-		return
+		return false
+	}
+	if errors.Is(err, errors.Delivered) {
+		return true
 	}
 	if !errors.Is(err, healing.ErrRetry) {
 		slog.Error("Failed to heal", "source", srcId, "destination", dstId, "number", seqNum, "error", err)
-		return
+		return false
 	}
 
 	count++
 	if count >= 10 {
 		slog.Error("Anchor still pending, skipping", "attempts", count)
-		return
+		return false
 	}
 	slog.Error("Anchor still pending, retrying", "attempts", count)
 	goto retry

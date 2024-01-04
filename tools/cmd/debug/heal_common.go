@@ -62,7 +62,7 @@ func init() {
 		if !cmd.Flag("cached-scan").Changed {
 			cachedScan = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".json")
 		}
-		if !cmd.Flag("light-db").Changed {
+		if f := cmd.Flag("light-db"); f != nil && !f.Changed {
 			lightDb = filepath.Join(currentUser.HomeDir, ".accumulate", "cache", strings.ToLower(args[0])+".db")
 		}
 	}
@@ -239,15 +239,10 @@ func (h *healer) heal(args []string) {
 
 // getAccount fetches the given account.
 func getAccount[T protocol.Account](h *healer, u *url.URL) T {
-	// Fetch and cache the account
-	a, ok := h.accounts[u.AccountID32()]
-	if !ok {
-		r, err := api.Querier2{Querier: h.C1}.QueryAccount(h.ctx, u, nil)
-		checkf(err, "get %v", u)
-		a = r.Account
-		h.accounts[u.AccountID32()] = a
-	}
+	r, err := api.Querier2{Querier: h.C1}.QueryAccount(h.ctx, u, nil)
+	checkf(err, "get %v", u)
 
+	a := r.Account
 	b, ok := a.(T)
 	if !ok {
 		fatalf("%v is a %T not a %v", u, a, reflect.TypeOf(new(T)).Elem())

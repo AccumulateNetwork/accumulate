@@ -64,6 +64,10 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 	res, err := Q.QueryMessage(ctx, si.ID, nil)
 	switch {
 	case err == nil:
+		if res.Status.Delivered() {
+			slog.InfoCtx(ctx, "Anchor has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
+			return errors.Delivered
+		}
 		switch msg := res.Message.(type) {
 		case *messaging.SequencedMessage:
 			txn, ok := msg.Message.(*messaging.TransactionMessage)
@@ -123,7 +127,7 @@ func HealAnchor(ctx context.Context, args HealAnchorArgs, si SequencedInfo) erro
 
 	if len(signed) >= int(threshold) {
 		slog.InfoCtx(ctx, "Sufficient signatures have been received")
-		return nil
+		return errors.Delivered
 	}
 
 	seq := &messaging.SequencedMessage{
