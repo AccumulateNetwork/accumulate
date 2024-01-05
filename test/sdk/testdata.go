@@ -15,8 +15,9 @@ import (
 )
 
 type TestSuite struct {
-	Transactions []*TestCaseGroup `json:"transactions,omitempty"`
-	Accounts     []*TestCaseGroup `json:"accounts,omitempty"`
+	TransactionlessEnvelopes []*TestCaseGroup `json:"transactionless_envelopes"`
+	Transactions             []*TestCaseGroup `json:"transactions,omitempty"`
+	Accounts                 []*TestCaseGroup `json:"accounts,omitempty"`
 }
 
 type TestCaseGroup struct {

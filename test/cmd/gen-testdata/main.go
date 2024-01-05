@@ -77,8 +77,9 @@ func run(cmd *cobra.Command, args []string) {
 
 	if len(args) > 1 {
 		lts := &sdktest.TestSuite{
-			Transactions: transactionTests(txnUnsignedEnvelopeTestVectors),
-			Accounts:     accountTests(txnUnsignedEnvelopeTestVectors),
+			TransactionlessEnvelopes: transactionTests(txnUnsignedEnvelopeTxHashOnlyTestVectors),
+			Transactions:             transactionTests(txnUnsignedEnvelopeTestVectors),
+			Accounts:                 accountTests(txnUnsignedEnvelopeTestVectors),
 		}
 		check(lts.Store(args[1]))
 	}
@@ -267,5 +268,42 @@ func txnUnsignedEnvelopeTestVectors(originUrl *url.URL, body TransactionBody) *T
 		data, _ := env.MarshalBinary()
 		fmt.Println(hex.EncodeToString(data))
 	}
+	return sdktest.NewTxnTest(env)
+}
+
+// txnUnsignedEnvelopeTxHashOnlyTestVectors creates an envelope with transaction body and only a signature body and transaction hash
+func txnUnsignedEnvelopeTxHashOnlyTestVectors(originUrl *url.URL, body TransactionBody) *TC {
+	signer := new(signing.Builder)
+	lts := EmptySigner{}
+	lts.PubKey = key.Public().(ed25519.PublicKey)
+
+	signer.Signer = &lts
+
+	// this is not a real transaction, only used for test vector generation
+	signer.Type = SignatureTypeED25519
+	signer.Url = originUrl
+	signer.Version = 1
+	signer.SetTimestamp(uint64(1234567890))
+
+	env := new(messaging.Envelope)
+	txn := new(Transaction)
+	txn.Header.Principal = originUrl
+	txn.Body = body
+
+	if *useSimpleHash {
+		signer.InitMode = signing.InitWithSimpleHash
+	}
+
+	sig, err := signer.Initiate(txn)
+	if err != nil && !errors.Is(err, UseRealSigner) {
+		panic(err)
+	}
+
+	env.Signatures = append(env.Signatures, sig)
+	if txn.Body.Type() == TransactionTypeSendTokens {
+		data, _ := env.MarshalBinary()
+		fmt.Println(hex.EncodeToString(data))
+	}
+
 	return sdktest.NewTxnTest(env)
 }
