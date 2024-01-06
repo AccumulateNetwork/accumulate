@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.3
+
+- Protocol
+  - User-specified transaction expiration
+  - Rejection of invalid authorities
+  - Dynamic inheritance of authorities
+  - Additional transaction authorities
+  - Reduced cost for creating sub-ADIs
+  - Memos and metadata for signatures
+  - RSV Ethereum signatures (deprecates DER)
+  - Database performance improvements
+  - Prevent persistence of bad blocks
+  - Bug fixes
+- Operations
+  - Anchoring improvements
+  - Enable snapshot v2
+  - Use binary genesis file for new nodes
+- API improvements
+- SDK
+  - Embedded checkpoint for validating network state
+
+## 1.2.10
+
+- API
+  - Query responses now include `lastBlockTime`, which is retrieved from the
+    consensus layer. This can be used to ensure the response is up to date.
+  - Sub-records of query responses (those that have sub-records) now may be
+    replaced with an error record, if the sub-record cannot not be found. This
+    prevents the entire query from failing if a sub-record cannot be found.
+  - Service discovery methods were tweaked to facilitate routing improvements.
+  - Refactored request routing to improve API stability.
+  - Added a REST API.
+- Operations
+  - Improved Prometheus metrics.
+  - Improved snapshot performance.
+  - Improved dispatch for anchors and synthetic transactions.
+  - Fixed a bug with the Badger database driver.
+
 ## 1.2
 
 - Signature processing overhaul

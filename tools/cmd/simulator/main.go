@@ -36,15 +36,16 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Database string
-	Network  string
-	Snapshot string
-	Log      string
-	Step     string
-	Globals  string
-	BvnCount int
-	ValCount int
-	BasePort int
+	Database  string
+	Network   string
+	Snapshot  string
+	Log       string
+	LogFormat string
+	Step      string
+	Globals   string
+	BvnCount  int
+	ValCount  int
+	BasePort  int
 }{}
 
 func init() {
@@ -54,6 +55,7 @@ func init() {
 	cmd.Flags().StringVar(&flag.Globals, "globals", "", "Override network globals")
 	cmd.Flags().StringVarP(&flag.Step, "step", "s", "on-wait", "Frequency at which to step the simulator, or 'on-wait' to step when an API query waits for a transaction")
 	cmd.Flags().StringVar(&flag.Log, "log", DefaultLogLevels, "Log levels")
+	cmd.Flags().StringVar(&flag.LogFormat, "log-format", "plain", "Log format")
 	cmd.Flags().IntVarP(&flag.BvnCount, "bvns", "b", 3, "Number of BVNs to create; applicable only when --network=simple")
 	cmd.Flags().IntVarP(&flag.ValCount, "validators", "v", 3, "Number of validators to create per BVN; applicable only when --network=simple")
 	cmd.Flags().IntVarP(&flag.BasePort, "port", "p", 26656, "Base port to listen on")
@@ -73,9 +75,7 @@ func run(*cobra.Command, []string) {
 	jsonrpc2.DebugMethodFunc = true
 
 	var opts []simulator.Option
-	if flag.Database == "memory" {
-		opts = append(opts, simulator.MemoryDatabase)
-	} else {
+	if flag.Database != "memory" {
 		opts = append(opts, simulator.BadgerDatabaseFromDirectory(flag.Database, func(err error) { checkf(err, "--database") }))
 	}
 
@@ -108,7 +108,7 @@ func run(*cobra.Command, []string) {
 		opts = append(opts, simulator.SnapshotFromDirectory(flag.Snapshot))
 	}
 
-	logw, err := logging.NewConsoleWriter("plain")
+	logw, err := logging.NewConsoleWriter(flag.LogFormat)
 	check(err)
 	level, writer, err := logging.ParseLogLevel(flag.Log, logw)
 	checkf(err, "--log")

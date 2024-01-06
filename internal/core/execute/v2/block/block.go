@@ -21,6 +21,8 @@ type Block struct {
 	State    BlockState
 	Batch    *database.Batch
 	Executor *Executor
+
+	syntheticCount uint64
 }
 
 func (b *Block) Params() execute.BlockParams { return b.BlockParams }
@@ -43,6 +45,10 @@ func (s *closedBlock) DidCompleteMajorBlock() (uint64, time.Time, bool) {
 
 func (s *closedBlock) DidUpdateValidators() ([]*execute.ValidatorUpdate, bool) {
 	return s.valUp, len(s.valUp) > 0
+}
+
+func (s *closedBlock) Hash() ([32]byte, error) {
+	return s.Batch.GetBptRootHash()
 }
 
 func (s *closedBlock) Commit() error {

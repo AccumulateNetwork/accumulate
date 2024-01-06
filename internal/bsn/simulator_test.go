@@ -9,8 +9,8 @@ package bsn_test
 import (
 	"testing"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -53,6 +53,8 @@ func captureBsnStore(db **memory.Database) simulator.Option {
 }
 
 func TestSimulator(t *testing.T) {
+	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3412")
+
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1

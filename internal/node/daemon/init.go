@@ -8,7 +8,6 @@ package accumulated
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,22 +17,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cometbft/cometbft/crypto/ed25519"
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
+	tmjson "github.com/cometbft/cometbft/libs/json"
+	"github.com/cometbft/cometbft/libs/log"
+	tmos "github.com/cometbft/cometbft/libs/os"
+	"github.com/cometbft/cometbft/p2p"
+	"github.com/cometbft/cometbft/privval"
+	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmjson "github.com/tendermint/tendermint/libs/json"
-	"github.com/tendermint/tendermint/libs/log"
-	tmos "github.com/tendermint/tendermint/libs/os"
-	"github.com/tendermint/tendermint/p2p"
-	"github.com/tendermint/tendermint/privval"
-	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -48,7 +46,6 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 		mkcfg = config.Default
 	}
 
-	netConfig := config.Network{Id: network.Id, Partitions: make([]config.Partition, 1)}
 	dnConfig := config.Partition{
 		Id:       protocol.Directory,
 		Type:     protocol.PartitionTypeDirectory,
@@ -92,6 +89,9 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 				Type:    node.BvnnType,
 			})
 
+			dnn.Instrumentation.Namespace += fmt.Sprintf("_directory_%d", i)
+			bvnn.Instrumentation.Namespace += fmt.Sprintf("_%s_%d", strings.ToLower(bvn.Id), i)
+
 			if dnn.P2P.ExternalAddress == "" {
 				dnn.P2P.ExternalAddress = node.Peer().TendermintP2P().Directory().String()
 			}
@@ -117,12 +117,12 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 			dnn.P2P.AddrBookStrict = strict
 			bvnn.P2P.AddrBookStrict = strict
 
-			dnn.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
-			bvnn.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
+			dnn.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
+			bvnn.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
 
-			if network.Id == "DevNet" {
-				p2pPeers := network.Peers(node).AccumulateP2P().WithKey().
-					Do(AddressBuilder.Directory, AddressBuilder.BlockValidator).
+			if network.Bootstrap != nil {
+				p2pPeers := AddressSliceBuilder{network.Bootstrap.Peer()}.
+					AccumulateP2P().WithKey().PartitionType(protocol.PartitionTypeBootstrap).
 					Do(func(b AddressBuilder) AddressBuilder { return b.Scheme("tcp") }, func(b AddressBuilder) AddressBuilder { return b.Scheme("udp") }).
 					Multiaddr()
 				dnn.Accumulate.P2P.BootstrapPeers = p2pPeers
@@ -132,9 +132,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 			bvnConfigs = append(bvnConfigs, []*config.Config{dnn, bvnn})
 		}
 		allConfigs = append(allConfigs, bvnConfigs)
-		netConfig.Partitions = append(netConfig.Partitions, bvnConfig)
 	}
-	netConfig.Partitions[0] = dnConfig
 
 	if network.Bsn != nil {
 		var bsnConfigs [][]*config.Config
@@ -170,15 +168,17 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 			bsnConfigs = append(bsnConfigs, []*config.Config{bsnn})
 		}
 		allConfigs = append(allConfigs, bsnConfigs)
-		netConfig.Partitions = append(netConfig.Partitions, bsnConfig)
 	}
 
-	for _, configs := range allConfigs {
-		for _, configs := range configs {
-			for _, config := range configs {
-				config.Accumulate.Network = netConfig
-			}
-		}
+	if network.Bootstrap != nil {
+		cfg := config.Default(network.Id, protocol.PartitionTypeBootstrap, 0, "")
+		ConfigureNodePorts(network.Bootstrap, cfg, protocol.PartitionTypeDirectory)
+		cfg.Accumulate.P2P.BootstrapPeers = nil
+		cfg.Accumulate.AnalysisLog = config.AnalysisLog{}
+		cfg.Accumulate.Snapshots = config.Snapshots{}
+		cfg.Storage = nil
+
+		allConfigs = append(allConfigs, [][]*config.Config{{cfg}})
 	}
 
 	return allConfigs
@@ -189,9 +189,6 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 	cfg.RPC.ListenAddress = node.Listen().Scheme("tcp").PartitionType(part).TendermintRPC().String()
 
 	cfg.Instrumentation.PrometheusListenAddr = node.Listen().PartitionType(part).Prometheus().String()
-	if cfg.Accumulate.LocalAddress == "" {
-		cfg.Accumulate.LocalAddress = node.Advertize().PartitionType(part).TendermintP2P().String()
-	}
 	cfg.Accumulate.P2P.Listen = []multiaddr.Multiaddr{
 		node.Listen().Scheme("tcp").PartitionType(part).AccumulateP2P().Multiaddr(),
 		node.Listen().Scheme("udp").PartitionType(part).AccumulateP2P().Multiaddr(),
@@ -199,81 +196,32 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.Partit
 	cfg.Accumulate.API.ListenAddress = node.Listen().Scheme("http").PartitionType(part).AccumulateAPI().String()
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func() (ioutil2.SectionReader, error)) (map[string]*tmtypes.GenesisDoc, error) {
-	docs := map[string]*tmtypes.GenesisDoc{}
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func() (ioutil2.SectionReader, error)) (map[string][]byte, error) {
+	docs := map[string][]byte{}
 	var operators [][]byte
 	netinfo := new(protocol.NetworkDefinition)
 	netinfo.NetworkName = network.Id
 	netinfo.AddPartition(protocol.Directory, protocol.PartitionTypeDirectory)
 
-	var dnTmValidators []tmtypes.GenesisValidator
-
 	var i int
 	for _, bvn := range network.Bvns {
-		var bvnTmValidators []tmtypes.GenesisValidator
+		netinfo.AddPartition(bvn.Id, protocol.PartitionTypeBlockValidator)
 
-		for j, node := range bvn.Nodes {
+		for _, node := range bvn.Nodes {
 			i++
 			key := tmed25519.PrivKey(node.PrivValKey)
 			operators = append(operators, key.PubKey().Bytes())
-
 			netinfo.AddValidator(key.PubKey().Bytes(), protocol.Directory, node.DnnType == config.Validator)
 			netinfo.AddValidator(key.PubKey().Bytes(), bvn.Id, node.BvnnType == config.Validator)
-
-			if node.DnnType == config.Validator {
-				dnTmValidators = append(dnTmValidators, tmtypes.GenesisValidator{
-					Name:    fmt.Sprintf("Directory.%d", i),
-					Address: key.PubKey().Address(),
-					PubKey:  key.PubKey(),
-					Power:   1,
-				})
-			}
-
-			if node.BvnnType == config.Validator {
-				bvnTmValidators = append(bvnTmValidators, tmtypes.GenesisValidator{
-					Name:    fmt.Sprintf("%s.%d", bvn.Id, j+1),
-					Address: key.PubKey().Address(),
-					PubKey:  key.PubKey(),
-					Power:   1,
-				})
-			}
-		}
-
-		netinfo.AddPartition(bvn.Id, protocol.PartitionTypeBlockValidator)
-		docs[bvn.Id] = &tmtypes.GenesisDoc{
-			ChainID:         bvn.Id,
-			GenesisTime:     time,
-			InitialHeight:   protocol.GenesisBlock + 1,
-			Validators:      bvnTmValidators,
-			ConsensusParams: tmtypes.DefaultConsensusParams(),
 		}
 	}
 
-	var bsnTmValidators []tmtypes.GenesisValidator
 	if network.Bsn != nil {
-		for j, node := range network.Bsn.Nodes {
+		for _, node := range network.Bsn.Nodes {
 			key := tmed25519.PrivKey(node.PrivValKey)
 			operators = append(operators, key.PubKey().Bytes())
-
 			netinfo.AddValidator(key.PubKey().Bytes(), network.Bsn.Id, node.BsnnType == config.Validator)
-
-			if node.BsnnType == config.Validator {
-				bsnTmValidators = append(bsnTmValidators, tmtypes.GenesisValidator{
-					Name:    fmt.Sprintf("%s.%d", network.Bsn.Id, j+1),
-					Address: key.PubKey().Address(),
-					PubKey:  key.PubKey(),
-					Power:   1,
-				})
-			}
 		}
-	}
-
-	docs[protocol.Directory] = &tmtypes.GenesisDoc{
-		ChainID:         protocol.Directory,
-		GenesisTime:     time,
-		InitialHeight:   protocol.GenesisBlock + 1,
-		Validators:      dnTmValidators,
-		ConsensusParams: tmtypes.DefaultConsensusParams(),
 	}
 
 	globals.Network = netinfo
@@ -303,7 +251,8 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			netType = protocol.PartitionTypeDirectory
 		}
 		snapBuf := new(ioutil2.Buffer)
-		root, err := genesis.Init(snapBuf, genesis.InitOpts{
+		err = genesis.Init(snapBuf, genesis.InitOpts{
+			NetworkID:       network.Id,
 			PartitionId:     id,
 			NetworkType:     netType,
 			GenesisTime:     time,
@@ -312,6 +261,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			OperatorKeys:    operators,
 			FactomAddresses: factomAddresses,
 			Snapshots:       snapshots,
+			ConsensusParams: tmtypes.DefaultConsensusParams(),
 		})
 		if err != nil {
 			return nil, err
@@ -333,38 +283,43 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 		}
 
-		docs[id].AppHash = root
-		docs[id].AppState, err = json.Marshal(snapBuf.Bytes())
-		if err != nil {
-			return nil, err
-		}
+		docs[id] = snapBuf.Bytes()
 	}
 
 	if network.Bsn != nil {
-		b, err := json.Marshal(bsnSnapBuf.Bytes())
-		if err != nil {
-			return nil, err
-		}
-		docs[network.Bsn.Id] = &tmtypes.GenesisDoc{
-			ChainID:         network.Bsn.Id,
-			GenesisTime:     time,
-			InitialHeight:   1,
-			Validators:      bsnTmValidators,
-			ConsensusParams: tmtypes.DefaultConsensusParams(),
-			AppHash:         make(tmbytes.HexBytes, 32),
-			AppState:        b,
-		}
+		docs[network.Bsn.Id] = bsnSnapBuf.Bytes()
 	}
 
 	return docs, nil
 }
 
-func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmtypes.GenesisDoc) (err error) {
+func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc []byte) (err error) {
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(cfg.RootDir)
 		}
 	}()
+
+	// Bootstrap node
+	if cfg.Accumulate.NetworkType == protocol.PartitionTypeBootstrap {
+		cfg.NodeKey = "node_key.json"
+
+		err = os.MkdirAll(cfg.RootDir, nodeDirPerm)
+		if err != nil {
+			return fmt.Errorf("failed to create config dir: %v", err)
+		}
+
+		err = config.StoreAcc(cfg, cfg.RootDir)
+		if err != nil {
+			return fmt.Errorf("failed to write config files: %w", err)
+		}
+
+		err = loadOrCreateNodeKey(cfg, nodeKey)
+		if err != nil {
+			return fmt.Errorf("failed to write node key: %w", err)
+		}
+		return nil
+	}
 
 	// Create directories
 	err = os.MkdirAll(filepath.Join(cfg.RootDir, "config"), nodeDirPerm)
@@ -393,7 +348,7 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 		return fmt.Errorf("failed to write node key: %w", err)
 	}
 
-	err = genDoc.SaveAs(cfg.GenesisFile())
+	err = os.WriteFile(cfg.GenesisFile(), genDoc, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write genesis file: %w", err)
 	}

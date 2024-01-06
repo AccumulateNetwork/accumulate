@@ -10,10 +10,10 @@ import (
 	"context"
 	"crypto/sha256"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -108,12 +108,12 @@ func (s *simService) Validate(ctx context.Context, envelope *messaging.Envelope,
 
 // Sequence routes the source to a partition and calls Sequence on the first
 // node of that partition, returning the result.
-func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
+func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
 	part, err := s.router.RouteAccount(src)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	return s.Executors[part].service.Private().Sequence(ctx, src, dst, num)
+	return s.Executors[part].service.Private().Sequence(ctx, src, dst, num, opts)
 }
 
 // partService implements API v3 for a partition.

@@ -9,9 +9,9 @@ package p2p
 import (
 	"context"
 	"crypto/ed25519"
-	"io"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -24,33 +24,19 @@ import (
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p/dial"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
-
-var BootstrapNodes = func() []multiaddr.Multiaddr {
-	p := func(s string) multiaddr.Multiaddr {
-		addr, err := multiaddr.NewMultiaddr(s)
-		if err != nil {
-			panic(err)
-		}
-		return addr
-	}
-
-	return []multiaddr.Multiaddr{
-		// Defi Devs bootstrap node
-		p("/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg"),
-	}
-}()
 
 // Node implements peer-to-peer routing of API v3 messages over via binary
 // message transport.
 type Node struct {
-	context    context.Context
-	cancel     context.CancelFunc
-	peermgr    *peerManager
-	host       host.Host
-	trackPeers bool
-	services   []*serviceHandler
+	context  context.Context
+	cancel   context.CancelFunc
+	peermgr  *peerManager
+	host     host.Host
+	tracker  dial.Tracker
+	services []*serviceHandler
 }
 
 // Options are options for creating a [Node].
@@ -80,6 +66,10 @@ type Options struct {
 	// EnablePeerTracker enables the peer tracker to reduce the impact of
 	// mis-configured peers. This is currently experimental.
 	EnablePeerTracker bool
+
+	PeerDatabase         string
+	PeerScanFrequency    time.Duration
+	PeerPersistFrequency time.Duration
 }
 
 // New creates a node with the given [Options].
@@ -87,7 +77,6 @@ func New(opts Options) (_ *Node, err error) {
 	// Initialize basic fields
 	n := new(Node)
 	n.context, n.cancel = context.WithCancel(context.Background())
-	n.trackPeers = opts.EnablePeerTracker
 
 	// Cancel on fail
 	defer func() {
@@ -163,10 +152,31 @@ func New(opts Options) (_ *Node, err error) {
 		util.Advertise(n.context, n.peermgr.routing, c.String())
 	}
 
+	// Set up the peer tracker
+	if opts.PeerDatabase != "" {
+		n.tracker, err = dial.NewPersistentTracker(n.context, dial.PersistentTrackerOptions{
+			Network:          opts.Network,
+			Filename:         opts.PeerDatabase,
+			Host:             (*connector)(n),
+			Peers:            (*dhtDiscoverer)(n),
+			ScanFrequency:    opts.PeerScanFrequency,
+			PersistFrequency: opts.PeerPersistFrequency,
+		})
+		if err != nil {
+			return nil, err
+		}
+	} else if opts.EnablePeerTracker {
+		n.tracker = new(dial.SimpleTracker)
+	} else {
+		n.tracker = dial.FakeTracker
+	}
+
 	return n, nil
 }
 
 func (n *Node) ID() peer.ID { return n.host.ID() }
+
+func (n *Node) Services() *nodeService { return (*nodeService)(n) }
 
 // Addresses lists the node's addresses.
 func (n *Node) Addresses() []multiaddr.Multiaddr {
@@ -203,14 +213,38 @@ func (n *Node) Close() error {
 	return n.host.Close()
 }
 
-// selfID returns the node's ID.
-func (n *Node) selfID() peer.ID {
-	return n.host.ID()
-}
-
 // getPeerService returns a new stream for the given peer and service.
-func (n *Node) getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error) {
-	return n.host.NewStream(ctx, peer, idRpc(service))
+func (n *Node) getPeerService(ctx context.Context, peerID peer.ID, service *api.ServiceAddress, ip multiaddr.Multiaddr) (message.Stream, error) {
+	if ip != nil {
+		// libp2p requires that the address include the peer ID
+		c, err := multiaddr.NewComponent("p2p", peerID.String())
+		if err != nil {
+			return nil, errors.InternalError.With(err)
+		}
+		ip = ip.Encapsulate(c)
+
+		// Tell the host to connect to the specified address
+		err = n.host.Connect(ctx, peer.AddrInfo{
+			ID:    peerID,
+			Addrs: []multiaddr.Multiaddr{ip},
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	connCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	s, err := n.host.NewStream(connCtx, peerID, idRpc(service))
+	if err != nil {
+		return nil, err
+	}
+
+	// Close the stream when the context is canceled
+	go func() { <-ctx.Done(); _ = s.Close() }()
+
+	return message.NewStream(s), nil
 }
 
 // getOwnService returns a service of this node.

@@ -13,7 +13,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -188,7 +188,7 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 		switch msg := msg.(type) {
 		case *messaging.TransactionMessage:
 			if msg.Transaction.Body.Type().IsUser() {
-				userTxnOrder[msg.ID().Hash()] = i
+				userTxnOrder[msg.Hash()] = i
 			}
 
 		case *messaging.SignatureMessage:
@@ -216,11 +216,11 @@ func orderMessagesDeterministically(messages []messaging.Message) {
 
 			// Sort user transactions by their original order
 			if a.Transaction.Body.Type().IsUser() {
-				return userTxnOrder[a.ID().Hash()] < userTxnOrder[b.ID().Hash()]
+				return userTxnOrder[a.Hash()] < userTxnOrder[b.Hash()]
 			}
 
 			// Sort system transactions by their sequence number
-			if x := sysTxnOrder[a.ID().Hash()] - sysTxnOrder[b.ID().Hash()]; x != 0 {
+			if x := sysTxnOrder[a.Hash()] - sysTxnOrder[b.Hash()]; x != 0 {
 				return x < 0
 			}
 			return a.ID().Compare(b.ID()) < 0

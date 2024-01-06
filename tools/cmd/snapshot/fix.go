@@ -83,7 +83,7 @@ func restoreSnapshot(filename, badgerPath, partitionID string) (uint64, []byte) 
 	partition := protocol.PartitionUrl(partitionID)
 	batch := db.Begin(false)
 	defer batch.Discard()
-	rootHash, err := batch.BPT().GetRootHash()
+	rootHash, err := batch.GetBptRootHash()
 	check(err)
 
 	var ledger *protocol.SystemLedger

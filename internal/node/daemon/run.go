@@ -17,30 +17,33 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/cometbft/cometbft/abci/types"
+	tmcfg "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto"
+	tmlog "github.com/cometbft/cometbft/libs/log"
+	service2 "github.com/cometbft/cometbft/libs/service"
+	tmnode "github.com/cometbft/cometbft/node"
+	tmp2p "github.com/cometbft/cometbft/p2p"
+	"github.com/cometbft/cometbft/privval"
+	"github.com/cometbft/cometbft/proxy"
+	"github.com/cometbft/cometbft/rpc/client/local"
 	"github.com/fatih/color"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	tmlog "github.com/tendermint/tendermint/libs/log"
-	service2 "github.com/tendermint/tendermint/libs/service"
-	tmnode "github.com/tendermint/tendermint/node"
-	tmp2p "github.com/tendermint/tendermint/p2p"
-	"github.com/tendermint/tendermint/privval"
-	"github.com/tendermint/tendermint/proxy"
-	tmclient "github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -48,13 +51,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
-	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/node/connections/status"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
@@ -62,27 +63,28 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/exp/slog"
 )
 
 type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
-	done              chan struct{}
-	db                *database.Database
-	node              *node.Node
-	apiServer         *http.Server
-	privVal           *privval.FilePV
-	p2pnode           *p2p.Node
-	api               *nodeapi.Handler
-	nodeKey           *tmp2p.NodeKey
-	connectionManager connections.ConnectionInitializer
-	router            routing.Router
-	eventBus          *events.Bus
-	localTm           tmclient.Client
-	snapshotSchedule  cron.Schedule
-	snapshotLock      *sync.Mutex
-	tracer            trace.Tracer
+	done             chan struct{}
+	db               *database.Database
+	node             *node.Node
+	apiServer        *http.Server
+	privVal          *privval.FilePV
+	p2pnode          *p2p.Node
+	api              *nodeapi.Handler
+	nodeKey          *tmp2p.NodeKey
+	router           routing.Router
+	eventBus         *events.Bus
+	localTm          *tendermint.DeferredClient
+	snapshotSchedule cron.Schedule
+	snapshotLock     *sync.Mutex
+	tracer           trace.Tracer
+	local            map[string]tendermint.DispatcherClient
 
 	// knobs for tests
 	// IsTest   bool
@@ -102,6 +104,7 @@ func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) 
 	var daemon Daemon
 	daemon.snapshotLock = new(sync.Mutex)
 	daemon.Config = cfg
+	daemon.localTm = tendermint.NewDeferredClient()
 
 	if newWriter == nil {
 		newWriter = func(c *config.Config) (io.Writer, error) {
@@ -140,13 +143,22 @@ func (d *Daemon) EventBus() *events.Bus           { return d.eventBus }
 
 // StartSecondary starts this daemon as a secondary process of the given daemon
 // (which must already be running).
-func (d *Daemon) StartSecondary(e *Daemon) error {
+func (d *Daemon) StartSecondary(e *Daemon, others ...*Daemon) error {
 	// Reuse the P2P node. Otherwise, start everything normally.
 	d.p2pnode = e.p2pnode
-	return d.Start()
+	return d.Start(append(others, e)...)
 }
 
-func (d *Daemon) Start() (err error) {
+func (d *Daemon) Start(others ...*Daemon) (err error) {
+	d.local = map[string]tendermint.DispatcherClient{}
+	d.local[strings.ToLower(d.Config.Accumulate.PartitionId)] = d.localTm
+	for _, e := range others {
+		part := strings.ToLower(e.Config.Accumulate.PartitionId)
+		if d.local[part] == nil {
+			d.local[part] = e.localTm
+		}
+	}
+
 	if d.Config.Accumulate.API.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
 	}
@@ -238,14 +250,16 @@ func (d *Daemon) startValidator() (err error) {
 		}
 	}
 
+	caughtUp := make(chan struct{})
+
 	// Start the executor and ABCI
-	app, err := d.startApp()
+	app, err := d.startApp(caughtUp)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Start Tendermint
-	err = d.startConsensus(app)
+	err = d.startConsensus(app, caughtUp)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -324,7 +338,7 @@ func (d *Daemon) loadKeys() error {
 	return nil
 }
 
-func (d *Daemon) startApp() (types.Application, error) {
+func (d *Daemon) startApp(caughtUp <-chan struct{}) (types.Application, error) {
 	dialer := d.p2pnode.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{
 		Network: d.Config.Accumulate.Network.Id,
@@ -332,25 +346,67 @@ func (d *Daemon) startApp() (types.Application, error) {
 		Router:  routing.MessageRouter{Router: d.router},
 	}}
 	execOpts := execute.Options{
-		Logger:    d.Logger,
-		Database:  d.db,
-		Key:       d.Key().Bytes(),
-		Router:    d.router,
-		EventBus:  d.eventBus,
-		Sequencer: client.Private(),
-		Querier:   client,
+		Logger:        d.Logger,
+		Database:      d.db,
+		Key:           d.Key().Bytes(),
+		Router:        d.router,
+		EventBus:      d.eventBus,
+		Sequencer:     client.Private(),
+		Querier:       client,
+		EnableHealing: d.Config.Accumulate.Healing.Enable,
 		Describe: execute.DescribeShim{
 			NetworkType: d.Config.Accumulate.Describe.NetworkType,
 			PartitionId: d.Config.Accumulate.Describe.PartitionId,
 		},
-		NewDispatcher: func() execute.Dispatcher {
+	}
+
+	if _, ok := d.local["directory"]; !ok ||
+		d.Config.Accumulate.DisableDirectDispatch {
+		// If we are not attached to a DN node, or direct dispatch is disabled,
+		// use the API dispatcher
+		execOpts.NewDispatcher = func() execute.Dispatcher {
 			return newDispatcher(d.Config.Accumulate.Network.Id, d.router, dialer)
-		},
+		}
+
+	} else {
+		// Otherwise, use the Tendermint dispatcher
+		execOpts.NewDispatcher = func() execute.Dispatcher {
+			return tendermint.NewDispatcher(d.router, d.local)
+		}
 	}
 
 	// On DNs initialize the major block scheduler
 	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
+	// This must happen before creating the executor since it needs to receive
+	// the initial WillChangeGlobals event
+	no := false
+	conductor := &crosschain.Conductor{
+		Partition:    &protocol.PartitionInfo{ID: d.Config.Accumulate.PartitionId, Type: d.Config.Accumulate.NetworkType},
+		ValidatorKey: execOpts.Key,
+		Database:     execOpts.Database,
+		Querier:      v3.Querier2{Querier: client},
+		Dispatcher:   execOpts.NewDispatcher(),
+		RunTask:      execOpts.BackgroundTaskLauncher,
+
+		// Disable for now
+		EnableAnchorHealing: &no,
+
+		Ready: func(execute.WillBeginBlock) bool {
+			// Pause the conductor until the node has caught up
+			select {
+			case <-caughtUp:
+				return true
+			default:
+				return false
+			}
+		},
+	}
+	err := conductor.Start(d.eventBus)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("start conductor: %v", err)
 	}
 
 	exec, err := execute.NewExecutor(execOpts)
@@ -359,26 +415,30 @@ func (d *Daemon) startApp() (types.Application, error) {
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		Address:  d.Key().PubKey().Address(),
-		Executor: exec,
-		Logger:   d.Logger,
-		EventBus: d.eventBus,
-		Config:   d.Config,
-		Tracer:   d.tracer,
-		Database: d.db,
+		Address:     d.Key().PubKey().Address(),
+		Executor:    exec,
+		Logger:      d.Logger,
+		EventBus:    d.eventBus,
+		Tracer:      d.tracer,
+		Database:    d.db,
+		Snapshots:   &d.Config.Accumulate.Snapshots,
+		Genesis:     genesis.DocProvider(&d.Config.Config),
+		Partition:   d.Config.Accumulate.PartitionId,
+		RootDir:     d.Config.RootDir,
+		AnalysisLog: d.Config.Accumulate.AnalysisLog,
 	})
 	return app, nil
 }
 
-func (d *Daemon) startConsensus(app types.Application) error {
+func (d *Daemon) startConsensus(app types.Application, caughtUp chan<- struct{}) error {
 	// Create node
 	tmn, err := tmnode.NewNode(
 		&d.Config.Config,
 		d.privVal,
 		d.nodeKey,
 		proxy.NewLocalClientCreator(app),
-		tmnode.DefaultGenesisDocProviderFunc(&d.Config.Config),
-		tmnode.DefaultDBProvider,
+		genesis.DocProvider(&d.Config.Config),
+		tmcfg.DefaultDBProvider,
 		tmnode.DefaultMetricsProvider(d.Config.Instrumentation),
 		d.Logger,
 	)
@@ -388,7 +448,6 @@ func (d *Daemon) startConsensus(app types.Application) error {
 	d.node = &node.Node{Node: tmn, Config: d.Config, ABCI: app}
 
 	// Start node
-	// TODO Feed Tendermint logger to service logger
 	err = d.node.Start()
 	if err != nil {
 		return errors.UnknownError.WithFormat("start consensus: %v", err)
@@ -414,24 +473,36 @@ func (d *Daemon) startConsensus(app types.Application) error {
 	})
 
 	// Create a local client
-	d.localTm = local.New(d.node.Node)
+	d.localTm.Set(local.New(d.node.Node))
+
+	// Signal once the node is caught up
+	if caughtUp != nil {
+		go func() {
+			t := time.NewTicker(time.Second)
+			defer t.Stop()
+			for range t.C {
+				st, err := d.localTm.Status(context.Background())
+				if err != nil {
+					slog.Error("Querying consensus status", "error", err)
+					continue
+				}
+				if !st.SyncInfo.CatchingUp {
+					close(caughtUp)
+					return
+				}
+			}
+		}()
+	}
 
 	return nil
 }
 
 func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
-	// Let the connection manager create and assign clients
-	statusChecker := statuschk.NewNodeStatusChecker()
-	err := d.connectionManager.InitClients(d.localTm, statusChecker)
-	if err != nil {
-		return errors.UnknownError.WithFormat("initialize the connection manager: %v", err)
-	}
-
 	// Wait for the executor to finish loading everything
 	globals := <-chGlobals
 
 	// Initialize all the services
-	nodeSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
+	consensusSvc := tm.NewConsensusService(tm.ConsensusServiceParams{
 		Logger:           d.Logger.With("module", "acc-rpc"),
 		Local:            d.localTm,
 		Database:         d.db,
@@ -451,10 +522,11 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		Logger:    d.Logger.With("module", "acc-rpc"),
 		Database:  d.db,
 		Partition: d.Config.Accumulate.PartitionId,
+		Consensus: consensusSvc,
 	})
 	metricsSvc := api.NewMetricsService(api.MetricsServiceParams{
 		Logger:  d.Logger.With("module", "acc-rpc"),
-		Node:    nodeSvc,
+		Node:    consensusSvc,
 		Querier: querySvc,
 	})
 	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
@@ -480,7 +552,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 		ValidatorKey: d.Key().Bytes(),
 	})
 	messageHandler, err := message.NewHandler(
-		&message.ConsensusService{ConsensusService: nodeSvc},
+		&message.ConsensusService{ConsensusService: consensusSvc},
 		&message.MetricsService{MetricsService: metricsSvc},
 		&message.NetworkService{NetworkService: netSvc},
 		&message.Querier{Querier: querySvc},
@@ -494,7 +566,7 @@ func (d *Daemon) startServices(chGlobals <-chan *core.GlobalValues) error {
 	}
 
 	services := []interface{ Type() v3.ServiceType }{
-		nodeSvc,
+		consensusSvc,
 		metricsSvc,
 		netSvc,
 		querySvc,
@@ -537,9 +609,6 @@ func (d *Daemon) StartP2P() error {
 }
 
 func (d *Daemon) startAPI() error {
-	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
-		return client.New(server)
-	})
 	d.router = routing.NewRouter(d.eventBus, d.Logger)
 
 	// Setup the p2p node
@@ -593,7 +662,7 @@ func (d *Daemon) startMonitoringAndCleanup() {
 		color.HiMagenta("Syncing ....")
 		time.Sleep(time.Second * 1)
 	}
-	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
+	color.HiBlue(" %s node running at %s :", d.Config.Accumulate.NetworkType, d.Config.Accumulate.API.ListenAddress)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
@@ -624,15 +693,6 @@ func (d *Daemon) startMonitoringAndCleanup() {
 	}()
 }
 
-func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.Config.Accumulate.PartitionId, false)
-	if err != nil {
-		return nil, err
-	}
-
-	return ctx.GetABCIClient(), nil
-}
-
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
 	if d.nodeKey.PrivKey.Equals(e.nodeKey.PrivKey) {
 		return errors.Conflict.With("cannot connect nodes directly as they have the same node key")
@@ -643,21 +703,7 @@ func (d *Daemon) ConnectDirectly(e *Daemon) error {
 		return err
 	}
 
-	err = e.p2pnode.ConnectDirectly(d.p2pnode)
-	if err != nil {
-		return err
-	}
-
-	if d.connectionManager == nil {
-		return nil
-	}
-
-	err = d.connectionManager.ConnectDirectly(e.connectionManager)
-	if err != nil {
-		return err
-	}
-
-	return e.connectionManager.ConnectDirectly(d.connectionManager)
+	return e.p2pnode.ConnectDirectly(d.p2pnode)
 }
 
 func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {

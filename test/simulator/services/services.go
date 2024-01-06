@@ -20,7 +20,7 @@ import (
 )
 
 type Network struct {
-	services Services
+	Services Services
 	*message.Client
 }
 
@@ -30,18 +30,18 @@ type Handler = func(message.Stream)
 
 func NewNetwork(router routing.Router) *Network {
 	n := new(Network)
-	n.services = Services{}
+	n.Services = Services{}
 	n.Client = &message.Client{Transport: &message.RoutedTransport{
 		Network:  "Simulator",
 		Attempts: 1,
-		Dialer:   n.services,
+		Dialer:   n.Services,
 		Router:   &routing.MessageRouter{Router: router},
 	}}
 	return n
 }
 
 func (n *Network) RegisterService(id peer.ID, address *api.ServiceAddress, handler Handler) bool {
-	return n.services.Register(id, address, handler)
+	return n.Services.Register(id, address, handler)
 }
 
 func (s Services) Register(id peer.ID, address *api.ServiceAddress, handler Handler) bool {
@@ -60,9 +60,12 @@ func (s Services) Register(id peer.ID, address *api.ServiceAddress, handler Hand
 }
 
 func (s Services) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	_, peer, sa, err := api.UnpackAddress(addr)
+	_, peer, sa, _, err := api.UnpackAddress(addr)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+	if sa == nil {
+		return nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
 	m, ok := s[sa.String()]

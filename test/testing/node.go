@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
@@ -89,12 +89,6 @@ func DefaultConfig(networkName string, net protocol.PartitionType, node config.N
 	cfg.Consensus.CreateEmptyBlocks = false              // Empty blocks are annoying to debug
 	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	cfg.Accumulate.Network.Partitions = []config.Partition{
-		{
-			Id:   "local",
-			Type: protocol.PartitionTypeBlockValidator,
-		},
-	}
 
 	cfg.LogLevel = DefaultLogLevels
 	return cfg

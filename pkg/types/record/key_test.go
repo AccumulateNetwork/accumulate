@@ -4,17 +4,18 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package record
+package record_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	. "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func TestKeyBinary(t *testing.T) {
-	k := Key{[]any{int64(123), uint64(456), "Foo", [32]byte{7, 8, 9}, protocol.AccountUrl("foo"), protocol.AccountUrl("bar").WithTxID([32]byte{1})}}
+	k := NewKey(int64(123), uint64(456), "Foo", [32]byte{7, 8, 9}, protocol.AccountUrl("foo"), protocol.AccountUrl("bar").WithTxID([32]byte{1}))
 	b, err := k.MarshalBinary()
 	require.NoError(t, err)
 
@@ -24,7 +25,7 @@ func TestKeyBinary(t *testing.T) {
 }
 
 func TestKeyJSON(t *testing.T) {
-	k := Key{[]any{int64(123), uint64(456), "Foo", [32]byte{7, 8, 9}, protocol.AccountUrl("foo"), protocol.AccountUrl("bar").WithTxID([32]byte{1})}}
+	k := NewKey(int64(123), uint64(456), "Foo", [32]byte{7, 8, 9}, protocol.AccountUrl("foo"), protocol.AccountUrl("bar").WithTxID([32]byte{1}))
 	b, err := k.MarshalJSON()
 	require.NoError(t, err)
 

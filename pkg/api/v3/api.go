@@ -8,61 +8,15 @@ package api
 
 import (
 	"context"
-	stdurl "net/url"
-	"strings"
 
-	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package api enums.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --long-union-discriminator --package api responses.yml options.yml records.yml events.yml types.yml queries.yml --reference ../../types/merkle/types.yml,../../../protocol/general.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --long-union-discriminator --package api responses.yml options.yml records.yml events.yml types.yml queries.yml --reference ../../database/merkle/types.yml,../../../protocol/general.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --long-union-discriminator --package api --language go-union --out unions_gen.go records.yml events.yml queries.yml --reference options.yml
-
-var BootstrapServers = func() []multiaddr.Multiaddr {
-	s := []string{
-		"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWGJTh4aeF7bFnwo9sAYRujCkuVU1Cq8wNeTNGpFgZgXdg",
-	}
-	addrs := make([]multiaddr.Multiaddr, len(s))
-	for i, s := range s {
-		addr, err := multiaddr.NewMultiaddr(s)
-		if err != nil {
-			panic(err)
-		}
-		addrs[i] = addr
-	}
-	return addrs
-}()
-
-var WellKnownNetworks = map[string]string{
-	"mainnet": "https://mainnet.accumulatenetwork.io",
-	"kermit":  "https://kermit.accumulatenetwork.io",
-	"fozzie":  "https://fozzie.accumulatenetwork.io",
-
-	"testnet": "https://kermit.accumulatenetwork.io",
-	"local":   "http://127.0.1.1:26660",
-}
-
-func ResolveWellKnownEndpoint(name string) string {
-	addr, ok := WellKnownNetworks[strings.ToLower(name)]
-	if !ok {
-		addr = name
-	}
-
-	u, err := stdurl.Parse(addr)
-	if err != nil {
-		return addr
-	}
-	switch u.Path {
-	case "":
-		addr += "/v3"
-	case "/":
-		addr += "v3"
-	}
-	return addr
-}
 
 // ServiceType is used to identify services.
 type ServiceType uint64
@@ -75,6 +29,9 @@ type RecordType uint64
 
 // EventType is the type of an [Event].
 type EventType uint64
+
+// KnownPeerStatus is the status of a known peer.
+type KnownPeerStatus int64
 
 // Query is an API query.
 type Query interface {
@@ -144,6 +101,10 @@ type Validator interface {
 
 type Faucet interface {
 	Faucet(ctx context.Context, account *url.URL, opts FaucetOptions) (*Submission, error)
+}
+
+func (r *ErrorRecord) Error() string {
+	return r.Value.Error()
 }
 
 func (r *MessageRecord[T]) StatusNo() uint64 { return uint64(r.Status) }

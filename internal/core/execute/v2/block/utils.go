@@ -17,21 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// none is an empty struct.
-type none = struct{}
-
-// set is an unordered set of T implemented as a map of T to [none].
-type set[T comparable] map[T]none
-
-// Add adds a value to the set.
-func (s set[T]) Add(v T) { s[v] = none{} }
-
-// Remove removes a value from the set.
-func (s set[T]) Remove(v T) { delete(s, v) }
-
-// Hash checks if the set has the given value.
-func (s set[T]) Has(v T) bool { _, ok := s[v]; return ok }
-
 // orderedMap is an ordered map from K to V implemented with a builtin map,
 // slice of keys, and comparison function.
 type orderedMap[K comparable, V any] struct {
@@ -150,20 +135,42 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2, blockInde
 	return indexIndex, true, nil
 }
 
-func getAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+func (m *MessageContext) getAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
 	auth, url, err := shared.GetAccountAuthoritySet(account)
-	if err != nil {
+	switch {
+	case err != nil:
 		return nil, errors.UnknownError.Wrap(err)
-	}
-	if auth != nil {
+
+	case auth == nil:
+		// Look at <url>
+		break
+
+	case len(auth.Authorities) > 0:
+		// Account has it's own authorities
 		return auth, nil
+
+	case !m.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled():
+		// Old logic
+		return auth, nil
+
+	case account.Type() == protocol.AccountTypeLiteDataAccount:
+		// LDAs have no authorities
+		return auth, nil
+
+	default:
+		// Inherit authority
+		var ok bool
+		url, ok = account.GetUrl().Parent()
+		if !ok {
+			return nil, errors.InvalidRecord.WithFormat("root account %v has an empty authority set", account.GetUrl())
+		}
 	}
 
 	account, err = batch.Account(url).Main().Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	return getAccountAuthoritySet(batch, account)
+	return m.getAccountAuthoritySet(batch, account)
 }
 
 func getValidator[T any](x *Executor, typ protocol.TransactionType) (T, bool) {

@@ -20,6 +20,10 @@ func (t *Transaction) ID() *url.TxID {
 	return t.Header.Principal.WithTxID(*(*[32]byte)(t.GetHash()))
 }
 
+func (t *Transaction) Hash() [32]byte {
+	return *(*[32]byte)(t.GetHash())
+}
+
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
 func (t *Transaction) GetHash() []byte {
 	t.calcHash()

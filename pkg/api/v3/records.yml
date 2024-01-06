@@ -11,6 +11,9 @@ RecordRange[T Record]:
     - name: Total
       type: uint
       keep-empty: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 AccountRecord:
   union: { type: record }
@@ -30,6 +33,9 @@ AccountRecord:
       type: Receipt
       marshal-as: reference
       pointer: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 ChainRecord:
   union: { type: record }
@@ -44,6 +50,9 @@ ChainRecord:
     - name: State
       type: bytes
       repeatable: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 ChainEntryRecord[T Record]:
   union: { type: record }
@@ -72,6 +81,9 @@ ChainEntryRecord[T Record]:
     - name: State
       type: bytes
       repeatable: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 KeyRecord:
   union: { type: record }
@@ -146,6 +158,10 @@ MessageRecord[T messaging.Message]:
       marshal-as: reference
       pointer: true
 
+    - name: LastBlockTime
+      type: time
+      pointer: true
+
 SignatureSetRecord:
   union: { type: record }
   fields:
@@ -190,6 +206,9 @@ MinorBlockRecord:
       type: { name: RecordRange, parameters: [{ type: MinorBlockRecord, pointer: true }] }
       marshal-as: reference
       pointer: true
+    - name: LastBlockTime
+      type: time
+      pointer: true
 
 MajorBlockRecord:
   union: { type: record }
@@ -201,6 +220,9 @@ MajorBlockRecord:
     - name: MinorBlocks
       type: { name: RecordRange, parameters: [{ type: MinorBlockRecord, pointer: true }] }
       marshal-as: reference
+      pointer: true
+    - name: LastBlockTime
+      type: time
       pointer: true
 
 UrlRecord:
@@ -224,3 +246,11 @@ IndexEntryRecord:
       type: protocol.IndexEntry
       marshal-as: reference
       pointer: true
+
+ErrorRecord:
+  union: { type: record }
+  fields:
+    - name: Value
+      type: errors2.Error
+      pointer: true
+      marshal-as: reference

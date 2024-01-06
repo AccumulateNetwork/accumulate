@@ -131,6 +131,9 @@ const ExecutorVersionV1Halt ExecutorVersion = 4
 // ExecutorVersionV2 is the second version of the executor system.
 const ExecutorVersionV2 ExecutorVersion = 5
 
+// ExecutorVersionV2Baikonur enables the Baikonur release's features.
+const ExecutorVersionV2Baikonur ExecutorVersion = 6
+
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -172,6 +175,9 @@ const PartitionTypeBlockValidator PartitionType = 2
 
 // PartitionTypeBlockSummary .
 const PartitionTypeBlockSummary PartitionType = 3
+
+// PartitionTypeBootstrap .
+const PartitionTypeBootstrap PartitionType = 4
 
 // SignatureTypeUnknown is used when the signature type is not known.
 const SignatureTypeUnknown SignatureType = 0
@@ -774,7 +780,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur:
 		*v = u
 		return true
 	}
@@ -794,6 +800,8 @@ func (v ExecutorVersion) String() string {
 		return "v1-halt"
 	case ExecutorVersionV2:
 		return "v2"
+	case ExecutorVersionV2Baikonur:
+		return "v2Baikonur"
 	}
 	return fmt.Sprintf("ExecutorVersion:%d", v)
 }
@@ -817,6 +825,8 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV1Halt, true
 	case "v2":
 		return ExecutorVersionV2, true
+	case "v2baikonur":
+		return ExecutorVersionV2Baikonur, true
 	}
 	return 0, false
 }
@@ -991,7 +1001,7 @@ func (v PartitionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *PartitionType) SetEnumValue(id uint64) bool {
 	u := PartitionType(id)
 	switch u {
-	case PartitionTypeDirectory, PartitionTypeBlockValidator, PartitionTypeBlockSummary:
+	case PartitionTypeDirectory, PartitionTypeBlockValidator, PartitionTypeBlockSummary, PartitionTypeBootstrap:
 		*v = u
 		return true
 	}
@@ -1007,6 +1017,8 @@ func (v PartitionType) String() string {
 		return "blockValidator"
 	case PartitionTypeBlockSummary:
 		return "blockSummary"
+	case PartitionTypeBootstrap:
+		return "bootstrap"
 	}
 	return fmt.Sprintf("PartitionType:%d", v)
 }
@@ -1024,6 +1036,8 @@ func PartitionTypeByName(name string) (PartitionType, bool) {
 		return PartitionTypeBlockSummary, true
 	case "block-summary":
 		return PartitionTypeBlockSummary, true
+	case "bootstrap":
+		return PartitionTypeBootstrap, true
 	}
 	return 0, false
 }

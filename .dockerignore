@@ -2,3 +2,6 @@
 .factom
 .genesis
 *.exe
+.git
+*/Dockerfile
+.test

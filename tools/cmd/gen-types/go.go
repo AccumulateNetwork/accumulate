@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
@@ -221,10 +222,16 @@ func goUnionMethod(field *Field, name string) string {
 		}
 		return fmt.Sprintf("%s.%s", parts[0], name)
 	}
-	if len(parts) == 1 {
+	if len(parts) > 1 {
+		return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
+	}
+
+	// Is the union private?
+	if !unicode.IsLower(rune(parts[0][0])) {
 		return name + parts[0]
 	}
-	return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
+
+	return strings.ToLower(name[:1]) + name[1:] + strings.ToUpper(parts[0][:1]) + parts[0][1:]
 }
 
 func goBinaryMethod(field *Field) (methodName string, cast, wantPtr bool) {
@@ -458,7 +465,7 @@ func GoCopy(field *Field, dstName, srcName string) (string, error) {
 	}
 	return fmt.Sprintf(
 		"\t%[1]s = make(%[2]s, len(%[3]s))\n"+
-			"\tfor i, v := range %[3]s { %s }",
+			"\tfor i, v := range %[3]s { v := v; %s }",
 		dstName, GoResolveType(field, false, false), srcName, expr), nil
 }
 
@@ -608,7 +615,11 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	case method == "Value":
 		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadValue(%d, x.UnmarshalBinaryFrom) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
 	case method == "Enum":
-		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadEnum(%d, x) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
+		var x = "x"
+		if isGenericParameter(field.ParentType, field.Type.String()) {
+			x = "any(x).(encoding.EnumValueSetter)" // This is a hack to avoid requiring more complex generic type parameterization
+		}
+		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadEnum(%d, %s) { %s }", GoResolveType(field, true, true), readerName, field.Number, x, set), true
 	default:
 		expr, hasIf = fmt.Sprintf("if x, ok := %s.Read%s(%d); ok { %s }", readerName, method, field.Number, set), true
 	}
@@ -622,6 +633,15 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	}
 
 	return "\tfor { ok := " + expr + "; if !ok { break } }", nil
+}
+
+func isGenericParameter(parent *Type, typ string) bool {
+	for _, param := range parent.Params {
+		if param.Name == typ {
+			return true
+		}
+	}
+	return false
 }
 
 func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {

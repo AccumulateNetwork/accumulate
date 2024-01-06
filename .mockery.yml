@@ -3,4 +3,4 @@ case: underscore
 recursive: true
 keeptree: true
 with-expecter: true
-name: ^(ConsensusService|NetworkService|MetricsService|Querier|Submitter|Validator|EventService)$
+name: ^(NodeService|ConsensusService|NetworkService|MetricsService|Querier|Submitter|Validator|EventService|Sequencer)$

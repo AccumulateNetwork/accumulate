@@ -26,6 +26,9 @@ const nodeTypeLeaf nodeType = 3
 // nodeTypeBoundary is the boundary between blocks.
 const nodeTypeBoundary nodeType = 4
 
+// nodeTypeLeafWithExpandedKey is a leaf node with an expanded key.
+const nodeTypeLeafWithExpandedKey nodeType = 5
+
 // GetEnumValue returns the value of the node Type
 func (v nodeType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -33,7 +36,7 @@ func (v nodeType) GetEnumValue() uint64 { return uint64(v) }
 func (v *nodeType) SetEnumValue(id uint64) bool {
 	u := nodeType(id)
 	switch u {
-	case nodeTypeEmpty, nodeTypeBranch, nodeTypeLeaf, nodeTypeBoundary:
+	case nodeTypeEmpty, nodeTypeBranch, nodeTypeLeaf, nodeTypeBoundary, nodeTypeLeafWithExpandedKey:
 		*v = u
 		return true
 	}
@@ -51,6 +54,8 @@ func (v nodeType) String() string {
 		return "leaf"
 	case nodeTypeBoundary:
 		return "boundary"
+	case nodeTypeLeafWithExpandedKey:
+		return "leaf+key"
 	}
 	return fmt.Sprintf("nodeType:%d", v)
 }
@@ -66,6 +71,10 @@ func nodeTypeByName(name string) (nodeType, bool) {
 		return nodeTypeLeaf, true
 	case "boundary":
 		return nodeTypeBoundary, true
+	case "leafwithexpandedkey":
+		return nodeTypeLeafWithExpandedKey, true
+	case "leaf+key":
+		return nodeTypeLeafWithExpandedKey, true
 	}
 	return 0, false
 }

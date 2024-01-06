@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -190,6 +190,9 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 				debug = true
 			case *messaging.BlockAnchor:
 				debug = true
+			case *messaging.BadSyntheticMessage:
+				msg = m.Message
+				goto again
 			case *messaging.SyntheticMessage:
 				msg = m.Message
 				goto again

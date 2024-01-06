@@ -19,13 +19,13 @@ func (c *Chain) AddEntry(hash []byte) {
 	var markMask = markFreq - 1
 	switch (c.Head.Count + 1) & markMask {
 	case 0:
-		c.Head.Add(hash)
+		c.Head.AddEntry(hash)
 		c.MarkPoints = append(c.MarkPoints, c.Head.Copy()) // Save the mark point
 	case 1:
 		c.Head.HashList = c.Head.HashList[:0]
 		fallthrough
 	default:
-		c.Head.Add(hash)
+		c.Head.AddEntry(hash)
 	}
 }
 

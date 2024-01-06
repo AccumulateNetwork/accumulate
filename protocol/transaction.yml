@@ -13,12 +13,24 @@ TransactionHeader:
     - name: Metadata
       type: bytes
       optional: true
-    - name: HoldUntil
-      description: holds the transaction as pending until the threshold is met
-      type: BlockThreshold
+    - name: Expire
+      description: expires the transaction as pending once the condition(s) are met
+      type: ExpireOptions
       optional: true
       pointer: true
       marshal-as: reference
+    - name: HoldUntil
+      description: holds the transaction as pending until the condition(s) are met
+      type: HoldUntilOptions
+      optional: true
+      pointer: true
+      marshal-as: reference
+    - name: Authorities
+      description: is a list of additional authorities that must approve the transaction
+      type: url
+      optional: true
+      pointer: true
+      repeatable: true
 
 Transaction:
   fields:
@@ -38,11 +50,18 @@ Transaction:
       type: bool
       marshal-as: none
 
-BlockThreshold:
+HoldUntilOptions:
   fields:
     - name: MinorBlock
       type: uint
       optional: true
+
+ExpireOptions:
+  fields:
+    - name: AtTime
+      type: time
+      optional: true
+      pointer: true
 
 TransactionStatus:
   fields:

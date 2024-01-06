@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 // MessageContext is the context in which a message is processed.
@@ -40,8 +41,8 @@ func (m *MessageContext) GetActiveGlobals() *core.GlobalValues {
 	return &m.Executor.globals.Active
 }
 
-func (*MessageContext) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
-	return getAccountAuthoritySet(batch, account)
+func (m *MessageContext) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+	return m.getAccountAuthoritySet(batch, account)
 }
 
 func (*MessageContext) TransactionIsInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, *messaging.CreditPayment, error) {
@@ -83,13 +84,25 @@ func (m *MessageContext) txnWith(txn *protocol.Transaction) *TransactionContext 
 // isWithin returns true if the given message type appears somewhere in the
 // message chain.
 func (m *MessageContext) isWithin(typ ...messaging.MessageType) bool {
+	newSynth := m.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled()
 	for {
 		if m.parent == nil {
 			return false
 		}
 		m = m.parent
 		for _, typ := range typ {
-			if m.message.Type() == typ {
+			switch {
+			case typ != messaging.MessageTypeSynthetic && m.message.Type() == typ:
+				// Check for the given message type
+				return true
+
+			case !newSynth && m.message.Type() == messaging.MessageTypeBadSynthetic:
+				// Check for the old synthetic message type
+				return true
+
+			case newSynth && m.message.Type() == messaging.MessageTypeBadSynthetic,
+				newSynth && m.message.Type() == messaging.MessageTypeSynthetic:
+				// Check for either synthetic message type
 				return true
 			}
 		}
@@ -139,14 +152,37 @@ func (m *MessageContext) queueAdditional(msg messaging.Message) {
 
 // didProduce queues a produced synthetic message for dispatch.
 func (m *MessageContext) didProduce(batch *database.Batch, dest *url.URL, msg messaging.Message) error {
-	if dest == nil {
-		panic("nil destination for produced message")
-	}
-	m.produced = append(m.produced, &ProducedMessage{
+	p := &ProducedMessage{
 		Producer:    m.message.ID(),
 		Destination: dest,
 		Message:     msg,
-	})
+	}
+
+	// Add an index to synthetic transactions to differentiate otherwise
+	// identical messages
+	m.syntheticCount++
+	switch msg := msg.(type) {
+	case *messaging.TransactionMessage:
+		if !m.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+			break
+		}
+
+		// SyntheticForwardTransaction is the only synthetic transaction type
+		// that does not satisfy this interface, but they are not used in v2
+		txn, ok := msg.Transaction.Body.(protocol.SyntheticTransaction)
+		if !ok {
+			slog.ErrorCtx(m.Context, "Synthetic transaction is not synthetic", "id", msg.ID())
+			break
+		}
+
+		txn.SetIndex(m.syntheticCount)
+		p.Message = msg.Copy() // Clear memoized hashes
+	}
+
+	if dest == nil {
+		panic("nil destination for produced message")
+	}
+	m.produced = append(m.produced, p)
 
 	err := batch.Message(m.message.Hash()).Produced().Add(msg.ID())
 	if err != nil {
@@ -188,6 +224,11 @@ func (m *MessageContext) callMessageValidator(batch *database.Batch, msg messagi
 func (b *bundle) getTransaction(batch *database.Batch, hash [32]byte) (*protocol.Transaction, error) {
 	// Look in the bundle
 	for _, msg := range b.messages {
+		// Look inside block anchors
+		if blk, ok := msg.(*messaging.BlockAnchor); ok && b.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+			msg = blk.Anchor
+		}
+
 		txn, ok := messaging.UnwrapAs[messaging.MessageWithTransaction](msg)
 		if ok &&
 			txn.GetTransaction().Body.Type() != protocol.TransactionTypeRemote &&
@@ -232,6 +273,14 @@ func (b *bundle) recordPending(batch *database.Batch, ctx *MessageContext, msg m
 	err := batch.Message(h).Main().Put(msg)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("store message: %w", err)
+	}
+
+	// Add it to the principal's pending list
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		err = batch.Account(msg.ID().Account()).Pending().Add(msg.ID())
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("update pending list: %w", err)
+		}
 	}
 
 	// Update the status

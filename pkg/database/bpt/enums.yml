@@ -11,3 +11,7 @@ nodeType:
   Boundary:
     description: is the boundary between blocks
     value: 4
+  LeafWithExpandedKey:
+    description: is a leaf node with an expanded key
+    label: leaf+key
+    value: 5

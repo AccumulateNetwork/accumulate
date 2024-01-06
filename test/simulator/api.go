@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/julienschmidt/httprouter"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -40,9 +41,8 @@ func (n *Node) newApiV2() (*apiv2.JrpcMethods, error) {
 		Logger:        n.logger,
 		TxMaxWaitTime: time.Hour,
 		LocalV3:       svc.ForPeer(n.peerID),
-		Querier:       svc,
+		Querier:       &api.Collator{Querier: svc, Network: svc},
 		Submitter:     svc,
-		Network:       svc,
 		Faucet:        svc,
 		Validator:     svc,
 		Sequencer:     svc.Private(),
@@ -149,15 +149,16 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 		return nil
 	}
 
-	var mux *http.ServeMux
+	mux := httprouter.New()
 	if opts.ListenHTTPv2 {
 		api, err := n.newApiV2()
 		if err != nil {
 			return err
 		}
-		mux = api.NewMux()
-	} else {
-		mux = new(http.ServeMux)
+		err = api.Register(mux)
+		if err != nil {
+			return err
+		}
 	}
 
 	var v3 http.Handler
@@ -170,6 +171,8 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 			jsonrpc.Querier{Querier: network},
 			jsonrpc.Submitter{Submitter: network},
 			jsonrpc.Validator{Validator: network},
+			jsonrpc.Sequencer{Sequencer: network.Private()},
+			jsonrpc.Faucet{Faucet: network},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize API v3: %w", err)
@@ -186,6 +189,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 			message.Submitter{Submitter: network},
 			message.Validator{Validator: network},
 			message.EventService{EventService: network},
+			message.Faucet{Faucet: network},
 		)
 		if err != nil {
 			return errors.UnknownError.WithFormat("initialize websocket API: %w", err)
@@ -198,16 +202,18 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 	}
 
 	if v3 != nil {
-		mux.Handle("/v3", v3)
+		mux.POST("/v3", func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+			v3.ServeHTTP(w, r)
+		})
 	}
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.GET("/", func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 		w.Header().Set("Location", "/x")
 		w.WriteHeader(http.StatusTemporaryRedirect)
 	})
 
 	webex := web.Handler()
-	mux.HandleFunc("/x/", func(w http.ResponseWriter, r *http.Request) {
+	mux.GET("/x/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x")
 		r.RequestURI = strings.TrimPrefix(r.RequestURI, "/x")
 		webex.ServeHTTP(w, r)
@@ -244,7 +250,7 @@ func (n *Node) listenAndServeHTTP(ctx context.Context, opts ListenOptions) error
 	}()
 	go func() { <-ctx.Done(); _ = srv.Shutdown(context.Background()) }()
 
-	n.logger.Info("Node HTTP up", "address", "http://"+addr)
+	n.logger.Info("Node HTTP up", "module", "sim", "address", "http://"+addr)
 	return nil
 }
 

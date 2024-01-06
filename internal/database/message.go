@@ -77,6 +77,9 @@ func (m *messageMain) Get() (messaging.Message, error) {
 func (m *messageMain) GetAs(target interface{}) error {
 	u, err := m.Get()
 	if err != nil {
+		if errors.Is(err, errors.NotFound) {
+			return err // Do not wrap database.NotFoundError
+		}
 		return errors.UnknownError.Wrap(err)
 	}
 

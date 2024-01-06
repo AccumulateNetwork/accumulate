@@ -33,20 +33,30 @@ func (fakeDispatcher) Send(context.Context) <-chan error {
 	return ch
 }
 
+type dispatchInterceptor = func(ctx context.Context, env *messaging.Envelope) (send bool, err error)
+
 // dispatcher implements [block.Dispatcher] for the simulator.
 //
 // dispatcher maintains a separate bundle (slice) of messages for each call to
 // Submit to make it easier to write tests that drop certain messages.
 type dispatcher struct {
-	client    *services.Network
-	router    routing.Router
-	envelopes map[string][]*messaging.Envelope
+	client      *services.Network
+	router      routing.Router
+	envelopes   map[string][]*messaging.Envelope
+	interceptor dispatchInterceptor
 }
 
 var _ execute.Dispatcher = (*dispatcher)(nil)
 
 // Submit routes the envelope and adds it to the queue for a partition.
 func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Envelope) error {
+	if d.interceptor != nil {
+		keep, err := d.interceptor(ctx, env)
+		if !keep || err != nil {
+			return err
+		}
+	}
+
 	partition, err := d.router.RouteAccount(u)
 	if err != nil {
 		return err

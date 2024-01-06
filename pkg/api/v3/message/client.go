@@ -42,35 +42,46 @@ var _ api.Submitter = (*Client)(nil)
 var _ api.Validator = (*Client)(nil)
 var _ api.Faucet = (*Client)(nil)
 
+func (c AddressedClient) ForAddress(addr multiaddr.Multiaddr) AddressedClient {
+	if c.Address != nil {
+		addr = c.Address.Encapsulate(addr)
+	}
+	return AddressedClient{c.Client, addr}
+}
+
+func (c AddressedClient) ForPeer(peer peer.ID) AddressedClient {
+	addr, err := multiaddr.NewComponent("p2p", peer.String())
+	if err != nil {
+		panic(err)
+	}
+	return c.ForAddress(addr)
+}
+
 func (c *Client) ForAddress(addr multiaddr.Multiaddr) AddressedClient {
 	return AddressedClient{c, addr}
 }
 
 func (c *Client) ForPeer(peer peer.ID) AddressedClient {
-	addr, err := multiaddr.NewComponent("p2p", peer.String())
-	if err != nil {
-		panic(err)
-	}
-	return AddressedClient{c, addr}
+	return c.ForAddress(nil).ForPeer(peer)
 }
 
 // NodeInfo implements [api.NodeService.NodeInfo].
-func (c *Client) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
+func (c *Client) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
 	return c.ForAddress(nil).NodeInfo(ctx, opts)
 }
 
 // FindService implements [api.NodeService.FindService].
-func (c *Client) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+func (c *Client) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
 	return c.ForAddress(nil).FindService(ctx, opts)
 }
 
 // ConsensusStatus implements [api.NodeService.ConsensusStatus].
-func (c *Client) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	return c.ForAddress(nil).ConsensusStatus(ctx, opts)
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
-func (c *Client) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
+func (c *Client) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return c.ForAddress(nil).NetworkStatus(ctx, opts)
 }
 
@@ -100,28 +111,28 @@ func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOp
 }
 
 // NodeInfo implements [api.NodeService.NodeInfo].
-func (c AddressedClient) NodeInfo(ctx context.Context, opts NodeInfoOptions) (*api.NodeInfo, error) {
+func (c AddressedClient) NodeInfo(ctx context.Context, opts api.NodeInfoOptions) (*api.NodeInfo, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a NodeInfo
 	return typedRequest[*NodeInfoResponse, *api.NodeInfo](c, ctx, &NodeInfoRequest{NodeInfoOptions: opts})
 }
 
 // FindService implements [api.NodeService.FindService].
-func (c AddressedClient) FindService(ctx context.Context, opts FindServiceOptions) ([]*api.FindServiceResult, error) {
+func (c AddressedClient) FindService(ctx context.Context, opts api.FindServiceOptions) ([]*api.FindServiceResult, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a FindServiceResult
 	return typedRequest[*FindServiceResponse, []*api.FindServiceResult](c, ctx, &FindServiceRequest{FindServiceOptions: opts})
 }
 
 // ConsensusStatus implements [api.NodeService.ConsensusStatus].
-func (c AddressedClient) ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*api.ConsensusStatus, error) {
+func (c AddressedClient) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a ConsensusStatus
 	return typedRequest[*ConsensusStatusResponse, *api.ConsensusStatus](c, ctx, &ConsensusStatusRequest{ConsensusStatusOptions: opts})
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
-func (c AddressedClient) NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*api.NetworkStatus, error) {
+func (c AddressedClient) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	// Wrap the request as a NetworkStatusRequest and expect a
 	// NetworkStatusResponse, which is unpacked into a NetworkStatus
 	return typedRequest[*NetworkStatusResponse, *api.NetworkStatus](c, ctx, &NetworkStatusRequest{NetworkStatusOptions: opts})
@@ -219,7 +230,7 @@ func (r *PrivateSequenceResponse) rval() *api.MessageRecord[messaging.Message] {
 	return r.Value
 }
 
-func unNilArray[T any, L ~[]T](l L) L {
+func unNilArray[T any, L ~[]T](l L) L { //nolint:unused
 	// Make the array not nil - returning an empty array instead of nil/null is
 	// better for most languages that aren't Go
 	if l != nil {

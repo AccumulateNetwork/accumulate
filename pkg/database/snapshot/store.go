@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -53,7 +54,7 @@ func (r *Reader) AsStore() (*Store, error) {
 
 func (s *Store) Get(key *record.Key) ([]byte, error) {
 	if s.count == 0 {
-		return nil, errors.NotFound.WithFormat("%v not found", key)
+		return nil, (*database.NotFoundError)(key)
 	}
 	rd, err := s.open(s.index)
 	if err != nil {
@@ -81,7 +82,7 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 		return nil, errors.UnknownError.WithFormat("read index entry: %w", err)
 	}
 	if x.Key != target {
-		return nil, errors.NotFound.WithFormat("%v not found", key)
+		return nil, (*database.NotFoundError)(key)
 	}
 
 	// Read the record from the given section and offset
@@ -90,12 +91,7 @@ func (s *Store) Get(key *record.Key) ([]byte, error) {
 		return nil, errors.UnknownError.WithFormat("open index: %w", err)
 	}
 
-	_, err = rd.Seek(int64(x.Offset), io.SeekStart)
-	if err != nil {
-		return nil, errors.BadRequest.WithFormat("seek to record: %w", err)
-	}
-
-	entry, err := (&RecordReader{rd}).Read()
+	entry, err := recordReader{rd}.ReadAt(int64(x.Offset))
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -109,6 +105,40 @@ func (s *Store) Put(*record.Key, []byte) error {
 
 func (s *Store) Delete(*record.Key) error {
 	return errors.NotAllowed.With("cannot modify a snapshot store")
+}
+
+// ForEach iterates over each value.
+func (s *Store) ForEach(fn func(*record.Key, []byte) error) error {
+	for i, ss := range s.sections {
+		if ss.Type() != SectionTypeRecords {
+			continue
+		}
+
+		rd, err := s.open(i)
+		if err != nil {
+			return err
+		}
+
+		rr := recordReader{rd}
+	readSection:
+		for {
+			entry, err := rr.Read()
+			switch {
+			case err == nil:
+				// Ok
+			case errors.Is(err, io.EOF):
+				break readSection
+			default:
+				return err
+			}
+
+			err = fn(entry.Key, entry.Value)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Store) open(i int) (ioutil.SectionReader, error) {

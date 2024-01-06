@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"math/big"
@@ -16,8 +17,8 @@ import (
 	"strings"
 	"testing"
 
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/require"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -46,7 +47,6 @@ func TestBadOperatorPageUpdate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -75,7 +75,6 @@ func TestBadOracleUpdate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -116,7 +115,6 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -171,7 +169,6 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 func TestSendDirectToWrongPartition(t *testing.T) {
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -225,7 +222,6 @@ func TestAnchoring(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -292,7 +288,6 @@ func TestSignatureChainAnchoring(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, values),
 	)
@@ -388,7 +383,6 @@ func TestProtocolVersionReactivation(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, values),
 	)
@@ -411,7 +405,6 @@ func TestUpdateKeyWithDelegate(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -454,7 +447,6 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *messaging.Envelope) {
 		// Initialize with V1+sig
 		sim := NewSim(t,
-			simulator.MemoryDatabase,
 			simulator.SimpleNetwork(t.Name(), 3, 1),
 			simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: v}),
 		)
@@ -615,7 +607,6 @@ func TestSignerOverwritten(t *testing.T) {
 
 	// Initialize with V1+sig
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: ExecutorVersionV1SignatureAnchoring}),
 	)
@@ -661,7 +652,6 @@ func TestMissingPrincipal(t *testing.T) {
 
 	// Initialize with V1+sig
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -695,7 +685,6 @@ func TestOldExec(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -731,7 +720,6 @@ func TestBadGlobalErrorMessage(t *testing.T) {
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	g.ExecutorVersion = ExecutorVersionLatest
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -766,7 +754,6 @@ func TestDifferentValidatorSignaturesV1(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
 		simulator.IgnoreDeliverResults,
@@ -822,7 +809,6 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV2
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.GenesisWith(GenesisTime, g),
 		simulator.IgnoreDeliverResults,
@@ -886,9 +872,9 @@ func TestMessageCompat(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
+		// simulator.UseABCI,
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -931,7 +917,6 @@ func TestProofOverride(t *testing.T) {
 	g := new(core.GlobalValues)
 	g.ExecutorVersion = ExecutorVersionV1
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
 	)
@@ -1052,7 +1037,6 @@ func TestChainUpdateAnchor(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -1153,4 +1137,86 @@ func TestChainUpdateAnchor(t *testing.T) {
 
 	// Verify the anchor matches the receipt
 	require.Equal(t, r1.Receipt.LocalBlock, anchor.MinorBlockIndex)
+}
+
+func TestAuthoritySignatureWithoutTransaction(t *testing.T) {
+	cases := []struct {
+		Version ExecutorVersion
+		Fails   bool
+	}{
+		{Version: ExecutorVersionV2, Fails: false},
+		{Version: ExecutorVersionLatest, Fails: true},
+	}
+
+	for _, c := range cases {
+		t.Run(c.Version.String(), func(t *testing.T) {
+			alice := url.MustParse("alice")
+			aliceKey := acctesting.GenerateKey(alice)
+
+			// Capture the authority signature
+			var captured *messaging.Envelope
+			capFn := func(_ context.Context, env *messaging.Envelope) (send bool, err error) {
+				for _, m := range env.Messages {
+					syn, ok := m.(interface{ Data() *messaging.SynthFields })
+					if !ok {
+						continue
+					}
+					seq, ok := syn.Data().Message.(*messaging.SequencedMessage)
+					if !ok {
+						continue
+					}
+					sig, ok := seq.Message.(*messaging.SignatureMessage)
+					if !ok || sig.Signature.Type() != SignatureTypeAuthority {
+						continue
+					}
+					require.Nil(t, captured)
+					captured = env
+					return false, nil
+				}
+				return true, nil
+			}
+
+			// Initialize
+			sim := NewSim(t,
+				simulator.SimpleNetwork(t.Name(), 1, 1),
+				simulator.GenesisWithVersion(GenesisTime, c.Version),
+				simulator.CaptureDispatchedMessages(capFn),
+			)
+
+			MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+			CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+			// Execute
+			sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For("bob.acme", "tokens").
+					BurnTokens(1, 0).
+					SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+			sim.StepUntil(
+				True(func(h *Harness) bool { return captured != nil }))
+
+			// Remove the transaction
+			msgs, err := captured.Normalize()
+			require.NoError(t, err)
+			captured = new(messaging.Envelope)
+			var removed int
+			for _, msg := range msgs {
+				if msg.Type() == messaging.MessageTypeTransaction {
+					removed++
+				} else {
+					captured.Messages = append(captured.Messages, msg)
+				}
+			}
+			require.NotZero(t, removed)
+
+			// Resubmit
+			_, err = sim.SubmitTo("BVN0", captured)
+			if c.Fails {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "message bundle is missing a transaction")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

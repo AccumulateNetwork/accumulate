@@ -23,10 +23,15 @@ import (
 // A Key is the key for a record.
 type Key struct {
 	values []any
+	hash   *KeyHash
 }
 
 func NewKey(v ...any) *Key {
-	return &Key{v}
+	return &Key{values: v}
+}
+
+func KeyFromHash(kh KeyHash) *Key {
+	return NewKey(kh)
 }
 
 func (k *Key) Len() int {
@@ -44,11 +49,11 @@ func (k *Key) Get(i int) any {
 }
 
 func (k *Key) SliceI(i int) *Key {
-	return &Key{k.values[i:]}
+	return &Key{values: k.values[i:]}
 }
 
 func (k *Key) SliceJ(j int) *Key {
-	return &Key{k.values[:j]}
+	return &Key{values: k.values[:j]}
 }
 
 // Append creates a child key of this key.
@@ -57,12 +62,12 @@ func (k *Key) Append(v ...any) *Key {
 		return k
 	}
 	if k.Len() == 0 {
-		return &Key{v}
+		return &Key{values: v}
 	}
 	l := make([]any, len(k.values)+len(v))
 	n := copy(l, k.values)
 	copy(l[n:], v)
-	return &Key{l}
+	return &Key{values: l}
 }
 
 // AppendKey appends one key to another. AppendKey will panic if K is not empty
@@ -85,12 +90,19 @@ func (k *Key) Hash() KeyHash {
 	if k.Len() == 0 {
 		return KeyHash{}
 	}
+	if k.hash != nil {
+		return *k.hash
+	}
 
 	// If the first value is a KeyHash, append to that
+	var kh KeyHash
 	if h, ok := k.values[0].(KeyHash); ok {
-		return h.Append(k.values[1:]...)
+		kh = h.Append(k.values[1:]...)
+	} else {
+		kh = (KeyHash{}).Append(k.values...)
 	}
-	return (KeyHash{}).Append(k.values...)
+	k.hash = &kh
+	return kh
 }
 
 // String returns a human-readable string for the key.
@@ -129,7 +141,7 @@ func (k *Key) Copy() *Key {
 	}
 	l := make([]any, len(k.values))
 	copy(l, k.values)
-	return &Key{l}
+	return &Key{values: l}
 }
 
 // CopyAsInterface implements [encoding.BinaryValue].

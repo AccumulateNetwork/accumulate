@@ -58,7 +58,6 @@ const (
 type value[T any] struct {
 	store        database.Store
 	key          *database.Key
-	name         string
 	status       valueStatus
 	value        encodableValue[T]
 	allowMissing bool
@@ -68,11 +67,10 @@ type value[T any] struct {
 var _ database.Value = (*value[*wrappedValue[uint64]])(nil)
 
 // NewValue returns a new value using the given encodable value.
-func newValue[T any](store database.Store, key *database.Key, name string, allowMissing bool, ev encodableValue[T]) *value[T] {
+func newValue[T any](store database.Store, key *database.Key, allowMissing bool, ev encodableValue[T]) *value[T] {
 	v := &value[T]{}
 	v.store = store
 	v.key = key
-	v.name = name
 	v.value = ev
 	v.allowMissing = allowMissing
 	v.status = valueUndefined
@@ -87,7 +85,7 @@ func (v *value[T]) Get() (u T, err error) {
 	// Do we already have the value?
 	switch v.status {
 	case valueNotFound:
-		return zero[T](), errors.NotFound.WithFormat("%s not found", v.name)
+		return zero[T](), (*database.NotFoundError)(v.key)
 
 	case valueClean, valueDirty:
 		return v.value.getValue(), nil
@@ -136,7 +134,7 @@ func (v *value[T]) Get() (u T, err error) {
 	default:
 		// Not found
 		v.status = valueNotFound
-		return zero[T](), errors.NotFound.WithFormat("%s not found", v.name)
+		return zero[T](), err // Allow NotFoundError to propagate
 	}
 }
 
@@ -281,7 +279,7 @@ func (v *value[T]) LoadValue(value database.Value, put bool) error {
 
 	u, ok := uv.(encodableValue[T])
 	if !ok {
-		return errors.InternalError.WithFormat("store %s: invalid value: want %T, got %T", v.name, (encodableValue[T])(nil), uv)
+		return errors.InternalError.WithFormat("store %v: invalid value: want %T, got %T", v.key, (encodableValue[T])(nil), uv)
 	}
 
 	if put {

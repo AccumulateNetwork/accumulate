@@ -31,12 +31,13 @@ import (
 )
 
 type AccountRecord struct {
-	fieldsSet []bool
-	Account   protocol.Account          `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Directory *RecordRange[*UrlRecord]  `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
-	Pending   *RecordRange[*TxIDRecord] `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
-	Receipt   *Receipt                  `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
-	extraData []byte
+	fieldsSet     []bool
+	Account       protocol.Account          `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Directory     *RecordRange[*UrlRecord]  `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
+	Pending       *RecordRange[*TxIDRecord] `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	Receipt       *Receipt                  `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	LastBlockTime *time.Time                `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 // AnchorSearchQuery queries {account}#anchor/{hash}.
@@ -72,15 +73,16 @@ type BlockQuery struct {
 type ChainEntryRecord[T Record] struct {
 	fieldsSet []bool
 	// Account is the account (omitted if unambiguous).
-	Account   *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Name      string           `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Type      merkle.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Index     uint64           `json:"index" form:"index" query:"index" validate:"required"`
-	Entry     [32]byte         `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	Value     T                `json:"value,omitempty" form:"value" query:"value" validate:"required"`
-	Receipt   *Receipt         `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
-	State     [][]byte         `json:"state,omitempty" form:"state" query:"state" validate:"required"`
-	extraData []byte
+	Account       *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Name          string           `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type          merkle.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Index         uint64           `json:"index" form:"index" query:"index" validate:"required"`
+	Entry         [32]byte         `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	Value         T                `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Receipt       *Receipt         `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	State         [][]byte         `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	LastBlockTime *time.Time       `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type ChainQuery struct {
@@ -94,12 +96,13 @@ type ChainQuery struct {
 }
 
 type ChainRecord struct {
-	fieldsSet []bool
-	Name      string           `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Type      merkle.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Count     uint64           `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	State     [][]byte         `json:"state,omitempty" form:"state" query:"state" validate:"required"`
-	extraData []byte
+	fieldsSet     []bool
+	Name          string           `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type          merkle.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Count         uint64           `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	State         [][]byte         `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	LastBlockTime *time.Time       `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type ConsensusPeerInfo struct {
@@ -125,10 +128,12 @@ type ConsensusStatus struct {
 }
 
 type ConsensusStatusOptions struct {
-	fieldsSet []bool
-	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
-	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
-	extraData []byte
+	fieldsSet         []bool
+	NodeID            string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	Partition         string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	IncludePeers      *bool  `json:"includePeers,omitempty" form:"includePeers" query:"includePeers"`
+	IncludeAccumulate *bool  `json:"includeAccumulate,omitempty" form:"includeAccumulate" query:"includeAccumulate"`
+	extraData         []byte
 }
 
 type DataQuery struct {
@@ -163,6 +168,12 @@ type ErrorEvent struct {
 	extraData []byte
 }
 
+type ErrorRecord struct {
+	fieldsSet []bool
+	Value     *errors2.Error `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type FaucetOptions struct {
 	fieldsSet []bool
 	Token     *url.URL `json:"token,omitempty" form:"token" query:"token"`
@@ -173,12 +184,18 @@ type FindServiceOptions struct {
 	fieldsSet []bool
 	Network   string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Service   *ServiceAddress `json:"service,omitempty" form:"service" query:"service" validate:"required"`
+	// Known restricts the results to known peers.
+	Known bool `json:"known,omitempty" form:"known" query:"known"`
+	// Timeout is the time to wait before stopping, when querying the DHT.
+	Timeout   time.Duration `json:"timeout,omitempty" form:"timeout" query:"timeout"`
 	extraData []byte
 }
 
 type FindServiceResult struct {
 	fieldsSet []bool
-	PeerID    p2p.PeerID `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
+	PeerID    p2p.PeerID      `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
+	Status    KnownPeerStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Addresses []p2p.Multiaddr `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
 	extraData []byte
 }
 
@@ -216,11 +233,12 @@ type LastBlock struct {
 }
 
 type MajorBlockRecord struct {
-	fieldsSet   []bool
-	Index       uint64                          `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Time        time.Time                       `json:"time,omitempty" form:"time" query:"time" validate:"required"`
-	MinorBlocks *RecordRange[*MinorBlockRecord] `json:"minorBlocks,omitempty" form:"minorBlocks" query:"minorBlocks" validate:"required"`
-	extraData   []byte
+	fieldsSet     []bool
+	Index         uint64                          `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Time          time.Time                       `json:"time,omitempty" form:"time" query:"time" validate:"required"`
+	MinorBlocks   *RecordRange[*MinorBlockRecord] `json:"minorBlocks,omitempty" form:"minorBlocks" query:"minorBlocks" validate:"required"`
+	LastBlockTime *time.Time                      `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type MessageHashSearchQuery struct {
@@ -244,6 +262,7 @@ type MessageRecord[T messaging.Message] struct {
 	Historical    bool                              `json:"historical,omitempty" form:"historical" query:"historical" validate:"required"`
 	Sequence      *messaging.SequencedMessage       `json:"sequence,omitempty" form:"sequence" query:"sequence"`
 	SourceReceipt *merkle.Receipt                   `json:"sourceReceipt,omitempty" form:"sourceReceipt" query:"sourceReceipt" validate:"required"`
+	LastBlockTime *time.Time                        `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 	extraData     []byte
 }
 
@@ -262,13 +281,14 @@ type MetricsOptions struct {
 }
 
 type MinorBlockRecord struct {
-	fieldsSet []bool
-	Index     uint64                                  `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Time      *time.Time                              `json:"time,omitempty" form:"time" query:"time" validate:"required"`
-	Source    *url.URL                                `json:"source,omitempty" form:"source" query:"source" validate:"required"`
-	Entries   *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
-	Anchored  *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty" form:"anchored" query:"anchored" validate:"required"`
-	extraData []byte
+	fieldsSet     []bool
+	Index         uint64                                  `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Time          *time.Time                              `json:"time,omitempty" form:"time" query:"time" validate:"required"`
+	Source        *url.URL                                `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Entries       *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	Anchored      *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty" form:"anchored" query:"anchored" validate:"required"`
+	LastBlockTime *time.Time                              `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type NetworkStatus struct {
@@ -296,6 +316,8 @@ type NodeInfo struct {
 	PeerID    p2p.PeerID        `json:"peerID,omitempty" form:"peerID" query:"peerID" validate:"required"`
 	Network   string            `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Services  []*ServiceAddress `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+	Version   string            `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit    string            `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
 	extraData []byte
 }
 
@@ -346,11 +368,12 @@ type Receipt struct {
 }
 
 type RecordRange[T Record] struct {
-	fieldsSet []bool
-	Records   []T    `json:"records,omitempty" form:"records" query:"records" validate:"required"`
-	Start     uint64 `json:"start" form:"start" query:"start" validate:"required"`
-	Total     uint64 `json:"total" form:"total" query:"total" validate:"required"`
-	extraData []byte
+	fieldsSet     []bool
+	Records       []T        `json:"records,omitempty" form:"records" query:"records" validate:"required"`
+	Start         uint64     `json:"start" form:"start" query:"start" validate:"required"`
+	Total         uint64     `json:"total" form:"total" query:"total" validate:"required"`
+	LastBlockTime *time.Time `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
+	extraData     []byte
 }
 
 type ServiceAddress struct {
@@ -436,6 +459,8 @@ func (*DirectoryQuery) QueryType() QueryType { return QueryTypeDirectory }
 
 func (*ErrorEvent) EventType() EventType { return EventTypeError }
 
+func (*ErrorRecord) RecordType() RecordType { return RecordTypeError }
+
 func (*GlobalsEvent) EventType() EventType { return EventTypeGlobals }
 
 func (*IndexEntryRecord) RecordType() RecordType { return RecordTypeIndexEntry }
@@ -479,6 +504,10 @@ func (v *AccountRecord) Copy() *AccountRecord {
 	if v.Receipt != nil {
 		u.Receipt = (v.Receipt).Copy()
 	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -513,6 +542,7 @@ func (v *BlockEvent) Copy() *BlockEvent {
 	u.Major = v.Major
 	u.Entries = make([]*ChainEntryRecord[Record], len(v.Entries))
 	for i, v := range v.Entries {
+		v := v
 		if v != nil {
 			u.Entries[i] = (v).Copy()
 		}
@@ -576,7 +606,12 @@ func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 	}
 	u.State = make([][]byte, len(v.State))
 	for i, v := range v.State {
+		v := v
 		u.State[i] = encoding.BytesCopy(v)
+	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -607,6 +642,7 @@ func ChainEntryRecordAs[T2 Record, T1 Record](v *ChainEntryRecord[T1]) (*ChainEn
 	u.Value = vValue
 	u.Receipt = v.Receipt
 	u.State = v.State
+	u.LastBlockTime = v.LastBlockTime
 	return u, nil
 }
 
@@ -641,7 +677,12 @@ func (v *ChainRecord) Copy() *ChainRecord {
 	u.Count = v.Count
 	u.State = make([][]byte, len(v.State))
 	for i, v := range v.State {
+		v := v
 		u.State[i] = encoding.BytesCopy(v)
+	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -684,6 +725,7 @@ func (v *ConsensusStatus) Copy() *ConsensusStatus {
 	u.PartitionType = v.PartitionType
 	u.Peers = make([]*ConsensusPeerInfo, len(v.Peers))
 	for i, v := range v.Peers {
+		v := v
 		if v != nil {
 			u.Peers[i] = (v).Copy()
 		}
@@ -703,6 +745,14 @@ func (v *ConsensusStatusOptions) Copy() *ConsensusStatusOptions {
 
 	u.NodeID = v.NodeID
 	u.Partition = v.Partition
+	if v.IncludePeers != nil {
+		u.IncludePeers = new(bool)
+		*u.IncludePeers = *v.IncludePeers
+	}
+	if v.IncludeAccumulate != nil {
+		u.IncludeAccumulate = new(bool)
+		*u.IncludeAccumulate = *v.IncludeAccumulate
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -796,6 +846,22 @@ func (v *ErrorEvent) Copy() *ErrorEvent {
 
 func (v *ErrorEvent) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ErrorRecord) Copy() *ErrorRecord {
+	u := new(ErrorRecord)
+
+	if v.Value != nil {
+		u.Value = (v.Value).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ErrorRecord) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *FaucetOptions) Copy() *FaucetOptions {
 	u := new(FaucetOptions)
 
@@ -819,6 +885,8 @@ func (v *FindServiceOptions) Copy() *FindServiceOptions {
 	if v.Service != nil {
 		u.Service = (v.Service).Copy()
 	}
+	u.Known = v.Known
+	u.Timeout = v.Timeout
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -834,6 +902,14 @@ func (v *FindServiceResult) Copy() *FindServiceResult {
 
 	if v.PeerID != "" {
 		u.PeerID = p2p.CopyPeerID(v.PeerID)
+	}
+	u.Status = v.Status
+	u.Addresses = make([]p2p.Multiaddr, len(v.Addresses))
+	for i, v := range v.Addresses {
+		v := v
+		if v != nil {
+			u.Addresses[i] = p2p.CopyMultiaddr(v)
+		}
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -930,6 +1006,10 @@ func (v *MajorBlockRecord) Copy() *MajorBlockRecord {
 	if v.MinorBlocks != nil {
 		u.MinorBlocks = (v.MinorBlocks).Copy()
 	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -987,6 +1067,10 @@ func (v *MessageRecord[T]) Copy() *MessageRecord[T] {
 	if v.SourceReceipt != nil {
 		u.SourceReceipt = (v.SourceReceipt).Copy()
 	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1020,6 +1104,7 @@ func MessageRecordAs[T2 messaging.Message, T1 messaging.Message](v *MessageRecor
 	u.Historical = v.Historical
 	u.Sequence = v.Sequence
 	u.SourceReceipt = v.SourceReceipt
+	u.LastBlockTime = v.LastBlockTime
 	return u, nil
 }
 
@@ -1068,6 +1153,10 @@ func (v *MinorBlockRecord) Copy() *MinorBlockRecord {
 	}
 	if v.Anchored != nil {
 		u.Anchored = (v.Anchored).Copy()
+	}
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
 	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -1130,10 +1219,13 @@ func (v *NodeInfo) Copy() *NodeInfo {
 	u.Network = v.Network
 	u.Services = make([]*ServiceAddress, len(v.Services))
 	for i, v := range v.Services {
+		v := v
 		if v != nil {
 			u.Services[i] = (v).Copy()
 		}
 	}
+	u.Version = v.Version
+	u.Commit = v.Commit
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1250,12 +1342,17 @@ func (v *RecordRange[T]) Copy() *RecordRange[T] {
 
 	u.Records = make([]T, len(v.Records))
 	for i, v := range v.Records {
+		v := v
 		if !EqualRecord(v, nil) {
 			u.Records[i] = CopyRecord(v).(T)
 		}
 	}
 	u.Start = v.Start
 	u.Total = v.Total
+	if v.LastBlockTime != nil {
+		u.LastBlockTime = new(time.Time)
+		*u.LastBlockTime = *v.LastBlockTime
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1284,6 +1381,7 @@ func RecordRangeAs[T2 Record, T1 Record](v *RecordRange[T1]) (*RecordRange[T2], 
 	u.Records = vRecords
 	u.Start = v.Start
 	u.Total = v.Total
+	u.LastBlockTime = v.LastBlockTime
 	return u, nil
 }
 
@@ -1439,6 +1537,14 @@ func (v *AccountRecord) Equal(u *AccountRecord) bool {
 	case !((v.Receipt).Equal(u.Receipt)):
 		return false
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -1567,6 +1673,14 @@ func (v *ChainEntryRecord[T]) Equal(u *ChainEntryRecord[T]) bool {
 			return false
 		}
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -1618,6 +1732,14 @@ func (v *ChainRecord) Equal(u *ChainRecord) bool {
 		if !(bytes.Equal(v.State[i], u.State[i])) {
 			return false
 		}
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
 	}
 
 	return true
@@ -1684,6 +1806,22 @@ func (v *ConsensusStatusOptions) Equal(u *ConsensusStatusOptions) bool {
 		return false
 	}
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+	switch {
+	case v.IncludePeers == u.IncludePeers:
+		// equal
+	case v.IncludePeers == nil || u.IncludePeers == nil:
+		return false
+	case !(*v.IncludePeers == *u.IncludePeers):
+		return false
+	}
+	switch {
+	case v.IncludeAccumulate == u.IncludeAccumulate:
+		// equal
+	case v.IncludeAccumulate == nil || u.IncludeAccumulate == nil:
+		return false
+	case !(*v.IncludeAccumulate == *u.IncludeAccumulate):
 		return false
 	}
 
@@ -1761,6 +1899,19 @@ func (v *ErrorEvent) Equal(u *ErrorEvent) bool {
 	return true
 }
 
+func (v *ErrorRecord) Equal(u *ErrorRecord) bool {
+	switch {
+	case v.Value == u.Value:
+		// equal
+	case v.Value == nil || u.Value == nil:
+		return false
+	case !((v.Value).Equal(u.Value)):
+		return false
+	}
+
+	return true
+}
+
 func (v *FaucetOptions) Equal(u *FaucetOptions) bool {
 	switch {
 	case v.Token == u.Token:
@@ -1786,6 +1937,12 @@ func (v *FindServiceOptions) Equal(u *FindServiceOptions) bool {
 	case !((v.Service).Equal(u.Service)):
 		return false
 	}
+	if !(v.Known == u.Known) {
+		return false
+	}
+	if !(v.Timeout == u.Timeout) {
+		return false
+	}
 
 	return true
 }
@@ -1793,6 +1950,17 @@ func (v *FindServiceOptions) Equal(u *FindServiceOptions) bool {
 func (v *FindServiceResult) Equal(u *FindServiceResult) bool {
 	if !(p2p.EqualPeerID(v.PeerID, u.PeerID)) {
 		return false
+	}
+	if !(v.Status == u.Status) {
+		return false
+	}
+	if len(v.Addresses) != len(u.Addresses) {
+		return false
+	}
+	for i := range v.Addresses {
+		if !(p2p.EqualMultiaddr(v.Addresses[i], u.Addresses[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -1902,6 +2070,14 @@ func (v *MajorBlockRecord) Equal(u *MajorBlockRecord) bool {
 	case !((v.MinorBlocks).Equal(u.MinorBlocks)):
 		return false
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -1986,6 +2162,14 @@ func (v *MessageRecord[T]) Equal(u *MessageRecord[T]) bool {
 	case !((v.SourceReceipt).Equal(u.SourceReceipt)):
 		return false
 	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
+		return false
+	}
 
 	return true
 }
@@ -2043,6 +2227,14 @@ func (v *MinorBlockRecord) Equal(u *MinorBlockRecord) bool {
 	case v.Anchored == nil || u.Anchored == nil:
 		return false
 	case !((v.Anchored).Equal(u.Anchored)):
+		return false
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
 		return false
 	}
 
@@ -2117,6 +2309,12 @@ func (v *NodeInfo) Equal(u *NodeInfo) bool {
 		if !((v.Services[i]).Equal(u.Services[i])) {
 			return false
 		}
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Commit == u.Commit) {
+		return false
 	}
 
 	return true
@@ -2219,6 +2417,14 @@ func (v *RecordRange[T]) Equal(u *RecordRange[T]) bool {
 		return false
 	}
 	if !(v.Total == u.Total) {
+		return false
+	}
+	switch {
+	case v.LastBlockTime == u.LastBlockTime:
+		// equal
+	case v.LastBlockTime == nil || u.LastBlockTime == nil:
+		return false
+	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
 		return false
 	}
 
@@ -2342,6 +2548,7 @@ var fieldNames_AccountRecord = []string{
 	3: "Directory",
 	4: "Pending",
 	5: "Receipt",
+	6: "LastBlockTime",
 }
 
 func (v *AccountRecord) MarshalBinary() ([]byte, error) {
@@ -2364,6 +2571,9 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Receipt == nil) {
 		writer.WriteValue(5, v.Receipt.MarshalBinary)
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(6, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountRecord)
@@ -2399,6 +2609,11 @@ func (v *AccountRecord) IsValid() error {
 		errs = append(errs, "field Receipt is missing")
 	} else if v.Receipt == nil {
 		errs = append(errs, "field Receipt is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -2613,15 +2828,16 @@ func (v *BlockQuery) baseIsValid() error {
 }
 
 var fieldNames_ChainEntryRecord = []string{
-	1: "RecordType",
-	2: "Account",
-	3: "Name",
-	4: "Type",
-	5: "Index",
-	6: "Entry",
-	7: "Value",
-	8: "Receipt",
-	9: "State",
+	1:  "RecordType",
+	2:  "Account",
+	3:  "Name",
+	4:  "Type",
+	5:  "Index",
+	6:  "Entry",
+	7:  "Value",
+	8:  "Receipt",
+	9:  "State",
+	10: "LastBlockTime",
 }
 
 func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
@@ -2656,6 +2872,9 @@ func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
 		for _, v := range v.State {
 			writer.WriteBytes(9, v)
 		}
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(10, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainEntryRecord)
@@ -2709,6 +2928,11 @@ func (v *ChainEntryRecord[T]) IsValid() error {
 		errs = append(errs, "field State is missing")
 	} else if len(v.State) == 0 {
 		errs = append(errs, "field State is not set")
+	}
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -2786,6 +3010,7 @@ var fieldNames_ChainRecord = []string{
 	3: "Type",
 	4: "Count",
 	5: "State",
+	6: "LastBlockTime",
 }
 
 func (v *ChainRecord) MarshalBinary() ([]byte, error) {
@@ -2810,6 +3035,9 @@ func (v *ChainRecord) MarshalBinary() ([]byte, error) {
 		for _, v := range v.State {
 			writer.WriteBytes(5, v)
 		}
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(6, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainRecord)
@@ -2845,6 +3073,11 @@ func (v *ChainRecord) IsValid() error {
 		errs = append(errs, "field State is missing")
 	} else if len(v.State) == 0 {
 		errs = append(errs, "field State is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -3038,6 +3271,8 @@ func (v *ConsensusStatus) IsValid() error {
 var fieldNames_ConsensusStatusOptions = []string{
 	1: "NodeID",
 	2: "Partition",
+	3: "IncludePeers",
+	4: "IncludeAccumulate",
 }
 
 func (v *ConsensusStatusOptions) MarshalBinary() ([]byte, error) {
@@ -3053,6 +3288,12 @@ func (v *ConsensusStatusOptions) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Partition) == 0) {
 		writer.WriteString(2, v.Partition)
+	}
+	if !(v.IncludePeers == nil) {
+		writer.WriteBool(3, *v.IncludePeers)
+	}
+	if !(v.IncludeAccumulate == nil) {
+		writer.WriteBool(4, *v.IncludeAccumulate)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ConsensusStatusOptions)
@@ -3325,6 +3566,54 @@ func (v *ErrorEvent) IsValid() error {
 	}
 }
 
+var fieldNames_ErrorRecord = []string{
+	1: "RecordType",
+	2: "Value",
+}
+
+func (v *ErrorRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.RecordType())
+	if !(v.Value == nil) {
+		writer.WriteValue(2, v.Value.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ErrorRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ErrorRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field RecordType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == nil {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_FaucetOptions = []string{
 	1: "Token",
 }
@@ -3365,6 +3654,8 @@ func (v *FaucetOptions) IsValid() error {
 var fieldNames_FindServiceOptions = []string{
 	1: "Network",
 	2: "Service",
+	3: "Known",
+	4: "Timeout",
 }
 
 func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
@@ -3380,6 +3671,12 @@ func (v *FindServiceOptions) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Service == nil) {
 		writer.WriteValue(2, v.Service.MarshalBinary)
+	}
+	if !(!v.Known) {
+		writer.WriteBool(3, v.Known)
+	}
+	if !(v.Timeout == 0) {
+		writer.WriteDuration(4, v.Timeout)
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceOptions)
@@ -3416,6 +3713,8 @@ func (v *FindServiceOptions) IsValid() error {
 
 var fieldNames_FindServiceResult = []string{
 	1: "PeerID",
+	2: "Status",
+	3: "Addresses",
 }
 
 func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
@@ -3428,6 +3727,14 @@ func (v *FindServiceResult) MarshalBinary() ([]byte, error) {
 
 	if !(v.PeerID == ("")) {
 		writer.WriteValue(1, v.PeerID.MarshalBinary)
+	}
+	if !(v.Status == 0) {
+		writer.WriteEnum(2, v.Status)
+	}
+	if !(len(v.Addresses) == 0) {
+		for _, v := range v.Addresses {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_FindServiceResult)
@@ -3445,6 +3752,16 @@ func (v *FindServiceResult) IsValid() error {
 		errs = append(errs, "field PeerID is missing")
 	} else if v.PeerID == ("") {
 		errs = append(errs, "field PeerID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Status is missing")
+	} else if v.Status == 0 {
+		errs = append(errs, "field Status is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Addresses is missing")
+	} else if len(v.Addresses) == 0 {
+		errs = append(errs, "field Addresses is not set")
 	}
 
 	switch len(errs) {
@@ -3730,6 +4047,7 @@ var fieldNames_MajorBlockRecord = []string{
 	2: "Index",
 	3: "Time",
 	4: "MinorBlocks",
+	5: "LastBlockTime",
 }
 
 func (v *MajorBlockRecord) MarshalBinary() ([]byte, error) {
@@ -3749,6 +4067,9 @@ func (v *MajorBlockRecord) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.MinorBlocks == nil) {
 		writer.WriteValue(4, v.MinorBlocks.MarshalBinary)
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(5, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_MajorBlockRecord)
@@ -3779,6 +4100,11 @@ func (v *MajorBlockRecord) IsValid() error {
 		errs = append(errs, "field MinorBlocks is missing")
 	} else if v.MinorBlocks == nil {
 		errs = append(errs, "field MinorBlocks is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -3853,6 +4179,7 @@ var fieldNames_MessageRecord = []string{
 	11: "Historical",
 	12: "Sequence",
 	13: "SourceReceipt",
+	14: "LastBlockTime",
 }
 
 func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
@@ -3899,6 +4226,9 @@ func (v *MessageRecord[T]) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.SourceReceipt == nil) {
 		writer.WriteValue(13, v.SourceReceipt.MarshalBinary)
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(14, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_MessageRecord)
@@ -3969,6 +4299,11 @@ func (v *MessageRecord[T]) IsValid() error {
 		errs = append(errs, "field SourceReceipt is missing")
 	} else if v.SourceReceipt == nil {
 		errs = append(errs, "field SourceReceipt is not set")
+	}
+	if len(v.fieldsSet) > 13 && !v.fieldsSet[13] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -4074,6 +4409,7 @@ var fieldNames_MinorBlockRecord = []string{
 	4: "Source",
 	5: "Entries",
 	6: "Anchored",
+	7: "LastBlockTime",
 }
 
 func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
@@ -4099,6 +4435,9 @@ func (v *MinorBlockRecord) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Anchored == nil) {
 		writer.WriteValue(6, v.Anchored.MarshalBinary)
+	}
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(7, *v.LastBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_MinorBlockRecord)
@@ -4139,6 +4478,11 @@ func (v *MinorBlockRecord) IsValid() error {
 		errs = append(errs, "field Anchored is missing")
 	} else if v.Anchored == nil {
 		errs = append(errs, "field Anchored is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -4290,6 +4634,8 @@ var fieldNames_NodeInfo = []string{
 	1: "PeerID",
 	2: "Network",
 	3: "Services",
+	4: "Version",
+	5: "Commit",
 }
 
 func (v *NodeInfo) MarshalBinary() ([]byte, error) {
@@ -4310,6 +4656,12 @@ func (v *NodeInfo) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Services {
 			writer.WriteValue(3, v.MarshalBinary)
 		}
+	}
+	if !(len(v.Version) == 0) {
+		writer.WriteString(4, v.Version)
+	}
+	if !(len(v.Commit) == 0) {
+		writer.WriteString(5, v.Commit)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NodeInfo)
@@ -4337,6 +4689,16 @@ func (v *NodeInfo) IsValid() error {
 		errs = append(errs, "field Services is missing")
 	} else if len(v.Services) == 0 {
 		errs = append(errs, "field Services is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Version is missing")
+	} else if len(v.Version) == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Commit is missing")
+	} else if len(v.Commit) == 0 {
+		errs = append(errs, "field Commit is not set")
 	}
 
 	switch len(errs) {
@@ -4665,6 +5027,7 @@ var fieldNames_RecordRange = []string{
 	2: "Records",
 	3: "Start",
 	4: "Total",
+	5: "LastBlockTime",
 }
 
 func (v *RecordRange[T]) MarshalBinary() ([]byte, error) {
@@ -4683,6 +5046,9 @@ func (v *RecordRange[T]) MarshalBinary() ([]byte, error) {
 	}
 	writer.WriteUint(3, v.Start)
 	writer.WriteUint(4, v.Total)
+	if !(v.LastBlockTime == nil) {
+		writer.WriteTime(5, *v.LastBlockTime)
+	}
 
 	_, _, err := writer.Reset(fieldNames_RecordRange)
 	if err != nil {
@@ -4708,6 +5074,11 @@ func (v *RecordRange[T]) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Total is missing")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field LastBlockTime is missing")
+	} else if v.LastBlockTime == nil {
+		errs = append(errs, "field LastBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -5135,6 +5506,9 @@ func (v *AccountRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(Receipt); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.Receipt = x
 	}
+	if x, ok := reader.ReadTime(6); ok {
+		v.LastBlockTime = &x
+	}
 
 	seen, err := reader.Reset(fieldNames_AccountRecord)
 	if err != nil {
@@ -5338,6 +5712,9 @@ func (v *ChainEntryRecord[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error
 			break
 		}
 	}
+	if x, ok := reader.ReadTime(10); ok {
+		v.LastBlockTime = &x
+	}
 
 	seen, err := reader.Reset(fieldNames_ChainEntryRecord)
 	if err != nil {
@@ -5432,6 +5809,9 @@ func (v *ChainRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		} else {
 			break
 		}
+	}
+	if x, ok := reader.ReadTime(6); ok {
+		v.LastBlockTime = &x
 	}
 
 	seen, err := reader.Reset(fieldNames_ChainRecord)
@@ -5538,6 +5918,12 @@ func (v *ConsensusStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadString(2); ok {
 		v.Partition = x
+	}
+	if x, ok := reader.ReadBool(3); ok {
+		v.IncludePeers = &x
+	}
+	if x, ok := reader.ReadBool(4); ok {
+		v.IncludeAccumulate = &x
 	}
 
 	seen, err := reader.Reset(fieldNames_ConsensusStatusOptions)
@@ -5733,6 +6119,41 @@ func (v *ErrorEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ErrorRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ErrorRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vRecordType RecordType
+	if x := new(RecordType); reader.ReadEnum(1, x) {
+		vRecordType = *x
+	}
+	if !(v.RecordType() == vRecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), vRecordType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ErrorRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(errors2.Error); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ErrorRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *FaucetOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -5769,6 +6190,12 @@ func (v *FindServiceOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(ServiceAddress); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Service = x
 	}
+	if x, ok := reader.ReadBool(3); ok {
+		v.Known = x
+	}
+	if x, ok := reader.ReadDuration(4); ok {
+		v.Timeout = x
+	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceOptions)
 	if err != nil {
@@ -5796,6 +6223,21 @@ func (v *FindServiceResult) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
+	if x := new(KnownPeerStatus); reader.ReadEnum(2, x) {
+		v.Status = *x
+	}
+	for {
+		ok := reader.ReadValue(3, func(r io.Reader) error {
+			x, err := p2p.UnmarshalMultiaddrFrom(r)
+			if err == nil {
+				v.Addresses = append(v.Addresses, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_FindServiceResult)
 	if err != nil {
@@ -5992,6 +6434,9 @@ func (v *MajorBlockRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(RecordRange[*MinorBlockRecord]); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.MinorBlocks = x
 	}
+	if x, ok := reader.ReadTime(5); ok {
+		v.LastBlockTime = &x
+	}
 
 	seen, err := reader.Reset(fieldNames_MajorBlockRecord)
 	if err != nil {
@@ -6103,6 +6548,9 @@ func (v *MessageRecord[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(merkle.Receipt); reader.ReadValue(13, x.UnmarshalBinaryFrom) {
 		v.SourceReceipt = x
 	}
+	if x, ok := reader.ReadTime(14); ok {
+		v.LastBlockTime = &x
+	}
 
 	seen, err := reader.Reset(fieldNames_MessageRecord)
 	if err != nil {
@@ -6198,6 +6646,9 @@ func (v *MinorBlockRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x := new(RecordRange[*MinorBlockRecord]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Anchored = x
+	}
+	if x, ok := reader.ReadTime(7); ok {
+		v.LastBlockTime = &x
 	}
 
 	seen, err := reader.Reset(fieldNames_MinorBlockRecord)
@@ -6299,6 +6750,12 @@ func (v *NodeInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 		} else {
 			break
 		}
+	}
+	if x, ok := reader.ReadString(4); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadString(5); ok {
+		v.Commit = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NodeInfo)
@@ -6546,6 +7003,9 @@ func (v *RecordRange[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 	if x, ok := reader.ReadUint(4); ok {
 		v.Total = x
+	}
+	if x, ok := reader.ReadTime(5); ok {
+		v.LastBlockTime = &x
 	}
 
 	seen, err := reader.Reset(fieldNames_RecordRange)
@@ -6804,11 +7264,12 @@ func (v *ValidateOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType RecordType                                    `json:"recordType"`
-		Account    *encoding.JsonUnmarshalWith[protocol.Account] `json:"account,omitempty"`
-		Directory  *RecordRange[*UrlRecord]                      `json:"directory,omitempty"`
-		Pending    *RecordRange[*TxIDRecord]                     `json:"pending,omitempty"`
-		Receipt    *Receipt                                      `json:"receipt,omitempty"`
+		RecordType    RecordType                                    `json:"recordType"`
+		Account       *encoding.JsonUnmarshalWith[protocol.Account] `json:"account,omitempty"`
+		Directory     *RecordRange[*UrlRecord]                      `json:"directory,omitempty"`
+		Pending       *RecordRange[*TxIDRecord]                     `json:"pending,omitempty"`
+		Receipt       *Receipt                                      `json:"receipt,omitempty"`
+		LastBlockTime *time.Time                                    `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(protocol.EqualAccount(v.Account, nil)) {
@@ -6822,6 +7283,9 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Receipt == nil) {
 		u.Receipt = v.Receipt
+	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
 	}
 	return json.Marshal(&u)
 }
@@ -6904,15 +7368,16 @@ func (v *BlockQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType RecordType                     `json:"recordType"`
-		Account    *url.URL                       `json:"account,omitempty"`
-		Name       string                         `json:"name,omitempty"`
-		Type       merkle.ChainType               `json:"type,omitempty"`
-		Index      uint64                         `json:"index"`
-		Entry      string                         `json:"entry,omitempty"`
-		Value      *encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
-		Receipt    *Receipt                       `json:"receipt,omitempty"`
-		State      encoding.JsonList[*string]     `json:"state,omitempty"`
+		RecordType    RecordType                     `json:"recordType"`
+		Account       *url.URL                       `json:"account,omitempty"`
+		Name          string                         `json:"name,omitempty"`
+		Type          merkle.ChainType               `json:"type,omitempty"`
+		Index         uint64                         `json:"index"`
+		Entry         string                         `json:"entry,omitempty"`
+		Value         *encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
+		Receipt       *Receipt                       `json:"receipt,omitempty"`
+		State         encoding.JsonList[*string]     `json:"state,omitempty"`
+		LastBlockTime *time.Time                     `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.Account == nil) {
@@ -6939,6 +7404,9 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 		for i, x := range v.State {
 			u.State[i] = encoding.BytesToJSON(x)
 		}
+	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
 	}
 	return json.Marshal(&u)
 }
@@ -6973,11 +7441,12 @@ func (v *ChainQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType RecordType                 `json:"recordType"`
-		Name       string                     `json:"name,omitempty"`
-		Type       merkle.ChainType           `json:"type,omitempty"`
-		Count      uint64                     `json:"count,omitempty"`
-		State      encoding.JsonList[*string] `json:"state,omitempty"`
+		RecordType    RecordType                 `json:"recordType"`
+		Name          string                     `json:"name,omitempty"`
+		Type          merkle.ChainType           `json:"type,omitempty"`
+		Count         uint64                     `json:"count,omitempty"`
+		State         encoding.JsonList[*string] `json:"state,omitempty"`
+		LastBlockTime *time.Time                 `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(len(v.Name) == 0) {
@@ -6994,6 +7463,9 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 		for i, x := range v.State {
 			u.State[i] = encoding.BytesToJSON(x)
 		}
+	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
 	}
 	return json.Marshal(&u)
 }
@@ -7108,12 +7580,54 @@ func (v *ErrorEvent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ErrorRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		RecordType RecordType     `json:"recordType"`
+		Value      *errors2.Error `json:"value,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	if !(v.Value == nil) {
+		u.Value = v.Value
+	}
+	return json.Marshal(&u)
+}
+
+func (v *FindServiceOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Network string          `json:"network,omitempty"`
+		Service *ServiceAddress `json:"service,omitempty"`
+		Known   bool            `json:"known,omitempty"`
+		Timeout interface{}     `json:"timeout,omitempty"`
+	}{}
+	if !(len(v.Network) == 0) {
+		u.Network = v.Network
+	}
+	if !(v.Service == nil) {
+		u.Service = v.Service
+	}
+	if !(!v.Known) {
+		u.Known = v.Known
+	}
+	if !(v.Timeout == 0) {
+		u.Timeout = encoding.DurationToJSON(v.Timeout)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *FindServiceResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"peerID,omitempty"`
+		Status    KnownPeerStatus                                `json:"status,omitempty"`
+		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
 	if !(v.PeerID == ("")) {
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	}
+	if !(v.Status == 0) {
+		u.Status = v.Status
+	}
+	if !(len(v.Addresses) == 0) {
+		u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -7202,10 +7716,11 @@ func (v *LastBlock) MarshalJSON() ([]byte, error) {
 
 func (v *MajorBlockRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType  RecordType                      `json:"recordType"`
-		Index       uint64                          `json:"index,omitempty"`
-		Time        time.Time                       `json:"time,omitempty"`
-		MinorBlocks *RecordRange[*MinorBlockRecord] `json:"minorBlocks,omitempty"`
+		RecordType    RecordType                      `json:"recordType"`
+		Index         uint64                          `json:"index,omitempty"`
+		Time          time.Time                       `json:"time,omitempty"`
+		MinorBlocks   *RecordRange[*MinorBlockRecord] `json:"minorBlocks,omitempty"`
+		LastBlockTime *time.Time                      `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.Index == 0) {
@@ -7216,6 +7731,9 @@ func (v *MajorBlockRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.MinorBlocks == nil) {
 		u.MinorBlocks = v.MinorBlocks
+	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
 	}
 	return json.Marshal(&u)
 }
@@ -7248,6 +7766,7 @@ func (v *MessageRecord[T]) MarshalJSON() ([]byte, error) {
 		Historical    bool                                                    `json:"historical,omitempty"`
 		Sequence      *messaging.SequencedMessage                             `json:"sequence,omitempty"`
 		SourceReceipt *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
+		LastBlockTime *time.Time                                              `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.ID == nil) {
@@ -7289,17 +7808,21 @@ func (v *MessageRecord[T]) MarshalJSON() ([]byte, error) {
 	if !(v.SourceReceipt == nil) {
 		u.SourceReceipt = v.SourceReceipt
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
 	return json.Marshal(&u)
 }
 
 func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType RecordType                              `json:"recordType"`
-		Index      uint64                                  `json:"index,omitempty"`
-		Time       *time.Time                              `json:"time,omitempty"`
-		Source     *url.URL                                `json:"source,omitempty"`
-		Entries    *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
-		Anchored   *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty"`
+		RecordType    RecordType                              `json:"recordType"`
+		Index         uint64                                  `json:"index,omitempty"`
+		Time          *time.Time                              `json:"time,omitempty"`
+		Source        *url.URL                                `json:"source,omitempty"`
+		Entries       *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
+		Anchored      *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty"`
+		LastBlockTime *time.Time                              `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(v.Index == 0) {
@@ -7317,6 +7840,9 @@ func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	if !(v.Anchored == nil) {
 		u.Anchored = v.Anchored
 	}
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
 	return json.Marshal(&u)
 }
 
@@ -7325,6 +7851,8 @@ func (v *NodeInfo) MarshalJSON() ([]byte, error) {
 		PeerID   *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
 		Network  string                                  `json:"network,omitempty"`
 		Services encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
+		Version  string                                  `json:"version,omitempty"`
+		Commit   string                                  `json:"commit,omitempty"`
 	}{}
 	if !(v.PeerID == ("")) {
 		u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
@@ -7334,6 +7862,12 @@ func (v *NodeInfo) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Services) == 0) {
 		u.Services = v.Services
+	}
+	if !(len(v.Version) == 0) {
+		u.Version = v.Version
+	}
+	if !(len(v.Commit) == 0) {
+		u.Commit = v.Commit
 	}
 	return json.Marshal(&u)
 }
@@ -7438,10 +7972,11 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 
 func (v *RecordRange[T]) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType RecordType                         `json:"recordType"`
-		Records    *encoding.JsonUnmarshalListWith[T] `json:"records,omitempty"`
-		Start      uint64                             `json:"start"`
-		Total      uint64                             `json:"total"`
+		RecordType    RecordType                         `json:"recordType"`
+		Records       *encoding.JsonUnmarshalListWith[T] `json:"records,omitempty"`
+		Start         uint64                             `json:"start"`
+		Total         uint64                             `json:"total"`
+		LastBlockTime *time.Time                         `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(len(v.Records) == 0) {
@@ -7449,6 +7984,9 @@ func (v *RecordRange[T]) MarshalJSON() ([]byte, error) {
 	}
 	u.Start = v.Start
 	u.Total = v.Total
+	if !(v.LastBlockTime == nil) {
+		u.LastBlockTime = v.LastBlockTime
+	}
 	return json.Marshal(&u)
 }
 
@@ -7494,17 +8032,19 @@ func (v *UrlRecord) MarshalJSON() ([]byte, error) {
 
 func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType RecordType                                    `json:"recordType"`
-		Account    *encoding.JsonUnmarshalWith[protocol.Account] `json:"account,omitempty"`
-		Directory  *RecordRange[*UrlRecord]                      `json:"directory,omitempty"`
-		Pending    *RecordRange[*TxIDRecord]                     `json:"pending,omitempty"`
-		Receipt    *Receipt                                      `json:"receipt,omitempty"`
+		RecordType    RecordType                                    `json:"recordType"`
+		Account       *encoding.JsonUnmarshalWith[protocol.Account] `json:"account,omitempty"`
+		Directory     *RecordRange[*UrlRecord]                      `json:"directory,omitempty"`
+		Pending       *RecordRange[*TxIDRecord]                     `json:"pending,omitempty"`
+		Receipt       *Receipt                                      `json:"receipt,omitempty"`
+		LastBlockTime *time.Time                                    `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Account = &encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccountJSON}
 	u.Directory = v.Directory
 	u.Pending = v.Pending
 	u.Receipt = v.Receipt
+	u.LastBlockTime = v.LastBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -7518,6 +8058,7 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	v.Directory = u.Directory
 	v.Pending = u.Pending
 	v.Receipt = u.Receipt
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -7608,15 +8149,16 @@ func (v *BlockQuery) UnmarshalJSON(data []byte) error {
 
 func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType RecordType                     `json:"recordType"`
-		Account    *url.URL                       `json:"account,omitempty"`
-		Name       string                         `json:"name,omitempty"`
-		Type       merkle.ChainType               `json:"type,omitempty"`
-		Index      uint64                         `json:"index"`
-		Entry      string                         `json:"entry,omitempty"`
-		Value      *encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
-		Receipt    *Receipt                       `json:"receipt,omitempty"`
-		State      encoding.JsonList[*string]     `json:"state,omitempty"`
+		RecordType    RecordType                     `json:"recordType"`
+		Account       *url.URL                       `json:"account,omitempty"`
+		Name          string                         `json:"name,omitempty"`
+		Type          merkle.ChainType               `json:"type,omitempty"`
+		Index         uint64                         `json:"index"`
+		Entry         string                         `json:"entry,omitempty"`
+		Value         *encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
+		Receipt       *Receipt                       `json:"receipt,omitempty"`
+		State         encoding.JsonList[*string]     `json:"state,omitempty"`
+		LastBlockTime *time.Time                     `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Account = v.Account
@@ -7630,6 +8172,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 	for i, x := range v.State {
 		u.State[i] = encoding.BytesToJSON(x)
 	}
+	u.LastBlockTime = v.LastBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -7658,6 +8201,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 			v.State[i] = x
 		}
 	}
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -7696,11 +8240,12 @@ func (v *ChainQuery) UnmarshalJSON(data []byte) error {
 
 func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType RecordType                 `json:"recordType"`
-		Name       string                     `json:"name,omitempty"`
-		Type       merkle.ChainType           `json:"type,omitempty"`
-		Count      uint64                     `json:"count,omitempty"`
-		State      encoding.JsonList[*string] `json:"state,omitempty"`
+		RecordType    RecordType                 `json:"recordType"`
+		Name          string                     `json:"name,omitempty"`
+		Type          merkle.ChainType           `json:"type,omitempty"`
+		Count         uint64                     `json:"count,omitempty"`
+		State         encoding.JsonList[*string] `json:"state,omitempty"`
+		LastBlockTime *time.Time                 `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Name = v.Name
@@ -7710,6 +8255,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	for i, x := range v.State {
 		u.State[i] = encoding.BytesToJSON(x)
 	}
+	u.LastBlockTime = v.LastBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -7727,6 +8273,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 			v.State[i] = x
 		}
 	}
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -7869,11 +8416,57 @@ func (v *ErrorEvent) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ErrorRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		RecordType RecordType     `json:"recordType"`
+		Value      *errors2.Error `json:"value,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	u.Value = v.Value
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.RecordType() == u.RecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
+	}
+	v.Value = u.Value
+	return nil
+}
+
+func (v *FindServiceOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Network string          `json:"network,omitempty"`
+		Service *ServiceAddress `json:"service,omitempty"`
+		Known   bool            `json:"known,omitempty"`
+		Timeout interface{}     `json:"timeout,omitempty"`
+	}{}
+	u.Network = v.Network
+	u.Service = v.Service
+	u.Known = v.Known
+	u.Timeout = encoding.DurationToJSON(v.Timeout)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Network = u.Network
+	v.Service = u.Service
+	v.Known = u.Known
+	if x, err := encoding.DurationFromJSON(u.Timeout); err != nil {
+		return fmt.Errorf("error decoding Timeout: %w", err)
+	} else {
+		v.Timeout = x
+	}
+	return nil
+}
+
 func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PeerID *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
+		PeerID    *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"peerID,omitempty"`
+		Status    KnownPeerStatus                                `json:"status,omitempty"`
+		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
+	u.Status = v.Status
+	u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -7881,6 +8474,13 @@ func (v *FindServiceResult) UnmarshalJSON(data []byte) error {
 		v.PeerID = u.PeerID.Value
 	}
 
+	v.Status = u.Status
+	if u.Addresses != nil {
+		v.Addresses = make([]p2p.Multiaddr, len(u.Addresses.Value))
+		for i, x := range u.Addresses.Value {
+			v.Addresses[i] = x
+		}
+	}
 	return nil
 }
 
@@ -7984,15 +8584,17 @@ func (v *LastBlock) UnmarshalJSON(data []byte) error {
 
 func (v *MajorBlockRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType  RecordType                      `json:"recordType"`
-		Index       uint64                          `json:"index,omitempty"`
-		Time        time.Time                       `json:"time,omitempty"`
-		MinorBlocks *RecordRange[*MinorBlockRecord] `json:"minorBlocks,omitempty"`
+		RecordType    RecordType                      `json:"recordType"`
+		Index         uint64                          `json:"index,omitempty"`
+		Time          time.Time                       `json:"time,omitempty"`
+		MinorBlocks   *RecordRange[*MinorBlockRecord] `json:"minorBlocks,omitempty"`
+		LastBlockTime *time.Time                      `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Index = v.Index
 	u.Time = v.Time
 	u.MinorBlocks = v.MinorBlocks
+	u.LastBlockTime = v.LastBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8002,6 +8604,7 @@ func (v *MajorBlockRecord) UnmarshalJSON(data []byte) error {
 	v.Index = u.Index
 	v.Time = u.Time
 	v.MinorBlocks = u.MinorBlocks
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -8042,6 +8645,7 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 		Historical    bool                                                    `json:"historical,omitempty"`
 		Sequence      *messaging.SequencedMessage                             `json:"sequence,omitempty"`
 		SourceReceipt *merkle.Receipt                                         `json:"sourceReceipt,omitempty"`
+		LastBlockTime *time.Time                                              `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.ID = v.ID
@@ -8057,6 +8661,7 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	u.Historical = v.Historical
 	u.Sequence = v.Sequence
 	u.SourceReceipt = v.SourceReceipt
+	u.LastBlockTime = v.LastBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8081,17 +8686,19 @@ func (v *MessageRecord[T]) UnmarshalJSON(data []byte) error {
 	v.Historical = u.Historical
 	v.Sequence = u.Sequence
 	v.SourceReceipt = u.SourceReceipt
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
 func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType RecordType                              `json:"recordType"`
-		Index      uint64                                  `json:"index,omitempty"`
-		Time       *time.Time                              `json:"time,omitempty"`
-		Source     *url.URL                                `json:"source,omitempty"`
-		Entries    *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
-		Anchored   *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty"`
+		RecordType    RecordType                              `json:"recordType"`
+		Index         uint64                                  `json:"index,omitempty"`
+		Time          *time.Time                              `json:"time,omitempty"`
+		Source        *url.URL                                `json:"source,omitempty"`
+		Entries       *RecordRange[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
+		Anchored      *RecordRange[*MinorBlockRecord]         `json:"anchored,omitempty"`
+		LastBlockTime *time.Time                              `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Index = v.Index
@@ -8099,6 +8706,7 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	u.Source = v.Source
 	u.Entries = v.Entries
 	u.Anchored = v.Anchored
+	u.LastBlockTime = v.LastBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8110,6 +8718,7 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	v.Source = u.Source
 	v.Entries = u.Entries
 	v.Anchored = u.Anchored
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 
@@ -8118,10 +8727,14 @@ func (v *NodeInfo) UnmarshalJSON(data []byte) error {
 		PeerID   *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
 		Network  string                                  `json:"network,omitempty"`
 		Services encoding.JsonList[*ServiceAddress]      `json:"services,omitempty"`
+		Version  string                                  `json:"version,omitempty"`
+		Commit   string                                  `json:"commit,omitempty"`
 	}{}
 	u.PeerID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.PeerID, Func: p2p.UnmarshalPeerIDJSON}
 	u.Network = v.Network
 	u.Services = v.Services
+	u.Version = v.Version
+	u.Commit = v.Commit
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8131,6 +8744,8 @@ func (v *NodeInfo) UnmarshalJSON(data []byte) error {
 
 	v.Network = u.Network
 	v.Services = u.Services
+	v.Version = u.Version
+	v.Commit = u.Commit
 	return nil
 }
 
@@ -8261,15 +8876,17 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 
 func (v *RecordRange[T]) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType RecordType                         `json:"recordType"`
-		Records    *encoding.JsonUnmarshalListWith[T] `json:"records,omitempty"`
-		Start      uint64                             `json:"start"`
-		Total      uint64                             `json:"total"`
+		RecordType    RecordType                         `json:"recordType"`
+		Records       *encoding.JsonUnmarshalListWith[T] `json:"records,omitempty"`
+		Start         uint64                             `json:"start"`
+		Total         uint64                             `json:"total"`
+		LastBlockTime *time.Time                         `json:"lastBlockTime,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Records = &encoding.JsonUnmarshalListWith[T]{Value: v.Records, Func: func(b []byte) (T, error) { return encoding.Cast[T](UnmarshalRecordJSON(b)) }}
 	u.Start = v.Start
 	u.Total = v.Total
+	u.LastBlockTime = v.LastBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8284,6 +8901,7 @@ func (v *RecordRange[T]) UnmarshalJSON(data []byte) error {
 	}
 	v.Start = u.Start
 	v.Total = u.Total
+	v.LastBlockTime = u.LastBlockTime
 	return nil
 }
 

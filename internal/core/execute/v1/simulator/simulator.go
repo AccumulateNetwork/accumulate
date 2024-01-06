@@ -11,16 +11,15 @@ package simulator
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
 	"time"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -148,10 +147,8 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
 
 		network := config.Describe{
-			NetworkType:  protocol.PartitionTypeDirectory,
-			PartitionId:  protocol.Directory,
-			LocalAddress: protocol.Directory,
-			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
+			NetworkType: protocol.PartitionTypeDirectory,
+			PartitionId: protocol.Directory,
 		}
 
 		logger := sim.newLogger(opts).With("partition", protocol.Directory)
@@ -173,10 +170,8 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		bvn.Nodes = []config.Node{{Type: config.Validator, Address: bvn.Id}}
 
 		network := config.Describe{
-			NetworkType:  bvn.Type,
-			PartitionId:  bvn.Id,
-			LocalAddress: bvn.Id,
-			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
+			NetworkType: bvn.Type,
+			PartitionId: bvn.Id,
 		}
 
 		logger := sim.newLogger(opts).With("partition", bvn.Id)
@@ -324,9 +319,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 
 	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
-		var snap []byte
-		require.NoError(s, json.Unmarshal(genDocs[x.Partition.Id].AppState, &snap))
-		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(snap), x.Executor.Logger, x.Executor.Describe.PartitionUrl()))
+		require.NoError(s, snapshot.FullRestore(x.Database, ioutil2.NewBuffer(genDocs[x.Partition.Id]), x.Executor.Logger, x.Executor.Describe.PartitionUrl()))
 		require.NoError(s, x.Executor.Init(x.Database))
 	}
 }
@@ -595,6 +588,7 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		Describe:      execute.DescribeShim{NetworkType: network.NetworkType, PartitionId: network.PartitionId},
 		Router:        sim.Router(),
 		EventBus:      eventBus,
+		EnableHealing: true,
 		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: sim, envelopes: map[string][]*messaging.Envelope{}} },
 		Sequencer:     sim.Services(),
 		Querier:       sim.Services(),
@@ -615,7 +609,6 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		LocalV3:       x.service,
 		Querier:       sim.Services(),
 		Submitter:     sim.Services(),
-		Network:       sim.Services(),
 		Faucet:        sim.Services(),
 		Validator:     sim.Services(),
 		Sequencer:     sim.Services(),

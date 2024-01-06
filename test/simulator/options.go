@@ -7,16 +7,15 @@
 package simulator
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
-	tmtypes "github.com/tendermint/tendermint/types"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -51,7 +50,31 @@ func Deterministic(opts *simFactory) error {
 // DropDispatchedMessages drops all internally dispatched messages.
 func DropDispatchedMessages(opts *simFactory) error {
 	opts.dropDispatchedMessages = true
+	opts.dropInitialAnchor = true
+	opts.disableAnchorHealing = true
 	return nil
+}
+
+// DropInitialAnchor drops anchors when they are initially submitted.
+func DropInitialAnchor(opts *simFactory) error {
+	opts.dropInitialAnchor = true
+	return nil
+}
+
+// DisableAnchorHealing disables healing of anchors after they are initially
+// submitted.
+func DisableAnchorHealing(opts *simFactory) error {
+	opts.disableAnchorHealing = true
+	return nil
+}
+
+// CaptureDispatchedMessages allows the caller to capture internally dispatched
+// messages.
+func CaptureDispatchedMessages(fn dispatchInterceptor) Option {
+	return func(opts *simFactory) error {
+		opts.interceptDispatchedMessages = fn
+		return nil
+	}
 }
 
 // SkipProposalCheck skips checking if each non-leader node agrees with the
@@ -146,7 +169,9 @@ func NewLocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePo
 	return net
 }
 
-// TODO Deprecated: This is a no-op
+// MemoryDatabase configures the simulator to use in-memory databases.
+//
+// Deprecated: This is a no-op
 func MemoryDatabase(*simFactory) error { return nil }
 
 func BadgerDatabaseFromDirectory(dir string, onErr func(error)) Option {
@@ -199,7 +224,7 @@ func genesis(time time.Time, values *core.GlobalValues) SnapshotFunc {
 		values = new(core.GlobalValues)
 	}
 
-	var genDocs map[string]*tmtypes.GenesisDoc
+	var genDocs map[string][]byte
 	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
 		var err error
 		if genDocs == nil {
@@ -209,12 +234,20 @@ func genesis(time time.Time, values *core.GlobalValues) SnapshotFunc {
 			}
 		}
 
-		var snapshot []byte
-		err = json.Unmarshal(genDocs[partition].AppState, &snapshot)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		return ioutil2.NewBuffer(snapshot), nil
+		return ioutil2.NewBuffer(genDocs[partition]), nil
 	}
 }
+
+// InitialAcmeSupply overrides the default initial ACME supply. A value of nil
+// will disable setting the initial supply.
+func InitialAcmeSupply(v *big.Int) Option {
+	return func(f *simFactory) error {
+		f.initialSupply = v
+		return nil
+	}
+}
+
+// func UseABCI(opts *simFactory) error {
+// 	opts.abci = withABCI
+// 	return nil
+// }

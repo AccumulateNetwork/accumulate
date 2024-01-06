@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -61,7 +63,6 @@ func TestAdvancedSigning(t *testing.T) {
 
 			// Initialize
 			sim := NewSim(t,
-				simulator.MemoryDatabase,
 				simulator.SimpleNetwork(t.Name(), 1, 1),
 				simulator.Genesis(GenesisTime),
 			)
@@ -121,7 +122,6 @@ func TestBlockHold(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -139,12 +139,12 @@ func TestBlockHold(t *testing.T) {
 	// Initiate two transactions with block thresholds
 	st1 := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(alice, "tokens").
-			HoldUntil(BlockThreshold{MinorBlock: 100}).
+			HoldUntil(HoldUntilOptions{MinorBlock: 100}).
 			BurnTokens(1, 0).
 			SignWith(alice, "book", "1").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey))
 	st2 := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(alice, "tokens").
-			HoldUntil(BlockThreshold{MinorBlock: 200}).
+			HoldUntil(HoldUntilOptions{MinorBlock: 200}).
 			BurnTokens(1, 0).
 			SignWith(alice, "book", "1").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey))
 
@@ -226,7 +226,6 @@ func TestBlockHoldPriority(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -246,7 +245,7 @@ func TestBlockHoldPriority(t *testing.T) {
 	// Initiate with page 1 with a hold
 	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "tokens").
-			HoldUntil(BlockThreshold{MinorBlock: 100}).
+			HoldUntil(HoldUntilOptions{MinorBlock: 100}).
 			BurnTokens(1, 0).
 			SignWith(alice, "book", "1").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey1))
 
@@ -275,7 +274,7 @@ func TestBlockHoldPriority(t *testing.T) {
 	// Initiate with page 2 with a hold
 	st = sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "tokens").
-			HoldUntil(BlockThreshold{MinorBlock: 200}).
+			HoldUntil(HoldUntilOptions{MinorBlock: 200}).
 			BurnTokens(1, 0).
 			SignWith(alice, "book", "2").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey2))
 
@@ -323,7 +322,6 @@ func TestBlockHoldPriority2(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -350,7 +348,7 @@ func TestBlockHoldPriority2(t *testing.T) {
 	// Initiate (and accept) with page 3 with a hold
 	st := sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(alice, "tokens").
-			HoldUntil(BlockThreshold{MinorBlock: 100}).
+			HoldUntil(HoldUntilOptions{MinorBlock: 100}).
 			BurnTokens(1, 0).
 			SignWith(alice, "book", "3").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey1))
 
@@ -391,7 +389,6 @@ func TestRejectSignaturesAfterExecution(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
@@ -421,4 +418,83 @@ func TestRejectSignaturesAfterExecution(t *testing.T) {
 		Sig(sig.TxID).AuthoritySignature().Fails().
 			WithError(errors.NotAllowed).
 			WithMessagef("%v has not been initiated", st.TxID))
+}
+
+// TestExpiration verifies that block holds work as advertized.
+func TestExpiration(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	aliceKey1 := acctesting.GenerateKey(alice, 1)
+	aliceKey2 := acctesting.GenerateKey(alice, 2)
+
+	// Initialize
+	g := new(network.GlobalValues)
+	g.Globals = new(NetworkGlobals)
+	g.Globals.MajorBlockSchedule = "* * * * *" // Once a minute
+	g.ExecutorVersion = ExecutorVersionLatest
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey1[32:], aliceKey2[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e3)})
+
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) {
+		p.AcceptThreshold = 2
+	})
+
+	// Initiate a transaction with an expiration
+	env := MustBuild(t,
+		build.Transaction().For(alice, "tokens").
+			ExpireAtTime(GenesisTime.Add(30*time.Second)).
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey1))
+	st := sim.SubmitSuccessfully(env)
+
+	// It must be pending
+	sim.StepUntil(
+		Txn(st[0].TxID).IsPending(),
+		Sig(st[1].TxID).Succeeds(),
+		Sig(st[1].TxID).CreditPayment().Completes())
+
+	// Step past the deadline
+	sim.StepUntil(
+		BlockTime(GenesisTime.Add(40 * time.Second)))
+
+	// Sign the transaction
+	st = sim.BuildAndSubmitSuccessfully(
+		build.SignatureForTransaction(env.Transaction[0]).
+			Url(alice, "book", "1").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey2))
+
+	sim.StepUntil(
+		Sig(st[1].TxID).Succeeds())
+
+	// Verify the transaction expired
+	sim.Verify(
+		Txn(st[0].TxID).Fails().
+			WithError(errors.Expired))
+
+	// Initiate another transaction with an expiration
+	st = sim.BuildAndSubmitSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			ExpireAtTime(GenesisTime.Add((2*60+30)*time.Second)).
+			BurnTokens(1, 0).
+			SignWith(alice, "book", "1").Timestamp(&timestamp).Version(1).PrivateKey(aliceKey1))
+
+	// It must be pending
+	sim.StepUntil(
+		Txn(st[0].TxID).IsPending(),
+		Sig(st[1].TxID).Succeeds(),
+		Sig(st[1].TxID).CreditPayment().Completes())
+
+	// Step until the major block after the expiration
+	sim.StepUntilN(1000,
+		MajorBlock(3))
+
+	// Verify the transaction expired
+	sim.StepUntil(
+		Txn(st[0].TxID).Fails().
+			WithError(errors.Expired))
 }

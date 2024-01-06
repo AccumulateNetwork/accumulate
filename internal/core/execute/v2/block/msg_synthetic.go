@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	registerSimpleExec[SyntheticMessage](&messageExecutors, messaging.MessageTypeSynthetic)
+	registerSimpleExec[SyntheticMessage](&messageExecutors, messaging.MessageTypeSynthetic, messaging.MessageTypeBadSynthetic)
 }
 
 // SyntheticMessage records the synthetic transaction but does not execute
@@ -37,10 +37,26 @@ func (x SyntheticMessage) Validate(batch *database.Batch, ctx *MessageContext) (
 	return nil, errors.UnknownError.Wrap(err)
 }
 
-func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SyntheticMessage, error) {
-	syn, ok := ctx.message.(*messaging.SyntheticMessage)
-	if !ok {
-		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSynthetic, ctx.message.Type())
+func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*messaging.SynthFields, error) {
+	// Using messaging.SynthFields is safer than converting one message type
+	// into the other because that could lead to issues with the different Hash
+	// method implementations
+	var syn *messaging.SynthFields
+	if !ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		msg, ok := ctx.message.(*messaging.BadSyntheticMessage)
+		if !ok {
+			return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBadSynthetic, ctx.message.Type())
+		}
+		syn = msg.Data()
+	} else {
+		switch msg := ctx.message.(type) {
+		case *messaging.BadSyntheticMessage:
+			syn = msg.Data()
+		case *messaging.SyntheticMessage:
+			syn = msg.Data()
+		default:
+			return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeSynthetic, ctx.message.Type())
+		}
 	}
 
 	// Basic validation
@@ -70,7 +86,7 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 	}
 
 	// Verify the signature
-	h := syn.Message.ID().Hash()
+	h := syn.Message.Hash()
 	if !syn.Signature.Verify(nil, h[:]) {
 		return nil, errors.BadRequest.With("invalid signature")
 	}

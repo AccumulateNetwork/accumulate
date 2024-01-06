@@ -16,14 +16,14 @@ import (
 	"strings"
 	"time"
 
+	tm "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/privval"
 	"github.com/mitchellh/mapstructure"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
-	tm "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -55,8 +55,9 @@ const (
 type StorageType string
 
 const (
-	MemoryStorage StorageType = "memory"
-	BadgerStorage StorageType = "badger"
+	MemoryStorage  StorageType = "memory"
+	BadgerStorage  StorageType = "badger"
+	LevelDBStorage StorageType = "leveldb"
 )
 
 // LogLevel defines the default and per-module log level for Accumulate's
@@ -126,7 +127,6 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
-	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
@@ -139,7 +139,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	c.Accumulate.BatchReplayLimit = 500
-	c.Accumulate.P2P.BootstrapPeers = api.BootstrapServers
+	c.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
 	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
@@ -153,12 +153,14 @@ type Config struct {
 }
 
 type Accumulate struct {
-	Describe         `toml:"describe" mapstructure:"describe"`
-	BatchReplayLimit int    `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
-	SummaryNetwork   string `toml:"summary-network" mapstructure:"summary-network"`
+	Describe              `toml:"describe" mapstructure:"describe"`
+	BatchReplayLimit      int    `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
+	SummaryNetwork        string `toml:"summary-network" mapstructure:"summary-network"`
+	DisableDirectDispatch bool   `toml:"disable-direct-dispatch" mapstructure:"disable-direct-dispatch"`
 
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
+	Healing     Healing     `toml:"healing" mapstructure:"healing"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
@@ -166,9 +168,17 @@ type Accumulate struct {
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
 }
 
+type Healing struct {
+	// Enable enables healing
+	Enable bool `toml:"enable" mapstructure:"enable"`
+}
+
 type Snapshots struct {
 	// Enable enables snapshots
 	Enable bool `toml:"enable" mapstructure:"enable"`
+
+	// EnableIndexing enables indexing of snapshots
+	EnableIndexing bool `toml:"enable-indexing" mapstructure:"enable-indexing"`
 
 	// Directory is the directory to store snapshots in
 	Directory string `toml:"directory" mapstructure:"directory"`
@@ -230,13 +240,11 @@ type Storage struct {
 }
 
 type API struct {
-	TxMaxWaitTime      time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
-	PrometheusServer   string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
-	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
-	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
-	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
-	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
-	ReadHeaderTimeout  time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
+	TxMaxWaitTime     time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
+	ListenAddress     string        `toml:"listen-address" mapstructure:"listen-address"`
+	DebugJSONRPC      bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
+	ConnectionLimit   int           `toml:"connection-limit" mapstructure:"connection-limit"`
+	ReadHeaderTimeout time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
 }
 
 func MakeAbsolute(root, path string) string {
@@ -268,31 +276,18 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 	return u, nil
 }
 
-func (n *Network) GetBvnNames() []string {
-	var names []string
-	for _, partition := range n.Partitions {
-		if partition.Type == protocol.PartitionTypeBlockValidator {
-			names = append(names, partition.Id)
-		}
-	}
-	return names
-}
-
-func (n *Network) GetPartitionByID(partitionID string) *Partition {
-	for i, partition := range n.Partitions {
-		if strings.EqualFold(partition.Id, partitionID) {
-			return &n.Partitions[i]
-		}
-	}
-	return nil
-}
-
 func LoadFilePV(keyFilePath, stateFilePath string) (*privval.FilePV, error) {
-	return privval.LoadFilePVSafe(keyFilePath, stateFilePath)
+	// TODO Submit an MR to CometBFT to fix their bull**** (calling os.Exit if
+	// the config file load fails)
+	return privval.LoadFilePV(keyFilePath, stateFilePath), nil
 }
 
 func Load(dir string) (*Config, error) {
 	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
+}
+
+func LoadAcc(dir string) (*Accumulate, error) {
+	return loadAccumulate(dir, filepath.Join(dir, accConfigFile))
 }
 
 func loadFile(dir, tmFile, accFile string) (*Config, error) {
@@ -309,13 +304,25 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 	return &Config{*tm, *acc}, nil
 }
 
-func Store(config *Config) error {
-	err := tm.WriteConfigFileSave(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
-	if err != nil {
-		return err
-	}
+func Store(config *Config) (err error) {
+	// TODO Submit an MR to CometBFT to fix their bull**** (calling os.Exit if
+	// the config file write fails)
+	defer func() {
+		r := recover()
+		if e, ok := r.(error); ok {
+			err = e
+		} else if r != nil {
+			err = fmt.Errorf("panicked: %v", r)
+		}
+	}()
 
-	return writeTomlFile(config.Accumulate, filepath.Join(config.RootDir, configDir, accConfigFile))
+	tm.WriteConfigFile(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
+
+	return StoreAcc(config, filepath.Join(config.RootDir, configDir))
+}
+
+func StoreAcc(config *Config, dir string) error {
+	return writeTomlFile(config.Accumulate, filepath.Join(dir, accConfigFile))
 }
 
 func writeTomlFile(v any, file string) error {

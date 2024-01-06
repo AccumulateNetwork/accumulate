@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	stdlog "log"
 	"mime"
@@ -16,11 +17,11 @@ import (
 	"os"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/go-playground/validator/v10"
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/julienschmidt/httprouter"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -40,16 +41,6 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 		m.logger = opts.Logger.With("module", "jrpc")
 	}
 
-	if opts.LocalV3 == nil ||
-		opts.Querier == nil ||
-		opts.Submitter == nil ||
-		opts.Network == nil ||
-		opts.Faucet == nil ||
-		opts.Validator == nil ||
-		opts.Sequencer == nil {
-		return nil, errors.BadRequest.With("missing P2P clients")
-	}
-
 	m.validate, err = protocol.NewValidator()
 	if err != nil {
 		return nil, err
@@ -65,17 +56,26 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 	}
 }
 
-func (m *JrpcMethods) NewMux() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.Handle("/status", m.jrpc2http(m.Status))
-	mux.Handle("/version", m.jrpc2http(m.Version))
-	mux.Handle("/describe", m.jrpc2http(m.Describe))
-	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
+func (m *JrpcMethods) Register(r *httprouter.Router) error {
+	r.GET("/status", m.jrpc2http(m.Status))
+	r.GET("/version", m.jrpc2http(m.Version))
+	r.GET("/describe", m.jrpc2http(m.Describe))
+
+	rpc := jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0))
+	r.POST("/v2", func(w http.ResponseWriter, r *http.Request, p_ httprouter.Params) {
+		rpc(w, r)
+	})
+	return nil
+}
+
+func (m *JrpcMethods) NewMux() *httprouter.Router {
+	mux := httprouter.New()
+	_ = m.Register(mux)
 	return mux
 }
 
-func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
-	return func(res http.ResponseWriter, req *http.Request) {
+func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) httprouter.Handle {
+	return func(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			res.WriteHeader(http.StatusBadRequest)
@@ -102,6 +102,10 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
+	if m.LocalV3 == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	s, err := m.LocalV3.ConsensusStatus(ctx, api.ConsensusStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
@@ -137,6 +141,10 @@ func (m *JrpcMethods) Version(ctx context.Context, _ json.RawMessage) interface{
 }
 
 func (m *JrpcMethods) Describe(ctx context.Context, _ json.RawMessage) interface{} {
+	if m.LocalV3 == nil {
+		return accumulateError(fmt.Errorf("service not available"))
+	}
+
 	net, err := m.LocalV3.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	if err != nil {
 		return accumulateError(err)
@@ -146,11 +154,18 @@ func (m *JrpcMethods) Describe(ctx context.Context, _ json.RawMessage) interface
 	if m.Options.Describe != nil {
 		res.PartitionId = m.Options.Describe.PartitionId
 		res.NetworkType = m.Options.Describe.NetworkType
-		res.Network = m.Options.Describe.Network
 	}
 	res.Values.Globals = net.Globals
 	res.Values.Network = net.Network
 	res.Values.Oracle = net.Oracle
 	res.Values.Routing = net.Routing
+
+	res.Network.Id = net.Network.NetworkName
+	for _, p := range net.Network.Partitions {
+		res.Network.Partitions = append(res.Network.Partitions, PartitionDescription{
+			Id:   p.ID,
+			Type: p.Type,
+		})
+	}
 	return res
 }

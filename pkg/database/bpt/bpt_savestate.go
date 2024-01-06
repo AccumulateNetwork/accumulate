@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 // SaveSnapshotV1
@@ -66,11 +67,12 @@ func SaveSnapshotV1(b *BPT, file io.WriteSeeker, loadState func(key storage.Key,
 		NodeCnt += uint64(len(bptVals))
 
 		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
-			_, e1 := file.Write(v.Key[:])                         // Write the key out
+			kh := v.Key.Hash()                                    //
+			_, e1 := file.Write(kh[:])                            // Write the key out
 			_, e2 := file.Write(v.Value[:])                       // Write the hash out
 			_, e3 := file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
 
-			value, e4 := loadState(v.Key, v.Value)               // Get that next value
+			value, e4 := loadState(kh, v.Value)                  // Get that next value
 			vLen := uint64(len(value))                           // get the value's length as uint64
 			_, e5 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
 			_, e6 := values.Write(value)                         // write out the value
@@ -128,7 +130,7 @@ func LoadSnapshotV1(b *BPT, file ioutil2.SectionReader, storeState func(key stor
 	}
 
 	return ReadSnapshotV1(file, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
-		err := b.Insert(key, hash) // Insert the key/hash into the BPT
+		err := b.Insert(record.KeyFromHash(key), hash) // Insert the key/hash into the BPT
 		if err != nil {
 			return err
 		}

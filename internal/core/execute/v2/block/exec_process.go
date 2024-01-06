@@ -14,7 +14,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/slog"
 )
 
 // bundle is a bundle of messages to be processed.
@@ -46,7 +48,7 @@ func (b *Block) Process(envelope *messaging.Envelope) ([]*protocol.TransactionSt
 	}
 
 	// Make sure every transaction is signed
-	err = checkForUnsignedTransactions(messages)
+	err = b.Executor.checkForUnsignedTransactions(messages)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -147,6 +149,19 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 			fn = b.Executor.logger.Info
 			kv = append(kv, "module", "anchoring")
 
+		case *messaging.BadSyntheticMessage:
+			if seq, ok := msg.Message.(*messaging.SequencedMessage); ok {
+				kv = append(kv, "inner-type", seq.Message.ID())
+				kv = append(kv, "source", seq.Source)
+				kv = append(kv, "dest", seq.Destination)
+				kv = append(kv, "seq", seq.Number)
+
+				switch msg := seq.Message.(type) {
+				case *messaging.TransactionMessage:
+					kv = append(kv, "txn-type", msg.Transaction.Body.Type())
+				}
+			}
+
 		case *messaging.SyntheticMessage:
 			if seq, ok := msg.Message.(*messaging.SequencedMessage); ok {
 				kv = append(kv, "inner-type", seq.Message.ID())
@@ -179,6 +194,20 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 
 		d.additional = append(d.additional, ctx.additional...)
 		d.produced = append(d.produced, ctx.produced...)
+	}
+
+	// Check for duplicates. This is a serious error if it occurs, but returning
+	// an error here would effectively stall the network.
+	pCount := map[[32]byte]int{}
+	pID := map[[32]byte]*url.TxID{}
+	for _, m := range d.produced {
+		pCount[m.Message.Hash()]++
+		pID[m.Message.Hash()] = m.Message.ID()
+	}
+	for h, c := range pCount {
+		if c > 1 {
+			slog.ErrorCtx(d.Context, "Duplicate synthetic messages", "id", pID[h], "count", c)
+		}
 	}
 
 	// Execute produced messages immediately if and only if the producer and
@@ -216,26 +245,49 @@ func (d *bundle) process() ([]*protocol.TransactionStatus, error) {
 
 // checkForUnsignedTransactions returns an error if the message bundle includes
 // any unsigned transactions.
-func checkForUnsignedTransactions(messages []messaging.Message) error {
-	unsigned := set[[32]byte]{}
+func (x *Executor) checkForUnsignedTransactions(messages []messaging.Message) error {
+	// Record signatures and transactions
+	haveSigFor := map[[32]byte]bool{}
+	haveTxn := map[[32]byte]bool{}
 	for _, msg := range messages {
-		if msg, ok := msg.(*messaging.TransactionMessage); ok {
-			unsigned[msg.ID().Hash()] = struct{}{}
+		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+			if _, ok := msg.(*messaging.BlockAnchor); ok {
+				continue
+			}
+		}
+
+		if msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg); ok {
+			// User signatures can be sent without a transaction, but authority
+			// signatures and other message-for-transaction types cannot
+			sig, ok := msg.(*messaging.SignatureMessage)
+			isUser := ok && sig.Signature.Type() != protocol.SignatureTypeAuthority
+			haveSigFor[msg.GetTxID().Hash()] = isUser
+		}
+
+		if txn, ok := msg.(*messaging.TransactionMessage); ok {
+			isRemote := txn.GetTransaction().Body.Type() == protocol.TransactionTypeRemote
+			haveTxn[txn.ID().Hash()] = isRemote
 		}
 	}
-	for _, msg := range messages {
-	again:
-		switch m := msg.(type) {
-		case messaging.MessageForTransaction:
-			delete(unsigned, m.GetTxID().Hash())
-		case interface{ Unwrap() messaging.Message }:
-			msg = m.Unwrap()
-			goto again
+
+	// If a transaction does not have a signature, reject the bundle
+	for txn := range haveTxn {
+		if _, has := haveSigFor[txn]; !has {
+			return errors.BadRequest.With("message bundle includes an unsigned transaction")
 		}
 	}
-	if len(unsigned) > 0 {
-		return errors.BadRequest.With("message bundle includes an unsigned transaction")
+
+	// If an authority signature or other synthetic message-for-transaction is
+	// sent without its transaction, reject the bundle
+	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		for txn, isUserSig := range haveSigFor {
+			isRemote, has := haveTxn[txn]
+			if !isUserSig && (!has || isRemote) {
+				return errors.BadRequest.With("message bundle is missing a transaction")
+			}
+		}
 	}
+
 	return nil
 }
 

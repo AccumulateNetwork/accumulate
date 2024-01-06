@@ -33,7 +33,6 @@ func BenchmarkTPS(b *testing.B) {
 
 	// Initialize
 	sim := NewSim(b,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(b.Name(), 1, 1),
 		simulator.Genesis(GenesisTime),
 	)

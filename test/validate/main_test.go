@@ -17,12 +17,12 @@ import (
 	"testing"
 	"time"
 
+	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	tmp2p "github.com/tendermint/tendermint/p2p"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -185,7 +185,6 @@ func setupSim(t *testing.T, net *accumulated.NetworkInit) (*simulator.Simulator,
 	logger := acctesting.NewTestLogger(t)
 	sim, err := simulator.New(
 		simulator.WithLogger(logger),
-		simulator.MemoryDatabase,
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
 
@@ -291,6 +290,13 @@ func (s *ValidationTestSuite) TestMain() {
 		_ = s.NoError(err) &&
 			s.NotNil(r) &&
 			s.NotEmpty(r.Records)
+	}
+	{
+		// Verify that [hash]@dn.acme is collated
+		r, err := c.QueryMessage(context.Background(), protocol.DnUrl().WithTxID(st1.TxID.Hash()), nil)
+		_ = s.NoError(err) &&
+			s.NotNil(r) &&
+			s.NotEmpty(r.Signatures.Records)
 	}
 	{
 		// TODO Make this smarter than hard coding a height

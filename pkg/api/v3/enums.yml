@@ -83,6 +83,8 @@ RecordType:
     value: 0x82
   IndexEntry:
     value: 0x83
+  Error:
+    value: 0x8F
 
 EventType:
   Error:
@@ -91,3 +93,14 @@ EventType:
     value: 2
   Globals:
     value: 3
+
+KnownPeerStatus:
+  Unknown:
+    name: PeerStatusIsUnknown
+    value: 0
+  Good:
+    name: PeerStatusIsKnownGood
+    value: 1
+  Bad:
+    name: PeerStatusIsKnownBad
+    value: 2

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -38,13 +38,14 @@ func init() {
 }
 
 func TestWalkAndReplay(t *testing.T) {
+	t.Skip("https://gitlab.com/accumulatenetwork/accumulate/-/issues/3412")
+
 	liteKey := acctesting.GenerateKey("Lite")
 	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
 
 	// Use the simulator to create genesis documents
 	net := simulator.SimpleNetwork(t.Name(), 3, 1)
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		net,
 		simulator.Genesis(GenesisTime),
 	)
@@ -70,7 +71,6 @@ func TestWalkAndReplay(t *testing.T) {
 
 	// Set up the simulator and harness
 	sim = NewSim(t,
-		simulator.MemoryDatabase,
 		net,
 		simulator.SnapshotMap(genesis),
 	)

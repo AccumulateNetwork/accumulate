@@ -8,9 +8,10 @@ package simulator
 
 import (
 	"io"
+	"math/big"
 	"runtime"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -46,6 +47,11 @@ func New(opts ...Option) (*Simulator, error) {
 			return new(ioutil2.Buffer), nil
 		},
 		abci: noABCI,
+
+		// Tests like to materialize tokens, which can cause problems with the
+		// supply calculations. So start with a non-zero supply to provide a
+		// buffer.
+		initialSupply: big.NewInt(1e6 * protocol.AcmePrecision),
 	}
 	for _, opt := range opts {
 		err := opt(o)
@@ -66,6 +72,26 @@ func New(opts ...Option) (*Simulator, error) {
 		err = s.partitions[id].initChain(snapshot)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("init %s: %w", id, err)
+		}
+	}
+
+	// Set the initial supply
+	if o.initialSupply != nil {
+		err := s.partitions[protocol.Directory].Update(func(b *database.Batch) error {
+			var acme *protocol.TokenIssuer
+			account := b.Account(protocol.AcmeUrl())
+			err := account.Main().GetAs(&acme)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+
+			acme.Issued.Add(&acme.Issued, o.initialSupply)
+
+			err = account.Main().Put(acme)
+			return errors.UnknownError.Wrap(err)
+		})
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 

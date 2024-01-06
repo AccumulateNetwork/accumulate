@@ -49,7 +49,7 @@ func TestSyntheticAnchor(t *testing.T) {
 		Number:      10,
 	}
 	hash := seq.Hash()
-	syn := &messaging.SyntheticMessage{
+	syn := &messaging.BadSyntheticMessage{
 		Message: seq,
 		Proof: &protocol.AnnotatedReceipt{
 			Anchor: &protocol.AnchorMetadata{
@@ -115,7 +115,7 @@ func TestSyntheticAnchor(t *testing.T) {
 					AnchorChain(protocol.Directory).
 					Root().
 					Inner().
-					AddHash(syn.Proof.Receipt.Anchor, false)
+					AddEntry(syn.Proof.Receipt.Anchor, false)
 				require.NoError(t, err)
 			}
 

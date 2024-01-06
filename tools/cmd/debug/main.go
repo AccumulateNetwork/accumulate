@@ -8,23 +8,41 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"os/user"
+	"time"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var (
-	outputJSON     bool
-	healContinuous bool
-	cachedScan     string
-	verbose        bool
+	outputJSON        bool
+	healContinuous    bool
+	cachedScan        string
+	verbose           bool
+	pretend           bool
+	waitForTxn        bool
+	peerDb            string
+	lightDb           string
+	only              string
+	pprof             string
+	healSinceDuration time.Duration
 )
 
 var cmd = &cobra.Command{
 	Use:   "debug",
 	Short: "Accumulate debug utilities",
 }
+
+var currentUser = func() *user.User {
+	u, err := user.Current()
+	if err != nil {
+		panic(err)
+	}
+	return u
+}()
 
 func main() {
 	_ = cmd.Execute()
@@ -46,4 +64,8 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	if err != nil {
 		fatalf(format+": %v", append(otherArgs, err)...)
 	}
+}
+
+func safeClose(c io.Closer) {
+	check(c.Close())
 }

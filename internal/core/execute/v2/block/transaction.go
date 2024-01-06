@@ -49,6 +49,14 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 		}
 	}
 
+	// Check if the transaction has expired
+	if t.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() &&
+		t.transaction.Header.Expire != nil &&
+		t.transaction.Header.Expire.AtTime != nil &&
+		t.Block.Time.After(*t.transaction.Header.Expire.AtTime) {
+		return t.recordFailedTransaction(batch, delivery, errors.Expired.With("transaction deadline exceeded"))
+	}
+
 	// Load the principal
 	principal, err := batch.Account(delivery.Transaction.Header.Principal).Main().Get()
 	switch {
@@ -148,6 +156,17 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 		return true, nil
 	}
 
+	// Check additional authorities
+	notReady := map[[32]byte]bool{}
+	if t.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
+		for _, auth := range delivery.Transaction.Header.Authorities {
+			err = t.checkAuth(batch, delivery.Transaction, auth, notReady)
+			if err != nil {
+				return false, err
+			}
+		}
+	}
+
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](x, delivery.Transaction.Body.Type())
 	if ok {
@@ -156,7 +175,8 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 			return false, errors.UnknownError.Wrap(err)
 		}
 		if !fallback {
-			return ready, nil
+			// Require approval from additional authorities, even if the executor overrides the normal logic
+			return ready && len(notReady) == 0, nil
 		}
 	}
 
@@ -166,7 +186,7 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 	}
 
 	// Get the principal's account auth
-	auth, err := getAccountAuthoritySet(batch, principal)
+	auth, err := t.getAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return false, fmt.Errorf("unable to load authority of %v: %w", delivery.Transaction.Header.Principal, err)
 	}
@@ -184,7 +204,6 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 	}
 
 	// For each authority
-	notReady := map[[32]byte]struct{}{}
 	ignoreDisabled := delivery.Transaction.Body.Type().RequireAuthorization()
 	for _, entry := range auth.Authorities {
 		// Ignore disabled authorities
@@ -192,28 +211,36 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 			continue
 		}
 
-		// Check if any signer has reached its threshold
-		ok, vote, err := t.AuthorityDidVote(batch, delivery.Transaction, entry.Url)
+		err = t.checkAuth(batch, delivery.Transaction, entry.Url, notReady)
 		if err != nil {
-			return false, errors.UnknownError.Wrap(err)
-		}
-
-		// Did the authority vote?
-		if !ok {
-			notReady[entry.Url.AccountID32()] = struct{}{}
-			continue
-		}
-
-		// Any vote that is not accept is counted as reject. Since a transaction
-		// is only executed once _all_ authorities accept, a single authority
-		// rejecting or abstaining is sufficient to block the transaction.
-		if vote != protocol.VoteTypeAccept {
-			return false, errors.Rejected
+			return false, err
 		}
 	}
 
 	// The transaction is only ready if all authorities have voted
 	return len(notReady) == 0, nil
+}
+
+func (t *TransactionContext) checkAuth(batch *database.Batch, txn *protocol.Transaction, auth *url.URL, notReady map[[32]byte]bool) error {
+	// Check if any signer has reached its threshold
+	ok, vote, err := t.AuthorityDidVote(batch, txn, auth)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Did the authority vote?
+	if !ok {
+		notReady[auth.AccountID32()] = true
+		return nil
+	}
+
+	// Any vote that is not accept is counted as reject. Since a transaction
+	// is only executed once _all_ authorities accept, a single authority
+	// rejecting or abstaining is sufficient to block the transaction.
+	if vote != protocol.VoteTypeAccept {
+		return errors.Rejected
+	}
+	return nil
 }
 
 func (m *MessageContext) AuthorityDidVote(batch *database.Batch, transaction *protocol.Transaction, authUrl *url.URL) (bool, protocol.VoteType, error) {
@@ -584,7 +611,7 @@ func (x *TransactionContext) recordFailedTransaction(batch *database.Batch, deli
 	}
 
 	// If this transaction is a synthetic transaction, send a refund
-	if swo, ok := delivery.Transaction.Body.(protocol.SynthTxnWithOrigin); ok {
+	if swo, ok := delivery.Transaction.Body.(protocol.SyntheticTransaction); ok {
 		init, refundAmount := swo.GetRefund()
 		if refundAmount > 0 {
 			refund := new(protocol.SyntheticDepositCredits)

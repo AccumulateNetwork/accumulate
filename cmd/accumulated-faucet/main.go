@@ -12,22 +12,20 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -46,7 +44,7 @@ var flag = struct {
 	NodeKey  string
 	Key      string
 	LogLevel string
-	Account  *url.URL
+	Account  UrlFlag
 	Listen   []multiaddr.Multiaddr
 	Peers    []multiaddr.Multiaddr
 }{}
@@ -54,7 +52,7 @@ var flag = struct {
 func init() {
 	cmd.Flags().StringVar(&flag.NodeKey, "node-key", "", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
 	cmd.Flags().StringVar(&flag.Key, "key", "", "The key used to sign faucet transactions")
-	cmd.Flags().Var(UrlFlag{V: &flag.Account}, "account", "The faucet account")
+	cmd.Flags().Var(&flag.Account, "account", "The faucet account")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.Listen), "listen", "P2P listening address(es)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
@@ -65,15 +63,7 @@ func init() {
 }
 
 func run(_ *cobra.Command, args []string) {
-	ctx, cancel := context.WithCancel(context.Background())
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
-
-	go func() {
-		<-sigs
-		signal.Stop(sigs)
-		cancel()
-	}()
+	ctx := cmdutil.ContextForMainProcess(context.Background())
 
 	lw, err := logging.NewConsoleWriter("plain")
 	Check(err)
@@ -114,7 +104,7 @@ func run(_ *cobra.Command, args []string) {
 
 	faucetSvc, err := v3impl.NewFaucet(context.Background(), v3impl.FaucetParams{
 		Logger:    logger.With("module", "faucet"),
-		Account:   flag.Account,
+		Account:   flag.Account.V,
 		Key:       build.ED25519PrivateKey(LoadKey(flag.Key)),
 		Submitter: client,
 		Querier:   client,

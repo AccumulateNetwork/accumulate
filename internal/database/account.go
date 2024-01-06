@@ -57,6 +57,11 @@ func (r *Account) Url() *url.URL {
 	return r.key.Get(1).(*url.URL)
 }
 
+// MarkDirty artificially marks the account as dirty.
+func (r *Account) MarkDirty() error {
+	return r.getUrl().Put(r.Url())
+}
+
 func (a *Account) Commit() error {
 	if !a.IsDirty() {
 		return nil
@@ -115,7 +120,7 @@ func (a *Account) Commit() error {
 
 		// Make sure the key book is set
 		account, ok := acc.(protocol.FullAccount)
-		if ok && len(account.GetAuth().Authorities) == 0 {
+		if ok && account.GetUrl().IsRootIdentity() && len(account.GetAuth().Authorities) == 0 {
 			return fmt.Errorf("missing key book")
 		}
 	}
@@ -124,8 +129,8 @@ func (a *Account) Commit() error {
 	var chains []*protocol.ChainMetadata
 	for _, c := range a.dirtyChains() {
 		chains = append(chains, &protocol.ChainMetadata{
-			Name: c.name,
-			Type: c.typ,
+			Name: c.Name(),
+			Type: c.Type(),
 		})
 	}
 	err := a.Chains().Add(chains...)

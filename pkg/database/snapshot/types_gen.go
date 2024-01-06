@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -36,8 +37,9 @@ type Header struct {
 
 type RecordEntry struct {
 	fieldsSet []bool
-	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Value     []byte      `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Key       *record.Key     `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Value     []byte          `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Receipt   *merkle.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	extraData []byte
 }
 
@@ -73,6 +75,9 @@ func (v *RecordEntry) Copy() *RecordEntry {
 		u.Key = (v.Key).Copy()
 	}
 	u.Value = encoding.BytesCopy(v.Value)
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -126,6 +131,14 @@ func (v *RecordEntry) Equal(u *RecordEntry) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Value, u.Value)) {
+		return false
+	}
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
 		return false
 	}
 
@@ -204,6 +217,7 @@ func (v *Header) IsValid() error {
 var fieldNames_RecordEntry = []string{
 	1: "Key",
 	2: "Value",
+	3: "Receipt",
 }
 
 func (v *RecordEntry) MarshalBinary() ([]byte, error) {
@@ -219,6 +233,9 @@ func (v *RecordEntry) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Value) == 0) {
 		writer.WriteBytes(2, v.Value)
+	}
+	if !(v.Receipt == nil) {
+		writer.WriteValue(3, v.Receipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RecordEntry)
@@ -241,6 +258,11 @@ func (v *RecordEntry) IsValid() error {
 		errs = append(errs, "field Value is missing")
 	} else if len(v.Value) == 0 {
 		errs = append(errs, "field Value is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Receipt is missing")
+	} else if v.Receipt == nil {
+		errs = append(errs, "field Receipt is not set")
 	}
 
 	switch len(errs) {
@@ -338,6 +360,9 @@ func (v *RecordEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.Value = x
 	}
+	if x := new(merkle.Receipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Receipt = x
+	}
 
 	seen, err := reader.Reset(fieldNames_RecordEntry)
 	if err != nil {
@@ -394,14 +419,18 @@ func (v *Header) MarshalJSON() ([]byte, error) {
 
 func (v *RecordEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Key   *record.Key `json:"key,omitempty"`
-		Value *string     `json:"value,omitempty"`
+		Key     *record.Key     `json:"key,omitempty"`
+		Value   *string         `json:"value,omitempty"`
+		Receipt *merkle.Receipt `json:"receipt,omitempty"`
 	}{}
 	if !(v.Key == nil) {
 		u.Key = v.Key
 	}
 	if !(len(v.Value) == 0) {
 		u.Value = encoding.BytesToJSON(v.Value)
+	}
+	if !(v.Receipt == nil) {
+		u.Receipt = v.Receipt
 	}
 	return json.Marshal(&u)
 }
@@ -430,11 +459,13 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 
 func (v *RecordEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Key   *record.Key `json:"key,omitempty"`
-		Value *string     `json:"value,omitempty"`
+		Key     *record.Key     `json:"key,omitempty"`
+		Value   *string         `json:"value,omitempty"`
+		Receipt *merkle.Receipt `json:"receipt,omitempty"`
 	}{}
 	u.Key = v.Key
 	u.Value = encoding.BytesToJSON(v.Value)
+	u.Receipt = v.Receipt
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -444,5 +475,6 @@ func (v *RecordEntry) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Value = x
 	}
+	v.Receipt = u.Receipt
 	return nil
 }

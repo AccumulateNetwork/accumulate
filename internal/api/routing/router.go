@@ -7,7 +7,7 @@
 package routing
 
 import (
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -74,7 +74,7 @@ var _ Router = (*RouterInstance)(nil)
 // bundle has signatures with conflicting routing locations.
 func RouteMessages(r Router, messages []messaging.Message) (string, error) {
 	if len(messages) == 0 {
-		return "", errors.BadRequest.With("nothing to route")
+		return "", errors.BadRequest.With("nothing to route (1)")
 	}
 
 	var route string
@@ -85,7 +85,7 @@ func RouteMessages(r Router, messages []messaging.Message) (string, error) {
 		}
 	}
 	if route == "" {
-		return "", errors.BadRequest.With("nothing to route")
+		return "", errors.BadRequest.With("nothing to route (2)")
 	}
 
 	return route, nil
@@ -97,7 +97,7 @@ func RouteMessages(r Router, messages []messaging.Message) (string, error) {
 // bundle has signatures with conflicting routing locations.
 func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*messaging.Envelope) (string, error) {
 	if len(envs) == 0 {
-		return "", errors.BadRequest.With("nothing to route")
+		return "", errors.BadRequest.With("nothing to route (3)")
 	}
 
 	var route string
@@ -119,7 +119,7 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*messag
 		}
 	}
 	if route == "" {
-		return "", errors.BadRequest.With("nothing to route")
+		return "", errors.BadRequest.With("nothing to route (4)")
 	}
 
 	return route, nil
@@ -145,6 +145,9 @@ func routeMessage(routeAccount func(*url.URL) (string, error), route *string, ms
 
 	case *messaging.BlockAnchor:
 		return routeMessage(routeAccount, route, msg.Anchor)
+
+	case interface{ Unwrap() messaging.Message }:
+		return routeMessage(routeAccount, route, msg.Unwrap())
 
 	default:
 		return nil

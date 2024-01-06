@@ -59,7 +59,6 @@ func TestCreateIdentity(t *testing.T) {
 
 		// Initialize
 		sim := NewSim(t,
-			simulator.MemoryDatabase,
 			simulator.SimpleNetwork(t.Name(), 3, 3),
 			simulator.Genesis(GenesisTime),
 		)
@@ -128,9 +127,8 @@ func TestCreateIdentity_Eth(t *testing.T) {
 
 	// Initialize
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
-		simulator.Genesis(GenesisTime),
+		simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Baikonur),
 	)
 
 	MakeAccount(t, sim.DatabaseFor(lite), &LiteIdentity{Url: lite, CreditBalance: 1e9})

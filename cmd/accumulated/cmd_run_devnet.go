@@ -18,17 +18,20 @@ import (
 	"strings"
 	"sync"
 
+	tmconfig "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/libs/log"
+	tmp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/fatih/color"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	tmconfig "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/faucet"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -79,13 +82,15 @@ func runDevNet(*cobra.Command, []string) {
 		skip[id] = true
 	}
 
-	vals, bsns := getNodeDirs(flagMain.WorkDir)
-	for _, nodes := range [][]int{vals, bsns} {
-		for _, node := range nodes {
-			id := fmt.Sprint(node)
-			if len(id) > nodeIdLen {
-				nodeIdLen = len(id)
-			}
+	vals, bsns, hasBS := getNodeDirs(flagMain.WorkDir)
+	for _, node := range vals {
+		name := fmt.Sprintf("node-%d", node)
+		c, err := config.Load(filepath.Join(flagMain.WorkDir, name, "bvnn"))
+		check(err)
+
+		id := fmt.Sprintf("%s.%d", c.Accumulate.PartitionId, node)
+		if len(id) > nodeIdLen {
+			nodeIdLen = len(id)
 		}
 	}
 
@@ -93,10 +98,14 @@ func runDevNet(*cobra.Command, []string) {
 	didStop := make(chan struct{}, len(vals)*2+len(bsns))
 	done := new(sync.WaitGroup)
 
-	logWriter := newLogWriter(nil)
+	logWriter := newLogWriter()
 
 	var daemons []*accumulated.Daemon
 	started := new(sync.WaitGroup)
+
+	if hasBS {
+		startDevnetBootstrap(makeLogger(logWriter), done, stop)
+	}
 
 	for _, num := range bsns {
 		if skip[-num] {
@@ -160,20 +169,18 @@ func runDevNet(*cobra.Command, []string) {
 	// Connect every node to every other node
 	for i, d := range daemons {
 		for _, e := range daemons[i+1:] {
-			check(d.ConnectDirectly(e))
+			err := d.ConnectDirectly(e)
+			if err == nil {
+				continue
+			}
+			if err.Error() != "cannot connect nodes directly as they have the same node key" {
+				check(err)
+			}
 		}
 	}
 
 	if flagRunDevnet.FaucetSeed != "" {
-		w, err := logWriter("plain", func(w io.Writer, format string, color bool) io.Writer {
-			return &plainNodeWriter{s: "[faucet] ", w: w}
-		})
-		check(err)
-		logLevel, logWriter, err := logging.ParseLogLevel("info", w)
-		check(err)
-		logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
-		check(err)
-		startDevnetFaucet(daemons, logger, done, stop)
+		startDevnetFaucet(daemons, makeLogger(logWriter), done, stop)
 	}
 
 	color.HiBlack("----- Started -----")
@@ -212,7 +219,7 @@ func startDevNetNode(primary, secondary *accumulated.Daemon, started, done *sync
 		defer started.Done()
 
 		// Start it
-		check(primary.Start())
+		check(primary.Start(secondary))
 		if secondary != nil {
 			check(secondary.StartSecondary(primary))
 		}
@@ -249,7 +256,7 @@ func startDevNetNode(primary, secondary *accumulated.Daemon, started, done *sync
 	}()
 }
 
-func getNodeDirs(dir string) (vals, bsns []int) {
+func getNodeDirs(dir string) (vals, bsns []int, bootstrap bool) {
 	ent, err := os.ReadDir(dir)
 	checkf(err, "failed to read %q", dir)
 
@@ -259,6 +266,9 @@ func getNodeDirs(dir string) (vals, bsns []int) {
 		var num string
 		switch {
 		case !ent.IsDir():
+			continue
+		case ent.Name() == "bootstrap":
+			bootstrap = true
 			continue
 		case strings.HasPrefix(ent.Name(), "node-"):
 			nodes, num = &vals, ent.Name()[5:]
@@ -277,7 +287,51 @@ func getNodeDirs(dir string) (vals, bsns []int) {
 		*nodes = append(*nodes, int(node))
 	}
 
-	return
+	return vals, bsns, bootstrap
+}
+
+func makeLogger(lw func(string, logAnnotator) (io.Writer, error)) log.Logger {
+	w, err := lw("plain", func(w io.Writer, format string, color bool) io.Writer {
+		return &plainNodeWriter{s: "[faucet] ", w: w}
+	})
+	check(err)
+	logLevel, logWriter, err := logging.ParseLogLevel("info", w)
+	check(err)
+	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
+	check(err)
+	return logger
+}
+
+func startDevnetBootstrap(logger log.Logger, done *sync.WaitGroup, stop chan struct{}) {
+	// Load stuff
+	dir := filepath.Join(flagMain.WorkDir, "bootstrap")
+	cfg, err := config.LoadAcc(dir)
+	check(err)
+
+	nodeKey, err := tmp2p.LoadNodeKey(filepath.Join(dir, "node_key.json"))
+	check(err)
+
+	node, err := p2p.New(p2p.Options{
+		Key:           nodeKey.PrivKey.Bytes(),
+		Listen:        cfg.P2P.Listen,
+		DiscoveryMode: dht.ModeAutoServer,
+		// TODO External address
+	})
+	check(err)
+
+	fmt.Println("Bootstrap")
+	for _, a := range node.Addresses() {
+		fmt.Printf("  %s\n", a)
+	}
+	fmt.Println()
+
+	// Cleanup
+	done.Add(1)
+	go func() {
+		defer done.Done()
+		<-stop
+		check(node.Close())
+	}()
 }
 
 func startDevnetFaucet(daemons []*accumulated.Daemon, logger log.Logger, done *sync.WaitGroup, stop chan struct{}) {
@@ -325,7 +379,10 @@ func newNodeWriter(w io.Writer, format, partition string, node int, color bool) 
 	switch format {
 	case tmconfig.LogFormatPlain:
 		id := fmt.Sprintf("%s.%d", partition, node)
-		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen+len("bvnxx")-len(id)+1)
+		if nodeIdLen < len(id) {
+			nodeIdLen = len(id)
+		}
+		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen-len(id)+1)
 		if !color {
 			return &plainNodeWriter{s, w}
 		}

@@ -8,6 +8,7 @@ package build
 
 import (
 	"math/big"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -37,8 +38,21 @@ func (b TransactionBuilder) Metadata(metadata []byte) TransactionBuilder {
 	return b
 }
 
-func (b TransactionBuilder) HoldUntil(threshold protocol.BlockThreshold) TransactionBuilder {
-	b.t.Header.HoldUntil = &threshold
+func (b TransactionBuilder) HoldUntil(opts protocol.HoldUntilOptions) TransactionBuilder {
+	b.t.Header.HoldUntil = &opts
+	return b
+}
+
+func (b TransactionBuilder) ExpireAtTime(v time.Time) TransactionBuilder {
+	if b.t.Header.Expire == nil {
+		b.t.Header.Expire = new(protocol.ExpireOptions)
+	}
+	b.t.Header.Expire.AtTime = &v
+	return b
+}
+
+func (b TransactionBuilder) AdditionalAuthority(signer any, path ...string) TransactionBuilder {
+	b.t.Header.Authorities = append(b.t.Header.Authorities, b.parseUrl(signer, path...))
 	return b
 }
 

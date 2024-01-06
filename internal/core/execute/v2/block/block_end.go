@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -50,7 +52,10 @@ func (block *Block) Close() (execute.BlockState, error) {
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
-	m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
+
+	if m.EnableHealing {
+		m.BackgroundTaskLauncher(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
+	}
 
 	// List all of the chains that have been modified. shouldPrepareAnchor
 	// relies on this list so this must be done first.
@@ -94,30 +99,14 @@ func (block *Block) Close() (execute.BlockState, error) {
 	t := time.Now()
 
 	// Record pending transactions
-	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
-	ledger := block.Batch.Account(ledgerUrl)
-	if len(block.State.Pending) > 0 {
-		// Get the major block height
-		major, err := getMajorHeight(m.Describe, block.Batch)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-
-		// Set the expiration height
-		if m.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
-			major += 14 // default to 2 weeks
-		} else {
-			major += m.globals.Active.Globals.Limits.PendingMajorBlocks
-		}
-
-		// Record the IDs
-		err = ledger.Events().Major().Pending(major).Add(block.State.GetPending()...)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("store pending expirations: %w", err)
-		}
+	err = block.recordTransactionExpiration()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Load the main chain of the minor root
+	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
+	ledger := block.Batch.Account(ledgerUrl)
 	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
@@ -249,6 +238,75 @@ func (block *Block) Close() (execute.BlockState, error) {
 	return &closedBlock{*block, valUp}, nil
 }
 
+func (block *Block) recordTransactionExpiration() error {
+	if len(block.State.Pending) == 0 {
+		return nil
+	}
+
+	// Get the currentMajor block height
+	currentMajor, err := getMajorHeight(block.Executor.Describe, block.Batch)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Set the expiration height
+	var max uint64
+	if block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks == 0 {
+		max = 14 // default to 2 weeks
+	} else {
+		max = block.Executor.globals.Active.Globals.Limits.PendingMajorBlocks
+	}
+
+	// Parse the schedule
+	schedule, err := core.Cron.Parse(block.Executor.globals.Active.Globals.MajorBlockSchedule)
+	if err != nil && block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		return errors.UnknownError.Wrap(err)
+	}
+
+	// Determine which major block each transaction should expire on
+	pending := map[uint64][]*url.TxID{}
+	for _, txn := range block.State.GetPending() {
+		var count uint64
+		switch {
+		case !block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled():
+			// Old logic
+			count = max
+
+		case txn.Header.Expire == nil || txn.Header.Expire.AtTime == nil:
+			// No expiration specified, use the default
+			count = max
+
+		default:
+			// Always at least the next major block
+			count = 1
+
+			// Increment until the expire time is after the expected major block time
+			now := block.Time
+			for count < max && txn.Header.Expire.AtTime.After(schedule.Next(now)) {
+				now = schedule.Next(now)
+				count++
+			}
+		}
+
+		if count <= 0 || count > max {
+			count = max
+		}
+
+		major := currentMajor + count
+		pending[major] = append(pending[major], txn.ID())
+	}
+
+	// Record the IDs
+	ledger := block.Batch.Account(block.Executor.Describe.NodeUrl(protocol.Ledger))
+	for major, ids := range pending {
+		err = ledger.Events().Major().Pending(major).Add(ids...)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store pending expirations: %w", err)
+		}
+	}
+	return nil
+}
+
 func getMajorHeight(desc execute.DescribeShim, batch *database.Batch) (uint64, error) {
 	c := batch.Account(desc.AnchorPool()).MajorBlockChain()
 	head, err := c.Head().Get()
@@ -346,7 +404,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		x.logger.Info(message, "seq-num", seqNum, "source", partition.Url)
 
 		// Request the transaction by sequence number
-		resp, err := x.Sequencer.Sequence(ctx, src, dest, seqNum)
+		resp, err := x.Sequencer.Sequence(ctx, src, dest, seqNum, private.SequenceOptions{})
 		if err != nil {
 			x.logger.Error("Failed to request sequenced transaction", "error", err, "from", src, "seq-num", seqNum)
 			continue
@@ -394,8 +452,19 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 				Anchor:    seq,
 				Signature: keySig,
 			}
-		} else {
+		} else if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
 			msg = &messaging.SyntheticMessage{
+				Message:   seq,
+				Signature: keySig,
+				Proof: &protocol.AnnotatedReceipt{
+					Receipt: resp.SourceReceipt,
+					Anchor: &protocol.AnchorMetadata{
+						Account: protocol.DnUrl(),
+					},
+				},
+			}
+		} else {
+			msg = &messaging.BadSyntheticMessage{
 				Message:   seq,
 				Signature: keySig,
 				Proof: &protocol.AnnotatedReceipt{
@@ -563,6 +632,27 @@ func (x *Executor) prepareAnchor(block *Block) error {
 		}
 
 		bvns := x.globals.Active.BvnNames()
+		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+			// From Baikonur forward, sort this list so changes in the
+			// implementation of BvnNames don't break it
+			sort.Strings(bvns)
+
+		} else {
+			// Use the ordering of routes to sort the BVN list since that preserves
+			// the order used prior to 1.3
+			routes := map[string]int{}
+			for i, r := range x.globals.Active.Routing.Routes {
+				id := strings.ToLower(r.Partition)
+				if _, ok := routes[id]; ok {
+					continue
+				}
+				routes[id] = i
+			}
+			sort.Slice(bvns, func(i, j int) bool {
+				return routes[strings.ToLower(bvns[i])] < routes[strings.ToLower(bvns[j])]
+			})
+		}
+
 		ledger.MajorBlockIndex++
 		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))

@@ -23,14 +23,16 @@ import (
 	"strconv"
 	"strings"
 
+	cmtjson "github.com/cometbft/cometbft/libs/json"
+	"github.com/cometbft/cometbft/libs/log"
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	"github.com/cometbft/cometbft/types"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/libs/log"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
@@ -184,17 +186,18 @@ func networkReset() {
 			continue
 		}
 
-		dir := path.Join(flagMain.WorkDir, ent.Name())
+		dir := filepath.Join(flagMain.WorkDir, ent.Name())
 		if strings.HasPrefix(ent.Name(), "dnn") || strings.HasPrefix(ent.Name(), "bvnn") {
-			os.RemoveAll(filepath.Join(flagMain.WorkDir, ent.Name()))
-			continue
-		}
-		if !strings.HasPrefix(ent.Name(), "node-") && !strings.HasPrefix(ent.Name(), "bsn-") {
+			// Delete
+		} else if ent.Name() == "bootstrap" {
+			if !bootstrapReset(dir) {
+				fmt.Printf("Keeping %s\n", dir)
+				continue
+			}
+		} else if !strings.HasPrefix(ent.Name(), "node-") && !strings.HasPrefix(ent.Name(), "bsn-") {
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
 			continue
-		}
-
-		if !nodeReset(dir) {
+		} else if !nodeReset(dir) {
 			fmt.Printf("Keeping %s\n", dir)
 			continue
 		}
@@ -238,28 +241,30 @@ func nodeReset(dir string) bool {
 	return !keep
 }
 
-func findInDescribe(addr string, partitionId string, d *cfg.Network) (partition *cfg.Partition, node *cfg.Node, err error) {
-	if partitionId == "" {
-		partitionId = d.Id
-	}
-	for i, v := range d.Partitions {
-		//search for the address.
-		partition = &d.Partitions[i]
-		if strings.EqualFold(partition.Id, partitionId) {
-			for j, n := range v.Nodes {
-				nodeAddr, err := resolveAddr(n.Address)
-				if err != nil {
-					return nil, nil, fmt.Errorf("cannot resolve node address in network describe")
-				}
-				if nodeAddr == addr {
-					node = &v.Nodes[j]
-					return partition, node, nil
-				}
-			}
-			return partition, nil, nil
+func bootstrapReset(dir string) bool {
+	ent, err := os.ReadDir(dir)
+	check(err)
+	var keep bool
+	for _, ent := range ent {
+		switch ent.Name() {
+		case "node_key.json", "accumulate.toml":
+			file := filepath.Join(dir, ent.Name())
+			fmt.Printf("Deleting %s\n", file)
+			err := os.Remove(file)
+			check(err)
+			continue
+
+		default:
+			dir := path.Join(dir, ent.Name())
+			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
+			keep = true
+		}
+		if !ent.IsDir() {
+			keep = true
+			continue
 		}
 	}
-	return nil, nil, fmt.Errorf("cannot locate partition %s or address %s in network description", partitionId, addr)
+	return !keep
 }
 
 func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config, *types.GenesisDoc, error) {
@@ -404,7 +409,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		return 0, nil, nil, err
 	}
 
-	config.Accumulate.Describe = cfg.Describe{NetworkType: resp.Type, PartitionId: partitionName, LocalAddress: "", Network: nc.NetworkState.Network}
+	config.Accumulate.Describe = cfg.Describe{NetworkType: resp.Type, PartitionId: partitionName, Network: nc.NetworkState.Network}
 
 	return int(resp.BasePort), config, genDoc, nil
 }
@@ -439,6 +444,10 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	description, err := accClient.Describe(context.Background())
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
+	}
+
+	if description.NetworkType == protocol.PartitionTypeBlockValidator {
+		netPort -= config.PortOffsetBlockValidator
 	}
 
 	genDoc, err := getGenesis(args[0], tmClient)
@@ -490,7 +499,7 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 
 	config.Accumulate.Describe = cfg.Describe{
 		NetworkType: description.NetworkType, PartitionId: description.PartitionId,
-		LocalAddress: "", Network: description.Network}
+		Network: cfg.Network{Id: description.Network.Id}}
 	return netPort, config, genDoc, nil
 }
 
@@ -586,33 +595,16 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 			return "", fmt.Errorf("invalid public address %v", err)
 		}
 
-		partition, node, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
+		localAddr, port, err := resolveAddrWithPort(config.Accumulate.API.ListenAddress)
 		if err != nil {
-			return "", fmt.Errorf("cannot resolve public address in description, %v", err)
+			return "", fmt.Errorf("invalid node address %v", err)
+		}
+		if publicAddr == "" {
+			publicAddr = localAddr
 		}
 
-		//the address wasn't found in the network description, so add it
-		var localAddr string
-		var port int
-		if node == nil {
-			u, err := ensureNodeOnPartition(partition, publicAddr, getNodeTypeFromFlag())
-			if err != nil {
-				return "", err
-			}
-
-			localAddr, port, err = resolveAddrWithPort(u.String())
-			if err != nil {
-				return "", fmt.Errorf("invalid node address %v", err)
-			}
-		} else {
-			localAddr, port, err = resolveAddrWithPort(node.Address)
-			if err != nil {
-				return "", fmt.Errorf("invalid node address %v", err)
-			}
-		}
 		//local address expect ip:port only with no scheme for connection manager to work
-		config.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", localAddr, port)
-		config.P2P.ExternalAddress = config.Accumulate.LocalAddress
+		config.P2P.ExternalAddress = fmt.Sprintf("%s:%d", publicAddr, port-int(cfg.PortOffsetAccumulateApi)+int(cfg.PortOffsetTendermintP2P))
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
@@ -652,7 +644,12 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		return "", fmt.Errorf("load/generate node key files, %v", err)
 	}
 
-	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
+	// TODO If AppData contains a consensus section, convert to binary genesis
+	genDocBytes, err := cmtjson.MarshalIndent(genDoc, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("write node files, %v", err)
+	}
+	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDocBytes)
 	if err != nil {
 		return "", fmt.Errorf("write node files, %v", err)
 	}

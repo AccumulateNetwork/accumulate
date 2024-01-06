@@ -11,15 +11,11 @@ package database
 //lint:file-ignore S1008,U1000 generated code
 
 import (
-	"encoding/hex"
-	"strconv"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	record "gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -97,7 +93,7 @@ func (c *Batch) BPT() *bpt.BPT {
 }
 
 func (c *Batch) newBPT() *bpt.BPT {
-	return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt", "bpt")
+	return newBPT(c, c.logger.L, c.store, (*record.Key)(nil).Append("BPT"), "bpt")
 }
 
 func (c *Batch) getAccount(url *url.URL) *Account {
@@ -110,7 +106,6 @@ func (c *Batch) newAccount(k accountKey) *Account {
 	v.store = c.store
 	v.key = (*record.Key)(nil).Append("Account", k.Url)
 	v.parent = c
-	v.label = "account" + " " + k.Url.RawString()
 	return v
 }
 
@@ -124,7 +119,6 @@ func (c *Batch) newMessage(k messageKey) *Message {
 	v.store = c.store
 	v.key = (*record.Key)(nil).Append("Message", k.Hash)
 	v.parent = c
-	v.label = "message" + " " + hex.EncodeToString(k.Hash[:])
 	return v
 }
 
@@ -138,7 +132,6 @@ func (c *Batch) newTransaction(k transactionKey) *Transaction {
 	v.store = c.store
 	v.key = (*record.Key)(nil).Append("Transaction", k.Hash)
 	v.parent = c
-	v.label = "transaction" + " " + hex.EncodeToString(k.Hash[:])
 	return v
 }
 
@@ -152,7 +145,6 @@ func (c *Batch) newSystemData(k systemDataKey) *SystemData {
 	v.store = c.store
 	v.key = (*record.Key)(nil).Append("SystemData", k.Partition)
 	v.parent = c
-	v.label = "system data" + " " + k.Partition
 	return v
 }
 
@@ -299,7 +291,6 @@ type Account struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *Batch
 
 	url                    values.Value[*url.URL]
@@ -313,6 +304,7 @@ type Account struct {
 	scratchChain           *Chain2
 	signatureChain         *Chain2
 	rootChain              *Chain2
+	bptChain               *Chain2
 	anchorSequenceChain    *Chain2
 	majorBlockChain        *Chain2
 	syntheticSequenceChain map[accountSyntheticSequenceChainMapKey]*Chain2
@@ -377,7 +369,7 @@ func (c *Account) getUrl() values.Value[*url.URL] {
 }
 
 func (c *Account) newUrl() values.Value[*url.URL] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Url"), c.label+" "+"url", false, values.Wrapped(values.UrlWrapper))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Url"), false, values.Wrapped(values.UrlWrapper))
 }
 
 func (c *Account) Main() values.Value[protocol.Account] {
@@ -385,7 +377,7 @@ func (c *Account) Main() values.Value[protocol.Account] {
 }
 
 func (c *Account) newMain() values.Value[protocol.Account] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Union(protocol.UnmarshalAccount))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), false, values.Union(protocol.UnmarshalAccount))
 }
 
 func (c *Account) Pending() values.Set[*url.TxID] {
@@ -393,7 +385,7 @@ func (c *Account) Pending() values.Set[*url.TxID] {
 }
 
 func (c *Account) newPending() values.Set[*url.TxID] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Pending"), c.label+" "+"pending", values.Wrapped(values.TxidWrapper), values.CompareTxid)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Pending"), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *Account) SyntheticForAnchor(anchor [32]byte) values.Set[*url.TxID] {
@@ -401,7 +393,7 @@ func (c *Account) SyntheticForAnchor(anchor [32]byte) values.Set[*url.TxID] {
 }
 
 func (c *Account) newSyntheticForAnchor(k accountSyntheticForAnchorKey) values.Set[*url.TxID] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", k.Anchor), c.label+" "+"synthetic for anchor"+" "+hex.EncodeToString(k.Anchor[:]), values.Wrapped(values.TxidWrapper), values.CompareTxid)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", k.Anchor), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *Account) Directory() values.Set[*url.URL] {
@@ -409,7 +401,7 @@ func (c *Account) Directory() values.Set[*url.URL] {
 }
 
 func (c *Account) newDirectory() values.Set[*url.URL] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" "+"directory", values.Wrapped(values.UrlWrapper), values.CompareUrl)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Directory"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
 }
 
 func (c *Account) Events() *AccountEvents {
@@ -422,7 +414,6 @@ func (c *Account) newEvents() *AccountEvents {
 	v.store = c.store
 	v.key = c.key.Append("Events")
 	v.parent = c
-	v.label = c.label + " " + "events"
 	return v
 }
 
@@ -436,7 +427,6 @@ func (c *Account) newTransaction(k accountTransactionKey) *AccountTransaction {
 	v.store = c.store
 	v.key = c.key.Append("Transaction", k.Hash)
 	v.parent = c
-	v.label = c.label + " " + "transaction" + " " + hex.EncodeToString(k.Hash[:])
 	return v
 }
 
@@ -445,7 +435,7 @@ func (c *Account) MainChain() *Chain2 {
 }
 
 func (c *Account) newMainChain() *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("MainChain"), "main", c.label+" "+"main chain")
+	return newChain2(c, c.logger.L, c.store, c.key.Append("MainChain"), "main")
 }
 
 func (c *Account) ScratchChain() *Chain2 {
@@ -453,7 +443,7 @@ func (c *Account) ScratchChain() *Chain2 {
 }
 
 func (c *Account) newScratchChain() *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("ScratchChain"), "scratch", c.label+" "+"scratch chain")
+	return newChain2(c, c.logger.L, c.store, c.key.Append("ScratchChain"), "scratch")
 }
 
 func (c *Account) SignatureChain() *Chain2 {
@@ -461,7 +451,7 @@ func (c *Account) SignatureChain() *Chain2 {
 }
 
 func (c *Account) newSignatureChain() *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("SignatureChain"), "signature", c.label+" "+"signature chain")
+	return newChain2(c, c.logger.L, c.store, c.key.Append("SignatureChain"), "signature")
 }
 
 func (c *Account) RootChain() *Chain2 {
@@ -469,7 +459,15 @@ func (c *Account) RootChain() *Chain2 {
 }
 
 func (c *Account) newRootChain() *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("RootChain"), "root", c.label+" "+"root chain")
+	return newChain2(c, c.logger.L, c.store, c.key.Append("RootChain"), "root")
+}
+
+func (c *Account) BptChain() *Chain2 {
+	return values.GetOrCreate(c, &c.bptChain, (*Account).newBptChain)
+}
+
+func (c *Account) newBptChain() *Chain2 {
+	return newChain2(c, c.logger.L, c.store, c.key.Append("BptChain"), "bpt")
 }
 
 func (c *Account) AnchorSequenceChain() *Chain2 {
@@ -477,7 +475,7 @@ func (c *Account) AnchorSequenceChain() *Chain2 {
 }
 
 func (c *Account) newAnchorSequenceChain() *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("AnchorSequenceChain"), "anchor-sequence", c.label+" "+"anchor sequence chain")
+	return newChain2(c, c.logger.L, c.store, c.key.Append("AnchorSequenceChain"), "anchor-sequence")
 }
 
 func (c *Account) MajorBlockChain() *Chain2 {
@@ -485,7 +483,7 @@ func (c *Account) MajorBlockChain() *Chain2 {
 }
 
 func (c *Account) newMajorBlockChain() *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("MajorBlockChain"), "major-block", c.label+" "+"major block chain")
+	return newChain2(c, c.logger.L, c.store, c.key.Append("MajorBlockChain"), "major-block")
 }
 
 func (c *Account) getSyntheticSequenceChain(partition string) *Chain2 {
@@ -493,7 +491,7 @@ func (c *Account) getSyntheticSequenceChain(partition string) *Chain2 {
 }
 
 func (c *Account) newSyntheticSequenceChain(k accountSyntheticSequenceChainKey) *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", k.Partition), "synthetic-sequence(%[4]v)", c.label+" "+"synthetic sequence chain"+" "+k.Partition)
+	return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", k.Partition), "synthetic-sequence(%[4]v)")
 }
 
 func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
@@ -506,7 +504,6 @@ func (c *Account) newAnchorChain(k accountAnchorChainKey) *AccountAnchorChain {
 	v.store = c.store
 	v.key = c.key.Append("AnchorChain", k.Partition)
 	v.parent = c
-	v.label = c.label + " " + "anchor chain" + " " + k.Partition
 	return v
 }
 
@@ -515,7 +512,7 @@ func (c *Account) Chains() values.Set[*protocol.ChainMetadata] {
 }
 
 func (c *Account) newChains() values.Set[*protocol.ChainMetadata] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" "+"chains", values.Struct[protocol.ChainMetadata](), func(u, v *protocol.ChainMetadata) int { return u.Compare(v) })
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Chains"), values.Struct[protocol.ChainMetadata](), func(u, v *protocol.ChainMetadata) int { return u.Compare(v) })
 }
 
 func (c *Account) SyntheticAnchors() values.Set[[32]byte] {
@@ -523,7 +520,7 @@ func (c *Account) SyntheticAnchors() values.Set[[32]byte] {
 }
 
 func (c *Account) newSyntheticAnchors() values.Set[[32]byte] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), c.label+" "+"synthetic anchors", values.Wrapped(values.HashWrapper), values.CompareHash)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
 func (c *Account) Data() *AccountData {
@@ -536,7 +533,6 @@ func (c *Account) newData() *AccountData {
 	v.store = c.store
 	v.key = c.key.Append("Data")
 	v.parent = c
-	v.label = c.label + " " + "data"
 	return v
 }
 
@@ -584,6 +580,8 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.SignatureChain(), key.SliceI(1), nil
 	case "RootChain":
 		return c.RootChain(), key.SliceI(1), nil
+	case "BptChain":
+		return c.BptChain(), key.SliceI(1), nil
 	case "AnchorSequenceChain":
 		return c.AnchorSequenceChain(), key.SliceI(1), nil
 	case "MajorBlockChain":
@@ -661,6 +659,9 @@ func (c *Account) IsDirty() bool {
 	if values.IsDirty(c.rootChain) {
 		return true
 	}
+	if values.IsDirty(c.bptChain) {
+		return true
+	}
 	if values.IsDirty(c.anchorSequenceChain) {
 		return true
 	}
@@ -701,6 +702,7 @@ func (c *Account) dirtyChains() []*MerkleManager {
 	chains = append(chains, c.scratchChain.dirtyChains()...)
 	chains = append(chains, c.signatureChain.dirtyChains()...)
 	chains = append(chains, c.rootChain.dirtyChains()...)
+	chains = append(chains, c.bptChain.dirtyChains()...)
 	chains = append(chains, c.anchorSequenceChain.dirtyChains()...)
 	chains = append(chains, c.majorBlockChain.dirtyChains()...)
 	for _, v := range c.syntheticSequenceChain {
@@ -733,6 +735,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
 	values.WalkField(&err, c.signatureChain, c.newSignatureChain, opts, fn)
 	values.WalkField(&err, c.rootChain, c.newRootChain, opts, fn)
+	values.WalkField(&err, c.bptChain, c.newBptChain, opts, fn)
 	values.WalkField(&err, c.anchorSequenceChain, c.newAnchorSequenceChain, opts, fn)
 	values.WalkField(&err, c.majorBlockChain, c.newMajorBlockChain, opts, fn)
 	values.WalkMap(&err, c.syntheticSequenceChain, c.newSyntheticSequenceChain, c.getSyntheticSequenceKeys, opts, fn)
@@ -766,6 +769,7 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.scratchChain)
 	values.Commit(&err, c.signatureChain)
 	values.Commit(&err, c.rootChain)
+	values.Commit(&err, c.bptChain)
 	values.Commit(&err, c.anchorSequenceChain)
 	values.Commit(&err, c.majorBlockChain)
 	for _, v := range c.syntheticSequenceChain {
@@ -785,7 +789,6 @@ type AccountEvents struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *Account
 
 	minor   *AccountEventsMinor
@@ -806,7 +809,6 @@ func (c *AccountEvents) newMinor() *AccountEventsMinor {
 	v.store = c.store
 	v.key = c.key.Append("Minor")
 	v.parent = c
-	v.label = c.label + " " + "minor"
 	return v
 }
 
@@ -820,7 +822,6 @@ func (c *AccountEvents) newMajor() *AccountEventsMajor {
 	v.store = c.store
 	v.key = c.key.Append("Major")
 	v.parent = c
-	v.label = c.label + " " + "major"
 	return v
 }
 
@@ -834,7 +835,6 @@ func (c *AccountEvents) newBacklog() *AccountEventsBacklog {
 	v.store = c.store
 	v.key = c.key.Append("Backlog")
 	v.parent = c
-	v.label = c.label + " " + "backlog"
 	return v
 }
 
@@ -843,7 +843,7 @@ func (c *AccountEvents) BPT() *bpt.BPT {
 }
 
 func (c *AccountEvents) newBPT() *bpt.BPT {
-	return newBPT(c, c.logger.L, c.store, c.key.Append("BPT"), "events-bpt", c.label+" "+"bpt")
+	return newBPT(c, c.logger.L, c.store, c.key.Append("BPT"), "events-bpt")
 }
 
 func (c *AccountEvents) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -920,7 +920,6 @@ type AccountEventsMinor struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *AccountEvents
 
 	blocks values.Set[uint64]
@@ -946,7 +945,7 @@ func (c *AccountEventsMinor) Blocks() values.Set[uint64] {
 }
 
 func (c *AccountEventsMinor) newBlocks() values.Set[uint64] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Blocks"), c.label+" "+"blocks", values.Wrapped(values.UintWrapper), values.CompareUint)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Blocks"), values.Wrapped(values.UintWrapper), values.CompareUint)
 }
 
 func (c *AccountEventsMinor) Votes(block uint64) values.Set[*protocol.AuthoritySignature] {
@@ -954,7 +953,7 @@ func (c *AccountEventsMinor) Votes(block uint64) values.Set[*protocol.AuthorityS
 }
 
 func (c *AccountEventsMinor) baseNewVotes(k accountEventsMinorVotesKey) values.Set[*protocol.AuthoritySignature] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Votes", k.Block), c.label+" "+"votes"+" "+strconv.FormatUint(k.Block, 10), values.Struct[protocol.AuthoritySignature](), compareHeldAuthSig)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Votes", k.Block), values.Struct[protocol.AuthoritySignature](), compareHeldAuthSig)
 }
 
 func (c *AccountEventsMinor) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1029,7 +1028,6 @@ type AccountEventsMajor struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *AccountEvents
 
 	blocks  values.Set[uint64]
@@ -1055,7 +1053,7 @@ func (c *AccountEventsMajor) Blocks() values.Set[uint64] {
 }
 
 func (c *AccountEventsMajor) newBlocks() values.Set[uint64] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Blocks"), c.label+" "+"blocks", values.Wrapped(values.UintWrapper), values.CompareUint)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Blocks"), values.Wrapped(values.UintWrapper), values.CompareUint)
 }
 
 func (c *AccountEventsMajor) Pending(block uint64) values.Set[*url.TxID] {
@@ -1063,7 +1061,7 @@ func (c *AccountEventsMajor) Pending(block uint64) values.Set[*url.TxID] {
 }
 
 func (c *AccountEventsMajor) baseNewPending(k accountEventsMajorPendingKey) values.Set[*url.TxID] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Pending", k.Block), c.label+" "+"pending"+" "+strconv.FormatUint(k.Block, 10), values.Wrapped(values.TxidWrapper), values.CompareTxid)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Pending", k.Block), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *AccountEventsMajor) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1138,7 +1136,6 @@ type AccountEventsBacklog struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *AccountEvents
 
 	expired values.Set[*url.TxID]
@@ -1151,7 +1148,7 @@ func (c *AccountEventsBacklog) Expired() values.Set[*url.TxID] {
 }
 
 func (c *AccountEventsBacklog) baseNewExpired() values.Set[*url.TxID] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Expired"), c.label+" "+"expired", values.Wrapped(values.TxidWrapper), values.CompareTxid)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Expired"), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *AccountEventsBacklog) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1207,7 +1204,6 @@ type AccountTransaction struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *Account
 
 	payments            values.Set[[32]byte]
@@ -1224,7 +1220,7 @@ func (c *AccountTransaction) Payments() values.Set[[32]byte] {
 }
 
 func (c *AccountTransaction) newPayments() values.Set[[32]byte] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Payments"), c.label+" "+"payments", values.Wrapped(values.HashWrapper), values.CompareHash)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Payments"), values.Wrapped(values.HashWrapper), values.CompareHash)
 }
 
 func (c *AccountTransaction) Votes() values.Set[*VoteEntry] {
@@ -1232,7 +1228,7 @@ func (c *AccountTransaction) Votes() values.Set[*VoteEntry] {
 }
 
 func (c *AccountTransaction) newVotes() values.Set[*VoteEntry] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Votes"), c.label+" "+"votes", values.Struct[VoteEntry](), compareVoteEntries)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Votes"), values.Struct[VoteEntry](), compareVoteEntries)
 }
 
 func (c *AccountTransaction) Signatures() values.Set[*SignatureSetEntry] {
@@ -1240,7 +1236,7 @@ func (c *AccountTransaction) Signatures() values.Set[*SignatureSetEntry] {
 }
 
 func (c *AccountTransaction) newSignatures() values.Set[*SignatureSetEntry] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" "+"signatures", values.Struct[SignatureSetEntry](), compareSignatureSetEntries)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Signatures"), values.Struct[SignatureSetEntry](), compareSignatureSetEntries)
 }
 
 func (c *AccountTransaction) ValidatorSignatures() values.Set[protocol.KeySignature] {
@@ -1248,7 +1244,7 @@ func (c *AccountTransaction) ValidatorSignatures() values.Set[protocol.KeySignat
 }
 
 func (c *AccountTransaction) newValidatorSignatures() values.Set[protocol.KeySignature] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("ValidatorSignatures"), c.label+" "+"validator signatures", values.Union(protocol.UnmarshalKeySignature), compareSignatureByKey)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("ValidatorSignatures"), values.Union(protocol.UnmarshalKeySignature), compareSignatureByKey)
 }
 
 func (c *AccountTransaction) History() values.Set[uint64] {
@@ -1256,7 +1252,7 @@ func (c *AccountTransaction) History() values.Set[uint64] {
 }
 
 func (c *AccountTransaction) newHistory() values.Set[uint64] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("History"), c.label+" "+"history", values.Wrapped(values.UintWrapper), values.CompareUint)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("History"), values.Wrapped(values.UintWrapper), values.CompareUint)
 }
 
 func (c *AccountTransaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1342,7 +1338,6 @@ type AccountAnchorChain struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *Account
 
 	root *Chain2
@@ -1356,7 +1351,7 @@ func (c *AccountAnchorChain) Root() *Chain2 {
 }
 
 func (c *AccountAnchorChain) newRoot() *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("Root"), "anchor(%[4]v)-root", c.label+" "+"root")
+	return newChain2(c, c.logger.L, c.store, c.key.Append("Root"), "anchor(%[4]v)-root")
 }
 
 func (c *AccountAnchorChain) BPT() *Chain2 {
@@ -1364,7 +1359,7 @@ func (c *AccountAnchorChain) BPT() *Chain2 {
 }
 
 func (c *AccountAnchorChain) newBPT() *Chain2 {
-	return newChain2(c, c.logger.L, c.store, c.key.Append("BPT"), "anchor(%[4]v)-bpt", c.label+" "+"bpt")
+	return newChain2(c, c.logger.L, c.store, c.key.Append("BPT"), "anchor(%[4]v)-bpt")
 }
 
 func (c *AccountAnchorChain) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1440,7 +1435,6 @@ type AccountData struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *Account
 
 	entry       values.Counted[[32]byte]
@@ -1466,7 +1460,7 @@ func (c *AccountData) Entry() values.Counted[[32]byte] {
 }
 
 func (c *AccountData) newEntry() values.Counted[[32]byte] {
-	return values.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), c.label+" "+"entry", values.WrappedFactory(values.HashWrapper))
+	return values.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), values.WrappedFactory(values.HashWrapper))
 }
 
 func (c *AccountData) Transaction(entryHash [32]byte) values.Value[[32]byte] {
@@ -1474,7 +1468,7 @@ func (c *AccountData) Transaction(entryHash [32]byte) values.Value[[32]byte] {
 }
 
 func (c *AccountData) newTransaction(k accountDataTransactionKey) values.Value[[32]byte] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Transaction", k.EntryHash), c.label+" "+"transaction"+" "+hex.EncodeToString(k.EntryHash[:]), false, values.Wrapped(values.HashWrapper))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Transaction", k.EntryHash), false, values.Wrapped(values.HashWrapper))
 }
 
 func (c *AccountData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1553,7 +1547,6 @@ type Message struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *Batch
 
 	main     values.Value[messaging.Message]
@@ -1569,7 +1562,7 @@ func (c *Message) getMain() values.Value[messaging.Message] {
 }
 
 func (c *Message) newMain() values.Value[messaging.Message] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Union(messaging.UnmarshalMessage))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), false, values.Union(messaging.UnmarshalMessage))
 }
 
 func (c *Message) Cause() values.Set[*url.TxID] {
@@ -1577,7 +1570,7 @@ func (c *Message) Cause() values.Set[*url.TxID] {
 }
 
 func (c *Message) newCause() values.Set[*url.TxID] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Cause"), c.label+" "+"cause", values.Wrapped(values.TxidWrapper), values.CompareTxid)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Cause"), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *Message) Produced() values.Set[*url.TxID] {
@@ -1585,7 +1578,7 @@ func (c *Message) Produced() values.Set[*url.TxID] {
 }
 
 func (c *Message) newProduced() values.Set[*url.TxID] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" "+"produced", values.Wrapped(values.TxidWrapper), values.CompareTxid)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Produced"), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *Message) Signers() values.Set[*url.URL] {
@@ -1593,7 +1586,7 @@ func (c *Message) Signers() values.Set[*url.URL] {
 }
 
 func (c *Message) newSigners() values.Set[*url.URL] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Signers"), c.label+" "+"signers", values.Wrapped(values.UrlWrapper), values.CompareUrl)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Signers"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
 }
 
 func (c *Message) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1676,7 +1669,6 @@ type Transaction struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *Batch
 
 	main       values.Value[*SigOrTxn]
@@ -1705,7 +1697,7 @@ func (c *Transaction) Main() values.Value[*SigOrTxn] {
 }
 
 func (c *Transaction) newMain() values.Value[*SigOrTxn] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, values.Struct[SigOrTxn]())
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Main"), false, values.Struct[SigOrTxn]())
 }
 
 func (c *Transaction) getStatus() values.Value[*protocol.TransactionStatus] {
@@ -1713,7 +1705,7 @@ func (c *Transaction) getStatus() values.Value[*protocol.TransactionStatus] {
 }
 
 func (c *Transaction) newStatus() values.Value[*protocol.TransactionStatus] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" "+"status", true, values.Struct[protocol.TransactionStatus]())
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Status"), true, values.Struct[protocol.TransactionStatus]())
 }
 
 func (c *Transaction) Produced() values.Set[*url.TxID] {
@@ -1721,7 +1713,7 @@ func (c *Transaction) Produced() values.Set[*url.TxID] {
 }
 
 func (c *Transaction) newProduced() values.Set[*url.TxID] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" "+"produced", values.Wrapped(values.TxidWrapper), values.CompareTxid)
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Produced"), values.Wrapped(values.TxidWrapper), values.CompareTxid)
 }
 
 func (c *Transaction) getSignatures(signer *url.URL) values.Value[*sigSetData] {
@@ -1729,7 +1721,7 @@ func (c *Transaction) getSignatures(signer *url.URL) values.Value[*sigSetData] {
 }
 
 func (c *Transaction) newSignatures(k transactionSignaturesKey) values.Value[*sigSetData] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Signatures", k.Signer), c.label+" "+"signatures"+" "+k.Signer.RawString(), true, values.Struct[sigSetData]())
+	return values.NewValue(c.logger.L, c.store, c.key.Append("Signatures", k.Signer), true, values.Struct[sigSetData]())
 }
 
 func (c *Transaction) Chains() values.Set[*TransactionChainEntry] {
@@ -1737,7 +1729,7 @@ func (c *Transaction) Chains() values.Set[*TransactionChainEntry] {
 }
 
 func (c *Transaction) newChains() values.Set[*TransactionChainEntry] {
-	return values.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" "+"chains", values.Struct[TransactionChainEntry](), func(u, v *TransactionChainEntry) int { return u.Compare(v) })
+	return values.NewSet(c.logger.L, c.store, c.key.Append("Chains"), values.Struct[TransactionChainEntry](), func(u, v *TransactionChainEntry) int { return u.Compare(v) })
 }
 
 func (c *Transaction) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1835,7 +1827,6 @@ type SystemData struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    *record.Key
-	label  string
 	parent *Batch
 
 	syntheticIndexIndex map[systemDataSyntheticIndexIndexMapKey]values.Value[uint64]
@@ -1860,7 +1851,7 @@ func (c *SystemData) SyntheticIndexIndex(block uint64) values.Value[uint64] {
 }
 
 func (c *SystemData) newSyntheticIndexIndex(k systemDataSyntheticIndexIndexKey) values.Value[uint64] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("SyntheticIndexIndex", k.Block), c.label+" "+"synthetic index index"+" "+strconv.FormatUint(k.Block, 10), false, values.Wrapped(values.UintWrapper))
+	return values.NewValue(c.logger.L, c.store, c.key.Append("SyntheticIndexIndex", k.Block), false, values.Wrapped(values.UintWrapper))
 }
 
 func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -1920,203 +1911,6 @@ func (c *SystemData) Commit() error {
 
 	var err error
 	for _, v := range c.syntheticIndexIndex {
-		values.Commit(&err, v)
-	}
-
-	return err
-}
-
-type MerkleManager struct {
-	logger    logging.OptionalLogger
-	store     record.Store
-	key       *record.Key
-	label     string
-	typ       merkle.ChainType
-	name      string
-	markPower int64
-	markFreq  int64
-	markMask  int64
-
-	head         values.Value[*merkle.State]
-	states       map[merkleManagerStatesMapKey]values.Value[*merkle.State]
-	elementIndex map[merkleManagerElementIndexMapKey]values.Value[uint64]
-	element      map[merkleManagerElementMapKey]values.Value[[]byte]
-}
-
-func (c *MerkleManager) Key() *record.Key { return c.key }
-
-type merkleManagerStatesKey struct {
-	Index uint64
-}
-
-type merkleManagerStatesMapKey struct {
-	Index uint64
-}
-
-func (k merkleManagerStatesKey) ForMap() merkleManagerStatesMapKey {
-	return merkleManagerStatesMapKey{k.Index}
-}
-
-type merkleManagerElementIndexKey struct {
-	Hash []byte
-}
-
-type merkleManagerElementIndexMapKey struct {
-	Hash [32]byte
-}
-
-func (k merkleManagerElementIndexKey) ForMap() merkleManagerElementIndexMapKey {
-	return merkleManagerElementIndexMapKey{values.MapKeyBytes(k.Hash)}
-}
-
-type merkleManagerElementKey struct {
-	Index uint64
-}
-
-type merkleManagerElementMapKey struct {
-	Index uint64
-}
-
-func (k merkleManagerElementKey) ForMap() merkleManagerElementMapKey {
-	return merkleManagerElementMapKey{k.Index}
-}
-
-func (c *MerkleManager) Head() values.Value[*merkle.State] {
-	return values.GetOrCreate(c, &c.head, (*MerkleManager).newHead)
-}
-
-func (c *MerkleManager) newHead() values.Value[*merkle.State] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" "+"head", true, values.Struct[merkle.State]())
-}
-
-func (c *MerkleManager) States(index uint64) values.Value[*merkle.State] {
-	return values.GetOrCreateMap(c, &c.states, merkleManagerStatesKey{index}, (*MerkleManager).newStates)
-}
-
-func (c *MerkleManager) newStates(k merkleManagerStatesKey) values.Value[*merkle.State] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("States", k.Index), c.label+" "+"states"+" "+strconv.FormatUint(k.Index, 10), false, values.Struct[merkle.State]())
-}
-
-func (c *MerkleManager) ElementIndex(hash []byte) values.Value[uint64] {
-	return values.GetOrCreateMap(c, &c.elementIndex, merkleManagerElementIndexKey{hash}, (*MerkleManager).newElementIndex)
-}
-
-func (c *MerkleManager) newElementIndex(k merkleManagerElementIndexKey) values.Value[uint64] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", k.Hash), c.label+" "+"element index"+" "+hex.EncodeToString(k.Hash), false, values.Wrapped(values.UintWrapper))
-}
-
-func (c *MerkleManager) Element(index uint64) values.Value[[]byte] {
-	return values.GetOrCreateMap(c, &c.element, merkleManagerElementKey{index}, (*MerkleManager).newElement)
-}
-
-func (c *MerkleManager) newElement(k merkleManagerElementKey) values.Value[[]byte] {
-	return values.NewValue(c.logger.L, c.store, c.key.Append("Element", k.Index), c.label+" "+"element"+" "+strconv.FormatUint(k.Index, 10), false, values.Wrapped(values.BytesWrapper))
-}
-
-func (c *MerkleManager) Resolve(key *record.Key) (record.Record, *record.Key, error) {
-	if key.Len() == 0 {
-		return nil, nil, errors.InternalError.With("bad key for merkle manager (1)")
-	}
-
-	switch key.Get(0) {
-	case "Head":
-		return c.Head(), key.SliceI(1), nil
-	case "States":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (2)")
-		}
-		index, okIndex := key.Get(1).(uint64)
-		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (3)")
-		}
-		v := c.States(index)
-		return v, key.SliceI(2), nil
-	case "ElementIndex":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (4)")
-		}
-		hash, okHash := key.Get(1).([]byte)
-		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (5)")
-		}
-		v := c.ElementIndex(hash)
-		return v, key.SliceI(2), nil
-	case "Element":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (6)")
-		}
-		index, okIndex := key.Get(1).(uint64)
-		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for merkle manager (7)")
-		}
-		v := c.Element(index)
-		return v, key.SliceI(2), nil
-	default:
-		return nil, nil, errors.InternalError.With("bad key for merkle manager (8)")
-	}
-}
-
-func (c *MerkleManager) IsDirty() bool {
-	if c == nil {
-		return false
-	}
-
-	if values.IsDirty(c.head) {
-		return true
-	}
-	for _, v := range c.states {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.elementIndex {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.element {
-		if v.IsDirty() {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (c *MerkleManager) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
-	if c == nil {
-		return nil
-	}
-
-	skip, err := values.WalkComposite(c, opts, fn)
-	if skip || err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	values.WalkField(&err, c.head, c.newHead, opts, fn)
-	values.WalkMap(&err, c.states, c.newStates, c.getMarkPoints, opts, fn)
-	if !opts.IgnoreIndices {
-		values.WalkMap(&err, c.elementIndex, c.newElementIndex, nil, opts, fn)
-	}
-	if !opts.IgnoreIndices {
-		values.WalkMap(&err, c.element, c.newElement, nil, opts, fn)
-	}
-	return err
-}
-
-func (c *MerkleManager) Commit() error {
-	if c == nil {
-		return nil
-	}
-
-	var err error
-	values.Commit(&err, c.head)
-	for _, v := range c.states {
-		values.Commit(&err, v)
-	}
-	for _, v := range c.elementIndex {
-		values.Commit(&err, v)
-	}
-	for _, v := range c.element {
 		values.Commit(&err, v)
 	}
 

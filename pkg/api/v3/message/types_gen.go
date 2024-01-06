@@ -18,6 +18,7 @@ import (
 	"io"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
@@ -35,7 +36,7 @@ type Addressed struct {
 
 type ConsensusStatusRequest struct {
 	fieldsSet []bool
-	ConsensusStatusOptions
+	api.ConsensusStatusOptions
 	extraData []byte
 }
 
@@ -60,7 +61,7 @@ type EventMessage struct {
 type FaucetRequest struct {
 	fieldsSet []bool
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	FaucetOptions
+	api.FaucetOptions
 	extraData []byte
 }
 
@@ -72,7 +73,7 @@ type FaucetResponse struct {
 
 type FindServiceRequest struct {
 	fieldsSet []bool
-	FindServiceOptions
+	api.FindServiceOptions
 	extraData []byte
 }
 
@@ -84,7 +85,7 @@ type FindServiceResponse struct {
 
 type MetricsRequest struct {
 	fieldsSet []bool
-	MetricsOptions
+	api.MetricsOptions
 	extraData []byte
 }
 
@@ -96,7 +97,7 @@ type MetricsResponse struct {
 
 type NetworkStatusRequest struct {
 	fieldsSet []bool
-	NetworkStatusOptions
+	api.NetworkStatusOptions
 	extraData []byte
 }
 
@@ -108,7 +109,7 @@ type NetworkStatusResponse struct {
 
 type NodeInfoRequest struct {
 	fieldsSet []bool
-	NodeInfoOptions
+	api.NodeInfoOptions
 	extraData []byte
 }
 
@@ -123,7 +124,8 @@ type PrivateSequenceRequest struct {
 	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
 	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
-	extraData      []byte
+	private.SequenceOptions
+	extraData []byte
 }
 
 type PrivateSequenceResponse struct {
@@ -148,7 +150,7 @@ type RecordResponse struct {
 type SubmitRequest struct {
 	fieldsSet []bool
 	Envelope  *messaging.Envelope `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	SubmitOptions
+	api.SubmitOptions
 	extraData []byte
 }
 
@@ -160,7 +162,7 @@ type SubmitResponse struct {
 
 type SubscribeRequest struct {
 	fieldsSet []bool
-	SubscribeOptions
+	api.SubscribeOptions
 	extraData []byte
 }
 
@@ -172,7 +174,7 @@ type SubscribeResponse struct {
 type ValidateRequest struct {
 	fieldsSet []bool
 	Envelope  *messaging.Envelope `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	ValidateOptions
+	api.ValidateOptions
 	extraData []byte
 }
 
@@ -302,6 +304,7 @@ func (v *EventMessage) Copy() *EventMessage {
 
 	u.Value = make([]api.Event, len(v.Value))
 	for i, v := range v.Value {
+		v := v
 		if v != nil {
 			u.Value[i] = api.CopyEvent(v)
 		}
@@ -368,6 +371,7 @@ func (v *FindServiceResponse) Copy() *FindServiceResponse {
 
 	u.Value = make([]*api.FindServiceResult, len(v.Value))
 	for i, v := range v.Value {
+		v := v
 		if v != nil {
 			u.Value[i] = (v).Copy()
 		}
@@ -482,6 +486,7 @@ func (v *PrivateSequenceRequest) Copy() *PrivateSequenceRequest {
 		u.Destination = v.Destination
 	}
 	u.SequenceNumber = v.SequenceNumber
+	u.SequenceOptions = *v.SequenceOptions.Copy()
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -565,6 +570,7 @@ func (v *SubmitResponse) Copy() *SubmitResponse {
 
 	u.Value = make([]*api.Submission, len(v.Value))
 	for i, v := range v.Value {
+		v := v
 		if v != nil {
 			u.Value[i] = (v).Copy()
 		}
@@ -628,6 +634,7 @@ func (v *ValidateResponse) Copy() *ValidateResponse {
 
 	u.Value = make([]*api.Submission, len(v.Value))
 	for i, v := range v.Value {
+		v := v
 		if v != nil {
 			u.Value[i] = (v).Copy()
 		}
@@ -831,6 +838,9 @@ func (v *PrivateSequenceRequest) Equal(u *PrivateSequenceRequest) bool {
 		return false
 	}
 	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
+	if !v.SequenceOptions.Equal(&u.SequenceOptions) {
 		return false
 	}
 
@@ -1660,6 +1670,7 @@ var fieldNames_PrivateSequenceRequest = []string{
 	2: "Source",
 	3: "Destination",
 	4: "SequenceNumber",
+	5: "SequenceOptions",
 }
 
 func (v *PrivateSequenceRequest) MarshalBinary() ([]byte, error) {
@@ -1680,6 +1691,7 @@ func (v *PrivateSequenceRequest) MarshalBinary() ([]byte, error) {
 	if !(v.SequenceNumber == 0) {
 		writer.WriteUint(4, v.SequenceNumber)
 	}
+	writer.WriteValue(5, v.SequenceOptions.MarshalBinary)
 
 	_, _, err := writer.Reset(fieldNames_PrivateSequenceRequest)
 	if err != nil {
@@ -1709,6 +1721,9 @@ func (v *PrivateSequenceRequest) IsValid() error {
 		errs = append(errs, "field SequenceNumber is missing")
 	} else if v.SequenceNumber == 0 {
 		errs = append(errs, "field SequenceNumber is not set")
+	}
+	if err := v.SequenceOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	switch len(errs) {
@@ -2718,6 +2733,7 @@ func (v *PrivateSequenceRequest) UnmarshalFieldsFrom(reader *encoding.Reader) er
 	if x, ok := reader.ReadUint(4); ok {
 		v.SequenceNumber = x
 	}
+	reader.ReadValue(5, v.SequenceOptions.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_PrivateSequenceRequest)
 	if err != nil {
@@ -3080,9 +3096,11 @@ func (v *Addressed) MarshalJSON() ([]byte, error) {
 
 func (v *ConsensusStatusRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      Type   `json:"type"`
-		NodeID    string `json:"nodeID,omitempty"`
-		Partition string `json:"partition,omitempty"`
+		Type              Type   `json:"type"`
+		NodeID            string `json:"nodeID,omitempty"`
+		Partition         string `json:"partition,omitempty"`
+		IncludePeers      *bool  `json:"includePeers,omitempty"`
+		IncludeAccumulate *bool  `json:"includeAccumulate,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.ConsensusStatusOptions.NodeID) == 0) {
@@ -3092,6 +3110,14 @@ func (v *ConsensusStatusRequest) MarshalJSON() ([]byte, error) {
 	if !(len(v.ConsensusStatusOptions.Partition) == 0) {
 
 		u.Partition = v.ConsensusStatusOptions.Partition
+	}
+	if !(v.ConsensusStatusOptions.IncludePeers == nil) {
+
+		u.IncludePeers = v.ConsensusStatusOptions.IncludePeers
+	}
+	if !(v.ConsensusStatusOptions.IncludeAccumulate == nil) {
+
+		u.IncludeAccumulate = v.ConsensusStatusOptions.IncludeAccumulate
 	}
 	return json.Marshal(&u)
 }
@@ -3164,6 +3190,8 @@ func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
 		Type    Type                `json:"type"`
 		Network string              `json:"network,omitempty"`
 		Service *api.ServiceAddress `json:"service,omitempty"`
+		Known   bool                `json:"known,omitempty"`
+		Timeout interface{}         `json:"timeout,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(len(v.FindServiceOptions.Network) == 0) {
@@ -3173,6 +3201,14 @@ func (v *FindServiceRequest) MarshalJSON() ([]byte, error) {
 	if !(v.FindServiceOptions.Service == nil) {
 
 		u.Service = v.FindServiceOptions.Service
+	}
+	if !(!v.FindServiceOptions.Known) {
+
+		u.Known = v.FindServiceOptions.Known
+	}
+	if !(v.FindServiceOptions.Timeout == 0) {
+
+		u.Timeout = encoding.DurationToJSON(v.FindServiceOptions.Timeout)
 	}
 	return json.Marshal(&u)
 }
@@ -3269,10 +3305,11 @@ func (v *NodeInfoResponse) MarshalJSON() ([]byte, error) {
 
 func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           Type     `json:"type"`
-		Source         *url.URL `json:"source,omitempty"`
-		Destination    *url.URL `json:"destination,omitempty"`
-		SequenceNumber uint64   `json:"sequenceNumber,omitempty"`
+		Type           Type                                    `json:"type"`
+		Source         *url.URL                                `json:"source,omitempty"`
+		Destination    *url.URL                                `json:"destination,omitempty"`
+		SequenceNumber uint64                                  `json:"sequenceNumber,omitempty"`
+		NodeID         *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Source == nil) {
@@ -3283,6 +3320,10 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SequenceNumber == 0) {
 		u.SequenceNumber = v.SequenceNumber
+	}
+	if !(v.SequenceOptions.NodeID == ("")) {
+
+		u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -3440,13 +3481,17 @@ func (v *Addressed) UnmarshalJSON(data []byte) error {
 
 func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      Type   `json:"type"`
-		NodeID    string `json:"nodeID,omitempty"`
-		Partition string `json:"partition,omitempty"`
+		Type              Type   `json:"type"`
+		NodeID            string `json:"nodeID,omitempty"`
+		Partition         string `json:"partition,omitempty"`
+		IncludePeers      *bool  `json:"includePeers,omitempty"`
+		IncludeAccumulate *bool  `json:"includeAccumulate,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.NodeID = v.ConsensusStatusOptions.NodeID
 	u.Partition = v.ConsensusStatusOptions.Partition
+	u.IncludePeers = v.ConsensusStatusOptions.IncludePeers
+	u.IncludeAccumulate = v.ConsensusStatusOptions.IncludeAccumulate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3455,6 +3500,8 @@ func (v *ConsensusStatusRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.ConsensusStatusOptions.NodeID = u.NodeID
 	v.ConsensusStatusOptions.Partition = u.Partition
+	v.ConsensusStatusOptions.IncludePeers = u.IncludePeers
+	v.ConsensusStatusOptions.IncludeAccumulate = u.IncludeAccumulate
 	return nil
 }
 
@@ -3556,10 +3603,14 @@ func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 		Type    Type                `json:"type"`
 		Network string              `json:"network,omitempty"`
 		Service *api.ServiceAddress `json:"service,omitempty"`
+		Known   bool                `json:"known,omitempty"`
+		Timeout interface{}         `json:"timeout,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Network = v.FindServiceOptions.Network
 	u.Service = v.FindServiceOptions.Service
+	u.Known = v.FindServiceOptions.Known
+	u.Timeout = encoding.DurationToJSON(v.FindServiceOptions.Timeout)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3568,6 +3619,12 @@ func (v *FindServiceRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.FindServiceOptions.Network = u.Network
 	v.FindServiceOptions.Service = u.Service
+	v.FindServiceOptions.Known = u.Known
+	if x, err := encoding.DurationFromJSON(u.Timeout); err != nil {
+		return fmt.Errorf("error decoding Timeout: %w", err)
+	} else {
+		v.FindServiceOptions.Timeout = x
+	}
 	return nil
 }
 
@@ -3698,15 +3755,17 @@ func (v *NodeInfoResponse) UnmarshalJSON(data []byte) error {
 
 func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           Type     `json:"type"`
-		Source         *url.URL `json:"source,omitempty"`
-		Destination    *url.URL `json:"destination,omitempty"`
-		SequenceNumber uint64   `json:"sequenceNumber,omitempty"`
+		Type           Type                                    `json:"type"`
+		Source         *url.URL                                `json:"source,omitempty"`
+		Destination    *url.URL                                `json:"destination,omitempty"`
+		SequenceNumber uint64                                  `json:"sequenceNumber,omitempty"`
+		NodeID         *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.Source
 	u.Destination = v.Destination
 	u.SequenceNumber = v.SequenceNumber
+	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3716,6 +3775,10 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 	v.Source = u.Source
 	v.Destination = u.Destination
 	v.SequenceNumber = u.SequenceNumber
+	if u.NodeID != nil {
+		v.SequenceOptions.NodeID = u.NodeID.Value
+	}
+
 	return nil
 }
 

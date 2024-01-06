@@ -10,13 +10,15 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"golang.org/x/exp/slog"
 )
 
 type Viewer interface {
@@ -55,7 +57,7 @@ func (d *Database) Begin(writable bool) *Batch {
 	return b
 }
 
-func NewBatch(id string, store keyvalue.ChangeSet, writable bool, logger log.Logger) *Batch {
+func NewBatch(id string, store keyvalue.Store, writable bool, logger log.Logger) *Batch {
 	b := new(Batch)
 	b.id = id
 	b.writable = writable
@@ -138,7 +140,9 @@ func (b *Batch) Commit() error {
 
 	err := b.baseCommit()
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		// An error during commit indicates a serious bug and likely will result
+		// in a corrupted database (partial write) so it's time to panic
+		panic(errors.UnknownError.Wrap(err))
 	}
 
 	// Committing may have changed the BPT, so commit it
@@ -179,12 +183,15 @@ func (b *Batch) Transaction2(id [32]byte) *Transaction {
 }
 
 func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
+	if key.Len() >= 2 && key.Get(0) == "Account" {
+		return key.Get(1).(*url.URL), nil
+	}
+
 	v, err := values.NewValue(
 		b.logger.L,
 		b.store,
 		// This must match the key used for the account's Url state
 		key.Append("Url"),
-		fmt.Sprintf("account %v URL", key),
 		false,
 		values.Wrapped(values.UrlWrapper),
 	).Get()
@@ -192,6 +199,30 @@ func (b *Batch) getAccountUrl(key *record.Key) (*url.URL, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	return v, nil
+}
+
+// resolveAccountKey resolves a key beginning with a KeyHash. If the key does
+// not begin with a key hash, it is returned unchanged. If it does,
+// resolveAccountKey looks up the account URL and constructs a resolved key by
+// replacing the first component (the KeyHash) with two components, "Account"
+// and the account URL.
+func (b *Batch) resolveAccountKey(key *record.Key) *record.Key {
+	if key.Len() < 1 {
+		return key
+	}
+
+	kh, ok := key.Get(0).(record.KeyHash)
+	if !ok {
+		return key
+	}
+
+	u, err := b.getAccountUrl(key.SliceJ(1))
+	if err != nil {
+		slog.Error("Unable to resolve account", "key-hash", logging.AsHex(kh), "error", err)
+		return key
+	}
+
+	return record.NewKey("Account", u).AppendKey(key.SliceI(1))
 }
 
 func keyIsAccountUrl(key *record.Key) bool {
@@ -217,7 +248,6 @@ func (b *Batch) Resolve(key *record.Key) (database.Record, *record.Key, error) {
 		b.logger.L,
 		b.store,
 		key,
-		fmt.Sprintf("account %v URL", key),
 		false,
 		values.Wrapped(values.UrlWrapper),
 	)

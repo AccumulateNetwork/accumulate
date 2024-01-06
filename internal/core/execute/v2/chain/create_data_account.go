@@ -84,7 +84,7 @@ func (x CreateDataAccount) Execute(st *StateManager, tx *Delivery) (protocol.Tra
 	account := new(protocol.DataAccount)
 	account.Url = body.Url
 
-	err = st.SetAuth(account, body.Authorities)
+	err = setInitialAuthorities(st, account, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

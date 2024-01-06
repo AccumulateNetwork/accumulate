@@ -7,15 +7,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -44,17 +46,25 @@ func singleNodeWorkDir(cmd *cobra.Command) (string, error) {
 		return flagMain.WorkDir, nil
 	}
 
-	if service.Interactive() {
-		fmt.Fprint(os.Stderr, "Error: at least one of --work-dir or --node is required\n")
-		printUsageAndExit1(cmd, []string{})
-		return "", nil // Not reached
-	} else {
-		return "", fmt.Errorf("at least one of --work-dir or --node is required")
-	}
+	fmt.Fprint(os.Stderr, "Error: at least one of --work-dir or --node is required\n")
+	printUsageAndExit1(cmd, []string{})
+	return "", nil // Not reached
 }
 
-func (p *Program) Start(s service.Service) (err error) {
-	logWriter := newLogWriter(s)
+func (p *Program) Run() error {
+	ctx := cmdutil.ContextForMainProcess(context.Background())
+
+	err := p.Start()
+	if err != nil {
+		return err
+	}
+
+	<-ctx.Done()
+	return p.Stop()
+}
+
+func (p *Program) Start() (err error) {
+	logWriter := newLogWriter()
 
 	primaryDir, err := p.primaryDir(p.cmd)
 	if err != nil {
@@ -95,8 +105,23 @@ func (p *Program) Start(s service.Service) (err error) {
 		return err
 	}
 
-	// Only one node can run Prometheus
-	p.secondary.Config.Instrumentation.Prometheus = false
+	{
+		a := p.primary.Config.Instrumentation
+		b := p.secondary.Config.Instrumentation
+
+		// If both sub-nodes have the default instrumentation namespace,
+		// dynamically append the partition ID to it
+		if (a.Namespace == "tendermint" || a.Namespace == "cometbft") && (b.Namespace == "tendermint" || b.Namespace == "cometbft") {
+			a.Namespace += "_" + strings.ToLower(p.primary.Config.Accumulate.PartitionId)
+			b.Namespace += "_" + strings.ToLower(p.secondary.Config.Accumulate.PartitionId)
+		}
+
+		// If both sub-nodes still have the same instrumentation namespace,
+		// disable the second one to prevent conflicts
+		if a.Namespace == b.Namespace {
+			b.Prometheus = false
+		}
+	}
 
 	if flagRun.EnableTimingLogs {
 		p.secondary.Config.Accumulate.AnalysisLog.Enabled = true
@@ -105,7 +130,7 @@ func (p *Program) Start(s service.Service) (err error) {
 	return startDual(p.primary, p.secondary)
 }
 
-func (p *Program) Stop(service.Service) error {
+func (p *Program) Stop() error {
 	if p.secondary == nil {
 		return p.primary.Stop()
 	}
@@ -130,7 +155,7 @@ func startDual(primary, secondary *accumulated.Daemon) error {
 
 	errg := new(errgroup.Group)
 	errg.Go(func() error {
-		err := primary.Start()
+		err := primary.Start(secondary)
 		if err != nil {
 			return errors.UnknownError.WithFormat("start primary: %w", err)
 		}

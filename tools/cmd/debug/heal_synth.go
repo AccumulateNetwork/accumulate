@@ -7,203 +7,178 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"net/url"
-	"os"
-	"strconv"
-	"strings"
+	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/healing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"golang.org/x/exp/slog"
 )
 
-var cmdHeal = &cobra.Command{
-	Use: "heal",
-}
-
 var cmdHealSynth = &cobra.Command{
-	Use:   "synth [network] [server]",
+	Use:   "synth [network] [txid or part→part (optional) [sequence number (optional)]]",
 	Short: "Fixup synthetic transactions",
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.RangeArgs(1, 3),
 	Run:   healSynth,
 }
 
-var flagHealSynth = struct {
-	Peer string
-}{}
-
 func init() {
-	cmd.AddCommand(cmdHeal)
 	cmdHeal.AddCommand(cmdHealSynth)
-	cmdHealSynth.Flags().StringVar(&flagHealSynth.Peer, "peer", "", "Query a specific peer")
+	cmdHealSynth.Flags().DurationVar(&healSinceDuration, "since", 48*time.Hour, "How far back in time to heal (0 for forever)")
 }
 
-func healSynth(_ *cobra.Command, args []string) {
-	testing.EnableDebugFeatures()
-	c, err := client.New(args[1])
-	check(err)
+func healSynth(cmd *cobra.Command, args []string) {
+	if !cmd.Flags().Changed("wait") {
+		waitForTxn = true
+	}
 
-	desc, err := c.Describe(context.Background())
-	check(err)
+	h := &healer{
+		healSingle: func(h *healer, src, dst *protocol.PartitionInfo, num uint64, txid *url.TxID) {
+			srcUrl := protocol.PartitionUrl(src.ID)
+			dstUrl := protocol.PartitionUrl(dst.ID)
 
-	node, err := p2p.New(p2p.Options{
-		Network:        args[0],
-		BootstrapPeers: api.BootstrapServers,
-	})
-	check(err)
-	defer func() { _ = node.Close() }()
+			// Pull chains
+			pullSynthDirChains(h)
+			pullSynthSrcChains(h, srcUrl)
+			pullSynthDstChains(h, dstUrl)
 
-	fmt.Printf("We are %v\n", node.ID())
+			// Pull accounts
+			pullSynthLedger(h, srcUrl)
+			pullSynthLedger(h, dstUrl)
 
-	router := new(routing.MessageRouter)
-	c2 := &message.Client{
-		Transport: &message.RoutedTransport{
-			Network: args[0],
-			Dialer:  node.DialNetwork(),
-			Router:  router,
+			// Heal
+			healSingleSynth(h, src.ID, dst.ID, num, txid)
+		},
+		healSequence: func(h *healer, src, dst *protocol.PartitionInfo) {
+			srcUrl := protocol.PartitionUrl(src.ID)
+			dstUrl := protocol.PartitionUrl(dst.ID)
+
+			// Pull chains
+			pullSynthDirChains(h)
+			pullSynthSrcChains(h, srcUrl)
+			pullSynthDstChains(h, dstUrl)
+
+			// Pull accounts
+		pullAgain:
+			ab := pullSynthLedger(h, srcUrl).Partition(dstUrl)
+			ba := pullSynthLedger(h, dstUrl).Partition(srcUrl)
+
+			// Heal
+			for i := uint64(0); i+ba.Delivered < ab.Produced; i++ {
+				select {
+				case <-h.ctx.Done():
+					return
+				default:
+				}
+				var id *url.TxID
+				if i < uint64(len(ba.Pending)) {
+					id = ba.Pending[i]
+				}
+				if healSingleSynth(h, src.ID, dst.ID, ba.Delivered+i+1, id) {
+					// If it was already delivered, recheck the ledgers
+					goto pullAgain
+				}
+			}
 		},
 	}
-	router.Router, err = routing.NewStaticRouter(desc.Values.Routing, nil)
-	check(err)
 
-	synths := map[string]*protocol.SyntheticLedger{}
-	for _, part := range desc.Values.Network.Partitions {
-		// Get synthetic ledger
-		req := new(v2.GeneralQuery)
-		req.Url = protocol.PartitionUrl(part.ID).JoinPath(protocol.Synthetic)
-		synth := new(protocol.SyntheticLedger)
-		res := new(v2.ChainQueryResponse)
-		res.Data = synth
-		err = c.RequestAPIv2(context.Background(), "query", req, res)
-		check(err)
-		synths[part.ID] = synth
-
-		for _, src := range synth.Sequence {
-			for _, txid := range src.Pending {
-				req.Url = txid.AsUrl()
-				res := new(v2.TransactionQueryResponse)
-				err = c.RequestAPIv2(context.Background(), "query", req, res)
-				check(err)
-
-				xreq := new(v2.ExecuteRequest)
-				xreq.Envelope = new(messaging.Envelope)
-				xreq.Envelope.Transaction = []*protocol.Transaction{res.Transaction}
-				var partSig *protocol.PartitionSignature
-				for _, sig := range res.Signatures {
-					sig, ok := sig.(*protocol.PartitionSignature)
-					if ok {
-						partSig = sig
-						xreq.Envelope.Signatures = []protocol.Signature{sig}
-					}
-				}
-
-				p := c2.Private()
-				if flagHealSynth.Peer != "" {
-					pid, err := peer.Decode(flagHealSynth.Peer)
-					check(err)
-					p = c2.ForPeer(pid).Private()
-				}
-
-				// Get a signature
-				r, err := p.Sequence(context.Background(), partSig.SourceNetwork.JoinPath(protocol.Synthetic), partSig.DestinationNetwork, partSig.SequenceNumber)
-				check(err)
-				var note string
-				for _, sigs := range r.Signatures.Records {
-					for _, sig := range sigs.Signatures.Records {
-						if sig, ok := sig.Message.(*messaging.SignatureMessage); ok {
-							switch sig := sig.Signature.(type) {
-							case protocol.KeySignature:
-								xreq.Envelope.Signatures = append(xreq.Envelope.Signatures, sig)
-							case *protocol.ReceiptSignature:
-								if !res.Status.GotDirectoryReceipt {
-									note = " with DN receipt"
-									xreq.Envelope.Signatures = append(xreq.Envelope.Signatures, sig)
-								}
-							}
-						}
-					}
-				}
-
-				fmt.Printf("Resubmitting %v%s\n", txid, note)
-				// b, _ := json.Marshal(xreq.Envelope)
-				// fmt.Printf("%s\n", b)
-				// return
-
-				xres, err := c.ExecuteDirect(context.Background(), xreq)
-				check(err)
-				if xres.Message != "" {
-					fmt.Fprintf(os.Stderr, "Warning: %s\n", xres.Message)
-				}
-			}
-		}
-	}
-
-	// Check produced vs received
-	for i, a := range desc.Values.Network.Partitions {
-		for _, b := range desc.Values.Network.Partitions[i:] {
-			ab := synths[a.ID].Partition(protocol.PartitionUrl(b.ID))
-			ba := synths[b.ID].Partition(protocol.PartitionUrl(a.ID))
-
-			for i := ba.Received + 1; i <= ab.Produced; i++ {
-				resubmitByNumber(desc, c, a.ID, b.ID, i, false)
-			}
-			if a == b {
-				continue
-			}
-			for i := ab.Received + 1; i <= ba.Produced; i++ {
-				resubmitByNumber(desc, c, b.ID, a.ID, i, false)
-			}
-		}
-	}
+	h.heal(args)
 }
 
-func resubmitByNumber(desc *v2.DescriptionResponse, c *client.Client, source, destination string, number uint64, anchor bool) {
-	// Get a client for the destination partition
-	var d *client.Client
-	for _, p := range desc.Network.Partitions {
-		if !strings.EqualFold(p.Id, destination) {
-			continue
-		}
-		if len(p.Nodes) == 0 {
-			fatalf("no nodes for %v", p.Id)
-		}
-		u, err := url.Parse(p.Nodes[0].Address)
-		check(err)
-		port, err := strconv.ParseUint(u.Port(), 10, 16)
-		check(err)
-		d, err = client.New(fmt.Sprintf("http://%s:%d", u.Hostname(), port+config.PortOffsetAccumulateApi.GetEnumValue()))
-		check(err)
+func healSingleSynth(h *healer, source, destination string, number uint64, id *url.TxID) bool {
+	var count int
+retry:
+	err := h.HealSynthetic(h.ctx, healing.HealSyntheticArgs{
+		Client:    h.C2.ForAddress(nil),
+		Querier:   h.C2,
+		Submitter: h.C2,
+		NetInfo:   h.net,
+		Light:     h.light,
+		Pretend:   pretend,
+		Wait:      waitForTxn,
+
+		// If an attempt fails, use the next anchor
+		SkipAnchors: count,
+	}, healing.SequencedInfo{
+		Source:      source,
+		Destination: destination,
+		Number:      number,
+		ID:          id,
+	})
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errors.Delivered) {
+		return true
+	}
+	if !errors.Is(err, healing.ErrRetry) {
+		slog.Error("Failed to heal", "source", source, "destination", destination, "number", number, "error", err)
+		return false
 	}
 
-	// Query the synthetic transaction
-	req := new(v2.SyntheticTransactionRequest)
-	req.Source = protocol.PartitionUrl(source)
-	req.Destination = protocol.PartitionUrl(destination)
-	req.SequenceNumber = number
-	req.Anchor = anchor
-	res, err := c.QuerySynth(context.Background(), req)
-	check(err)
-
-	// Submit the synthetic transaction directly to the destination partition
-	fmt.Printf("Resubmitting %v\n", res.Txid)
-	xreq := new(v2.ExecuteRequest)
-	xreq.Envelope = new(messaging.Envelope)
-	xreq.Envelope.Transaction = []*protocol.Transaction{res.Transaction}
-	xreq.Envelope.Signatures = res.Signatures
-	xres, err := d.ExecuteLocal(context.Background(), xreq)
-	check(err)
-	if xres.Message != "" {
-		fmt.Fprintf(os.Stderr, "Warning: %s\n", xres.Message)
+	count++
+	if count >= 3 {
+		slog.Error("Message still pending, skipping", "attempts", count)
+		return false
 	}
+	slog.Error("Message still pending, trying next anchor", "attempts", count)
+	goto retry
+}
+
+func pullSynthDirChains(h *healer) {
+	ctx, cancel, _ := api.ContextWithBatchData(h.ctx)
+	defer cancel()
+
+	check(h.light.PullAccountWithChains(ctx, protocol.DnUrl().JoinPath(protocol.Ledger), skipSigChain))
+	check(h.light.IndexAccountChains(ctx, protocol.DnUrl().JoinPath(protocol.Ledger)))
+	check(h.light.PullAccount(ctx, protocol.DnUrl().JoinPath(protocol.Network)))
+}
+
+func pullSynthSrcChains(h *healer, part *url.URL) {
+	ctx, cancel, _ := api.ContextWithBatchData(h.ctx)
+	defer cancel()
+
+	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.Ledger), skipSigChain))
+	check(h.light.IndexAccountChains(ctx, part.JoinPath(protocol.Ledger)))
+
+	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.Synthetic), skipSigChain))
+	check(h.light.IndexAccountChains(ctx, part.JoinPath(protocol.Synthetic)))
+}
+
+func pullSynthDstChains(h *healer, part *url.URL) {
+	ctx, cancel, _ := api.ContextWithBatchData(h.ctx)
+	defer cancel()
+
+	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.Ledger), func(c *api.ChainRecord) bool {
+		return c.Name == "root" ||
+			c.Name == "root-index"
+	}))
+	check(h.light.IndexAccountChains(ctx, part.JoinPath(protocol.Ledger)))
+	check(h.light.PullAccountWithChains(ctx, part.JoinPath(protocol.AnchorPool), skipSigChain))
+	check(h.light.IndexAccountChains(ctx, part.JoinPath(protocol.AnchorPool)))
+
+	if healSinceDuration > 0 {
+		check(h.light.PullMessagesForAccountSince(ctx, part.JoinPath(protocol.AnchorPool), time.Now().Add(-healSinceDuration), "main"))
+	} else {
+		check(h.light.PullMessagesForAccount(ctx, part.JoinPath(protocol.AnchorPool), "main"))
+	}
+	check(h.light.IndexReceivedAnchors(ctx, part))
+}
+
+func pullSynthLedger(h *healer, part *url.URL) *protocol.SyntheticLedger {
+	check(h.light.PullAccountWithChains(h.ctx, part.JoinPath(protocol.Synthetic), skipSigChain))
+
+	batch := h.light.OpenDB(false)
+	defer batch.Discard()
+
+	var ledger *protocol.SyntheticLedger
+	check(batch.Account(part.JoinPath(protocol.Synthetic)).Main().GetAs(&ledger))
+	return ledger
+}
+
+func skipSigChain(c *api.ChainRecord) bool {
+	return c.Name != "signature"
 }

@@ -7,23 +7,24 @@
 package bpt
 
 import (
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type KeyValuePair struct {
-	Key, Value [32]byte
+	Key   *record.Key
+	Value [32]byte
 }
 
 // New returns a new BPT.
-func New(parent database.Record, logger log.Logger, store database.Store, key *database.Key, label string) *BPT {
+func New(parent database.Record, logger log.Logger, store database.Store, key *database.Key) *BPT {
 	b := new(BPT)
 	b.logger.Set(logger)
 	b.store = store
 	b.key = key
-	b.label = label
 	return b
 }
 
@@ -49,7 +50,7 @@ func (b *BPT) GetRootHash() ([32]byte, error) {
 }
 
 func (b *BPT) newState() values.Value[*parameters] {
-	v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), b.label+" "+"state", false, values.Struct[parameters]())
+	v := values.NewValue(b.logger.L, b.store, b.key.Append("Root"), false, values.Struct[parameters]())
 	return paramsRecord{v}
 }
 
@@ -141,15 +142,15 @@ func (b *BPT) newRoot() *rootRecord {
 }
 
 // Get retrieves the latest hash associated with the given key.
-func (b *BPT) Get(key [32]byte) ([32]byte, error) {
-	if v, ok := b.pending[key]; ok {
+func (b *BPT) Get(key *record.Key) ([32]byte, error) {
+	if v, ok := b.pending[key.Hash()]; ok {
 		if v.delete {
 			return [32]byte{}, errors.NotFound
 		}
 		return v.value, nil
 	}
 
-	e, err := b.getRoot().getLeaf(key)
+	e, err := b.getRoot().getLeaf(key.Hash())
 	if err != nil {
 		return [32]byte{}, errors.UnknownError.Wrap(err)
 	}
@@ -166,7 +167,7 @@ again:
 
 	switch f := (*f).(type) {
 	case *leaf:
-		if f.Key == key {
+		if f.Key.Hash() == key {
 			return f, nil
 		}
 	case *branch:

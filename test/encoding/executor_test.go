@@ -48,10 +48,10 @@ func TestExecutorConsistency(t *testing.T) {
 	// Start the simulator
 	sim, err := simulator.New(
 		simulator.WithLogger(acctesting.NewTestLogger(t)),
-		simulator.MemoryDatabase,
 		simulator.WithNetwork(testData.Network),
 		simulator.SnapshotMap(testData.Genesis),
 		simulator.DropDispatchedMessages,
+		simulator.InitialAcmeSupply(nil),
 	)
 	require.NoError(t, err)
 
@@ -121,7 +121,11 @@ func (v *snapVisitor) VisitAccount(a *snapshot.Account, i int) error {
 
 	b, err := snapshot.CollectAccount(v.batch.Account(a.Url), true)
 	require.NoError(v, err)
-	assert.Equalf(v, a.Copy(), b.Copy(), "Account %v", a.Url)
+	c, err := json.MarshalIndent(a, "", "  ")
+	require.NoError(v, err)
+	d, err := json.MarshalIndent(b, "", "  ")
+	require.NoError(v, err)
+	assert.Equalf(v, string(c), string(d), "Account %v", a.Url)
 
 	return nil
 }

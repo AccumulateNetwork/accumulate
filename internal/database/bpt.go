@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
@@ -18,8 +18,22 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
-func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name, label string) *bpt.BPT {
-	return bpt.New(parent, logger, store, key, label)
+func newBPT(parent record.Record, logger log.Logger, store record.Store, key *record.Key, name string) *bpt.BPT {
+	return bpt.New(parent, logger, store, key)
+}
+
+// GetBptRootHash returns the BPT root hash, after applying updates as necessary
+// for modified accounts.
+func (b *Batch) GetBptRootHash() ([32]byte, error) {
+	for _, a := range b.account {
+		if a.IsDirty() {
+			err := a.putBpt()
+			if err != nil {
+				return [32]byte{}, errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
+			}
+		}
+	}
+	return b.BPT().GetRootHash()
 }
 
 type AccountIterator struct {
@@ -53,7 +67,7 @@ func (it *AccountIterator) Next() bool {
 	v := it.entries[it.pos]
 	it.pos++
 
-	u, err := it.batch.getAccountUrl(record.NewKey(storage.Key(v.Key)))
+	u, err := it.batch.getAccountUrl(v.Key)
 	if err != nil {
 		it.err = errors.UnknownError.WithFormat("resolve key hash: %w", err)
 		return false
@@ -79,9 +93,9 @@ func (b *Batch) IterateAccounts() *AccountIterator {
 }
 
 func (b *Batch) ForEachAccount(fn func(account *Account, hash [32]byte) error) error {
-	return bpt.ForEach(b.BPT(), func(key storage.Key, hash [32]byte) error {
+	return bpt.ForEach(b.BPT(), func(key *record.Key, hash [32]byte) error {
 		// Create an Account object
-		u, err := b.getAccountUrl(record.NewKey(key))
+		u, err := b.getAccountUrl(key)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -121,6 +135,6 @@ func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte
 }
 
 // BptReceipt builds a BPT receipt for the given key.
-func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*merkle.Receipt, error) {
+func (b *Batch) BptReceipt(key *record.Key, value [32]byte) (*merkle.Receipt, error) {
 	return b.BPT().GetReceipt(key)
 }

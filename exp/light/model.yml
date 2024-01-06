@@ -1,10 +1,11 @@
 - name: IndexDB
   type: entity
-  interface: true
+  fields:
+  - name: parent
+    type: '*DB'
   attributes:
   - name: Account
     type: entity
-    interface: true
     parameters:
     - name: Url
       type: url
@@ -14,40 +15,64 @@
       type: state
       dataType: hash
       collection: set
-    - name: DidLoadTransaction
-      type: state
-      dataType: hash
-      collection: set
     - name: Chain
       type: entity
-      interface: true
       parameters:
       - name: Name
         type: string
       attributes:
-      - name: Index
-        type: index
-        dataType: protocol.IndexEntry
+      - name: DidLoad
+        type: state
+        dataType: rangeSet
         pointer: true
-        collection: list
+        private: true
+        emptyIfMissing: true
+      - name: SourceIndex
+        description: indexes the chain's index chain by entries' Source.
+        type: other
+        dataType: ChainIndexUint
+        pointer: true
+      - name: BlockIndex
+        description: indexes the chain's index chain by entries' BlockIndex.
+        type: other
+        dataType: ChainIndexUint
+        pointer: true
+      - name: BlockTime
+        description: indexes the chain's index chain by entries' BlockTime.
+        type: other
+        dataType: ChainIndexTime
+        pointer: true
 
   - name: Partition
     type: entity
-    interface: true
     parameters:
     - name: Url
       type: url
       pointer: true
     attributes:
     - name: Anchors
-      type: state
-      dataType: AnchorMetadata
-      pointer: true
-      collection: list
+      type: entity
+      attributes:
+      - name: Produced
+        type: state
+        dataType: AnchorMetadata
+        pointer: true
+        collection: list
+        private: true
+      - name: Received
+        description: indexes received directory anchors
+        # Received(dn) indexes anchors by their DN height
+        # Received(bvn) indexes anchors that contain a receipt for a BVN by the BVN height of the receipt
+        parameters:
+        - name: Url
+          type: url
+          pointer: true
+        type: other
+        dataType: ChainIndexUint
+        pointer: true
 
   - name: Transaction
     type: entity
-    interface: true
     parameters:
     - name: Hash
       type: hash

@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	. "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -23,14 +24,14 @@ import (
 
 func TestPrivateMessageRouting(t *testing.T) {
 	s := mocks.NewSequencer(t)
-	s.EXPECT().Sequence(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(new(api.MessageRecord[messaging.Message]), nil)
+	s.EXPECT().Sequence(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(new(api.MessageRecord[messaging.Message]), nil)
 	c := SetupTest(t, &Sequencer{Sequencer: s})
 	c.Transport.(*RoutedTransport).Router = &routing.MessageRouter{
 		Router: routerFunc(func(*url.URL) (string, error) {
 			return protocol.Directory, nil
 		}),
 	}
-	_, err := c.Private().Sequence(context.Background(), protocol.DnUrl(), protocol.DnUrl(), 1)
+	_, err := c.Private().Sequence(context.Background(), protocol.DnUrl(), protocol.DnUrl(), 1, private.SequenceOptions{})
 	require.NoError(t, err)
 }
 

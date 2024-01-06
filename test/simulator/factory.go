@@ -8,16 +8,18 @@ package simulator
 
 import (
 	"fmt"
+	"math/big"
 	"sync"
 
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -38,17 +40,21 @@ import (
 
 type simFactory struct {
 	// Options
-	network    *accumulated.NetworkInit
-	storeOpt   OpenDatabaseFunc
-	snapshot   SnapshotFunc
-	recordings RecordingFunc
-	abci       abciFunc
+	network       *accumulated.NetworkInit
+	storeOpt      OpenDatabaseFunc
+	snapshot      SnapshotFunc
+	recordings    RecordingFunc
+	abci          abciFunc
+	initialSupply *big.Int
 
-	dropDispatchedMessages bool
-	skipProposalCheck      bool
-	ignoreDeliverResults   bool
-	ignoreCommitResults    bool
-	deterministic          bool
+	dropDispatchedMessages      bool
+	skipProposalCheck           bool
+	ignoreDeliverResults        bool
+	ignoreCommitResults         bool
+	deterministic               bool
+	dropInitialAnchor           bool
+	disableAnchorHealing        bool
+	interceptDispatchedMessages dispatchInterceptor
 
 	// State
 	logger           log.Logger
@@ -157,6 +163,11 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	}
 
 	// Register services
+	f.registerSvc(api.ServiceTypeNode, message.NodeService{NodeService: &nodeService{
+		network:  f.networkFactory.network.Id,
+		peerID:   n.peerID,
+		services: f.getServices().Services,
+	}})
 	f.registerSvc(api.ServiceTypeConsensus, message.ConsensusService{ConsensusService: n})
 	f.registerSvc(api.ServiceTypeSubmit, message.Submitter{Submitter: n})
 	f.registerSvc(api.ServiceTypeValidate, message.Validator{Validator: n})
@@ -298,12 +309,14 @@ func (f *simFactory) getDispatcherFunc() func() execute.Dispatcher {
 	// Avoid capture
 	services := f.getServices()
 	router := f.getRouter()
+	interceptor := f.interceptDispatchedMessages
 
 	f.dispatcherFunc = func() execute.Dispatcher {
 		d := new(dispatcher)
 		d.client = services
 		d.router = router
 		d.envelopes = map[string][]*messaging.Envelope{}
+		d.interceptor = interceptor
 		return d
 	}
 	return f.dispatcherFunc
@@ -433,9 +446,16 @@ func (f *nodeFactory) getSvcHandler() *message.Handler {
 }
 
 func (f *nodeFactory) registerSvc(typ api.ServiceType, svc message.Service) {
+	var sa *api.ServiceAddress
+	if typ == api.ServiceTypeNode {
+		sa = typ.Address()
+	} else {
+		sa = typ.AddressFor(f.networkFactory.id)
+	}
+
 	h := f.getSvcHandler()
 	_ = h.Register(svc)
-	f.getServices().RegisterService(f.getPeerID(), typ.AddressFor(f.networkFactory.id), h.Handle)
+	f.getServices().RegisterService(f.getPeerID(), sa, h.Handle)
 }
 
 type abciFunc = func(*nodeFactory, execute.Executor, consensus.RestoreFunc) consensus.App
@@ -447,6 +467,24 @@ func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreF
 		Restore:  restore,
 	}
 }
+
+// func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
+// 	a := abci.NewAccumulator(abci.AccumulatorOptions{
+// 		Config: &config.Config{
+// 			Accumulate: config.Accumulate{
+// 				Describe: config.Describe{
+// 					PartitionId: node.networkFactory.id,
+// 				},
+// 			},
+// 		},
+// 		Executor: exec,
+// 		EventBus: node.eventBus,
+// 		Logger:   node.logger,
+// 		Database: node.getDatabase(),
+// 		Address:  node.network.PrivValKey,
+// 	})
+// 	return (*consensus.AbciApp)(a)
+// }
 
 type appFunc = func(*nodeFactory) *consensus.Node
 
@@ -521,6 +559,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		NewDispatcher: f.getDispatcherFunc(),
 		Sequencer:     f.getServices().Private(),
 		Querier:       f.getServices(),
+		EnableHealing: true,
 		Describe:      execute.DescribeShim{NetworkType: f.networkFactory.typ, PartitionId: f.networkFactory.id},
 	}
 
@@ -537,6 +576,25 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Initialize the major block scheduler
 	if f.networkFactory.typ == protocol.PartitionTypeDirectory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(f.getEventBus())
+	}
+
+	// Create the conductor. This must happen before creating the executor since
+	// it needs to receive the initial WillChangeGlobals event.
+	enableAnchorHealing := !f.disableAnchorHealing
+	conductor := &crosschain.Conductor{
+		Partition:           &protocol.PartitionInfo{ID: f.networkFactory.id, Type: f.typ},
+		ValidatorKey:        execOpts.Key,
+		Database:            execOpts.Database,
+		Querier:             api.Querier2{Querier: f.getServices()},
+		Dispatcher:          execOpts.NewDispatcher(),
+		RunTask:             execOpts.BackgroundTaskLauncher,
+		DropInitialAnchor:   f.dropInitialAnchor,
+		EnableAnchorHealing: &enableAnchorHealing,
+		Intercept:           f.interceptDispatchedMessages,
+	}
+	err := conductor.Start(f.getEventBus())
+	if err != nil {
+		panic(err)
 	}
 
 	// Create an executor

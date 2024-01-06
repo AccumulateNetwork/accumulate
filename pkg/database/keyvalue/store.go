@@ -22,6 +22,9 @@ type Store interface {
 
 	// Delete deletes a key-value pair.
 	Delete(*record.Key) error
+
+	// ForEach iterates over each value.
+	ForEach(func(*record.Key, []byte) error) error
 }
 
 // RecordStore implements [database.Store].
@@ -38,12 +41,12 @@ func (s RecordStore) Unwrap() Store { return s.Store }
 func (s RecordStore) GetValue(key *record.Key, value database.Value) error {
 	b, err := s.Store.Get(key)
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		return err // Do not wrap - allow NotFoundError to propagate
 	}
 
 	// Tests may 'delete' an account by setting its value to nil
 	if len(b) == 0 {
-		return errors.NotFound.WithFormat("%v not found", key)
+		return (*database.NotFoundError)(key)
 	}
 
 	err = value.LoadBytes(b, false)

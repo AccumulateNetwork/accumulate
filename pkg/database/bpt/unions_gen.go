@@ -10,21 +10,7 @@ package bpt
 
 import (
 	"encoding/json"
-	"fmt"
 )
-
-// newNode creates a new node for the specified nodeType.
-func newNode(typ nodeType) (node, error) {
-	switch typ {
-	case nodeTypeBranch:
-		return new(branch), nil
-	case nodeTypeEmpty:
-		return new(emptyNode), nil
-	case nodeTypeLeaf:
-		return new(leaf), nil
-	}
-	return nil, fmt.Errorf("unknown node %v", typ)
-}
 
 // equalNode is used to compare the values of the union
 func equalNode(a, b node) bool {

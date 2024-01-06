@@ -9,7 +9,7 @@ package snapshot
 import (
 	"io"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -82,11 +82,7 @@ func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Lo
 		// Ok
 
 	case v2.Version2:
-		db, ok := db.(*database.Database)
-		if !ok {
-			return errors.BadRequest.With("executor does not support v2 snapshots")
-		}
-		err = db.Restore(file, nil)
+		err = database.Restore(db, file, nil)
 		return errors.UnknownError.Wrap(err)
 
 	default:

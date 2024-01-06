@@ -203,6 +203,10 @@ FeeSchedule:
       type: Fee
       marshal-as: enum
       repeatable: true
+    - name: CreateSubIdentity
+      description: is the fee for creating a non-root ADI.
+      type: Fee
+      marshal-as: enum
 
 NetworkLimits:
   fields:

@@ -7,11 +7,13 @@
 package database
 
 import (
+	"encoding"
 	"strings"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	merkle2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
@@ -19,16 +21,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type MerkleManager = merkle2.Chain
+
 // Chain2 is a wrapper for Chain.
 type Chain2 struct {
-	account  *Account
-	key      *record.Key
-	inner    *MerkleManager
-	index    *Chain2
-	labelfmt string
+	account *Account
+	key     *record.Key
+	inner   *MerkleManager
+	index   *Chain2
 }
 
-func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.Key, namefmt, labelfmt string) *Chain2 {
+func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.Key, namefmt string) *Chain2 {
 	var account *Account
 	switch parent := parent.(type) {
 	case *Account:
@@ -45,9 +48,10 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.K
 		"SignatureChain",
 		"ScratchChain",
 		"AnchorSequenceChain",
-		"SyntheticSequenceChain":
+		"SyntheticSequenceChain": // Bug, this is actually an index chain
 		typ = merkle.ChainTypeTransaction
 	case "RootChain",
+		"BptChain",
 		"AnchorChain":
 		typ = merkle.ChainTypeAnchor
 	case "MajorBlockChain":
@@ -56,8 +60,8 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key *record.K
 		panic("unknown chain key") // Will be removed once chains are completely integrated into the model
 	}
 
-	c := NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt, labelfmt)
-	return &Chain2{account, key, c, nil, labelfmt}
+	c := merkle2.NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt)
+	return &Chain2{account, key, c, nil}
 }
 
 func (c *Chain2) Key() *record.Key { return c.key }
@@ -120,7 +124,7 @@ func (c *Chain2) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 func (c *Chain2) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	var err error
 	values.Walk(&err, c.inner, opts, fn)
-	if c.inner.typ != merkle.ChainTypeIndex {
+	if c.inner.Type() != merkle.ChainTypeIndex {
 		values.WalkField(&err, c.index, c.newIndex, opts, fn)
 	}
 	return err
@@ -143,12 +147,22 @@ func (c *Chain2) Head() values.Value[*merkle.State] {
 
 // IndexOf returns the index of the given entry in the chain.
 func (c *Chain2) IndexOf(hash []byte) (int64, error) {
-	return c.inner.GetElementIndex(hash)
+	return c.inner.IndexOf(hash)
 }
 
 // Entry loads the entry in the chain at the given height.
 func (c *Chain2) Entry(height int64) ([]byte, error) {
-	return c.inner.Get(height)
+	return c.inner.Entry(height)
+}
+
+// EntryAs loads and unmarshals the entry in the chain at the given height.
+func (c *Chain2) EntryAs(height int64, value encoding.BinaryUnmarshaler) error {
+	data, err := c.Entry(height)
+	if err != nil {
+		return err
+	}
+
+	return value.UnmarshalBinary(data)
 }
 
 // Get converts the Chain2 to a Chain, updating the account's chains index and
@@ -170,6 +184,14 @@ func (c *Chain2) Get() (*Chain, error) {
 	return wrapChain(c.inner)
 }
 
+func (c *Chain2) Receipt(from, to uint64) (*merkle.Receipt, error) {
+	c2, err := c.Get()
+	if err != nil {
+		return nil, err
+	}
+	return c2.Receipt(int64(from), int64(to))
+}
+
 // Index returns the index chain of this chain. Index will panic if called on an
 // index chain.
 func (c *Chain2) Index() *Chain2 {
@@ -181,9 +203,8 @@ func (c *Chain2) newIndex() *Chain2 {
 		panic("cannot index an index chain")
 	}
 	key := c.key.Append("Index")
-	label := c.labelfmt + " index"
-	m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
-	return &Chain2{c.account, key, m, nil, label}
+	m := merkle2.NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index")
+	return &Chain2{c.account, key, m, nil}
 }
 
 // ChainByName returns account Chain2 for the named chain, or a not found error if
@@ -235,6 +256,8 @@ func (a *Account) chainByName(name string) *Chain2 {
 		return a.ScratchChain()
 	case "root":
 		return a.RootChain()
+	case "bpt":
+		return a.BptChain()
 	case "anchor-sequence":
 		return a.AnchorSequenceChain()
 	case "major-block":
@@ -313,11 +336,13 @@ func (c *Account) getAnchorKeys() ([]accountAnchorChainKey, error) {
 
 	// Find chains matching the pattern `anchor(:id)`
 	keys := make([]accountAnchorChainKey, 0, len(chains))
+	seen := map[string]bool{}
 	for _, c := range chains {
 		first, arg, _, ok := splitChainName(strings.ToLower(c.Name))
-		if !ok || first != "anchor" {
+		if !ok || first != "anchor" || seen[arg] {
 			continue
 		}
+		seen[arg] = true
 		keys = append(keys, accountAnchorChainKey{arg})
 	}
 

@@ -11,30 +11,36 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
+	_ "net/http/pprof" //nolint:gosec
+	"os/user"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/cometbft/cometbft/libs/log"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/cors"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/libs/log"
-	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
+	"gitlab.com/accumulatenetwork/accumulate/exp/apiutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	nodehttp "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/exp/slog"
 )
@@ -51,22 +57,29 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Key         string
-	LogLevel    string
-	HttpListen  []multiaddr.Multiaddr
-	P2pListen   []multiaddr.Multiaddr
-	Peers       []multiaddr.Multiaddr
-	Timeout     time.Duration
-	ConnLimit   int
-	CorsOrigins []string
-	LetsEncrypt []string
-	TlsCert     string
-	TlsKey      string
+	Key          string
+	LogLevel     string
+	HttpListen   []multiaddr.Multiaddr
+	P2pListen    []multiaddr.Multiaddr
+	Peers        []multiaddr.Multiaddr
+	Timeout      time.Duration
+	ConnLimit    int
+	CorsOrigins  []string
+	LetsEncrypt  []string
+	TlsCert      string
+	TlsKey       string
+	PeerDatabase string
+	Pprof        string
 }{
-	Peers: api.BootstrapServers,
+	Peers: accumulate.BootstrapServers,
 }
 
 func init() {
+	cu, _ := user.Current()
+	if cu != nil {
+		flag.PeerDatabase = filepath.Join(cu.HomeDir, ".accumulate", "cache", "peerdb.json")
+	}
+
 	cmd.Flags().StringVar(&flag.Key, "key", "", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.HttpListen), "http-listen", "l", "HTTP listening address(es) (default /ip4/0.0.0.0/tcp/8080/http)")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.P2pListen), "p2p-listen", "P2P listening address(es)")
@@ -78,19 +91,34 @@ func init() {
 	cmd.Flags().StringSliceVar(&flag.LetsEncrypt, "lets-encrypt", nil, "Enable HTTPS on 443 and use Let's Encrypt to retrieve a certificate. Use of this feature implies acceptance of the LetsEncrypt Terms of Service.")
 	cmd.Flags().StringVar(&flag.TlsCert, "tls-cert", "", "Certificate used for HTTPS")
 	cmd.Flags().StringVar(&flag.TlsKey, "tls-key", "", "Private key used for HTTPS")
+	cmd.Flags().StringVar(&flag.PeerDatabase, "peer-db", flag.PeerDatabase, "Track peers using a persistent database.")
 	cmd.Flags().BoolVar(&jsonrpc2.DebugMethodFunc, "debug", false, "Print out a stack trace if an API method fails")
+	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
+}
+
+var nodeMainnetApollo = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWAgrBYpWEXRViTnToNmpCoC3dvHdmR6m1FmyKjDn1NYpj"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/apollo-mainnet.accumulate.defidevs.io")},
+}
+var nodeMainnetYutu = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWDqFDwjHEog1bNbxai2dKSaR1aFvq2LAZ2jivSohgoSc7"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/yutu-mainnet.accumulate.defidevs.io")},
+}
+var nodeMainnetChandrayaan = peer.AddrInfo{
+	ID:    mustParsePeer("12D3KooWHzjkoeAqe7L55tAaepCbMbhvNu9v52ayZNVQobdEE1RL"),
+	Addrs: []multiaddr.Multiaddr{mustParseMulti("/dns/chandrayaan-mainnet.accumulate.defidevs.io")},
 }
 
 func run(_ *cobra.Command, args []string) {
-	ctx, cancel := context.WithCancel(context.Background())
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
+	if flag.Pprof != "" {
+		s := new(http.Server)
+		s.Addr = flag.Pprof
+		s.ReadHeaderTimeout = time.Minute
+		go func() { Check(s.ListenAndServe()) }() //nolint:gosec
+	}
 
-	go func() {
-		<-sigs
-		signal.Stop(sigs)
-		cancel()
-	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = cmdutil.ContextForMainProcess(ctx)
 
 	if len(flag.HttpListen) == 0 && len(flag.LetsEncrypt) == 0 {
 		// Default listen address
@@ -102,18 +130,14 @@ func run(_ *cobra.Command, args []string) {
 		Fatalf("must specify at least one peer")
 	}
 
-	lw, err := logging.NewConsoleWriter("plain")
-	Check(err)
-	ll, lw, err := logging.ParseLogLevel(flag.LogLevel, lw)
-	Check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(lw), ll, false)
-	Check(err)
+	logger := NewConsoleLogger(flag.LogLevel)
 
 	node, err := p2p.New(p2p.Options{
 		Key:               loadOrGenerateKey(),
 		Network:           args[0],
 		Listen:            flag.P2pListen,
 		BootstrapPeers:    flag.Peers,
+		PeerDatabase:      flag.PeerDatabase,
 		EnablePeerTracker: true,
 	})
 	Check(err)
@@ -121,39 +145,74 @@ func run(_ *cobra.Command, args []string) {
 
 	fmt.Printf("We are %v\n", node.ID())
 
-	fmt.Println("Waiting for a live network service")
-	svcAddr, err := api.ServiceTypeNetwork.AddressFor(protocol.Directory).MultiaddrFor(args[0])
-	Check(err)
-	Check(node.WaitForService(ctx, svcAddr))
-
-	fmt.Println("Fetching routing information")
-	router := new(routing.MessageRouter)
-	client := &message.Client{
-		Transport: &message.RoutedTransport{
-			Network: args[0],
-			Dialer:  node.DialNetwork(),
-			Router:  router,
-		},
-	}
-	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
-	Check(err)
-	router.Router, err = routing.NewStaticRouter(ns.Routing, logger)
+	router, err := apiutil.InitRouter(ctx, node, args[0])
 	Check(err)
 
-	api, err := nodehttp.NewHandler(nodehttp.Options{
+	apiOpts := nodehttp.Options{
 		Logger:    logger,
 		Node:      node,
-		Router:    router.Router,
+		Router:    router,
 		MaxWait:   10 * time.Second,
 		NetworkId: args[0],
-	})
+	}
+	client := &message.Client{Transport: &message.RoutedTransport{
+		Network: args[0],
+		Router:  routing.MessageRouter{Router: router},
+		Dialer:  node.DialNetwork(),
+	}}
+	timestamps := &TimestampService{
+		querier: &api.Collator{Querier: client, Network: client},
+		cache:   memory.New(nil),
+	}
+
+	if strings.EqualFold(args[0], "MainNet") {
+		// Hard code the peers used for the MainNet as a hack for stability
+		apiOpts.PeerMap = map[string][]peer.AddrInfo{
+			"apollo":      {nodeMainnetApollo},
+			"yutu":        {nodeMainnetYutu},
+			"chandrayaan": {nodeMainnetChandrayaan},
+			"directory":   {nodeMainnetApollo, nodeMainnetYutu, nodeMainnetChandrayaan},
+		}
+	}
+
+	api, err := nodehttp.NewHandler(apiOpts)
 	Check(err)
+
+	api2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const prefix = "/timestamp/"
+		if r.Method != "GET" || !strings.HasPrefix(r.URL.Path, prefix) {
+			api.ServeHTTP(w, r)
+			return
+		}
+
+		var res any
+		id, err := url.ParseTxID(r.URL.Path[len(prefix):])
+		if err == nil {
+			res, err = timestamps.GetTimestamp(r.Context(), id)
+		}
+
+		if err == nil {
+			err := json.NewEncoder(w).Encode(res)
+			if err != nil {
+				slog.ErrorCtx(r.Context(), "Failed to encode response", "error", err)
+			}
+			return
+		}
+
+		err2 := errors.UnknownError.Wrap(err).(*errors.Error)
+		w.WriteHeader(int(err2.Code))
+
+		err = json.NewEncoder(w).Encode(err2)
+		if err != nil {
+			slog.ErrorCtx(r.Context(), "Failed to encode response", "error", err)
+		}
+	})
 
 	c := cors.New(cors.Options{
 		AllowedOrigins: flag.CorsOrigins,
 	})
 	server := &http.Server{
-		Handler:           c.Handler(api),
+		Handler:           c.Handler(api2),
 		ReadHeaderTimeout: flag.Timeout,
 	}
 
@@ -250,4 +309,20 @@ func serve(server *http.Server, l net.Listener, secure bool, wg *sync.WaitGroup,
 		}
 		slog.Error("Server stopped", "error", err, "address", l.Addr())
 	}()
+}
+
+func mustParsePeer(s string) peer.ID {
+	id, err := peer.Decode(s)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func mustParseMulti(s string) multiaddr.Multiaddr {
+	addr, err := multiaddr.NewMultiaddr(s)
+	if err != nil {
+		panic(err)
+	}
+	return addr
 }

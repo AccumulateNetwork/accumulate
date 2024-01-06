@@ -12,9 +12,9 @@ import (
 	"math/big"
 	"testing"
 
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	oldsim "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -443,8 +443,7 @@ func TestSubAdi(t *testing.T) {
 	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *ADI
 		require.NoError(t, batch.Account(alice.JoinPath("sub")).Main().GetAs(&identity))
-		require.Len(t, identity.Authorities, 1)
-		require.Equal(t, "alice.acme/book", identity.Authorities[0].Url.ShortString())
+		require.Empty(t, identity.Authorities)
 		return nil
 	})
 }

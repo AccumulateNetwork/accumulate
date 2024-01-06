@@ -17,6 +17,9 @@ ExecutorVersion:
   V2:
     value: 5
     description: is the second version of the executor system
+  V2Baikonur:
+    value: 6
+    description: enables the Baikonur release's features
 
 PartitionType:
   Directory:
@@ -27,6 +30,8 @@ PartitionType:
   BlockSummary:
     value: 3
     aliases: [block-summary]
+  Bootstrap:
+    value: 4
 
 DataEntryType:
   Unknown:

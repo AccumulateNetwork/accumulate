@@ -17,7 +17,7 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
@@ -75,7 +75,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	key := record.NewKey("Account", foo, "MainChain")
 	storetx := store.Begin(nil, false)
 	defer storetx.Discard()
-	c := database.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
+	c := merkle.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main")
 
 	entriesShouldFailOrReturnCorrectNumber(t, c, 0, 300)
 	entriesShouldFailOrReturnCorrectNumber(t, c, 100, 300)
@@ -129,19 +129,19 @@ func TestSnapshotFullHistory(t *testing.T) {
 		key := record.NewKey("Account", foo, "MainChain")
 		storetx := store.Begin(nil, false)
 		defer storetx.Discard()
-		c := database.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main", "main")
+		c := merkle.NewChain(nil, keyvalue.RecordStore{Store: storetx}, key, 8, merkle.ChainTypeTransaction, "main")
 
 		for i := 0; i < n; i++ {
-			hash, err := c.Get(int64(i))
+			hash, err := c.Entry(int64(i))
 			require.NoError(t, err)
-			require.Equalf(t, rh.List[i], []byte(hash), "Entry %d", i)
+			require.Equalf(t, rh.List[i], hash, "Entry %d", i)
 		}
 	}
 }
 
 func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *database.MerkleManager, start, end int64) {
 	t.Helper()
-	hashes, err := chain.GetRange(start, end)
+	hashes, err := chain.Entries(start, end)
 	if err != nil {
 		return
 	}

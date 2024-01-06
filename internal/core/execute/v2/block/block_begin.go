@@ -12,9 +12,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -53,6 +52,20 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	defer x.BlockTimers.Stop(r)
 
 	x.logger.Debug("Begin block", "module", "block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
+
+	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		// Get the previous block's root hash, before making any changes
+		prevRootHash, err := block.Batch.GetBptRootHash()
+		if err != nil {
+			return nil, err
+		}
+
+		// Record it on the BPT chain
+		err = block.Batch.Account(x.Describe.Ledger()).BptChain().Inner().AddEntry(prevRootHash[:], false)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// Finalize the previous block
 	err = x.finalizeBlock(block)
@@ -198,7 +211,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Send the anchor first, before synthetic transactions
-	err = x.sendAnchor(block, ledger)
+	err = x.recordAnchor(block, ledger)
 	if err != nil {
 		return errors.UnknownError.WithFormat("send anchor: %w", err)
 	}
@@ -213,40 +226,12 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	return nil
 }
 
-func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error {
-	// Is there an anchor to send?
-	if ledger.Anchor == nil {
-		x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
-		return nil
+func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) error {
+	// Construct the anchor
+	anchor, sequenceNumber, err := crosschain.ConstructLastAnchor(block.Context, block.Batch, x.Describe.PartitionUrl().URL)
+	if anchor == nil || err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
-
-	// Load the anchor ledger state
-	var anchorLedger *protocol.AnchorLedger
-	err := block.Batch.Account(x.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load anchor ledger: %w", err)
-	}
-
-	// Send the block anchor
-	sequenceNumber := anchorLedger.MinorBlockSequenceNumber
-	x.logger.Debug("Anchor block", "module", "anchoring", "index", ledger.Index, "seq-num", sequenceNumber)
-
-	// Load the root chain
-	rootChain, err := block.Batch.Account(x.Describe.Ledger()).RootChain().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load root chain: %w", err)
-	}
-
-	stateRoot, err := block.Batch.BPT().GetRootHash()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load state root: %w", err)
-	}
-
-	anchor := ledger.Anchor.CopyAsInterface().(protocol.AnchorBody)
-	partAnchor := anchor.GetPartitionAnchor()
-	partAnchor.RootChainIndex = uint64(rootChain.Height()) - 1
-	partAnchor.RootChainAnchor = *(*[32]byte)(rootChain.Anchor())
-	partAnchor.StateTreeAnchor = stateRoot
 	anchorTxn := new(protocol.Transaction)
 	anchorTxn.Body = anchor
 
@@ -279,39 +264,14 @@ func (x *Executor) sendAnchor(block *Block, ledger *protocol.SystemLedger) error
 		return errors.UnknownError.Wrap(err)
 	}
 
-	switch x.Describe.NetworkType {
-	case protocol.PartitionTypeDirectory:
+	if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		anchor := anchor.(*protocol.DirectoryAnchor)
 		if anchor.MakeMajorBlock > 0 {
 			x.logger.Info("Start major block", "major-index", anchor.MakeMajorBlock, "minor-index", ledger.Index)
 			block.State.OpenedMajorBlock = true
 			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
 		}
-
-		// DN -> BVN
-		for _, bvn := range x.globals.Active.BvnNames() {
-			err = x.sendBlockAnchor(block, anchor, sequenceNumber, bvn)
-			if err != nil {
-				return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
-			}
-		}
-
-		// DN -> self
-		anchor = anchor.Copy() // Make a copy so we don't modify the anchors sent to the BVNs
-		anchor.MakeMajorBlock = 0
-		err = x.sendBlockAnchor(block, anchor, sequenceNumber, protocol.Directory)
-		if err != nil {
-			return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
-		}
-
-	case protocol.PartitionTypeBlockValidator:
-		// BVN -> DN
-		err = x.sendBlockAnchor(block, anchor, sequenceNumber, protocol.Directory)
-		if err != nil {
-			return errors.UnknownError.WithFormat("send anchor for block %d: %w", ledger.Index, err)
-		}
 	}
-
 	return nil
 }
 
@@ -464,9 +424,9 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		receipt.Anchor = new(protocol.AnchorMetadata)
 		receipt.Anchor.Account = protocol.DnUrl()
 		if blockReceipt == nil {
-			receipt.Receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt)
+			receipt.Receipt, err = synthReceipt.Combine(rootReceipt)
 		} else {
-			receipt.Receipt, err = merkle.CombineReceipts(synthReceipt, rootReceipt, blockReceipt.RootChainReceipt)
+			receipt.Receipt, err = synthReceipt.Combine(rootReceipt, blockReceipt.RootChainReceipt)
 		}
 		if err != nil {
 			return errors.UnknownError.WithFormat("combine receipts: %w", err)
@@ -479,11 +439,20 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 		}
 
 		messages := []messaging.Message{
-			&messaging.SyntheticMessage{
+			&messaging.BadSyntheticMessage{
 				Message:   seq,
 				Proof:     receipt,
 				Signature: keySig,
 			},
+		}
+		if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+			messages = []messaging.Message{
+				&messaging.SyntheticMessage{
+					Message:   seq,
+					Proof:     receipt,
+					Signature: keySig,
+				},
+			}
 		}
 
 		// Send the transaction along with the signature request/authority
@@ -511,80 +480,6 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLe
 	}
 
 	return nil
-}
-
-func (x *Executor) sendBlockAnchor(block *Block, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
-	// Only send anchors from a validator
-	if !x.isValidator {
-		return nil
-	}
-
-	// If we're on the DN,  the last block updated to v2, and the destination is
-	// a BVN, then we must send out the anchor as a v1 anchor since the BVNs
-	// will still be running v1
-	destPartUrl := protocol.PartitionUrl(destPart)
-	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && didUpdateToV2(anchor) && !strings.EqualFold(destPart, protocol.Directory) {
-		env, err := shared.PrepareBlockAnchor(x.Describe, x.globals.Active.Network, x.Key, block.Batch, anchor, sequenceNumber, destPartUrl)
-		if err != nil {
-			return errors.InternalError.Wrap(err)
-		}
-
-		err = x.mainDispatcher.Submit(context.Background(), destPartUrl, env)
-		return errors.UnknownError.Wrap(err)
-	}
-
-	// Create the transaction
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = destPartUrl.JoinPath(protocol.AnchorPool)
-	txn.Body = anchor
-
-	x.logger.Info("Sending an anchor", "module", "anchoring",
-		"block", block.Index,
-		"destination", txn.Header.Principal,
-		"source-block", anchor.GetPartitionAnchor().MinorBlockIndex,
-		"root", logging.AsHex(anchor.GetPartitionAnchor().RootChainAnchor).Slice(0, 4),
-		"bpt", logging.AsHex(anchor.GetPartitionAnchor().StateTreeAnchor).Slice(0, 4))
-
-	seq := &messaging.SequencedMessage{
-		Message:     &messaging.TransactionMessage{Transaction: txn},
-		Source:      x.Describe.NodeUrl(),
-		Destination: destPartUrl,
-		Number:      sequenceNumber,
-	}
-
-	// Create a key signature
-	h := seq.Hash()
-	keySig, err := x.signTransaction(h[:])
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	msg := &messaging.BlockAnchor{
-		Anchor:    seq,
-		Signature: keySig,
-	}
-
-	// Dispatch the envelope
-	env := &messaging.Envelope{Messages: []messaging.Message{msg}}
-	err = x.mainDispatcher.Submit(context.Background(), destPartUrl, env)
-	return errors.UnknownError.Wrap(err)
-}
-
-func didUpdateToV2(anchor protocol.AnchorBody) bool {
-	// TODO Is there a better way to check for a recent version change?
-
-	dir, ok := anchor.(*protocol.DirectoryAnchor)
-	if !ok {
-		return false
-	}
-
-	for _, update := range dir.Updates {
-		update, ok := update.Body.(*protocol.ActivateProtocolVersion)
-		if ok && update.Version.V2() {
-			return true
-		}
-	}
-	return false
 }
 
 func (x *Executor) signTransaction(hash []byte) (protocol.KeySignature, error) {

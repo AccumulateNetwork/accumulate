@@ -28,13 +28,14 @@ func TestUpdateKey(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(page *KeyPage) {
+		// Require a second signature from a non-existent authority to ensure
+		// UpdateKey skips the normal multisig checks
 		page.CreditBalance = 1e9
 		page.AddKeySpec(&KeySpec{Delegate: AccountUrl("foo")})
 		page.AcceptThreshold = 2
@@ -65,7 +66,6 @@ func TestUpdateKey_MultisigDelegate(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -110,7 +110,6 @@ func TestUpdateKey_HasDelegate(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -146,7 +145,6 @@ func TestUpdateKey_MultiLevel(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)
@@ -183,7 +181,6 @@ func TestUpdateKey_TwoDelegates(t *testing.T) {
 	// Initialize
 	var timestamp uint64
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
 		simulator.Genesis(GenesisTime),
 	)

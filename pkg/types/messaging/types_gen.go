@@ -24,6 +24,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type BadSyntheticMessage struct {
+	fieldsSet []bool
+	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Signature protocol.KeySignature      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	extraData []byte
+}
+
 type BlockAnchor struct {
 	fieldsSet []bool
 	Signature protocol.KeySignature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
@@ -107,6 +115,13 @@ type StateTreeUpdate struct {
 	extraData []byte
 }
 
+// SynthFields contains the fields of a synthetic message.
+type SynthFields struct {
+	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Signature protocol.KeySignature      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Proof     *protocol.AnnotatedReceipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+}
+
 type SyntheticMessage struct {
 	fieldsSet []bool
 	Message   Message                    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
@@ -120,6 +135,8 @@ type TransactionMessage struct {
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	extraData   []byte
 }
+
+func (*BadSyntheticMessage) Type() MessageType { return MessageTypeBadSynthetic }
 
 func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
 
@@ -136,6 +153,28 @@ func (*SignatureRequest) Type() MessageType { return MessageTypeSignatureRequest
 func (*SyntheticMessage) Type() MessageType { return MessageTypeSynthetic }
 
 func (*TransactionMessage) Type() MessageType { return MessageTypeTransaction }
+
+func (v *BadSyntheticMessage) Copy() *BadSyntheticMessage {
+	u := new(BadSyntheticMessage)
+
+	if v.Message != nil {
+		u.Message = CopyMessage(v.Message)
+	}
+	if v.Signature != nil {
+		u.Signature = protocol.CopyKeySignature(v.Signature)
+	}
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BadSyntheticMessage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockAnchor) Copy() *BlockAnchor {
 	u := new(BlockAnchor)
@@ -165,12 +204,14 @@ func (v *BlockSummary) Copy() *BlockSummary {
 	u.PreviousBlock = v.PreviousBlock
 	u.RecordUpdates = make([]*RecordUpdate, len(v.RecordUpdates))
 	for i, v := range v.RecordUpdates {
+		v := v
 		if v != nil {
 			u.RecordUpdates[i] = (v).Copy()
 		}
 	}
 	u.StateTreeUpdates = make([]*StateTreeUpdate, len(v.StateTreeUpdates))
 	for i, v := range v.StateTreeUpdates {
+		v := v
 		if v != nil {
 			u.StateTreeUpdates[i] = (v).Copy()
 		}
@@ -214,6 +255,7 @@ func (v *Envelope) Copy() *Envelope {
 
 	u.Signatures = make([]protocol.Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
+		v := v
 		if v != nil {
 			u.Signatures[i] = protocol.CopySignature(v)
 		}
@@ -221,12 +263,14 @@ func (v *Envelope) Copy() *Envelope {
 	u.TxHash = encoding.BytesCopy(v.TxHash)
 	u.Transaction = make([]*protocol.Transaction, len(v.Transaction))
 	for i, v := range v.Transaction {
+		v := v
 		if v != nil {
 			u.Transaction[i] = (v).Copy()
 		}
 	}
 	u.Messages = make([]Message, len(v.Messages))
 	for i, v := range v.Messages {
+		v := v
 		if v != nil {
 			u.Messages[i] = CopyMessage(v)
 		}
@@ -339,6 +383,24 @@ func (v *StateTreeUpdate) Copy() *StateTreeUpdate {
 
 func (v *StateTreeUpdate) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SynthFields) Copy() *SynthFields {
+	u := new(SynthFields)
+
+	if v.Message != nil {
+		u.Message = CopyMessage(v.Message)
+	}
+	if v.Signature != nil {
+		u.Signature = protocol.CopyKeySignature(v.Signature)
+	}
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+
+	return u
+}
+
+func (v *SynthFields) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SyntheticMessage) Copy() *SyntheticMessage {
 	u := new(SyntheticMessage)
 
@@ -376,6 +438,25 @@ func (v *TransactionMessage) Copy() *TransactionMessage {
 }
 
 func (v *TransactionMessage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BadSyntheticMessage) Equal(u *BadSyntheticMessage) bool {
+	if !(EqualMessage(v.Message, u.Message)) {
+		return false
+	}
+	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+
+	return true
+}
 
 func (v *BlockAnchor) Equal(u *BlockAnchor) bool {
 	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
@@ -592,6 +673,25 @@ func (v *StateTreeUpdate) Equal(u *StateTreeUpdate) bool {
 	return true
 }
 
+func (v *SynthFields) Equal(u *SynthFields) bool {
+	if !(EqualMessage(v.Message, u.Message)) {
+		return false
+	}
+	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+
+	return true
+}
+
 func (v *SyntheticMessage) Equal(u *SyntheticMessage) bool {
 	if !(EqualMessage(v.Message, u.Message)) {
 		return false
@@ -622,6 +722,72 @@ func (v *TransactionMessage) Equal(u *TransactionMessage) bool {
 	}
 
 	return true
+}
+
+var fieldNames_BadSyntheticMessage = []string{
+	1: "Type",
+	2: "Message",
+	3: "Signature",
+	4: "Proof",
+}
+
+func (v *BadSyntheticMessage) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(EqualMessage(v.Message, nil)) {
+		writer.WriteValue(2, v.Message.MarshalBinary)
+	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		writer.WriteValue(3, v.Signature.MarshalBinary)
+	}
+	if !(v.Proof == nil) {
+		writer.WriteValue(4, v.Proof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BadSyntheticMessage)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BadSyntheticMessage) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Message is missing")
+	} else if EqualMessage(v.Message, nil) {
+		errs = append(errs, "field Message is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Signature is missing")
+	} else if protocol.EqualKeySignature(v.Signature, nil) {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Proof is missing")
+	} else if v.Proof == nil {
+		errs = append(errs, "field Proof is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_BlockAnchor = []string{
@@ -1324,6 +1490,55 @@ func (v *TransactionMessage) IsValid() error {
 	}
 }
 
+func (v *BadSyntheticMessage) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BadSyntheticMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BadSyntheticMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := UnmarshalMessageFrom(r)
+		if err == nil {
+			v.Message = x
+		}
+		return err
+	})
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := protocol.UnmarshalKeySignatureFrom(r)
+		if err == nil {
+			v.Signature = x
+		}
+		return err
+	})
+	if x := new(protocol.AnnotatedReceipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+		v.Proof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BadSyntheticMessage)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BlockAnchor) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1796,6 +2011,26 @@ func (v *TransactionMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	return nil
 }
 
+func (v *BadSyntheticMessage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType                                        `json:"type"`
+		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(EqualMessage(v.Message, nil)) {
+		u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
+	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	}
+	if !(v.Proof == nil) {
+		u.Proof = v.Proof
+	}
+	return json.Marshal(&u)
+}
+
 func (v *BlockAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      MessageType                                        `json:"type"`
@@ -1982,6 +2217,24 @@ func (v *StateTreeUpdate) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SynthFields) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+	}{}
+	if !(EqualMessage(v.Message, nil)) {
+		u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
+	}
+	if !(protocol.EqualKeySignature(v.Signature, nil)) {
+		u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	}
+	if !(v.Proof == nil) {
+		u.Proof = v.Proof
+	}
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticMessage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      MessageType                                        `json:"type"`
@@ -2012,6 +2265,35 @@ func (v *TransactionMessage) MarshalJSON() ([]byte, error) {
 		u.Transaction = v.Transaction
 	}
 	return json.Marshal(&u)
+}
+
+func (v *BadSyntheticMessage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType                                        `json:"type"`
+		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Proof = v.Proof
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Message != nil {
+		v.Message = u.Message.Value
+	}
+
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
+
+	v.Proof = u.Proof
+	return nil
 }
 
 func (v *BlockAnchor) UnmarshalJSON(data []byte) error {
@@ -2250,6 +2532,30 @@ func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Hash = x
 	}
+	return nil
+}
+
+func (v *SynthFields) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Message   *encoding.JsonUnmarshalWith[Message]               `json:"message,omitempty"`
+		Signature *encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		Proof     *protocol.AnnotatedReceipt                         `json:"proof,omitempty"`
+	}{}
+	u.Message = &encoding.JsonUnmarshalWith[Message]{Value: v.Message, Func: UnmarshalMessageJSON}
+	u.Signature = &encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
+	u.Proof = v.Proof
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Message != nil {
+		v.Message = u.Message.Value
+	}
+
+	if u.Signature != nil {
+		v.Signature = u.Signature.Value
+	}
+
+	v.Proof = u.Proof
 	return nil
 }
 

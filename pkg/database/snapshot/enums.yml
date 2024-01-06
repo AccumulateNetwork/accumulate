@@ -23,6 +23,12 @@ SectionType:
   RecordIndex:
     description: indexes record keys, including the offset and section number
     value: 8
-  BPT:
-    description: contains the BPT
+  RawBPT:
+    description: contains the BPT, as raw (key hash, value) pairs
     value: 9
+  Consensus:
+    description: contains consensus parameters
+    value: 10
+  BPT:
+    description: contains the BPT, as records
+    value: 11

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	dut "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -34,7 +35,6 @@ func TestSequencer(t *testing.T) {
 	logger := acctesting.NewTestLogger(t)
 	net := simulator.NewSimpleNetwork(t.Name(), 2, 1)
 	sim := NewSim(t,
-		simulator.MemoryDatabase,
 		simulator.WithNetwork(net),
 		simulator.GenesisWith(GenesisTime, new(core.GlobalValues)), // Use v1
 	)
@@ -75,7 +75,7 @@ func TestSequencer(t *testing.T) {
 		ValidatorKey: net.Bvns[0].Nodes[0].PrivValKey,
 	})
 
-	anchor, err := svc.Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(AnchorPool), DnUrl().JoinPath(AnchorPool), 1)
+	anchor, err := svc.Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(AnchorPool), DnUrl().JoinPath(AnchorPool), 1, private.SequenceOptions{})
 	require.NoError(t, err)
 	require.IsType(t, (*messaging.TransactionMessage)(nil), anchor.Message)
 	require.IsType(t, (*BlockValidatorAnchor)(nil), anchor.Message.(*messaging.TransactionMessage).Transaction.Body)
@@ -85,7 +85,7 @@ func TestSequencer(t *testing.T) {
 	require.IsType(t, (*PartitionSignature)(nil), sigs[0].Message.(*messaging.SignatureMessage).Signature)
 	require.IsType(t, (*ED25519Signature)(nil), sigs[1].Message.(*messaging.SignatureMessage).Signature)
 
-	synth, err := svc.Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(Synthetic), PartitionUrl("BVN1").JoinPath(Synthetic), 1)
+	synth, err := svc.Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(Synthetic), PartitionUrl("BVN1").JoinPath(Synthetic), 1, private.SequenceOptions{})
 	require.NoError(t, err)
 	require.IsType(t, (*messaging.TransactionMessage)(nil), anchor.Message)
 	require.IsType(t, (*SyntheticDepositTokens)(nil), synth.Message.(*messaging.TransactionMessage).Transaction.Body)

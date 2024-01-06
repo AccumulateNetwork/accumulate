@@ -23,19 +23,17 @@ import (
 )
 
 type Describe struct {
-	fieldsSet    []bool
-	NetworkType  protocol.PartitionType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
-	PartitionId  string                 `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required" toml:"partition-id" mapstructure:"partition-id"`
-	LocalAddress string                 `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
-	Network      Network                `json:"network,omitempty" form:"network" query:"network" validate:"required" toml:"network" mapstructure:"network"`
-	extraData    []byte
+	fieldsSet   []bool
+	NetworkType protocol.PartitionType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
+	PartitionId string                 `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required" toml:"partition-id" mapstructure:"partition-id"`
+	Network     Network                `json:"network,omitempty" form:"network" query:"network" validate:"required" toml:"network" mapstructure:"network"`
+	extraData   []byte
 }
 
 type Network struct {
-	fieldsSet  []bool
-	Id         string      `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
-	Partitions []Partition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required" toml:"partitions" mapstructure:"partitions"`
-	extraData  []byte
+	fieldsSet []bool
+	Id        string `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
+	extraData []byte
 }
 
 type Node struct {
@@ -66,7 +64,6 @@ func (v *Describe) Copy() *Describe {
 
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
-	u.LocalAddress = v.LocalAddress
 	u.Network = *(&v.Network).Copy()
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -82,10 +79,6 @@ func (v *Network) Copy() *Network {
 	u := new(Network)
 
 	u.Id = v.Id
-	u.Partitions = make([]Partition, len(v.Partitions))
-	for i, v := range v.Partitions {
-		u.Partitions[i] = *(&v).Copy()
-	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -116,12 +109,14 @@ func (v *P2P) Copy() *P2P {
 
 	u.Listen = make([]p2p.Multiaddr, len(v.Listen))
 	for i, v := range v.Listen {
+		v := v
 		if v != nil {
 			u.Listen[i] = p2p.CopyMultiaddr(v)
 		}
 	}
 	u.BootstrapPeers = make([]p2p.Multiaddr, len(v.BootstrapPeers))
 	for i, v := range v.BootstrapPeers {
+		v := v
 		if v != nil {
 			u.BootstrapPeers[i] = p2p.CopyMultiaddr(v)
 		}
@@ -144,6 +139,7 @@ func (v *Partition) Copy() *Partition {
 	u.BasePort = v.BasePort
 	u.Nodes = make([]Node, len(v.Nodes))
 	for i, v := range v.Nodes {
+		v := v
 		u.Nodes[i] = *(&v).Copy()
 	}
 	if len(v.extraData) > 0 {
@@ -163,9 +159,6 @@ func (v *Describe) Equal(u *Describe) bool {
 	if !(v.PartitionId == u.PartitionId) {
 		return false
 	}
-	if !(v.LocalAddress == u.LocalAddress) {
-		return false
-	}
 	if !((&v.Network).Equal(&u.Network)) {
 		return false
 	}
@@ -176,14 +169,6 @@ func (v *Describe) Equal(u *Describe) bool {
 func (v *Network) Equal(u *Network) bool {
 	if !(v.Id == u.Id) {
 		return false
-	}
-	if len(v.Partitions) != len(u.Partitions) {
-		return false
-	}
-	for i := range v.Partitions {
-		if !((&v.Partitions[i]).Equal(&u.Partitions[i])) {
-			return false
-		}
 	}
 
 	return true
@@ -246,8 +231,7 @@ func (v *Partition) Equal(u *Partition) bool {
 var fieldNames_Describe = []string{
 	1: "NetworkType",
 	2: "PartitionId",
-	3: "LocalAddress",
-	4: "Network",
+	3: "Network",
 }
 
 func (v *Describe) MarshalBinary() ([]byte, error) {
@@ -264,11 +248,8 @@ func (v *Describe) MarshalBinary() ([]byte, error) {
 	if !(len(v.PartitionId) == 0) {
 		writer.WriteString(2, v.PartitionId)
 	}
-	if !(len(v.LocalAddress) == 0) {
-		writer.WriteString(3, v.LocalAddress)
-	}
 	if !((v.Network).Equal(new(Network))) {
-		writer.WriteValue(4, v.Network.MarshalBinary)
+		writer.WriteValue(3, v.Network.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Describe)
@@ -293,11 +274,6 @@ func (v *Describe) IsValid() error {
 		errs = append(errs, "field PartitionId is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field LocalAddress is missing")
-	} else if len(v.LocalAddress) == 0 {
-		errs = append(errs, "field LocalAddress is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Network is missing")
 	} else if (v.Network).Equal(new(Network)) {
 		errs = append(errs, "field Network is not set")
@@ -315,7 +291,6 @@ func (v *Describe) IsValid() error {
 
 var fieldNames_Network = []string{
 	1: "Id",
-	2: "Partitions",
 }
 
 func (v *Network) MarshalBinary() ([]byte, error) {
@@ -328,11 +303,6 @@ func (v *Network) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Id) == 0) {
 		writer.WriteString(1, v.Id)
-	}
-	if !(len(v.Partitions) == 0) {
-		for _, v := range v.Partitions {
-			writer.WriteValue(2, v.MarshalBinary)
-		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_Network)
@@ -350,11 +320,6 @@ func (v *Network) IsValid() error {
 		errs = append(errs, "field Id is missing")
 	} else if len(v.Id) == 0 {
 		errs = append(errs, "field Id is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Partitions is missing")
-	} else if len(v.Partitions) == 0 {
-		errs = append(errs, "field Partitions is not set")
 	}
 
 	switch len(errs) {
@@ -560,10 +525,7 @@ func (v *Describe) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(2); ok {
 		v.PartitionId = x
 	}
-	if x, ok := reader.ReadString(3); ok {
-		v.LocalAddress = x
-	}
-	if x := new(Network); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+	if x := new(Network); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Network = *x
 	}
 
@@ -588,13 +550,6 @@ func (v *Network) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Id = x
-	}
-	for {
-		if x := new(Partition); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-			v.Partitions = append(v.Partitions, *x)
-		} else {
-			break
-		}
 	}
 
 	seen, err := reader.Reset(fieldNames_Network)
@@ -717,11 +672,10 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *Describe) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkType  protocol.PartitionType `json:"networkType,omitempty"`
-		PartitionId  string                 `json:"partitionId,omitempty"`
-		SubnetId     string                 `json:"subnetId,omitempty"`
-		LocalAddress string                 `json:"localAddress,omitempty"`
-		Network      Network                `json:"network,omitempty"`
+		NetworkType protocol.PartitionType `json:"networkType,omitempty"`
+		PartitionId string                 `json:"partitionId,omitempty"`
+		SubnetId    string                 `json:"subnetId,omitempty"`
+		Network     Network                `json:"network,omitempty"`
 	}{}
 	if !(v.NetworkType == 0) {
 		u.NetworkType = v.NetworkType
@@ -730,27 +684,8 @@ func (v *Describe) MarshalJSON() ([]byte, error) {
 		u.PartitionId = v.PartitionId
 		u.SubnetId = v.PartitionId
 	}
-	if !(len(v.LocalAddress) == 0) {
-		u.LocalAddress = v.LocalAddress
-	}
 	if !((v.Network).Equal(new(Network))) {
 		u.Network = v.Network
-	}
-	return json.Marshal(&u)
-}
-
-func (v *Network) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Id         string                       `json:"id,omitempty"`
-		Partitions encoding.JsonList[Partition] `json:"partitions,omitempty"`
-		Subnets    encoding.JsonList[Partition] `json:"subnets,omitempty"`
-	}{}
-	if !(len(v.Id) == 0) {
-		u.Id = v.Id
-	}
-	if !(len(v.Partitions) == 0) {
-		u.Partitions = v.Partitions
-		u.Subnets = v.Partitions
 	}
 	return json.Marshal(&u)
 }
@@ -793,16 +728,14 @@ func (v *Partition) MarshalJSON() ([]byte, error) {
 
 func (v *Describe) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkType  protocol.PartitionType `json:"networkType,omitempty"`
-		PartitionId  string                 `json:"partitionId,omitempty"`
-		SubnetId     string                 `json:"subnetId,omitempty"`
-		LocalAddress string                 `json:"localAddress,omitempty"`
-		Network      Network                `json:"network,omitempty"`
+		NetworkType protocol.PartitionType `json:"networkType,omitempty"`
+		PartitionId string                 `json:"partitionId,omitempty"`
+		SubnetId    string                 `json:"subnetId,omitempty"`
+		Network     Network                `json:"network,omitempty"`
 	}{}
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
-	u.LocalAddress = v.LocalAddress
 	u.Network = v.Network
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -813,29 +746,7 @@ func (v *Describe) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PartitionId = u.SubnetId
 	}
-	v.LocalAddress = u.LocalAddress
 	v.Network = u.Network
-	return nil
-}
-
-func (v *Network) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Id         string                       `json:"id,omitempty"`
-		Partitions encoding.JsonList[Partition] `json:"partitions,omitempty"`
-		Subnets    encoding.JsonList[Partition] `json:"subnets,omitempty"`
-	}{}
-	u.Id = v.Id
-	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Id = u.Id
-	if !(len(u.Partitions) == 0) {
-		v.Partitions = u.Partitions
-	} else {
-		v.Partitions = u.Subnets
-	}
 	return nil
 }
 

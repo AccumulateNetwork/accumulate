@@ -7,18 +7,18 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
-	. "gitlab.com/accumulatenetwork/accumulate/cmd/internal"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
+	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 )
 
@@ -67,9 +67,8 @@ func run(*cobra.Command, []string) {
 	fmt.Println()
 
 	// Wait for SIGINT
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt)
-	<-sigs
+	ctx := cmdutil.ContextForMainProcess(context.Background())
+	<-ctx.Done()
 }
 
 func loadOrGenerateKey() ed25519.PrivateKey {

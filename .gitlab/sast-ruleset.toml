@@ -1,4 +1,13 @@
 [semgrep]
+  # This rule complains about importing net/http/pprof. That registers a handler
+  # with the default HTTP server, but we don't use that server for anything
+  # except pprof, and that is only enabled if the --pprof flag is passed, so
+  # this is not relevant.
+  [[semgrep.ruleset]]
+    disable = true
+    [semgrep.ruleset.identifier]
+      type = "semgrep_id"
+      value = "gosec.G108-1"
 
   # This rule complains if Mkdir/MkdirAll is called with mode > 0600 and !=
   # 0750, which is stupid so I'm disabling it.

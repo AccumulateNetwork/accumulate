@@ -31,9 +31,12 @@ var flags struct {
 	FilePerType            bool
 	ExpandEmbedded         bool
 	LongUnionDiscriminator bool
+	UnionSkipNew           bool
+	UnionSkipType          bool
 	ElidePackageType       bool
 	GoInclude              []string
 	Header                 string
+	GenericSkipAs          bool
 }
 
 func main() {
@@ -51,7 +54,10 @@ func main() {
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
 	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
+	cmd.Flags().BoolVar(&flags.UnionSkipNew, "union-skip-new", false, "Don't generate a new func for unions")
+	cmd.Flags().BoolVar(&flags.UnionSkipType, "union-skip-type", false, "Don't generate a type method for union members")
 	cmd.Flags().BoolVar(&flags.ElidePackageType, "elide-package-type", false, "If there is a union type that has the same name as the package, elide it")
+	cmd.Flags().BoolVar(&flags.GenericSkipAs, "skip-generic-as", false, "Do not create {Type}As methods for generic types")
 	cmd.Flags().StringSliceVar(&flags.GoInclude, "go-include", nil, "Additional Go packages to include")
 	cmd.Flags().StringVar(&flags.Header, "header", "", "Add a header to each file")
 	flags.files.SetFlags(cmd.Flags(), "types")
