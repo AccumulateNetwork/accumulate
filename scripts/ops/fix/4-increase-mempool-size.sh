@@ -21,4 +21,4 @@ fi
 update-config "$node/dnn/config/tendermint.toml"
 update-config "$node/bvnn/config/tendermint.toml"
 
-grep -i max_tx_bytes "$node/dnn/config/tendermint.toml" "$node/bvnn/config/tendermint.toml"
+grep -A 1 "# Maximum number of transactions in the mempool" "$node/dnn/config/tendermint.toml" "$node/bvnn/config/tendermint.toml" 
