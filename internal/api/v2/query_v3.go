@@ -305,7 +305,14 @@ func queryTx(v3 api.Querier, ctx context.Context, txid *url.TxID, includeReceipt
 			return signatureV3(r, msg)
 		}
 		return sigAndReceiptV3(v3, ctx, r, msg)
-
+	case *messaging.SequencedMessage:
+		if ignorePending && r.Status == errors.Pending {
+			return nil, errors.NotFound.WithFormat("%v is pending", txid)
+		}
+		if !includeReceipt {
+			return sequencedV3(r, msg)
+		}
+		return seqAndReceiptV3(v3, ctx, r, msg)
 	default:
 		return nil, errors.BadRequest.WithFormat("%v is a %v, not a transaction or signature", r.ID, r.Message.Type())
 	}
@@ -347,6 +354,82 @@ func (m *JrpcMethods) QueryDirectory(ctx context.Context, params json.RawMessage
 	return res
 }
 
+func sequencedV3[T messaging.Message](r *api.MessageRecord[T], seq *messaging.SequencedMessage) (*TransactionQueryResponse, error) {
+	res := new(TransactionQueryResponse)
+	txn := seq.Message.(*messaging.TransactionMessage)
+	res.Type = txn.Type().String()
+	res.Origin = txn.Transaction.Header.Principal
+	res.Data = seq.Message
+	res.Txid = r.ID
+	res.Status = &protocol.TransactionStatus{
+		TxID:     r.ID,
+		Code:     r.Status,
+		Error:    r.Error,
+		Result:   r.Result,
+		Received: r.Received,
+	}
+
+	res.TransactionHash = seq.Message.ID().HashSlice()
+	res.Transaction = txn.Transaction
+	if r.Produced != nil {
+		for _, r := range r.Produced.Records {
+			res.Produced = append(res.Produced, r.Value)
+		}
+	}
+
+	if r.Sequence != nil {
+		res.Status.SourceNetwork = seq.Source           //r.Sequence.Source
+		res.Status.DestinationNetwork = seq.Destination //r.Sequence.Destination
+		res.Status.SequenceNumber = seq.Number          //r.Sequence.Number
+	}
+
+	if r.SourceReceipt != nil {
+		res.Status.Proof = r.SourceReceipt
+	}
+
+	if r.Signatures != nil {
+		for _, set := range r.Signatures.Records {
+			if signer, ok := set.Account.(protocol.Signer); ok {
+				res.Status.Signers = append(res.Status.Signers, signer)
+			}
+
+			if set.Signatures != nil {
+				for _, msg := range set.Signatures.Records {
+					switch msg := msg.Message.(type) {
+					case *messaging.CreditPayment:
+						if msg.Initiator {
+							res.Status.Initiator = msg.Payer
+						}
+					case *messaging.BlockAnchor:
+						res.Status.AnchorSigners = append(res.Status.AnchorSigners, msg.Signature.GetPublicKey())
+					}
+				}
+			}
+		}
+	}
+
+	//
+	//res.Signatures = []protocol.Signature{sig.Signature}
+	//res.SignatureBooks = []*SignatureBook{{
+	//	Pages: []*SignaturePage{{
+	//		Signatures: []protocol.Signature{sig.Signature},
+	//	}},
+	//}}
+	//
+	//if sig.Signature.Type().IsSystem() {
+	//	res.SignatureBooks[0].Authority = protocol.DnUrl().JoinPath(protocol.Operators)
+	//	res.SignatureBooks[0].Pages[0].Signer.Url = protocol.DnUrl().JoinPath(protocol.Network)
+	//} else {
+	//	if book, _, ok := protocol.ParseKeyPageUrl(sig.Signature.GetSigner()); ok {
+	//		res.SignatureBooks[0].Authority = book
+	//	} else {
+	//		res.SignatureBooks[0].Authority = sig.Signature.GetSigner().RootIdentity()
+	//	}
+	//	res.SignatureBooks[0].Pages[0].Signer.Url = sig.Signature.GetSigner()
+	//}
+
+	return res, nil
+}
 func transactionV3[T messaging.Message](r *api.MessageRecord[T], txn *messaging.TransactionMessage) (*TransactionQueryResponse, error) {
 	res := new(TransactionQueryResponse)
 	res.Type = txn.Transaction.Body.Type().String()
@@ -514,6 +597,30 @@ func signatureV3(r *api.MessageRecord[messaging.Message], sig *messaging.Signatu
 		res.SignatureBooks[0].Pages[0].Signer.Url = sig.Signature.GetSigner()
 	}
 
+	return res, nil
+}
+
+func seqAndReceiptV3(v3 api.Querier, ctx context.Context, r *api.MessageRecord[messaging.Message], seq *messaging.SequencedMessage) (*TransactionQueryResponse, error) {
+	res, err := sequencedV3(r, seq)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if res.Transaction.Header.Principal == nil {
+		return res, nil
+	}
+
+	// Get a receipt from the main chain
+	r2, err := chainRangeOf[api.Record](v3.Query(ctx, seq.ID().AsUrl(), &api.ChainQuery{IncludeReceipt: true}))
+	switch {
+	case err == nil:
+		for _, r := range r2.Records {
+			res.Receipts = append(res.Receipts, txReceiptV3(r))
+		}
+	case errors.Is(err, errors.NotFound):
+		// Ignore
+	default:
+		return nil, errors.UnknownError.Wrap(err)
+	}
 	return res, nil
 }
 
