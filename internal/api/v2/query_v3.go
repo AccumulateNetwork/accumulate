@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -314,7 +314,7 @@ func queryTx(v3 api.Querier, ctx context.Context, txid *url.TxID, includeReceipt
 		}
 		return seqAndReceiptV3(v3, ctx, r, msg)
 	default:
-		return nil, errors.BadRequest.WithFormat("%v is a %v, not a transaction or signature", r.ID, r.Message.Type())
+		return nil, errors.BadRequest.WithFormat("%v is a %v, not a transaction, signature, or sequenced message", r.ID, r.Message.Type())
 	}
 }
 
@@ -407,26 +407,6 @@ func sequencedV3[T messaging.Message](r *api.MessageRecord[T], seq *messaging.Se
 			}
 		}
 	}
-
-	//
-	//res.Signatures = []protocol.Signature{sig.Signature}
-	//res.SignatureBooks = []*SignatureBook{{
-	//	Pages: []*SignaturePage{{
-	//		Signatures: []protocol.Signature{sig.Signature},
-	//	}},
-	//}}
-	//
-	//if sig.Signature.Type().IsSystem() {
-	//	res.SignatureBooks[0].Authority = protocol.DnUrl().JoinPath(protocol.Operators)
-	//	res.SignatureBooks[0].Pages[0].Signer.Url = protocol.DnUrl().JoinPath(protocol.Network)
-	//} else {
-	//	if book, _, ok := protocol.ParseKeyPageUrl(sig.Signature.GetSigner()); ok {
-	//		res.SignatureBooks[0].Authority = book
-	//	} else {
-	//		res.SignatureBooks[0].Authority = sig.Signature.GetSigner().RootIdentity()
-	//	}
-	//	res.SignatureBooks[0].Pages[0].Signer.Url = sig.Signature.GetSigner()
-	//}
 
 	return res, nil
 }
