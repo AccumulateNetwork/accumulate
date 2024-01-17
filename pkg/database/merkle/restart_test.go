@@ -46,7 +46,7 @@ func TestRestart(t *testing.T) {
 }
 
 func TestRestartCache(t *testing.T) {
-	rand.Seed(12344)
+	rand.Seed(12344) //nolint:staticcheck // It's a test, who cares
 	var rh common.RandHash
 	store := new(memdb)
 	txn := store.Begin(nil, true)

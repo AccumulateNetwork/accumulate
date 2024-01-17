@@ -1,0 +1,11 @@
+PrivateKeyType:
+  Raw:
+    value: 1
+  Transient:
+    value: 2
+  Seed:
+    value: 3
+  CometPrivValFile:
+    value: 4
+  CometNodeKeyFile:
+    value: 5
