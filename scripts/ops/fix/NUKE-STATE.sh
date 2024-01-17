@@ -20,4 +20,4 @@ for i in {3..1}; do
     sleep 1
 done
 >&2 echo "Resetting state"
-rm -rf "$node/{dnn,bvnn}/data/{*db,cs.wal}"
+rm -rf "$node"/{dnn,bvnn}/data/{*.db,cs.wal}
