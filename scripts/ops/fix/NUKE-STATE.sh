@@ -11,7 +11,7 @@ if ! [ -d "$node" ]; then
   exit 1
 fi
 
->&2 echo 'This will `rm -rf "$node/{dnn,bvnn}/data/{*db,cs.wal}"`. Are you sure you want to do that? Ctrl-C to cancel or [Enter] to continue.'
+>&2 echo 'This will `rm -rf "'"$node"'/{dnn,bvnn}/data/{*db,cs.wal}"`. Are you sure you want to do that? Ctrl-C to cancel or [Enter] to continue.'
 read -s
 
 # Nuke all the state
