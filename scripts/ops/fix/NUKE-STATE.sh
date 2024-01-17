@@ -12,7 +12,7 @@ if ! [ -d "$node" ]; then
 fi
 
 >&2 echo 'This will `"$node/{dnn,bvnn}/data/{*db,cs.wal}`. Are you sure you want to do that? Ctrl-C to cancel or [Enter] to continue.'
-read
+read -s
 
 # Nuke all the state
 for i in {3..1}; do
@@ -20,4 +20,4 @@ for i in {3..1}; do
     sleep 1
 done
 >&2 echo "Resetting state"
-rm -rf "$node/{dnn,bvnn}/data/{*db,cs.wal}
+rm -rf "$node/{dnn,bvnn}/data/{*db,cs.wal}"
