@@ -11,7 +11,8 @@ if ! [ -d "$node" ]; then
   exit 1
 fi
 
->&2 echo 'This will `rm -rf "'"$node"'/{dnn,bvnn}/data/{*db,cs.wal}"`. Are you sure you want to do that? Ctrl-C to cancel or [Enter] to continue.'
+>&2 echo "This will delete all state. Are you sure you want to do that?"
+>&2 echo "Ctrl-C to abort or [Enter] to continue."
 read -s
 
 # Nuke all the state
@@ -21,3 +22,5 @@ for i in {3..1}; do
 done
 >&2 echo "Resetting state"
 rm -rf "$node"/{dnn,bvnn}/data/{*.db,cs.wal}
+echo '{"height": "0","round": 0,"step": 0}' > "$node"/dnn/data/priv_validator_state.json
+echo '{"height": "0","round": 0,"step": 0}' > "$node"/bvnn/data/priv_validator_state.json
