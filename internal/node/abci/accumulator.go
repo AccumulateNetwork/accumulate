@@ -351,6 +351,28 @@ func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain)
 	return &abci.ResponseInitChain{AppHash: root[:], Validators: updates}, nil
 }
 
+func (app *Accumulator) PrepareProposal(ctx context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
+	if app.Accumulate.MaxEnvelopesPerBlock > 0 && len(req.Txs) > app.Accumulate.MaxEnvelopesPerBlock {
+		req.Txs = req.Txs[:app.Accumulate.MaxEnvelopesPerBlock]
+	}
+
+	// Cloned from BaseApplication
+	txs := make([][]byte, 0, len(req.Txs))
+	var totalBytes int64
+	for _, tx := range req.Txs {
+		totalBytes += int64(len(tx))
+		if totalBytes > req.MaxTxBytes {
+			break
+		}
+		txs = append(txs, tx)
+	}
+	return &abci.ResponsePrepareProposal{Txs: txs}, nil
+}
+
+func (app *Accumulator) ProcessProposal(ctx context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil
+}
+
 func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	defer app.recover()
 
