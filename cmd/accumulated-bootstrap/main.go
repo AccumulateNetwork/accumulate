@@ -8,18 +8,17 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/sha256"
-	"fmt"
 	"strings"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
+	. "gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func main() {
@@ -35,7 +34,6 @@ var cmd = &cobra.Command{
 
 var flag = struct {
 	Key      string
-	LogLevel string
 	Listen   []multiaddr.Multiaddr
 	Peers    []multiaddr.Multiaddr
 	External multiaddr.Multiaddr
@@ -46,45 +44,43 @@ func init() {
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Listen), "listen", "l", "Listening address")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().Var(MultiaddrFlag{Value: &flag.External}, "external", "External address to advertize")
-	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
 }
 
 func run(*cobra.Command, []string) {
-	node, err := p2p.New(p2p.Options{
-		Key:            loadOrGenerateKey(),
-		Listen:         flag.Listen,
-		BootstrapPeers: flag.Peers,
-		DiscoveryMode:  dht.ModeAutoServer,
-		External:       flag.External,
-	})
-	Check(err)
-	defer func() { _ = node.Close() }()
-
-	fmt.Println("We are")
-	for _, a := range node.Addresses() {
-		fmt.Printf("  %s\n", a)
+	cfg := &Config{
+		P2P: &P2P{
+			Key:            loadOrGenerateKey(),
+			Listen:         flag.Listen,
+			BootstrapPeers: flag.Peers,
+			DiscoveryMode:  DhtMode(dht.ModeAutoServer),
+			External:       flag.External,
+		},
 	}
-	fmt.Println()
 
-	// Wait for SIGINT
 	ctx := cmdutil.ContextForMainProcess(context.Background())
+	inst, err := Start(ctx, cfg)
+	Check(err)
+
 	<-ctx.Done()
+	Check(inst.Stop())
 }
 
-func loadOrGenerateKey() ed25519.PrivateKey {
+func loadOrGenerateKey() PrivateKey {
+	if flag.Key == "" {
+		return &TransientPrivateKey{}
+	}
+
 	if strings.HasPrefix(flag.Key, "seed:") {
-		Warnf("Generating a new key from a seed. This is not at all secure.")
-		h := sha256.Sum256([]byte(flag.Key))
-		return ed25519.NewKeyFromSeed(h[:])
+		return &PrivateKeySeed{Seed: record.NewKey(flag.Key[5:])}
 	}
 
-	if flag.Key != "" {
-		return LoadKey(flag.Key)
+	sk := LoadKey(flag.Key)
+	addr := &address.PrivateKey{
+		PublicKey: address.PublicKey{
+			Type: protocol.SignatureTypeED25519,
+			Key:  sk[32:],
+		},
+		Key: sk,
 	}
-
-	// Generate a key if necessary
-	Warnf("Generating a new key. This is highly discouraged for permanent infrastructure.")
-	_, sk, err := ed25519.GenerateKey(rand.Reader)
-	Checkf(err, "generate key")
-	return sk
+	return &RawPrivateKey{Address: addr.String()}
 }
