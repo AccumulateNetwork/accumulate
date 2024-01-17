@@ -145,14 +145,3 @@ func camel2kebab(s string) string {
 		return s[:1] + "-" + s[1:]
 	}))
 }
-
-// type orderedMap []kvp
-
-// type kvp struct {
-// 	key   string
-// 	value any
-// }
-
-// func (m *orderedMap) UnmarshalJSON(b []byte) error {
-// 	json.Token
-// }

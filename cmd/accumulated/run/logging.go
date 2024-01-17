@@ -120,6 +120,7 @@ func (h *logHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
+	record.AddAttrs(logging.Attrs(ctx)...)
 	if record.Level < h.levelFor(h.defaultLevel, record.Attrs) {
 		return nil
 	}

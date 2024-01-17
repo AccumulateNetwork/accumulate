@@ -22,11 +22,11 @@ type Instance struct {
 	network string
 	rootDir string
 
-	running *sync.WaitGroup
-	context context.Context
-	cancel  context.CancelFunc
-	logger  *slog.Logger
-	p2p     *p2p.Node
+	running  *sync.WaitGroup    // tracks jobs that want a graceful shutdown
+	context  context.Context    // canceled when the instance shuts down
+	shutdown context.CancelFunc // shuts down the instance
+	logger   *slog.Logger
+	p2p      *p2p.Node
 }
 
 const minDiskSpace = 0.05
@@ -35,11 +35,11 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	inst := new(Instance)
 	inst.network = cfg.Network
 	inst.running = new(sync.WaitGroup)
-	inst.context, inst.cancel = context.WithCancel(ctx)
+	inst.context, inst.shutdown = context.WithCancel(ctx)
 
 	defer func() {
 		if err != nil {
-			inst.cancel()
+			inst.shutdown()
 		}
 	}()
 
@@ -78,7 +78,7 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 }
 
 func (i *Instance) Stop() error {
-	i.cancel()
+	i.shutdown()
 	i.running.Wait()
 	return nil
 }
