@@ -25,4 +25,4 @@ fi
 update-config "$node/dnn/config/accumulate.toml"
 update-config "$node/bvnn/config/accumulate.toml"
 
-grep -A 1 "batch-replay-limit" "$node/dnn/config/accumulate.toml" "$node/bvnn/config/accumulate.toml"
+grep -A 1 "max-envelopes-per-block" "$node/dnn/config/accumulate.toml" "$node/bvnn/config/accumulate.toml"
