@@ -59,6 +59,7 @@ func (h *Healer) HealSynthetic(ctx context.Context, args HealSyntheticArgs, si S
 	// Has it already been delivered?
 	Q := api.Querier2{Querier: args.Querier}
 	if r, err := Q.QueryMessage(ctx, r.ID, nil); err == nil && r.Status.Delivered() {
+		slog.InfoCtx(ctx, "Synthetic message has been delivered", "id", si.ID, "source", si.Source, "destination", si.Destination, "number", si.Number)
 		return errors.Delivered
 	}
 
