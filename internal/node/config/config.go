@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -144,6 +144,7 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
 	c.ProxyApp = ""
+	c.Accumulate.MaxEnvelopesPerBlock = 100
 	return c
 }
 
@@ -157,6 +158,7 @@ type Accumulate struct {
 	BatchReplayLimit      int    `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
 	SummaryNetwork        string `toml:"summary-network" mapstructure:"summary-network"`
 	DisableDirectDispatch bool   `toml:"disable-direct-dispatch" mapstructure:"disable-direct-dispatch"`
+	MaxEnvelopesPerBlock  int    `toml:"max-envelopes-per-block" mapstructure:"max-envelopes-per-block"`
 
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
