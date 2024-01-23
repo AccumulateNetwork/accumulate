@@ -34,5 +34,6 @@ update-max-env "$node/bvnn/config/accumulate.toml"
 update-mempool "$node/dnn/config/tendermint.toml"
 update-mempool "$node/bvnn/config/tendermint.toml"
 
-grep -A 1 "max-envelopes-per-block" "$node/dnn/config/accumulate.toml" "$node/bvnn/config/accumulate.toml"
+grep "max-envelopes-per-block" "$node/dnn/config/accumulate.toml" "$node/bvnn/config/accumulate.toml"
+echo
 grep -A 1 "# Maximum number of transactions in the mempool" "$node/dnn/config/tendermint.toml" "$node/bvnn/config/tendermint.toml"
