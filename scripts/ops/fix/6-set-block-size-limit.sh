@@ -3,13 +3,20 @@
 
 set -e
 
-function update-config {
+function update-max-env {
     if `grep -q '^max-envelopes-per-block = ' "$1"`; then
         awk '{gsub(/^max-envelopes-per-block = .*$/, "max-envelopes-per-block = 100");print$0}' "$1" > /tmp/file
     else
         { echo 'max-envelopes-per-block = 100'; cat "$1"; } > /tmp/file
     fi
     cat /tmp/file > "$1"
+}
+
+function update-mempool {
+    awk '{gsub(/^size = 10000$/, "size = 5000");print$0}' $1 > /tmp/file
+    cat /tmp/file > $1
+    awk '{gsub(/^size = 15000$/, "size = 5000");print$0}' $1 > /tmp/file
+    cat /tmp/file > $1
 }
 
 node="$1"
@@ -22,7 +29,10 @@ if ! [ -d "$node" ]; then
   exit 1
 fi
 
-update-config "$node/dnn/config/accumulate.toml"
-update-config "$node/bvnn/config/accumulate.toml"
+update-max-env "$node/dnn/config/accumulate.toml"
+update-max-env "$node/bvnn/config/accumulate.toml"
+update-mempool "$node/dnn/config/tendermint.toml"
+update-mempool "$node/bvnn/config/tendermint.toml"
 
 grep -A 1 "max-envelopes-per-block" "$node/dnn/config/accumulate.toml" "$node/bvnn/config/accumulate.toml"
+grep -A 1 "# Maximum number of transactions in the mempool" "$node/dnn/config/tendermint.toml" "$node/bvnn/config/tendermint.toml"
