@@ -9,3 +9,13 @@ PrivateKeyType:
     value: 4
   CometNodeKeyFile:
     value: 5
+
+ServiceType:
+  Storage:
+    value: 1
+
+StorageType:
+  Memory:
+    value: 1
+  Badger:
+    value: 2
