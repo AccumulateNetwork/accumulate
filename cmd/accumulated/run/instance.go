@@ -8,11 +8,13 @@ package run
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/exp/slog"
@@ -27,6 +29,7 @@ type Instance struct {
 	shutdown context.CancelFunc // shuts down the instance
 	logger   *slog.Logger
 	p2p      *p2p.Node
+	services ioc.Registry
 }
 
 const minDiskSpace = 0.05
@@ -36,6 +39,7 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	inst.network = cfg.Network
 	inst.running = new(sync.WaitGroup)
 	inst.context, inst.shutdown = context.WithCancel(ctx)
+	inst.services = ioc.Registry{}
 
 	defer func() {
 		if err != nil {
@@ -48,6 +52,12 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	} else {
 		inst.rootDir, err = os.Getwd()
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine initialization order
+	services, err := ioc.Solve(cfg.Services)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +82,31 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	err = cfg.P2P.start(inst)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("start p2p: %w", err)
+	}
+
+	// Prestart
+	for _, services := range services {
+		for _, svc := range services {
+			svc, ok := svc.(prestarter)
+			if !ok {
+				continue
+			}
+			err = svc.prestart(inst)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("prestart service %T: %w", svc, err)
+			}
+		}
+	}
+
+	// Start services
+	for _, services := range services {
+		for _, svc := range services {
+			slog.InfoCtx(inst.context, "Starting", "service", fmt.Sprintf("%T", svc))
+			err := svc.start(inst)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("start service %T: %w", svc, err)
+			}
+		}
 	}
 
 	return inst, nil

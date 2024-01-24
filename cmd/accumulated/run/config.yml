@@ -14,6 +14,10 @@ Config:
       type: P2P
       marshal-as: reference
       pointer: true
+    - name: Services
+      type: Service
+      marshal-as: union
+      repeatable: true
 
 Logging:
   non-binary: true
@@ -107,5 +111,28 @@ CometNodeKeyFile:
     - name: key
       type: address.Address
       marshal-as: none
+    - name: Path
+      type: string
+
+StorageService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+      optional: true
+    - name: Storage
+      type: Storage
+      marshal-as: union
+
+MemoryStorage:
+  union: { type: storage }
+  non-binary: true
+  fields: ~
+
+BadgerStorage:
+  union: { type: storage }
+  non-binary: true
+  fields:
     - name: Path
       type: string
