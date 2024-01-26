@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -40,8 +40,7 @@ func checkNode(_ *cobra.Command, args []string) {
 	jc := jsonrpc.NewClient("http://" + args[0] + ":16595/v3")
 	ns, err := jc.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	check(err)
-	router, err := routing.NewStaticRouter(ns.Routing, nil)
-	check(err)
+	router := routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 
 	ni, err := jc.NodeInfo(ctx, api.NodeInfoOptions{})
 	check(err)

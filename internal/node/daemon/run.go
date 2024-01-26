@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -609,7 +609,10 @@ func (d *Daemon) StartP2P() error {
 }
 
 func (d *Daemon) startAPI() error {
-	d.router = routing.NewRouter(d.eventBus, d.Logger)
+	d.router = routing.NewRouter(routing.RouterOptions{
+		Events: d.eventBus,
+		Logger: d.Logger,
+	})
 
 	// Setup the p2p node
 	err := d.StartP2P()
