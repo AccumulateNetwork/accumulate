@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -69,9 +69,7 @@ func accountId(_ *cobra.Command, args []string) {
 	ns, err := dclient.NetworkStatus(context.Background(), api.NetworkStatusOptions{Partition: protocol.Directory})
 	check(err)
 
-	router, err := routing.NewStaticRouter(ns.Routing, nil)
-	check(err)
-
+	router := routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 	partition, err := router.RouteAccount(u)
 	check(err)
 	fmt.Printf("Method:         prefix routing table\n")

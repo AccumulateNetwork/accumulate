@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -139,7 +139,10 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 
 	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
-	sim.router = &router{sim, routing.NewRouter(mainEventBus, sim.Logger)}
+	sim.router = &router{sim, routing.NewRouter(routing.RouterOptions{
+		Events: mainEventBus,
+		Logger: sim.Logger,
+	})}
 
 	// Initialize each executor
 	for i, bvn := range sim.netInit.Bvns[:1] {
