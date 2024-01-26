@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -99,14 +99,10 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	b.db.SetObserver(execute.NewDatabaseObserver())
 
 	// Create the router
-	var err error
-	b.router, err = routing.NewStaticRouter(gg.Routing, b.Logger)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
+	b.router = routing.NewRouter(routing.RouterOptions{Initial: gg.Routing, Logger: b.Logger})
 
 	// Unpack snapshots
-	err = b.unpackSnapshots()
+	err := b.unpackSnapshots()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

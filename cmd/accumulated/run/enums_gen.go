@@ -32,6 +32,12 @@ const PrivateKeyTypeCometNodeKeyFile PrivateKeyType = 5
 // ServiceTypeStorage .
 const ServiceTypeStorage ServiceType = 1
 
+// ServiceTypeHttp .
+const ServiceTypeHttp ServiceType = 7
+
+// ServiceTypeRouter .
+const ServiceTypeRouter ServiceType = 8
+
 // StorageTypeMemory .
 const StorageTypeMemory StorageType = 1
 
@@ -114,7 +120,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeStorage:
+	case ServiceTypeStorage, ServiceTypeHttp, ServiceTypeRouter:
 		*v = u
 		return true
 	}
@@ -126,6 +132,10 @@ func (v ServiceType) String() string {
 	switch v {
 	case ServiceTypeStorage:
 		return "storage"
+	case ServiceTypeHttp:
+		return "http"
+	case ServiceTypeRouter:
+		return "router"
 	}
 	return fmt.Sprintf("ServiceType:%d", v)
 }
@@ -135,6 +145,10 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 	switch strings.ToLower(name) {
 	case "storage":
 		return ServiceTypeStorage, true
+	case "http":
+		return ServiceTypeHttp, true
+	case "router":
+		return ServiceTypeRouter, true
 	}
 	return 0, false
 }
