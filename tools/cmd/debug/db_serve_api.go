@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -100,8 +100,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 			return batch.Account(u).Main().GetAs(target)
 		}))
 	}
-	router, err := routing.NewStaticRouter(g.Routing, logger)
-	Check(err)
+	router := routing.NewRouter(routing.RouterOptions{Initial: g.Routing, Logger: logger})
 
 	// Make a querier for each partition
 	Q := &Querier{
