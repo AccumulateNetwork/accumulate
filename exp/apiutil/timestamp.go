@@ -1,10 +1,10 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package main
+package apiutil
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 )
 
 type TimestampService struct {
-	querier api.Querier
-	cache   keyvalue.Beginner
+	Querier api.Querier
+	Cache   keyvalue.Beginner
 }
 
 type ptrVal[T any] interface {
@@ -30,7 +30,7 @@ type ptrVal[T any] interface {
 }
 
 func (s *TimestampService) GetTimestamp(ctx context.Context, id *url.TxID) (_ *MessageData, err error) {
-	cache := s.cache.Begin(nil, true)
+	cache := s.Cache.Begin(nil, true)
 	defer func() {
 		if err == nil {
 			err = cache.Commit()
@@ -49,7 +49,7 @@ func (s *TimestampService) GetTimestamp(ctx context.Context, id *url.TxID) (_ *M
 	v = new(MessageData)
 	v.LastUpdated = time.Now()
 
-	Q := api.Querier2{Querier: s.querier}
+	Q := api.Querier2{Querier: s.Querier}
 	r, err := Q.QueryTransactionChains(ctx, id, &api.ChainQuery{IncludeReceipt: true})
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (s *TimestampService) getAnchorData(ctx context.Context, cache keyvalue.Sto
 		return v, nil
 	}
 
-	Q := api.Querier2{Querier: s.querier}
+	Q := api.Querier2{Querier: s.Querier}
 	r, err := Q.SearchForAnchor(ctx, protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{
 		Anchor:         anchor[:],
 		IncludeReceipt: true,

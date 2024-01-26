@@ -2052,7 +2052,7 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 		Type             MessageType                         `json:"type"`
 		Partition        string                              `json:"partition,omitempty"`
 		Index            uint64                              `json:"index,omitempty"`
-		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		StateTreeHash    *string                             `json:"stateTreeHash,omitempty"`
 		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
 		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
 		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
@@ -2065,7 +2065,7 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 		u.Index = v.Index
 	}
 	if !(v.StateTreeHash == ([32]byte{})) {
-		u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+		u.StateTreeHash = encoding.ChainToJSON(&v.StateTreeHash)
 	}
 	if !(v.PreviousBlock == 0) {
 		u.PreviousBlock = v.PreviousBlock
@@ -2206,13 +2206,13 @@ func (v *SignatureRequest) MarshalJSON() ([]byte, error) {
 func (v *StateTreeUpdate) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Key  *record.Key `json:"key,omitempty"`
-		Hash string      `json:"hash,omitempty"`
+		Hash *string     `json:"hash,omitempty"`
 	}{}
 	if !(v.Key == nil) {
 		u.Key = v.Key
 	}
 	if !(v.Hash == ([32]byte{})) {
-		u.Hash = encoding.ChainToJSON(v.Hash)
+		u.Hash = encoding.ChainToJSON(&v.Hash)
 	}
 	return json.Marshal(&u)
 }
@@ -2327,7 +2327,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 		Type             MessageType                         `json:"type"`
 		Partition        string                              `json:"partition,omitempty"`
 		Index            uint64                              `json:"index,omitempty"`
-		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		StateTreeHash    *string                             `json:"stateTreeHash,omitempty"`
 		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
 		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
 		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
@@ -2335,7 +2335,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Partition = v.Partition
 	u.Index = v.Index
-	u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+	u.StateTreeHash = encoding.ChainToJSON(&v.StateTreeHash)
 	u.PreviousBlock = v.PreviousBlock
 	u.RecordUpdates = v.RecordUpdates
 	u.StateTreeUpdates = v.StateTreeUpdates
@@ -2350,7 +2350,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.StateTreeHash); err != nil {
 		return fmt.Errorf("error decoding StateTreeHash: %w", err)
 	} else {
-		v.StateTreeHash = x
+		v.StateTreeHash = *x
 	}
 	v.PreviousBlock = u.PreviousBlock
 	v.RecordUpdates = u.RecordUpdates
@@ -2519,10 +2519,10 @@ func (v *SignatureRequest) UnmarshalJSON(data []byte) error {
 func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Key  *record.Key `json:"key,omitempty"`
-		Hash string      `json:"hash,omitempty"`
+		Hash *string     `json:"hash,omitempty"`
 	}{}
 	u.Key = v.Key
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Hash = encoding.ChainToJSON(&v.Hash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2530,7 +2530,7 @@ func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
-		v.Hash = x
+		v.Hash = *x
 	}
 	return nil
 }
