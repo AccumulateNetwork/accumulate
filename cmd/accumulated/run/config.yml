@@ -136,3 +136,80 @@ BadgerStorage:
   fields:
     - name: Path
       type: string
+
+HttpService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Listen
+      description: are the addresses and schemes to listen on
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
+    - name: TlsCertPath
+      description: is the path of the TLS certificate
+      type: string
+      optional: true
+    - name: TlsKeyPath
+      description: is the path of the TLS key
+      type: string
+      optional: true
+    - name: CorsOrigins
+      description: is a list of allowed CORS origins
+      type: string
+      repeatable: true
+      optional: true
+    - name: LetsEncrypt
+      description: automatically retrieves a certificate from Let's Encrypt for the specified domains
+      type: string
+      repeatable: true
+      optional: true
+    - name: ConnectionLimit
+      description: limits the number of concurrent connections
+      type: int
+      optional: true
+      pointer: true
+    - name: ReadHeaderTimeout
+      description: protects against slow-loris attacks
+      type: duration
+      optional: true
+      pointer: true
+    - name: DebugJsonRpc
+      type: bool
+      optional: true
+      pointer: true
+    - name: Router
+      type: { name: ServiceOrRef, parameters: [{ type: RouterService, pointer: true }] }
+      marshal-as: reference
+      pointer: true
+    - name: PeerMap
+      description: hard-codes the peer map
+      type: HttpPeerMapEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+HttpPeerMapEntry:
+  fields:
+    - name: ID
+      type: p2p.PeerID
+      marshal-as: union
+      zero-value: '""'
+    - name: Partitions
+      type: string
+      repeatable: true
+    - name: Addresses
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
+
+RouterService:
+  union: { type: service }
+  fields:
+    - name: Name
+      type: string
+      optional: true
+    - name: Events
+      description: may specify an event bus to use for routing table updates
+      type: string
+      optional: true

@@ -1,10 +1,10 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package main
+package apiutil
 
 import (
 	"context"
@@ -53,8 +53,8 @@ func TestTimestampService(t *testing.T) {
 		Txn(st.TxID).Produced().Succeeds())
 
 	svc := &TimestampService{
-		querier: sim.Query(),
-		cache:   memory.New(nil),
+		Querier: sim.Query(),
+		Cache:   memory.New(nil),
 	}
 
 	// Test
@@ -65,7 +65,7 @@ func TestTimestampService(t *testing.T) {
 	}
 
 	// Pull from cache
-	svc.querier = nil
+	svc.Querier = nil
 	_, err = svc.GetTimestamp(context.Background(), st.TxID)
 	require.NoError(t, err)
 }

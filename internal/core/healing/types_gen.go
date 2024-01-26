@@ -86,7 +86,7 @@ func (v *PeerInfo) Equal(u *PeerInfo) bool {
 func (v *PeerInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Operator  *url.URL                                       `json:"operator,omitempty"`
-		Key       string                                         `json:"key,omitempty"`
+		Key       *string                                        `json:"key,omitempty"`
 		Status    *api.ConsensusStatus                           `json:"status,omitempty"`
 		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
@@ -94,7 +94,7 @@ func (v *PeerInfo) MarshalJSON() ([]byte, error) {
 		u.Operator = v.Operator
 	}
 	if !(v.Key == ([32]byte{})) {
-		u.Key = encoding.ChainToJSON(v.Key)
+		u.Key = encoding.ChainToJSON(&v.Key)
 	}
 	if !(v.Status == nil) {
 		u.Status = v.Status
@@ -108,12 +108,12 @@ func (v *PeerInfo) MarshalJSON() ([]byte, error) {
 func (v *PeerInfo) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Operator  *url.URL                                       `json:"operator,omitempty"`
-		Key       string                                         `json:"key,omitempty"`
+		Key       *string                                        `json:"key,omitempty"`
 		Status    *api.ConsensusStatus                           `json:"status,omitempty"`
 		Addresses *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"addresses,omitempty"`
 	}{}
 	u.Operator = v.Operator
-	u.Key = encoding.ChainToJSON(v.Key)
+	u.Key = encoding.ChainToJSON(&v.Key)
 	u.Status = v.Status
 	u.Addresses = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Addresses, Func: p2p.UnmarshalMultiaddrJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -123,7 +123,7 @@ func (v *PeerInfo) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.Key); err != nil {
 		return fmt.Errorf("error decoding Key: %w", err)
 	} else {
-		v.Key = x
+		v.Key = *x
 	}
 	v.Status = u.Status
 	if u.Addresses != nil {

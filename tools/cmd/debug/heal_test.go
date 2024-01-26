@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -65,7 +65,11 @@ func TestIndexReceivedAnchors(t *testing.T) {
 	checkf(err, "start p2p node")
 	t.Cleanup(func() { require.NoError(t, node.Close()) })
 
-	router, err := apiutil.InitRouter(ctx, node, network)
+	router, err := apiutil.InitRouter(apiutil.RouterOptions{
+		Context: ctx,
+		Node:    node,
+		Network: network,
+	})
 	check(err)
 
 	dialer := node.DialNetwork()
@@ -125,8 +129,7 @@ func TestCheckTransactions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &netinfo))
 
 	router := new(routing.MessageRouter)
-	router.Router, err = routing.NewStaticRouter(netinfo.Status.Routing, nil)
-	require.NoError(t, err)
+	router.Router = routing.NewRouter(routing.RouterOptions{Initial: netinfo.Status.Routing})
 
 	req := []struct {
 		Partition string
@@ -255,7 +258,11 @@ func TestHealSynth(t *testing.T) {
 
 	fmt.Printf("We are %v\n", node.ID())
 
-	router, err := apiutil.InitRouter(context.Background(), node, "MainNet")
+	router, err := apiutil.InitRouter(apiutil.RouterOptions{
+		Context: context.Background(),
+		Node:    node,
+		Network: "MainNet",
+	})
 	require.NoError(t, err)
 
 	client := &message.Client{
@@ -419,8 +426,7 @@ func TestHealAnchors(t *testing.T) {
 	}
 	ns, err := client.NetworkStatus(ctx, api.NetworkStatusOptions{})
 	require.NoError(t, err)
-	router.Router, err = routing.NewStaticRouter(ns.Routing, nil)
-	require.NoError(t, err)
+	router.Router = routing.NewRouter(routing.RouterOptions{Initial: ns.Routing})
 
 	peers, err := client.FindService(ctx, api.FindServiceOptions{
 		Network: network,
