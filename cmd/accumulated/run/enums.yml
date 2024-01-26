@@ -13,6 +13,10 @@ PrivateKeyType:
 ServiceType:
   Storage:
     value: 1
+  Http:
+    value: 7
+  Router:
+    value: 8
 
 StorageType:
   Memory:

@@ -2746,26 +2746,26 @@ func (v *ChainState) MarshalJSON() ([]byte, error) {
 func (v *DataEntryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url       *url.URL `json:"url,omitempty"`
-		EntryHash string   `json:"entryHash,omitempty"`
+		EntryHash *string  `json:"entryHash,omitempty"`
 	}{}
 	if !(v.Url == nil) {
 		u.Url = v.Url
 	}
 	if !(v.EntryHash == ([32]byte{})) {
-		u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+		u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	}
 	return json.Marshal(&u)
 }
 
 func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		EntryHash string                                          `json:"entryHash,omitempty"`
+		EntryHash *string                                         `json:"entryHash,omitempty"`
 		Entry     *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 		TxId      *url.TxID                                       `json:"txId,omitempty"`
 		CauseTxId *url.TxID                                       `json:"causeTxId,omitempty"`
 	}{}
 	if !(v.EntryHash == ([32]byte{})) {
-		u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+		u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	}
 	if !(protocol.EqualDataEntry(v.Entry, nil)) {
 		u.Entry = &encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
@@ -2832,7 +2832,7 @@ func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 		PartitionId   string                 `json:"partitionId,omitempty"`
 		NetworkType   protocol.PartitionType `json:"networkType,omitempty"`
 		Network       NetworkDescription     `json:"network,omitempty"`
-		NetworkAnchor string                 `json:"networkAnchor,omitempty"`
+		NetworkAnchor *string                `json:"networkAnchor,omitempty"`
 		Values        core.GlobalValues      `json:"values,omitempty"`
 		Error         *errors2.Error         `json:"error,omitempty"`
 	}{}
@@ -2846,7 +2846,7 @@ func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 		u.Network = v.Network
 	}
 	if !(v.NetworkAnchor == ([32]byte{})) {
-		u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
+		u.NetworkAnchor = encoding.ChainToJSON(&v.NetworkAnchor)
 	}
 	if !((v.Values).Equal(new(core.GlobalValues))) {
 		u.Values = v.Values
@@ -3242,13 +3242,13 @@ func (v *QueryOptions) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		EntryHash string                                          `json:"entryHash,omitempty"`
+		EntryHash *string                                         `json:"entryHash,omitempty"`
 		Entry     *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 		TxId      *url.TxID                                       `json:"txId,omitempty"`
 		CauseTxId *url.TxID                                       `json:"causeTxId,omitempty"`
 	}{}
 	if !(v.EntryHash == ([32]byte{})) {
-		u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+		u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	}
 	if !(protocol.EqualDataEntry(v.Entry, nil)) {
 		u.Entry = &encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
@@ -3364,10 +3364,10 @@ func (v *StatusResponse) MarshalJSON() ([]byte, error) {
 		BvnTime                   time.Time `json:"bvnTime,omitempty"`
 		DnTime                    time.Time `json:"dnTime,omitempty"`
 		LastDirectoryAnchorHeight uint64    `json:"lastDirectoryAnchorHeight,omitempty"`
-		BvnRootHash               string    `json:"bvnRootHash,omitempty"`
-		DnRootHash                string    `json:"dnRootHash,omitempty"`
-		BvnBptHash                string    `json:"bvnBptHash,omitempty"`
-		DnBptHash                 string    `json:"dnBptHash,omitempty"`
+		BvnRootHash               *string   `json:"bvnRootHash,omitempty"`
+		DnRootHash                *string   `json:"dnRootHash,omitempty"`
+		BvnBptHash                *string   `json:"bvnBptHash,omitempty"`
+		DnBptHash                 *string   `json:"dnBptHash,omitempty"`
 	}{}
 	if !(!v.Ok) {
 		u.Ok = v.Ok
@@ -3388,16 +3388,16 @@ func (v *StatusResponse) MarshalJSON() ([]byte, error) {
 		u.LastDirectoryAnchorHeight = v.LastDirectoryAnchorHeight
 	}
 	if !(v.BvnRootHash == ([32]byte{})) {
-		u.BvnRootHash = encoding.ChainToJSON(v.BvnRootHash)
+		u.BvnRootHash = encoding.ChainToJSON(&v.BvnRootHash)
 	}
 	if !(v.DnRootHash == ([32]byte{})) {
-		u.DnRootHash = encoding.ChainToJSON(v.DnRootHash)
+		u.DnRootHash = encoding.ChainToJSON(&v.DnRootHash)
 	}
 	if !(v.BvnBptHash == ([32]byte{})) {
-		u.BvnBptHash = encoding.ChainToJSON(v.BvnBptHash)
+		u.BvnBptHash = encoding.ChainToJSON(&v.BvnBptHash)
 	}
 	if !(v.DnBptHash == ([32]byte{})) {
-		u.DnBptHash = encoding.ChainToJSON(v.DnBptHash)
+		u.DnBptHash = encoding.ChainToJSON(&v.DnBptHash)
 	}
 	return json.Marshal(&u)
 }
@@ -3841,10 +3841,10 @@ func (v *ChainState) UnmarshalJSON(data []byte) error {
 func (v *DataEntryQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url       *url.URL `json:"url,omitempty"`
-		EntryHash string   `json:"entryHash,omitempty"`
+		EntryHash *string  `json:"entryHash,omitempty"`
 	}{}
 	u.Url = v.Url
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3852,19 +3852,19 @@ func (v *DataEntryQuery) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
 	} else {
-		v.EntryHash = x
+		v.EntryHash = *x
 	}
 	return nil
 }
 
 func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		EntryHash string                                          `json:"entryHash,omitempty"`
+		EntryHash *string                                         `json:"entryHash,omitempty"`
 		Entry     *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 		TxId      *url.TxID                                       `json:"txId,omitempty"`
 		CauseTxId *url.TxID                                       `json:"causeTxId,omitempty"`
 	}{}
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	u.Entry = &encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	u.TxId = v.TxId
 	u.CauseTxId = v.CauseTxId
@@ -3874,7 +3874,7 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
 	} else {
-		v.EntryHash = x
+		v.EntryHash = *x
 	}
 	if u.Entry != nil {
 		v.Entry = u.Entry.Value
@@ -3929,14 +3929,14 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 		PartitionId   string                 `json:"partitionId,omitempty"`
 		NetworkType   protocol.PartitionType `json:"networkType,omitempty"`
 		Network       NetworkDescription     `json:"network,omitempty"`
-		NetworkAnchor string                 `json:"networkAnchor,omitempty"`
+		NetworkAnchor *string                `json:"networkAnchor,omitempty"`
 		Values        core.GlobalValues      `json:"values,omitempty"`
 		Error         *errors2.Error         `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
-	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
+	u.NetworkAnchor = encoding.ChainToJSON(&v.NetworkAnchor)
 	u.Values = v.Values
 	u.Error = v.Error
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -3948,7 +3948,7 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.NetworkAnchor); err != nil {
 		return fmt.Errorf("error decoding NetworkAnchor: %w", err)
 	} else {
-		v.NetworkAnchor = x
+		v.NetworkAnchor = *x
 	}
 	v.Values = u.Values
 	v.Error = u.Error
@@ -4378,12 +4378,12 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		EntryHash string                                          `json:"entryHash,omitempty"`
+		EntryHash *string                                         `json:"entryHash,omitempty"`
 		Entry     *encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 		TxId      *url.TxID                                       `json:"txId,omitempty"`
 		CauseTxId *url.TxID                                       `json:"causeTxId,omitempty"`
 	}{}
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.EntryHash = encoding.ChainToJSON(&v.EntryHash)
 	u.Entry = &encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	u.TxId = v.TxId
 	u.CauseTxId = v.CauseTxId
@@ -4393,7 +4393,7 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
 	} else {
-		v.EntryHash = x
+		v.EntryHash = *x
 	}
 	if u.Entry != nil {
 		v.Entry = u.Entry.Value
@@ -4529,10 +4529,10 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 		BvnTime                   time.Time `json:"bvnTime,omitempty"`
 		DnTime                    time.Time `json:"dnTime,omitempty"`
 		LastDirectoryAnchorHeight uint64    `json:"lastDirectoryAnchorHeight,omitempty"`
-		BvnRootHash               string    `json:"bvnRootHash,omitempty"`
-		DnRootHash                string    `json:"dnRootHash,omitempty"`
-		BvnBptHash                string    `json:"bvnBptHash,omitempty"`
-		DnBptHash                 string    `json:"dnBptHash,omitempty"`
+		BvnRootHash               *string   `json:"bvnRootHash,omitempty"`
+		DnRootHash                *string   `json:"dnRootHash,omitempty"`
+		BvnBptHash                *string   `json:"bvnBptHash,omitempty"`
+		DnBptHash                 *string   `json:"dnBptHash,omitempty"`
 	}{}
 	u.Ok = v.Ok
 	u.BvnHeight = v.BvnHeight
@@ -4540,10 +4540,10 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 	u.BvnTime = v.BvnTime
 	u.DnTime = v.DnTime
 	u.LastDirectoryAnchorHeight = v.LastDirectoryAnchorHeight
-	u.BvnRootHash = encoding.ChainToJSON(v.BvnRootHash)
-	u.DnRootHash = encoding.ChainToJSON(v.DnRootHash)
-	u.BvnBptHash = encoding.ChainToJSON(v.BvnBptHash)
-	u.DnBptHash = encoding.ChainToJSON(v.DnBptHash)
+	u.BvnRootHash = encoding.ChainToJSON(&v.BvnRootHash)
+	u.DnRootHash = encoding.ChainToJSON(&v.DnRootHash)
+	u.BvnBptHash = encoding.ChainToJSON(&v.BvnBptHash)
+	u.DnBptHash = encoding.ChainToJSON(&v.DnBptHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -4556,22 +4556,22 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.BvnRootHash); err != nil {
 		return fmt.Errorf("error decoding BvnRootHash: %w", err)
 	} else {
-		v.BvnRootHash = x
+		v.BvnRootHash = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.DnRootHash); err != nil {
 		return fmt.Errorf("error decoding DnRootHash: %w", err)
 	} else {
-		v.DnRootHash = x
+		v.DnRootHash = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.BvnBptHash); err != nil {
 		return fmt.Errorf("error decoding BvnBptHash: %w", err)
 	} else {
-		v.BvnBptHash = x
+		v.BvnBptHash = *x
 	}
 	if x, err := encoding.ChainFromJSON(u.DnBptHash); err != nil {
 		return fmt.Errorf("error decoding DnBptHash: %w", err)
 	} else {
-		v.DnBptHash = x
+		v.DnBptHash = *x
 	}
 	return nil
 }

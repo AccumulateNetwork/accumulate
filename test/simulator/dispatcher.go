@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"context"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -42,6 +43,7 @@ type dispatchInterceptor = func(ctx context.Context, env *messaging.Envelope) (s
 type dispatcher struct {
 	client      *services.Network
 	router      routing.Router
+	mu          sync.Mutex
 	envelopes   map[string][]*messaging.Envelope
 	interceptor dispatchInterceptor
 }
@@ -62,12 +64,15 @@ func (d *dispatcher) Submit(ctx context.Context, u *url.URL, env *messaging.Enve
 		return err
 	}
 
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.envelopes[partition] = append(d.envelopes[partition], env)
 	return nil
 }
 
 // Send submits queued envelopes to the respective partitions.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
+	d.mu.Lock()
 	envelopes := make(map[string][]*messaging.Envelope, len(d.envelopes))
 	for p, e := range d.envelopes {
 		envelopes[p] = e
@@ -77,6 +82,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	for p := range d.envelopes {
 		delete(d.envelopes, p)
 	}
+	d.mu.Unlock()
 
 	// Run the dispatch asynchronously and return a channel because that's what
 	// the dispatcher interface expects

@@ -186,6 +186,10 @@ func UnmarshalPrivateKeyJSON(data []byte) (PrivateKey, error) {
 // NewService creates a new Service for the specified ServiceType.
 func NewService(typ ServiceType) (Service, error) {
 	switch typ {
+	case ServiceTypeHttp:
+		return new(HttpService), nil
+	case ServiceTypeRouter:
+		return new(RouterService), nil
 	case ServiceTypeStorage:
 		return new(StorageService), nil
 	}
@@ -198,6 +202,18 @@ func EqualService(a, b Service) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *HttpService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*HttpService)
+		return ok && a.Equal(b)
+	case *RouterService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*RouterService)
+		return ok && a.Equal(b)
 	case *StorageService:
 		if a == nil {
 			return b == nil
@@ -211,6 +227,10 @@ func EqualService(a, b Service) bool {
 // CopyService copies a Service.
 func CopyService(v Service) Service {
 	switch v := v.(type) {
+	case *HttpService:
+		return v.Copy()
+	case *RouterService:
+		return v.Copy()
 	case *StorageService:
 		return v.Copy()
 	default:

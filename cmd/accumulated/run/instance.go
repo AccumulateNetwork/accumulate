@@ -118,6 +118,14 @@ func (i *Instance) Stop() error {
 	return nil
 }
 
+func (i *Instance) run(fn func()) {
+	i.running.Add(1)
+	go func() {
+		defer i.running.Done()
+		fn()
+	}()
+}
+
 func (i *Instance) cleanup(fn func()) {
 	i.running.Add(1)
 	go func() {

@@ -8,10 +8,32 @@ package run
 
 import (
 	"crypto/ed25519"
+	"reflect"
 
+	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func setDefaultPtr[V any](ptr **V, def V) {
+	if *ptr == nil {
+		*ptr = &def
+	}
+}
+
+func setDefaultVal[V any](ptr *V, def V) {
+	if reflect.ValueOf(ptr).Elem().IsZero() {
+		*ptr = def
+	}
+}
+
+func mustParseMulti(s string) multiaddr.Multiaddr {
+	addr, err := multiaddr.NewMultiaddr(s)
+	if err != nil {
+		panic(err)
+	}
+	return addr
+}
 
 func getPrivateKey(key PrivateKey, inst *Instance) (ed25519.PrivateKey, error) {
 	addr, err := key.get(inst)
