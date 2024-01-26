@@ -402,14 +402,14 @@ func (v *versionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 func (v *Header) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Version      uint64                 `json:"version,omitempty"`
-		RootHash     string                 `json:"rootHash,omitempty"`
+		RootHash     *string                `json:"rootHash,omitempty"`
 		SystemLedger *protocol.SystemLedger `json:"systemLedger,omitempty"`
 	}{}
 	if !(v.Version == 0) {
 		u.Version = v.Version
 	}
 	if !(v.RootHash == ([32]byte{})) {
-		u.RootHash = encoding.ChainToJSON(v.RootHash)
+		u.RootHash = encoding.ChainToJSON(&v.RootHash)
 	}
 	if !(v.SystemLedger == nil) {
 		u.SystemLedger = v.SystemLedger
@@ -438,11 +438,11 @@ func (v *RecordEntry) MarshalJSON() ([]byte, error) {
 func (v *Header) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Version      uint64                 `json:"version,omitempty"`
-		RootHash     string                 `json:"rootHash,omitempty"`
+		RootHash     *string                `json:"rootHash,omitempty"`
 		SystemLedger *protocol.SystemLedger `json:"systemLedger,omitempty"`
 	}{}
 	u.Version = v.Version
-	u.RootHash = encoding.ChainToJSON(v.RootHash)
+	u.RootHash = encoding.ChainToJSON(&v.RootHash)
 	u.SystemLedger = v.SystemLedger
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -451,7 +451,7 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.RootHash); err != nil {
 		return fmt.Errorf("error decoding RootHash: %w", err)
 	} else {
-		v.RootHash = x
+		v.RootHash = *x
 	}
 	v.SystemLedger = u.SystemLedger
 	return nil
