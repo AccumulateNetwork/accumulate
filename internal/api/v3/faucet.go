@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -33,6 +33,7 @@ import (
 type Faucet struct {
 	logger    logging.OptionalLogger
 	account   *url.URL
+	token     *url.URL
 	precision uint64
 	amount    uint64
 	issue     bool
@@ -91,6 +92,7 @@ func NewFaucet(ctx context.Context, params FaucetParams) (*Faucet, error) {
 	case *protocol.TokenIssuer:
 		f.precision = account.Precision
 		f.issue = true
+		f.token = account.Url
 	case protocol.AccountWithTokens:
 		var issuer *protocol.TokenIssuer
 		_, err = q.QueryAccountAs(ctx, account.GetTokenUrl(), nil, &issuer)
@@ -98,6 +100,7 @@ func NewFaucet(ctx context.Context, params FaucetParams) (*Faucet, error) {
 			return nil, errors.UnknownError.WithFormat("load issuer %v: %w", account.GetTokenUrl(), err)
 		}
 		f.precision = issuer.Precision
+		f.token = account.GetTokenUrl()
 	default:
 		return nil, errors.UnknownError.WithFormat("cannot send tokens from %v (%v)", f.account, account.Type())
 	}
@@ -194,6 +197,9 @@ func NewFaucet(ctx context.Context, params FaucetParams) (*Faucet, error) {
 
 // Type returns [api.ServiceTypeFaucet].
 func (f *Faucet) Type() api.ServiceType { return api.ServiceTypeFaucet }
+
+// ServiceAddress returns `/acc-svc/facuet:{token}`.
+func (f *Faucet) ServiceAddress() *api.ServiceAddress { return f.Type().AddressForUrl(f.token) }
 
 // Stop stops the faucet.
 func (f *Faucet) Stop() { f.cancel() }
