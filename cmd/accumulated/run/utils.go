@@ -11,6 +11,8 @@ import (
 	"reflect"
 
 	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -48,4 +50,12 @@ func getPrivateKey(key PrivateKey, inst *Instance) (ed25519.PrivateKey, error) {
 		return nil, errors.BadRequest.WithFormat("missing private key")
 	}
 	return sk, nil
+}
+
+func registerRpcService(inst *Instance, addr *api.ServiceAddress, service message.Service) {
+	handler, err := message.NewHandler(service)
+	if err != nil {
+		panic(err)
+	}
+	inst.p2p.RegisterService(addr, handler.Handle)
 }
