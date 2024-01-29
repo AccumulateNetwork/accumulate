@@ -17,6 +17,8 @@ ServiceType:
     value: 7
   Router:
     value: 8
+  Faucet:
+    value: 10
 
 StorageType:
   Memory:
