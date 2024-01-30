@@ -13,6 +13,14 @@ PrivateKeyType:
 ServiceType:
   Storage:
     value: 1
+  Querier:
+    value: 3
+  Network:
+    value: 4
+  Metrics:
+    value: 5
+  Events:
+    value: 6
   Http:
     value: 7
   Router:
