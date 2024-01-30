@@ -111,7 +111,7 @@ func run(_ *cobra.Command, args []string) {
 			Key:                flag.Key.Value,
 			Listen:             flag.P2pListen,
 			BootstrapPeers:     flag.Peers,
-			PeerDB:             flag.PeerDatabase,
+			PeerDB:             &flag.PeerDatabase,
 			EnablePeerTracking: true,
 		},
 		Services: []Service{http},
