@@ -42,17 +42,22 @@ type CometPrivValFile struct {
 }
 
 type Config struct {
-	file     string
-	Network  string    `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Logging  *Logging  `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
-	P2P      *P2P      `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
-	Services []Service `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+	file           string
+	Network        string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Logging        *Logging        `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
+	P2P            *P2P            `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
+	Configurations []Configuration `json:"configurations,omitempty" form:"configurations" query:"configurations" validate:"required"`
+	Services       []Service       `json:"services,omitempty" form:"services" query:"services" validate:"required"`
 }
 
 type FaucetService struct {
 	Account    *url.URL                      `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	SigningKey PrivateKey                    `json:"signingKey,omitempty" form:"signingKey" query:"signingKey" validate:"required"`
 	Router     *ServiceOrRef[*RouterService] `json:"router,omitempty" form:"router" query:"router" validate:"required"`
+}
+
+type GatewayConfiguration struct {
+	Listen p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
 }
 
 type HttpPeerMapEntry struct {
@@ -102,7 +107,7 @@ type P2P struct {
 	Listen             []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
 	BootstrapPeers     []p2p.Multiaddr `json:"bootstrapPeers,omitempty" form:"bootstrapPeers" query:"bootstrapPeers" validate:"required"`
 	Key                PrivateKey      `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	PeerDB             string          `json:"peerDB,omitempty" form:"peerDB" query:"peerDB" validate:"required"`
+	PeerDB             *string         `json:"peerDB,omitempty" form:"peerDB" query:"peerDB" validate:"required"`
 	EnablePeerTracking bool            `json:"enablePeerTracking,omitempty" form:"enablePeerTracking" query:"enablePeerTracking" validate:"required"`
 	DiscoveryMode      DhtMode         `json:"discoveryMode,omitempty" form:"discoveryMode" query:"discoveryMode" validate:"required"`
 	External           p2p.Multiaddr   `json:"external,omitempty" form:"external" query:"external" validate:"required"`
@@ -141,6 +146,8 @@ func (*CometNodeKeyFile) Type() PrivateKeyType { return PrivateKeyTypeCometNodeK
 func (*CometPrivValFile) Type() PrivateKeyType { return PrivateKeyTypeCometPrivValFile }
 
 func (*FaucetService) Type() ServiceType { return ServiceTypeFaucet }
+
+func (*GatewayConfiguration) Type() ConfigurationType { return ConfigurationTypeGateway }
 
 func (*HttpService) Type() ServiceType { return ServiceTypeHttp }
 
@@ -196,6 +203,13 @@ func (v *Config) Copy() *Config {
 	if v.P2P != nil {
 		u.P2P = (v.P2P).Copy()
 	}
+	u.Configurations = make([]Configuration, len(v.Configurations))
+	for i, v := range v.Configurations {
+		v := v
+		if v != nil {
+			u.Configurations[i] = CopyConfiguration(v)
+		}
+	}
 	u.Services = make([]Service, len(v.Services))
 	for i, v := range v.Services {
 		v := v
@@ -226,6 +240,18 @@ func (v *FaucetService) Copy() *FaucetService {
 }
 
 func (v *FaucetService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GatewayConfiguration) Copy() *GatewayConfiguration {
+	u := new(GatewayConfiguration)
+
+	if v.Listen != nil {
+		u.Listen = p2p.CopyMultiaddr(v.Listen)
+	}
+
+	return u
+}
+
+func (v *GatewayConfiguration) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *HttpPeerMapEntry) Copy() *HttpPeerMapEntry {
 	u := new(HttpPeerMapEntry)
@@ -361,7 +387,10 @@ func (v *P2P) Copy() *P2P {
 	if v.Key != nil {
 		u.Key = CopyPrivateKey(v.Key)
 	}
-	u.PeerDB = v.PeerDB
+	if v.PeerDB != nil {
+		u.PeerDB = new(string)
+		*u.PeerDB = *v.PeerDB
+	}
 	u.EnablePeerTracking = v.EnablePeerTracking
 	u.DiscoveryMode = v.DiscoveryMode
 	if v.External != nil {
@@ -475,6 +504,14 @@ func (v *Config) Equal(u *Config) bool {
 	case !((v.P2P).Equal(u.P2P)):
 		return false
 	}
+	if len(v.Configurations) != len(u.Configurations) {
+		return false
+	}
+	for i := range v.Configurations {
+		if !(EqualConfiguration(v.Configurations[i], u.Configurations[i])) {
+			return false
+		}
+	}
 	if len(v.Services) != len(u.Services) {
 		return false
 	}
@@ -505,6 +542,14 @@ func (v *FaucetService) Equal(u *FaucetService) bool {
 	case v.Router == nil || u.Router == nil:
 		return false
 	case !((v.Router).Equal(u.Router)):
+		return false
+	}
+
+	return true
+}
+
+func (v *GatewayConfiguration) Equal(u *GatewayConfiguration) bool {
+	if !(p2p.EqualMultiaddr(v.Listen, u.Listen)) {
 		return false
 	}
 
@@ -662,7 +707,12 @@ func (v *P2P) Equal(u *P2P) bool {
 	if !(EqualPrivateKey(v.Key, u.Key)) {
 		return false
 	}
-	if !(v.PeerDB == u.PeerDB) {
+	switch {
+	case v.PeerDB == u.PeerDB:
+		// equal
+	case v.PeerDB == nil || u.PeerDB == nil:
+		return false
+	case !(*v.PeerDB == *u.PeerDB):
 		return false
 	}
 	if !(v.EnablePeerTracking == u.EnablePeerTracking) {
@@ -960,10 +1010,11 @@ func (v *CometPrivValFile) MarshalJSON() ([]byte, error) {
 
 func (v *Config) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Network  string                                   `json:"network,omitempty"`
-		Logging  *Logging                                 `json:"logging,omitempty"`
-		P2P      *P2P                                     `json:"p2P,omitempty"`
-		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
+		Network        string                                         `json:"network,omitempty"`
+		Logging        *Logging                                       `json:"logging,omitempty"`
+		P2P            *P2P                                           `json:"p2P,omitempty"`
+		Configurations *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
+		Services       *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
 	if !(len(v.Network) == 0) {
 		u.Network = v.Network
@@ -973,6 +1024,9 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.P2P == nil) {
 		u.P2P = v.P2P
+	}
+	if !(len(v.Configurations) == 0) {
+		u.Configurations = &encoding.JsonUnmarshalListWith[Configuration]{Value: v.Configurations, Func: UnmarshalConfigurationJSON}
 	}
 	if !(len(v.Services) == 0) {
 		u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
@@ -996,6 +1050,18 @@ func (v *FaucetService) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Router == nil) {
 		u.Router = v.Router
+	}
+	return json.Marshal(&u)
+}
+
+func (v *GatewayConfiguration) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   ConfigurationType                          `json:"type"`
+		Listen *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(p2p.EqualMultiaddr(v.Listen, nil)) {
+		u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
 	return json.Marshal(&u)
 }
@@ -1095,7 +1161,7 @@ func (v *P2P) MarshalJSON() ([]byte, error) {
 		Listen             *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
 		BootstrapPeers     *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
 		Key                *encoding.JsonUnmarshalWith[PrivateKey]        `json:"key,omitempty"`
-		PeerDB             string                                         `json:"peerDB,omitempty"`
+		PeerDB             *string                                        `json:"peerDB,omitempty"`
 		EnablePeerTracking bool                                           `json:"enablePeerTracking,omitempty"`
 		DiscoveryMode      DhtMode                                        `json:"discoveryMode,omitempty"`
 		External           *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"external,omitempty"`
@@ -1109,7 +1175,7 @@ func (v *P2P) MarshalJSON() ([]byte, error) {
 	if !(EqualPrivateKey(v.Key, nil)) {
 		u.Key = &encoding.JsonUnmarshalWith[PrivateKey]{Value: v.Key, Func: UnmarshalPrivateKeyJSON}
 	}
-	if !(len(v.PeerDB) == 0) {
+	if !(v.PeerDB == nil) {
 		u.PeerDB = v.PeerDB
 	}
 	if !(!v.EnablePeerTracking) {
@@ -1241,14 +1307,16 @@ func (v *CometPrivValFile) UnmarshalJSON(data []byte) error {
 
 func (v *Config) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Network  string                                   `json:"network,omitempty"`
-		Logging  *Logging                                 `json:"logging,omitempty"`
-		P2P      *P2P                                     `json:"p2P,omitempty"`
-		Services *encoding.JsonUnmarshalListWith[Service] `json:"services,omitempty"`
+		Network        string                                         `json:"network,omitempty"`
+		Logging        *Logging                                       `json:"logging,omitempty"`
+		P2P            *P2P                                           `json:"p2P,omitempty"`
+		Configurations *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
+		Services       *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
 	u.Network = v.Network
 	u.Logging = v.Logging
 	u.P2P = v.P2P
+	u.Configurations = &encoding.JsonUnmarshalListWith[Configuration]{Value: v.Configurations, Func: UnmarshalConfigurationJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1256,6 +1324,12 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 	v.Network = u.Network
 	v.Logging = u.Logging
 	v.P2P = u.P2P
+	if u.Configurations != nil {
+		v.Configurations = make([]Configuration, len(u.Configurations.Value))
+		for i, x := range u.Configurations.Value {
+			v.Configurations[i] = x
+		}
+	}
 	if u.Services != nil {
 		v.Services = make([]Service, len(u.Services.Value))
 		for i, x := range u.Services.Value {
@@ -1288,6 +1362,26 @@ func (v *FaucetService) UnmarshalJSON(data []byte) error {
 	}
 
 	v.Router = u.Router
+	return nil
+}
+
+func (v *GatewayConfiguration) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   ConfigurationType                          `json:"type"`
+		Listen *encoding.JsonUnmarshalWith[p2p.Multiaddr] `json:"listen,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Listen = &encoding.JsonUnmarshalWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Listen != nil {
+		v.Listen = u.Listen.Value
+	}
+
 	return nil
 }
 
@@ -1408,7 +1502,7 @@ func (v *P2P) UnmarshalJSON(data []byte) error {
 		Listen             *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
 		BootstrapPeers     *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
 		Key                *encoding.JsonUnmarshalWith[PrivateKey]        `json:"key,omitempty"`
-		PeerDB             string                                         `json:"peerDB,omitempty"`
+		PeerDB             *string                                        `json:"peerDB,omitempty"`
 		EnablePeerTracking bool                                           `json:"enablePeerTracking,omitempty"`
 		DiscoveryMode      DhtMode                                        `json:"discoveryMode,omitempty"`
 		External           *encoding.JsonUnmarshalWith[p2p.Multiaddr]     `json:"external,omitempty"`
