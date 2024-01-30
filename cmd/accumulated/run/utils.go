@@ -204,15 +204,13 @@ func (useHTTP) Apply(c multiaddr.Component) ([]multiaddr.Component, bool) {
 }
 
 func haveService[T any](cfg *Config, predicate func(T) bool, existing *T) bool {
-	for _, s := range [][]Service{cfg.Services} {
-		for _, s := range s {
-			t, ok := s.(T)
-			if ok && (predicate == nil || predicate(t)) {
-				if existing != nil {
-					*existing = t
-				}
-				return true
+	for _, s := range cfg.Services {
+		t, ok := s.(T)
+		if ok && (predicate == nil || predicate(t)) {
+			if existing != nil {
+				*existing = t
 			}
+			return true
 		}
 	}
 	return false

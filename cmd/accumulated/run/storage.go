@@ -41,6 +41,44 @@ type Storage interface {
 	open(*Instance) (keyvalue.Beginner, error)
 }
 
+type StorageOrRef baseRef[Storage]
+
+func (s *StorageOrRef) base() *baseRef[Storage] {
+	return (*baseRef[Storage])(s)
+}
+
+func (s *StorageOrRef) Required(def string) []ioc.Requirement {
+	if s.base().hasValue() {
+		return nil
+	}
+	return []ioc.Requirement{
+		{Descriptor: ioc.NewDescriptorOf[keyvalue.Beginner](s.base().refOr(def))},
+	}
+}
+
+func (s *StorageOrRef) open(inst *Instance, def string) (keyvalue.Beginner, error) {
+	if s != nil && s.value != nil {
+		return s.value.open(inst)
+	}
+	return ioc.Get[keyvalue.Beginner](inst.services, s.base().refOr(def))
+}
+
+func (s *StorageOrRef) Copy() *StorageOrRef {
+	return (*StorageOrRef)(s.base().copyWith(CopyStorage))
+}
+
+func (s *StorageOrRef) Equal(t *StorageOrRef) bool {
+	return s.base().equalWith(t.base(), EqualStorage)
+}
+
+func (s *StorageOrRef) MarshalJSON() ([]byte, error) {
+	return s.base().marshal()
+}
+
+func (s *StorageOrRef) UnmarshalJSON(b []byte) error {
+	return s.base().unmarshalWith(b, UnmarshalStorageJSON)
+}
+
 func (s *MemoryStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 	return memory.New(nil), nil
 }
