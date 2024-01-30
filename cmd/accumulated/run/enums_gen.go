@@ -35,6 +35,18 @@ const PrivateKeyTypeCometNodeKeyFile PrivateKeyType = 5
 // ServiceTypeStorage .
 const ServiceTypeStorage ServiceType = 1
 
+// ServiceTypeQuerier .
+const ServiceTypeQuerier ServiceType = 3
+
+// ServiceTypeNetwork .
+const ServiceTypeNetwork ServiceType = 4
+
+// ServiceTypeMetrics .
+const ServiceTypeMetrics ServiceType = 5
+
+// ServiceTypeEvents .
+const ServiceTypeEvents ServiceType = 6
+
 // ServiceTypeHttp .
 const ServiceTypeHttp ServiceType = 7
 
@@ -179,7 +191,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeStorage, ServiceTypeHttp, ServiceTypeRouter, ServiceTypeFaucet:
+	case ServiceTypeStorage, ServiceTypeQuerier, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeEvents, ServiceTypeHttp, ServiceTypeRouter, ServiceTypeFaucet:
 		*v = u
 		return true
 	}
@@ -191,6 +203,14 @@ func (v ServiceType) String() string {
 	switch v {
 	case ServiceTypeStorage:
 		return "storage"
+	case ServiceTypeQuerier:
+		return "querier"
+	case ServiceTypeNetwork:
+		return "network"
+	case ServiceTypeMetrics:
+		return "metrics"
+	case ServiceTypeEvents:
+		return "events"
 	case ServiceTypeHttp:
 		return "http"
 	case ServiceTypeRouter:
@@ -206,6 +226,14 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 	switch strings.ToLower(name) {
 	case "storage":
 		return ServiceTypeStorage, true
+	case "querier":
+		return ServiceTypeQuerier, true
+	case "network":
+		return ServiceTypeNetwork, true
+	case "metrics":
+		return ServiceTypeMetrics, true
+	case "events":
+		return ServiceTypeEvents, true
 	case "http":
 		return ServiceTypeHttp, true
 	case "router":
