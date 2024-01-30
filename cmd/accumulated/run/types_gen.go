@@ -50,6 +50,10 @@ type Config struct {
 	Services       []Service       `json:"services,omitempty" form:"services" query:"services" validate:"required"`
 }
 
+type EventsService struct {
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
 type FaucetService struct {
 	Account    *url.URL                      `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	SigningKey PrivateKey                    `json:"signingKey,omitempty" form:"signingKey" query:"signingKey" validate:"required"`
@@ -103,6 +107,14 @@ type LoggingRule struct {
 type MemoryStorage struct {
 }
 
+type MetricsService struct {
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
+type NetworkService struct {
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+}
+
 type P2P struct {
 	Listen             []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
 	BootstrapPeers     []p2p.Multiaddr `json:"bootstrapPeers,omitempty" form:"bootstrapPeers" query:"bootstrapPeers" validate:"required"`
@@ -116,6 +128,11 @@ type P2P struct {
 type PrivateKeySeed struct {
 	key  address.Address
 	Seed *record.Key `json:"seed,omitempty" form:"seed" query:"seed" validate:"required"`
+}
+
+type Querier struct {
+	Partition string        `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Storage   *StorageOrRef `json:"storage,omitempty" form:"storage" query:"storage"`
 }
 
 type RawPrivateKey struct {
@@ -145,6 +162,8 @@ func (*CometNodeKeyFile) Type() PrivateKeyType { return PrivateKeyTypeCometNodeK
 
 func (*CometPrivValFile) Type() PrivateKeyType { return PrivateKeyTypeCometPrivValFile }
 
+func (*EventsService) Type() ServiceType { return ServiceTypeEvents }
+
 func (*FaucetService) Type() ServiceType { return ServiceTypeFaucet }
 
 func (*GatewayConfiguration) Type() ConfigurationType { return ConfigurationTypeGateway }
@@ -153,7 +172,13 @@ func (*HttpService) Type() ServiceType { return ServiceTypeHttp }
 
 func (*MemoryStorage) Type() StorageType { return StorageTypeMemory }
 
+func (*MetricsService) Type() ServiceType { return ServiceTypeMetrics }
+
+func (*NetworkService) Type() ServiceType { return ServiceTypeNetwork }
+
 func (*PrivateKeySeed) Type() PrivateKeyType { return PrivateKeyTypeSeed }
+
+func (*Querier) Type() ServiceType { return ServiceTypeQuerier }
 
 func (*RawPrivateKey) Type() PrivateKeyType { return PrivateKeyTypeRaw }
 
@@ -222,6 +247,16 @@ func (v *Config) Copy() *Config {
 }
 
 func (v *Config) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EventsService) Copy() *EventsService {
+	u := new(EventsService)
+
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *EventsService) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *FaucetService) Copy() *FaucetService {
 	u := new(FaucetService)
@@ -367,6 +402,26 @@ func (v *MemoryStorage) Copy() *MemoryStorage {
 
 func (v *MemoryStorage) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *MetricsService) Copy() *MetricsService {
+	u := new(MetricsService)
+
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *MetricsService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NetworkService) Copy() *NetworkService {
+	u := new(NetworkService)
+
+	u.Partition = v.Partition
+
+	return u
+}
+
+func (v *NetworkService) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *P2P) Copy() *P2P {
 	u := new(P2P)
 
@@ -413,6 +468,19 @@ func (v *PrivateKeySeed) Copy() *PrivateKeySeed {
 }
 
 func (v *PrivateKeySeed) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Querier) Copy() *Querier {
+	u := new(Querier)
+
+	u.Partition = v.Partition
+	if v.Storage != nil {
+		u.Storage = (v.Storage).Copy()
+	}
+
+	return u
+}
+
+func (v *Querier) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RawPrivateKey) Copy() *RawPrivateKey {
 	u := new(RawPrivateKey)
@@ -519,6 +587,14 @@ func (v *Config) Equal(u *Config) bool {
 		if !(EqualService(v.Services[i], u.Services[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *EventsService) Equal(u *EventsService) bool {
+	if !(v.Partition == u.Partition) {
+		return false
 	}
 
 	return true
@@ -687,6 +763,22 @@ func (v *MemoryStorage) Equal(u *MemoryStorage) bool {
 	return true
 }
 
+func (v *MetricsService) Equal(u *MetricsService) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NetworkService) Equal(u *NetworkService) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+
+	return true
+}
+
 func (v *P2P) Equal(u *P2P) bool {
 	if len(v.Listen) != len(u.Listen) {
 		return false
@@ -735,6 +827,22 @@ func (v *PrivateKeySeed) Equal(u *PrivateKeySeed) bool {
 	case v.Seed == nil || u.Seed == nil:
 		return false
 	case !((v.Seed).Equal(u.Seed)):
+		return false
+	}
+
+	return true
+}
+
+func (v *Querier) Equal(u *Querier) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	switch {
+	case v.Storage == u.Storage:
+		// equal
+	case v.Storage == nil || u.Storage == nil:
+		return false
+	case !((v.Storage).Equal(u.Storage)):
 		return false
 	}
 
@@ -1034,6 +1142,18 @@ func (v *Config) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *EventsService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	return json.Marshal(&u)
+}
+
 func (v *FaucetService) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type       ServiceType                             `json:"type"`
@@ -1156,6 +1276,30 @@ func (v *MemoryStorage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MetricsService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	return json.Marshal(&u)
+}
+
+func (v *NetworkService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	return json.Marshal(&u)
+}
+
 func (v *P2P) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Listen             *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
@@ -1198,6 +1342,22 @@ func (v *PrivateKeySeed) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	if !(v.Seed == nil) {
 		u.Seed = v.Seed
+	}
+	return json.Marshal(&u)
+}
+
+func (v *Querier) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      ServiceType   `json:"type"`
+		Partition string        `json:"partition,omitempty"`
+		Storage   *StorageOrRef `json:"storage,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(v.Storage == nil) {
+		u.Storage = v.Storage
 	}
 	return json.Marshal(&u)
 }
@@ -1336,6 +1496,23 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 			v.Services[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *EventsService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
 	return nil
 }
 
@@ -1497,6 +1674,40 @@ func (v *MemoryStorage) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *MetricsService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	return nil
+}
+
+func (v *NetworkService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType `json:"type"`
+		Partition string      `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	return nil
+}
+
 func (v *P2P) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Listen             *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
@@ -1557,6 +1768,26 @@ func (v *PrivateKeySeed) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Seed = u.Seed
+	return nil
+}
+
+func (v *Querier) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      ServiceType   `json:"type"`
+		Partition string        `json:"partition,omitempty"`
+		Storage   *StorageOrRef `json:"storage,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Storage = v.Storage
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Storage = u.Storage
 	return nil
 }
 
