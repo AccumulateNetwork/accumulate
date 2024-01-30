@@ -14,6 +14,9 @@ import (
 	"strings"
 )
 
+// ConfigurationTypeGateway .
+const ConfigurationTypeGateway ConfigurationType = 2
+
 // PrivateKeyTypeRaw .
 const PrivateKeyTypeRaw PrivateKeyType = 1
 
@@ -46,6 +49,59 @@ const StorageTypeMemory StorageType = 1
 
 // StorageTypeBadger .
 const StorageTypeBadger StorageType = 2
+
+// GetEnumValue returns the value of the Configuration Type
+func (v ConfigurationType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ConfigurationType) SetEnumValue(id uint64) bool {
+	u := ConfigurationType(id)
+	switch u {
+	case ConfigurationTypeGateway:
+		*v = u
+		return true
+	}
+	return false
+}
+
+// String returns the name of the Configuration Type.
+func (v ConfigurationType) String() string {
+	switch v {
+	case ConfigurationTypeGateway:
+		return "gateway"
+	}
+	return fmt.Sprintf("ConfigurationType:%d", v)
+}
+
+// ConfigurationTypeByName returns the named Configuration Type.
+func ConfigurationTypeByName(name string) (ConfigurationType, bool) {
+	switch strings.ToLower(name) {
+	case "gateway":
+		return ConfigurationTypeGateway, true
+	}
+	return 0, false
+}
+
+// MarshalJSON marshals the Configuration Type to JSON as a string.
+func (v ConfigurationType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Configuration Type from JSON as a string.
+func (v *ConfigurationType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = ConfigurationTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Configuration Type %q", s)
+	}
+	return nil
+}
 
 // GetEnumValue returns the value of the Private Key Type
 func (v PrivateKeyType) GetEnumValue() uint64 { return uint64(v) }
