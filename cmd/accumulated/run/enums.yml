@@ -25,3 +25,7 @@ StorageType:
     value: 1
   Badger:
     value: 2
+
+ConfigurationType:
+  Gateway:
+    value: 2

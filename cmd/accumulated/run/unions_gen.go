@@ -272,3 +272,63 @@ func UnmarshalServiceJSON(data []byte) (Service, error) {
 
 	return acnt, nil
 }
+
+// NewConfiguration creates a new Configuration for the specified ConfigurationType.
+func NewConfiguration(typ ConfigurationType) (Configuration, error) {
+	switch typ {
+	case ConfigurationTypeGateway:
+		return new(GatewayConfiguration), nil
+	}
+	return nil, fmt.Errorf("unknown configuration %v", typ)
+}
+
+// EqualConfiguration is used to compare the values of the union
+func EqualConfiguration(a, b Configuration) bool {
+	if a == b {
+		return true
+	}
+	switch a := a.(type) {
+	case *GatewayConfiguration:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*GatewayConfiguration)
+		return ok && a.Equal(b)
+	}
+	return false
+}
+
+// CopyConfiguration copies a Configuration.
+func CopyConfiguration(v Configuration) Configuration {
+	switch v := v.(type) {
+	case *GatewayConfiguration:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(Configuration)
+	}
+}
+
+// UnmarshalConfigurationJson unmarshals a Configuration.
+func UnmarshalConfigurationJSON(data []byte) (Configuration, error) {
+	var typ *struct{ Type ConfigurationType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
+	}
+
+	acnt, err := NewConfiguration(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
