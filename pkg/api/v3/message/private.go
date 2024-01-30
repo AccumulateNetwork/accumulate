@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,12 +21,12 @@ type Sequencer struct {
 	private.Sequencer
 }
 
-func (s *Sequencer) methods() serviceMethodMap {
+func (s Sequencer) methods() serviceMethodMap {
 	typ, fn := makeServiceMethod(s.sequence)
 	return serviceMethodMap{typ: fn}
 }
 
-func (s *Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
+func (s Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
 	res, err := s.Sequencer.Sequence(c.context, c.params.Source, c.params.Destination, c.params.SequenceNumber, c.params.SequenceOptions)
 	if err != nil {
 		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
