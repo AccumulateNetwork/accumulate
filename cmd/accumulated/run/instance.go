@@ -56,6 +56,14 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, err
 	}
 
+	// Apply configurations
+	for _, c := range cfg.Configurations {
+		err = c.apply(cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Determine initialization order
 	services, err := ioc.Solve(cfg.Services)
 	if err != nil {

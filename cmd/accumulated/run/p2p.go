@@ -28,12 +28,14 @@ func (p *P2P) start(inst *Instance) error {
 		return err
 	}
 
+	setDefaultPtr(&p.PeerDB, "")
+
 	node, err := p2p.New(p2p.Options{
 		Key:               sk,
 		Network:           inst.network,
 		Listen:            p.Listen,
 		BootstrapPeers:    p.BootstrapPeers,
-		PeerDatabase:      p.PeerDB,
+		PeerDatabase:      *p.PeerDB,
 		EnablePeerTracker: p.EnablePeerTracking,
 	})
 	if err != nil {
