@@ -53,6 +53,7 @@ require (
 	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/ghodss/yaml v1.0.0
 	github.com/gobeam/stringy v0.0.6
+	github.com/google/pprof v0.0.0-20230705174524-200ffdc848b8
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/libp2p/go-libp2p v0.25.1
 	github.com/libp2p/go-libp2p-kad-dht v0.21.1
@@ -107,7 +108,6 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/golang/glog v1.0.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
-	github.com/google/pprof v0.0.0-20230228050547-1710fef4ab10 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
