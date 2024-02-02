@@ -21,6 +21,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -147,6 +148,19 @@ type RouterService struct {
 	extraData []byte
 }
 
+type SnapshotService struct {
+	Partition string        `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Storage   *StorageOrRef `json:"storage,omitempty" form:"storage" query:"storage"`
+	// Directory is the directory to store snapshots in.
+	Directory string `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
+	// Schedule is the schedule for capturing snapshots.
+	Schedule *network.CronSchedule `json:"schedule,omitempty" form:"schedule" query:"schedule"`
+	// RetainCount is the number of snapshots to retain.
+	RetainCount *uint64 `json:"retainCount,omitempty" form:"retainCount" query:"retainCount"`
+	// EnableIndexing enables indexing of snapshots.
+	EnableIndexing *bool `json:"enableIndexing,omitempty" form:"enableIndexing" query:"enableIndexing"`
+}
+
 type StorageService struct {
 	Name    string  `json:"name,omitempty" form:"name" query:"name"`
 	Storage Storage `json:"storage,omitempty" form:"storage" query:"storage" validate:"required"`
@@ -183,6 +197,8 @@ func (*Querier) Type() ServiceType { return ServiceTypeQuerier }
 func (*RawPrivateKey) Type() PrivateKeyType { return PrivateKeyTypeRaw }
 
 func (*RouterService) Type() ServiceType { return ServiceTypeRouter }
+
+func (*SnapshotService) Type() ServiceType { return ServiceTypeSnapshot }
 
 func (*StorageService) Type() ServiceType { return ServiceTypeStorage }
 
@@ -506,6 +522,31 @@ func (v *RouterService) Copy() *RouterService {
 }
 
 func (v *RouterService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SnapshotService) Copy() *SnapshotService {
+	u := new(SnapshotService)
+
+	u.Partition = v.Partition
+	if v.Storage != nil {
+		u.Storage = (v.Storage).Copy()
+	}
+	u.Directory = v.Directory
+	if v.Schedule != nil {
+		u.Schedule = (v.Schedule).Copy()
+	}
+	if v.RetainCount != nil {
+		u.RetainCount = new(uint64)
+		*u.RetainCount = *v.RetainCount
+	}
+	if v.EnableIndexing != nil {
+		u.EnableIndexing = new(bool)
+		*u.EnableIndexing = *v.EnableIndexing
+	}
+
+	return u
+}
+
+func (v *SnapshotService) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *StorageService) Copy() *StorageService {
 	u := new(StorageService)
@@ -862,6 +903,49 @@ func (v *RouterService) Equal(u *RouterService) bool {
 		return false
 	}
 	if !(v.Events == u.Events) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SnapshotService) Equal(u *SnapshotService) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	switch {
+	case v.Storage == u.Storage:
+		// equal
+	case v.Storage == nil || u.Storage == nil:
+		return false
+	case !((v.Storage).Equal(u.Storage)):
+		return false
+	}
+	if !(v.Directory == u.Directory) {
+		return false
+	}
+	switch {
+	case v.Schedule == u.Schedule:
+		// equal
+	case v.Schedule == nil || u.Schedule == nil:
+		return false
+	case !((v.Schedule).Equal(u.Schedule)):
+		return false
+	}
+	switch {
+	case v.RetainCount == u.RetainCount:
+		// equal
+	case v.RetainCount == nil || u.RetainCount == nil:
+		return false
+	case !(*v.RetainCount == *u.RetainCount):
+		return false
+	}
+	switch {
+	case v.EnableIndexing == u.EnableIndexing:
+		// equal
+	case v.EnableIndexing == nil || u.EnableIndexing == nil:
+		return false
+	case !(*v.EnableIndexing == *u.EnableIndexing):
 		return false
 	}
 
@@ -1390,6 +1474,38 @@ func (v *RouterService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SnapshotService) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type           ServiceType           `json:"type"`
+		Partition      string                `json:"partition,omitempty"`
+		Storage        *StorageOrRef         `json:"storage,omitempty"`
+		Directory      string                `json:"directory,omitempty"`
+		Schedule       *network.CronSchedule `json:"schedule,omitempty"`
+		RetainCount    *uint64               `json:"retainCount,omitempty"`
+		EnableIndexing *bool                 `json:"enableIndexing,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(v.Storage == nil) {
+		u.Storage = v.Storage
+	}
+	if !(len(v.Directory) == 0) {
+		u.Directory = v.Directory
+	}
+	if !(v.Schedule == nil) {
+		u.Schedule = v.Schedule
+	}
+	if !(v.RetainCount == nil) {
+		u.RetainCount = v.RetainCount
+	}
+	if !(v.EnableIndexing == nil) {
+		u.EnableIndexing = v.EnableIndexing
+	}
+	return json.Marshal(&u)
+}
+
 func (v *StorageService) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    ServiceType                          `json:"type"`
@@ -1825,6 +1941,38 @@ func (v *RouterService) UnmarshalJSON(data []byte) error {
 	}
 	v.Name = u.Name
 	v.Events = u.Events
+	return nil
+}
+
+func (v *SnapshotService) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type           ServiceType           `json:"type"`
+		Partition      string                `json:"partition,omitempty"`
+		Storage        *StorageOrRef         `json:"storage,omitempty"`
+		Directory      string                `json:"directory,omitempty"`
+		Schedule       *network.CronSchedule `json:"schedule,omitempty"`
+		RetainCount    *uint64               `json:"retainCount,omitempty"`
+		EnableIndexing *bool                 `json:"enableIndexing,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Storage = v.Storage
+	u.Directory = v.Directory
+	u.Schedule = v.Schedule
+	u.RetainCount = v.RetainCount
+	u.EnableIndexing = v.EnableIndexing
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Storage = u.Storage
+	v.Directory = u.Directory
+	v.Schedule = u.Schedule
+	v.RetainCount = u.RetainCount
+	v.EnableIndexing = u.EnableIndexing
 	return nil
 }
 
