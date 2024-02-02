@@ -1,5 +1,5 @@
 #!/bin/bash
-# image: registry.gitlab.com/accumulatenetwork/accumulate:v1-2-9
+# image: registry.gitlab.com/accumulatenetwork/accumulate:v1-2-12
 
 set -e
 
