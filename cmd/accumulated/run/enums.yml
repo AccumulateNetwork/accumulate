@@ -25,6 +25,8 @@ ServiceType:
     value: 7
   Router:
     value: 8
+  Snapshot:
+    value: 9
   Faucet:
     value: 10
 
