@@ -44,12 +44,28 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 	})
 
 	// Create partition services
-	err := c.applyPart(cfg, protocol.Directory, protocol.PartitionTypeDirectory, "dnn")
+	err := partOpts{
+		CoreValidatorConfiguration: c,
+
+		ID:             protocol.Directory,
+		Type:           protocol.PartitionTypeDirectory,
+		Genesis:        c.DnGenesis,
+		BootstrapPeers: c.DnBootstrapPeers,
+		Dir:            "dnn",
+	}.apply(cfg)
 	if err != nil {
 		return err
 	}
 
-	err = c.applyPart(cfg, c.BVN, protocol.PartitionTypeBlockValidator, "bvnn")
+	err = partOpts{
+		CoreValidatorConfiguration: c,
+
+		ID:             c.BVN,
+		Type:           protocol.PartitionTypeBlockValidator,
+		Genesis:        c.BvnGenesis,
+		BootstrapPeers: c.BvnBootstrapPeers,
+		Dir:            "bvnn",
+	}.apply(cfg)
 	if err != nil {
 		return err
 	}
@@ -68,14 +84,29 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 	return nil
 }
 
-func (c *CoreValidatorConfiguration) applyPart(cfg *Config, partID string, partType protocol.PartitionType, dir string) error {
+type partOpts struct {
+	*CoreValidatorConfiguration
+	ID             string
+	Type           protocol.PartitionType
+	Genesis        string
+	Dir            string
+	BootstrapPeers []multiaddr.Multiaddr
+}
+
+func (p partOpts) apply(cfg *Config) error {
+	partID, partType, dir := p.ID, p.Type, p.Dir
+
 	// Consensus
 	addService(cfg,
 		&ConsensusService{
-			NodeDir: dir,
+			NodeDir:        dir,
+			ValidatorKey:   p.ValidatorKey,
+			Genesis:        p.Genesis,
+			Listen:         p.Listen,
+			BootstrapPeers: p.BootstrapPeers,
 			App: &CoreConsensusApp{
-				EnableHealing:        c.EnableHealing,
-				EnableDirectDispatch: c.EnableDirectDispatch,
+				EnableHealing:        p.EnableHealing,
+				EnableDirectDispatch: p.EnableDirectDispatch,
 				Partition: &protocol.PartitionInfo{
 					ID:   partID,
 					Type: partType,
@@ -86,7 +117,7 @@ func (c *CoreValidatorConfiguration) applyPart(cfg *Config, partID string, partT
 
 	// Storage
 	if !haveService2[*StorageService](cfg, partID, func(s *StorageService) string { return s.Name }, nil) {
-		switch *c.StorageType {
+		switch *p.StorageType {
 		case StorageTypeMemory:
 			cfg.Services = append(cfg.Services, &StorageService{
 				Name:    partID,
@@ -102,7 +133,7 @@ func (c *CoreValidatorConfiguration) applyPart(cfg *Config, partID string, partT
 			})
 
 		default:
-			return errors.BadRequest.WithFormat("unsupported storage type %v", c.StorageType)
+			return errors.BadRequest.WithFormat("unsupported storage type %v", p.StorageType)
 		}
 	}
 
