@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger"
@@ -64,6 +65,7 @@ func New(filepath string) (*Database, error) {
 	// Run GC every hour
 	go d.gc()
 
+	mDbOpen.Inc()
 	return d, nil
 }
 
@@ -71,6 +73,9 @@ func New(filepath string) (*Database, error) {
 func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	// Use a read-only transaction for reading
 	rd := d.badger.NewTransaction(false)
+
+	mTxnOpen.Inc()
+	var closed atomic.Bool
 
 	// The memory changeset caches entries in a map so Get will see values
 	// updated with Put, regardless of the underlying transaction and write
@@ -109,6 +114,9 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 			}
 			defer l.Unlock()
 
+			start := time.Now()
+			defer func() { mCommitDuration.Set(time.Since(start).Seconds()) }()
+
 			// Use a write batch for writing to work around Badger's limitations
 			wr := d.badger.NewWriteBatch()
 
@@ -131,6 +139,9 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		func() {
 			// Fix https://discuss.dgraph.io/t/badgerdb-consume-too-much-disk-space/17070?
 			rd.Discard()
+			if closed.CompareAndSwap(false, true) {
+				mTxnOpen.Dec()
+			}
 		})
 }
 
@@ -143,6 +154,7 @@ func (d *Database) Close() error {
 		defer l.Unlock()
 	}
 
+	mDbOpen.Dec()
 	d.ready = false
 	return d.badger.Close()
 }
@@ -159,8 +171,15 @@ func (d *Database) gc() {
 		}
 
 		// Run GC if 50% space could be reclaimed
+		start := time.Now()
 		err = d.badger.RunValueLogGC(0.5)
-		if err != nil && !errors.Is(err, badger.ErrNoRewrite) {
+		switch {
+		case err == nil:
+			mGcRun.Inc()
+			mGcDuration.Set(time.Since(start).Seconds())
+		case errors.Is(err, badger.ErrNoRewrite):
+			// Ok
+		default:
 			slog.Error("Badger GC failed", "error", err, "module", "badger")
 		}
 
