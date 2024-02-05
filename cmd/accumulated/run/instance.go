@@ -21,7 +21,7 @@ import (
 )
 
 type Instance struct {
-	network string
+	config  *Config
 	rootDir string
 
 	running  *sync.WaitGroup    // tracks jobs that want a graceful shutdown
@@ -36,7 +36,7 @@ const minDiskSpace = 0.05
 
 func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	inst := new(Instance)
-	inst.network = cfg.Network
+	inst.config = cfg
 	inst.running = new(sync.WaitGroup)
 	inst.context, inst.shutdown = context.WithCancel(ctx)
 	inst.services = ioc.Registry{}

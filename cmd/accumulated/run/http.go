@@ -69,10 +69,10 @@ func (h *HttpService) start(inst *Instance) error {
 		Node:      inst.p2p,
 		Router:    router,
 		MaxWait:   10 * time.Second,
-		NetworkId: inst.network,
+		NetworkId: inst.config.Network,
 	}
 	client := &message.Client{Transport: &message.RoutedTransport{
-		Network: inst.network,
+		Network: inst.config.Network,
 		Router:  routing.MessageRouter{Router: router},
 		Dialer:  inst.p2p.DialNetwork(),
 	}}
@@ -139,31 +139,7 @@ func (h *HttpService) start(inst *Instance) error {
 	}
 
 	for _, l := range h.Listen {
-		var proto, addr, port string
-		var secure bool
-		var err error
-		multiaddr.ForEach(l, func(c multiaddr.Component) bool {
-			switch c.Protocol().Code {
-			case multiaddr.P_IP4,
-				multiaddr.P_IP6,
-				multiaddr.P_DNS,
-				multiaddr.P_DNS4,
-				multiaddr.P_DNS6:
-				addr = c.Value()
-			case multiaddr.P_TCP,
-				multiaddr.P_UDP:
-				proto = c.Protocol().Name
-				port = c.Value()
-			case multiaddr.P_HTTP:
-				// Ok
-			case multiaddr.P_HTTPS:
-				secure = true
-			default:
-				err = errors.UnknownError.WithFormat("invalid listen address: %v", l)
-				return false
-			}
-			return true
-		})
+		proto, addr, port, http, err := decomposeListen(l)
 		if err != nil {
 			return err
 		}
@@ -176,7 +152,7 @@ func (h *HttpService) start(inst *Instance) error {
 		if err != nil {
 			return err
 		}
-		err = h.serve(inst, server, l, secure)
+		err = h.serve(inst, server, l, http == "https")
 		if err != nil {
 			return err
 		}
