@@ -42,7 +42,7 @@ func (r *RouterService) create(inst *Instance) (routing.Router, error) {
 	return apiutil.InitRouter(apiutil.RouterOptions{
 		Context: inst.context,
 		Node:    inst.p2p,
-		Network: inst.network,
+		Network: inst.config.Network,
 		Events:  events,
 		Logger:  (*logging.Slogger)(inst.logger),
 	})
