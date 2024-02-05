@@ -13,6 +13,8 @@ PrivateKeyType:
 ServiceType:
   Storage:
     value: 1
+  Consensus:
+    value: 2
   Querier:
     value: 3
   Network:
@@ -37,5 +39,11 @@ StorageType:
     value: 2
 
 ConfigurationType:
+  CoreValidator:
+    value: 1
   Gateway:
     value: 2
+
+ConsensusAppType:
+  Core:
+    value: 1
