@@ -316,6 +316,21 @@ CoreValidatorConfiguration:
       marshal-as: union
     - name: BVN
       type: string
+    - name: ValidatorKey
+      type: PrivateKey
+      marshal-as: union
+    - name: DnGenesis
+      type: string
+    - name: BvnGenesis
+      type: string
+    - name: DnBootstrapPeers
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
+    - name: BvnBootstrapPeers
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
     - name: EnableHealing
       type: bool
       pointer: true
@@ -336,6 +351,18 @@ ConsensusService:
   fields:
     - name: NodeDir
       type: string
+    - name: ValidatorKey
+      type: PrivateKey
+      marshal-as: union
+    - name: Genesis
+      type: string
+    - name: Listen
+      type: p2p.Multiaddr
+      marshal-as: union
+    - name: BootstrapPeers
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
     - name: App
       type: ConsensusApp
       marshal-as: union
