@@ -186,6 +186,8 @@ func UnmarshalPrivateKeyJSON(data []byte) (PrivateKey, error) {
 // NewService creates a new Service for the specified ServiceType.
 func NewService(typ ServiceType) (Service, error) {
 	switch typ {
+	case ServiceTypeConsensus:
+		return new(ConsensusService), nil
 	case ServiceTypeEvents:
 		return new(EventsService), nil
 	case ServiceTypeFaucet:
@@ -214,6 +216,12 @@ func EqualService(a, b Service) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *ConsensusService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ConsensusService)
+		return ok && a.Equal(b)
 	case *EventsService:
 		if a == nil {
 			return b == nil
@@ -275,6 +283,8 @@ func EqualService(a, b Service) bool {
 // CopyService copies a Service.
 func CopyService(v Service) Service {
 	switch v := v.(type) {
+	case *ConsensusService:
+		return v.Copy()
 	case *EventsService:
 		return v.Copy()
 	case *FaucetService:
@@ -323,9 +333,71 @@ func UnmarshalServiceJSON(data []byte) (Service, error) {
 	return acnt, nil
 }
 
+// NewConsensusApp creates a new ConsensusApp for the specified ConsensusAppType.
+func NewConsensusApp(typ ConsensusAppType) (ConsensusApp, error) {
+	switch typ {
+	case ConsensusAppTypeCore:
+		return new(CoreConsensusApp), nil
+	}
+	return nil, fmt.Errorf("unknown consensus app %v", typ)
+}
+
+// EqualConsensusApp is used to compare the values of the union
+func EqualConsensusApp(a, b ConsensusApp) bool {
+	if a == b {
+		return true
+	}
+	switch a := a.(type) {
+	case *CoreConsensusApp:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*CoreConsensusApp)
+		return ok && a.Equal(b)
+	}
+	return false
+}
+
+// CopyConsensusApp copies a ConsensusApp.
+func CopyConsensusApp(v ConsensusApp) ConsensusApp {
+	switch v := v.(type) {
+	case *CoreConsensusApp:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(ConsensusApp)
+	}
+}
+
+// UnmarshalConsensusAppJson unmarshals a ConsensusApp.
+func UnmarshalConsensusAppJSON(data []byte) (ConsensusApp, error) {
+	var typ *struct{ Type ConsensusAppType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
+	}
+
+	acnt, err := NewConsensusApp(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
 // NewConfiguration creates a new Configuration for the specified ConfigurationType.
 func NewConfiguration(typ ConfigurationType) (Configuration, error) {
 	switch typ {
+	case ConfigurationTypeCoreValidator:
+		return new(CoreValidatorConfiguration), nil
 	case ConfigurationTypeGateway:
 		return new(GatewayConfiguration), nil
 	}
@@ -338,6 +410,12 @@ func EqualConfiguration(a, b Configuration) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *CoreValidatorConfiguration:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*CoreValidatorConfiguration)
+		return ok && a.Equal(b)
 	case *GatewayConfiguration:
 		if a == nil {
 			return b == nil
@@ -351,6 +429,8 @@ func EqualConfiguration(a, b Configuration) bool {
 // CopyConfiguration copies a Configuration.
 func CopyConfiguration(v Configuration) Configuration {
 	switch v := v.(type) {
+	case *CoreValidatorConfiguration:
+		return v.Copy()
 	case *GatewayConfiguration:
 		return v.Copy()
 	default:
