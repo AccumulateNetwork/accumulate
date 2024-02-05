@@ -8,20 +8,31 @@ package run
 
 import (
 	"crypto/sha256"
+	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/cometbft/cometbft/abci/types"
+	types "github.com/cometbft/cometbft/abci/types"
 	tm "github.com/cometbft/cometbft/config"
 	tmcfg "github.com/cometbft/cometbft/config"
+	tmcrypto "github.com/cometbft/cometbft/crypto"
+	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/libs/log"
 	tmnode "github.com/cometbft/cometbft/node"
 	tmp2p "github.com/cometbft/cometbft/p2p"
-	"github.com/cometbft/cometbft/privval"
+	tmpv "github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
 	"github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/rpc/client/local"
+	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/fatih/color"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	libp2ppb "github.com/libp2p/go-libp2p/core/crypto/pb"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/viper"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	tmlib "gitlab.com/accumulatenetwork/accumulate/exp/tendermint"
@@ -36,7 +47,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -65,6 +75,7 @@ type ConsensusApp interface {
 	CopyAsInterface() any
 
 	partition() *protocol.PartitionInfo
+	portOffset() portOffset
 	Requires() []ioc.Requirement
 	Provides() []ioc.Provided
 	prestart(*Instance) error
@@ -74,7 +85,7 @@ type ConsensusApp interface {
 
 type tendermint struct {
 	config   *tm.Config
-	privVal  *privval.FilePV
+	privVal  *tmpv.FilePV
 	nodeKey  *tmp2p.NodeKey
 	logger   log.Logger
 	eventBus *events.Bus
@@ -107,38 +118,87 @@ func (c *ConsensusService) start(inst *Instance) error {
 		inst.shutdown()
 	})
 
-	// Load config. Use Viper because that's what Tendermint does.{
-	nodeDir := inst.path(c.NodeDir)
-	v := viper.New()
-	v.SetConfigFile(filepath.Join(nodeDir, "config", "tendermint.toml"))
-	v.AddConfigPath(filepath.Join(nodeDir, "config"))
-	err := v.ReadInConfig()
+	// Make the node directories
+	err := os.MkdirAll(inst.path(c.NodeDir, "config"), 0700)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(inst.path(c.NodeDir, "data"), 0700)
 	if err != nil {
 		return err
 	}
 
+	// Load CometBFT config
 	d.config = tm.DefaultConfig()
-	err = v.Unmarshal(d.config)
-	if err != nil {
+	d.config.SetRoot(inst.path(c.NodeDir))
+	_, err = os.Stat(inst.path(c.NodeDir, "config", "config.toml"))
+	switch {
+	case err == nil:
+		// Load the existing file with Viper because that's what Tendermint does
+		nodeDir := inst.path(c.NodeDir)
+		v := viper.New()
+		v.SetConfigFile(filepath.Join(nodeDir, "config", "config.toml"))
+		v.AddConfigPath(filepath.Join(nodeDir, "config"))
+		err = v.ReadInConfig()
+		if err != nil {
+			return err
+		}
+
+		err = v.Unmarshal(d.config)
+		if err != nil {
+			return err
+		}
+
+	case errors.Is(err, fs.ErrNotExist):
+		partPort := c.App.portOffset()
+
+		d.config.NodeKey = ""
+		d.config.PrivValidatorKey = ""
+		d.config.Genesis = filepath.Join("..", c.Genesis)
+		d.config.Mempool.MaxTxBytes = 4194304
+
+		d.config.Instrumentation.Prometheus = true
+		d.config.Instrumentation.PrometheusListenAddr = listenHostPort(c.Listen, defaultHost, partPort, portMetrics)
+		d.config.Instrumentation.Namespace = fmt.Sprintf("cometbft_%s", c.App.partition().ID)
+
+		d.config.P2P.ListenAddress = listenUrl(c.Listen, defaultHost, partPort, useTCP{}, portCmtP2P)
+		d.config.RPC.ListenAddress = listenUrl(c.Listen, defaultHost, partPort, useTCP{}, portCmtRPC)
+
+		// No duplicate IPs
+		d.config.P2P.AllowDuplicateIP = false
+
+		// Initial peers (should be bootstrap peers but that setting isn't
+		// present in 0.37)
+		for i, peer := range c.BootstrapPeers {
+			id, err := cmtPeerAddress(peer)
+			if err != nil {
+				return errors.UnknownError.WithFormat("bootstrap peer %d: %w", i, err)
+			}
+			if i > 0 {
+				d.config.P2P.PersistentPeers += ","
+			}
+			d.config.P2P.PersistentPeers += id
+		}
+
+		// Set whether unroutable addresses are allowed
+		d.config.P2P.AddrBookStrict = !isPrivate(c.Listen)
+
+	default:
 		return err
 	}
 
-	d.config.SetRoot(nodeDir)
 	err = d.config.ValidateBasic()
 	if err != nil {
 		return err
 	}
 
 	// Load keys
-	d.privVal, err = config.LoadFilePV(
-		d.config.PrivValidatorKeyFile(),
-		d.config.PrivValidatorStateFile(),
-	)
+	d.privVal, err = c.loadPrivVal(inst, d.config, c.ValidatorKey)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load private validator key: %w", err)
 	}
 
-	d.nodeKey, err = tmp2p.LoadNodeKey(d.config.NodeKeyFile())
+	d.nodeKey, err = convertNodeKey(inst)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load node key: %w", err)
 	}
@@ -155,7 +215,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 		d.privVal,
 		d.nodeKey,
 		proxy.NewLocalClientCreator(app),
-		genesis.DocProvider(d.config),
+		c.genesisDocProvider(inst),
 		tmcfg.DefaultDBProvider,
 		tmnode.DefaultMetricsProvider(d.config.Instrumentation),
 		d.logger,
@@ -185,7 +245,142 @@ func (c *ConsensusService) start(inst *Instance) error {
 	return c.App.register(inst, d, node)
 }
 
+func convertNodeKey(inst *Instance) (*tmp2p.NodeKey, error) {
+	var key PrivateKey
+	if inst.config.P2P != nil {
+		key = inst.config.P2P.Key
+	}
+	key2, err := convertKeyToComet(inst, key)
+	if err != nil {
+		return nil, err
+	}
+	return &tmp2p.NodeKey{PrivKey: key2}, nil
+}
+
+func (c *ConsensusService) loadPrivVal(inst *Instance, config *tm.Config, key PrivateKey) (*tmpv.FilePV, error) {
+	key2, err := convertKeyToComet(inst, key)
+	if err != nil {
+		return nil, err
+	}
+
+	// This is a hack to work around CometBFT
+	pv := tmpv.NewFilePV(key2, "", config.PrivValidatorStateFile())
+
+	b, err := os.ReadFile(config.PrivValidatorStateFile())
+	switch {
+	case err == nil:
+		err = cmtjson.Unmarshal(b, &pv.LastSignState)
+		return pv, err
+	case !errors.Is(err, fs.ErrNotExist):
+		return nil, err
+	}
+
+	b, err = cmtjson.MarshalIndent(pv.LastSignState, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	err = os.WriteFile(config.PrivValidatorStateFile(), b, 0600)
+	return pv, err
+}
+
+func convertKeyToComet(inst *Instance, key PrivateKey) (tmcrypto.PrivKey, error) {
+	switch key.(type) {
+	case nil:
+		return nil, errors.BadRequest.With("key is nil")
+	case *TransientPrivateKey:
+		return nil, errors.BadRequest.With("key is transient")
+	}
+
+	addr, err := key.get(inst)
+	if err != nil {
+		return nil, err
+	}
+
+	sk, ok := addr.GetPrivateKey()
+	if !ok {
+		return nil, errors.BadRequest.With("not a private key")
+	}
+
+	switch addr.GetType() {
+	case protocol.SignatureTypeED25519:
+		return tmed25519.PrivKey(sk), nil
+	default:
+		return nil, errors.BadRequest.With("unsupported key type %v", addr.GetType())
+	}
+}
+
+func (c *ConsensusService) genesisDocProvider(inst *Instance) tmnode.GenesisDocProvider {
+	path := inst.path(c.Genesis)
+
+	if filepath.Ext(c.Genesis) == ".json" {
+		return func() (*tmtypes.GenesisDoc, error) {
+			return tmtypes.GenesisDocFromFile(path)
+		}
+	}
+
+	return func() (*tmtypes.GenesisDoc, error) {
+		// Open the snapshot
+		all, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+
+		return genesis.ConvertSnapshotToJson(all)
+	}
+}
+
+func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
+	var pub libp2pcrypto.PubKey
+	var host, port string
+	var err error
+	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+		switch c.Protocol().Code {
+		case multiaddr.P_P2P:
+			pub, err = peer.ID(c.RawValue()).ExtractPublicKey()
+		case multiaddr.P_IP4,
+			multiaddr.P_IP6,
+			multiaddr.P_DNS,
+			multiaddr.P_DNS4,
+			multiaddr.P_DNS6:
+			host = c.Value()
+		case multiaddr.P_TCP,
+			multiaddr.P_UDP:
+			port = c.Value()
+		}
+		if err != nil {
+			return false
+		}
+		return pub == nil || host == "" || port == ""
+	})
+	if err != nil {
+		return "", err
+	}
+	if pub == nil {
+		return "", errors.BadRequest.With("missing peer ID")
+	}
+	if host == "" {
+		return "", errors.BadRequest.With("missing host")
+	}
+	if port == "" {
+		return "", errors.BadRequest.With("missing port")
+	}
+
+	switch pub.Type() {
+	case libp2ppb.KeyType_Ed25519:
+		return fmt.Sprintf("%s@%s:%s", pub, host, port), nil
+	default:
+		return "", errors.BadRequest.With("unsupported key type %v", pub.Type())
+	}
+}
+
 func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partition }
+
+func (c *CoreConsensusApp) portOffset() portOffset {
+	if c.Partition.Type == protocol.PartitionTypeDirectory {
+		return portDir
+	}
+	return portBVN
+}
 
 func (c *CoreConsensusApp) Requires() []ioc.Requirement {
 	return []ioc.Requirement{
@@ -228,7 +423,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 
 	dialer := inst.p2p.DialNetwork()
 	client := &message.Client{Transport: &message.RoutedTransport{
-		Network: inst.network,
+		Network: inst.config.Network,
 		Dialer:  dialer,
 		Router:  routing.MessageRouter{Router: router},
 	}}
@@ -258,7 +453,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		// If we are not attached to a DN node, or direct dispatch is disabled,
 		// use the API dispatcher
 		execOpts.NewDispatcher = func() execute.Dispatcher {
-			return accumulated.NewDispatcher(inst.network, router, dialer)
+			return accumulated.NewDispatcher(inst.config.Network, router, dialer)
 		}
 
 	} else {
