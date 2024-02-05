@@ -7,13 +7,31 @@
 package address
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"testing"
 
 	"github.com/multiformats/go-multihash"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func TestGenerateKey(t *testing.T) {
+	t.Skip("Manual")
+	pk, sk, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	addr := &PrivateKey{
+		Key: sk,
+		PublicKey: PublicKey{
+			Type: protocol.SignatureTypeED25519,
+			Key:  pk,
+		},
+	}
+	fmt.Println(addr)
+}
 
 func TestPublicKeyHash(t *testing.T) {
 	cases := map[string]struct {
