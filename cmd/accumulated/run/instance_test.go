@@ -45,6 +45,24 @@ func TestCoreValidatorConfig(t *testing.T) {
 	fmt.Printf("%s", b)
 }
 
+func TestRun2(t *testing.T) {
+	t.Skip("Manual")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	c := new(Config)
+	require.NoError(t, c.LoadFrom("../../../.nodes/node-1/accumulate.toml"))
+
+	ctx = logging.With(ctx, "test", t.Name())
+	inst, err := Start(ctx, c)
+	require.NoError(t, err)
+
+	time.Sleep(time.Minute)
+
+	require.NoError(t, inst.Stop())
+}
+
 func TestRun(t *testing.T) {
 	t.Skip("Manual")
 
@@ -66,6 +84,7 @@ func TestRun(t *testing.T) {
 		Services: []Service{
 			&ConsensusService{
 				NodeDir: "node-1/dnn",
+				Genesis: "node-1/dn-genesis.snap",
 				App: &CoreConsensusApp{
 					EnableHealing: ptr(true),
 					Partition: &protocol.PartitionInfo{
@@ -76,6 +95,7 @@ func TestRun(t *testing.T) {
 			},
 			&ConsensusService{
 				NodeDir: "node-1/bvnn",
+				Genesis: "node-1/bvn-genesis.snap",
 				App: &CoreConsensusApp{
 					EnableHealing: ptr(true),
 					Partition: &protocol.PartitionInfo{

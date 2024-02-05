@@ -32,7 +32,7 @@ func (p *P2P) start(inst *Instance) error {
 
 	node, err := p2p.New(p2p.Options{
 		Key:               sk,
-		Network:           inst.network,
+		Network:           inst.config.Network,
 		Listen:            p.Listen,
 		BootstrapPeers:    p.BootstrapPeers,
 		PeerDatabase:      *p.PeerDB,
