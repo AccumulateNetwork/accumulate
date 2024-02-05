@@ -306,3 +306,53 @@ SnapshotService:
       type: bool
       optional: true
       pointer: true
+
+CoreValidatorConfiguration:
+  union: { type: configuration }
+  non-binary: true
+  fields:
+    - name: Listen
+      type: p2p.Multiaddr
+      marshal-as: union
+    - name: BVN
+      type: string
+    - name: EnableHealing
+      type: bool
+      pointer: true
+      optional: true
+    - name: EnableDirectDispatch
+      type: bool
+      optional: true
+      pointer: true
+    - name: StorageType
+      type: StorageType
+      marshal-as: enum
+      pointer: true
+      optional: true
+
+ConsensusService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: NodeDir
+      type: string
+    - name: App
+      type: ConsensusApp
+      marshal-as: union
+
+CoreConsensusApp:
+  union: { type: consensusApp }
+  non-binary: true
+  fields:
+    - name: Partition
+      type: protocol.PartitionInfo
+      marshal-as: reference
+      pointer: true
+    - name: EnableHealing
+      type: bool
+      optional: true
+      pointer: true
+    - name: EnableDirectDispatch
+      type: bool
+      optional: true
+      pointer: true

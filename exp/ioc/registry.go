@@ -25,13 +25,27 @@ func (r Registry) Register(desc Descriptor, value any) error {
 	}
 
 	// If there's no existing service, register it
-	_, ok := r[key]
+	existing, ok := r[key]
 	if !ok {
 		r[key] = value
 		return nil
 	}
 
-	return key.wrap(ErrAlreadyRegistered)
+	// If the existing service is [Promised]...
+	promised, ok := existing.(Promised)
+	if !ok {
+		return key.wrap(ErrAlreadyRegistered)
+	}
+
+	// Resolve the [Promised]
+	err := promised.Resolve(value)
+	if err != nil {
+		return key.wrap(err)
+	}
+
+	// And replace it
+	r[key] = value
+	return nil
 }
 
 func (r Registry) Get(desc Descriptor) (any, bool) {

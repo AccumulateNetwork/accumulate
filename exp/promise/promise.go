@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -152,6 +152,18 @@ func slogNilResult(callers []uintptr) {
 		break
 	}
 	slog.Error("nil promise result", "func", "unknown")
+}
+
+// New returns a Promise that behaves more like traditional promises, returning
+// resolve and reject callbacks.
+func New[T any]() (_ Promise[T], resolve func(T), reject func(error)) {
+	// Allocate a channel for the result and a [sync.Once] to avoid races.
+	ch := make(chan Result[T], 1)
+	var once sync.Once
+
+	return &chanPromise[T]{ch: ch},
+		func(v T) { once.Do(func() { ch <- Value[T]{v} }) },
+		func(err error) { once.Do(func() { ch <- Error[T]{err} }) }
 }
 
 // Call spawns a concurrent process that calls the function.
