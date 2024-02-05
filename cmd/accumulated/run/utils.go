@@ -9,6 +9,7 @@ package run
 import (
 	"crypto/ed25519"
 	"fmt"
+	"net"
 	"reflect"
 	"strconv"
 	"strings"
@@ -21,12 +22,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+const defaultHost = "/ip4/0.0.0.0"
+
 var (
 	portDir = portOffset(config.PortOffsetDirectory)
 	portBVN = portOffset(config.PortOffsetBlockValidator)
 
-	portAccAPI = portOffset(config.PortOffsetAccumulateApi)
-	portAccP2P = portOffset(config.PortOffsetAccumulateP2P)
+	portCmtP2P  = portOffset(config.PortOffsetTendermintP2P)
+	portCmtRPC  = portOffset(config.PortOffsetTendermintRpc)
+	portMetrics = portOffset(config.PortOffsetPrometheus)
+	portAccAPI  = portOffset(config.PortOffsetAccumulateApi)
+	portAccP2P  = portOffset(config.PortOffsetAccumulateP2P)
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -100,6 +106,64 @@ func listen(addr multiaddr.Multiaddr, defaultHost string, transform ...addrTrans
 		addr = ensureHost(addr, defaultHost)
 	}
 	return applyAddrTransforms(addr, transform...)
+}
+
+func listenUrl(addr multiaddr.Multiaddr, defaultHost string, transform ...addrTransform) string {
+	addr = listen(addr, defaultHost, transform...)
+	scheme, host, port, _, err := decomposeListen(addr)
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%s://%s:%s", scheme, host, port)
+}
+
+func listenHostPort(addr multiaddr.Multiaddr, defaultHost string, transform ...addrTransform) string {
+	addr = listen(addr, defaultHost, transform...)
+	_, host, port, _, err := decomposeListen(addr)
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%s:%s", host, port)
+}
+
+func decomposeListen(addr multiaddr.Multiaddr) (proto, host, port, http string, err error) {
+	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+		switch c.Protocol().Code {
+		case multiaddr.P_IP4,
+			multiaddr.P_IP6,
+			multiaddr.P_DNS,
+			multiaddr.P_DNS4,
+			multiaddr.P_DNS6:
+			host = c.Value()
+		case multiaddr.P_TCP,
+			multiaddr.P_UDP:
+			proto = c.Protocol().Name
+			port = c.Value()
+		case multiaddr.P_HTTP,
+			multiaddr.P_HTTPS:
+			http = c.Protocol().Name
+		default:
+			err = errors.UnknownError.WithFormat("invalid listen address: %v", addr)
+			return false
+		}
+		return true
+	})
+	return
+}
+
+func isPrivate(addr multiaddr.Multiaddr) bool {
+	var private bool
+	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
+		switch c.Protocol().Code {
+		case multiaddr.P_IP4,
+			multiaddr.P_IP6:
+			ip := net.ParseIP(c.Value())
+			private = ip != nil && (ip.IsLoopback() || ip.IsPrivate())
+			return false
+		}
+		return true
+	})
+	return private
 }
 
 type addrTransform interface {
