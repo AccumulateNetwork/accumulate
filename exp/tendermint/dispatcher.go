@@ -163,7 +163,7 @@ func (d *dispatcher) send(ctx context.Context, queue map[string][]*messaging.Env
 
 	check := func(err error, peer *coretypes.Peer) {
 		err = CheckDispatchError(err)
-		if err != nil {
+		if err == nil {
 			return
 		}
 
