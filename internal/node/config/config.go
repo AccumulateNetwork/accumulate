@@ -166,6 +166,14 @@ type Accumulate struct {
 	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
 	API         API         `toml:"api" mapstructure:"api"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
+	Logging     Logging     `toml:"logging" mapstructure:"logging"`
+}
+
+type Logging struct {
+	EnableLoki   bool   `toml:"enable-loki" mapstructure:"enable-loki"`
+	LokiUrl      string `toml:"loki-url" mapstructure:"loki-url"`
+	LokiUsername string `toml:"loki-username" mapstructure:"loki-username"`
+	LokiPassword string `toml:"loki-password" mapstructure:"loki-password"`
 }
 
 type Healing struct {
