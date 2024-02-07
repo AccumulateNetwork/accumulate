@@ -15,6 +15,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -25,6 +27,57 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"golang.org/x/exp/slog"
+)
+
+var (
+	mSnapshotCount = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "snapshot",
+		Name:      "collect_count",
+		Help:      "The number of collected snapshots",
+	})
+
+	mSnapshotSkipped = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "snapshot",
+		Name:      "collect_skipped",
+		Help:      "The number of skipped snapshots",
+	})
+
+	mSnapshotFailed = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "snapshot",
+		Name:      "collect_failed",
+		Help:      "The number of failed snapshots",
+	})
+
+	mSnapshotDuration = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: "accumulate",
+		Subsystem: "snapshot",
+		Name:      "collect_duration",
+		Help:      "The time it takes to collect a snapshot.",
+	})
+
+	mSnapshotAccountRecords = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "snapshot",
+		Name:      "collect_accountRecords",
+		Help:      "The number of collected account records",
+	})
+
+	mSnapshotMessageRecords = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "snapshot",
+		Name:      "collect_messageRecords",
+		Help:      "The number of collected message records",
+	})
+
+	mSnapshotOtherRecords = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate",
+		Subsystem: "snapshot",
+		Name:      "collect_otherRecords",
+		Help:      "The number of collected records other than accounts and messages",
+	})
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
@@ -45,6 +98,7 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 
 	// Don't collect a snapshot if one is still being collected
 	if !d.snapshotLock.TryLock() {
+		mSnapshotSkipped.Inc()
 		return
 	}
 	defer d.snapshotLock.Unlock()
@@ -56,11 +110,16 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 	}()
 	defer batch.Discard()
 
+	mSnapshotCount.Inc()
+	start := time.Now()
+	defer func() { mSnapshotDuration.Set(time.Since(start).Seconds()) }()
+
 	d.Logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
 	err := os.Mkdir(snapDir, 0755)
 	if err != nil && !errors.Is(err, fs.ErrExist) {
 		d.Logger.Error("Failed to create snapshot directory", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		mSnapshotFailed.Inc()
 		return
 	}
 
@@ -68,12 +127,14 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		mSnapshotFailed.Inc()
 		return
 	}
 	defer func() {
 		err = file.Close()
 		if err != nil {
 			d.Logger.Error("Failed to close snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+			mSnapshotFailed.Inc()
 			return
 		}
 	}()
@@ -87,6 +148,15 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 		Metrics:    &metrics,
 		BuildIndex: d.Config.Accumulate.Snapshots.EnableIndexing,
 		Predicate: func(r database.Record) (bool, error) {
+			switch r.Key().Get(0) {
+			case "Account":
+				mSnapshotAccountRecords.Inc()
+			case "Message", "Transaction":
+				mSnapshotMessageRecords.Inc()
+			default:
+				mSnapshotOtherRecords.Inc()
+			}
+
 			select {
 			case <-tick.C:
 			default:
@@ -110,6 +180,7 @@ func (d *Daemon) collectSnapshot(batch *coredb.Batch, blockTime time.Time, major
 	})
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		mSnapshotFailed.Inc()
 		return
 	}
 
