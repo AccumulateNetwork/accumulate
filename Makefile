@@ -1,7 +1,7 @@
 all: build
 
 # Go handles build caching, so Go targets should always be marked phony.
-.PHONY: all build docker docker-push http http-docker http-docker-push healing healing-docker healing-docker-push
+.PHONY: all build docker docker-push http http-docker http-docker-push faucet-docker faucet-docker-push healing healing-docker healing-docker-push
 
 GIT_DESCRIBE = $(shell git fetch --tags -q ; git describe --dirty)
 GIT_COMMIT = $(shell git rev-parse HEAD)
@@ -30,3 +30,9 @@ http-docker:
 
 http-docker-push: http-docker
 	docker push "$(IMAGE)/http"
+
+faucet-docker:
+	docker build --build-arg "GIT_DESCRIBE=$(GIT_DESCRIBE)" --build-arg "GIT_COMMIT=$(GIT_COMMIT)" -t "$(IMAGE)/faucet" -f cmd/accumulated-faucet/Dockerfile .
+
+faucet-docker-push: faucet-docker
+	docker push "$(IMAGE)/faucet"
