@@ -77,7 +77,7 @@ func NewPersistentTracker(ctx context.Context, opts PersistentTrackerOptions) (*
 
 	// Launch async jobs
 	t.runJob(t.writeDb, opts.PersistFrequency, defaultPersistFrequency, false)
-	t.runJob(t.scanPeers, opts.ScanFrequency, defaultScanFrequency, false)
+	t.runJob(t.scanPeers, opts.ScanFrequency, defaultScanFrequency, true)
 
 	return t, nil
 }
