@@ -15,6 +15,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
+	"golang.org/x/exp/slog"
 )
 
 func main() {
@@ -61,8 +62,13 @@ func run(_ *cobra.Command, args []string) {
 	}
 	cfg := &Config{
 		Network: args[0],
+		Logging: &Logging{
+			Rules: []*LoggingRule{{
+				Level: slog.LevelInfo,
+			}},
+		},
 		P2P: &P2P{
-			Key:            flag.Key.Value,
+			Key:            flag.NodeKey.Value,
 			Listen:         flag.Listen,
 			BootstrapPeers: flag.Peers,
 		},
