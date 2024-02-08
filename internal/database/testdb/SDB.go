@@ -16,7 +16,7 @@ type keyValue struct {
 }
 
 type SDB struct {
-	Directory    string
+	Directory  string
 	StaticFile string
 	DB         *badger.DB
 	Data       *os.File
@@ -29,7 +29,6 @@ func (s *SDB) Close(t *testing.T) error {
 	return s.DB.Close()
 }
 
-
 func (s *SDB) Open(directory string) error {
 	s.Directory = directory
 	db, err := badger.Open(badger.DefaultOptions(s.Directory))
@@ -37,7 +36,7 @@ func (s *SDB) Open(directory string) error {
 		return err
 	}
 	s.DB = db
-	
+
 	tmpfile := filepath.Join(s.Directory, "Records.dat")
 	s.Data, err = os.Create(tmpfile)
 	if err != nil {
@@ -57,26 +56,37 @@ func (s *SDB) Open(directory string) error {
 		s.DB = nil
 		return err
 	}
+	return nil
 }
 
-func (s *SDB) Write(dataSet []keyValue) {
+func (s *SDB) Write(dataSet []keyValue) error {
 	if !s.UseFile {
 		txn := s.DB.NewTransaction(true)
 		for _, kv := range dataSet {
-			txn.Set(kv.key[:], kv.data)
+			if err := txn.Set(kv.key[:], kv.data); err != nil {
+				return err
+			}
 		}
-		txn.Commit()
+		if err := txn.Commit(); err != nil {
+			return err
+		}
 		txn.Discard()
+
 	} else {
-		var length [16]byte
+		var lengthBuff [16]byte
 		var data bytes.Buffer
 		var keys bytes.Buffer
 		txn := s.DB.NewTransaction(true)
 		for _, kv := range dataSet {
-			binary.BigEndian.PutUint64(length[:], s.EOF)
-			data.Write(kv.data)
-			keys.Write(kv.key[:])
-			txn.Set(kv.key[:], length[:])
+			binary.BigEndian.PutUint64(lengthBuff[:], s.EOF)
+			length, err := data.Write(kv.data)
+			if err != nil {
+				return err
+			}
+			if _,err := keys.Write(kv.key[:]); err != nil {
+				return err
+			}
+			txn.Set(kv.key[:], lengthBuff[:])
 			s.EOF += uint64(len(kv.data))
 		}
 		s.Data.Write(data.Bytes())
@@ -85,4 +95,3 @@ func (s *SDB) Write(dataSet []keyValue) {
 		txn.Discard()
 	}
 }
-
