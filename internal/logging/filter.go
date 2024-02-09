@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -85,7 +85,7 @@ func (w FilterWriter) WriteLevel(level zerolog.Level, p []byte) (n int, err erro
 	d := json.NewDecoder(bytes.NewReader(p))
 	err = d.Decode(&evt)
 	if err != nil {
-		return n, fmt.Errorf("cannot decode event: %s", err)
+		return 0, fmt.Errorf("cannot decode event: %s", err)
 	}
 
 	if level == zerolog.NoLevel {
@@ -95,6 +95,7 @@ func (w FilterWriter) WriteLevel(level zerolog.Level, p []byte) (n int, err erro
 		}
 	}
 
+	n = len(p)
 	if p := w.Predicate; p != nil && !p(level, evt) {
 		return n, nil
 	}
