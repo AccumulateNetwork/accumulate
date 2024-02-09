@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -67,17 +67,18 @@ type Accumulator struct {
 }
 
 type AccumulatorOptions struct {
-	Tracer      trace.Tracer
-	Executor    execute.Executor
-	EventBus    *events.Bus
-	Logger      log.Logger
-	Snapshots   *config.Snapshots
-	Database    coredb.Beginner
-	Address     crypto.Address // This is the address of this node, and is used to determine if the node is the leader
-	Genesis     node.GenesisDocProvider
-	Partition   string
-	RootDir     string
-	AnalysisLog config.AnalysisLog
+	Tracer               trace.Tracer
+	Executor             execute.Executor
+	EventBus             *events.Bus
+	Logger               log.Logger
+	Snapshots            *config.Snapshots
+	Database             coredb.Beginner
+	Address              crypto.Address // This is the address of this node, and is used to determine if the node is the leader
+	Genesis              node.GenesisDocProvider
+	Partition            string
+	RootDir              string
+	AnalysisLog          config.AnalysisLog
+	MaxEnvelopesPerBlock int
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -367,6 +368,28 @@ func (app *Accumulator) InitChain(_ context.Context, req *abci.RequestInitChain)
 
 	app.ready = true
 	return &abci.ResponseInitChain{AppHash: root[:], Validators: updates}, nil
+}
+
+func (app *Accumulator) PrepareProposal(ctx context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
+	if app.MaxEnvelopesPerBlock > 0 && len(req.Txs) > app.MaxEnvelopesPerBlock {
+		req.Txs = req.Txs[:app.MaxEnvelopesPerBlock]
+	}
+
+	// Cloned from BaseApplication
+	txs := make([][]byte, 0, len(req.Txs))
+	var totalBytes int64
+	for _, tx := range req.Txs {
+		totalBytes += int64(len(tx))
+		if totalBytes > req.MaxTxBytes {
+			break
+		}
+		txs = append(txs, tx)
+	}
+	return &abci.ResponsePrepareProposal{Txs: txs}, nil
+}
+
+func (app *Accumulator) ProcessProposal(ctx context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil
 }
 
 func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {

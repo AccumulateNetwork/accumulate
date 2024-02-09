@@ -339,6 +339,10 @@ CoreValidatorConfiguration:
       type: bool
       optional: true
       pointer: true
+    - name: MaxEnvelopesPerBlock
+      type: uint
+      optional: true
+      pointer: true
     - name: StorageType
       type: StorageType
       marshal-as: enum
@@ -381,5 +385,9 @@ CoreConsensusApp:
       pointer: true
     - name: EnableDirectDispatch
       type: bool
+      optional: true
+      pointer: true
+    - name: MaxEnvelopesPerBlock
+      type: uint
       optional: true
       pointer: true
