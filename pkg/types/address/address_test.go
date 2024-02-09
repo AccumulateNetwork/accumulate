@@ -31,6 +31,17 @@ func TestGenerateKey(t *testing.T) {
 		},
 	}
 	fmt.Println(addr)
+
+	// This is a bogus key that can be added to a key page
+	fmt.Println()
+	fmt.Println(&UnknownHash{
+		Hash: []byte("The quick brown fox jumps over the lazy dog"),
+	})
+
+	a, err := Parse("MHz125hWDmTmFN25xqjfFTMdUyBRUDVyHcCn6Jp7NCbdjt45x4UQ9hg")
+	require.NoError(t, err)
+	fmt.Printf("%T\n", a)
+	fmt.Println(string(a.(*UnknownMultihash).Digest))
 }
 
 func TestPublicKeyHash(t *testing.T) {
