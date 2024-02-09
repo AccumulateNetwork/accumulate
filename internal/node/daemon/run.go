@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -813,12 +813,6 @@ func (d *Daemon) Stop() error {
 
 func (d *Daemon) Done() <-chan struct{} {
 	return d.node.Quit()
-}
-
-type logFunc func(keyvals ...interface{}) error
-
-func (l logFunc) Log(keyvals ...interface{}) error {
-	return l(keyvals...)
 }
 
 type writeFunc func([]byte) (int, error)
