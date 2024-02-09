@@ -47,11 +47,12 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 	err := partOpts{
 		CoreValidatorConfiguration: c,
 
-		ID:             protocol.Directory,
-		Type:           protocol.PartitionTypeDirectory,
-		Genesis:        c.DnGenesis,
-		BootstrapPeers: c.DnBootstrapPeers,
-		Dir:            "dnn",
+		ID:                   protocol.Directory,
+		Type:                 protocol.PartitionTypeDirectory,
+		Genesis:              c.DnGenesis,
+		BootstrapPeers:       c.DnBootstrapPeers,
+		Dir:                  "dnn",
+		MaxEnvelopesPerBlock: c.MaxEnvelopesPerBlock,
 	}.apply(cfg)
 	if err != nil {
 		return err
@@ -60,11 +61,12 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 	err = partOpts{
 		CoreValidatorConfiguration: c,
 
-		ID:             c.BVN,
-		Type:           protocol.PartitionTypeBlockValidator,
-		Genesis:        c.BvnGenesis,
-		BootstrapPeers: c.BvnBootstrapPeers,
-		Dir:            "bvnn",
+		ID:                   c.BVN,
+		Type:                 protocol.PartitionTypeBlockValidator,
+		Genesis:              c.BvnGenesis,
+		BootstrapPeers:       c.BvnBootstrapPeers,
+		Dir:                  "bvnn",
+		MaxEnvelopesPerBlock: c.MaxEnvelopesPerBlock,
 	}.apply(cfg)
 	if err != nil {
 		return err
@@ -86,11 +88,12 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 
 type partOpts struct {
 	*CoreValidatorConfiguration
-	ID             string
-	Type           protocol.PartitionType
-	Genesis        string
-	Dir            string
-	BootstrapPeers []multiaddr.Multiaddr
+	ID                   string
+	Type                 protocol.PartitionType
+	Genesis              string
+	Dir                  string
+	BootstrapPeers       []multiaddr.Multiaddr
+	MaxEnvelopesPerBlock *uint64
 }
 
 func (p partOpts) apply(cfg *Config) error {
@@ -107,6 +110,7 @@ func (p partOpts) apply(cfg *Config) error {
 			App: &CoreConsensusApp{
 				EnableHealing:        p.EnableHealing,
 				EnableDirectDispatch: p.EnableDirectDispatch,
+				MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
 				Partition: &protocol.PartitionInfo{
 					ID:   partID,
 					Type: partType,
