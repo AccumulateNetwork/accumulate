@@ -65,6 +65,7 @@ type CoreConsensusApp struct {
 	Partition            *protocol.PartitionInfo `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	EnableHealing        *bool                   `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
 	EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	MaxEnvelopesPerBlock *uint64                 `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
 }
 
 type CoreValidatorConfiguration struct {
@@ -77,6 +78,7 @@ type CoreValidatorConfiguration struct {
 	BvnBootstrapPeers    []p2p.Multiaddr `json:"bvnBootstrapPeers,omitempty" form:"bvnBootstrapPeers" query:"bvnBootstrapPeers" validate:"required"`
 	EnableHealing        *bool           `json:"enableHealing,omitempty" form:"enableHealing" query:"enableHealing"`
 	EnableDirectDispatch *bool           `json:"enableDirectDispatch,omitempty" form:"enableDirectDispatch" query:"enableDirectDispatch"`
+	MaxEnvelopesPerBlock *uint64         `json:"maxEnvelopesPerBlock,omitempty" form:"maxEnvelopesPerBlock" query:"maxEnvelopesPerBlock"`
 	StorageType          *StorageType    `json:"storageType,omitempty" form:"storageType" query:"storageType"`
 }
 
@@ -340,6 +342,10 @@ func (v *CoreConsensusApp) Copy() *CoreConsensusApp {
 		u.EnableDirectDispatch = new(bool)
 		*u.EnableDirectDispatch = *v.EnableDirectDispatch
 	}
+	if v.MaxEnvelopesPerBlock != nil {
+		u.MaxEnvelopesPerBlock = new(uint64)
+		*u.MaxEnvelopesPerBlock = *v.MaxEnvelopesPerBlock
+	}
 
 	return u
 }
@@ -379,6 +385,10 @@ func (v *CoreValidatorConfiguration) Copy() *CoreValidatorConfiguration {
 	if v.EnableDirectDispatch != nil {
 		u.EnableDirectDispatch = new(bool)
 		*u.EnableDirectDispatch = *v.EnableDirectDispatch
+	}
+	if v.MaxEnvelopesPerBlock != nil {
+		u.MaxEnvelopesPerBlock = new(uint64)
+		*u.MaxEnvelopesPerBlock = *v.MaxEnvelopesPerBlock
 	}
 	if v.StorageType != nil {
 		u.StorageType = new(StorageType)
@@ -812,6 +822,14 @@ func (v *CoreConsensusApp) Equal(u *CoreConsensusApp) bool {
 	case !(*v.EnableDirectDispatch == *u.EnableDirectDispatch):
 		return false
 	}
+	switch {
+	case v.MaxEnvelopesPerBlock == u.MaxEnvelopesPerBlock:
+		// equal
+	case v.MaxEnvelopesPerBlock == nil || u.MaxEnvelopesPerBlock == nil:
+		return false
+	case !(*v.MaxEnvelopesPerBlock == *u.MaxEnvelopesPerBlock):
+		return false
+	}
 
 	return true
 }
@@ -862,6 +880,14 @@ func (v *CoreValidatorConfiguration) Equal(u *CoreValidatorConfiguration) bool {
 	case v.EnableDirectDispatch == nil || u.EnableDirectDispatch == nil:
 		return false
 	case !(*v.EnableDirectDispatch == *u.EnableDirectDispatch):
+		return false
+	}
+	switch {
+	case v.MaxEnvelopesPerBlock == u.MaxEnvelopesPerBlock:
+		// equal
+	case v.MaxEnvelopesPerBlock == nil || u.MaxEnvelopesPerBlock == nil:
+		return false
+	case !(*v.MaxEnvelopesPerBlock == *u.MaxEnvelopesPerBlock):
 		return false
 	}
 	switch {
@@ -1507,6 +1533,7 @@ func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
 		Partition            *protocol.PartitionInfo `json:"partition,omitempty"`
 		EnableHealing        *bool                   `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty"`
+		MaxEnvelopesPerBlock *uint64                 `json:"maxEnvelopesPerBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Partition == nil) {
@@ -1517,6 +1544,9 @@ func (v *CoreConsensusApp) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.EnableDirectDispatch == nil) {
 		u.EnableDirectDispatch = v.EnableDirectDispatch
+	}
+	if !(v.MaxEnvelopesPerBlock == nil) {
+		u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
 	}
 	return json.Marshal(&u)
 }
@@ -1533,6 +1563,7 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
 		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		MaxEnvelopesPerBlock *uint64                                        `json:"maxEnvelopesPerBlock,omitempty"`
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -1562,6 +1593,9 @@ func (v *CoreValidatorConfiguration) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.EnableDirectDispatch == nil) {
 		u.EnableDirectDispatch = v.EnableDirectDispatch
+	}
+	if !(v.MaxEnvelopesPerBlock == nil) {
+		u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
 	}
 	if !(v.StorageType == nil) {
 		u.StorageType = v.StorageType
@@ -2010,11 +2044,13 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 		Partition            *protocol.PartitionInfo `json:"partition,omitempty"`
 		EnableHealing        *bool                   `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                   `json:"enableDirectDispatch,omitempty"`
+		MaxEnvelopesPerBlock *uint64                 `json:"maxEnvelopesPerBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Partition = v.Partition
 	u.EnableHealing = v.EnableHealing
 	u.EnableDirectDispatch = v.EnableDirectDispatch
+	u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2024,6 +2060,7 @@ func (v *CoreConsensusApp) UnmarshalJSON(data []byte) error {
 	v.Partition = u.Partition
 	v.EnableHealing = u.EnableHealing
 	v.EnableDirectDispatch = u.EnableDirectDispatch
+	v.MaxEnvelopesPerBlock = u.MaxEnvelopesPerBlock
 	return nil
 }
 
@@ -2039,6 +2076,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 		BvnBootstrapPeers    *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bvnBootstrapPeers,omitempty"`
 		EnableHealing        *bool                                          `json:"enableHealing,omitempty"`
 		EnableDirectDispatch *bool                                          `json:"enableDirectDispatch,omitempty"`
+		MaxEnvelopesPerBlock *uint64                                        `json:"maxEnvelopesPerBlock,omitempty"`
 		StorageType          *StorageType                                   `json:"storageType,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -2051,6 +2089,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	u.BvnBootstrapPeers = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BvnBootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
 	u.EnableHealing = v.EnableHealing
 	u.EnableDirectDispatch = v.EnableDirectDispatch
+	u.MaxEnvelopesPerBlock = v.MaxEnvelopesPerBlock
 	u.StorageType = v.StorageType
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -2083,6 +2122,7 @@ func (v *CoreValidatorConfiguration) UnmarshalJSON(data []byte) error {
 	}
 	v.EnableHealing = u.EnableHealing
 	v.EnableDirectDispatch = u.EnableDirectDispatch
+	v.MaxEnvelopesPerBlock = u.MaxEnvelopesPerBlock
 	v.StorageType = u.StorageType
 	return nil
 }

@@ -156,6 +156,8 @@ func (d *Daemon) startSummaryApp() (types.Application, error) {
 		Partition:   d.Config.Accumulate.PartitionId,
 		RootDir:     d.Config.RootDir,
 		AnalysisLog: d.Config.Accumulate.AnalysisLog,
+
+		MaxEnvelopesPerBlock: d.Config.Accumulate.MaxEnvelopesPerBlock,
 	})
 
 	return app, nil
