@@ -243,7 +243,7 @@ func (d *dispatcher) getClients(ctx context.Context, want map[string]bool) map[s
 	}()
 
 	// Walk the directory for dual-mode nodes on the desired partitions
-	WalkPeers(ctx, d.self["directory"], func(ctx context.Context, peer coretypes.Peer) (rpc.NetworkClient, bool) {
+	WalkPeers(ctx, d.self["directory"], func(ctx context.Context, peer coretypes.Peer) (WalkClient, bool) {
 		scanned++
 
 		// Create a client for the BVNN

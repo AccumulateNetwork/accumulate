@@ -27,6 +27,7 @@ type BlockState struct {
 	Produced           int
 	ChainUpdates       chain.ChainUpdates
 	ReceivedAnchors    []*chain.ReceivedAnchor
+	PreviousStateHash  [32]byte
 
 	Anchor *BlockAnchorState
 

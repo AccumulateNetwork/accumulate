@@ -406,6 +406,7 @@ func (c *CoreConsensusApp) prestart(inst *Instance) error {
 func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Application, error) {
 	setDefaultPtr(&c.EnableHealing, false)
 	setDefaultPtr(&c.EnableDirectDispatch, true)
+	setDefaultPtr(&c.MaxEnvelopesPerBlock, 100)
 
 	store, err := coreConsensusNeedsStorage.Get(inst.services, c)
 	if err != nil {
@@ -507,6 +508,8 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		Genesis:   genesis.DocProvider(d.config),
 		Partition: c.Partition.ID,
 		RootDir:   d.config.RootDir,
+
+		MaxEnvelopesPerBlock: int(*c.MaxEnvelopesPerBlock),
 	})
 	return app, nil
 }

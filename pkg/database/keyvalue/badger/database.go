@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger"
@@ -84,6 +85,7 @@ func New(filepath string, o ...Option) (*Database, error) {
 	// Run GC every hour
 	go d.gc()
 
+	mDbOpen.Inc()
 	return d, nil
 }
 
@@ -115,6 +117,9 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		commit = d.commit
 	}
 
+	mTxnOpen.Inc()
+	var closed atomic.Bool
+
 	// The memory changeset caches entries in a map so Get will see values
 	// updated with Put, regardless of the underlying transaction and write
 	// batch behavior
@@ -123,7 +128,15 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		Get:     get,
 		Commit:  commit,
 		ForEach: d.forEach,
-		Discard: rd.Discard,
+
+		// Discard the transaction
+		Discard: func() {
+			// Fix https://discuss.dgraph.io/t/badgerdb-consume-too-much-disk-space/17070?
+			rd.Discard()
+			if closed.CompareAndSwap(false, true) {
+				mTxnOpen.Dec()
+			}
+		},
 	})
 }
 
@@ -156,6 +169,9 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 		return err
 	}
 	defer l.Unlock()
+
+	start := time.Now()
+	defer func() { mCommitDuration.Set(time.Since(start).Seconds()) }()
 
 	// Use a write batch for writing to work around Badger's limitations
 	wr := d.badger.NewWriteBatch()
@@ -220,6 +236,7 @@ func (d *Database) Close() error {
 		defer l.Unlock()
 	}
 
+	mDbOpen.Dec()
 	d.ready = false
 	return d.badger.Close()
 }
@@ -236,8 +253,15 @@ func (d *Database) gc() {
 		}
 
 		// Run GC if 50% space could be reclaimed
+		start := time.Now()
 		err = d.badger.RunValueLogGC(0.5)
-		if err != nil && !errors.Is(err, badger.ErrNoRewrite) {
+		switch {
+		case err == nil:
+			mGcRun.Inc()
+			mGcDuration.Set(time.Since(start).Seconds())
+		case errors.Is(err, badger.ErrNoRewrite):
+			// Ok
+		default:
 			slog.Error("Badger GC failed", "error", err, "module", "badger")
 		}
 
