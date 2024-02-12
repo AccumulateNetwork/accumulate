@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -56,10 +57,17 @@ func TestUpdateAccountAuth_SignatureRequest(t *testing.T) {
 		Txn(sig.ID()).Succeeds(),
 		Txn(sig.ID()).Produced().Succeeds())
 
-	// Ensure the transaction shows up as pending on bob's book
-	r := sim.QueryPendingIds(bob.JoinPath("book"), nil)
-	require.Len(t, r.Records, 1)
-	require.Equal(t, env.Transaction[0].ID().String(), r.Records[0].Value.String())
+	// Ensure the transaction does not show up as pending on bob's book, and
+	// does snow up in its signature chain
+	r1 := sim.QueryPendingIds(bob.JoinPath("book"), nil)
+	require.Len(t, r1.Records, 0)
+	r2 := sim.QueryChainEntries(bob.JoinPath("book"), &api.ChainQuery{Name: "signature", Range: &api.RangeOptions{Count: api.Ptr[uint64](1), FromEnd: true, Expand: api.Ptr(true)}})
+	require.Len(t, r2.Records, 1)
+	require.IsType(t, (*api.MessageRecord[messaging.Message])(nil), r2.Records[0].Value)
+	r2_1 := r2.Records[0].Value.(*api.MessageRecord[messaging.Message])
+	require.IsType(t, (*messaging.SignatureRequest)(nil), r2_1.Message)
+	r2_2 := r2_1.Message.(*messaging.SignatureRequest)
+	require.Equal(t, env.Transaction[0].ID().String(), r2_2.TxID.String())
 }
 
 func TestUpdateAccountAuth(t *testing.T) {
