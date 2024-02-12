@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -1217,6 +1217,61 @@ func TestAuthoritySignatureWithoutTransaction(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestLiteIdentityPendingTransaction(t *testing.T) {
+	// Create the lite addresses and one account
+	aliceKey := acctesting.GenerateKey("alice")
+	alice := acctesting.AcmeLiteAddressStdPriv(aliceKey)
+
+	cases := []struct {
+		Name    string
+		Version ExecutorVersion
+		Signer  *url.URL
+		Expect  func(*Sim)
+	}{
+		{"Before", ExecutorVersionV2, alice, func(sim *Sim) {
+			// Verify the transaction appears as pending
+			r1 := sim.QueryPendingIds(alice.RootIdentity(), nil)
+			require.Len(sim.TB, r1.Records, 1)
+		}},
+		{"After", ExecutorVersionV2Baikonur, alice, func(sim *Sim) {
+			// Verify the transaction does *not* appear as pending
+			r1 := sim.QueryPendingIds(alice.RootIdentity(), nil)
+			require.Len(sim.TB, r1.Records, 0)
+		}},
+		{"LiteID", ExecutorVersionV2Baikonur, alice.RootIdentity(), func(sim *Sim) {
+			// Verify the transaction does *not* appear as pending
+			r1 := sim.QueryPendingIds(alice.RootIdentity(), nil)
+			require.Len(sim.TB, r1.Records, 0)
+		}},
+	}
+
+	for _, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			// Initialize
+			sim := NewSim(t,
+				simulator.SimpleNetwork(t.Name(), 3, 1),
+				simulator.GenesisWithVersion(GenesisTime, c.Version),
+			)
+
+			Update(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+				require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(aliceKey), 1e6, 1e9))
+			})
+
+			// Execute
+			st := sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For(alice).
+					BurnTokens(1, 0).
+					SignWith(c.Signer).Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+			sim.StepUntil(
+				Txn(st.TxID).Completes())
+
+			// Verify
+			c.Expect(sim)
 		})
 	}
 }
