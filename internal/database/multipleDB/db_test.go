@@ -1,4 +1,4 @@
-package testdb
+package multipleDB
 
 import (
 	"fmt"
@@ -8,12 +8,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 )
 
-
-
 func TestMain(t *testing.T) {
-	var sdb SDB
-	sdb.Open(t)
-	defer sdb.Close(t)
+	var sdb MultipleDB
+	
 
 	numSets := 100000
 	numRecords := 100
@@ -36,7 +33,6 @@ func TestMain(t *testing.T) {
 			kv.data = rh.GetRandBuff(int(rh.GetRandInt64()%1024 + 1024))
 			set = append(set, kv)
 		}
-		sdb.Write(set)
 	}
 	seconds := time.Since(start).Seconds()
 	fmt.Printf("Use a file for the data: %v\n", sdb.UseFile)

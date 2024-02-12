@@ -1,0 +1,20 @@
+
+DBBlockKey:
+  description: the entry written into the DB to point to DBlock Data Entry
+  fields:
+    - name: Key
+      type: hash
+    - name: Partition 
+      type: uint
+    - name: FileNumber
+      type: uint
+    - name: Offset
+      type: uint
+
+DBBlockKeys:
+  description: all keys collected in a DBBlock
+  fields:
+    - name: Keys
+      type: DBBlockKey
+      marshal-as: reference
+      repeatable: true
