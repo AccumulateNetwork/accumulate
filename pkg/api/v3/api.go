@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -101,6 +101,12 @@ type Validator interface {
 
 type Faucet interface {
 	Faucet(ctx context.Context, account *url.URL, opts FaucetOptions) (*Submission, error)
+}
+
+// Ptr returns a pointer to the argument. Ptr is intended to make it easier to
+// construct queries that use pointer fields.
+func Ptr[T any](v T) *T {
+	return &v
 }
 
 func (r *ErrorRecord) Error() string {
