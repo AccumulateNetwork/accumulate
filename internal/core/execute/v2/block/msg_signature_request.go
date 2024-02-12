@@ -112,7 +112,7 @@ func (x SignatureRequest) process(batch *database.Batch, ctx *MessageContext, re
 		}
 
 		// Record the transaction as pending
-		err = batch.Account(req.Authority).Pending().Add(req.TxID)
+		err = pending.Add(req.TxID)
 		if err != nil {
 			return errors.UnknownError.WithFormat("add pending: %w", err)
 		}
