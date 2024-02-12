@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -32,6 +32,12 @@ type True func(*Harness) bool
 func (f True) Satisfied(h *Harness) bool { return f(h) }
 
 func (f True) Format(prefix, suffix string) string { return prefix + "(unknown predicate function)" }
+
+type False func(*Harness) bool
+
+func (f False) Satisfied(h *Harness) bool { return !f(h) }
+
+func (f False) Format(prefix, suffix string) string { return prefix + "(unknown predicate function)" }
 
 func MajorBlock(v uint64) majorHeightOnPart {
 	return majorHeightOnPart{v, protocol.Directory}
