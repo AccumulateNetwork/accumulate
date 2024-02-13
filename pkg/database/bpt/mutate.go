@@ -22,6 +22,12 @@ type mutation struct {
 // Insert updates or inserts a hash for the given key. Insert may defer the
 // actual update.
 func (b *BPT) Insert(key *record.Key, hash [32]byte) error {
+	// Use a key hash for backwards compatibility. TODO Remove once 1.3 is
+	// activated.
+	//
+	// https://gitlab.com/accumulatenetwork/accumulate/-/issues/3495
+	key = record.KeyFromHash(key.Hash())
+
 	if b.pending == nil {
 		b.pending = map[[32]byte]*mutation{}
 	}
