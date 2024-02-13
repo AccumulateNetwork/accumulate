@@ -28,6 +28,9 @@ Logging:
   fields:
     - name: Format
       type: string
+    - name: Color
+      type: bool
+      pointer: true
     - name: Rules
       type: LoggingRule
       marshal-as: reference
@@ -42,8 +45,9 @@ LoggingRule:
       marshal-as: value
       zero-value: '0'
       keep-empty: true
-    - name: Module
+    - name: Modules
       type: string
+      repeatable: true
 
 P2P:
   non-binary: true
@@ -67,7 +71,7 @@ P2P:
     - name: DiscoveryMode
       type: DhtMode
       marshal-as: value
-      zero-value: '0'
+      pointer: true
     - name: External
       type: p2p.Multiaddr
       marshal-as: union
@@ -367,6 +371,9 @@ ConsensusService:
       type: p2p.Multiaddr
       marshal-as: union
       repeatable: true
+    - name: MetricsNamespace
+      type: string
+      optional: true
     - name: App
       type: ConsensusApp
       marshal-as: union
@@ -391,3 +398,36 @@ CoreConsensusApp:
       type: uint
       optional: true
       pointer: true
+
+DevnetConfiguration:
+  union: { type: configuration }
+  non-binary: true
+  fields:
+    - name: Listen
+      type: p2p.Multiaddr
+      marshal-as: union
+    - name: Bvns
+      type: uint
+    - name: Validators
+      type: uint
+    - name: Followers
+      type: uint
+      optional: true
+    - name: Globals
+      type: network.GlobalValues
+      marshal-as: reference
+      pointer: true
+
+SubnodeService:
+  union: { type: service }
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+    - name: NodeKey
+      type: PrivateKey
+      marshal-as: union
+    - name: Services
+      type: Service
+      marshal-as: union
+      repeatable: true
