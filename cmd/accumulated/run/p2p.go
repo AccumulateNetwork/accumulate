@@ -43,14 +43,14 @@ func (p *P2P) start(inst *Instance) error {
 	}
 	inst.p2p = node
 
-	slog.InfoCtx(inst.context, "We are", "id", node.ID(), "module", "p2p")
+	slog.InfoCtx(inst.context, "We are", "id", node.ID(), "module", "run")
 
 	inst.cleanup(func() {
 		err := node.Close()
 		if err != nil {
-			slog.ErrorCtx(inst.context, "Error while stopping node", "module", "p2p", "id", node.ID(), "error", err)
+			slog.ErrorCtx(inst.context, "Error while stopping node", "module", "run", "id", node.ID(), "error", err)
 		} else {
-			slog.InfoCtx(inst.context, "Stopped", "id", node.ID(), "module", "p2p")
+			slog.InfoCtx(inst.context, "Stopped", "id", node.ID(), "module", "run")
 		}
 	})
 	return nil

@@ -49,7 +49,7 @@ func (c *Config) Load(b []byte, format func([]byte, any) error) error {
 		return err
 	}
 
-	v = remap(v, kebab2camel)
+	v = remap(v, kebab2camel, nil)
 	b, err = json.Marshal(v)
 	if err != nil {
 		return err
@@ -105,28 +105,31 @@ func (c *Config) Marshal(format func(any) ([]byte, error)) ([]byte, error) {
 		return nil, err
 	}
 
-	v = remap(v, camel2kebab)
+	v = remap(v, camel2kebab, float2int)
 	return format(v)
 }
 
-func remap(v any, fn func(string) string) any {
+func remap(v any, mapKey func(string) string, mapValue func(reflect.Value) any) any {
 	rv := reflect.ValueOf(v)
 	switch rv.Kind() {
 	case reflect.Slice:
 		u := make([]any, rv.Len())
 		for i := range u {
-			u[i] = remap(rv.Index(i).Interface(), fn)
+			u[i] = remap(rv.Index(i).Interface(), mapKey, mapValue)
 		}
 		return u
 
 	case reflect.Map:
 		u := make(map[string]any, rv.Len())
 		for it := rv.MapRange(); it.Next(); {
-			u[fn(it.Key().String())] = remap(it.Value().Interface(), fn)
+			u[mapKey(it.Key().String())] = remap(it.Value().Interface(), mapKey, mapValue)
 		}
 		return u
 
 	default:
+		if mapValue != nil {
+			return mapValue(rv)
+		}
 		return v
 	}
 }
@@ -144,4 +147,18 @@ func camel2kebab(s string) string {
 	return strings.ToLower(reCamel.ReplaceAllStringFunc(s, func(s string) string {
 		return s[:1] + "-" + s[1:]
 	}))
+}
+
+func float2int(v reflect.Value) any {
+	switch v.Kind() {
+	case reflect.Float32, reflect.Float64:
+		// If the float has no fractional part, convert it to an int
+		v := v.Float()
+		if v == float64(int64(v)) {
+			return int64(v)
+		}
+		return v
+	default:
+		return v.Interface()
+	}
 }

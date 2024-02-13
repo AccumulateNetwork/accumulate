@@ -206,6 +206,8 @@ func NewService(typ ServiceType) (Service, error) {
 		return new(SnapshotService), nil
 	case ServiceTypeStorage:
 		return new(StorageService), nil
+	case ServiceTypeSubnode:
+		return new(SubnodeService), nil
 	}
 	return nil, fmt.Errorf("unknown service %v", typ)
 }
@@ -276,6 +278,12 @@ func EqualService(a, b Service) bool {
 		}
 		b, ok := b.(*StorageService)
 		return ok && a.Equal(b)
+	case *SubnodeService:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*SubnodeService)
+		return ok && a.Equal(b)
 	}
 	return false
 }
@@ -302,6 +310,8 @@ func CopyService(v Service) Service {
 	case *SnapshotService:
 		return v.Copy()
 	case *StorageService:
+		return v.Copy()
+	case *SubnodeService:
 		return v.Copy()
 	default:
 		return v.CopyAsInterface().(Service)
@@ -398,6 +408,8 @@ func NewConfiguration(typ ConfigurationType) (Configuration, error) {
 	switch typ {
 	case ConfigurationTypeCoreValidator:
 		return new(CoreValidatorConfiguration), nil
+	case ConfigurationTypeDevnet:
+		return new(DevnetConfiguration), nil
 	case ConfigurationTypeGateway:
 		return new(GatewayConfiguration), nil
 	}
@@ -416,6 +428,12 @@ func EqualConfiguration(a, b Configuration) bool {
 		}
 		b, ok := b.(*CoreValidatorConfiguration)
 		return ok && a.Equal(b)
+	case *DevnetConfiguration:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*DevnetConfiguration)
+		return ok && a.Equal(b)
 	case *GatewayConfiguration:
 		if a == nil {
 			return b == nil
@@ -430,6 +448,8 @@ func EqualConfiguration(a, b Configuration) bool {
 func CopyConfiguration(v Configuration) Configuration {
 	switch v := v.(type) {
 	case *CoreValidatorConfiguration:
+		return v.Copy()
+	case *DevnetConfiguration:
 		return v.Copy()
 	case *GatewayConfiguration:
 		return v.Copy()

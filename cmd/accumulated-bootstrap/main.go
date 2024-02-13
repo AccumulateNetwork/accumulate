@@ -50,7 +50,7 @@ func run(*cobra.Command, []string) {
 			Key:            flag.Key.Value,
 			Listen:         flag.Listen,
 			BootstrapPeers: flag.Peers,
-			DiscoveryMode:  DhtMode(dht.ModeAutoServer),
+			DiscoveryMode:  Ptr(DhtMode(dht.ModeAutoServer)),
 			External:       flag.External,
 		},
 	}
@@ -60,5 +60,5 @@ func run(*cobra.Command, []string) {
 	Check(err)
 
 	<-ctx.Done()
-	Check(inst.Stop())
+	inst.Stop()
 }

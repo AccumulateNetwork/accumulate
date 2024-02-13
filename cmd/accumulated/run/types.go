@@ -31,6 +31,10 @@ type Service interface {
 	start(inst *Instance) error
 }
 
+type resetable interface {
+	reset(inst *Instance) error
+}
+
 type prestarter interface {
 	prestart(inst *Instance) error
 }
@@ -39,5 +43,5 @@ type Configuration interface {
 	Type() ConfigurationType
 	CopyAsInterface() any
 
-	apply(cfg *Config) error
+	apply(inst *Instance, cfg *Config) error
 }

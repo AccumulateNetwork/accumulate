@@ -8,7 +8,6 @@ package run
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -34,38 +33,27 @@ type Instance struct {
 
 const minDiskSpace = 0.05
 
-func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
+func Start(ctx context.Context, cfg *Config) (*Instance, error) {
+	inst, err := New(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return inst, inst.Start()
+}
+
+func New(ctx context.Context, cfg *Config) (*Instance, error) {
 	inst := new(Instance)
 	inst.config = cfg
 	inst.running = new(sync.WaitGroup)
 	inst.context, inst.shutdown = context.WithCancel(ctx)
 	inst.services = ioc.Registry{}
 
-	defer func() {
-		if err != nil {
-			inst.shutdown()
-		}
-	}()
-
+	var err error
 	if cfg.file != "" {
 		inst.rootDir, err = filepath.Abs(filepath.Dir(cfg.file))
 	} else {
 		inst.rootDir, err = os.Getwd()
 	}
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply configurations
-	for _, c := range cfg.Configurations {
-		err = c.apply(cfg)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Determine initialization order
-	services, err := ioc.Solve(cfg.Services)
 	if err != nil {
 		return nil, err
 	}
@@ -76,20 +64,70 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 		return nil, errors.UnknownError.WithFormat("start logging: %w", err)
 	}
 
+	return inst, nil
+}
+
+func (inst *Instance) Reset() error {
+	for _, c := range inst.config.Configurations {
+		c, ok := c.(resetable)
+		if !ok {
+			continue
+		}
+		err := c.reset(inst)
+		if err != nil {
+			return errors.UnknownError.WithFormat("reset %T: %w", c, err)
+		}
+	}
+
+	for _, s := range inst.services {
+		s, ok := s.(resetable)
+		if !ok {
+			continue
+		}
+		err := s.reset(inst)
+		if err != nil {
+			return errors.UnknownError.WithFormat("reset %T: %w", s, err)
+		}
+	}
+	return nil
+}
+
+func (inst *Instance) Start() (err error) {
+	// Cleanup if boot fails
+	defer func() {
+		if err != nil {
+			inst.shutdown()
+		}
+	}()
+
 	// Ensure the disk does not fill up (and is not currently full; requires
 	// logging)
 	free, err := diskUsage(inst.rootDir)
 	if err != nil {
-		return nil, err
+		return err
 	} else if free < minDiskSpace {
-		return nil, errors.FatalError.With("disk is full")
+		return errors.FatalError.With("disk is full")
 	}
 	go inst.checkDiskSpace()
 
-	// Start the P2P node
-	err = cfg.P2P.start(inst)
+	// Apply configurations
+	for _, c := range inst.config.Configurations {
+		err = c.apply(inst, inst.config)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Determine initialization order
+	services, err := ioc.Solve(inst.config.Services)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("start p2p: %w", err)
+		return err
+	}
+
+	// Start the P2P node
+	err = inst.config.P2P.start(inst)
+	if err != nil {
+		return errors.UnknownError.WithFormat("start p2p: %w", err)
 	}
 
 	// Prestart
@@ -101,7 +139,7 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 			}
 			err = svc.prestart(inst)
 			if err != nil {
-				return nil, errors.UnknownError.WithFormat("prestart service %T: %w", svc, err)
+				return errors.UnknownError.WithFormat("prestart service %T: %w", svc, err)
 			}
 		}
 	}
@@ -109,21 +147,20 @@ func Start(ctx context.Context, cfg *Config) (_ *Instance, err error) {
 	// Start services
 	for _, services := range services {
 		for _, svc := range services {
-			slog.InfoCtx(inst.context, "Starting", "service", fmt.Sprintf("%T", svc))
+			inst.logger.InfoCtx(inst.context, "Starting", "module", "run", "service", svc.Type())
 			err := svc.start(inst)
 			if err != nil {
-				return nil, errors.UnknownError.WithFormat("start service %T: %w", svc, err)
+				return errors.UnknownError.WithFormat("start service %v: %w", svc.Type(), err)
 			}
 		}
 	}
 
-	return inst, nil
+	return nil
 }
 
-func (i *Instance) Stop() error {
+func (i *Instance) Stop() {
 	i.shutdown()
 	i.running.Wait()
-	return nil
 }
 
 func (i *Instance) run(fn func()) {
