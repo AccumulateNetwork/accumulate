@@ -9,6 +9,7 @@ package run
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -19,22 +20,24 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-func (l *Logging) start(inst *Instance) error {
-	if l == nil {
-		l = new(Logging)
-	}
+const messageKey = "theMessage"
 
-	defaultLevel := slog.LevelError
+func (l *Logging) newHandler(out io.Writer) (slog.Handler, error) {
+	setDefaultPtr(&l.Color, true)
+
+	defaultLevel := slog.LevelWarn
 	lowestLevel := defaultLevel
 	modules := map[string]slog.Level{}
 	for _, r := range l.Rules {
-		if r.Module == "" {
-			defaultLevel = r.Level
-		} else {
-			modules[strings.ToLower(r.Module)] = r.Level
-		}
 		if r.Level < lowestLevel {
 			lowestLevel = r.Level
+		}
+		if len(r.Modules) == 0 {
+			defaultLevel = r.Level
+			continue
+		}
+		for _, m := range r.Modules {
+			modules[strings.ToLower(m)] = r.Level
 		}
 	}
 
@@ -42,22 +45,33 @@ func (l *Logging) start(inst *Instance) error {
 		Level: lowestLevel,
 	}
 
+	opts.ReplaceAttr = func(groups []string, a slog.Attr) slog.Attr {
+		switch a.Key {
+		case "msg":
+			if a.Value.Kind() != slog.KindString {
+				return slog.String(a.Key, fmt.Sprint(a.Value.Any()))
+			}
+			if a.Value.String() == "" {
+				return slog.Attr{} // Discard
+			}
+			return a
+		case "message":
+			return a
+		case messageKey:
+			return slog.Any("message", a.Value)
+		default:
+			return a
+		}
+	}
+
 	var h slog.Handler
 	switch l.Format {
 	case "", "text", "plain":
 		// Use zerolog's console writer to write pretty logs
-		opts.ReplaceAttr = func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key != "msg" {
-				return a
-			}
-			if a.Value.Kind() == slog.KindString {
-				return slog.Any("message", a.Value)
-			}
-			return slog.String("message", fmt.Sprint(a.Value.Any()))
-		}
 		h = slog.NewJSONHandler(&zerolog.ConsoleWriter{
-			Out:        os.Stderr,
+			Out:        out,
 			TimeFormat: time.RFC3339,
+			NoColor:    !*l.Color,
 			FormatLevel: func(i interface{}) string {
 				if ll, ok := i.(string); ok {
 					return strings.ToUpper(ll)
@@ -73,17 +87,30 @@ func (l *Logging) start(inst *Instance) error {
 			},
 		}, opts)
 	case "json":
-		h = slog.NewJSONHandler(os.Stderr, opts)
+		h = slog.NewJSONHandler(out, opts)
 	default:
-		return errors.BadRequest.WithFormat("log format %q is not supported", l.Format)
+		return nil, errors.BadRequest.WithFormat("log format %q is not supported", l.Format)
 	}
 
-	inst.logger = slog.New(&logHandler{
+	return &logHandler{
 		handler:      h,
 		defaultLevel: defaultLevel,
 		lowestLevel:  lowestLevel,
 		modules:      modules,
-	})
+	}, nil
+}
+
+func (l *Logging) start(inst *Instance) error {
+	if l == nil {
+		l = new(Logging)
+	}
+
+	h, err := l.newHandler(os.Stderr)
+	if err != nil {
+		return err
+	}
+
+	inst.logger = slog.New(h)
 	slog.SetDefault(inst.logger)
 
 	return nil
@@ -124,6 +151,28 @@ func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 	if record.Level < h.levelFor(h.defaultLevel, record.Attrs) {
 		return nil
 	}
+
+	// Discard specific consensus messages that do not specify a module
+	var discard bool
+	switch record.Message {
+	case "Version info":
+		record.Attrs(func(a slog.Attr) bool {
+			discard = a.Key == "tendermint_version"
+			return !discard
+		})
+
+	case "service start":
+		record.Attrs(func(a slog.Attr) bool {
+			discard = a.Key == "impl" && a.Value.String() == "Node"
+			return !discard
+		})
+	}
+	if discard {
+		return nil
+	}
+
+	record.Add(messageKey, record.Message)
+	record.Message = ""
 	return h.handler.Handle(ctx, record)
 }
 
@@ -145,7 +194,7 @@ func (h *logHandler) levelFor(level slog.Level, fn func(func(slog.Attr) bool)) s
 		if a.Key != "module" {
 			return true
 		}
-		if l, ok := h.modules[strings.ToLower(a.Key)]; ok {
+		if l, ok := h.modules[strings.ToLower(a.Value.String())]; ok {
 			level = l
 		}
 		return false
