@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	types "github.com/cometbft/cometbft/abci/types"
-	tm "github.com/cometbft/cometbft/config"
 	tmcfg "github.com/cometbft/cometbft/config"
 	tmcrypto "github.com/cometbft/cometbft/crypto"
 	tmed25519 "github.com/cometbft/cometbft/crypto/ed25519"
@@ -75,7 +74,6 @@ type ConsensusApp interface {
 	CopyAsInterface() any
 
 	partition() *protocol.PartitionInfo
-	portOffset() portOffset
 	Requires() []ioc.Requirement
 	Provides() []ioc.Provided
 	prestart(*Instance) error
@@ -84,7 +82,7 @@ type ConsensusApp interface {
 }
 
 type tendermint struct {
-	config   *tm.Config
+	config   *tmcfg.Config
 	privVal  *tmpv.FilePV
 	nodeKey  *tmp2p.NodeKey
 	logger   log.Logger
@@ -109,6 +107,9 @@ func (c *ConsensusService) prestart(inst *Instance) error {
 }
 
 func (c *ConsensusService) start(inst *Instance) error {
+	// Defaults
+	setDefaultVal(&c.MetricsNamespace, fmt.Sprintf("consensus_%s", c.App.partition().ID))
+
 	d := new(tendermint)
 	d.logger = (*logging.Slogger)(inst.logger)
 	d.eventBus = events.NewBus(d.logger.With("module", "events"))
@@ -129,7 +130,7 @@ func (c *ConsensusService) start(inst *Instance) error {
 	}
 
 	// Load CometBFT config
-	d.config = tm.DefaultConfig()
+	d.config = tmcfg.DefaultConfig()
 	d.config.SetRoot(inst.path(c.NodeDir))
 	_, err = os.Stat(inst.path(c.NodeDir, "config", "config.toml"))
 	switch {
@@ -150,19 +151,17 @@ func (c *ConsensusService) start(inst *Instance) error {
 		}
 
 	case errors.Is(err, fs.ErrNotExist):
-		partPort := c.App.portOffset()
-
 		d.config.NodeKey = ""
 		d.config.PrivValidatorKey = ""
 		d.config.Genesis = filepath.Join("..", c.Genesis)
 		d.config.Mempool.MaxTxBytes = 4194304
 
 		d.config.Instrumentation.Prometheus = true
-		d.config.Instrumentation.PrometheusListenAddr = listenHostPort(c.Listen, defaultHost, partPort, portMetrics)
-		d.config.Instrumentation.Namespace = fmt.Sprintf("cometbft_%s", c.App.partition().ID)
+		d.config.Instrumentation.PrometheusListenAddr = listenHostPort(c.Listen, defaultHost, portMetrics)
+		d.config.Instrumentation.Namespace = c.MetricsNamespace
 
-		d.config.P2P.ListenAddress = listenUrl(c.Listen, defaultHost, partPort, useTCP{}, portCmtP2P)
-		d.config.RPC.ListenAddress = listenUrl(c.Listen, defaultHost, partPort, useTCP{}, portCmtRPC)
+		d.config.P2P.ListenAddress = listenUrl(c.Listen, defaultHost, useTCP{}, portCmtP2P)
+		d.config.RPC.ListenAddress = listenUrl(c.Listen, defaultHost, useTCP{}, portCmtRPC)
 
 		// No duplicate IPs
 		d.config.P2P.AllowDuplicateIP = false
@@ -182,6 +181,8 @@ func (c *ConsensusService) start(inst *Instance) error {
 
 		// Set whether unroutable addresses are allowed
 		d.config.P2P.AddrBookStrict = !isPrivate(c.Listen)
+
+		tmcfg.WriteConfigFile(inst.path(c.NodeDir, "config", "config.toml"), d.config)
 
 	default:
 		return err
@@ -257,7 +258,7 @@ func convertNodeKey(inst *Instance) (*tmp2p.NodeKey, error) {
 	return &tmp2p.NodeKey{PrivKey: key2}, nil
 }
 
-func (c *ConsensusService) loadPrivVal(inst *Instance, config *tm.Config, key PrivateKey) (*tmpv.FilePV, error) {
+func (c *ConsensusService) loadPrivVal(inst *Instance, config *tmcfg.Config, key PrivateKey) (*tmpv.FilePV, error) {
 	key2, err := convertKeyToComet(inst, key)
 	if err != nil {
 		return nil, err
@@ -365,22 +366,21 @@ func cmtPeerAddress(addr multiaddr.Multiaddr) (string, error) {
 		return "", errors.BadRequest.With("missing port")
 	}
 
+	raw, err := pub.Raw()
+	if err != nil {
+		return "", err
+	}
+
 	switch pub.Type() {
 	case libp2ppb.KeyType_Ed25519:
-		return fmt.Sprintf("%s@%s:%s", pub, host, port), nil
+		nodeId := tmp2p.PubKeyToID(tmed25519.PubKey(raw))
+		return tmp2p.IDAddressString(nodeId, fmt.Sprintf("%s:%s", host, port)), nil
 	default:
 		return "", errors.BadRequest.With("unsupported key type %v", pub.Type())
 	}
 }
 
 func (c *CoreConsensusApp) partition() *protocol.PartitionInfo { return c.Partition }
-
-func (c *CoreConsensusApp) portOffset() portOffset {
-	if c.Partition.Type == protocol.PartitionTypeDirectory {
-		return portDir
-	}
-	return portBVN
-}
 
 func (c *CoreConsensusApp) Requires() []ioc.Requirement {
 	return []ioc.Requirement{
@@ -581,6 +581,6 @@ func (c *CoreConsensusApp) register(inst *Instance, d *tendermint, node *tmnode.
 		return errors.UnknownError.Wrap(err)
 	}
 
-	color.HiBlue("Node is running (%v, %v)", c.Partition.ID, c.Partition.Type)
+	inst.logger.Info(color.HiBlueString("Running"), "partition", c.Partition.ID, "module", "run", "service", "consensus")
 	return nil
 }
