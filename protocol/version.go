@@ -37,3 +37,8 @@ func (v ExecutorVersion) V2Enabled() bool {
 func (v ExecutorVersion) V2BaikonurEnabled() bool {
 	return v >= ExecutorVersionV2Baikonur
 }
+
+// V2VandenbergEnabled checks if the version is at least V2 Vandenberg.
+func (v ExecutorVersion) V2VandenbergEnabled() bool {
+	return v >= ExecutorVersionV2Vandenberg
+}
