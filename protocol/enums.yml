@@ -19,7 +19,12 @@ ExecutorVersion:
     description: is the second version of the executor system
   V2Baikonur:
     value: 6
-    description: enables the Baikonur release's features
+    aliases: [v2-baikonur]
+    description: enables the Baikonur release
+  V2Vandenberg:
+    value: 7
+    label: v2-vandenberg
+    description: enables the Vandenberg release
 
 PartitionType:
   Directory:
