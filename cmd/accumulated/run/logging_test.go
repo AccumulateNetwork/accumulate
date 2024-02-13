@@ -7,8 +7,10 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -25,20 +27,47 @@ func TestLoggingCtxAttrs(t *testing.T) {
 
 	ctx := logging.With(context.Background(), "foo", "bar")
 	logger.InfoContext(ctx, "Hello world")
-
 	require.Len(t, records, 1)
-	r := records[0]
-	require.Equal(t, "Hello world", r.Message)
 
-	var foo *slog.Attr
-	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == "foo" {
-			foo = &a
-		}
-		return foo == nil
+	attrs := map[string]any{}
+	records[0].Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.Any()
+		return true
 	})
-	require.NotNil(t, foo)
-	require.Equal(t, "bar", foo.Value.String())
+
+	require.Equal(t, "Hello world", attrs[messageKey])
+	require.Equal(t, "bar", attrs["foo"])
+}
+
+func TestPlainLogging(t *testing.T) {
+	buf := new(bytes.Buffer)
+	handler, err := (&Logging{
+		Format: "plain",
+		Color:  Ptr(false),
+		Rules:  []*LoggingRule{{Level: slog.LevelDebug}},
+	}).newHandler(buf)
+	require.NoError(t, err)
+	logger := slog.New(stripTime{handler})
+
+	logger.Info("Hello world")
+	require.Equal(t, testTime.Format(time.RFC3339)+" INFO Hello world\n", buf.String())
+}
+
+func TestJSONLogging(t *testing.T) {
+	buf := new(bytes.Buffer)
+	handler, err := (&Logging{
+		Format: "json",
+		Rules:  []*LoggingRule{{Level: slog.LevelDebug}},
+	}).newHandler(buf)
+	require.NoError(t, err)
+	logger := slog.New(stripTime{handler})
+
+	logger.Info("Hello world")
+	require.Equal(t, `{`+
+		`"time":"`+testTime.Format(time.RFC3339)+`",`+
+		`"level":"INFO",`+
+		`"message":"Hello world"`+
+		`}`+"\n", buf.String())
 }
 
 func (*records) Enabled(context.Context, slog.Level) bool     { return true }
@@ -87,4 +116,23 @@ func (h *groupHandler) Handle(ctx context.Context, r slog.Record) error {
 	r = slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
 	r.AddAttrs(slog.Group(h.group, attrs))
 	return h.Handler.Handle(ctx, r)
+}
+
+type stripTime struct {
+	slog.Handler
+}
+
+var testTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.Local)
+
+func (s stripTime) Handle(ctx context.Context, r slog.Record) error {
+	r.Time = testTime
+	return s.Handler.Handle(ctx, r)
+}
+
+func (s stripTime) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return stripTime{s.Handler.WithAttrs(attrs)}
+}
+
+func (s stripTime) WithGroup(name string) slog.Handler {
+	return stripTime{s.Handler.WithGroup(name)}
 }

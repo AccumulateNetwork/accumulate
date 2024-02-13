@@ -7,6 +7,8 @@
 package routing
 
 import (
+	"sync"
+
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -26,6 +28,7 @@ type Router interface {
 
 // RouterInstance sends transactions to remote nodes via RPC calls.
 type RouterInstance struct {
+	ready  chan struct{}
 	tree   *RouteTree
 	logger logging.OptionalLogger
 }
@@ -45,7 +48,15 @@ type RouterOptions struct {
 // panic unless an initial routing table and/or event bus are specified.
 func NewRouter(opts RouterOptions) *RouterInstance {
 	r := new(RouterInstance)
+	r.ready = make(chan struct{})
 	r.logger.Set(opts.Logger, "module", "router")
+
+	var readyOnce sync.Once
+	markReady := func() {
+		readyOnce.Do(func() {
+			close(r.ready)
+		})
+	}
 
 	var ok bool
 	if opts.Initial != nil {
@@ -55,6 +66,7 @@ func NewRouter(opts RouterOptions) *RouterInstance {
 			panic(err)
 		}
 		r.tree = tree
+		markReady()
 	}
 
 	if opts.Events != nil {
@@ -68,6 +80,7 @@ func NewRouter(opts RouterOptions) *RouterInstance {
 			}
 
 			r.tree = tree
+			markReady()
 			return nil
 		})
 	}
@@ -178,6 +191,10 @@ func routeMessage(routeAccount func(*url.URL) (string, error), route *string, ms
 		return errors.BadRequest.With("conflicting routes")
 	}
 	return nil
+}
+
+func (r *RouterInstance) Ready() <-chan struct{} {
+	return r.ready
 }
 
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
