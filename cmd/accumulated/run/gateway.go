@@ -15,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-func (g *GatewayConfiguration) apply(cfg *Config) error {
+func (g *GatewayConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Validate
 	if g.Listen != nil && !addrHasOneOf(g.Listen, "tcp", "udp") {
 		return errors.BadRequest.With("listen address must specify a port")

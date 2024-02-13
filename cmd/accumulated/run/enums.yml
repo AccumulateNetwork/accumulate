@@ -31,6 +31,8 @@ ServiceType:
     value: 9
   Faucet:
     value: 10
+  Subnode:
+    value: 11
 
 StorageType:
   Memory:
@@ -43,6 +45,8 @@ ConfigurationType:
     value: 1
   Gateway:
     value: 2
+  Devnet:
+    value: 3
 
 ConsensusAppType:
   Core:

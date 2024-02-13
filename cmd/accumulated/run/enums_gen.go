@@ -20,6 +20,9 @@ const ConfigurationTypeCoreValidator ConfigurationType = 1
 // ConfigurationTypeGateway .
 const ConfigurationTypeGateway ConfigurationType = 2
 
+// ConfigurationTypeDevnet .
+const ConfigurationTypeDevnet ConfigurationType = 3
+
 // ConsensusAppTypeCore .
 const ConsensusAppTypeCore ConsensusAppType = 1
 
@@ -68,6 +71,9 @@ const ServiceTypeSnapshot ServiceType = 9
 // ServiceTypeFaucet .
 const ServiceTypeFaucet ServiceType = 10
 
+// ServiceTypeSubnode .
+const ServiceTypeSubnode ServiceType = 11
+
 // StorageTypeMemory .
 const StorageTypeMemory StorageType = 1
 
@@ -81,7 +87,7 @@ func (v ConfigurationType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ConfigurationType) SetEnumValue(id uint64) bool {
 	u := ConfigurationType(id)
 	switch u {
-	case ConfigurationTypeCoreValidator, ConfigurationTypeGateway:
+	case ConfigurationTypeCoreValidator, ConfigurationTypeGateway, ConfigurationTypeDevnet:
 		*v = u
 		return true
 	}
@@ -95,6 +101,8 @@ func (v ConfigurationType) String() string {
 		return "coreValidator"
 	case ConfigurationTypeGateway:
 		return "gateway"
+	case ConfigurationTypeDevnet:
+		return "devnet"
 	}
 	return fmt.Sprintf("ConfigurationType:%d", v)
 }
@@ -106,6 +114,8 @@ func ConfigurationTypeByName(name string) (ConfigurationType, bool) {
 		return ConfigurationTypeCoreValidator, true
 	case "gateway":
 		return ConfigurationTypeGateway, true
+	case "devnet":
+		return ConfigurationTypeDevnet, true
 	}
 	return 0, false
 }
@@ -260,7 +270,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeStorage, ServiceTypeConsensus, ServiceTypeQuerier, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeEvents, ServiceTypeHttp, ServiceTypeRouter, ServiceTypeSnapshot, ServiceTypeFaucet:
+	case ServiceTypeStorage, ServiceTypeConsensus, ServiceTypeQuerier, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeEvents, ServiceTypeHttp, ServiceTypeRouter, ServiceTypeSnapshot, ServiceTypeFaucet, ServiceTypeSubnode:
 		*v = u
 		return true
 	}
@@ -290,6 +300,8 @@ func (v ServiceType) String() string {
 		return "snapshot"
 	case ServiceTypeFaucet:
 		return "faucet"
+	case ServiceTypeSubnode:
+		return "subnode"
 	}
 	return fmt.Sprintf("ServiceType:%d", v)
 }
@@ -317,6 +329,8 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 		return ServiceTypeSnapshot, true
 	case "faucet":
 		return ServiceTypeFaucet, true
+	case "subnode":
+		return ServiceTypeSubnode, true
 	}
 	return 0, false
 }

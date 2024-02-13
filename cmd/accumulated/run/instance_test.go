@@ -27,15 +27,51 @@ func TestCoreValidatorConfig(t *testing.T) {
 			&CoreValidatorConfiguration{
 				Listen:        mustParseMulti("/tcp/16591"),
 				BVN:           "Apollo",
-				EnableHealing: ptr(true),
-				StorageType:   ptr(StorageTypeBadger),
+				EnableHealing: Ptr(true),
+				StorageType:   Ptr(StorageTypeBadger),
 			},
 		},
 	}
 
 	// Apply configurations
+	inst := new(Instance)
 	for _, d := range c.Configurations {
-		require.NoError(t, d.apply(c))
+		require.NoError(t, d.apply(inst, c))
+	}
+
+	c.Configurations = nil
+	b, err := c.Marshal(MarshalTOML)
+	require.NoError(t, err)
+
+	fmt.Printf("%s", b)
+}
+
+func TestDevNetConfig(t *testing.T) {
+	c := &Config{
+		Network: "DevNet",
+		P2P: &P2P{
+			Key: &PrivateKeySeed{Seed: record.NewKey()},
+		},
+		Configurations: []Configuration{
+			&DevnetConfiguration{
+				Listen:     mustParseMulti("/tcp/26656"),
+				Bvns:       1,
+				Validators: 1,
+			},
+		},
+	}
+
+	// Apply configurations
+	inst := new(Instance)
+	inst.rootDir = t.TempDir()
+	// inst.rootDir = "../../../.nodes/devnet"
+	inst.logger = slog.Default()
+
+	c.file = inst.path("accumulate.toml")
+	require.NoError(t, c.Save())
+
+	for _, d := range c.Configurations {
+		require.NoError(t, d.apply(inst, c))
 	}
 
 	c.Configurations = nil
@@ -60,7 +96,7 @@ func TestRun2(t *testing.T) {
 
 	time.Sleep(time.Minute)
 
-	require.NoError(t, inst.Stop())
+	inst.Stop()
 }
 
 func TestRun(t *testing.T) {
@@ -86,7 +122,7 @@ func TestRun(t *testing.T) {
 				NodeDir: "node-1/dnn",
 				Genesis: "node-1/dn-genesis.snap",
 				App: &CoreConsensusApp{
-					EnableHealing: ptr(true),
+					EnableHealing: Ptr(true),
 					Partition: &protocol.PartitionInfo{
 						ID:   protocol.Directory,
 						Type: protocol.PartitionTypeDirectory,
@@ -97,7 +133,7 @@ func TestRun(t *testing.T) {
 				NodeDir: "node-1/bvnn",
 				Genesis: "node-1/bvn-genesis.snap",
 				App: &CoreConsensusApp{
-					EnableHealing: ptr(true),
+					EnableHealing: Ptr(true),
 					Partition: &protocol.PartitionInfo{
 						ID:   "BVN1",
 						Type: protocol.PartitionTypeBlockValidator,
@@ -136,7 +172,7 @@ func TestRun(t *testing.T) {
 	inst, err := Start(ctx, c)
 	require.NoError(t, err)
 
-	require.NoError(t, inst.Stop())
+	inst.Stop()
 }
 
 func TestMainNetHttp(t *testing.T) {
@@ -167,7 +203,7 @@ func TestMainNetHttp(t *testing.T) {
 
 	time.Sleep(time.Hour)
 
-	require.NoError(t, inst.Stop())
+	inst.Stop()
 }
 
 func TestEmbededStorage(t *testing.T) {
@@ -192,7 +228,7 @@ func TestEmbededStorage(t *testing.T) {
 	inst, err := Start(ctx, c)
 	require.NoError(t, err)
 
-	require.NoError(t, inst.Stop())
+	inst.Stop()
 }
 
 func TestReferenceStorage(t *testing.T) {
@@ -219,7 +255,7 @@ func TestReferenceStorage(t *testing.T) {
 	inst, err := Start(ctx, c)
 	require.NoError(t, err)
 
-	require.NoError(t, inst.Stop())
+	inst.Stop()
 }
 
 func TestEmbededRouter(t *testing.T) {
@@ -241,7 +277,7 @@ func TestEmbededRouter(t *testing.T) {
 	inst, err := Start(ctx, c)
 	require.NoError(t, err)
 
-	require.NoError(t, inst.Stop())
+	inst.Stop()
 }
 
 func TestReferenceRouter(t *testing.T) {
@@ -267,7 +303,7 @@ func TestReferenceRouter(t *testing.T) {
 	inst, err := Start(ctx, c)
 	require.NoError(t, err)
 
-	require.NoError(t, inst.Stop())
+	inst.Stop()
 }
 
 func contextForTest(t testing.TB) context.Context {
