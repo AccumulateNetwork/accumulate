@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -74,16 +74,9 @@ func (x SyntheticDepositCredits) Execute(st *StateManager, tx *Delivery) (protoc
 
 	account.CreditCredits(body.Amount)
 
-	// Update the ledger
-	var ledgerState *protocol.SystemLedger
-	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-	if err != nil {
-		return nil, err
-	}
-
+	// Update the block's total burn amount
 	if body.AcmeRefundAmount != nil {
-		ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, body.AcmeRefundAmount)
-		err = st.Update(ledgerState)
+		err = st.markAcmeBurnt(body.AcmeRefundAmount)
 		if err != nil {
 			return nil, err
 		}
