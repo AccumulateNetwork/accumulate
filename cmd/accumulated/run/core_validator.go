@@ -15,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
+func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Set core validator defaults
 	setDefaultPtr(&c.StorageType, StorageTypeBadger)
 
@@ -47,12 +47,11 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 	err := partOpts{
 		CoreValidatorConfiguration: c,
 
-		ID:                   protocol.Directory,
-		Type:                 protocol.PartitionTypeDirectory,
-		Genesis:              c.DnGenesis,
-		BootstrapPeers:       c.DnBootstrapPeers,
-		Dir:                  "dnn",
-		MaxEnvelopesPerBlock: c.MaxEnvelopesPerBlock,
+		ID:             protocol.Directory,
+		Type:           protocol.PartitionTypeDirectory,
+		Genesis:        c.DnGenesis,
+		BootstrapPeers: c.DnBootstrapPeers,
+		Dir:            "dnn",
 	}.apply(cfg)
 	if err != nil {
 		return err
@@ -61,12 +60,11 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 	err = partOpts{
 		CoreValidatorConfiguration: c,
 
-		ID:                   c.BVN,
-		Type:                 protocol.PartitionTypeBlockValidator,
-		Genesis:              c.BvnGenesis,
-		BootstrapPeers:       c.BvnBootstrapPeers,
-		Dir:                  "bvnn",
-		MaxEnvelopesPerBlock: c.MaxEnvelopesPerBlock,
+		ID:             c.BVN,
+		Type:           protocol.PartitionTypeBlockValidator,
+		Genesis:        c.BvnGenesis,
+		BootstrapPeers: c.BvnBootstrapPeers,
+		Dir:            "bvnn",
 	}.apply(cfg)
 	if err != nil {
 		return err
@@ -88,51 +86,50 @@ func (c *CoreValidatorConfiguration) apply(cfg *Config) error {
 
 type partOpts struct {
 	*CoreValidatorConfiguration
-	ID                   string
-	Type                 protocol.PartitionType
-	Genesis              string
-	Dir                  string
-	BootstrapPeers       []multiaddr.Multiaddr
-	MaxEnvelopesPerBlock *uint64
+	ID               string
+	Type             protocol.PartitionType
+	Genesis          string
+	Dir              string
+	BootstrapPeers   []multiaddr.Multiaddr
+	MetricsNamespace string
 }
 
 func (p partOpts) apply(cfg *Config) error {
-	partID, partType, dir := p.ID, p.Type, p.Dir
-
 	// Consensus
 	addService(cfg,
 		&ConsensusService{
-			NodeDir:        dir,
-			ValidatorKey:   p.ValidatorKey,
-			Genesis:        p.Genesis,
-			Listen:         p.Listen,
-			BootstrapPeers: p.BootstrapPeers,
+			NodeDir:          p.Dir,
+			ValidatorKey:     p.ValidatorKey,
+			Genesis:          p.Genesis,
+			Listen:           p.Listen,
+			BootstrapPeers:   p.BootstrapPeers,
+			MetricsNamespace: p.MetricsNamespace,
 			App: &CoreConsensusApp{
 				EnableHealing:        p.EnableHealing,
 				EnableDirectDispatch: p.EnableDirectDispatch,
 				MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
 				Partition: &protocol.PartitionInfo{
-					ID:   partID,
-					Type: partType,
+					ID:   p.ID,
+					Type: p.Type,
 				},
 			},
 		},
 		func(c *ConsensusService) string { return c.App.partition().ID })
 
 	// Storage
-	if !haveService2[*StorageService](cfg, partID, func(s *StorageService) string { return s.Name }, nil) {
+	if !haveService2[*StorageService](cfg, p.ID, func(s *StorageService) string { return s.Name }, nil) {
 		switch *p.StorageType {
 		case StorageTypeMemory:
 			cfg.Services = append(cfg.Services, &StorageService{
-				Name:    partID,
+				Name:    p.ID,
 				Storage: &MemoryStorage{},
 			})
 
 		case StorageTypeBadger:
 			cfg.Services = append(cfg.Services, &StorageService{
-				Name: partID,
+				Name: p.ID,
 				Storage: &BadgerStorage{
-					Path: filepath.Join(dir, "data", "accumulate.db"),
+					Path: filepath.Join(p.Dir, "data", "accumulate.db"),
 				},
 			})
 
@@ -144,16 +141,16 @@ func (p partOpts) apply(cfg *Config) error {
 	// Snapshots
 	addService(cfg,
 		&SnapshotService{
-			Partition: partID,
-			Directory: filepath.Join(dir, "snapshots"),
+			Partition: p.ID,
+			Directory: filepath.Join(p.Dir, "snapshots"),
 		},
 		func(s *SnapshotService) string { return s.Partition })
 
 	// Services
-	addService(cfg, &Querier{Partition: partID}, func(s *Querier) string { return s.Partition })
-	addService(cfg, &NetworkService{Partition: partID}, func(s *NetworkService) string { return s.Partition })
-	addService(cfg, &MetricsService{Partition: partID}, func(s *MetricsService) string { return s.Partition })
-	addService(cfg, &EventsService{Partition: partID}, func(s *EventsService) string { return s.Partition })
+	addService(cfg, &Querier{Partition: p.ID}, func(s *Querier) string { return s.Partition })
+	addService(cfg, &NetworkService{Partition: p.ID}, func(s *NetworkService) string { return s.Partition })
+	addService(cfg, &MetricsService{Partition: p.ID}, func(s *MetricsService) string { return s.Partition })
+	addService(cfg, &EventsService{Partition: p.ID}, func(s *EventsService) string { return s.Partition })
 
 	return nil
 }

@@ -7,11 +7,13 @@
 package run
 
 import (
+	"time"
+
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -19,7 +21,6 @@ import (
 
 var (
 	faucetRefRouter = ioc.Needs[routing.Router](func(f *FaucetService) string { return f.Router.base().refOr("") })
-	faucetProvides  = ioc.Provides[v3.Faucet](func(f *FaucetService) string { return f.Account.ShortString() })
 )
 
 func (f *FaucetService) Requires() []ioc.Requirement {
@@ -61,19 +62,45 @@ func (f *FaucetService) start(inst *Instance) error {
 		},
 	}
 
-	impl, err := v3impl.NewFaucet(inst.context, v3impl.FaucetParams{
-		Logger:    (*logging.Slogger)(inst.logger.With("module", "faucet")),
-		Account:   f.Account,
-		Key:       build.ED25519PrivateKey(sk),
-		Submitter: client,
-		Querier:   client,
-		Events:    client,
-	})
-	if err != nil {
-		return err
-	}
-	inst.cleanup(func() { impl.Stop() })
+	go func() {
+		if r, ok := router.(*routing.RouterInstance); ok {
+			inst.logger.Info("Waiting for router", "module", "run", "service", "faucet")
+			<-r.Ready()
+		}
 
-	registerRpcService(inst, impl.ServiceAddress(), message.Faucet{Faucet: impl})
-	return faucetProvides.Register(inst.services, f, impl)
+		for {
+			_, err := api.Querier2{Querier: client}.QueryAccount(inst.context, f.Account, nil)
+			switch {
+			case err == nil:
+				// Ok
+			case errors.Is(err, errors.NoPeer):
+				time.Sleep(time.Second)
+				continue
+			default:
+				inst.logger.Error("Failed to start faucet", "error", err)
+				inst.Stop()
+				return
+			}
+			break
+		}
+
+		impl, err := v3impl.NewFaucet(inst.context, v3impl.FaucetParams{
+			Logger:    (*logging.Slogger)(inst.logger.With("module", "faucet")),
+			Account:   f.Account,
+			Key:       build.ED25519PrivateKey(sk),
+			Submitter: client,
+			Querier:   client,
+			Events:    client,
+		})
+		if err != nil {
+			inst.logger.Error("Failed to start faucet", "error", err)
+			inst.Stop()
+			return
+		}
+
+		inst.cleanup(func() { impl.Stop() })
+		registerRpcService(inst, impl.ServiceAddress(), message.Faucet{Faucet: impl})
+		inst.logger.Info("Ready", "module", "run", "service", "faucet")
+	}()
+	return nil
 }
