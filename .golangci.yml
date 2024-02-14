@@ -60,6 +60,10 @@ issues:
     linters:
     - goheader
 
+  - path: ^.*_gen.go$
+    linters:
+    - goheader
+
 linters-settings:
   goheader:
     values:
