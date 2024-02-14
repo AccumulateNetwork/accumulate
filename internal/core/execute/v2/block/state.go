@@ -30,6 +30,7 @@ type BlockState struct {
 	ReceivedAnchors    []*chain.ReceivedAnchor
 	PreviousStateHash  [32]byte
 	AcmeBurnt          big.Int
+	NetworkUpdate      []*protocol.NetworkAccountUpdate
 
 	Anchor *BlockAnchorState
 
@@ -147,4 +148,5 @@ func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
 		s.MakeMajorBlockTime = r.MakeMajorBlockTime
 	}
 	s.AcmeBurnt.Add(&s.AcmeBurnt, &r.AcmeBurnt)
+	s.NetworkUpdate = append(s.NetworkUpdate, r.NetworkUpdate...)
 }

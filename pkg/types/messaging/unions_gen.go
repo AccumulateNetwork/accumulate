@@ -28,6 +28,8 @@ func NewMessage(typ MessageType) (Message, error) {
 		return new(BlockSummary), nil
 	case MessageTypeCreditPayment:
 		return new(CreditPayment), nil
+	case MessageTypeNetworkUpdate:
+		return new(NetworkUpdate), nil
 	case MessageTypeSequenced:
 		return new(SequencedMessage), nil
 	case MessageTypeSignature:
@@ -71,6 +73,12 @@ func EqualMessage(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*CreditPayment)
+		return ok && a.Equal(b)
+	case *NetworkUpdate:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*NetworkUpdate)
 		return ok && a.Equal(b)
 	case *SequencedMessage:
 		if a == nil {
@@ -116,6 +124,8 @@ func CopyMessage(v Message) Message {
 	case *BlockSummary:
 		return v.Copy()
 	case *CreditPayment:
+		return v.Copy()
+	case *NetworkUpdate:
 		return v.Copy()
 	case *SequencedMessage:
 		return v.Copy()
