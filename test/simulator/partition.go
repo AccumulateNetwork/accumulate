@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -16,6 +16,7 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -173,8 +174,13 @@ func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*proto
 }
 
 func (p *Partition) execute() error {
-	_, err := p.nodes[0].consensus.Execute(&consensus.ExecuteRequest{Context: context.Background()})
-	return err
+	ctx := context.Background()
+	ctx = logging.With(ctx, "partition", p.ID)
+	hub := consensus.NewSimpleHub(ctx)
+	for _, n := range p.nodes {
+		hub.Register(n.consensus)
+	}
+	return hub.Send(&consensus.StartBlock{})
 }
 
 // orderMessagesDeterministically reorders messages deterministically,

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -127,13 +127,12 @@ func (s *Simulator) BlockIndexFor(account *url.URL) uint64 {
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
 	if s.deterministic {
-		var err error
 		for _, id := range s.partIDs {
-			if e := s.partitions[id].execute(); e != nil {
-				err = e
+			err := s.partitions[id].execute()
+			if err != nil {
+				return err
 			}
 		}
-		return err
 	} else {
 		for _, p := range s.partitions {
 			p := p // Don't capture loop variables
