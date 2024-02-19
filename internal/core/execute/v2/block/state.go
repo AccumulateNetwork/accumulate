@@ -7,6 +7,7 @@
 package block
 
 import (
+	"math/big"
 	"sort"
 	"time"
 
@@ -28,6 +29,7 @@ type BlockState struct {
 	ChainUpdates       chain.ChainUpdates
 	ReceivedAnchors    []*chain.ReceivedAnchor
 	PreviousStateHash  [32]byte
+	AcmeBurnt          big.Int
 
 	Anchor *BlockAnchorState
 
@@ -144,4 +146,5 @@ func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
 		s.MakeMajorBlock = r.MakeMajorBlock
 		s.MakeMajorBlockTime = r.MakeMajorBlockTime
 	}
+	s.AcmeBurnt.Add(&s.AcmeBurnt, &r.AcmeBurnt)
 }
