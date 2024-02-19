@@ -242,6 +242,12 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Update the BPT
+	err = block.Batch.UpdateBPT()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
 	return &closedBlock{*block, valUp}, nil
 }

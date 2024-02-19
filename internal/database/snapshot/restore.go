@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -243,7 +243,11 @@ func (v *RestoreVisitor) visit(i, threshold int, msg string, force bool) error {
 
 func (v *RestoreVisitor) refreshBatch() error {
 	if v.batch != nil {
-		err := v.batch.Commit()
+		err := v.batch.UpdateBPT()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		err = v.batch.Commit()
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
@@ -258,7 +262,11 @@ func (v *RestoreVisitor) end(count int, msg string) error {
 	}
 	d := time.Since(v.start)
 	v.logger.Info(msg, "module", "restore", "count", count, "duration", d, "per-second", float64(count)/d.Seconds())
-	err := v.batch.Commit()
+	err := v.batch.UpdateBPT()
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	err = v.batch.Commit()
 	v.batch = nil
 	return errors.UnknownError.Wrap(err)
 }
