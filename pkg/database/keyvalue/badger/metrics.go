@@ -20,44 +20,29 @@ var (
 		Subsystem: "badger",
 		Name:      "db_open",
 		Help:      "Number of open databases",
-		ConstLabels: prometheus.Labels{
-			"driver": "v1",
-		},
 	})
 	mGcRun = promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: "accumulate",
 		Subsystem: "badger",
 		Name:      "gc_run",
 		Help:      "Number of times garbage collection has run",
-		ConstLabels: prometheus.Labels{
-			"driver": "v1",
-		},
 	})
 	mGcDuration = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "accumulate",
 		Subsystem: "badger",
 		Name:      "gc_duration",
 		Help:      "Garbage collection duration in seconds",
-		ConstLabels: prometheus.Labels{
-			"driver": "v1",
-		},
 	})
 	mTxnOpen = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "accumulate",
 		Subsystem: "badger",
 		Name:      "txn_open",
 		Help:      "Number of open transactions",
-		ConstLabels: prometheus.Labels{
-			"driver": "v1",
-		},
 	})
 	mCommitDuration = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "accumulate",
 		Subsystem: "badger",
 		Name:      "commit_duration",
 		Help:      "Commit duration in seconds",
-		ConstLabels: prometheus.Labels{
-			"driver": "v1",
-		},
 	})
 )
