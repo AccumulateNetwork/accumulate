@@ -25,11 +25,12 @@ import (
 
 func TestCreditAccounting(t *testing.T) {
 	cases := []struct {
-		Name    string
-		Version ExecutorVersion
+		Name     string
+		Version  ExecutorVersion
+		NoLedger bool
 	}{
-		{"V2", ExecutorVersionV2Baikonur},
-		{"Latest", ExecutorVersionV2Vandenberg},
+		{"V2", ExecutorVersionV2Baikonur, false},
+		{"Latest", ExecutorVersionLatest, true},
 	}
 
 	for _, c := range cases {
@@ -44,7 +45,7 @@ func TestCreditAccounting(t *testing.T) {
 			)
 
 			// Verify that AcmeBurnt is never set
-			if c.Version.V2VandenbergEnabled() {
+			if c.NoLedger {
 				sim.SetBlockHookFor(lite, func(_ execute.BlockParams, env []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
 					ledger := GetAccount[*SystemLedger](t, sim.DatabaseFor(lite), url.MustParse("bvn-BVN0.acme").JoinPath(Ledger))
 					assert.Zero(t, ledger.AcmeBurnt)

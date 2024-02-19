@@ -553,19 +553,19 @@ func (x TransactionMessage) expirePendingTransactions(batch *database.Batch, ctx
 	return nil
 }
 
-func (x *Executor) processEventBacklog(block *Block) error {
-	n := int(x.globals.Active.Globals.Limits.EventsPerBlock)
+func (b *Block) processEventBacklog() error {
+	n := int(b.Executor.globals.Active.Globals.Limits.EventsPerBlock)
 	if n == 0 {
 		n = 100
 	}
-	n -= block.State.Events
+	n -= b.State.Events
 	if n <= 0 {
 		return nil
 	}
 
 	// Load the backlog
-	batch := block.Batch
-	record := batch.Account(x.Describe.Ledger()).
+	batch := b.Batch
+	record := batch.Account(b.Executor.Describe.Ledger()).
 		Events().
 		Backlog().
 		Expired()
@@ -587,7 +587,7 @@ func (x *Executor) processEventBacklog(block *Block) error {
 	}
 
 	d := new(bundle)
-	d.Block = block
+	d.Block = b
 	d.state = orderedMap[[32]byte, *chain.ProcessTransactionState]{cmp: func(u, v [32]byte) int { return bytes.Compare(u[:], v[:]) }}
 
 	// Process N items
@@ -597,7 +597,7 @@ func (x *Executor) processEventBacklog(block *Block) error {
 	}
 
 	// Claim we're on pass 1 so that internal messages are allowed
-	_, err = block.processMessages(msgs, 1)
+	_, err = b.processMessages(msgs, 1)
 	return errors.UnknownError.Wrap(err)
 }
 
