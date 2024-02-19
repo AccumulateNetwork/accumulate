@@ -35,9 +35,14 @@ func (block *Block) Close() (execute.BlockState, error) {
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
-	err := m.processEventBacklog(block)
+	err := block.processEventBacklog()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("process event backlog: %w", err)
+	}
+
+	err = block.produceBlockMessages()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("produce block messages: %w", err)
 	}
 
 	// Check for missing synthetic transactions. Load the ledger synchronously,
@@ -771,6 +776,34 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	return anchor, nil
 }
 
+func (b *Block) produceBlockMessages() error {
+	if !b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		return nil
+	}
+
+	if b.State.AcmeBurnt.Sign() > 0 {
+		body := new(protocol.SyntheticBurnTokens)
+		body.Amount = b.State.AcmeBurnt
+		txn := new(protocol.Transaction)
+		txn.Header.Principal = protocol.AcmeUrl()
+		txn.Body = body
+		msg := new(messaging.TransactionMessage)
+		msg.Transaction = txn
+
+		b.State.Produced++
+
+		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			Destination: txn.Header.Principal,
+			Message:     msg,
+		}}, b.Index)
+		if err != nil {
+			return errors.UnknownError.WithFormat("queue ACME burn: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLedger) (*protocol.BlockValidatorAnchor, error) {
 	// Do not populate the root chain index, root chain anchor, or state tree
 	// anchor. Those cannot be populated until the block is complete, thus they
@@ -780,9 +813,7 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 
-	if x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
-		anchor.AcmeBurnt = block.State.AcmeBurnt
-	} else {
+	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
 		anchor.AcmeBurnt = ledger.AcmeBurnt
 	}
 
