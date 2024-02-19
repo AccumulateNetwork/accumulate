@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package chain
 
 import (
+	"math/big"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
@@ -24,6 +25,7 @@ type ProcessTransactionState struct {
 	MakeMajorBlock     uint64
 	MakeMajorBlockTime time.Time
 	ReceivedAnchors    []*ReceivedAnchor
+	AcmeBurnt          big.Int
 }
 
 type ReceivedAnchor struct {
@@ -71,6 +73,7 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 	s.AdditionalMessages = append(s.AdditionalMessages, r.AdditionalMessages...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
 	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
+	s.AcmeBurnt.Add(&s.AcmeBurnt, &r.AcmeBurnt)
 }
 
 type ChainUpdates struct {

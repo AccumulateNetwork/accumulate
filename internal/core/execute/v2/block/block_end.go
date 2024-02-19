@@ -773,7 +773,13 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.Source = x.Describe.NodeUrl()
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
-	anchor.AcmeBurnt = ledger.AcmeBurnt
+
+	if x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		anchor.AcmeBurnt = block.State.AcmeBurnt
+	} else {
+		anchor.AcmeBurnt = ledger.AcmeBurnt
+	}
+
 	return anchor, nil
 }
 
