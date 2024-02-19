@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -361,7 +361,13 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 		}
 
 		for {
+			// Update the BPT, commit, and recreate the batch after every N
+			// records
 			if opts.BatchRecordLimit != 0 && count > 0 && count%opts.BatchRecordLimit == 0 {
+				err = batch.UpdateBPT()
+				if err != nil {
+					return errors.UnknownError.WithFormat("update BPT: %w", err)
+				}
 				err = batch.Commit()
 				if err != nil {
 					return errors.UnknownError.WithFormat("commit changes: %w", err)
@@ -409,6 +415,12 @@ func Restore(db Beginner, file ioutil.SectionReader, opts *RestoreOptions) error
 				}
 			}
 		}
+	}
+
+	// Force the BPT to update
+	err = batch.UpdateBPT()
+	if err != nil {
+		return errors.UnknownError.WithFormat("update BPT: %w", err)
 	}
 
 	err = batch.Commit()
