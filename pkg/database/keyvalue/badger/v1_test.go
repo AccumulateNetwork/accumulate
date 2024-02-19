@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,6 +8,7 @@ package badger
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/dgraph-io/badger"
@@ -15,33 +16,22 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
+	"golang.org/x/exp/slog"
 )
 
-func open(t testing.TB) kvtest.Opener {
-	dir := t.TempDir()
-	return func() (keyvalue.Beginner, error) {
-		return New(dir)
-	}
+func init() {
+	// Suppress Badger logs
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelError,
+	})))
 }
 
-func BenchmarkCommit(b *testing.B) {
-	kvtest.BenchmarkCommit(b, open(b))
-}
-
-func BenchmarkOpen(b *testing.B) {
-	kvtest.BenchmarkOpen(b, open(b))
-}
-
-func BenchmarkReadRandom(b *testing.B) {
-	kvtest.BenchmarkReadRandom(b, open(b))
-}
-
-func TestWriteLimit(t *testing.T) {
+func TestV1WriteLimit(t *testing.T) {
 	// Create a badger DB
 	raw, err := badger.Open(badger.
 		DefaultOptions(t.TempDir()).
 		WithMaxTableSize(1 << 20). // 1MB
-		WithLogger(Slogger{}))
+		WithLogger(slogger{}))
 	require.NoError(t, err)
 	defer raw.Close()
 
@@ -72,6 +62,37 @@ func TestWriteLimit(t *testing.T) {
 	for i := 0; i < 2000; i++ {
 		_, err = batch.Get(record.NewKey(i))
 		require.NoError(t, err)
+	}
+}
+
+func BenchmarkV1Commit(b *testing.B) {
+	kvtest.BenchmarkCommit(b, newOpenerV1(b))
+}
+
+func BenchmarkV1ReadRandom(b *testing.B) {
+	kvtest.BenchmarkReadRandom(b, newOpenerV1(b))
+}
+
+func TestV1Database(t *testing.T) {
+	kvtest.TestDatabase(t, newOpenerV1(t))
+}
+
+func TestV1SubBatch(t *testing.T) {
+	kvtest.TestSubBatch(t, newOpenerV1(t))
+}
+
+func TestV1Prefix(t *testing.T) {
+	kvtest.TestPrefix(t, newOpenerV1(t))
+}
+
+func TestV1Delete(t *testing.T) {
+	kvtest.TestDelete(t, newOpenerV1(t))
+}
+
+func newOpenerV1(t testing.TB) kvtest.Opener {
+	path := t.TempDir()
+	return func() (keyvalue.Beginner, error) {
+		return New(path)
 	}
 }
 
@@ -112,24 +133,4 @@ func TestVersions(t *testing.T) {
 
 	// Only one version survives
 	require.Equal(t, 1, count)
-}
-
-func TestDatabase(t *testing.T) {
-	kvtest.TestDatabase(t, open(t))
-}
-
-func TestIsolation(t *testing.T) {
-	kvtest.TestIsolation(t, open(t))
-}
-
-func TestSubBatch(t *testing.T) {
-	kvtest.TestSubBatch(t, open(t))
-}
-
-func TestPrefix(t *testing.T) {
-	kvtest.TestPrefix(t, open(t))
-}
-
-func TestDelete(t *testing.T) {
-	kvtest.TestDelete(t, open(t))
 }
