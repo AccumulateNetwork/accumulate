@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -104,6 +104,10 @@ func (d *Database) Update(fn func(batch *Batch) error) error {
 	batch := d.Begin(true)
 	defer batch.Discard()
 	err := fn(batch)
+	if err != nil {
+		return err
+	}
+	err = batch.UpdateBPT()
 	if err != nil {
 		return err
 	}
