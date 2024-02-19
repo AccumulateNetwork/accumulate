@@ -197,8 +197,8 @@ func hashTxID(h *hashSet, v *url.TxID, memo any) {
 		h.Add(rawHash{}, memo)
 	} else {
 		u := v.Hash()
-		x := hash.Combine(u[:], v.Account().Hash())
-		h.Add(rawHash(*(*[32]byte)(x)), memo)
+		x := sha256.Sum256(append(u[:], v.Account().Hash()...))
+		h.Add(rawHash(x), memo)
 	}
 }
 
