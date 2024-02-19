@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,6 +8,7 @@ package chain
 
 import (
 	"fmt"
+	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -211,4 +212,20 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 	}
 
 	return nil
+}
+
+func (st *stateCache) markAcmeBurnt(amount *big.Int) error {
+	if st.Globals.ExecutorVersion.V2VandenbergEnabled() {
+		st.State.AcmeBurnt.Add(&st.State.AcmeBurnt, amount)
+		return nil
+	}
+
+	var ledger *protocol.SystemLedger
+	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledger)
+	if err != nil {
+		return err
+	}
+
+	ledger.AcmeBurnt.Add(&ledger.AcmeBurnt, amount)
+	return st.Update(ledger)
 }
