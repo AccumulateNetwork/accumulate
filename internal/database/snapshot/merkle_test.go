@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -105,6 +105,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 			require.NoError(t, chain.AddEntry(rh.NextList(), false))
 		}
 
+		require.NoError(t, batch.UpdateBPT())
 		require.NoError(t, batch.Commit())
 
 		// Make a snapshot

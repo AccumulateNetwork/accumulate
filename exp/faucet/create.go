@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -40,7 +40,11 @@ func CreateLite(url *url.URL) ([]byte, error) {
 			return nil, err
 		}
 	}
-	err := batch.Commit()
+	err := batch.UpdateBPT()
+	if err != nil {
+		return nil, err
+	}
+	err = batch.Commit()
 	if err != nil {
 		return nil, err
 	}

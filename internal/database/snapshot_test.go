@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -276,6 +276,7 @@ func TestPreservationOfOldTransactions(t *testing.T) {
 	defer batch.Discard()
 	require.NoError(t, batch.Transaction(txn.GetHash()).Main().Put(&database.SigOrTxn{Transaction: txn}))
 	require.NoError(t, batch.Account(txn.Header.Principal).MainChain().Inner().AddEntry(txn.GetHash(), false))
+	require.NoError(t, batch.UpdateBPT())
 	require.NoError(t, batch.Commit())
 
 	// Collect a snapshot
