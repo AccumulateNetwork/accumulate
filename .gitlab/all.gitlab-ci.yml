@@ -5,7 +5,11 @@ go build:
       optional: true
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
-  script: go build -v ./...
+  script:
+  # Build normally
+  - go build -v ./...
+  # Check tags
+  - go build -tags debug,no_mmap -v ./...
 
 .go test:
   extends: [ .rules all, .go ]

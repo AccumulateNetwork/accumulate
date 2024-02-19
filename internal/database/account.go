@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -150,15 +150,32 @@ func (a *Account) Commit() error {
 		}
 	}
 
-	// If anything has changed, update the BPT entry
-	err = a.putBpt()
-	if err != nil {
-		return errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
-	}
-
 	// Do the normal commit stuff
 	err = a.baseCommit()
 	return errors.UnknownError.Wrap(err)
+}
+
+func (b *Batch) UpdateBPT() error {
+	if b.parent != nil {
+		err := b.parent.UpdateBPT()
+		if err != nil {
+			return err
+		}
+	}
+	for _, a := range b.account {
+		if a.IsDirty() {
+			err := a.Commit()
+			if err != nil {
+				return errors.UnknownError.WithFormat("commit %v: %w", a.Url(), err)
+			}
+
+			err = a.putBpt()
+			if err != nil {
+				return errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
+			}
+		}
+	}
+	return nil
 }
 
 func compareSignatureByKey(a, b protocol.KeySignature) int {
