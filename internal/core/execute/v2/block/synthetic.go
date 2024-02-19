@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -33,6 +33,10 @@ func (x *Executor) produceSynthetic(batch *database.Batch, produced []*ProducedM
 		seq, err := x.buildSynthTxn(state, batch, p, block)
 		if err != nil {
 			return err
+		}
+
+		if p.Producer == nil {
+			continue
 		}
 
 		// Record message -> produced synthetic message
