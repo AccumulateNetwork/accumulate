@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -104,4 +104,12 @@ func (v LogWithFormat) MarshalJSON() ([]byte, error) {
 //go:inline
 func WithFormat(format string, values ...interface{}) LogWithFormat {
 	return LogWithFormat{format, values}
+}
+
+func TypeOf(v any) any { return logType{v} }
+
+type logType struct{ value any }
+
+func (v logType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(fmt.Sprint(reflect.TypeOf(v.value)))
 }
