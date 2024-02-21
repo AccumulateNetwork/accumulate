@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -18,7 +18,7 @@ type Gossip struct {
 
 func (g *Gossip) adopt(n *Node) {
 	ptr, new := sortutil.BinaryInsert(&g.nodes, func(m *Node) int {
-		return bytes.Compare(m.pubKeyHash[:], n.pubKeyHash[:])
+		return bytes.Compare(m.self.PubKeyHash[:], n.self.PubKeyHash[:])
 	})
 	if !new {
 		panic("attempted to adopt the same node twice")
