@@ -377,7 +377,7 @@
       "program": "${workspaceFolder}/tools/cmd/gen-types",
       "cwd": "${workspaceFolder}/protocol",
       "args": [
-        "account_auth_operations.yml",
+        "operations.yml",
         "accounts.yml",
         "general.yml",
         "system.yml",
