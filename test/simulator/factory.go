@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package simulator
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"sync"
@@ -613,7 +614,9 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 }
 
 func (node *nodeFactory) makeConsensusNode(app consensus.App) *consensus.Node {
-	cn := consensus.NewNode(node.network.PrivValKey, app, node.getGossip(), node.getLogger())
+	ctx := context.Background()
+	ctx = logging.With(ctx, "partition", node.networkFactory.id, "node", node.id)
+	cn := consensus.NewNode(ctx, node.network.PrivValKey, app, node.getGossip())
 	cn.SkipProposalCheck = node.skipProposalCheck
 	cn.IgnoreDeliverResults = node.ignoreDeliverResults
 	cn.IgnoreCommitResults = node.ignoreCommitResults
