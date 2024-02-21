@@ -860,7 +860,8 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 		err = sim.S.Step()
 	}
 	require.Error(t, err, "Expected consensus failure within 50 blocks")
-	require.IsType(t, (consensus.CommitConsensusError)(nil), err)
+	var err2 *consensus.ConsensusError[consensus.CommitResult]
+	require.ErrorAs(t, err, &err2)
 }
 
 func TestMessageCompat(t *testing.T) {
