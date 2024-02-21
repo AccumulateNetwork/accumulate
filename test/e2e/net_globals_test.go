@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -9,9 +9,13 @@ package e2e
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
@@ -30,6 +34,13 @@ func TestOracleDistribution(t *testing.T) {
 	dn := sim.Partition(Directory)
 	bvn0 := sim.Partition("BVN0")
 	// bvn1 := sim.Partition("BVN1")
+
+	// Verify that PendingUpdates is never set
+	sim.S.SetBlockHook(Directory, func(_ execute.BlockParams, env []*messaging.Envelope) (_ []*messaging.Envelope, keepHook bool) {
+		ledger := GetAccount[*SystemLedger](t, sim.S.Database(Directory), url.MustParse("dn.acme").JoinPath(Ledger))
+		assert.Empty(t, ledger.PendingUpdates)
+		return env, true
+	})
 
 	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.OperatorsPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])

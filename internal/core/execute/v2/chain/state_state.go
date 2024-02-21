@@ -26,6 +26,7 @@ type ProcessTransactionState struct {
 	MakeMajorBlockTime time.Time
 	ReceivedAnchors    []*ReceivedAnchor
 	AcmeBurnt          big.Int
+	NetworkUpdate      []*protocol.NetworkAccountUpdate
 }
 
 type ReceivedAnchor struct {
@@ -74,6 +75,7 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 	s.ChainUpdates.Merge(&r.ChainUpdates)
 	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
 	s.AcmeBurnt.Add(&s.AcmeBurnt, &r.AcmeBurnt)
+	s.NetworkUpdate = append(s.NetworkUpdate, r.NetworkUpdate...)
 }
 
 type ChainUpdates struct {
