@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -215,6 +215,7 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 		fee = FeeData * Fee(count)
 
 	case *ActivateProtocolVersion,
+		*NetworkMaintenance,
 		*AddCredits,
 		*BurnCredits,
 		*AcmeFaucet:

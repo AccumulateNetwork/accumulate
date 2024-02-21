@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -42,6 +42,15 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 
 func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protocol.AnchorBody, index int64) {
 	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index})
+}
+
+// ProcessNetworkMaintenanceOp queues a [internal.NetworkMaintenanceOp] message for processing
+// after the current bundle.
+func (s *ProcessTransactionState) ProcessNetworkMaintenanceOp(cause *url.TxID, op protocol.NetworkMaintenanceOperation) {
+	s.AdditionalMessages = append(s.AdditionalMessages, &internal.NetworkMaintenanceOp{
+		Cause:     cause,
+		Operation: op,
+	})
 }
 
 // ProcessNetworkUpdate queues a [internal.NetworkUpdate] message for processing
