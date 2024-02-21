@@ -154,6 +154,15 @@ BlockSummary:
       pointer: true
       repeatable: true
 
+NetworkUpdate:
+  union: { type: message }
+  fields:
+    - name: Accounts
+      type: protocol.NetworkAccountUpdate
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+
 # Components
 
 RecordUpdate:
