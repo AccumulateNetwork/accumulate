@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,14 +10,13 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // processNetworkAccountUpdates processes updates to network data accounts,
 // updating the in-memory globals variable and pushing updates when necessary.
-func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
+func (x *Executor) processNetworkAccountUpdates(st *chain.StateManager, delivery *chain.Delivery, principal protocol.Account) error {
 	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
 	defer x.BlockTimers.Stop(r)
 
@@ -123,22 +122,27 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		return nil
 	}
 
-	// Write the update to the ledger
-	var ledger *protocol.SystemLedger
-	record := batch.Account(x.Describe.Ledger())
-	err := record.Main().GetAs(&ledger)
-	if err != nil {
-		return errors.UnknownError.WithFormat("load ledger: %w", err)
-	}
-
+	// Queue the update for distribution
 	var update protocol.NetworkAccountUpdate
 	update.Name = targetName
 	update.Body = delivery.Transaction.Body
-	ledger.PendingUpdates = append(ledger.PendingUpdates, update)
+	if x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		st.State.NetworkUpdate = append(st.State.NetworkUpdate, &update)
 
-	err = record.Main().Put(ledger)
-	if err != nil {
-		return errors.UnknownError.WithFormat("store ledger: %w", err)
+	} else {
+		var ledger *protocol.SystemLedger
+		record := st.GetBatch().Account(x.Describe.Ledger())
+		err := record.Main().GetAs(&ledger)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load ledger: %w", err)
+		}
+
+		ledger.PendingUpdates = append(ledger.PendingUpdates, update)
+
+		err = record.Main().Put(ledger)
+		if err != nil {
+			return errors.UnknownError.WithFormat("store ledger: %w", err)
+		}
 	}
 
 	return nil

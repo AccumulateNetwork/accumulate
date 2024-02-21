@@ -722,7 +722,11 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.Source = x.Describe.NodeUrl()
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
-	anchor.Updates = systemLedger.PendingUpdates
+
+	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		anchor.Updates = systemLedger.PendingUpdates
+	}
+
 	if block.State.Anchor.ShouldOpenMajorBlock {
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
@@ -781,6 +785,11 @@ func (b *Block) produceBlockMessages() error {
 		return nil
 	}
 
+	// This is likely unnecessarily cautious, but better safe than sorry. This
+	// will prevent any variation in order from causing a consensus failure.
+	bvns := b.Executor.globals.Active.BvnNames()
+	sort.Strings(bvns)
+
 	if b.State.AcmeBurnt.Sign() > 0 {
 		body := new(protocol.SyntheticBurnTokens)
 		body.Amount = b.State.AcmeBurnt
@@ -793,11 +802,26 @@ func (b *Block) produceBlockMessages() error {
 		b.State.Produced++
 
 		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
-			Destination: txn.Header.Principal,
+			Destination: protocol.AcmeUrl(),
 			Message:     msg,
 		}}, b.Index)
 		if err != nil {
 			return errors.UnknownError.WithFormat("queue ACME burn: %w", err)
+		}
+	}
+
+	if len(b.State.NetworkUpdate) > 0 {
+		for _, bvn := range bvns {
+			b.State.Produced++
+			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+				Destination: protocol.PartitionUrl(bvn),
+				Message: &messaging.NetworkUpdate{
+					Accounts: b.State.NetworkUpdate,
+				},
+			}}, b.Index)
+			if err != nil {
+				return errors.UnknownError.WithFormat("queue network update: %w", err)
+			}
 		}
 	}
 
