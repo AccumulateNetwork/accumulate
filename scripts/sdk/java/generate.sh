@@ -25,7 +25,7 @@ function generate {
 PROT=../../../protocol
 generate enum protocol $PROT/enums.yml
 generate types protocol $PROT/general.yml
-generate types protocol $PROT/account_auth_operations.yml $PROT/key_page_operations.yml $PROT/signatures.yml $PROT/transaction_results.yml $PROT/transaction.yml \
+generate types protocol $PROT/operations.yml $PROT/key_page_operations.yml $PROT/signatures.yml $PROT/transaction_results.yml $PROT/transaction.yml \
     $PROT/user_transactions.yml $PROT/synthetic_transactions.yml $PROT/accounts.yml \
     -x TransactionStatus
 
