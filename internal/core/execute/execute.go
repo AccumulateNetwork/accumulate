@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,7 @@
 package execute
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"time"
@@ -51,6 +52,12 @@ type ValidatorUpdate struct {
 	Type      protocol.SignatureType
 	PublicKey []byte
 	Power     int64
+}
+
+func (v *ValidatorUpdate) Equal(u *ValidatorUpdate) bool {
+	return v.Type == u.Type &&
+		bytes.Equal(v.PublicKey, u.PublicKey) &&
+		v.Power == u.Power
 }
 
 // Options are the options for constructing an [Executor]
