@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package run
+package logging
 
 import (
 	"bytes"
@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"golang.org/x/exp/slog"
 )
 
@@ -25,7 +24,7 @@ func TestLoggingCtxAttrs(t *testing.T) {
 		lowestLevel:  slog.LevelDebug,
 	})
 
-	ctx := logging.With(context.Background(), "foo", "bar")
+	ctx := With(context.Background(), "foo", "bar")
 	logger.InfoContext(ctx, "Hello world")
 	require.Len(t, records, 1)
 
@@ -41,11 +40,11 @@ func TestLoggingCtxAttrs(t *testing.T) {
 
 func TestPlainLogging(t *testing.T) {
 	buf := new(bytes.Buffer)
-	handler, err := (&Logging{
-		Format: "plain",
-		Color:  Ptr(false),
-		Rules:  []*LoggingRule{{Level: slog.LevelDebug}},
-	}).newHandler(buf)
+	handler, err := NewSlogHandler(SlogConfig{
+		Format:       "plain",
+		NoColor:      true,
+		DefaultLevel: slog.LevelDebug,
+	}, buf)
 	require.NoError(t, err)
 	logger := slog.New(stripTime{handler})
 
@@ -55,10 +54,10 @@ func TestPlainLogging(t *testing.T) {
 
 func TestJSONLogging(t *testing.T) {
 	buf := new(bytes.Buffer)
-	handler, err := (&Logging{
-		Format: "json",
-		Rules:  []*LoggingRule{{Level: slog.LevelDebug}},
-	}).newHandler(buf)
+	handler, err := NewSlogHandler(SlogConfig{
+		Format:       "json",
+		DefaultLevel: slog.LevelDebug,
+	}, buf)
 	require.NoError(t, err)
 	logger := slog.New(stripTime{handler})
 
