@@ -26,3 +26,6 @@ MessageType:
   Synthetic:
     value: 9
     description: is a message produced by the protocol, requiring proof
+  NetworkUpdate:
+    value: 10
+    description: is an update to network parameters
