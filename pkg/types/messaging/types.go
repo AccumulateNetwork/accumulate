@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -99,6 +99,10 @@ func (m *BlockSummary) ID() *url.TxID {
 	return protocol.PartitionUrl(m.Partition).WithTxID(m.Hash())
 }
 
+func (m *NetworkUpdate) ID() *url.TxID {
+	return protocol.DnUrl().WithTxID(m.Hash())
+}
+
 func (m *BadSyntheticMessage) Unwrap() Message { return m.Message }
 func (m *SyntheticMessage) Unwrap() Message    { return m.Message }
 func (m *SequencedMessage) Unwrap() Message    { return m.Message }
@@ -184,6 +188,7 @@ func (m *SignatureRequest) Hash() [32]byte { return marshalAndHash(m) }
 func (m *CreditPayment) Hash() [32]byte    { return marshalAndHash(m) }
 func (m *BlockSummary) Hash() [32]byte     { return marshalAndHash(m) }
 func (m *SyntheticMessage) Hash() [32]byte { return marshalAndHash(m) }
+func (m *NetworkUpdate) Hash() [32]byte    { return marshalAndHash(m) }
 
 func marshalAndHash(m Message) [32]byte {
 	// If this fails something is seriously wrong
