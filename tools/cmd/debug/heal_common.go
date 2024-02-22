@@ -175,6 +175,7 @@ func (h *healer) heal(args []string) {
 		defer func() { _ = h.light.Close() }()
 	}
 
+	<-h.router.(*routing.RouterInstance).Ready()
 	if cachedScan == "" {
 		h.net, err = healing.ScanNetwork(ctx, h.C2)
 		check(err)

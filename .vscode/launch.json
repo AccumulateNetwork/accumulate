@@ -563,7 +563,9 @@
         "heal",
         "synth",
         "kermit",
-        "Harpo → Groucho", "1"
+        "--cached-scan=${env:HOME}/.accumulate/cache/kermit.json",
+        "--light-db=/tmp/kermit.db",
+        "Directory → Harpo",
       ]
     },
     {
