@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -133,7 +133,7 @@ func (v *set[T]) Walk(opts database.WalkOptions, fn database.WalkFunc) error {
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	if len(u) == 0 {
+	if len(u) == 0 && !opts.Modified {
 		return nil
 	}
 
