@@ -10,6 +10,8 @@ go build:
   - go build -v ./...
   # Check tags
   - go build -tags debug,no_mmap -v ./...
+  # Check manual tool
+  - go build -v ./test/cmd/manual
 
 .go test:
   extends: [ .rules all, .go ]

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -260,9 +261,6 @@ func (d *DB[Db, Txn, Item, Wb]) Close() error {
 
 func (d *DB[Db, Txn, Item, Wb]) gc() {
 	for {
-		// GC every hour
-		time.Sleep(time.Hour)
-
 		// Still open?
 		l, err := d.lock(false)
 		if err != nil {
@@ -270,20 +268,28 @@ func (d *DB[Db, Txn, Item, Wb]) gc() {
 		}
 
 		// Run GC if 50% space could be reclaimed
+		var noGC bool
 		start := time.Now()
 		err = d.badger.RunValueLogGC(0.5)
 		switch {
 		case err == nil:
 			mGcRun.Inc()
 			mGcDuration.Set(time.Since(start).Seconds())
-		case errors.Is(err, d.errNoRewrite):
-			// Ok
+
+		case errors.Is(err, badger.ErrNoRewrite):
+			noGC = true
+
 		default:
 			slog.Error("Badger GC failed", "error", err, "module", "badger")
 		}
 
 		// Release the lock
 		l.Unlock()
+
+		// Keep collecting until no garbage is collected, then wait for an hour
+		if noGC {
+			time.Sleep(time.Hour)
+		}
 	}
 }
 
