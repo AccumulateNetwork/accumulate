@@ -9,6 +9,7 @@ package consensus
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"golang.org/x/exp/slog"
@@ -16,21 +17,32 @@ import (
 
 // SimpleHub is a simple implementation of [Hub].
 type SimpleHub struct {
+	mu      *sync.Mutex
 	context context.Context
 	modules []Module
 }
 
 func NewSimpleHub(ctx context.Context) *SimpleHub {
-	return &SimpleHub{context: logging.With(ctx, "module", "consensus")}
+	return &SimpleHub{mu: new(sync.Mutex), context: logging.With(ctx, "module", "consensus")}
 }
 
 func (s *SimpleHub) Register(module Module) {
 	s.modules = append(s.modules, module)
 }
 
+func (s *SimpleHub) With(modules ...Module) Hub {
+	// Use the same mutex
+	r := *s
+	r.modules = append(modules, s.modules...)
+	return &r
+}
+
 func (s *SimpleHub) Send(messages ...Message) error {
 	var errs []error
 	var next []Message
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	// Loop until there's an error or no more messages are produced
 	for len(messages) > 0 && len(errs) == 0 {
@@ -54,4 +66,15 @@ func (s *SimpleHub) Send(messages ...Message) error {
 
 	}
 	return errors.Join(errs...)
+}
+
+type Capture[V Message] []V
+
+func (r *Capture[V]) Receive(messages ...Message) ([]Message, error) {
+	for _, msg := range messages {
+		if msg, ok := msg.(V); ok {
+			*r = append(*r, msg)
+		}
+	}
+	return nil, nil
 }
