@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -247,7 +247,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 }
 
 func (block *Block) recordTransactionExpiration() error {
-	if len(block.State.Pending) == 0 {
+	if len(block.State.PendingTxns) == 0 && len(block.State.PendingSigs) == 0 {
 		return nil
 	}
 
@@ -272,8 +272,7 @@ func (block *Block) recordTransactionExpiration() error {
 	}
 
 	// Determine which major block each transaction should expire on
-	pending := map[uint64][]*url.TxID{}
-	for _, txn := range block.State.GetPending() {
+	shouldExpireOn := func(txn *protocol.Transaction) uint64 {
 		var count uint64
 		switch {
 		case !block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled():
@@ -300,8 +299,22 @@ func (block *Block) recordTransactionExpiration() error {
 			count = max
 		}
 
-		major := currentMajor + count
+		return currentMajor + count
+	}
+
+	// Expire transactions
+	pending := map[uint64][]*url.TxID{}
+	for _, txn := range block.State.GetPendingTxns() {
+		major := shouldExpireOn(txn)
 		pending[major] = append(pending[major], txn.ID())
+	}
+
+	// Expire signature sets
+	for _, s := range block.State.GetPendingSigs() {
+		major := shouldExpireOn(s.Transaction)
+		for _, auth := range s.GetAuthorities() {
+			pending[major] = append(pending[major], auth.WithTxID(s.Transaction.Hash()))
+		}
 	}
 
 	// Record the IDs
