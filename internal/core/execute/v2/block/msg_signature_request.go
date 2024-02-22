@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -81,20 +81,21 @@ func (x SignatureRequest) Process(batch *database.Batch, ctx *MessageContext) (_
 }
 
 func (x SignatureRequest) process(batch *database.Batch, ctx *MessageContext, req *messaging.SignatureRequest) error {
-	// If the 'authority' is not the principal, verify it exists and is an
-	// authority
-	var invalid bool
+	// (V2) Always mark the transaction as pending for the 'authority'.
+	//
+	// (Baikonur) Only mark the transaction pending if the 'authority' is the
+	// principal. If the 'authority' is not the principal and is not a valid
+	// authority, reject the transaction.
+	markPending := true
 	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() && !req.Authority.Equal(req.TxID.Account()) {
-		ok, err := x.authorityIsValid(batch, ctx, req)
+		markPending = false
+		_, err := x.authorityIsValid(batch, ctx, req)
 		if err != nil {
-			return errors.UnknownError.Wrap(err)
-		}
-		if !ok {
-			invalid = true
+			return err
 		}
 	}
 
-	if !invalid {
+	if markPending {
 		// Check if the transaction has already been recorded
 		pending := batch.Account(req.Authority).Pending()
 		_, err := pending.Index(req.TxID)
@@ -111,7 +112,7 @@ func (x SignatureRequest) process(batch *database.Batch, ctx *MessageContext, re
 		}
 
 		// Record the transaction as pending
-		err = batch.Account(req.Authority).Pending().Add(req.TxID)
+		err = pending.Add(req.TxID)
 		if err != nil {
 			return errors.UnknownError.WithFormat("add pending: %w", err)
 		}
