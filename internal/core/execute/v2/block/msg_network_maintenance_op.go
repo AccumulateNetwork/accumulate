@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -34,17 +35,19 @@ func (x NetworkMaintenanceOp) Process(batch *database.Batch, ctx *MessageContext
 	batch = batch.Begin(true)
 	defer batch.Discard()
 
-	// Record the cause (the network maintenance transaction) on the main chain
+	// Record the cause (the network maintenance transaction) on the signature chain
 	h := msg.Cause.Hash()
-	err := batch.Account(msg.Operation.ID().Account()).MainChain().Inner().AddHash(h[:], false)
+	err := batch.Account(msg.Operation.ID().Account()).
+		SignatureChain().Inner().
+		AddHash(h[:], false)
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("update main chain: %w", err)
+		return nil, errors.UnknownError.WithFormat("update chain: %w", err)
 	}
 
 	// Execute the operation
 	switch op := msg.Operation.(type) {
 	case *protocol.PendingTransactionGCOperation:
-		err = x.processPendingTransactionGC(batch, ctx, op)
+		err = x.processPendingTransactionGC(batch, msg, op)
 	default:
 		err = errors.InternalError.WithFormat("unknown operation %v", op.Type())
 	}
@@ -67,12 +70,13 @@ func (x NetworkMaintenanceOp) Process(batch *database.Batch, ctx *MessageContext
 	return nil, nil
 }
 
-func (NetworkMaintenanceOp) processPendingTransactionGC(batch *database.Batch, ctx *MessageContext, op *protocol.PendingTransactionGCOperation) error {
+func (NetworkMaintenanceOp) processPendingTransactionGC(batch *database.Batch, msg *internal.NetworkMaintenanceOp, op *protocol.PendingTransactionGCOperation) error {
 	account := batch.Account(op.Account)
 	pending, err := account.Pending().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load pending: %w", err)
 	}
+	var realPending []*url.TxID
 	for _, id := range pending {
 		// If the transaction is actually pending, leave it alone
 		st, err := batch.Transaction2(id.Hash()).Status().Get()
@@ -80,13 +84,8 @@ func (NetworkMaintenanceOp) processPendingTransactionGC(batch *database.Batch, c
 			return errors.UnknownError.WithFormat("load transaction status: %w", err)
 		}
 		if st.Pending() {
+			realPending = append(realPending, id)
 			continue
-		}
-
-		// Remove it from the pending list
-		err = account.Pending().Remove(id)
-		if err != nil {
-			return errors.UnknownError.WithFormat("clear pending: %w", err)
 		}
 
 		// If the account is a key book or page, clear the active signature set
@@ -117,16 +116,29 @@ func (NetworkMaintenanceOp) processPendingTransactionGC(batch *database.Batch, c
 
 		// Clear the active signature set of every signer
 		for _, signer := range auth.GetSigners() {
-			for _, id := range pending {
-				err = batch.
-					Account(signer).
-					Transaction(id.Hash()).
-					Signatures().Put(nil)
-				if err != nil {
-					return errors.UnknownError.WithFormat("clear the signature set: %w", err)
-				}
+			err = batch.
+				Account(signer).
+				Transaction(id.Hash()).
+				Signatures().Put(nil)
+			if err != nil {
+				return errors.UnknownError.WithFormat("clear the signature set: %w", err)
+			}
+
+			// Record the cause (the network maintenance transaction) on the signature chain
+			h := msg.Cause.Hash()
+			err := batch.Account(msg.Operation.ID().Account()).
+				SignatureChain().Inner().
+				AddHash(h[:], false)
+			if err != nil {
+				return errors.UnknownError.WithFormat("update chain: %w", err)
 			}
 		}
+	}
+
+	// Update the pending list
+	err = account.Pending().Put(realPending)
+	if err != nil {
+		return errors.UnknownError.WithFormat("clear pending: %w", err)
 	}
 	return nil
 }
