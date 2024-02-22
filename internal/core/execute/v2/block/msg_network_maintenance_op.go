@@ -36,7 +36,7 @@ func (x NetworkMaintenanceOp) Process(batch *database.Batch, ctx *MessageContext
 
 	// Record the cause (the network maintenance transaction) on the main chain
 	h := msg.Cause.Hash()
-	err := batch.Account(msg.Operation.ID().Account()).MainChain().Inner().AddHash(h[:], false)
+	err := batch.Account(msg.Operation.ID().Account()).MainChain().Inner().AddEntry(h[:], false)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("update main chain: %w", err)
 	}
