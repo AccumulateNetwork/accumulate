@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -614,14 +614,24 @@ func (x ExpiredTransaction) Process(batch *database.Batch, ctx *MessageContext) 
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", internal.MessageTypeExpiredTransaction, ctx.message.Type())
 	}
 
+	err := x.expireTransaction(batch, ctx, msg)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	err = x.eraseSignatures(batch, ctx, msg)
+	return nil, errors.UnknownError.Wrap(err)
+}
+
+func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction) error {
 	// If the transaction has been executed (which erases the credit
 	// payments), skip it
 	isInit, _, err := transactionIsInitiated(batch, msg.TxID)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 	if !isInit {
-		return nil, nil
+		return nil
 	}
 
 	// Load it
@@ -633,22 +643,58 @@ func (x ExpiredTransaction) Process(batch *database.Batch, ctx *MessageContext) 
 	case errors.Is(err, errors.NotFound):
 		// This should not happen but returning an error would be bad
 		ctx.Executor.logger.Error("Missing pending transaction", "id", msg.TxID)
-		return nil, nil
+		return nil
 	default:
-
-		return nil, errors.UnknownError.WithFormat("load pending transaction: %w", err)
+		return errors.UnknownError.WithFormat("load pending transaction: %w", err)
 	}
 	if ctx.message == nil {
 		ctx.message = msg
 	}
 
+	// If the account in the expiring ID is not the principal, skip it (because
+	// it's a signature set expiration)
+	if ctx.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() && !msg.TxID.Account().Equal(txn.Transaction.Header.Principal) {
+		return nil
+	}
+
 	ctx2 := ctx.txnWith(txn.Transaction)
 	_, state, err := ctx2.recordFailedTransaction(batch, &chain.Delivery{Transaction: txn.Transaction}, errors.Expired)
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return errors.UnknownError.Wrap(err)
 	}
 	ctx.State.MergeTransaction(state)
 
 	err = TransactionMessage{}.postProcess(batch, ctx2, state, true)
-	return nil, errors.UnknownError.Wrap(err)
+	return errors.UnknownError.Wrap(err)
+}
+
+func (x ExpiredTransaction) eraseSignatures(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction) error {
+	// Load the account
+	account, err := batch.Account(msg.TxID.Account()).Main().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load account: %w", err)
+	}
+
+	// Is it an authority?
+	if _, ok := account.(protocol.Authority); !ok {
+		return nil
+	}
+
+	// Load the transaction
+	var txn *messaging.TransactionMessage
+	err = batch.Message(msg.TxID.Hash()).Main().GetAs(&txn)
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		// This should not happen but returning an error would be bad
+		ctx.Executor.logger.Error("Missing pending transaction", "id", msg.TxID)
+		return nil
+	default:
+		return errors.UnknownError.WithFormat("load pending transaction: %w", err)
+	}
+
+	// Clear the signature set
+	err = clearActiveSignatures(batch, account.GetUrl(), txn.ID())
+	return errors.UnknownError.Wrap(err)
 }
