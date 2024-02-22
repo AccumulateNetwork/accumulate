@@ -52,7 +52,7 @@ func (x NetworkMaintenance) TransactionIsReady(delegate AuthDelegate, batch *dat
 }
 
 func (NetworkMaintenance) allowDnOperators(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
-	// Verify the principal is a system ledger
+	// Verify the principal is a partition ADI
 	account, err := batch.Account(transaction.Header.Principal).Main().Get()
 	if err != nil {
 		return false, errors.UnknownError.WithFormat("load principal: %w", err)
@@ -67,7 +67,9 @@ func (NetworkMaintenance) allowDnOperators(batch *database.Batch, transaction *p
 		return false, nil
 	}
 	book := adi.Authorities[0].Url
-	if _, ok := protocol.ParsePartitionUrl(book); !ok || !book.PathEqual(protocol.Operators) {
+	if _, ok := protocol.ParsePartitionUrl(book); !ok ||
+		!book.RootIdentity().Equal(adi.Url) ||
+		!book.PathEqual(protocol.Operators) {
 		return false, nil
 	}
 
@@ -109,13 +111,6 @@ func (x NetworkMaintenance) Execute(st *StateManager, tx *Delivery) (protocol.Tr
 	// Verify the principal
 	if !st.NodeUrl().Equal(st.OriginUrl) {
 		return nil, errors.BadRequest.WithFormat("invalid principal: want %v, got %v", st.NodeUrl(), st.OriginUrl)
-	}
-
-	// Load the system ledger
-	var ledger *protocol.SystemLedger
-	err = st.batch.Account(st.Ledger()).Main().GetAs(&ledger)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load ledger: %w", err)
 	}
 
 	// For each operation
