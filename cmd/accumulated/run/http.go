@@ -64,6 +64,9 @@ func (h *HttpService) start(inst *Instance) error {
 		return err
 	}
 
+	// HACK DO NOT COMMIT
+	<-router.(*routing.RouterInstance).Ready()
+
 	apiOpts := nodehttp.Options{
 		Logger:    (*logging.Slogger)(inst.logger).With("module", "http"),
 		Node:      inst.p2p,
