@@ -9,6 +9,7 @@ package badger
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -165,6 +166,12 @@ func (d *Database) gc() {
 		l, err := d.lock(false)
 		if err != nil {
 			return
+		}
+
+		// Flatten
+		err = d.badger.Flatten(runtime.NumCPU())
+		if err != nil {
+			slog.Error("Badger flatten failed", "error", err, "module", "badger")
 		}
 
 		// Run GC if 50% space could be reclaimed
