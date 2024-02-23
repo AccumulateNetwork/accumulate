@@ -7,7 +7,7 @@ go build:
     GIT_SUBMODULE_STRATEGY: recursive
   script:
   - go build -v ./...
-  - go build -v ./test/cmd/manual
+  - (cd test/cmd/manual; go build -v .)
 
 .go test:
   extends: [ .rules all, .go ]
