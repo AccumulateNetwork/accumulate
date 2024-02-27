@@ -32,7 +32,8 @@ type Node struct {
 
 	context        context.Context
 	network        string
-	state          nodeState
+	blockState     blockState
+	submitState    map[*messaging.Envelope]submitState
 	self           *validator
 	validators     []*validator
 	mempool        *mempool
@@ -89,6 +90,7 @@ func NewNode(ctx context.Context, network string, key ed25519.PrivateKey, app Ap
 		PubKey:     key[32:],
 		PubKeyHash: sha256.Sum256(key[32:]),
 	}
+	n.submitState = map[*messaging.Envelope]submitState{}
 	n.app = app
 	n.network = network
 	n.context = logging.With(ctx, "module", "consensus")
@@ -125,31 +127,22 @@ func (n *Node) Status(*StatusRequest) (*StatusResponse, error) {
 	}, nil
 }
 
-func (n *Node) check(ctx context.Context, req *Submission) ([]Message, error) {
+func (n *Node) check(ctx context.Context, env *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	messages, err := req.Envelope.Normalize()
+	messages, err := env.Normalize()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	res, err := n.app.Check(&CheckRequest{
 		Context:  ctx,
-		Envelope: req.Envelope,
+		Envelope: env,
 		New:      true,
-		Pretend:  req.Pretend,
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
-	}
-
-	msgs := []Message{&SubmissionResponse{
-		Results: res.Results,
-	}}
-
-	if req.Pretend {
-		return msgs, nil
 	}
 
 	lup := map[[32]byte]messaging.Message{}
@@ -219,8 +212,7 @@ func (n *Node) check(ctx context.Context, req *Submission) ([]Message, error) {
 		}
 	}
 
-	n.mempool.Add(n.lastBlockIndex, req.Envelope)
-	return msgs, nil
+	return res.Results, nil
 }
 
 func (n *Node) Init(req *InitRequest) (*InitResponse, error) {
