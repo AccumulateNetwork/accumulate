@@ -37,6 +37,24 @@ import (
 
 const BufferSize = 1024 * 1024 * 10 // N MB, i.e. N *(1024^2)
 
+type DBBKey struct {
+	Offset uint64
+	Length uint64
+}
+type DBBKeyFull struct {
+	Key    [32]byte
+	Offset uint64
+	Length uint64
+}
+
+func (d *DBBKeyFull) Bytes() []byte {
+	var buff [48]byte
+	copy(buff[:32], d.Key[:])
+	binary.BigEndian.PutUint64(buff[32:], d.Offset)
+	binary.BigEndian.PutUint64(buff[40:], d.Length)
+	return buff[:]
+}
+
 // BBuff
 // Block Buff
 // Holds all the persisted transactions and their keys.
@@ -64,12 +82,12 @@ type BFile struct {
 
 // Get
 // Get the value for a given DBKeyFull
-func (b *BFile) Get(Key DBBKeyFull) ( value []byte, err error){
-	if _, err = b.File.Seek(int64(Key.Offset),io.SeekStart); err != nil {
+func (b *BFile) Get(Key DBBKeyFull) (value []byte, err error) {
+	if _, err = b.File.Seek(int64(Key.Offset), io.SeekStart); err != nil {
 		return nil, err
 	}
-	value = make([]byte,Key.Length)
-	_,err = b.File.Read(value)
+	value = make([]byte, Key.Length)
+	_, err = b.File.Read(value)
 	return value, err
 }
 
@@ -90,7 +108,7 @@ func (b *BFile) newBlock() (err error) {
 // Open
 // Open a DBBlock file at a given height.
 // OpenBlock assumes Memory is available to hold 2 copies of the keys in a DBBlock
-func Open(Directory string, Type int, Partition int, Height int) (bFile *BFile, keys []DBBKeyFull, err error) {
+func Open(Directory string, Type int, Partition int, Height int) (bFile *BFile, err error) {
 	bFile = new(BFile)          // create a new BFile
 	bFile.Directory = Directory // Set Directory
 	bFile.Type = Type           // Type is like perm, scratch, etc.
@@ -109,28 +127,34 @@ func (b *BFile) Close() {
 
 // OpenNext
 // Open the next DBBlock.  OpenNext assumes memory is available to hold 2 copies of the keys in a DBBlock
-func (b *BFile) OpenNext() (bFile *BFile, keys []DBBKeyFull, err error) {
+func (b *BFile) OpenNext() (bFile *BFile, err error) {
 
-	bFile.Height++ // Go to the next DBBlock
+	b.Height++ // Go to the next DBBlock
 
 	filename := fmt.Sprintf("BBlock_%3d_%2d_%09d.dat", b.Partition, b.Type, b.Height) // Compute the next file name
-	if b.File, err = os.Open(filepath.Join(b.Directory, filename)); err != nil {
-		return nil, nil, err
-	}
+	b.File, err = os.Open(filepath.Join(b.Directory, filename))
+
+	return b, err
+}
+
+// GetKeys
+// Returns a slice of the Keys in the BFile
+func (b *BFile) GetKeys() (keys []DBBKeyFull, err error) {
 
 	var offsetB [8]byte                               // First 8 bytes of DBBlock is the offset to the keys
 	if _, err = b.File.Read(offsetB[:]); err != nil { // Load that offset.
-		return nil, nil, err
+		return nil, err
 	}
 	keyOffset := binary.BigEndian.Uint64(offsetB[:])                      // Seek to start of the keys
 	if _, err = b.File.Seek(int64(keyOffset), io.SeekStart); err != nil { //
-		return nil, nil, err
+		return nil, err
 	}
 
 	buff, err := io.ReadAll(b.File) // Load all the keys
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+
 	keys = make([]DBBKeyFull, len(buff)/48) // Make a slice of all the Full (including address) DBBkeys
 	for i := range keys {                   // Walk through all the keys in the buff
 		copy(keys[i].Key[:32], buff[:32])                   // Copy the address
@@ -139,7 +163,7 @@ func (b *BFile) OpenNext() (bFile *BFile, keys []DBBKeyFull, err error) {
 		buff = buff[48:]                                    // Next 48 bytes in buff
 	}
 
-	return bFile, keys, nil
+	return keys, nil
 }
 
 // NewBFile

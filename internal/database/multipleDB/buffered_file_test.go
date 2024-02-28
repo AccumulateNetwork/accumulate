@@ -15,15 +15,29 @@ import (
 )
 
 const (
-	Directory     = "/tmp/DBBlockTest" // Where files go
-	Type          = 0                  // type specifies stuff like perm, scratch, etc.
-	Partition     = 0                  // Partition (DN, BVN0, BVN1, etc.)
-	Writes        = 10_000_000         // Total writes in the test
-	DBBlockWrites = 1_000_000          // Number of writes in a DBBlock
-	MaxSize       = 2000               // Max size of a value
-	MinSize       = 200                // Minimum size of a value
-	MaxBadgerSize = 10_000             // Maximum size of Badger tx
+	Directory     = "/tmp/DBBlockTest"          // Where files go
+	KeySliceDir   = "/tmp/DBBlockTest/keySlice" // Where key slices go
+	Type          = 0                           // type specifies stuff like perm, scratch, etc.
+	Partition     = 0                           // Partition (DN, BVN0, BVN1, etc.)
+	Writes        = 100                         // Total writes in the test
+	DBBlockWrites = 10                          // Number of writes in a DBBlock
+	MaxSize       = 2000                        // Max size of a value
+	MinSize       = 200                         // Minimum size of a value
+	MaxBadgerSize = 10_000                      // Maximum size of Badger tx
 )
+
+func TestReadKeys(t *testing.T) {
+	bFile, err := Open(Directory, Type, Partition, 0)
+	assert.NoError(t, err, "failed to open DBBlock file")
+	keys, err := bFile.GetKeys()
+	assert.NoError(t, err, "failed to get keys")
+	for i, k := range keys {
+		fmt.Printf("%x %8d %8d\n", k.Key, k.Offset, k.Length)
+		if i > 10 {
+			break
+		}
+	}
+}
 
 func TestBBFile(t *testing.T) {
 	fmt.Println("TestBBFile Past result: 587365.7 t/s")
@@ -163,8 +177,4 @@ func TestBadger(t *testing.T) {
 	fmt.Printf("%10.1f t/s", float64(Writes)/time.Since(start).Seconds())
 }
 
-func TestReadKeys(t *testing.T) {
-	//bfile, keys, err := Open(Directory,Type,Partition,0)
-	//assert.NoError(t,err,"failed to open DBBlock file")
-	
-}
+

@@ -11,64 +11,75 @@ import (
 	"sort"
 )
 
-type KeyFile struct {
+type KeySlice struct {
 	Directory string
-	Type      int
-	Partition int
-	Slice    int
+	slice     int
 	File      *os.File
 	NewKeys   []DBBKeyFull
 	Keys      []DBBKeyFull
 	Offset    uint64
 }
 
-func (kf *KeyFile) Open(slice int) (err error) {
-	kf.Slice=slice
-	filename := filepath.Join(kf.Directory, fmt.Sprintf("KeyFile_%3d.dat", slice))
+func NewKeySlice(Directory string) *KeySlice {
+	ks := new(KeySlice)
+	ks.Directory=Directory
+	return ks
+}
+
+func (k *KeySlice) Open(slice int) (err error) {
+	k.slice=slice
+	
+	filename := filepath.Join(k.Directory, fmt.Sprintf("KeyFile_%3d.dat", slice))
+	if err = os.MkdirAll(k.Directory,os.ModePerm); err != nil {
+		return err
+	}
+
+	k.File,err = os.OpenFile(filename,os.O_RDWR,os.ModePerm)
+	
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		if kf.File, err = os.Create(filename); err != nil {
+		if k.File, err = os.Create(filename); err != nil {
 			return err
 		}
-		kf.Offset = 8
+		k.Offset = 8
 		var offsetB [8]byte // Write an initial offset of 8 to the new file
 		offsetB[7] = 8
-		kf.File.Write(offsetB[:])
+		k.File.Write(offsetB[:])
 	case err != nil:
 		return err
 	default:
-		if kf.File, err = os.OpenFile(filename, os.O_RDWR, os.ModePerm); err != nil {
+		if k.File, err = os.OpenFile(filename, os.O_RDWR, os.ModePerm); err != nil {
 			return err
 		}
 		var offsetB [8]byte
-		if _, err = kf.File.Read(offsetB[:]); err != nil {
-			kf.File.Close()
+		if _, err = k.File.Read(offsetB[:]); err != nil {
+			k.File.Close()
 			return err
 		}
-		kf.Offset = binary.BigEndian.Uint64(offsetB[:])
-		if _, err = kf.File.Seek(int64(kf.Offset), io.SeekStart); err != nil { // Seek to start of keys.
-			kf.File.Close()
+		k.Offset = binary.BigEndian.Uint64(offsetB[:])
+		if _, err = k.File.Seek(int64(k.Offset), io.SeekStart); err != nil { // Seek to start of keys.
+			k.File.Close()
 			return err
 		}
-		Keys, err := io.ReadAll(kf.File)
+		Keys, err := io.ReadAll(k.File)
 		if err != nil {
 			return err
 		}
-		kf.Keys = make([]DBBKeyFull, len(Keys)/48)
-		for i := range kf.Keys {
-			copy(kf.Keys[i].Key[:], Keys[:32])
-			kf.Keys[i].Offset = binary.BigEndian.Uint64(Keys[32:])
-			kf.Keys[i].Length = binary.BigEndian.Uint64(Keys[40:])
+		k.Keys = make([]DBBKeyFull, len(Keys)/48)
+		for i := range k.Keys {
+			copy(k.Keys[i].Key[:], Keys[:32])
+			k.Keys[i].Offset = binary.BigEndian.Uint64(Keys[32:])
+			k.Keys[i].Length = binary.BigEndian.Uint64(Keys[40:])
 			Keys = Keys[48:]
 		}
-		kf.File.Seek(int64(kf.Offset), io.SeekStart) // Position to add more values
+		k.File.Seek(int64(k.Offset), io.SeekStart) // Position to add more values
 	}
 	return nil
 }
 
 // Close
 // close the KeyFile
-func (kf *KeyFile) Close() error {
+func (kf *KeySlice) Close() error {
 	
 	// Add new keys to existing keys
 	n := len(kf.Keys)
@@ -102,7 +113,7 @@ func (kf *KeyFile) Close() error {
 
 // Put
 // Add a key value pair to the KeyFile
-func (kf *KeyFile) Put (dbKey DBBKeyFull, value []byte) (err error) {
+func (kf *KeySlice) Put (dbKey DBBKeyFull, value []byte) (err error) {
 	dbKey.Offset=kf.Offset
 	if _, err = kf.File.Write(value); err != nil {
 		return err
@@ -113,10 +124,9 @@ func (kf *KeyFile) Put (dbKey DBBKeyFull, value []byte) (err error) {
 }
 
 
-func (kf *KeyFile) Update(Directory string, Type int, Partition int) (err error) {
+func (kf *KeySlice) Update(bFile *BFile) (err error) {
 
-	// Open the BFile with the given Directory, Type, and Partition
-	bFile, keys, err := Open(Directory, Type, Partition, 0)
+	keys,err := bFile.GetKeys()
 	if err != nil {
 		return err
 	}
