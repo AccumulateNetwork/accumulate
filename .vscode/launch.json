@@ -263,6 +263,7 @@
       "args": [
         "MainNet",
         "--debug",
+        "--key=seed:foo",
         "--http-listen=/ip4/0.0.0.0/tcp/26660",
       ]
     },
