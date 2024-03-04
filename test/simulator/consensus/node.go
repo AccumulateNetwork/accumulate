@@ -33,6 +33,7 @@ type Node struct {
 	gossip *Gossip
 
 	context        context.Context
+	network        string
 	state          nodeState
 	self           *validator
 	validators     []*validator
@@ -83,7 +84,7 @@ type ExecuteRequest struct {
 type ExecuteResponse struct {
 }
 
-func NewNode(ctx context.Context, key ed25519.PrivateKey, app App, gossip *Gossip) *Node {
+func NewNode(ctx context.Context, network string, key ed25519.PrivateKey, app App, gossip *Gossip) *Node {
 	n := new(Node)
 	n.mu = new(sync.Mutex)
 	n.self = &validator{
@@ -91,6 +92,7 @@ func NewNode(ctx context.Context, key ed25519.PrivateKey, app App, gossip *Gossi
 		PubKeyHash: sha256.Sum256(key[32:]),
 	}
 	n.app = app
+	n.network = network
 	n.gossip = gossip
 	gossip.adopt(n)
 	n.context = logging.With(ctx, "module", "consensus")
