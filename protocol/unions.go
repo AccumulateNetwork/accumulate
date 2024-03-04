@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -8,9 +8,10 @@ package protocol
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --language go-union --out unions_gen.go account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --language go-union --out unions_gen.go operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
 
 // AccountType is the type of an account.
 type AccountType uint64
@@ -45,4 +46,14 @@ type KeyPageOperation interface {
 type AccountAuthOperation interface {
 	encoding.UnionValue
 	Type() AccountAuthOperationType
+}
+
+type NetworkMaintenanceOperation interface {
+	encoding.UnionValue
+	Type() NetworkMaintenanceOperationType
+	ID() *url.TxID
+}
+
+func (p *PendingTransactionGCOperation) ID() *url.TxID {
+	return p.Account.WithTxID(encoding.Hash(p))
 }
