@@ -26,6 +26,11 @@ type Message interface {
 	isMsg()
 }
 
+type NetworkMessage interface {
+	Message
+	Network() string
+}
+
 // A Hub distributes messages to modules.
 type Hub interface {
 	Send(...Message) error

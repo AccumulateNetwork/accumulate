@@ -616,7 +616,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 func (node *nodeFactory) makeConsensusNode(app consensus.App) *consensus.Node {
 	ctx := context.Background()
 	ctx = logging.With(ctx, "partition", node.networkFactory.id, "node", node.id)
-	cn := consensus.NewNode(ctx, node.network.PrivValKey, app, node.getGossip())
+	cn := consensus.NewNode(ctx, node.networkFactory.id, node.network.PrivValKey, app, node.getGossip())
 	cn.SkipProposalCheck = node.skipProposalCheck
 	cn.IgnoreDeliverResults = node.ignoreDeliverResults
 	cn.IgnoreCommitResults = node.ignoreCommitResults
