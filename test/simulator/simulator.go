@@ -9,7 +9,6 @@ package simulator
 import (
 	"io"
 	"math/big"
-	"runtime"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -122,31 +121,6 @@ func (s *Simulator) BlockIndexFor(account *url.URL) uint64 {
 		panic(err)
 	}
 	return s.BlockIndex(partition)
-}
-
-// Step executes a single simulator step
-func (s *Simulator) Step() error {
-	if s.deterministic {
-		for _, id := range s.partIDs {
-			err := s.partitions[id].execute()
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		for _, p := range s.partitions {
-			p := p // Don't capture loop variables
-			s.tasks.Go(p.execute)
-		}
-	}
-
-	// Wait for execution to complete
-	err := s.tasks.Flush()
-
-	// Give any parallel processes a chance to run
-	runtime.Gosched()
-
-	return err
 }
 
 func (s *Simulator) SetSubmitHookFor(account *url.URL, fn SubmitHookFunc) {

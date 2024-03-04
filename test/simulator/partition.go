@@ -8,7 +8,6 @@ package simulator
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"sort"
 	"sync"
@@ -16,7 +15,6 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -171,16 +169,6 @@ func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*proto
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	return res.Results, nil
-}
-
-func (p *Partition) execute() error {
-	ctx := context.Background()
-	ctx = logging.With(ctx, "partition", p.ID)
-	hub := consensus.NewSimpleHub(ctx)
-	for _, n := range p.nodes {
-		hub.Register(n.consensus)
-	}
-	return hub.Send(&consensus.StartBlock{})
 }
 
 // orderMessagesDeterministically reorders messages deterministically,

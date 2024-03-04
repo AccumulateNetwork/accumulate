@@ -18,13 +18,13 @@ import (
 type nodeState interface {
 	// execute processes the message and returns the next state and messages
 	// that should be sent.
-	execute(nodeMessage) (nodeState, []Message, error)
+	execute(Message) (nodeState, []Message, error)
 }
 
-// nodeMessage is a message for a [Node].
-type nodeMessage interface {
+// NodeMessage is a message for a [Node].
+type NodeMessage interface {
 	Message
-	isNodeMsg() *validator
+	Sender() [32]byte
 }
 
 // Receive implements [Message.Receive].
@@ -38,14 +38,15 @@ func (n *Node) Receive(messages ...Message) ([]Message, error) {
 
 	// Process each message
 	for _, msg := range messages {
-		// Ignore messages for other module types
-		msg, ok := msg.(nodeMessage)
-		if !ok {
+		// Ignore messages from ourself
+		if msg, ok := msg.(NodeMessage); ok &&
+			msg.Sender() == n.self.PubKeyHash {
 			continue
 		}
 
-		// Ignore messages set by us
-		if s := msg.isNodeMsg(); s != nil && s.PubKeyHash == n.self.PubKeyHash {
+		// Ignore messages for other networks
+		if msg, ok := msg.(NetworkMessage); ok &&
+			msg.Network() != n.network {
 			continue
 		}
 
@@ -89,8 +90,7 @@ func (n *Node) Receive(messages ...Message) ([]Message, error) {
 // StartBlock starts a block.
 type StartBlock struct{}
 
-func (*StartBlock) isMsg()                  {}
-func (m *StartBlock) isNodeMsg() *validator { return nil }
+func (*StartBlock) isMsg() {}
 
 // nodeIsQuiescent is the state of the node when waiting for a new block to
 // start.
@@ -98,15 +98,13 @@ type nodeIsQuiescent struct{ *Node }
 
 // execute sends [proposeLeader] and transitions to [didProposeLeader] on
 // receipt of [StartBlock].
-func (n *nodeIsQuiescent) execute(msg nodeMessage) (nodeState, []Message, error) {
+func (n *nodeIsQuiescent) execute(msg Message) (nodeState, []Message, error) {
 	switch msg.(type) {
 	case *StartBlock:
 		return n.proposeLeader()
 
-	default:
-		if msg != nil {
-			slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
-		}
+	case NodeMessage:
+		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	return n, nil, nil
@@ -116,13 +114,13 @@ func (n *Node) proposeLeader() (nodeState, []Message, error) {
 	m := new(didProposeLeader)
 	m.Node = n
 	m.votes = n.newVotes()
-	m.p.sender = n.self
+	m.p.baseNodeMessage = n.newMsg()
 	m.p.Leader = n.validators[n.lastBlockIndex%uint64(len(n.validators))].PubKeyHash
 	return m, []Message{&m.p}, nil
 }
 
 type proposeLeader struct {
-	sender *validator
+	baseNodeMessage
 	LeaderProposal
 }
 
@@ -134,16 +132,13 @@ type didProposeLeader struct {
 	blockProposal *proposeBlock
 }
 
-func (*proposeLeader) isMsg()                  {}
-func (m *proposeLeader) isNodeMsg() *validator { return m.sender }
-
 // execute records a vote upon receipt of [proposeLeader] and waits for the
 // threshold to be reached. Then, if the receiver is the leader, execute sends
 // [proposeBlock] and transitions to [didProposeBlock] upon receipt of
 // [proposeLeader]. If the receiver is not the leader, execute sends
 // [acceptBlockProposal] and transitions to [didProposeBlock] upon receipt of
 // [proposeBlock].
-func (n *didProposeLeader) execute(msg nodeMessage) (nodeState, []Message, error) {
+func (n *didProposeLeader) execute(msg Message) (nodeState, []Message, error) {
 	switch msg := msg.(type) {
 	case *proposeLeader:
 		// Verify the proposal matches
@@ -159,7 +154,7 @@ func (n *didProposeLeader) execute(msg nodeMessage) (nodeState, []Message, error
 		}
 
 		// Add the vote
-		n.votes.add(msg.sender.PubKeyHash)
+		n.votes.add(msg.sender)
 
 	case *proposeBlock:
 		// Verify the threshold has been reached
@@ -168,8 +163,8 @@ func (n *didProposeLeader) execute(msg nodeMessage) (nodeState, []Message, error
 		}
 
 		// And the block proposal came from the leader
-		if msg.sender.PubKeyHash != n.p.Leader {
-			return n, nil, errors.Conflict.WithFormat("got block proposal from wrong leader: want %x, got %x", n.p.Leader[:4], msg.sender.PubKeyHash[:4])
+		if msg.sender != n.p.Leader {
+			return n, nil, errors.Conflict.WithFormat("got block proposal from wrong leader: want %x, got %x", n.p.Leader[:4], msg.sender[:4])
 		}
 
 		// Check the proposed block
@@ -189,10 +184,8 @@ func (n *didProposeLeader) execute(msg nodeMessage) (nodeState, []Message, error
 		// Record the proposal
 		n.blockProposal = msg
 
-	default:
-		if msg != nil {
-			slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
-		}
+	case NodeMessage:
+		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	switch {
@@ -219,7 +212,7 @@ func (n *Node) proposeBlock(p LeaderProposal) (nodeState, []Message, error) {
 
 	m := new(didProposeBlock)
 	m.Node = n
-	m.p.sender = n.self
+	m.p.baseNodeMessage = n.newMsg()
 	m.p.LeaderProposal = p
 	m.p.Index = n.lastBlockIndex + 1
 	m.p.Time = n.lastBlockTime.Add(time.Second)
@@ -233,18 +226,18 @@ func (n *Node) acceptBlockProposal(p *proposeBlock) (nodeState, []Message, error
 	m.Node = n
 	m.p = *p
 	m.votes = n.newVotes()
-	m.votes.add(p.sender.PubKeyHash)
-	return m, []Message{&acceptBlockProposal{n.self, *p}}, nil
+	m.votes.add(p.sender)
+	return m, []Message{&acceptBlockProposal{n.newMsg(), *p}}, nil
 }
 
 type proposeBlock struct {
-	sender *validator
+	baseNodeMessage
 	BlockProposal
 }
 
 type acceptBlockProposal struct {
-	sender *validator
-	p      proposeBlock
+	baseNodeMessage
+	p proposeBlock
 }
 
 // didProposeBlock is the state of the node after a block has been proposed.
@@ -254,21 +247,16 @@ type didProposeBlock struct {
 	votes votes
 }
 
-func (*proposeBlock) isMsg()                         {}
-func (m *proposeBlock) isNodeMsg() *validator        { return m.sender }
-func (*acceptBlockProposal) isMsg()                  {}
-func (m *acceptBlockProposal) isNodeMsg() *validator { return m.sender }
-
 func (m *proposeBlock) equal(n *proposeBlock) bool {
 	// The proposals are equal and were proposed by the same node
-	return m.sender.PubKeyHash == n.sender.PubKeyHash &&
+	return m.sender == n.sender &&
 		m.BlockProposal.Equal(&n.BlockProposal)
 }
 
 // execute records a vote upon receipt of [acceptBlockProposal] and waits for
 // the threshold to be reached. Then, execute finalizes the block, sends
 // [finalizedBlock], and transitions to [didFinalizeBlock].
-func (n *didProposeBlock) execute(msg nodeMessage) (nodeState, []Message, error) {
+func (n *didProposeBlock) execute(msg Message) (nodeState, []Message, error) {
 	switch msg := msg.(type) {
 	case *acceptBlockProposal:
 		if !msg.p.equal(&n.p) {
@@ -279,12 +267,10 @@ func (n *didProposeBlock) execute(msg nodeMessage) (nodeState, []Message, error)
 			}
 		}
 
-		n.votes.add(msg.sender.PubKeyHash)
+		n.votes.add(msg.sender)
 
-	default:
-		if msg != nil {
-			slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
-		}
+	case NodeMessage:
+		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	if !n.votes.reachedThreshold() {
@@ -352,7 +338,7 @@ func (n *Node) finalizeBlock(p *BlockProposal) (nodeState, []Message, error) {
 	// Send [finalizedBlock] and transition to [didFinalizeBlock].
 	m := new(didFinalizeBlock)
 	m.Node = n
-	m.b.sender = n.self
+	m.b.baseNodeMessage = n.newMsg()
 	if !n.IgnoreDeliverResults {
 		m.b.results.MessageResults = results
 	}
@@ -363,7 +349,7 @@ func (n *Node) finalizeBlock(p *BlockProposal) (nodeState, []Message, error) {
 }
 
 type finalizedBlock struct {
-	sender  *validator
+	baseNodeMessage
 	results BlockResults
 }
 
@@ -376,13 +362,10 @@ type didFinalizeBlock struct {
 	blockState execute.BlockState
 }
 
-func (*finalizedBlock) isMsg()                  {}
-func (m *finalizedBlock) isNodeMsg() *validator { return m.sender }
-
 // execute records a vote upon receipt of [finalizedBlock] and waits for the
 // threshold to be reached. Then, execute commits the block, sends
 // [committedBlock], and transitions to [didCommitBlock].
-func (n *didFinalizeBlock) execute(msg nodeMessage) (nodeState, []Message, error) {
+func (n *didFinalizeBlock) execute(msg Message) (nodeState, []Message, error) {
 	switch msg := msg.(type) {
 	case *finalizedBlock:
 		if !n.b.results.Equal(&msg.results) {
@@ -393,12 +376,10 @@ func (n *didFinalizeBlock) execute(msg nodeMessage) (nodeState, []Message, error
 			}
 		}
 
-		n.votes.add(msg.sender.PubKeyHash)
+		n.votes.add(msg.sender)
 
-	default:
-		if msg != nil {
-			slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
-		}
+	case NodeMessage:
+		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	if !n.votes.reachedThreshold() {
@@ -422,14 +403,14 @@ func (n *Node) commitBlock(results *BlockResults, state execute.BlockState) (nod
 
 	m := new(didCommitBlock)
 	m.Node = n
-	m.b.sender = n.self
+	m.b.baseNodeMessage = n.newMsg()
 	m.b.results.Hash = *(*[32]byte)(hash)
 	m.votes = n.newVotes()
 	return m, []Message{&m.b}, nil
 }
 
 type committedBlock struct {
-	sender  *validator
+	baseNodeMessage
 	results CommitResult
 }
 
@@ -440,12 +421,12 @@ type didCommitBlock struct {
 	votes votes
 }
 
-func (*committedBlock) isMsg()                  {}
-func (m *committedBlock) isNodeMsg() *validator { return m.sender }
+func (*committedBlock) isMsg()             {}
+func (m *committedBlock) Sender() [32]byte { return m.sender }
 
 // execute records a vote upon receipt of [committedBlock] and waits for the
 // threshold to be reached. Then, execute transitions to [nodeIsQuiescent].
-func (n *didCommitBlock) execute(msg nodeMessage) (nodeState, []Message, error) {
+func (n *didCommitBlock) execute(msg Message) (nodeState, []Message, error) {
 	switch msg := msg.(type) {
 	case *committedBlock:
 		if !n.IgnoreCommitResults && n.b.results != msg.results {
@@ -456,12 +437,10 @@ func (n *didCommitBlock) execute(msg nodeMessage) (nodeState, []Message, error) 
 			}
 		}
 
-		n.votes.add(msg.sender.PubKeyHash)
+		n.votes.add(msg.sender)
 
-	default:
-		if msg != nil {
-			slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
-		}
+	case NodeMessage:
+		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	if !n.votes.reachedThreshold() {
@@ -474,3 +453,19 @@ func (n *didCommitBlock) execute(msg nodeMessage) (nodeState, []Message, error) 
 func (n *Node) completeBlock() (nodeState, []Message, error) {
 	return &nodeIsQuiescent{n}, nil, nil
 }
+
+type baseNodeMessage struct {
+	sender  [32]byte
+	network string
+}
+
+func (n *Node) newMsg() baseNodeMessage {
+	return baseNodeMessage{
+		sender:  n.self.PubKeyHash,
+		network: n.network,
+	}
+}
+
+func (_ *baseNodeMessage) isMsg()           {}
+func (m *baseNodeMessage) Sender() [32]byte { return m.sender }
+func (m *baseNodeMessage) Network() string  { return m.network }
