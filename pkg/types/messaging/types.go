@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,10 +7,7 @@
 package messaging
 
 import (
-	"crypto/sha256"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -178,18 +175,9 @@ func (m *BadSyntheticMessage) Hash() [32]byte {
 	return *(*[32]byte)(h.MerkleHash())
 }
 
-func (m *SequencedMessage) Hash() [32]byte { return marshalAndHash(m) }
-func (m *BlockAnchor) Hash() [32]byte      { return marshalAndHash(m) }
-func (m *SignatureRequest) Hash() [32]byte { return marshalAndHash(m) }
-func (m *CreditPayment) Hash() [32]byte    { return marshalAndHash(m) }
-func (m *BlockSummary) Hash() [32]byte     { return marshalAndHash(m) }
-func (m *SyntheticMessage) Hash() [32]byte { return marshalAndHash(m) }
-
-func marshalAndHash(m Message) [32]byte {
-	// If this fails something is seriously wrong
-	b, err := m.MarshalBinary()
-	if err != nil {
-		panic(errors.InternalError.WithFormat("marshaling message: %w", err))
-	}
-	return sha256.Sum256(b)
-}
+func (m *SequencedMessage) Hash() [32]byte { return encoding.Hash(m) }
+func (m *BlockAnchor) Hash() [32]byte      { return encoding.Hash(m) }
+func (m *SignatureRequest) Hash() [32]byte { return encoding.Hash(m) }
+func (m *CreditPayment) Hash() [32]byte    { return encoding.Hash(m) }
+func (m *BlockSummary) Hash() [32]byte     { return encoding.Hash(m) }
+func (m *SyntheticMessage) Hash() [32]byte { return encoding.Hash(m) }

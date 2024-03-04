@@ -142,6 +142,14 @@ AccountAuthOperationType:
     value: 4
     description: removes an authority
 
+NetworkMaintenanceOperationType:
+  Unknown:
+    value: 0
+    description: is used when the operation type is not known
+  PendingTransactionGC:
+    value: 1
+    description: removes pending transaction garbage
+
 TransactionMax:
   User:
     value: 0x30
@@ -218,6 +226,9 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
+  NetworkMaintenance:
+    value: 0x2E
+    description: executes network maintenance operations
   ActivateProtocolVersion:
     value: 0x2F
     description: activates a new version of the protocol
