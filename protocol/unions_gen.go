@@ -398,6 +398,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeLockAccount:
 		return new(LockAccount), nil
+	case TransactionTypeNetworkMaintenance:
+		return new(NetworkMaintenance), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -536,6 +538,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		}
 		b, ok := b.(*LockAccount)
 		return ok && a.Equal(b)
+	case *NetworkMaintenance:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*NetworkMaintenance)
+		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		if a == nil {
 			return b == nil
@@ -670,6 +678,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *IssueTokens:
 		return v.Copy()
 	case *LockAccount:
+		return v.Copy()
+	case *NetworkMaintenance:
 		return v.Copy()
 	case *RemoteTransaction:
 		return v.Copy()
@@ -1243,6 +1253,101 @@ func UnmarshalSignatureJSON(data []byte) (Signature, error) {
 	}
 
 	acnt, err := NewSignature(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
+// NewNetworkMaintenanceOperation creates a new NetworkMaintenanceOperation for the specified NetworkMaintenanceOperationType.
+func NewNetworkMaintenanceOperation(typ NetworkMaintenanceOperationType) (NetworkMaintenanceOperation, error) {
+	switch typ {
+	case NetworkMaintenanceOperationTypePendingTransactionGC:
+		return new(PendingTransactionGCOperation), nil
+	}
+	return nil, fmt.Errorf("unknown network maintenance operation %v", typ)
+}
+
+// EqualNetworkMaintenanceOperation is used to compare the values of the union
+func EqualNetworkMaintenanceOperation(a, b NetworkMaintenanceOperation) bool {
+	if a == b {
+		return true
+	}
+	switch a := a.(type) {
+	case *PendingTransactionGCOperation:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*PendingTransactionGCOperation)
+		return ok && a.Equal(b)
+	}
+	return false
+}
+
+// CopyNetworkMaintenanceOperation copies a NetworkMaintenanceOperation.
+func CopyNetworkMaintenanceOperation(v NetworkMaintenanceOperation) NetworkMaintenanceOperation {
+	switch v := v.(type) {
+	case *PendingTransactionGCOperation:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(NetworkMaintenanceOperation)
+	}
+}
+
+// UnmarshalNetworkMaintenanceOperation unmarshals a NetworkMaintenanceOperation.
+func UnmarshalNetworkMaintenanceOperation(data []byte) (NetworkMaintenanceOperation, error) {
+	return UnmarshalNetworkMaintenanceOperationFrom(bytes.NewReader(data))
+}
+
+// UnmarshalNetworkMaintenanceOperationFrom unmarshals a NetworkMaintenanceOperation.
+func UnmarshalNetworkMaintenanceOperationFrom(rd io.Reader) (NetworkMaintenanceOperation, error) {
+	reader := encoding.NewReader(rd)
+
+	// Read the type code
+	var typ NetworkMaintenanceOperationType
+	if !reader.ReadEnum(1, &typ) {
+		if reader.IsEmpty() {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("field Type: missing")
+	}
+
+	// Create a new network maintenance operation
+	v, err := NewNetworkMaintenanceOperation(NetworkMaintenanceOperationType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the rest of the network maintenance operation
+	err = v.UnmarshalFieldsFrom(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalNetworkMaintenanceOperationJson unmarshals a NetworkMaintenanceOperation.
+func UnmarshalNetworkMaintenanceOperationJSON(data []byte) (NetworkMaintenanceOperation, error) {
+	var typ *struct {
+		Type NetworkMaintenanceOperationType
+	}
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
+	}
+
+	acnt, err := NewNetworkMaintenanceOperation(typ.Type)
 	if err != nil {
 		return nil, err
 	}
