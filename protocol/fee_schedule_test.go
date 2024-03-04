@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -137,6 +137,7 @@ func TestFee(t *testing.T) {
 
 				switch i {
 				case TransactionTypeActivateProtocolVersion,
+					TransactionTypeNetworkMaintenance,
 					TransactionTypeAcmeFaucet,
 					TransactionTypeBurnCredits,
 					TransactionTypeAddCredits:
