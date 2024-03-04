@@ -5,7 +5,9 @@ go build:
       optional: true
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
-  script: go build -v ./...
+  script:
+  - go build -v ./...
+  - (cd test/cmd/manual; go build -v .)
 
 .go test:
   extends: [ .rules all, .go ]
