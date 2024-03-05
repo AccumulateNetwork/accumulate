@@ -1134,22 +1134,18 @@ func (s *RsaSha256Signature) GetVote() VoteType {
 // hash. The public key is expected to be in PKCS#1 ASN.1 DER format
 func (e *RsaSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
 	//Convert public DER key into and rsa public key struct
-	pubKey, err := x509.ParsePKIXPublicKey(e.PublicKey)
+	pubKey, err := x509.ParsePKCS1PublicKey(e.PublicKey)
 	if err != nil {
 		return false
 	}
 
-	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
-	if !ok {
-		return false
-	}
 	//The length of the signature should be the size of the public key's modulus
-	if rsaPubKey.Size() != len(e.Signature) {
+	if pubKey.Size() != len(e.Signature) {
 		return false
 	}
 
 	// Verify signature
-	err = rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
+	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
 	if err != nil {
 		return false
 	}

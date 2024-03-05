@@ -49,10 +49,7 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 		if err != nil {
 			return err
 		}
-		sig.PublicKey, err = x509.MarshalPKIXPublicKey(privKey.Public())
-		if err != nil {
-			return err
-		}
+		sig.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
 
 	default:
 		return fmt.Errorf("cannot set the public key on a %T", sig)
