@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -317,4 +317,7 @@ func TestRsaSha256Signature(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
+
+	//now try 2048 key
+
 }
