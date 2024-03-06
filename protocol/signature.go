@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -1146,8 +1146,5 @@ func (e *RsaSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
 
 	// Verify signature
 	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }

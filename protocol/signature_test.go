@@ -320,4 +320,41 @@ func TestRsaSha256Signature(t *testing.T) {
 
 	//now try 2048 key
 
+	block, _ = pem.Decode([]byte(rsaPrivateKey2048))
+        privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	require.NoError(t, err)
+
+	rsaSha256 = new(RsaSha256Signature)
+        rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+
+        require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
+
+        //should fail
+        require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+        //public key should still match
+        keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
+        require.NoError(t, err)
+
+        require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
+
+
+	//now try 4096 key
+
+        block, _ = pem.Decode([]byte(rsaPrivateKey4096))
+        privKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+        require.NoError(t, err)
+
+        rsaSha256 = new(RsaSha256Signature)
+        rsaSha256.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+
+        require.NoError(t, SignRsaSha256(rsaSha256, x509.MarshalPKCS1PrivateKey(privKey), nil, hash[:]))
+
+        //should fail
+        require.Equal(t, VerifyUserSignature(rsaSha256, hash[:]), true)
+        //public key should still match
+        keyComp, err = x509.ParsePKCS1PublicKey(rsaSha256.PublicKey)
+        require.NoError(t, err)
+
+        require.True(t, keyComp.Equal(privKey.Public()), "public keys don't match")
+
 }
