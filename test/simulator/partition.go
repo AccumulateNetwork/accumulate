@@ -26,7 +26,6 @@ type Partition struct {
 	protocol.PartitionInfo
 	sim        *Simulator
 	logger     log.Logger
-	gossip     *consensus.Gossip
 	mu         *sync.Mutex
 	nodes      []*Node
 	submitHook SubmitHookFunc
@@ -141,34 +140,6 @@ func (p *Partition) applySubmitHook(messages []messaging.Message) bool {
 	}
 
 	return drop
-}
-
-func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*protocol.TransactionStatus, error) {
-	// Apply the hook
-	messages, err := envelope.Normalize()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	if p.applySubmitHook(messages) {
-		st := make([]*protocol.TransactionStatus, len(messages))
-		for i, msg := range messages {
-			st[i] = new(protocol.TransactionStatus)
-			st[i].TxID = msg.ID()
-			st[i].Code = errors.NotAllowed
-			st[i].Error = errors.NotAllowed.With("dropped")
-		}
-		return st, nil
-	}
-
-	res, err := p.nodes[0].consensus.Check(&consensus.CheckRequest{
-		Envelope: envelope.Copy(), // Copy to avoid weird bugs
-		New:      false,           // Set type = recheck to make the executor create a new batch to avoid timing issues
-		Pretend:  pretend,
-	})
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return res.Results, nil
 }
 
 // orderMessagesDeterministically reorders messages deterministically,

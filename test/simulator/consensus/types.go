@@ -26,15 +26,80 @@ type Message interface {
 	isMsg()
 }
 
-type NetworkMessage interface {
+// A networkMessage is a message that is specific to a network.
+type networkMessage interface {
 	Message
-	Network() string
+	network() string
+}
+
+// blockMessages are passed between nodes while executing a block.
+type blockMessage interface {
+	Message
+	isBlkMsg()
+	senderID() [32]byte
 }
 
 // A Hub distributes messages to modules.
 type Hub interface {
 	Send(...Message) error
+	With(modules ...Module) Hub
 }
+
+type Response interface {
+	Message
+	isResponse()
+}
+
+type Submission struct {
+	Network  string
+	Envelope *messaging.Envelope
+	Pretend  bool
+}
+
+var _ networkMessage = (*Submission)(nil)
+
+func (_ *Submission) isMsg()          {}
+func (s *Submission) network() string { return s.Network }
+
+type SubmissionResponse struct {
+	Results []*protocol.TransactionStatus
+}
+
+var _ Response = (*SubmissionResponse)(nil)
+
+func (*SubmissionResponse) isMsg()      {}
+func (*SubmissionResponse) isResponse() {}
+
+func (s *SubmissionResponse) Equal(r *SubmissionResponse) bool {
+	if len(s.Results) != len(r.Results) {
+		return false
+	}
+
+	for i := range s.Results {
+		if !s.Results[i].Equal(r.Results[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// StartBlock starts a block.
+type StartBlock struct{}
+
+var _ Message = (*StartBlock)(nil)
+
+func (*StartBlock) isMsg() {}
+
+type ExecutedBlock struct {
+	Network string
+	Node    [32]byte
+}
+
+var _ Response = (*ExecutedBlock)(nil)
+
+func (*ExecutedBlock) isMsg()      {}
+func (*ExecutedBlock) isResponse() {}
 
 type LeaderProposal struct {
 	Leader [32]byte

@@ -8,6 +8,9 @@ package errors
 
 import "errors"
 
+// Join calls stdlib errors.Join.
+func Join(errs ...error) error { return errors.Join(errs...) }
+
 // As calls stdlib errors.As.
 func As(err error, target interface{}) bool { return errors.As(err, target) }
 
