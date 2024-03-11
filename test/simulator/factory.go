@@ -77,7 +77,6 @@ type networkFactory struct {
 
 	// State
 	logger log.Logger
-	gossip *consensus.Gossip
 }
 
 type nodeFactory struct {
@@ -125,7 +124,6 @@ func (f *networkFactory) Build(s *Simulator) *Partition {
 	p.Type = f.typ
 	p.sim = s
 	p.logger = f.getLogger()
-	p.gossip = f.getGossip()
 	p.mu = new(sync.Mutex)
 
 	for id, init := range f.nodes {
@@ -154,6 +152,7 @@ func (f *nodeFactory) Build(p *Partition) *Node {
 	n.logger = f.getLogger()
 	n.eventBus = f.getEventBus()
 	n.nodeKey = f.getNodeKey()
+	n.privValKey = f.network.PrivValKey
 	n.peerID = f.getPeerID()
 	n.consensus = f.app(f)
 	n.services = f.getSvcHandler()
@@ -362,15 +361,6 @@ func (f *simFactory) getNetworkFactories() []*networkFactory {
 	}
 
 	return f.networkFactories
-}
-
-func (f *networkFactory) getGossip() *consensus.Gossip {
-	if f.gossip != nil {
-		return f.gossip
-	}
-
-	f.gossip = new(consensus.Gossip)
-	return f.gossip
 }
 
 func (f *nodeFactory) getNodeKey() []byte {
@@ -616,7 +606,7 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 func (node *nodeFactory) makeConsensusNode(app consensus.App) *consensus.Node {
 	ctx := context.Background()
 	ctx = logging.With(ctx, "partition", node.networkFactory.id, "node", node.id)
-	cn := consensus.NewNode(ctx, node.networkFactory.id, node.network.PrivValKey, app, node.getGossip())
+	cn := consensus.NewNode(ctx, node.networkFactory.id, node.network.PrivValKey, app)
 	cn.SkipProposalCheck = node.skipProposalCheck
 	cn.IgnoreDeliverResults = node.ignoreDeliverResults
 	cn.IgnoreCommitResults = node.ignoreCommitResults
