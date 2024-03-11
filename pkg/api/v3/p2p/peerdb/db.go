@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -43,9 +43,34 @@ func (db *DB) Load(rd io.Reader) error {
 }
 
 func (db *DB) Store(wr io.Writer) error {
+	db.prune()
 	enc := json.NewEncoder(wr)
 	enc.SetIndent("", "  ")
 	return enc.Encode(db)
+}
+
+func (db *DB) prune() {
+	db.Peers.RemoveFunc((*PeerStatus).prune)
+}
+
+func (p *PeerStatus) prune() bool {
+	p.Addresses.RemoveFunc((*PeerAddressStatus).prune)
+	p.Networks.RemoveFunc((*PeerNetworkStatus).prune)
+	return len(p.Addresses.Load()) == 0 &&
+		len(p.Networks.Load()) == 0
+}
+
+func (a *PeerAddressStatus) prune() bool {
+	return a.Last.Success == nil
+}
+
+func (n *PeerNetworkStatus) prune() bool {
+	n.Services.RemoveFunc((*PeerServiceStatus).prune)
+	return len(n.Services.Load()) == 0
+}
+
+func (a *PeerServiceStatus) prune() bool {
+	return a.Last.Success == nil
 }
 
 func (db *DB) StoreFile(file string) error {

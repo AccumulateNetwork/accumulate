@@ -85,14 +85,20 @@ func initRouter(opts RouterOptions) {
 		// Check if we know of a suitable peer
 		var found bool
 		for _, peer := range tr.DB().Peers.Load() {
-			if peer.Network(opts.Network).Service(dirNetSvc).Last.Success != nil {
-				found = true
+			s := peer.Network(opts.Network).Service(dirNetSvc)
+			if s.Last.Success == nil {
+				continue
 			}
+			if tr.SuccessIsTooOld(s.Last) {
+				continue
+			}
+			found = true
 		}
 
 		// If not then scan the network (synchronously)
 		if !found {
 			slog.InfoCtx(opts.Context, "Scanning for peers")
+			time.Sleep(time.Minute) // Give the DHT time
 			tr.ScanPeers(5 * time.Minute)
 		}
 	}

@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -21,6 +21,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
+	mafmt "github.com/multiformats/go-multiaddr-fmt"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -157,6 +159,7 @@ func New(opts Options) (_ *Node, err error) {
 		n.tracker, err = dial.NewPersistentTracker(n.context, dial.PersistentTrackerOptions{
 			Network:          opts.Network,
 			Filename:         opts.PeerDatabase,
+			SelfID:           n.host.ID(),
 			Host:             (*connector)(n),
 			Peers:            (*dhtDiscoverer)(n),
 			ScanFrequency:    opts.PeerScanFrequency,
@@ -216,6 +219,8 @@ func (n *Node) Close() error {
 // getPeerService returns a new stream for the given peer and service.
 func (n *Node) getPeerService(ctx context.Context, peerID peer.ID, service *api.ServiceAddress, ip multiaddr.Multiaddr) (message.Stream, error) {
 	if ip != nil {
+		ip = oldQuicCompat(ip)
+
 		// libp2p requires that the address include the peer ID
 		c, err := multiaddr.NewComponent("p2p", peerID.String())
 		if err != nil {
@@ -257,4 +262,30 @@ func (n *Node) getOwnService(network string, sa *api.ServiceAddress) (*serviceHa
 		return nil, false
 	}
 	return n.services[i], true
+}
+
+var quicDraft29DialMatcher = mafmt.And(mafmt.IP, mafmt.Base(ma.P_UDP), mafmt.Base(ma.P_QUIC))
+
+func oldQuicCompat(a multiaddr.Multiaddr) multiaddr.Multiaddr {
+	if !quicDraft29DialMatcher.Matches(a) {
+		return a
+	}
+
+	var b multiaddr.Multiaddr
+	multiaddr.ForEach(a, func(c multiaddr.Component) bool {
+		if c.Protocol().Code == ma.P_QUIC {
+			d, err := ma.NewComponent("quic-v1", "")
+			if err != nil {
+				panic(err)
+			}
+			c = *d
+		}
+		if b == nil {
+			b = &c
+		} else {
+			b = b.Encapsulate(&c)
+		}
+		return true
+	})
+	return b
 }
