@@ -1,5 +1,5 @@
-// Copyright 2023 The Accumulate Authors
-//
+// Copyright 2024 The Accumulate Authors
+// 
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
@@ -23,15 +23,14 @@ var (
 )
 
 func main() {
-	e := commands.NewExecutor(commands.BuildInfo{
+	err := commands.Execute(commands.BuildInfo{
 		GoVersion: "go",
 		Version:   version,
 		Commit:    commit,
 		Date:      date,
 	})
-	addCustomLinters(e.DBManager)
 
-	if err := e.Execute(); err != nil {
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed executing command with error %v\n", err)
 		os.Exit(exitcodes.Failure)
 	}
