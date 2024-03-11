@@ -1,5 +1,5 @@
-// Copyright 2022 The Accumulate Authors
-//
+// Copyright 2024 The Accumulate Authors
+// 
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
@@ -11,8 +11,7 @@ import (
 	"go/token"
 	"go/types"
 
-	"github.com/golangci/golangci-lint/pkg/golinters/goanalysis"
-	"github.com/golangci/golangci-lint/pkg/lint/linter"
+	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
 )
 
@@ -20,14 +19,16 @@ func init() {
 	const name = "rangevarref"
 	const doc = "Checks for loops that capture a pointer to a value-type range variable"
 
-	customLinters = append(customLinters, linter.NewConfig(
-		goanalysis.NewLinter(name, doc, []*analysis.Analyzer{{
-			Name: name,
-			Doc:  doc,
-			Run:  rangevarref,
-		}}, nil).
-			WithLoadMode(goanalysis.LoadModeTypesInfo),
-	))
+	register.Plugin(name, func(any) (register.LinterPlugin, error) {
+		return &customLinter{
+			LoadMode: register.LoadModeSyntax,
+			Analyzer: &analysis.Analyzer{
+				Name: name,
+				Doc:  doc,
+				Run:  rangevarref,
+			},
+		}, nil
+	})
 }
 
 func rangevarref(pass *analysis.Pass) (interface{}, error) {
