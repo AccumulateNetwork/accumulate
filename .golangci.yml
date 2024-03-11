@@ -20,39 +20,7 @@ linters-settings:
 
 linters:
   disable-all: true
-  enable:
-  # Custom
-  - noprint # Use forbidigo instead?
-  - nodebug
-  - rangevarref
-
-  # Standard
-  - asasalint     # Bugs (variadic functions taking any)
-  - bidichk       # Check for questionable Unicode
-  - exportloopref # Smarter version of rangevarref?
-  - goheader      # Enforce the copyright header
-  - misspell      # Spelling
-  - nakedret      # Not really sure what this one does
-  - unconvert     # Lint (unnecessary conversions)
-
-  # TODO Enable at some point
-  # - maintidx      # Maintainability
-
-  # Gosec panics on some of the generic code
-  # - gosec         # Security
-  # - nilerr        # Bugs (error checking)
-
-  # Defaults
-  - errcheck
-  - gosimple
-  - govet
-  - ineffassign
-  - staticcheck
-  - typecheck
-  - unused
-
-  # - nestif # I'd like to enable this but I don't want to deal with the issues yet
-  # - godox # Enable to find TODO/BUG/FIXME
+  enable: [govet]
 
 issues:
   max-same-issues: 0

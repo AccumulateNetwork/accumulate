@@ -9,8 +9,6 @@ go 1.21
 
 replace github.com/julienschmidt/httprouter v1.3.0 => github.com/firelizzard18/httprouter v0.0.0-20231019203155-74063b4f447c
 
-replace golang.org/x/tools v0.19.0 => golang.org/x/tools v0.18.0
-
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
 	github.com/FactomProject/factom v0.4.0
