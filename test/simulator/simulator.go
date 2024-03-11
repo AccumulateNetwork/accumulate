@@ -33,6 +33,7 @@ type Simulator struct {
 	tasks         *taskQueue
 	partIDs       []string
 	partitions    map[string]*Partition
+	hub           consensus.Hub
 }
 
 func New(opts ...Option) (*Simulator, error) {
@@ -94,6 +95,7 @@ func New(opts ...Option) (*Simulator, error) {
 		}
 	}
 
+	s.hub = s.newHub()
 	return s, nil
 }
 
