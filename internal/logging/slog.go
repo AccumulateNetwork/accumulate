@@ -69,6 +69,11 @@ func NewSlogHandler(c SlogConfig, out io.Writer) (slog.Handler, error) {
 			return a
 		case messageKey:
 			return slog.Any("message", a.Value)
+		case "stack":
+			if b, ok := a.Value.Any().([]byte); ok {
+				return slog.String(a.Key, string(b))
+			}
+			return a
 		default:
 			return a
 		}
