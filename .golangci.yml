@@ -1,3 +1,23 @@
+linters-settings:
+  custom:
+    noprint:
+      type: module
+    nodebug:
+      type: module
+    rangevarref:
+      type: module
+
+  goheader:
+    values:
+      const:
+        AUTHOR: The Accumulate Authors
+    template: |-
+      Copyright {{ YEAR }} {{ AUTHOR }}
+
+      Use of this source code is governed by an MIT-style
+      license that can be found in the LICENSE file or at
+      https://opensource.org/licenses/MIT.
+
 linters:
   disable-all: true
   enable:
@@ -59,15 +79,3 @@ issues:
   - path: ^test/util/goroutine_leaks\.go$
     linters:
     - goheader
-
-linters-settings:
-  goheader:
-    values:
-      const:
-        AUTHOR: The Accumulate Authors
-    template: |-
-      Copyright {{ YEAR }} {{ AUTHOR }}
-
-      Use of this source code is governed by an MIT-style
-      license that can be found in the LICENSE file or at
-      https://opensource.org/licenses/MIT.
