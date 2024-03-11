@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"net"
 	"sync"
+
+	"github.com/multiformats/go-multiaddr"
+	mafmt "github.com/multiformats/go-multiaddr-fmt"
 )
 
 var initIsPrivate sync.Once
@@ -47,3 +50,6 @@ func isPrivateIP(ip net.IP) bool {
 	}
 	return false
 }
+
+var ipOrDns = mafmt.Or(mafmt.IP, mafmt.DNS)
+var hasQuic = mafmt.And(ipOrDns, mafmt.Base(multiaddr.P_UDP), mafmt.Or(mafmt.Base(multiaddr.P_QUIC), mafmt.Base(multiaddr.P_QUIC_V1)))
