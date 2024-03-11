@@ -23,14 +23,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/slog"
-	"golang.org/x/sync/errgroup"
 )
 
 type Node struct {
 	mu     sync.Locker
 	app    App
 	record Recorder
-	gossip *Gossip
 
 	context        context.Context
 	network        string
@@ -84,7 +82,7 @@ type ExecuteRequest struct {
 type ExecuteResponse struct {
 }
 
-func NewNode(ctx context.Context, network string, key ed25519.PrivateKey, app App, gossip *Gossip) *Node {
+func NewNode(ctx context.Context, network string, key ed25519.PrivateKey, app App) *Node {
 	n := new(Node)
 	n.mu = new(sync.Mutex)
 	n.self = &validator{
@@ -93,8 +91,6 @@ func NewNode(ctx context.Context, network string, key ed25519.PrivateKey, app Ap
 	}
 	n.app = app
 	n.network = network
-	n.gossip = gossip
-	gossip.adopt(n)
 	n.context = logging.With(ctx, "module", "consensus")
 	n.mempool = newMempool((*logging.Slogger)(slog.Default().With("module", "consensus")))
 	return n
@@ -129,46 +125,31 @@ func (n *Node) Status(*StatusRequest) (*StatusResponse, error) {
 	}, nil
 }
 
-func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
+func (n *Node) check(ctx context.Context, req *Submission) ([]Message, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	messages, err := req.Envelope.Normalize()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	for _, m := range n.gossip.nodes {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-	}
-
-	res, err := n.app.Check(req)
+	res, err := n.app.Check(&CheckRequest{
+		Context:  ctx,
+		Envelope: req.Envelope,
+		New:      true,
+		Pretend:  req.Pretend,
+	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+
+	msgs := []Message{&SubmissionResponse{
+		Results: res.Results,
+	}}
 
 	if req.Pretend {
-		return res, nil
-	}
-
-	ctx := req.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	errg, _ := errgroup.WithContext(ctx)
-	for _, m := range n.gossip.nodes {
-		if m == n {
-			continue
-		}
-
-		m := m
-		errg.Go(func() error {
-			return m.recheck(req, res)
-		})
-	}
-
-	err = errg.Wait()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return msgs, nil
 	}
 
 	lup := map[[32]byte]messaging.Message{}
@@ -238,31 +219,8 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 		}
 	}
 
-	if ok {
-		for _, m := range n.gossip.nodes {
-			m.mempool.Add(m.lastBlockIndex, req.Envelope)
-		}
-	}
-
-	return res, nil
-}
-
-func (n *Node) recheck(req *CheckRequest, expect *CheckResponse) error {
-	res, err := n.app.Check(req)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if len(res.Results) != len(expect.Results) {
-		slog.ErrorContext(n.context, "Consensus failure", "step", "check", "expected", expect.Results, "actual", res.Results)
-		return errors.FatalError.WithFormat("consensus failure: different number of results")
-	}
-	for i, st := range res.Results {
-		if !expect.Results[i].Equal(st) {
-			slog.ErrorContext(n.context, "Consensus failure", "step", "check", "id", st.TxID, "expected", expect.Results[i], "actual", st)
-			return errors.FatalError.WithFormat("consensus failure: check message %v", st.TxID)
-		}
-	}
-	return nil
+	n.mempool.Add(n.lastBlockIndex, req.Envelope)
+	return msgs, nil
 }
 
 func (n *Node) Init(req *InitRequest) (*InitResponse, error) {
