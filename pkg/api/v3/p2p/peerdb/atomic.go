@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -64,6 +64,67 @@ func (s *AtomicSlice[PT, T]) Insert(target PT) PT {
 		m[i] = target
 		if s.p().CompareAndSwap(l, &m) {
 			return m[i]
+		}
+	}
+}
+
+func (s *AtomicSlice[PT, T]) RemoveFunc(fn func(v PT) bool) {
+	s.remove(func(l []PT) []int {
+		var indices []int
+		for _, t := range l {
+			if !fn(t) {
+				continue
+			}
+			i, found := sortutil.Search(l, func(entry PT) int {
+				return entry.Compare((*T)(t))
+			})
+			if found {
+				indices = append(indices, i)
+			}
+		}
+		return indices
+	})
+}
+
+func (s *AtomicSlice[PT, T]) Remove(targets ...PT) {
+	s.remove(func(l []PT) []int {
+		var indices []int
+		for _, t := range targets {
+			i, found := sortutil.Search(l, func(entry PT) int {
+				return entry.Compare((*T)(t))
+			})
+			if found {
+				indices = append(indices, i)
+			}
+		}
+		return indices
+	})
+}
+
+func (s *AtomicSlice[PT, T]) remove(fn func([]PT) []int) {
+	for {
+		// Is the list empty?
+		l := s.p().Load()
+		if l == nil {
+			return
+		}
+
+		// Are the elements present?
+		indices := fn(*l)
+		if len(indices) == 0 {
+			return
+		}
+
+		m := make([]PT, len(*l)-len(indices))
+		n := copy(m, (*l)[:indices[0]])
+		for i, j := range indices[1:] {
+			i := indices[i]
+			n += copy(m[n:], (*l)[i+1:j])
+		}
+		copy(m[n:], (*l)[indices[len(indices)-1]+1:])
+
+		if s.p().CompareAndSwap(l, &m) {
+			return
 		}
 	}
 }
