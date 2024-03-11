@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -31,6 +31,7 @@ func startDHT(host host.Host, ctx context.Context, mode dht.ModeOpt, bootstrapPe
 	// Connect to the bootstrap peers
 	wg := new(sync.WaitGroup)
 	for _, addr := range bootstrapPeers {
+		addr = oldQuicCompat(addr)
 		pi, err := peer.AddrInfoFromP2pAddr(addr)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("parse address: %w", err)
