@@ -1,5 +1,5 @@
-// Copyright 2022 The Accumulate Authors
-//
+// Copyright 2024 The Accumulate Authors
+// 
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
@@ -9,8 +9,7 @@ package main
 import (
 	"go/ast"
 
-	"github.com/golangci/golangci-lint/pkg/golinters/goanalysis"
-	"github.com/golangci/golangci-lint/pkg/lint/linter"
+	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
 )
 
@@ -18,14 +17,16 @@ func init() {
 	const name = "noprint"
 	const doc = "Checks for out of place print statements"
 
-	customLinters = append(customLinters, linter.NewConfig(
-		goanalysis.NewLinter(name, doc, []*analysis.Analyzer{{
-			Name: name,
-			Doc:  doc,
-			Run:  noprint,
-		}}, nil).
-			WithLoadMode(goanalysis.LoadModeSyntax),
-	))
+	register.Plugin(name, func(any) (register.LinterPlugin, error) {
+		return &customLinter{
+			LoadMode: register.LoadModeSyntax,
+			Analyzer: &analysis.Analyzer{
+				Name: name,
+				Doc:  doc,
+				Run:  noprint,
+			},
+		}, nil
+	})
 }
 
 func noprint(pass *analysis.Pass) (interface{}, error) {
