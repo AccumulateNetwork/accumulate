@@ -10,6 +10,7 @@ import (
 	"context"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec
+	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -53,11 +54,15 @@ var flag = struct {
 	Pprof        string
 }{}
 
+var cu = func() *user.User {
+	cu, _ := user.Current()
+	return cu
+}()
+
 func init() {
 	flag.Key.Value = &TransientPrivateKey{}
 	flag.Peers = accumulate.BootstrapServers
 
-	cu, _ := user.Current()
 	if cu != nil {
 		flag.PeerDatabase = filepath.Join(cu.HomeDir, ".accumulate", "cache", "peerdb.json")
 	}
@@ -78,12 +83,17 @@ func init() {
 	cmd.Flags().StringVar(&flag.Pprof, "pprof", "", "Address to run net/http/pprof on")
 }
 
-func run(_ *cobra.Command, args []string) {
+func run(cmd *cobra.Command, args []string) {
 	if flag.Pprof != "" {
 		s := new(http.Server)
 		s.Addr = flag.Pprof
 		s.ReadHeaderTimeout = time.Minute
 		go func() { Check(s.ListenAndServe()) }() //nolint:gosec
+	}
+
+	if !cmd.Flag("peer-db").Changed && cu != nil {
+		err := os.MkdirAll(filepath.Join(cu.HomeDir, ".accumulate", "cache"), 0700)
+		Check(err)
 	}
 
 	if len(flag.HttpListen) == 0 && len(flag.LetsEncrypt) == 0 {
