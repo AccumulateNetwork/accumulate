@@ -141,6 +141,7 @@ func (t *PersistentTracker) writeDb(time.Duration) {
 
 func (t *PersistentTracker) scanPeers(duration time.Duration) {
 	slog.InfoCtx(t.context, "Scanning for peers")
+	defer slog.InfoCtx(t.context, "Completed peer scan")
 
 	// Update the last scan time
 	now := time.Now()
