@@ -41,6 +41,7 @@ type blockMessage interface {
 
 // A Hub distributes messages to modules.
 type Hub interface {
+	Register(module Module)
 	Send(...Message) error
 	With(modules ...Module) Hub
 }
