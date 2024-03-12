@@ -7,6 +7,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -30,6 +31,9 @@ func TestMissingSynthTxn(t *testing.T) {
 	}, func(t *testing.T, version ExecutorVersion) {
 		var timestamp uint64
 
+		// The first time an envelope contains a deposit, drop the first deposit
+		var didDrop bool
+
 		// Initialize
 		globals := new(core.GlobalValues)
 		globals.ExecutorVersion = version
@@ -37,6 +41,33 @@ func TestMissingSynthTxn(t *testing.T) {
 			simulator.SimpleNetwork(t.Name(), 3, 3),
 			simulator.GenesisWith(GenesisTime, globals),
 			simulator.SkipProposalCheck, // FIXME should not be necessary
+
+			simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+				if didDrop {
+					return true, nil
+				}
+
+				messages, err := env.Normalize()
+				if err != nil {
+					return false, err
+				}
+
+				for _, msg := range messages {
+				again:
+					switch m := msg.(type) {
+					case interface{ Unwrap() messaging.Message }:
+						msg = m.Unwrap()
+						goto again
+					case messaging.MessageWithTransaction:
+						if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {
+							fmt.Printf("Dropping %X\n", m.GetTransaction().GetHash()[:4])
+							didDrop = true
+							return false, nil
+						}
+					}
+				}
+				return true, nil
+			}),
 		)
 
 		alice := acctesting.GenerateKey("Alice")
@@ -44,26 +75,6 @@ func TestMissingSynthTxn(t *testing.T) {
 		bob := acctesting.GenerateKey("Bob")
 		bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
 		MakeLiteTokenAccount(t, sim.DatabaseFor(aliceUrl), alice[32:], AcmeUrl())
-
-		// The first time an envelope contains a deposit, drop the first deposit
-		var didDrop bool
-		sim.SetSubmitHookFor(bobUrl, func(messages []messaging.Message) (drop bool, keepHook bool) {
-			for _, msg := range messages {
-			again:
-				switch m := msg.(type) {
-				case interface{ Unwrap() messaging.Message }:
-					msg = m.Unwrap()
-					goto again
-				case messaging.MessageWithTransaction:
-					if m.GetTransaction().Body.Type() == TransactionTypeSyntheticDepositTokens {
-						fmt.Printf("Dropping %X\n", m.GetTransaction().GetHash()[:4])
-						didDrop = true
-						return true, false
-					}
-				}
-			}
-			return false, true
-		})
 
 		// Execute
 		st := make([]*protocol.TransactionStatus, 5)
@@ -88,11 +99,39 @@ func TestMissingSynthTxn(t *testing.T) {
 }
 
 func TestMissingDirectoryAnchorTxn(t *testing.T) {
+	// Drop the next directory anchor
+	var anchors int
+
 	// Initialize
 	const bvnCount, valCount = 1, 1 // Anchor healing doesn't work with more than one validator
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), bvnCount, valCount),
 		simulator.Genesis(GenesisTime),
+
+		simulator.CaptureDispatchedMessages(func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+			if anchors >= valCount*bvnCount {
+				return true, nil
+			}
+
+			messages, err := env.Normalize()
+			if err != nil {
+				return false, err
+			}
+
+			var drop bool
+			for _, msg := range messages {
+				anchor, ok := msg.(*messaging.BlockAnchor)
+				if !ok {
+					continue
+				}
+				txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
+				if txn.Transaction.Body.Type() == TransactionTypeDirectoryAnchor {
+					anchors++
+					drop = true
+				}
+			}
+			return !drop, nil
+		}),
 	)
 
 	liteKey := acctesting.GenerateKey("Lite")
@@ -105,23 +144,6 @@ func TestMissingDirectoryAnchorTxn(t *testing.T) {
 	faucetKey := acctesting.GenerateKey("Faucet")
 	faucet := acctesting.AcmeLiteAddressStdPriv(faucetKey)
 	MakeLiteTokenAccount(t, sim.DatabaseFor(faucet), faucetKey[32:], AcmeUrl())
-
-	// Drop the next directory anchor
-	var anchors int
-	sim.SetSubmitHookFor(alice, func(messages []messaging.Message) (drop bool, keepHook bool) {
-		for _, msg := range messages {
-			anchor, ok := msg.(*messaging.BlockAnchor)
-			if !ok {
-				continue
-			}
-			txn := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage)
-			if txn.Transaction.Body.Type() == TransactionTypeDirectoryAnchor {
-				anchors++
-				drop = true
-			}
-		}
-		return drop, anchors < valCount*bvnCount
-	})
 
 	sim.StepUntil(True(func(*Harness) bool { return anchors >= valCount*bvnCount }))
 
