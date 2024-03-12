@@ -445,12 +445,18 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 	charlieKey := acctesting.GenerateKey(charlie)
 
-	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *messaging.Envelope) {
+	setup := func(t *testing.T, v ExecutorVersion, cap simulator.DispatchInterceptor) (*Sim, *messaging.Envelope) {
 		// Initialize with V1+sig
-		sim := NewSim(t,
+		opts := []simulator.Option{
 			simulator.SimpleNetwork(t.Name(), 3, 1),
 			simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: v}),
-		)
+		}
+		if cap != nil {
+			opts = append(opts,
+				simulator.CaptureDispatchedMessages(cap),
+			)
+		}
+		sim := NewSim(t, opts...)
 
 		// The account (charlie) and authority (bob) are on one partition and the
 		// delegate (alice) is on another
@@ -520,30 +526,36 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		return st
 	}
 
-	captureFwd := func(sim *Sim) func() *url.TxID {
+	captureFwd := func() (simulator.DispatchInterceptor, func(sim *Sim) *url.TxID) {
 		var sigId *url.TxID
-		sim.SetSubmitHook("BVN1", func(messages []messaging.Message) (dropTx bool, keepHook bool) {
-			for _, msg := range messages {
-				msg, ok := msg.(*messaging.TransactionMessage)
-				if !ok {
-					continue
+		return func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+				if sigId != nil {
+					return true, nil
 				}
-				fwd, ok := msg.Transaction.Body.(*SyntheticForwardTransaction)
-				if !ok || len(fwd.Signatures) != 1 || !fwd.Signatures[0].Destination.Equal(charlie.JoinPath("tokens")) {
-					continue
+				messages, err := env.Normalize()
+				if err != nil {
+					return false, err
 				}
-				sig := fwd.Signatures[0]
-				sigId = sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
-				return false, false
+				for _, msg := range messages {
+					msg, ok := msg.(*messaging.TransactionMessage)
+					if !ok {
+						continue
+					}
+					fwd, ok := msg.Transaction.Body.(*SyntheticForwardTransaction)
+					if !ok || len(fwd.Signatures) != 1 || !fwd.Signatures[0].Destination.Equal(charlie.JoinPath("tokens")) {
+						continue
+					}
+					sig := fwd.Signatures[0]
+					sigId = sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
+					return true, nil
+				}
+				return true, nil
+			},
+			func(sim *Sim) *url.TxID {
+				sim.StepUntil(
+					True(func(h *Harness) bool { return sigId != nil }))
+				return sigId
 			}
-			return false, true
-		})
-		return func() *url.TxID {
-			for sigId == nil {
-				sim.Step()
-			}
-			return sigId
-		}
 	}
 
 	fwdFails := func(sim *Sim, sigId *url.TxID, errstr string) {
@@ -556,30 +568,30 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	// Broken in V1
 	t.Run("V1", func(t *testing.T) {
 		t.Run("Out of order", func(t *testing.T) {
-			sim, delivery := setup(t, ExecutorVersionV1)
-			waitForFwd := captureFwd(sim)
+			cap, waitForFwd := captureFwd()
+			sim, delivery := setup(t, ExecutorVersionV1, cap)
 
 			outOfOrder(sim, delivery)
 
 			// Fails
-			fwdFails(sim, waitForFwd(), "initiator is already set and does not match the signature")
+			fwdFails(sim, waitForFwd(sim), "initiator is already set and does not match the signature")
 		})
 
 		t.Run("Extra signature", func(t *testing.T) {
-			sim, delivery := setup(t, ExecutorVersionV1)
-			waitForFwd := captureFwd(sim)
+			cap, waitForFwd := captureFwd()
+			sim, delivery := setup(t, ExecutorVersionV1, cap)
 
 			extraSig(sim, delivery)
 
 			// Fails
-			fwdFails(sim, waitForFwd(), "initiator is already set and does not match the signature")
+			fwdFails(sim, waitForFwd(sim), "initiator is already set and does not match the signature")
 		})
 	})
 
 	// Fixed in V1+sig
 	t.Run("V1+sig", func(t *testing.T) {
 		t.Run("Out of order", func(t *testing.T) {
-			sim, delivery := setup(t, ExecutorVersionV1SignatureAnchoring)
+			sim, delivery := setup(t, ExecutorVersionV1SignatureAnchoring, nil)
 
 			st := outOfOrder(sim, delivery)
 
@@ -589,7 +601,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		})
 
 		t.Run("Extra signature", func(t *testing.T) {
-			sim, delivery := setup(t, ExecutorVersionV1SignatureAnchoring)
+			sim, delivery := setup(t, ExecutorVersionV1SignatureAnchoring, nil)
 
 			st := extraSig(sim, delivery)
 

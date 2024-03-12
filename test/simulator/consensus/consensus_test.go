@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -42,7 +44,11 @@ func TestSimulator(t *testing.T) {
 				simulator.Genesis(GenesisTime),
 			)
 
-			sim.StepN(2)
+			// Step a block and verify that only one block happened
+			sim.Step()
+			require.Equal(t, 2, int(sim.S.BlockIndex(protocol.Directory)))
+			sim.Step()
+			require.Equal(t, 3, int(sim.S.BlockIndex(protocol.Directory)))
 		})
 	}
 }
