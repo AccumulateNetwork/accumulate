@@ -95,7 +95,11 @@ func New(opts ...Option) (*Simulator, error) {
 		}
 	}
 
-	s.hub = s.newHub()
+	for _, id := range s.partIDs {
+		for _, n := range s.partitions[id].nodes {
+			s.hub.Register(n.consensus)
+		}
+	}
 	return s, nil
 }
 
