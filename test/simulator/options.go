@@ -70,7 +70,7 @@ func DisableAnchorHealing(opts *simFactory) error {
 
 // CaptureDispatchedMessages allows the caller to capture internally dispatched
 // messages.
-func CaptureDispatchedMessages(fn dispatchInterceptor) Option {
+func CaptureDispatchedMessages(fn DispatchInterceptor) Option {
 	return func(opts *simFactory) error {
 		opts.interceptDispatchedMessages = fn
 		return nil
