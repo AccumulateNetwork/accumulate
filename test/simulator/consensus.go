@@ -7,7 +7,6 @@
 package simulator
 
 import (
-	"context"
 	"crypto/sha256"
 	"runtime"
 
@@ -16,16 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
 )
-
-func (s *Simulator) newHub() consensus.Hub {
-	h := consensus.NewSimpleHub(context.Background())
-	for _, id := range s.partIDs {
-		for _, n := range s.partitions[id].nodes {
-			h.Register(n.consensus)
-		}
-	}
-	return h
-}
 
 func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*protocol.TransactionStatus, error) {
 	// Apply the hook

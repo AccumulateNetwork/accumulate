@@ -55,12 +55,13 @@ type simFactory struct {
 	deterministic               bool
 	dropInitialAnchor           bool
 	disableAnchorHealing        bool
-	interceptDispatchedMessages dispatchInterceptor
+	interceptDispatchedMessages DispatchInterceptor
 
 	// State
 	logger           log.Logger
 	taskQueue        *taskQueue
 	router           *Router
+	hub              consensus.Hub
 	services         *services.Network
 	dispatcherFunc   func() execute.Dispatcher
 	networkFactories []*networkFactory
@@ -102,6 +103,7 @@ func (f *simFactory) Build() *Simulator {
 	s.deterministic = f.deterministic
 	s.logger = f.getLogger()
 	s.router = f.getRouter()
+	s.hub = f.getHub()
 	s.services = f.getServices()
 	s.tasks = f.getTaskQueue()
 
@@ -285,6 +287,15 @@ func (f *simFactory) getRouter() *Router {
 	return f.router
 }
 
+func (f *simFactory) getHub() consensus.Hub {
+	if f.hub != nil {
+		return f.hub
+	}
+
+	f.hub = consensus.NewSimpleHub(context.Background())
+	return f.hub
+}
+
 func (f *simFactory) getServices() *services.Network {
 	if f.services != nil {
 		return f.services
@@ -306,18 +317,23 @@ func (f *simFactory) getDispatcherFunc() func() execute.Dispatcher {
 		return f.dispatcherFunc
 	}
 
-	// Avoid capture
-	services := f.getServices()
+	// Avoid capturing f
 	router := f.getRouter()
+	hub := f.getHub()
 	interceptor := f.interceptDispatchedMessages
 
 	f.dispatcherFunc = func() execute.Dispatcher {
-		d := new(dispatcher)
-		d.client = services
-		d.router = router
-		d.envelopes = map[string][]*messaging.Envelope{}
-		d.interceptor = interceptor
-		return d
+		d := consensus.NewDispatcher(router)
+		hub.Register(d)
+
+		if interceptor == nil {
+			return d
+		}
+
+		return &interceptDispatcher{
+			Dispatcher:  d,
+			interceptor: interceptor,
+		}
 	}
 	return f.dispatcherFunc
 }
