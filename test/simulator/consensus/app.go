@@ -35,7 +35,6 @@ type CheckRequest struct {
 	Context  context.Context
 	Envelope *messaging.Envelope
 	New      bool
-	Pretend  bool
 }
 
 type CheckResponse struct {
