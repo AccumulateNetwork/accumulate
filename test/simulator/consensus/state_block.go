@@ -7,7 +7,6 @@
 package consensus
 
 import (
-	"context"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
@@ -16,108 +15,18 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-type nodeState interface {
-	// execute processes the message and returns the next state and messages
-	// that should be sent.
-	execute(Message) (nodeState, []Message, error)
-}
+type blockState state[blockState]
 
-// Receive implements [Message.Receive].
-func (n *Node) Receive(messages ...Message) ([]Message, error) {
-	var allOut []Message
-
-	// Initialize to the quiescent state
-	if n.state == nil {
-		n.state = &nodeIsQuiescent{n}
-	}
-
-	// Process each message
-	for _, msg := range messages {
-		// Ignore messages from ourself
-		if msg, ok := msg.(blockMessage); ok &&
-			msg.senderID() == n.self.PubKeyHash {
-			continue
-		}
-
-		// Ignore messages for other networks
-		if msg, ok := msg.(networkMessage); ok &&
-			msg.network() != n.network {
-			continue
-		}
-
-		switch msg := msg.(type) {
-		case *Submission:
-			// Process submission
-			out, err := n.check(context.Background(), msg)
-			allOut = append(allOut, out...)
-			if err != nil {
-				return allOut, err
-			}
-			continue
-		}
-
-		// Execute the message
-		s, out, err := n.state.execute(msg)
-		allOut = append(allOut, out...)
-
-		// Did we transition into the next state?
-		if s != n.state {
-			slog.DebugContext(n.context, "Transitioning", "to", logging.TypeOf(s))
-			n.state = s
-		}
-
-		if err != nil {
-			return allOut, err
-		}
-	}
-
-	// Keep stepping until the state doesn't change. Under normal circumstances
-	// this won't do anything. However, this is necessary if there are 1 or 2
-	// validators in the network. If there is only one validator, we must
-	// proceed directly through the phases of consensus instead of waiting to
-	// receive votes. Without this loop, each state would need logic to handle
-	// that scenario.
-	for {
-		s, out, err := n.state.execute(nil)
-		allOut = append(allOut, out...)
-		if err != nil {
-			return allOut, err
-		}
-		if s == n.state {
-			break
-		}
-		slog.DebugContext(n.context, "Transitioning", "to", logging.TypeOf(s))
-		n.state = s
-	}
-
-	return allOut, nil
-}
-
-// nodeIsQuiescent is the state of the node when waiting for a new block to
-// start.
-type nodeIsQuiescent struct{ *Node }
-
-// execute sends [proposeLeader] and transitions to [didProposeLeader] on
-// receipt of [StartBlock].
-func (n *nodeIsQuiescent) execute(msg Message) (nodeState, []Message, error) {
-	switch msg.(type) {
-	case *StartBlock:
-		return n.proposeLeader()
-
-	case blockMessage:
-		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
-	}
-
-	return n, nil, nil
-}
-
-func (n *Node) proposeLeader() (nodeState, []Message, error) {
+func (n *Node) proposeLeader() (blockState, []Message, error) {
 	m := new(didProposeLeader)
 	m.Node = n
 	m.votes = n.newVotes()
 	m.p.baseNodeMessage = n.newMsg()
 	m.p.Leader = n.validators[n.lastBlockIndex%uint64(len(n.validators))].PubKeyHash
-	return m, []Message{&m.p}, nil
+
+	s, out, err := executeState[blockState](n.context, m, nil)
+	out = append(out, &m.p)
+	return s, out, err
 }
 
 type proposeLeader struct {
@@ -139,7 +48,7 @@ type didProposeLeader struct {
 // [proposeLeader]. If the receiver is not the leader, execute sends
 // [acceptBlockProposal] and transitions to [didProposeBlock] upon receipt of
 // [proposeBlock].
-func (n *didProposeLeader) execute(msg Message) (nodeState, []Message, error) {
+func (n *didProposeLeader) execute(msg Message) (blockState, []Message, error) {
 	switch msg := msg.(type) {
 	case *proposeLeader:
 		// Verify the proposal matches
@@ -184,9 +93,6 @@ func (n *didProposeLeader) execute(msg Message) (nodeState, []Message, error) {
 
 		// Record the proposal
 		n.blockProposal = msg
-
-	case blockMessage:
-		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	switch {
@@ -208,7 +114,7 @@ func (n *didProposeLeader) execute(msg Message) (nodeState, []Message, error) {
 	}
 }
 
-func (n *Node) proposeBlock(p LeaderProposal) (nodeState, []Message, error) {
+func (n *Node) proposeBlock(p LeaderProposal) (blockState, []Message, error) {
 	slog.DebugContext(n.context, "Proposing a block", "block", n.lastBlockIndex+1)
 
 	m := new(didProposeBlock)
@@ -222,7 +128,7 @@ func (n *Node) proposeBlock(p LeaderProposal) (nodeState, []Message, error) {
 	return m, []Message{&m.p}, nil
 }
 
-func (n *Node) acceptBlockProposal(p *proposeBlock) (nodeState, []Message, error) {
+func (n *Node) acceptBlockProposal(p *proposeBlock) (blockState, []Message, error) {
 	m := new(didProposeBlock)
 	m.Node = n
 	m.p = *p
@@ -257,7 +163,7 @@ func (m *proposeBlock) equal(n *proposeBlock) bool {
 // execute records a vote upon receipt of [acceptBlockProposal] and waits for
 // the threshold to be reached. Then, execute finalizes the block, sends
 // [finalizedBlock], and transitions to [didFinalizeBlock].
-func (n *didProposeBlock) execute(msg Message) (nodeState, []Message, error) {
+func (n *didProposeBlock) execute(msg Message) (blockState, []Message, error) {
 	switch msg := msg.(type) {
 	case *acceptBlockProposal:
 		if !msg.p.equal(&n.p) {
@@ -269,9 +175,6 @@ func (n *didProposeBlock) execute(msg Message) (nodeState, []Message, error) {
 		}
 
 		n.votes.add(msg.senderID())
-
-	case blockMessage:
-		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	if !n.votes.reachedThreshold() {
@@ -282,7 +185,7 @@ func (n *didProposeBlock) execute(msg Message) (nodeState, []Message, error) {
 }
 
 // finalizeBlock executes or 'finalizes' the block.
-func (n *Node) finalizeBlock(p *BlockProposal) (nodeState, []Message, error) {
+func (n *Node) finalizeBlock(p *BlockProposal) (blockState, []Message, error) {
 	// Prevent races with methods like SetRecorder
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -366,7 +269,7 @@ type didFinalizeBlock struct {
 // execute records a vote upon receipt of [finalizedBlock] and waits for the
 // threshold to be reached. Then, execute commits the block, sends
 // [committedBlock], and transitions to [didCommitBlock].
-func (n *didFinalizeBlock) execute(msg Message) (nodeState, []Message, error) {
+func (n *didFinalizeBlock) execute(msg Message) (blockState, []Message, error) {
 	switch msg := msg.(type) {
 	case *finalizedBlock:
 		if !n.b.results.Equal(&msg.results) {
@@ -378,9 +281,6 @@ func (n *didFinalizeBlock) execute(msg Message) (nodeState, []Message, error) {
 		}
 
 		n.votes.add(msg.senderID())
-
-	case blockMessage:
-		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	if !n.votes.reachedThreshold() {
@@ -388,11 +288,11 @@ func (n *didFinalizeBlock) execute(msg Message) (nodeState, []Message, error) {
 	}
 
 	state := n.blockState
-	n.state = nil
+	n.blockState = nil
 	return n.commitBlock(&n.b.results, state)
 }
 
-func (n *Node) commitBlock(results *BlockResults, state execute.BlockState) (nodeState, []Message, error) {
+func (n *Node) commitBlock(results *BlockResults, state execute.BlockState) (blockState, []Message, error) {
 	// Apply validator updates
 	n.applyValUp(results.ValidatorUpdates)
 
@@ -426,7 +326,7 @@ type didCommitBlock struct {
 
 // execute records a vote upon receipt of [committedBlock] and waits for the
 // threshold to be reached. Then, execute transitions to [nodeIsQuiescent].
-func (n *didCommitBlock) execute(msg Message) (nodeState, []Message, error) {
+func (n *didCommitBlock) execute(msg Message) (blockState, []Message, error) {
 	switch msg := msg.(type) {
 	case *committedBlock:
 		if !n.IgnoreCommitResults && n.b.results != msg.results {
@@ -438,9 +338,6 @@ func (n *didCommitBlock) execute(msg Message) (nodeState, []Message, error) {
 		}
 
 		n.votes.add(msg.senderID())
-
-	case blockMessage:
-		slog.DebugContext(n.context, "Ignoring message", "type", logging.TypeOf(msg), "state", logging.TypeOf(n))
 	}
 
 	if !n.votes.reachedThreshold() {
@@ -450,25 +347,9 @@ func (n *didCommitBlock) execute(msg Message) (nodeState, []Message, error) {
 	return n.completeBlock()
 }
 
-func (n *Node) completeBlock() (nodeState, []Message, error) {
-	return &nodeIsQuiescent{n}, []Message{&ExecutedBlock{
+func (n *Node) completeBlock() (blockState, []Message, error) {
+	return nil, []Message{&ExecutedBlock{
 		Node:    n.self.PubKeyHash,
 		Network: n.network,
 	}}, nil
 }
-
-type baseNodeMessage struct {
-	sender *Node
-}
-
-var _ blockMessage = (*baseNodeMessage)(nil)
-var _ networkMessage = (*baseNodeMessage)(nil)
-
-func (n *Node) newMsg() baseNodeMessage {
-	return baseNodeMessage{n}
-}
-
-func (_ *baseNodeMessage) isMsg()             {}
-func (_ *baseNodeMessage) isBlkMsg()          {}
-func (m *baseNodeMessage) senderID() [32]byte { return m.sender.self.PubKeyHash }
-func (m *baseNodeMessage) network() string    { return m.sender.network }
