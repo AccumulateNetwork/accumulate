@@ -131,8 +131,11 @@ const ExecutorVersionV1Halt ExecutorVersion = 4
 // ExecutorVersionV2 is the second version of the executor system.
 const ExecutorVersionV2 ExecutorVersion = 5
 
-// ExecutorVersionV2Baikonur enables the Baikonur release's features.
+// ExecutorVersionV2Baikonur enables the Baikonur release.
 const ExecutorVersionV2Baikonur ExecutorVersion = 6
+
+// ExecutorVersionV2Vandenberg enables the Vandenberg release.
+const ExecutorVersionV2Vandenberg ExecutorVersion = 7
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -783,7 +786,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg:
 		*v = u
 		return true
 	}
@@ -805,6 +808,8 @@ func (v ExecutorVersion) String() string {
 		return "v2"
 	case ExecutorVersionV2Baikonur:
 		return "v2Baikonur"
+	case ExecutorVersionV2Vandenberg:
+		return "v2-vandenberg"
 	}
 	return fmt.Sprintf("ExecutorVersion:%d", v)
 }
@@ -830,6 +835,12 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV2, true
 	case "v2baikonur":
 		return ExecutorVersionV2Baikonur, true
+	case "v2-baikonur":
+		return ExecutorVersionV2Baikonur, true
+	case "v2vandenberg":
+		return ExecutorVersionV2Vandenberg, true
+	case "v2-vandenberg":
+		return ExecutorVersionV2Vandenberg, true
 	}
 	return 0, false
 }

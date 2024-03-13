@@ -74,6 +74,12 @@ type Envelope struct {
 	extraData   []byte
 }
 
+type NetworkUpdate struct {
+	fieldsSet []bool
+	Accounts  []*protocol.NetworkAccountUpdate `json:"accounts,omitempty" form:"accounts" query:"accounts" validate:"required"`
+	extraData []byte
+}
+
 type RecordUpdate struct {
 	fieldsSet []bool
 	Key       *record.Key `json:"key,omitempty" form:"key" query:"key" validate:"required"`
@@ -143,6 +149,8 @@ func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
 func (*BlockSummary) Type() MessageType { return MessageTypeBlockSummary }
 
 func (*CreditPayment) Type() MessageType { return MessageTypeCreditPayment }
+
+func (*NetworkUpdate) Type() MessageType { return MessageTypeNetworkUpdate }
 
 func (*SequencedMessage) Type() MessageType { return MessageTypeSequenced }
 
@@ -284,6 +292,26 @@ func (v *Envelope) Copy() *Envelope {
 }
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NetworkUpdate) Copy() *NetworkUpdate {
+	u := new(NetworkUpdate)
+
+	u.Accounts = make([]*protocol.NetworkAccountUpdate, len(v.Accounts))
+	for i, v := range v.Accounts {
+		v := v
+		if v != nil {
+			u.Accounts[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *NetworkUpdate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RecordUpdate) Copy() *RecordUpdate {
 	u := new(RecordUpdate)
@@ -562,6 +590,19 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	}
 	for i := range v.Messages {
 		if !(EqualMessage(v.Messages[i], u.Messages[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *NetworkUpdate) Equal(u *NetworkUpdate) bool {
+	if len(v.Accounts) != len(u.Accounts) {
+		return false
+	}
+	for i := range v.Accounts {
+		if !((v.Accounts[i]).Equal(u.Accounts[i])) {
 			return false
 		}
 	}
@@ -1077,6 +1118,56 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_NetworkUpdate = []string{
+	1: "Type",
+	2: "Accounts",
+}
+
+func (v *NetworkUpdate) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Accounts) == 0) {
+		for _, v := range v.Accounts {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_NetworkUpdate)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *NetworkUpdate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Accounts is missing")
+	} else if len(v.Accounts) == 0 {
+		errs = append(errs, "field Accounts is not set")
 	}
 
 	switch len(errs) {
@@ -1744,6 +1835,45 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *NetworkUpdate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NetworkUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *NetworkUpdate) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(protocol.NetworkAccountUpdate); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Accounts = append(v.Accounts, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_NetworkUpdate)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *RecordUpdate) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2052,7 +2182,7 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 		Type             MessageType                         `json:"type"`
 		Partition        string                              `json:"partition,omitempty"`
 		Index            uint64                              `json:"index,omitempty"`
-		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		StateTreeHash    *string                             `json:"stateTreeHash,omitempty"`
 		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
 		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
 		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
@@ -2065,7 +2195,7 @@ func (v *BlockSummary) MarshalJSON() ([]byte, error) {
 		u.Index = v.Index
 	}
 	if !(v.StateTreeHash == ([32]byte{})) {
-		u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+		u.StateTreeHash = encoding.ChainToJSON(&v.StateTreeHash)
 	}
 	if !(v.PreviousBlock == 0) {
 		u.PreviousBlock = v.PreviousBlock
@@ -2125,6 +2255,18 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Messages) == 0) {
 		u.Messages = &encoding.JsonUnmarshalListWith[Message]{Value: v.Messages, Func: UnmarshalMessageJSON}
+	}
+	return json.Marshal(&u)
+}
+
+func (v *NetworkUpdate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type     MessageType                                       `json:"type"`
+		Accounts encoding.JsonList[*protocol.NetworkAccountUpdate] `json:"accounts,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Accounts) == 0) {
+		u.Accounts = v.Accounts
 	}
 	return json.Marshal(&u)
 }
@@ -2206,13 +2348,13 @@ func (v *SignatureRequest) MarshalJSON() ([]byte, error) {
 func (v *StateTreeUpdate) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Key  *record.Key `json:"key,omitempty"`
-		Hash string      `json:"hash,omitempty"`
+		Hash *string     `json:"hash,omitempty"`
 	}{}
 	if !(v.Key == nil) {
 		u.Key = v.Key
 	}
 	if !(v.Hash == ([32]byte{})) {
-		u.Hash = encoding.ChainToJSON(v.Hash)
+		u.Hash = encoding.ChainToJSON(&v.Hash)
 	}
 	return json.Marshal(&u)
 }
@@ -2327,7 +2469,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 		Type             MessageType                         `json:"type"`
 		Partition        string                              `json:"partition,omitempty"`
 		Index            uint64                              `json:"index,omitempty"`
-		StateTreeHash    string                              `json:"stateTreeHash,omitempty"`
+		StateTreeHash    *string                             `json:"stateTreeHash,omitempty"`
 		PreviousBlock    uint64                              `json:"previousBlock,omitempty"`
 		RecordUpdates    encoding.JsonList[*RecordUpdate]    `json:"recordUpdates,omitempty"`
 		StateTreeUpdates encoding.JsonList[*StateTreeUpdate] `json:"stateTreeUpdates,omitempty"`
@@ -2335,7 +2477,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Partition = v.Partition
 	u.Index = v.Index
-	u.StateTreeHash = encoding.ChainToJSON(v.StateTreeHash)
+	u.StateTreeHash = encoding.ChainToJSON(&v.StateTreeHash)
 	u.PreviousBlock = v.PreviousBlock
 	u.RecordUpdates = v.RecordUpdates
 	u.StateTreeUpdates = v.StateTreeUpdates
@@ -2350,7 +2492,7 @@ func (v *BlockSummary) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.StateTreeHash); err != nil {
 		return fmt.Errorf("error decoding StateTreeHash: %w", err)
 	} else {
-		v.StateTreeHash = x
+		v.StateTreeHash = *x
 	}
 	v.PreviousBlock = u.PreviousBlock
 	v.RecordUpdates = u.RecordUpdates
@@ -2419,6 +2561,23 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 			v.Messages[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *NetworkUpdate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type     MessageType                                       `json:"type"`
+		Accounts encoding.JsonList[*protocol.NetworkAccountUpdate] `json:"accounts,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Accounts = v.Accounts
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Accounts = u.Accounts
 	return nil
 }
 
@@ -2519,10 +2678,10 @@ func (v *SignatureRequest) UnmarshalJSON(data []byte) error {
 func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Key  *record.Key `json:"key,omitempty"`
-		Hash string      `json:"hash,omitempty"`
+		Hash *string     `json:"hash,omitempty"`
 	}{}
 	u.Key = v.Key
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Hash = encoding.ChainToJSON(&v.Hash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2530,7 +2689,7 @@ func (v *StateTreeUpdate) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
-		v.Hash = x
+		v.Hash = *x
 	}
 	return nil
 }

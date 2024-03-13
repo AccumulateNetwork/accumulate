@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -10,8 +10,7 @@ import (
 	"go/ast"
 	"strings"
 
-	"github.com/golangci/golangci-lint/pkg/golinters/goanalysis"
-	"github.com/golangci/golangci-lint/pkg/lint/linter"
+	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
 )
 
@@ -19,14 +18,16 @@ func init() {
 	const name = "nodebug"
 	const doc = "Checks for enabled debug flags"
 
-	customLinters = append(customLinters, linter.NewConfig(
-		goanalysis.NewLinter(name, doc, []*analysis.Analyzer{{
-			Name: name,
-			Doc:  doc,
-			Run:  nodebug,
-		}}, nil).
-			WithLoadMode(goanalysis.LoadModeSyntax),
-	))
+	register.Plugin(name, func(any) (register.LinterPlugin, error) {
+		return &customLinter{
+			LoadMode: register.LoadModeSyntax,
+			Analyzer: &analysis.Analyzer{
+				Name: name,
+				Doc:  doc,
+				Run:  nodebug,
+			},
+		}, nil
+	})
 }
 
 func nodebug(pass *analysis.Pass) (interface{}, error) {

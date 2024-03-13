@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -82,4 +82,23 @@ func TestBptChain(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, bptHash[:], entry)
 	})
+}
+
+func TestQuiescence(t *testing.T) {
+	// Tests https://gitlab.com/accumulatenetwork/accumulate/-/issues/3453?work_item_iid=3520
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	// Give the network time to stabilize
+	sim.StepN(100)
+
+	// Verify that the network is (and stays) quiescent
+	before := GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger))
+	sim.StepN(100)
+	after := GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger))
+	require.Equal(t, int(before.Index), int(after.Index))
 }

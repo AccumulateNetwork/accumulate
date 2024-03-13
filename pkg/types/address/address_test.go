@@ -1,4 +1,4 @@
-// Copyright 2022 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,13 +7,42 @@
 package address
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"testing"
 
 	"github.com/multiformats/go-multihash"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func TestGenerateKey(t *testing.T) {
+	t.Skip("Manual")
+	pk, sk, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	addr := &PrivateKey{
+		Key: sk,
+		PublicKey: PublicKey{
+			Type: protocol.SignatureTypeED25519,
+			Key:  pk,
+		},
+	}
+	fmt.Println(addr)
+
+	// This is a bogus key that can be added to a key page
+	fmt.Println()
+	fmt.Println(&UnknownHash{
+		Hash: []byte("The quick brown fox jumps over the lazy dog"),
+	})
+
+	a, err := Parse("MHz125hWDmTmFN25xqjfFTMdUyBRUDVyHcCn6Jp7NCbdjt45x4UQ9hg")
+	require.NoError(t, err)
+	fmt.Printf("%T\n", a)
+	fmt.Println(string(a.(*UnknownMultihash).Digest))
+}
 
 func TestPublicKeyHash(t *testing.T) {
 	cases := map[string]struct {

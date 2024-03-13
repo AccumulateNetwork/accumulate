@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,13 +7,10 @@
 package badger
 
 import (
-	"fmt"
-	"os"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -32,11 +29,18 @@ import (
 // break, such as synthetic transactions and anchoring.
 var TruncateBadger = false
 
-type Database struct {
+type DB[Db dbImpl[Txn, Item, Wb], Txn txn[Item], Item item, Wb writeBatch] struct {
+	args[Txn, Item]
 	opts
-	badger *badger.DB
+	badger Db
 	ready  bool
 	mu     sync.RWMutex
+}
+
+type args[Txn txn[Item], Item item] struct {
+	errKeyNotFound error
+	errNoRewrite   error
+	newIterator    func(Txn) iterator[Item]
 }
 
 type opts struct {
@@ -50,44 +54,58 @@ func WithPlainKeys(o *opts) error {
 	return nil
 }
 
-func New(filepath string, o ...Option) (*Database, error) {
-	// Make sure all directories exist
-	err := os.MkdirAll(filepath, 0700)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("open badger: create %q: %w", filepath, err)
+func open[Db dbImpl[Txn, Item, Wb], Txn txn[Item], Item item, Wb writeBatch](badger Db, errs args[Txn, Item], o []Option) (*DB[Db, Txn, Item, Wb], error) {
+	db := &DB[Db, Txn, Item, Wb]{
+		args:   errs,
+		badger: badger,
+		ready:  true,
 	}
-
-	opts := badger.DefaultOptions(filepath)
-	opts = opts.WithLogger(Slogger{})
-
-	// Truncate corrupted data
-	if TruncateBadger {
-		opts = opts.WithTruncate(true)
-	}
-
-	d := new(Database)
 	for _, o := range o {
-		err = o(&d.opts)
+		err := o(&db.opts)
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
-	d.ready = true
-
-	// Open Badger
-	d.badger, err = badger.Open(opts)
-	if err != nil {
-		return nil, err
-	}
-
 	// Run GC every hour
-	go d.gc()
+	go db.gc()
 
-	return d, nil
+	mDbOpen.Inc()
+	return db, nil
 }
 
-func (d *Database) key(key *record.Key) []byte {
+type dbImpl[Txn txn[Item], Item item, Wb writeBatch] interface {
+	NewTransaction(writable bool) Txn
+	NewWriteBatch() Wb
+	RunValueLogGC(float64) error
+	Close() error
+}
+
+type txn[Item item] interface {
+	Get([]byte) (Item, error)
+	Discard()
+}
+
+type item interface {
+	ValueCopy([]byte) ([]byte, error)
+	Key() []byte
+}
+
+type writeBatch interface {
+	Delete([]byte) error
+	Set(key, value []byte) error
+	Flush() error
+}
+
+type iterator[Item item] interface {
+	Seek(key []byte)
+	Valid() bool
+	Next()
+	Close()
+	Item() Item
+}
+
+func (d *DB[Db, Txn, Item, Wb]) key(key *record.Key) []byte {
 	if d.plainKeys {
 		b, err := key.MarshalBinary()
 		if err != nil {
@@ -100,7 +118,7 @@ func (d *Database) key(key *record.Key) []byte {
 }
 
 // Begin begins a change set.
-func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
+func (d *DB[Db, Txn, Item, Wb]) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	// Use a read-only transaction for reading
 	rd := d.badger.NewTransaction(false)
 
@@ -115,6 +133,9 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		commit = d.commit
 	}
 
+	mTxnOpen.Inc()
+	var closed atomic.Bool
+
 	// The memory changeset caches entries in a map so Get will see values
 	// updated with Put, regardless of the underlying transaction and write
 	// batch behavior
@@ -123,16 +144,24 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 		Get:     get,
 		Commit:  commit,
 		ForEach: d.forEach,
-		Discard: rd.Discard,
+
+		// Discard the transaction
+		Discard: func() {
+			// Fix https://discuss.dgraph.io/t/badgerdb-consume-too-much-disk-space/17070?
+			rd.Discard()
+			if closed.CompareAndSwap(false, true) {
+				mTxnOpen.Dec()
+			}
+		},
 	})
 }
 
-func (d *Database) get(txn *badger.Txn, key *record.Key) ([]byte, error) {
+func (d *DB[Db, Txn, Item, Wb]) get(txn Txn, key *record.Key) ([]byte, error) {
 	item, err := txn.Get(d.key(key))
 	switch {
 	case err == nil:
 		// Ok
-	case errors.Is(err, badger.ErrKeyNotFound):
+	case errors.Is(err, d.errKeyNotFound):
 		return nil, (*database.NotFoundError)(key)
 	default:
 		return nil, err
@@ -143,19 +172,22 @@ func (d *Database) get(txn *badger.Txn, key *record.Key) ([]byte, error) {
 	switch {
 	case err == nil:
 		return v, nil
-	case errors.Is(err, badger.ErrKeyNotFound):
+	case errors.Is(err, d.errKeyNotFound):
 		return nil, (*database.NotFoundError)(key)
 	default:
 		return nil, errors.UnknownError.WithFormat("get %v: %w", key, err)
 	}
 }
 
-func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
+func (d *DB[Db, Txn, Item, Wb]) commit(entries map[[32]byte]memory.Entry) error {
 	l, err := d.lock(false)
 	if err != nil {
 		return err
 	}
 	defer l.Unlock()
+
+	start := time.Now()
+	defer func() { mCommitDuration.Set(time.Since(start).Seconds()) }()
 
 	// Use a write batch for writing to work around Badger's limitations
 	wr := d.badger.NewWriteBatch()
@@ -174,13 +206,14 @@ func (d *Database) commit(entries map[[32]byte]memory.Entry) error {
 	return wr.Flush()
 }
 
-func (d *Database) forEach(fn func(*record.Key, []byte) error) error {
+func (d *DB[Db, Txn, Item, Wb]) forEach(fn func(*record.Key, []byte) error) error {
 	tx := d.badger.NewTransaction(false)
 	defer tx.Discard()
 
-	opts := badger.DefaultIteratorOptions
-	opts.PrefetchValues = true
-	it := tx.NewIterator(opts)
+	// opts := badger.DefaultIteratorOptions
+	// opts.PrefetchValues = true
+	// it := tx.NewIterator(opts)
+	it := d.newIterator(tx)
 	defer it.Close()
 
 	for it.Seek(nil); it.Valid(); it.Next() {
@@ -213,18 +246,19 @@ func (d *Database) forEach(fn func(*record.Key, []byte) error) error {
 
 // Close
 // Close the underlying database
-func (d *Database) Close() error {
+func (d *DB[Db, Txn, Item, Wb]) Close() error {
 	if l, err := d.lock(true); err != nil {
 		return err
 	} else {
 		defer l.Unlock()
 	}
 
+	mDbOpen.Dec()
 	d.ready = false
 	return d.badger.Close()
 }
 
-func (d *Database) gc() {
+func (d *DB[Db, Txn, Item, Wb]) gc() {
 	for {
 		// GC every hour
 		time.Sleep(time.Hour)
@@ -236,8 +270,15 @@ func (d *Database) gc() {
 		}
 
 		// Run GC if 50% space could be reclaimed
+		start := time.Now()
 		err = d.badger.RunValueLogGC(0.5)
-		if err != nil && !errors.Is(err, badger.ErrNoRewrite) {
+		switch {
+		case err == nil:
+			mGcRun.Inc()
+			mGcDuration.Set(time.Since(start).Seconds())
+		case errors.Is(err, d.errNoRewrite):
+			// Ok
+		default:
 			slog.Error("Badger GC failed", "error", err, "module", "badger")
 		}
 
@@ -253,7 +294,7 @@ func (d *Database) gc() {
 // shutdown process of a Tendermint node is fairly non-deterministic, which lead
 // to a lot of hard-to-reproduce issues showing up in CI tests. Weeks of
 // guesswork lead to this solution.
-func (d *Database) lock(closing bool) (sync.Locker, error) {
+func (d *DB[Db, Txn, Item, Wb]) lock(closing bool) (sync.Locker, error) {
 	var l sync.Locker = &d.mu
 	if !closing {
 		l = d.mu.RLocker()
@@ -266,27 +307,4 @@ func (d *Database) lock(closing bool) (sync.Locker, error) {
 	}
 
 	return l, nil
-}
-
-type Slogger struct{}
-
-func (l Slogger) format(format string, args ...interface{}) string {
-	s := fmt.Sprintf(format, args...)
-	return strings.TrimRight(s, "\n")
-}
-
-func (l Slogger) Errorf(format string, args ...interface{}) {
-	slog.Error(l.format(format, args...), "module", "badger")
-}
-
-func (l Slogger) Warningf(format string, args ...interface{}) {
-	slog.Warn(l.format(format, args...), "module", "badger")
-}
-
-func (l Slogger) Infof(format string, args ...interface{}) {
-	slog.Info(l.format(format, args...), "module", "badger")
-}
-
-func (l Slogger) Debugf(format string, args ...interface{}) {
-	slog.Debug(l.format(format, args...), "module", "badger")
 }

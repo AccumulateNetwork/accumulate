@@ -7,16 +7,17 @@
 //go:build production
 // +build production
 
-package testing
+package logging
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/fatih/color"
+	"golang.org/x/exp/slog"
 )
 
 func EnableDebugFeatures() {
-	fmt.Fprintln(os.Stderr, color.RedString("Debugging features are not supported in production"))
+	slog.Warn(color.RedString("Debugging features are not supported in production"))
 	// os.Exit(1)
+}
+
+func DisableDebugFeatures() {
 }

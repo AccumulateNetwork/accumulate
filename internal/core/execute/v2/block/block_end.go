@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -35,9 +35,14 @@ func (block *Block) Close() (execute.BlockState, error) {
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
-	err := m.processEventBacklog(block)
+	err := block.processEventBacklog()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("process event backlog: %w", err)
+	}
+
+	err = block.produceBlockMessages()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("produce block messages: %w", err)
 	}
 
 	// Check for missing synthetic transactions. Load the ledger synchronously,
@@ -70,6 +75,14 @@ func (block *Block) Close() (execute.BlockState, error) {
 	// Do nothing if the block is empty
 	if block.State.Empty() {
 		return &closedBlock{*block, nil}, nil
+	}
+
+	// Record the previous block's state hash it on the BPT chain
+	if block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
+		err := block.Batch.Account(block.Executor.Describe.Ledger()).BptChain().Inner().AddEntry(block.State.PreviousStateHash[:], false)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Update active globals - **after** checking if the block is empty, because
@@ -234,12 +247,18 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Update the BPT
+	err = block.Batch.UpdateBPT()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
 	return &closedBlock{*block, valUp}, nil
 }
 
 func (block *Block) recordTransactionExpiration() error {
-	if len(block.State.Pending) == 0 {
+	if len(block.State.PendingTxns) == 0 && len(block.State.PendingSigs) == 0 {
 		return nil
 	}
 
@@ -264,8 +283,7 @@ func (block *Block) recordTransactionExpiration() error {
 	}
 
 	// Determine which major block each transaction should expire on
-	pending := map[uint64][]*url.TxID{}
-	for _, txn := range block.State.GetPending() {
+	shouldExpireOn := func(txn *protocol.Transaction) uint64 {
 		var count uint64
 		switch {
 		case !block.Executor.globals.Active.ExecutorVersion.V2BaikonurEnabled():
@@ -292,8 +310,22 @@ func (block *Block) recordTransactionExpiration() error {
 			count = max
 		}
 
-		major := currentMajor + count
+		return currentMajor + count
+	}
+
+	// Expire transactions
+	pending := map[uint64][]*url.TxID{}
+	for _, txn := range block.State.GetPendingTxns() {
+		major := shouldExpireOn(txn)
 		pending[major] = append(pending[major], txn.ID())
+	}
+
+	// Expire signature sets
+	for _, s := range block.State.GetPendingSigs() {
+		major := shouldExpireOn(s.Transaction)
+		for _, auth := range s.GetAuthorities() {
+			pending[major] = append(pending[major], auth.WithTxID(s.Transaction.Hash()))
+		}
 	}
 
 	// Record the IDs
@@ -690,7 +722,11 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.Source = x.Describe.NodeUrl()
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
-	anchor.Updates = systemLedger.PendingUpdates
+
+	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		anchor.Updates = systemLedger.PendingUpdates
+	}
+
 	if block.State.Anchor.ShouldOpenMajorBlock {
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
@@ -744,6 +780,54 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	return anchor, nil
 }
 
+func (b *Block) produceBlockMessages() error {
+	if !b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		return nil
+	}
+
+	// This is likely unnecessarily cautious, but better safe than sorry. This
+	// will prevent any variation in order from causing a consensus failure.
+	bvns := b.Executor.globals.Active.BvnNames()
+	sort.Strings(bvns)
+
+	if b.State.AcmeBurnt.Sign() > 0 {
+		body := new(protocol.SyntheticBurnTokens)
+		body.Amount = b.State.AcmeBurnt
+		txn := new(protocol.Transaction)
+		txn.Header.Principal = protocol.AcmeUrl()
+		txn.Body = body
+		msg := new(messaging.TransactionMessage)
+		msg.Transaction = txn
+
+		b.State.Produced++
+
+		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			Destination: protocol.AcmeUrl(),
+			Message:     msg,
+		}}, b.Index)
+		if err != nil {
+			return errors.UnknownError.WithFormat("queue ACME burn: %w", err)
+		}
+	}
+
+	if len(b.State.NetworkUpdate) > 0 {
+		for _, bvn := range bvns {
+			b.State.Produced++
+			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+				Destination: protocol.PartitionUrl(bvn),
+				Message: &messaging.NetworkUpdate{
+					Accounts: b.State.NetworkUpdate,
+				},
+			}}, b.Index)
+			if err != nil {
+				return errors.UnknownError.WithFormat("queue network update: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLedger) (*protocol.BlockValidatorAnchor, error) {
 	// Do not populate the root chain index, root chain anchor, or state tree
 	// anchor. Those cannot be populated until the block is complete, thus they
@@ -752,7 +836,11 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.Source = x.Describe.NodeUrl()
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
-	anchor.AcmeBurnt = ledger.AcmeBurnt
+
+	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		anchor.AcmeBurnt = ledger.AcmeBurnt
+	}
+
 	return anchor, nil
 }
 

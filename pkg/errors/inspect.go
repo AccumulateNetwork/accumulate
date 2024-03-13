@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -7,6 +7,9 @@
 package errors
 
 import "errors"
+
+// Join calls stdlib errors.Join.
+func Join(errs ...error) error { return errors.Join(errs...) }
 
 // As calls stdlib errors.As.
 func As(err error, target interface{}) bool { return errors.As(err, target) }

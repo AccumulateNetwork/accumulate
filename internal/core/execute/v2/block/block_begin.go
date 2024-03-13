@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -53,18 +53,10 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 
 	x.logger.Debug("Begin block", "module", "block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
-	if x.globals.Active.ExecutorVersion.V2BaikonurEnabled() {
-		// Get the previous block's root hash, before making any changes
-		prevRootHash, err := block.Batch.GetBptRootHash()
-		if err != nil {
-			return nil, err
-		}
-
-		// Record it on the BPT chain
-		err = block.Batch.Account(x.Describe.Ledger()).BptChain().Inner().AddEntry(prevRootHash[:], false)
-		if err != nil {
-			return nil, err
-		}
+	// Get the previous block's root hash (before any changes are made)
+	block.State.PreviousStateHash, err = block.Batch.GetBptRootHash()
+	if err != nil {
+		return nil, err
 	}
 
 	// Finalize the previous block

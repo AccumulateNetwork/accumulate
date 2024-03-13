@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -11,11 +11,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
-	stderr "errors"
 	"sync"
 	"time"
 
-	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -24,21 +22,22 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/sync/errgroup"
+	"golang.org/x/exp/slog"
 )
 
 type Node struct {
-	mu         sync.Locker
-	pool       *mempool
-	privKey    ed25519.PrivateKey
-	pubKeyHash [32]byte
-	app        App
-	gossip     *Gossip
-	blockIndex uint64
-	blockTime  time.Time
-	record     Recorder
-	logger     logging.OptionalLogger
-	validators []*validator
+	mu     sync.Locker
+	app    App
+	record Recorder
+
+	context        context.Context
+	network        string
+	state          nodeState
+	self           *validator
+	validators     []*validator
+	mempool        *mempool
+	lastBlockIndex uint64
+	lastBlockTime  time.Time
 
 	executeHook ExecuteHookFunc
 
@@ -83,16 +82,17 @@ type ExecuteRequest struct {
 type ExecuteResponse struct {
 }
 
-func NewNode(key ed25519.PrivateKey, app App, gossip *Gossip, logger log.Logger) *Node {
+func NewNode(ctx context.Context, network string, key ed25519.PrivateKey, app App) *Node {
 	n := new(Node)
 	n.mu = new(sync.Mutex)
-	n.privKey = key
-	n.pubKeyHash = sha256.Sum256(key[32:])
+	n.self = &validator{
+		PubKey:     key[32:],
+		PubKeyHash: sha256.Sum256(key[32:]),
+	}
 	n.app = app
-	n.gossip = gossip
-	n.logger.Set(logger, "module", "consensus")
-	gossip.adopt(n)
-	n.pool = newMempool(n.logger.L)
+	n.network = network
+	n.context = logging.With(ctx, "module", "consensus")
+	n.mempool = newMempool((*logging.Slogger)(slog.Default().With("module", "consensus")))
 	return n
 }
 
@@ -120,51 +120,36 @@ func (n *Node) Status(*StatusRequest) (*StatusResponse, error) {
 	defer n.mu.Unlock()
 
 	return &StatusResponse{
-		BlockIndex: n.blockIndex,
-		BlockTime:  n.blockTime,
+		BlockIndex: n.lastBlockIndex,
+		BlockTime:  n.lastBlockTime,
 	}, nil
 }
 
-func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
+func (n *Node) check(ctx context.Context, req *Submission) ([]Message, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
 	messages, err := req.Envelope.Normalize()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	for _, m := range n.gossip.nodes {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-	}
-
-	res, err := n.app.Check(req)
+	res, err := n.app.Check(&CheckRequest{
+		Context:  ctx,
+		Envelope: req.Envelope,
+		New:      true,
+		Pretend:  req.Pretend,
+	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+
+	msgs := []Message{&SubmissionResponse{
+		Results: res.Results,
+	}}
 
 	if req.Pretend {
-		return res, nil
-	}
-
-	ctx := req.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	errg, _ := errgroup.WithContext(ctx)
-	for _, m := range n.gossip.nodes {
-		if m == n {
-			continue
-		}
-
-		m := m
-		errg.Go(func() error {
-			return m.recheck(req, res)
-		})
-	}
-
-	err = errg.Wait()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return msgs, nil
 	}
 
 	lup := map[[32]byte]messaging.Message{}
@@ -173,7 +158,7 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 	}
 
 	logMessage := func(ok bool, id *url.TxID, msg messaging.Message, err error) {
-		kv := []any{"id", id, "last-block", n.blockIndex}
+		kv := []any{"id", id, "last-block", n.lastBlockIndex}
 		var debug bool
 		if msg != nil {
 
@@ -211,9 +196,9 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 			s = "Message rejected"
 		}
 		if debug {
-			n.logger.Debug(s, kv...)
+			slog.DebugContext(n.context, s, kv...)
 		} else {
-			n.logger.Info(s, kv...)
+			slog.InfoContext(n.context, s, kv...)
 		}
 	}
 
@@ -234,34 +219,12 @@ func (n *Node) Check(req *CheckRequest) (*CheckResponse, error) {
 		}
 	}
 
-	if ok {
-		for _, m := range n.gossip.nodes {
-			m.pool.Add(m.blockIndex, req.Envelope)
-		}
-	}
-
-	return res, nil
-}
-
-func (n *Node) recheck(req *CheckRequest, expect *CheckResponse) error {
-	res, err := n.app.Check(req)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	if len(res.Results) != len(expect.Results) {
-		n.logger.Error("Consensus failure", "step", "check", "expected", expect.Results, "actual", res.Results)
-		return errors.FatalError.WithFormat("consensus failure: different number of results")
-	}
-	for i, st := range res.Results {
-		if !expect.Results[i].Equal(st) {
-			n.logger.Error("Consensus failure", "step", "check", "id", st.TxID, "expected", expect.Results[i], "actual", st)
-			return errors.FatalError.WithFormat("consensus failure: check message %v", st.TxID)
-		}
-	}
-	return nil
+	n.mempool.Add(n.lastBlockIndex, req.Envelope)
+	return msgs, nil
 }
 
 func (n *Node) Init(req *InitRequest) (*InitResponse, error) {
+	// Prevent races with methods such as SetRecorder
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -282,8 +245,8 @@ func (n *Node) Init(req *InitRequest) (*InitResponse, error) {
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	n.blockIndex = info.LastBlock.Index
-	n.blockTime = info.LastBlock.Time
+	n.lastBlockIndex = info.LastBlock.Index
+	n.lastBlockTime = info.LastBlock.Time
 
 	// Record the snapshot
 	if n.record != nil {
@@ -296,113 +259,6 @@ func (n *Node) Init(req *InitRequest) (*InitResponse, error) {
 	return res, nil
 }
 
-var errAborted = stderr.New("aborted")
-
-func (n *Node) Execute(req *ExecuteRequest) (*ExecuteResponse, error) {
-	for _, m := range n.gossip.nodes {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-	}
-
-	// Select the leader
-	leader := n.selectLeader()
-	var haveLeader bool
-	for _, m := range n.gossip.nodes {
-		if m.pubKeyHash == leader {
-			haveLeader = true
-		}
-		if m.selectLeader() != leader {
-			return nil, errors.FatalError.WithFormat("consensus error: select leader (1)")
-		}
-	}
-	if !haveLeader {
-		return nil, errors.FatalError.WithFormat("consensus error: select leader (2)")
-	}
-	n.logger.Debug("Selected a leader", "leader", logging.AsHex(leader).Slice(0, 4), "block", n.blockIndex+1)
-
-	// Execute
-	followers := make([]chan any, len(n.gossip.nodes)-1)
-	for i := range followers {
-		followers[i] = make(chan any, 1)
-	}
-
-	ctx := req.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	errg, ctx := errgroup.WithContext(ctx)
-	var i int
-	for _, m := range n.gossip.nodes {
-		m := m
-		if m.pubKeyHash == leader {
-			// Force a panic if ch is used by the leader
-			ch := make(chan any)
-			close(ch)
-
-			errg.Go(func() error {
-				err := m.execute(ctx, true, followers, ch)
-				if err != nil {
-					m.logger.Error("Execute failed", "error", err)
-				}
-				return err
-			})
-		} else {
-			ch := followers[i]
-			i++
-			errg.Go(func() error {
-				err := m.execute(ctx, false, nil, ch)
-				if err != nil {
-					m.logger.Error("Execute failed", "error", err)
-				}
-				return err
-			})
-		}
-	}
-
-	err := errg.Wait()
-	if err != nil {
-		// If a consensus error occurs, err should be that error, because the
-		// other nodes will only stop *after* the context is canceled by the
-		// consensus error. The only other possibility is that the context was
-		// canceled directly, in which case its error should be returned. There
-		// should never be a scenario where err is errAborted and the context
-		// error is nil.
-		if errors.Is(err, errAborted) && ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, err
-	}
-
-	n.logger.Debug("Block complete", "block", n.blockIndex)
-	return &ExecuteResponse{}, nil
-}
-
-func (n *Node) selectLeader() [32]byte {
-	return n.validators[int(n.blockIndex)%len(n.validators)].PubKeyHash
-}
-
-func get[T any](ch chan any) (T, bool) {
-	v, ok := <-ch
-	if !ok {
-		var z T
-		return z, false
-	}
-	return v.(T), true
-}
-
-func send(ctx context.Context, ch []chan any, v any) bool {
-	for _, ch := range ch {
-		select {
-		case ch <- v:
-			// Ok
-		case <-ctx.Done():
-			return false
-		}
-	}
-	return true
-}
-
 func copyEnv(env []*messaging.Envelope) []*messaging.Envelope {
 	// Use a copy to avoid weirdness
 	c := make([]*messaging.Envelope, len(env))
@@ -410,191 +266,6 @@ func copyEnv(env []*messaging.Envelope) []*messaging.Envelope {
 		c[i] = env.Copy()
 	}
 	return c
-}
-
-func (n *Node) execute(ctx context.Context, isLeader bool, followers []chan any, ch chan any) error {
-	if isLeader {
-		defer func() {
-			for _, ch := range followers {
-				close(ch)
-			}
-		}()
-	}
-
-	var envelopes []*messaging.Envelope
-	if isLeader {
-		// Send out the proposal
-		n.logger.Debug("Proposing a block", "block", n.blockIndex+1)
-		envelopes = n.pool.Propose(n.blockIndex + 1)
-		envelopes = copyEnv(envelopes)
-		if !send(ctx, followers, envelopes) {
-			return errAborted
-		}
-
-	} else {
-		// Receive the proposal
-		var ok bool
-		envelopes, ok = get[[]*messaging.Envelope](ch)
-		if !ok {
-			return errAborted
-		}
-		envelopes = copyEnv(envelopes)
-
-		// FIXME Fix this and reenable it. It is unreliable and causes
-		// intermittent failures.
-		if false && !n.SkipProposalCheck {
-			for _, env := range envelopes {
-				err := n.pool.CheckProposed(n.blockIndex+1, env)
-				if err != nil {
-					n.logger.Error("Consensus failure", "step", "propose", "error", err, "envelope", env, "block", n.blockIndex+1)
-					return errors.FatalError.With("consensus error: propose block (1)")
-				}
-			}
-		}
-	}
-
-	n.blockIndex++
-	n.blockTime = n.blockTime.Add(time.Second)
-	n.pool.AcceptProposed(n.blockIndex, envelopes)
-
-	params := execute.BlockParams{
-		Context:  ctx,
-		Index:    n.blockIndex,
-		Time:     n.blockTime,
-		IsLeader: isLeader,
-	}
-
-	// Apply the block hook
-	if n.executeHook != nil {
-		var keep bool
-		envelopes, keep = n.executeHook(n, params, envelopes)
-		if !keep {
-			n.executeHook = nil
-		}
-	}
-
-	// Begin the block
-	block, err := n.begin(params)
-	if err != nil {
-		return errors.FatalError.WithFormat("begin block: %w", err)
-	}
-	if isLeader {
-		n.logger.Debug("Block begin", "block", params.Index, "time", params.Time)
-		if !send(ctx, followers, params) {
-			return errAborted
-		}
-	} else {
-		p, ok := get[execute.BlockParams](ch)
-		if !ok {
-			return errAborted
-		}
-		if params.Index != p.Index {
-			n.logger.Error("Consensus failure", "step", "begin", "error", "block parameters don't match", "leader-hash", p, "our-hash", params)
-			return errors.FatalError.With("consensus error: begin block")
-		}
-	}
-
-	// Deliver the envelopes
-	results, err := n.deliver(block, envelopes)
-	if err != nil {
-		return errors.FatalError.WithFormat("deliver: %w", err)
-	}
-	if isLeader {
-		for _, r := range results {
-			n.logger.Debug("Delivered", "block", params.Index, "result", r)
-		}
-		if !send(ctx, followers, results) {
-			return errAborted
-		}
-	} else {
-		r, ok := get[[]*protocol.TransactionStatus](ch)
-		if !ok {
-			return errAborted
-		}
-		if !n.IgnoreDeliverResults {
-			if len(results) != len(r) {
-				n.logger.Error("Consensus failure", "step", "deliver", "expected", r, "actual", results)
-				return errors.FatalError.WithFormat("consensus failure: different number of results")
-			}
-			for i, st := range results {
-				if !r[i].Equal(st) {
-					n.logger.Error("Consensus failure", "step", "deliver", "id", st.TxID, "expected", r[i], "actual", st)
-					return errors.FatalError.WithFormat("consensus failure: deliver message %v", st.TxID)
-				}
-			}
-		}
-	}
-
-	// End the block
-	state, err := n.endBlock(block)
-	if err != nil {
-		return errors.FatalError.WithFormat("end block: %w", err)
-	}
-
-	// Record before checking consensus
-	if n.record != nil {
-		err = n.record.DidExecuteBlock(state, envelopes)
-		if err != nil {
-			return errors.UnknownError.WithFormat("record block: %w", err)
-		}
-	}
-
-	type valUpOk struct {
-		V  []*execute.ValidatorUpdate
-		Ok bool
-	}
-	valUp, didUpdate := state.DidUpdateValidators()
-	if isLeader {
-		n.logger.Debug("End block", "block", params.Index, "validator-updates", valUp)
-		if !send(ctx, followers, valUpOk{valUp, didUpdate}) {
-			return errAborted
-		}
-	} else {
-		v, ok := get[valUpOk](ch)
-		if !ok {
-			return errAborted
-		}
-		if v.Ok != didUpdate {
-			n.logger.Error("Consensus failure", "step", "end", "expected", v.Ok, "actual", didUpdate)
-			return errors.FatalError.WithFormat("consensus failure: end block (1)")
-		}
-		if len(v.V) != len(valUp) {
-			n.logger.Error("Consensus failure", "step", "end", "expected", v.V, "actual", valUp)
-			return errors.FatalError.WithFormat("consensus failure: end block (2)")
-		}
-		for i, v := range v.V {
-			if !bytes.Equal(v.PublicKey, valUp[i].PublicKey) || v.Power != valUp[i].Power {
-				n.logger.Error("Consensus failure", "step", "end", "expected", v, "actual", valUp[i])
-				return errors.FatalError.WithFormat("consensus failure: end block (3)")
-			}
-		}
-	}
-	n.applyValUp(valUp)
-
-	// Commit the block
-	hash, err := n.commit(state)
-	if err != nil {
-		return errors.FatalError.WithFormat("commit: %w", err)
-	}
-	if isLeader {
-		n.logger.Debug("Commit", "block", params.Index, "hash", logging.AsHex(hash))
-		if !send(ctx, followers, hash) {
-			return errAborted
-		}
-	} else {
-		expect, ok := get[[]byte](ch)
-		if !ok {
-			return errAborted
-		}
-		if !n.IgnoreCommitResults {
-			err := CommitConsensusError{hash, expect}
-			if err.isErr() {
-				n.logger.Error("Consensus failure", "step", "commit", "error", "state hashes don't match", "leader", logging.AsHex(expect).Slice(0, 4), "ours", logging.AsHex(hash).Slice(0, 4))
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func (n *Node) begin(params execute.BlockParams) (execute.Block, error) {
@@ -662,16 +333,3 @@ func (n *Node) applyValUp(valUp []*execute.ValidatorUpdate) {
 		}
 	}
 }
-
-type CommitConsensusError [][]byte
-
-func (c CommitConsensusError) isErr() bool {
-	for _, v := range c[1:] {
-		if !bytes.Equal(c[0], v) {
-			return true
-		}
-	}
-	return false
-}
-
-func (CommitConsensusError) Error() string { return "consensus failure during commit" }

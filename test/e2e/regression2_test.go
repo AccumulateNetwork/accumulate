@@ -1,4 +1,4 @@
-// Copyright 2023 The Accumulate Authors
+// Copyright 2024 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -32,6 +32,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -444,12 +445,18 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	bobKey := acctesting.GenerateKey(bob)
 	charlieKey := acctesting.GenerateKey(charlie)
 
-	setup := func(t *testing.T, v ExecutorVersion) (*Sim, *messaging.Envelope) {
+	setup := func(t *testing.T, v ExecutorVersion, cap simulator.DispatchInterceptor) (*Sim, *messaging.Envelope) {
 		// Initialize with V1+sig
-		sim := NewSim(t,
+		opts := []simulator.Option{
 			simulator.SimpleNetwork(t.Name(), 3, 1),
 			simulator.GenesisWith(GenesisTime, &core.GlobalValues{ExecutorVersion: v}),
-		)
+		}
+		if cap != nil {
+			opts = append(opts,
+				simulator.CaptureDispatchedMessages(cap),
+			)
+		}
+		sim := NewSim(t, opts...)
 
 		// The account (charlie) and authority (bob) are on one partition and the
 		// delegate (alice) is on another
@@ -519,30 +526,36 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		return st
 	}
 
-	captureFwd := func(sim *Sim) func() *url.TxID {
+	captureFwd := func() (simulator.DispatchInterceptor, func(sim *Sim) *url.TxID) {
 		var sigId *url.TxID
-		sim.SetSubmitHook("BVN1", func(messages []messaging.Message) (dropTx bool, keepHook bool) {
-			for _, msg := range messages {
-				msg, ok := msg.(*messaging.TransactionMessage)
-				if !ok {
-					continue
+		return func(ctx context.Context, env *messaging.Envelope) (send bool, err error) {
+				if sigId != nil {
+					return true, nil
 				}
-				fwd, ok := msg.Transaction.Body.(*SyntheticForwardTransaction)
-				if !ok || len(fwd.Signatures) != 1 || !fwd.Signatures[0].Destination.Equal(charlie.JoinPath("tokens")) {
-					continue
+				messages, err := env.Normalize()
+				if err != nil {
+					return false, err
 				}
-				sig := fwd.Signatures[0]
-				sigId = sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
-				return false, false
+				for _, msg := range messages {
+					msg, ok := msg.(*messaging.TransactionMessage)
+					if !ok {
+						continue
+					}
+					fwd, ok := msg.Transaction.Body.(*SyntheticForwardTransaction)
+					if !ok || len(fwd.Signatures) != 1 || !fwd.Signatures[0].Destination.Equal(charlie.JoinPath("tokens")) {
+						continue
+					}
+					sig := fwd.Signatures[0]
+					sigId = sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
+					return true, nil
+				}
+				return true, nil
+			},
+			func(sim *Sim) *url.TxID {
+				sim.StepUntil(
+					True(func(h *Harness) bool { return sigId != nil }))
+				return sigId
 			}
-			return false, true
-		})
-		return func() *url.TxID {
-			for sigId == nil {
-				sim.Step()
-			}
-			return sigId
-		}
 	}
 
 	fwdFails := func(sim *Sim, sigId *url.TxID, errstr string) {
@@ -555,30 +568,30 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 	// Broken in V1
 	t.Run("V1", func(t *testing.T) {
 		t.Run("Out of order", func(t *testing.T) {
-			sim, delivery := setup(t, ExecutorVersionV1)
-			waitForFwd := captureFwd(sim)
+			cap, waitForFwd := captureFwd()
+			sim, delivery := setup(t, ExecutorVersionV1, cap)
 
 			outOfOrder(sim, delivery)
 
 			// Fails
-			fwdFails(sim, waitForFwd(), "initiator is already set and does not match the signature")
+			fwdFails(sim, waitForFwd(sim), "initiator is already set and does not match the signature")
 		})
 
 		t.Run("Extra signature", func(t *testing.T) {
-			sim, delivery := setup(t, ExecutorVersionV1)
-			waitForFwd := captureFwd(sim)
+			cap, waitForFwd := captureFwd()
+			sim, delivery := setup(t, ExecutorVersionV1, cap)
 
 			extraSig(sim, delivery)
 
 			// Fails
-			fwdFails(sim, waitForFwd(), "initiator is already set and does not match the signature")
+			fwdFails(sim, waitForFwd(sim), "initiator is already set and does not match the signature")
 		})
 	})
 
 	// Fixed in V1+sig
 	t.Run("V1+sig", func(t *testing.T) {
 		t.Run("Out of order", func(t *testing.T) {
-			sim, delivery := setup(t, ExecutorVersionV1SignatureAnchoring)
+			sim, delivery := setup(t, ExecutorVersionV1SignatureAnchoring, nil)
 
 			st := outOfOrder(sim, delivery)
 
@@ -588,7 +601,7 @@ func TestRemoteAuthorityInitiator(t *testing.T) {
 		})
 
 		t.Run("Extra signature", func(t *testing.T) {
-			sim, delivery := setup(t, ExecutorVersionV1SignatureAnchoring)
+			sim, delivery := setup(t, ExecutorVersionV1SignatureAnchoring, nil)
 
 			st := extraSig(sim, delivery)
 
@@ -859,7 +872,8 @@ func TestDifferentValidatorSignaturesV2(t *testing.T) {
 		err = sim.S.Step()
 	}
 	require.Error(t, err, "Expected consensus failure within 50 blocks")
-	require.IsType(t, (consensus.CommitConsensusError)(nil), err)
+	var err2 *consensus.ConsensusError[consensus.CommitResult]
+	require.ErrorAs(t, err, &err2)
 }
 
 func TestMessageCompat(t *testing.T) {
@@ -1219,4 +1233,157 @@ func TestAuthoritySignatureWithoutTransaction(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLiteIdentityPendingTransaction(t *testing.T) {
+	// Create the lite addresses and one account
+	aliceKey := acctesting.GenerateKey("alice")
+	alice := acctesting.AcmeLiteAddressStdPriv(aliceKey)
+
+	cases := []struct {
+		Name    string
+		Version ExecutorVersion
+		Signer  *url.URL
+		Expect  func(*Sim)
+	}{
+		{"Before", ExecutorVersionV2, alice, func(sim *Sim) {
+			// Verify the transaction appears as pending
+			r1 := sim.QueryPendingIds(alice.RootIdentity(), nil)
+			require.Len(sim.TB, r1.Records, 1)
+		}},
+		{"After", ExecutorVersionV2Baikonur, alice, func(sim *Sim) {
+			// Verify the transaction does *not* appear as pending
+			r1 := sim.QueryPendingIds(alice.RootIdentity(), nil)
+			require.Len(sim.TB, r1.Records, 0)
+		}},
+		{"LiteID", ExecutorVersionV2Baikonur, alice.RootIdentity(), func(sim *Sim) {
+			// Verify the transaction does *not* appear as pending
+			r1 := sim.QueryPendingIds(alice.RootIdentity(), nil)
+			require.Len(sim.TB, r1.Records, 0)
+		}},
+	}
+
+	for _, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			// Initialize
+			sim := NewSim(t,
+				simulator.SimpleNetwork(t.Name(), 3, 1),
+				simulator.GenesisWithVersion(GenesisTime, c.Version),
+			)
+
+			Update(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+				require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(aliceKey), 1e6, 1e9))
+			})
+
+			// Execute
+			st := sim.BuildAndSubmitTxnSuccessfully(
+				build.Transaction().For(alice).
+					BurnTokens(1, 0).
+					SignWith(c.Signer).Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+			sim.StepUntil(
+				Txn(st.TxID).Completes())
+
+			// Verify
+			c.Expect(sim)
+		})
+	}
+}
+
+func TestSignatureExpiration(t *testing.T) {
+	alice := url.MustParse("alice")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey1 := acctesting.GenerateKey(bob, 1)
+	bobKey2 := acctesting.GenerateKey(bob, 2)
+
+	// Initialize
+	g := new(network.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionLatest
+	g.Globals = &NetworkGlobals{
+		MajorBlockSchedule: "* * * * *",
+		Limits: &NetworkLimits{
+			PendingMajorBlocks: 1,
+		},
+	}
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 2, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	sim.SetRoute(alice, "BVN0")
+	sim.SetRoute(bob, "BVN1")
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey1[32:], bobKey2[32:])
+	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e9)
+
+	UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) {
+		p.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book")})
+	})
+
+	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(p *KeyPage) {
+		p.AcceptThreshold = 2
+	})
+
+	// Initiate with Bob (multisig)
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			BurnTokens(1, 0).
+			SignWith(bob, "book", "1").Delegator(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey1))
+
+	sim.StepUntil(
+		Txn(st.TxID).IsPending())
+
+	// Verify the transaction is pending on Alice's token account
+	r := sim.QueryPendingIds(alice.JoinPath("tokens"), nil)
+	require.Len(t, r.Records, 1)
+	require.Equal(t, st.TxID.String(), r.Records[0].Value.String())
+
+	// Verify the transaction is pending on Bob's page
+	r = sim.QueryPendingIds(bob.JoinPath("book"), nil)
+	require.Len(t, r.Records, 1)
+	require.Equal(t, st.TxID.String(), r.Records[0].Value.String())
+
+	// Verify the signature is active
+	qtxid := bob.WithTxID(st.TxID.Hash())
+	sigActive := func(h *Harness) bool {
+		r2 := sim.QueryTransaction(qtxid, nil)
+		var active int
+		for _, sigSet := range r2.Signatures.Records {
+			for _, sig := range sigSet.Signatures.Records {
+				var msg = "historical"
+				if !sig.Historical {
+					msg = "active"
+					active++
+				}
+				fmt.Println(sig.ID, "is", msg)
+			}
+		}
+		return active > 0
+	}
+	sim.Verify(
+		True(sigActive))
+
+	// Wait for a major block to trigger expiration
+	sim.StepUntilN(1000, MajorBlock(1))
+
+	// Step until...
+	sim.StepUntil(
+		// The transaction expires
+		Txn(st.TxID).Fails().WithError(errors.Expired),
+
+		// And Bob's signature expires
+		False(sigActive))
+
+	// Verify the transaction is *not* pending on Alice's token account
+	r = sim.QueryPendingIds(alice.JoinPath("tokens"), nil)
+	require.Empty(t, r.Records)
+
+	// Verify the transaction is *not* pending on Bob's page
+	r = sim.QueryPendingIds(bob.JoinPath("book"), nil)
+	require.Empty(t, r.Records)
 }

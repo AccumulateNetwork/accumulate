@@ -529,10 +529,10 @@ func (v *DbPatch) MarshalJSON() ([]byte, error) {
 
 func (v *DbPatchResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		StateHash string `json:"stateHash,omitempty"`
+		StateHash *string `json:"stateHash,omitempty"`
 	}{}
 	if !(v.StateHash == ([32]byte{})) {
-		u.StateHash = encoding.ChainToJSON(v.StateHash)
+		u.StateHash = encoding.ChainToJSON(&v.StateHash)
 	}
 	return json.Marshal(&u)
 }
@@ -587,16 +587,16 @@ func (v *DbPatch) UnmarshalJSON(data []byte) error {
 
 func (v *DbPatchResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		StateHash string `json:"stateHash,omitempty"`
+		StateHash *string `json:"stateHash,omitempty"`
 	}{}
-	u.StateHash = encoding.ChainToJSON(v.StateHash)
+	u.StateHash = encoding.ChainToJSON(&v.StateHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	if x, err := encoding.ChainFromJSON(u.StateHash); err != nil {
 		return fmt.Errorf("error decoding StateHash: %w", err)
 	} else {
-		v.StateHash = x
+		v.StateHash = *x
 	}
 	return nil
 }
