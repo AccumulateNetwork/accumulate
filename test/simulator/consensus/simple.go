@@ -38,11 +38,32 @@ func (s *SimpleHub) With(modules ...Module) Hub {
 }
 
 func (s *SimpleHub) Send(messages ...Message) error {
-	var errs []error
-	var next []Message
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Record the results of each module separately, then concatenate them. This
+	// way, the result has the same order as if the modules were called
+	// synchronously.
+	results := make([][]Message, len(s.modules))
+
+	// Use a mutex to avoid races when recording an error
+	var errs []error
+	errMu := new(sync.Mutex)
+
+	wg := new(sync.WaitGroup)
+	receive := func(i int) {
+		defer wg.Done()
+		m, err := s.modules[i].Receive(messages...)
+		results[i] = m
+
+		if err == nil {
+			return
+		}
+
+		errMu.Lock()
+		defer errMu.Unlock()
+		errs = append(errs, err)
+	}
 
 	// Loop until there's an error or no more messages are produced
 	for len(messages) > 0 && len(errs) == 0 {
@@ -50,21 +71,20 @@ func (s *SimpleHub) Send(messages ...Message) error {
 			slog.DebugContext(s.context, "Executing", "message-type", logging.TypeOf(m))
 		}
 
-		// Send the message to each module and collect any produced messages
-		for _, module := range s.modules {
-			m, err := module.Receive(messages...)
-			if err != nil {
-				errs = append(errs, err)
-			}
-			next = append(next, m...)
+		// Send the messages to each module
+		for i := range s.modules {
+			wg.Add(1)
+			go receive(i)
 		}
+		wg.Wait()
 
-		// Process the produced messages. Reuse `messages` and `next` to
-		// minimize allocation.
-		messages = append(messages[:0], next...)
-		next = next[:0]
-
+		// Collect produced messages. Reuse `messages` to minimize allocation.
+		messages = messages[:0]
+		for _, m := range results {
+			messages = append(messages, m...)
+		}
 	}
+
 	return errors.Join(errs...)
 }
 
