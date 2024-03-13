@@ -32,13 +32,6 @@ type networkMessage interface {
 	network() string
 }
 
-// blockMessages are passed between nodes while executing a block.
-type blockMessage interface {
-	Message
-	isBlkMsg()
-	senderID() [32]byte
-}
-
 // A Hub distributes messages to modules.
 type Hub interface {
 	Register(module Module)
