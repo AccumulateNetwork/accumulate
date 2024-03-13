@@ -10,6 +10,10 @@ Config:
       type: Logging
       marshal-as: reference
       pointer: true
+    - name: Instrumentation
+      type: Instrumentation
+      marshal-as: reference
+      pointer: true
     - name: P2P
       type: P2P
       marshal-as: reference
@@ -48,6 +52,39 @@ LoggingRule:
     - name: Modules
       type: string
       repeatable: true
+
+Instrumentation:
+  non-binary: true
+  fields:
+    - type: HttpListener
+      marshal-as: reference
+
+HttpListener:
+  non-binary: true
+  fields:
+    - name: Listen
+      description: are the addresses and schemes to listen on
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
+    - name: ConnectionLimit
+      description: limits the number of concurrent connections
+      type: int
+      optional: true
+      pointer: true
+    - name: ReadHeaderTimeout
+      description: protects against slow-loris attacks
+      type: duration
+      optional: true
+      pointer: true
+    - name: TlsCertPath
+      description: is the path of the TLS certificate
+      type: string
+      optional: true
+    - name: TlsKeyPath
+      description: is the path of the TLS key
+      type: string
+      optional: true
 
 P2P:
   non-binary: true
@@ -150,19 +187,8 @@ HttpService:
   union: { type: service }
   non-binary: true
   fields:
-    - name: Listen
-      description: are the addresses and schemes to listen on
-      type: p2p.Multiaddr
-      marshal-as: union
-      repeatable: true
-    - name: TlsCertPath
-      description: is the path of the TLS certificate
-      type: string
-      optional: true
-    - name: TlsKeyPath
-      description: is the path of the TLS key
-      type: string
-      optional: true
+    - type: HttpListener
+      marshal-as: reference
     - name: CorsOrigins
       description: is a list of allowed CORS origins
       type: string
@@ -173,16 +199,6 @@ HttpService:
       type: string
       repeatable: true
       optional: true
-    - name: ConnectionLimit
-      description: limits the number of concurrent connections
-      type: int
-      optional: true
-      pointer: true
-    - name: ReadHeaderTimeout
-      description: protects against slow-loris attacks
-      type: duration
-      optional: true
-      pointer: true
     - name: DebugJsonRpc
       type: bool
       optional: true

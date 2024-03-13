@@ -73,9 +73,11 @@ func (c *CoreValidatorConfiguration) apply(_ *Instance, cfg *Config) error {
 	// Create HTTP configuration
 	if !haveService[*HttpService](cfg, nil, nil) {
 		cfg.Services = append(cfg.Services, &HttpService{
-			Listen: []multiaddr.Multiaddr{
-				listen(c.Listen, "", portDir+portAccAPI),
-				listen(c.Listen, "", portBVN+portAccAPI),
+			HttpListener: HttpListener{
+				Listen: []multiaddr.Multiaddr{
+					listen(c.Listen, "", portDir+portAccAPI),
+					listen(c.Listen, "", portBVN+portAccAPI),
+				},
 			},
 			Router: ServiceReference[*RouterService]("Directory"),
 		})
