@@ -54,6 +54,5 @@ func (d *Dispatcher) Receive(messages ...Message) ([]Message, error) {
 	defer d.mu.Unlock()
 	queue := d.queue
 	d.queue = nil
-	// TODO What if there's a CheckTx consensus error?
 	return queue, nil
 }
