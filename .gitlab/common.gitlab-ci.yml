@@ -6,7 +6,8 @@ variables:
   NO_COLOR: '\e[0m'
   SECTION: '\e[0K'
   PRODUCTION_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
-  GO_CI_IMAGE: ${CI_REGISTRY_IMAGE}/ci-golang
+  GO_CI_VERSION: '1.22'
+  GO_CI_IMAGE: ${CI_REGISTRY_IMAGE}/ci-golang:${GO_CI_VERSION}
 
 build-image:golang:
   stage: test
@@ -20,7 +21,7 @@ build-image:golang:
     - name: docker:20-dind
       command: [ --experimental ] # Do we need this?
   script:
-    - docker build -t ${GO_CI_IMAGE} scripts/images/ci-golang
+    - docker build -t ${GO_CI_IMAGE} --build-arg VERSION=${GO_CI_VERSION} scripts/images/ci-golang
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker push ${GO_CI_IMAGE}
 
