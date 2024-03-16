@@ -144,6 +144,8 @@ func (h *healer) heal(args []string) {
 	})
 	check(err)
 
+	<-h.router.(*routing.RouterInstance).Ready()
+
 	dialer := node.DialNetwork()
 	if _, ok := node.Tracker().(*dial.PersistentTracker); !ok {
 		// Use a hack dialer that uses the API for peer discovery
