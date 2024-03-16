@@ -203,6 +203,9 @@ type ChainSearchResult2 interface {
 
 	// Index returns the index of the target entry.
 	Index() (uint64, error)
+
+	// TODO Add Next() (ChainSearchResult2, bool) that returns the next entry in
+	// the index.
 }
 
 type beforeResult struct {
