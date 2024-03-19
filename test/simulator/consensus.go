@@ -42,17 +42,8 @@ func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*proto
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	for _, r := range resp[1:] {
-		if !resp[0].Equal(r) {
-			return nil, &consensus.ConsensusError[consensus.SubmissionResponse]{
-				Message: "conflicting submission responses",
-				Mine:    *resp[0],
-				Theirs:  *r,
-			}
-		}
-	}
 	if len(resp) == 0 {
-		panic("no response")
+		return nil, errors.FatalError.With("no response")
 	}
 	return resp[0].Results, nil
 }

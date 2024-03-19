@@ -38,7 +38,7 @@ func newMempool(logger log.Logger) *mempool {
 }
 
 // Add adds an envelope to the mempool, tracking its arrival order.
-func (m *mempool) Add(block uint64, envelope *messaging.Envelope) {
+func (m *mempool) Add(envelope *messaging.Envelope) {
 	b, err := envelope.MarshalBinary()
 	if err != nil {
 		panic(err)
