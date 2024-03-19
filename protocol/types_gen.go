@@ -19185,7 +19185,7 @@ func (v *RsaSha256Signature) MarshalJSON() ([]byte, error) {
 		SignerVersion   uint64        `json:"signerVersion,omitempty"`
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
-		TransactionHash string        `json:"transactionHash,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
 		Memo            string        `json:"memo,omitempty"`
 		Data            *string       `json:"data,omitempty"`
 	}{}
@@ -19209,7 +19209,7 @@ func (v *RsaSha256Signature) MarshalJSON() ([]byte, error) {
 		u.Vote = v.Vote
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
-		u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+		u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
 	}
 	if !(len(v.Memo) == 0) {
 		u.Memo = v.Memo
@@ -21791,7 +21791,7 @@ func (v *RsaSha256Signature) UnmarshalJSON(data []byte) error {
 		SignerVersion   uint64        `json:"signerVersion,omitempty"`
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
-		TransactionHash string        `json:"transactionHash,omitempty"`
+		TransactionHash *string       `json:"transactionHash,omitempty"`
 		Memo            string        `json:"memo,omitempty"`
 		Data            *string       `json:"data,omitempty"`
 	}{}
@@ -21802,7 +21802,7 @@ func (v *RsaSha256Signature) UnmarshalJSON(data []byte) error {
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
-	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
 	u.Memo = v.Memo
 	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -21828,7 +21828,7 @@ func (v *RsaSha256Signature) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
 		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
-		v.TransactionHash = x
+		v.TransactionHash = *x
 	}
 	v.Memo = u.Memo
 	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
