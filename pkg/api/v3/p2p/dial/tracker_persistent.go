@@ -540,7 +540,11 @@ func (t *PersistentTracker) Discover(ctx context.Context, req *DiscoveryRequest)
 				}
 			}
 
-			ch <- info
+			select {
+			case ch <- info:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
