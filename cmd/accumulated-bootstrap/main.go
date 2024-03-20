@@ -29,23 +29,33 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	Key      PrivateKeyFlag
-	Listen   []multiaddr.Multiaddr
-	Peers    []multiaddr.Multiaddr
-	External multiaddr.Multiaddr
+	Key        PrivateKeyFlag
+	Listen     []multiaddr.Multiaddr
+	PromListen []multiaddr.Multiaddr
+	Peers      []multiaddr.Multiaddr
+	External   multiaddr.Multiaddr
 }{
 	Key: cmdutil.PrivateKeyFlag{Value: &TransientPrivateKey{}},
+	PromListen: []multiaddr.Multiaddr{
+		multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http"),
+	},
 }
 
 func init() {
 	cmd.Flags().Var(&flag.Key, "key", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Listen), "listen", "l", "Listening address")
+	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es) (default /ip4/0.0.0.0/tcp/8081/http)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().Var(MultiaddrFlag{Value: &flag.External}, "external", "External address to advertize")
 }
 
 func run(*cobra.Command, []string) {
 	cfg := &Config{
+		Instrumentation: &Instrumentation{
+			HttpListener: HttpListener{
+				Listen: flag.PromListen,
+			},
+		},
 		P2P: &P2P{
 			Key:            flag.Key.Value,
 			Listen:         flag.Listen,
