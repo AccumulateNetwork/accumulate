@@ -7,6 +7,7 @@
 package signing
 
 import (
+	"crypto/x509"
 	"fmt"
 
 	btc "github.com/btcsuite/btcd/btcec"
@@ -43,6 +44,13 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 		_, pubKey := btc.PrivKeyFromBytes(btc.S256(), k)
 		sig.PublicKey = pubKey.SerializeUncompressed()
 
+	case *protocol.RsaSha256Signature:
+		privKey, err := x509.ParsePKCS1PrivateKey(k)
+		if err != nil {
+			return err
+		}
+		sig.PublicKey = x509.MarshalPKCS1PublicKey(&privKey.PublicKey)
+
 	default:
 		return fmt.Errorf("cannot set the public key on a %T", sig)
 	}
@@ -69,6 +77,9 @@ func (k PrivateKey) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 
 	case *protocol.ETHSignature:
 		return protocol.SignETH(sig, k, sigMdHash, message)
+
+	case *protocol.RsaSha256Signature:
+		return protocol.SignRsaSha256(sig, k, sigMdHash, message)
 
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)
