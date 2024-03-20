@@ -30,13 +30,18 @@ var cmd = &cobra.Command{
 }
 
 var flag = struct {
-	NodeKey  PrivateKeyFlag
-	Key      PrivateKeyFlag
-	LogLevel string
-	Account  UrlFlag
-	Listen   []multiaddr.Multiaddr
-	Peers    []multiaddr.Multiaddr
-}{}
+	NodeKey    PrivateKeyFlag
+	Key        PrivateKeyFlag
+	LogLevel   string
+	Account    UrlFlag
+	Listen     []multiaddr.Multiaddr
+	PromListen []multiaddr.Multiaddr
+	Peers      []multiaddr.Multiaddr
+}{
+	PromListen: []multiaddr.Multiaddr{
+		multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http"),
+	},
+}
 
 func init() {
 	flag.Key.Value = &TransientPrivateKey{}
@@ -46,6 +51,7 @@ func init() {
 	cmd.Flags().Var(&flag.Key, "key", "The key used to sign faucet transactions")
 	cmd.Flags().Var(&flag.Account, "account", "The faucet account")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.Listen), "listen", "P2P listening address(es)")
+	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es) (default /ip4/0.0.0.0/tcp/8081/http)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
 
@@ -66,6 +72,11 @@ func run(_ *cobra.Command, args []string) {
 			Rules: []*LoggingRule{{
 				Level: slog.LevelInfo,
 			}},
+		},
+		Instrumentation: &Instrumentation{
+			HttpListener: HttpListener{
+				Listen: flag.PromListen,
+			},
 		},
 		P2P: &P2P{
 			Key:            flag.NodeKey.Value,

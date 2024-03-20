@@ -42,6 +42,7 @@ var flag = struct {
 	Key          PrivateKeyFlag
 	LogLevel     string
 	HttpListen   []multiaddr.Multiaddr
+	PromListen   []multiaddr.Multiaddr
 	P2pListen    []multiaddr.Multiaddr
 	Peers        []multiaddr.Multiaddr
 	Timeout      time.Duration
@@ -52,7 +53,11 @@ var flag = struct {
 	TlsKey       string
 	PeerDatabase string
 	Pprof        string
-}{}
+}{
+	PromListen: []multiaddr.Multiaddr{
+		multiaddr.StringCast("/ip4/0.0.0.0/tcp/8081/http"),
+	},
+}
 
 var cu = func() *user.User {
 	cu, _ := user.Current()
@@ -69,6 +74,7 @@ func init() {
 
 	cmd.Flags().Var(&flag.Key, "key", "The node key - not required but highly recommended. The value can be a key or a file containing a key. The key must be hex, base64, or an Accumulate secret key address.")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.HttpListen), "http-listen", "l", "HTTP listening address(es) (default /ip4/0.0.0.0/tcp/8080/http)")
+	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.PromListen), "prom-listen", "Prometheus listening address(es)")
 	cmd.Flags().Var((*MultiaddrSliceFlag)(&flag.P2pListen), "p2p-listen", "P2P listening address(es)")
 	cmd.Flags().VarP((*MultiaddrSliceFlag)(&flag.Peers), "peer", "p", "Peers to connect to")
 	cmd.Flags().StringVar(&flag.LogLevel, "log-level", "error", "Log level")
@@ -100,21 +106,23 @@ func run(cmd *cobra.Command, args []string) {
 		// Default listen address
 		a, err := multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/8080/http")
 		Check(err)
-		flag.HttpListen = append(flag.HttpListen, a)
+		flag.HttpListen = []multiaddr.Multiaddr{a}
 	}
 	if len(flag.Peers) == 0 {
 		Fatalf("must specify at least one peer")
 	}
 
 	http := &HttpService{
-		Listen:            flag.HttpListen,
-		TlsCertPath:       flag.TlsCert,
-		TlsKeyPath:        flag.TlsKey,
-		CorsOrigins:       flag.CorsOrigins,
-		LetsEncrypt:       flag.LetsEncrypt,
-		ConnectionLimit:   &flag.ConnLimit,
-		ReadHeaderTimeout: &flag.Timeout,
-		Router:            ServiceValue(&RouterService{}),
+		HttpListener: HttpListener{
+			Listen:            flag.HttpListen,
+			ConnectionLimit:   &flag.ConnLimit,
+			ReadHeaderTimeout: &flag.Timeout,
+			TlsCertPath:       flag.TlsCert,
+			TlsKeyPath:        flag.TlsKey,
+		},
+		CorsOrigins: flag.CorsOrigins,
+		LetsEncrypt: flag.LetsEncrypt,
+		Router:      ServiceValue(&RouterService{}),
 	}
 	cfg := &Config{
 		Network: args[0],
@@ -122,6 +130,11 @@ func run(cmd *cobra.Command, args []string) {
 			Rules: []*LoggingRule{{
 				Level: slog.LevelInfo,
 			}},
+		},
+		Instrumentation: &Instrumentation{
+			HttpListener: HttpListener{
+				Listen: flag.PromListen,
+			},
 		},
 		P2P: &P2P{
 			Key:                flag.Key.Value,

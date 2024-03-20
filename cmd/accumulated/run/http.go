@@ -46,8 +46,7 @@ func (h *HttpService) Provides() []ioc.Provided { return nil }
 
 func (h *HttpService) start(inst *Instance) error {
 	setDefaultVal(&h.Listen, []multiaddr.Multiaddr{mustParseMulti("/ip4/0.0.0.0/tcp/8080/http")})
-	setDefaultPtr(&h.ReadHeaderTimeout, 10*time.Second)
-	setDefaultPtr(&h.ConnectionLimit, 500)
+	h.applyHttpDefaults()
 
 	if len(h.Listen) == 0 {
 		return errors.BadRequest.With("no listen addresses specified")
@@ -133,36 +132,30 @@ func (h *HttpService) start(inst *Instance) error {
 	c := cors.New(cors.Options{
 		AllowedOrigins: h.CorsOrigins,
 	})
-	server := &http.Server{
-		Handler:           c.Handler(api2),
-		ReadHeaderTimeout: *h.ReadHeaderTimeout,
-	}
-
-	for _, l := range h.Listen {
-		proto, addr, port, http, err := decomposeListen(l)
-		if err != nil {
-			return err
-		}
-		if proto == "" || port == "" {
-			return errors.UnknownError.WithFormat("invalid listen address: %v", l)
-		}
-		addr += ":" + port
-
-		l, err := net.Listen(proto, addr)
-		if err != nil {
-			return err
-		}
-		err = h.serve(inst, server, l, http == "https")
-		if err != nil {
-			return err
-		}
+	server, err := h.startHTTP(inst, c.Handler(api2))
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
 	}
 
 	if len(h.LetsEncrypt) > 0 {
-		err = h.serve(inst, server, autocert.NewListener(h.LetsEncrypt...), false)
+		err = h.serveHTTP(inst, server, autocert.NewListener(h.LetsEncrypt...), false)
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (h *HttpListener) applyHttpDefaults() {
+	setDefaultPtr(&h.ReadHeaderTimeout, 10*time.Second)
+	setDefaultPtr(&h.ConnectionLimit, 500)
+}
+
+func (h *HttpListener) startHTTP(inst *Instance, handler http.Handler) (*http.Server, error) {
+	server := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: *h.ReadHeaderTimeout,
 	}
 
 	inst.cleanup(func() {
@@ -171,10 +164,30 @@ func (h *HttpService) start(inst *Instance) error {
 		err := server.Shutdown(ctx)
 		slog.Error("Server stopped", "error", err)
 	})
-	return nil
+
+	for _, l := range h.Listen {
+		proto, addr, port, http, err := decomposeListen(l)
+		if err != nil {
+			return nil, err
+		}
+		if proto == "" || port == "" {
+			return nil, errors.UnknownError.WithFormat("invalid listen address: %v", l)
+		}
+		addr += ":" + port
+
+		l, err := net.Listen(proto, addr)
+		if err != nil {
+			return nil, err
+		}
+		err = h.serveHTTP(inst, server, l, http == "https")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return server, nil
 }
 
-func (h *HttpService) serve(inst *Instance, server *http.Server, l net.Listener, secure bool) error {
+func (h *HttpListener) serveHTTP(inst *Instance, server *http.Server, l net.Listener, secure bool) error {
 	if secure && (h.TlsCertPath == "" || h.TlsKeyPath == "") {
 		return errors.UnknownError.WithFormat("--tls-cert and --tls-key are required to listen on %v", l)
 	}
