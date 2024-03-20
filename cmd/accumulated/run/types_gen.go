@@ -44,12 +44,13 @@ type CometPrivValFile struct {
 }
 
 type Config struct {
-	file           string
-	Network        string          `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Logging        *Logging        `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
-	P2P            *P2P            `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
-	Configurations []Configuration `json:"configurations,omitempty" form:"configurations" query:"configurations" validate:"required"`
-	Services       []Service       `json:"services,omitempty" form:"services" query:"services" validate:"required"`
+	file            string
+	Network         string           `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Logging         *Logging         `json:"logging,omitempty" form:"logging" query:"logging" validate:"required"`
+	Instrumentation *Instrumentation `json:"instrumentation,omitempty" form:"instrumentation" query:"instrumentation" validate:"required"`
+	P2P             *P2P             `json:"p2P,omitempty" form:"p2P" query:"p2P" validate:"required"`
+	Configurations  []Configuration  `json:"configurations,omitempty" form:"configurations" query:"configurations" validate:"required"`
+	Services        []Service        `json:"services,omitempty" form:"services" query:"services" validate:"required"`
 }
 
 type ConsensusService struct {
@@ -105,6 +106,20 @@ type GatewayConfiguration struct {
 	Listen p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
 }
 
+type HttpListener struct {
+
+	// Listen are the addresses and schemes to listen on.
+	Listen []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
+	// ConnectionLimit limits the number of concurrent connections.
+	ConnectionLimit *int64 `json:"connectionLimit,omitempty" form:"connectionLimit" query:"connectionLimit"`
+	// ReadHeaderTimeout protects against slow-loris attacks.
+	ReadHeaderTimeout *time.Duration `json:"readHeaderTimeout,omitempty" form:"readHeaderTimeout" query:"readHeaderTimeout"`
+	// TlsCertPath is the path of the TLS certificate.
+	TlsCertPath string `json:"tlsCertPath,omitempty" form:"tlsCertPath" query:"tlsCertPath"`
+	// TlsKeyPath is the path of the TLS key.
+	TlsKeyPath string `json:"tlsKeyPath,omitempty" form:"tlsKeyPath" query:"tlsKeyPath"`
+}
+
 type HttpPeerMapEntry struct {
 	fieldsSet  []bool
 	ID         p2p.PeerID      `json:"id,omitempty" form:"id" query:"id" validate:"required"`
@@ -114,25 +129,19 @@ type HttpPeerMapEntry struct {
 }
 
 type HttpService struct {
-
-	// Listen are the addresses and schemes to listen on.
-	Listen []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required"`
-	// TlsCertPath is the path of the TLS certificate.
-	TlsCertPath string `json:"tlsCertPath,omitempty" form:"tlsCertPath" query:"tlsCertPath"`
-	// TlsKeyPath is the path of the TLS key.
-	TlsKeyPath string `json:"tlsKeyPath,omitempty" form:"tlsKeyPath" query:"tlsKeyPath"`
+	HttpListener
 	// CorsOrigins is a list of allowed CORS origins.
 	CorsOrigins []string `json:"corsOrigins,omitempty" form:"corsOrigins" query:"corsOrigins"`
 	// LetsEncrypt automatically retrieves a certificate from Let's Encrypt for the specified domains.
-	LetsEncrypt []string `json:"letsEncrypt,omitempty" form:"letsEncrypt" query:"letsEncrypt"`
-	// ConnectionLimit limits the number of concurrent connections.
-	ConnectionLimit *int64 `json:"connectionLimit,omitempty" form:"connectionLimit" query:"connectionLimit"`
-	// ReadHeaderTimeout protects against slow-loris attacks.
-	ReadHeaderTimeout *time.Duration                `json:"readHeaderTimeout,omitempty" form:"readHeaderTimeout" query:"readHeaderTimeout"`
-	DebugJsonRpc      *bool                         `json:"debugJsonRpc,omitempty" form:"debugJsonRpc" query:"debugJsonRpc"`
-	Router            *ServiceOrRef[*RouterService] `json:"router,omitempty" form:"router" query:"router" validate:"required"`
+	LetsEncrypt  []string                      `json:"letsEncrypt,omitempty" form:"letsEncrypt" query:"letsEncrypt"`
+	DebugJsonRpc *bool                         `json:"debugJsonRpc,omitempty" form:"debugJsonRpc" query:"debugJsonRpc"`
+	Router       *ServiceOrRef[*RouterService] `json:"router,omitempty" form:"router" query:"router" validate:"required"`
 	// PeerMap hard-codes the peer map.
 	PeerMap []*HttpPeerMapEntry `json:"peerMap,omitempty" form:"peerMap" query:"peerMap" validate:"required"`
+}
+
+type Instrumentation struct {
+	HttpListener
 }
 
 type Logging struct {
@@ -297,6 +306,9 @@ func (v *Config) Copy() *Config {
 	u.Network = v.Network
 	if v.Logging != nil {
 		u.Logging = (v.Logging).Copy()
+	}
+	if v.Instrumentation != nil {
+		u.Instrumentation = (v.Instrumentation).Copy()
 	}
 	if v.P2P != nil {
 		u.P2P = (v.P2P).Copy()
@@ -479,6 +491,32 @@ func (v *GatewayConfiguration) Copy() *GatewayConfiguration {
 
 func (v *GatewayConfiguration) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *HttpListener) Copy() *HttpListener {
+	u := new(HttpListener)
+
+	u.Listen = make([]p2p.Multiaddr, len(v.Listen))
+	for i, v := range v.Listen {
+		v := v
+		if v != nil {
+			u.Listen[i] = p2p.CopyMultiaddr(v)
+		}
+	}
+	if v.ConnectionLimit != nil {
+		u.ConnectionLimit = new(int64)
+		*u.ConnectionLimit = *v.ConnectionLimit
+	}
+	if v.ReadHeaderTimeout != nil {
+		u.ReadHeaderTimeout = new(time.Duration)
+		*u.ReadHeaderTimeout = *v.ReadHeaderTimeout
+	}
+	u.TlsCertPath = v.TlsCertPath
+	u.TlsKeyPath = v.TlsKeyPath
+
+	return u
+}
+
+func (v *HttpListener) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *HttpPeerMapEntry) Copy() *HttpPeerMapEntry {
 	u := new(HttpPeerMapEntry)
 
@@ -510,15 +548,7 @@ func (v *HttpPeerMapEntry) CopyAsInterface() interface{} { return v.Copy() }
 func (v *HttpService) Copy() *HttpService {
 	u := new(HttpService)
 
-	u.Listen = make([]p2p.Multiaddr, len(v.Listen))
-	for i, v := range v.Listen {
-		v := v
-		if v != nil {
-			u.Listen[i] = p2p.CopyMultiaddr(v)
-		}
-	}
-	u.TlsCertPath = v.TlsCertPath
-	u.TlsKeyPath = v.TlsKeyPath
+	u.HttpListener = *v.HttpListener.Copy()
 	u.CorsOrigins = make([]string, len(v.CorsOrigins))
 	for i, v := range v.CorsOrigins {
 		v := v
@@ -528,14 +558,6 @@ func (v *HttpService) Copy() *HttpService {
 	for i, v := range v.LetsEncrypt {
 		v := v
 		u.LetsEncrypt[i] = v
-	}
-	if v.ConnectionLimit != nil {
-		u.ConnectionLimit = new(int64)
-		*u.ConnectionLimit = *v.ConnectionLimit
-	}
-	if v.ReadHeaderTimeout != nil {
-		u.ReadHeaderTimeout = new(time.Duration)
-		*u.ReadHeaderTimeout = *v.ReadHeaderTimeout
 	}
 	if v.DebugJsonRpc != nil {
 		u.DebugJsonRpc = new(bool)
@@ -556,6 +578,16 @@ func (v *HttpService) Copy() *HttpService {
 }
 
 func (v *HttpService) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Instrumentation) Copy() *Instrumentation {
+	u := new(Instrumentation)
+
+	u.HttpListener = *v.HttpListener.Copy()
+
+	return u
+}
+
+func (v *Instrumentation) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Logging) Copy() *Logging {
 	u := new(Logging)
@@ -812,6 +844,14 @@ func (v *Config) Equal(u *Config) bool {
 		return false
 	}
 	switch {
+	case v.Instrumentation == u.Instrumentation:
+		// equal
+	case v.Instrumentation == nil || u.Instrumentation == nil:
+		return false
+	case !((v.Instrumentation).Equal(u.Instrumentation)):
+		return false
+	}
+	switch {
 	case v.P2P == u.P2P:
 		// equal
 	case v.P2P == nil || u.P2P == nil:
@@ -1040,6 +1080,41 @@ func (v *GatewayConfiguration) Equal(u *GatewayConfiguration) bool {
 	return true
 }
 
+func (v *HttpListener) Equal(u *HttpListener) bool {
+	if len(v.Listen) != len(u.Listen) {
+		return false
+	}
+	for i := range v.Listen {
+		if !(p2p.EqualMultiaddr(v.Listen[i], u.Listen[i])) {
+			return false
+		}
+	}
+	switch {
+	case v.ConnectionLimit == u.ConnectionLimit:
+		// equal
+	case v.ConnectionLimit == nil || u.ConnectionLimit == nil:
+		return false
+	case !(*v.ConnectionLimit == *u.ConnectionLimit):
+		return false
+	}
+	switch {
+	case v.ReadHeaderTimeout == u.ReadHeaderTimeout:
+		// equal
+	case v.ReadHeaderTimeout == nil || u.ReadHeaderTimeout == nil:
+		return false
+	case !(*v.ReadHeaderTimeout == *u.ReadHeaderTimeout):
+		return false
+	}
+	if !(v.TlsCertPath == u.TlsCertPath) {
+		return false
+	}
+	if !(v.TlsKeyPath == u.TlsKeyPath) {
+		return false
+	}
+
+	return true
+}
+
 func (v *HttpPeerMapEntry) Equal(u *HttpPeerMapEntry) bool {
 	if !(p2p.EqualPeerID(v.ID, u.ID)) {
 		return false
@@ -1065,18 +1140,7 @@ func (v *HttpPeerMapEntry) Equal(u *HttpPeerMapEntry) bool {
 }
 
 func (v *HttpService) Equal(u *HttpService) bool {
-	if len(v.Listen) != len(u.Listen) {
-		return false
-	}
-	for i := range v.Listen {
-		if !(p2p.EqualMultiaddr(v.Listen[i], u.Listen[i])) {
-			return false
-		}
-	}
-	if !(v.TlsCertPath == u.TlsCertPath) {
-		return false
-	}
-	if !(v.TlsKeyPath == u.TlsKeyPath) {
+	if !v.HttpListener.Equal(&u.HttpListener) {
 		return false
 	}
 	if len(v.CorsOrigins) != len(u.CorsOrigins) {
@@ -1094,22 +1158,6 @@ func (v *HttpService) Equal(u *HttpService) bool {
 		if !(v.LetsEncrypt[i] == u.LetsEncrypt[i]) {
 			return false
 		}
-	}
-	switch {
-	case v.ConnectionLimit == u.ConnectionLimit:
-		// equal
-	case v.ConnectionLimit == nil || u.ConnectionLimit == nil:
-		return false
-	case !(*v.ConnectionLimit == *u.ConnectionLimit):
-		return false
-	}
-	switch {
-	case v.ReadHeaderTimeout == u.ReadHeaderTimeout:
-		// equal
-	case v.ReadHeaderTimeout == nil || u.ReadHeaderTimeout == nil:
-		return false
-	case !(*v.ReadHeaderTimeout == *u.ReadHeaderTimeout):
-		return false
 	}
 	switch {
 	case v.DebugJsonRpc == u.DebugJsonRpc:
@@ -1134,6 +1182,14 @@ func (v *HttpService) Equal(u *HttpService) bool {
 		if !((v.PeerMap[i]).Equal(u.PeerMap[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *Instrumentation) Equal(u *Instrumentation) bool {
+	if !v.HttpListener.Equal(&u.HttpListener) {
+		return false
 	}
 
 	return true
@@ -1606,17 +1662,21 @@ func (v *CometPrivValFile) MarshalJSON() ([]byte, error) {
 
 func (v *Config) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Network        string                                         `json:"network,omitempty"`
-		Logging        *Logging                                       `json:"logging,omitempty"`
-		P2P            *P2P                                           `json:"p2P,omitempty"`
-		Configurations *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
-		Services       *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
+		Network         string                                         `json:"network,omitempty"`
+		Logging         *Logging                                       `json:"logging,omitempty"`
+		Instrumentation *Instrumentation                               `json:"instrumentation,omitempty"`
+		P2P             *P2P                                           `json:"p2P,omitempty"`
+		Configurations  *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
+		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
 	if !(len(v.Network) == 0) {
 		u.Network = v.Network
 	}
 	if !(v.Logging == nil) {
 		u.Logging = v.Logging
+	}
+	if !(v.Instrumentation == nil) {
+		u.Instrumentation = v.Instrumentation
 	}
 	if !(v.P2P == nil) {
 		u.P2P = v.P2P
@@ -1814,6 +1874,34 @@ func (v *GatewayConfiguration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *HttpListener) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
+		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
+		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+	}{}
+	if !(len(v.Listen) == 0) {
+		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(v.ConnectionLimit == nil) {
+		u.ConnectionLimit = v.ConnectionLimit
+	}
+	if !(v.ReadHeaderTimeout == nil) {
+		if v.ReadHeaderTimeout != nil {
+			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
+		}
+	}
+	if !(len(v.TlsCertPath) == 0) {
+		u.TlsCertPath = v.TlsCertPath
+	}
+	if !(len(v.TlsKeyPath) == 0) {
+		u.TlsKeyPath = v.TlsKeyPath
+	}
+	return json.Marshal(&u)
+}
+
 func (v *HttpPeerMapEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
@@ -1836,39 +1924,44 @@ func (v *HttpService) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type              ServiceType                                    `json:"type"`
 		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
 		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
 		CorsOrigins       encoding.JsonList[string]                      `json:"corsOrigins,omitempty"`
 		LetsEncrypt       encoding.JsonList[string]                      `json:"letsEncrypt,omitempty"`
-		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
-		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		DebugJsonRpc      *bool                                          `json:"debugJsonRpc,omitempty"`
 		Router            *ServiceOrRef[*RouterService]                  `json:"router,omitempty"`
 		PeerMap           encoding.JsonList[*HttpPeerMapEntry]           `json:"peerMap,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if !(len(v.Listen) == 0) {
-		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	if !(len(v.HttpListener.Listen) == 0) {
+
+		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
 	}
-	if !(len(v.TlsCertPath) == 0) {
-		u.TlsCertPath = v.TlsCertPath
+	if !(v.HttpListener.ConnectionLimit == nil) {
+
+		u.ConnectionLimit = v.HttpListener.ConnectionLimit
 	}
-	if !(len(v.TlsKeyPath) == 0) {
-		u.TlsKeyPath = v.TlsKeyPath
+	if !(v.HttpListener.ReadHeaderTimeout == nil) {
+
+		if v.HttpListener.ReadHeaderTimeout != nil {
+			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.HttpListener.ReadHeaderTimeout)
+		}
+	}
+	if !(len(v.HttpListener.TlsCertPath) == 0) {
+
+		u.TlsCertPath = v.HttpListener.TlsCertPath
+	}
+	if !(len(v.HttpListener.TlsKeyPath) == 0) {
+
+		u.TlsKeyPath = v.HttpListener.TlsKeyPath
 	}
 	if !(len(v.CorsOrigins) == 0) {
 		u.CorsOrigins = v.CorsOrigins
 	}
 	if !(len(v.LetsEncrypt) == 0) {
 		u.LetsEncrypt = v.LetsEncrypt
-	}
-	if !(v.ConnectionLimit == nil) {
-		u.ConnectionLimit = v.ConnectionLimit
-	}
-	if !(v.ReadHeaderTimeout == nil) {
-		if v.ReadHeaderTimeout != nil {
-			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
-		}
 	}
 	if !(v.DebugJsonRpc == nil) {
 		u.DebugJsonRpc = v.DebugJsonRpc
@@ -1878,6 +1971,39 @@ func (v *HttpService) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.PeerMap) == 0) {
 		u.PeerMap = v.PeerMap
+	}
+	return json.Marshal(&u)
+}
+
+func (v *Instrumentation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
+		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
+		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+	}{}
+	if !(len(v.HttpListener.Listen) == 0) {
+
+		u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	}
+	if !(v.HttpListener.ConnectionLimit == nil) {
+
+		u.ConnectionLimit = v.HttpListener.ConnectionLimit
+	}
+	if !(v.HttpListener.ReadHeaderTimeout == nil) {
+
+		if v.HttpListener.ReadHeaderTimeout != nil {
+			u.ReadHeaderTimeout = encoding.DurationToJSON(*v.HttpListener.ReadHeaderTimeout)
+		}
+	}
+	if !(len(v.HttpListener.TlsCertPath) == 0) {
+
+		u.TlsCertPath = v.HttpListener.TlsCertPath
+	}
+	if !(len(v.HttpListener.TlsKeyPath) == 0) {
+
+		u.TlsKeyPath = v.HttpListener.TlsKeyPath
 	}
 	return json.Marshal(&u)
 }
@@ -2163,14 +2289,16 @@ func (v *CometPrivValFile) UnmarshalJSON(data []byte) error {
 
 func (v *Config) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Network        string                                         `json:"network,omitempty"`
-		Logging        *Logging                                       `json:"logging,omitempty"`
-		P2P            *P2P                                           `json:"p2P,omitempty"`
-		Configurations *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
-		Services       *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
+		Network         string                                         `json:"network,omitempty"`
+		Logging         *Logging                                       `json:"logging,omitempty"`
+		Instrumentation *Instrumentation                               `json:"instrumentation,omitempty"`
+		P2P             *P2P                                           `json:"p2P,omitempty"`
+		Configurations  *encoding.JsonUnmarshalListWith[Configuration] `json:"configurations,omitempty"`
+		Services        *encoding.JsonUnmarshalListWith[Service]       `json:"services,omitempty"`
 	}{}
 	u.Network = v.Network
 	u.Logging = v.Logging
+	u.Instrumentation = v.Instrumentation
 	u.P2P = v.P2P
 	u.Configurations = &encoding.JsonUnmarshalListWith[Configuration]{Value: v.Configurations, Func: UnmarshalConfigurationJSON}
 	u.Services = &encoding.JsonUnmarshalListWith[Service]{Value: v.Services, Func: UnmarshalServiceJSON}
@@ -2179,6 +2307,7 @@ func (v *Config) UnmarshalJSON(data []byte) error {
 	}
 	v.Network = u.Network
 	v.Logging = u.Logging
+	v.Instrumentation = u.Instrumentation
 	v.P2P = u.P2P
 	if u.Configurations != nil {
 		v.Configurations = make([]Configuration, len(u.Configurations.Value))
@@ -2428,6 +2557,43 @@ func (v *GatewayConfiguration) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *HttpListener) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
+		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
+		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+	}{}
+	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.ConnectionLimit = v.ConnectionLimit
+	if v.ReadHeaderTimeout != nil {
+		u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
+	}
+	u.TlsCertPath = v.TlsCertPath
+	u.TlsKeyPath = v.TlsKeyPath
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Listen != nil {
+		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
+		for i, x := range u.Listen.Value {
+			v.Listen[i] = x
+		}
+	}
+	v.ConnectionLimit = u.ConnectionLimit
+	if u.ReadHeaderTimeout != nil {
+		if x, err := encoding.DurationFromJSON(u.ReadHeaderTimeout); err != nil {
+			return fmt.Errorf("error decoding ReadHeaderTimeout: %w", err)
+		} else {
+			v.ReadHeaderTimeout = &x
+		}
+	}
+	v.TlsCertPath = u.TlsCertPath
+	v.TlsKeyPath = u.TlsKeyPath
+	return nil
+}
+
 func (v *HttpPeerMapEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		ID         *encoding.JsonUnmarshalWith[p2p.PeerID]        `json:"id,omitempty"`
@@ -2458,26 +2624,26 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type              ServiceType                                    `json:"type"`
 		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
 		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
 		CorsOrigins       encoding.JsonList[string]                      `json:"corsOrigins,omitempty"`
 		LetsEncrypt       encoding.JsonList[string]                      `json:"letsEncrypt,omitempty"`
-		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
-		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
 		DebugJsonRpc      *bool                                          `json:"debugJsonRpc,omitempty"`
 		Router            *ServiceOrRef[*RouterService]                  `json:"router,omitempty"`
 		PeerMap           encoding.JsonList[*HttpPeerMapEntry]           `json:"peerMap,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
-	u.TlsCertPath = v.TlsCertPath
-	u.TlsKeyPath = v.TlsKeyPath
+	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.ConnectionLimit = v.HttpListener.ConnectionLimit
+	if v.HttpListener.ReadHeaderTimeout != nil {
+		u.ReadHeaderTimeout = encoding.DurationToJSON(*v.HttpListener.ReadHeaderTimeout)
+	}
+	u.TlsCertPath = v.HttpListener.TlsCertPath
+	u.TlsKeyPath = v.HttpListener.TlsKeyPath
 	u.CorsOrigins = v.CorsOrigins
 	u.LetsEncrypt = v.LetsEncrypt
-	u.ConnectionLimit = v.ConnectionLimit
-	if v.ReadHeaderTimeout != nil {
-		u.ReadHeaderTimeout = encoding.DurationToJSON(*v.ReadHeaderTimeout)
-	}
 	u.DebugJsonRpc = v.DebugJsonRpc
 	u.Router = v.Router
 	u.PeerMap = v.PeerMap
@@ -2488,26 +2654,63 @@ func (v *HttpService) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if u.Listen != nil {
-		v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
+		v.HttpListener.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
 		for i, x := range u.Listen.Value {
-			v.Listen[i] = x
+			v.HttpListener.Listen[i] = x
 		}
 	}
-	v.TlsCertPath = u.TlsCertPath
-	v.TlsKeyPath = u.TlsKeyPath
-	v.CorsOrigins = u.CorsOrigins
-	v.LetsEncrypt = u.LetsEncrypt
-	v.ConnectionLimit = u.ConnectionLimit
+	v.HttpListener.ConnectionLimit = u.ConnectionLimit
 	if u.ReadHeaderTimeout != nil {
 		if x, err := encoding.DurationFromJSON(u.ReadHeaderTimeout); err != nil {
 			return fmt.Errorf("error decoding ReadHeaderTimeout: %w", err)
 		} else {
-			v.ReadHeaderTimeout = &x
+			v.HttpListener.ReadHeaderTimeout = &x
 		}
 	}
+	v.HttpListener.TlsCertPath = u.TlsCertPath
+	v.HttpListener.TlsKeyPath = u.TlsKeyPath
+	v.CorsOrigins = u.CorsOrigins
+	v.LetsEncrypt = u.LetsEncrypt
 	v.DebugJsonRpc = u.DebugJsonRpc
 	v.Router = u.Router
 	v.PeerMap = u.PeerMap
+	return nil
+}
+
+func (v *Instrumentation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Listen            *encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		ConnectionLimit   *int64                                         `json:"connectionLimit,omitempty"`
+		ReadHeaderTimeout interface{}                                    `json:"readHeaderTimeout,omitempty"`
+		TlsCertPath       string                                         `json:"tlsCertPath,omitempty"`
+		TlsKeyPath        string                                         `json:"tlsKeyPath,omitempty"`
+	}{}
+	u.Listen = &encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.HttpListener.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.ConnectionLimit = v.HttpListener.ConnectionLimit
+	if v.HttpListener.ReadHeaderTimeout != nil {
+		u.ReadHeaderTimeout = encoding.DurationToJSON(*v.HttpListener.ReadHeaderTimeout)
+	}
+	u.TlsCertPath = v.HttpListener.TlsCertPath
+	u.TlsKeyPath = v.HttpListener.TlsKeyPath
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Listen != nil {
+		v.HttpListener.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
+		for i, x := range u.Listen.Value {
+			v.HttpListener.Listen[i] = x
+		}
+	}
+	v.HttpListener.ConnectionLimit = u.ConnectionLimit
+	if u.ReadHeaderTimeout != nil {
+		if x, err := encoding.DurationFromJSON(u.ReadHeaderTimeout); err != nil {
+			return fmt.Errorf("error decoding ReadHeaderTimeout: %w", err)
+		} else {
+			v.HttpListener.ReadHeaderTimeout = &x
+		}
+	}
+	v.HttpListener.TlsCertPath = u.TlsCertPath
+	v.HttpListener.TlsKeyPath = u.TlsKeyPath
 	return nil
 }
 
