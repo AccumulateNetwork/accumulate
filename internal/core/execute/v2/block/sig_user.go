@@ -18,15 +18,24 @@ import (
 )
 
 func init() {
+	// Delegated signatures
 	registerSimpleExec[UserSignature](&signatureExecutors,
 		protocol.SignatureTypeDelegated,
+	)
 
+	// Regular signatures
+	registerSimpleExec[UserSignature](&signatureExecutors,
 		protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519,
 		protocol.SignatureTypeRCD1,
 		protocol.SignatureTypeBTC,
 		protocol.SignatureTypeBTCLegacy,
 		protocol.SignatureTypeETH,
+	)
+
+	// RSA signatures (enabled with Vandenberg)
+	registerConditionalExec[UserSignature](&signatureExecutors,
+		func(ctx *SignatureContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
 		protocol.SignatureTypeRsaSha256,
 	)
 }
@@ -77,13 +86,6 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	sig, ok := ctx.signature.(protocol.UserSignature)
 	if !ok {
 		return errors.BadRequest.WithFormat("invalid user signature: expected delegated or key, got %v", ctx.signature.Type())
-	}
-
-	if !ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
-		switch sig.Type() {
-		case protocol.SignatureTypeRsaSha256:
-			return errors.NotAllowed.WithFormat("unsupported signature type %v", sig.Type())
-		}
 	}
 
 	// Unwrap delegated signatures

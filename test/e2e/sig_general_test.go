@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -115,7 +114,7 @@ func TestNewSigType(t *testing.T) {
 			} else {
 				st := sim.BuildAndSubmit(env)
 				require.Error(t, st[1].AsError())
-				require.ErrorIs(t, st[1].Error, errors.NotAllowed)
+				require.ErrorContains(t, st[1].Error, "unsupported signature type")
 			}
 		})
 	}
