@@ -27,6 +27,7 @@ func init() {
 		protocol.SignatureTypeBTC,
 		protocol.SignatureTypeBTCLegacy,
 		protocol.SignatureTypeETH,
+		protocol.SignatureTypeRsaSha256,
 	)
 }
 
@@ -76,6 +77,13 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 	sig, ok := ctx.signature.(protocol.UserSignature)
 	if !ok {
 		return errors.BadRequest.WithFormat("invalid user signature: expected delegated or key, got %v", ctx.signature.Type())
+	}
+
+	if !ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
+		switch sig.Type() {
+		case protocol.SignatureTypeRsaSha256:
+			return errors.NotAllowed.WithFormat("unsupported signature type %v", sig.Type())
+		}
 	}
 
 	// Unwrap delegated signatures
