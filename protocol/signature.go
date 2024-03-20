@@ -8,14 +8,18 @@ package protocol
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"fmt"
 	"io"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
-	"github.com/ethereum/go-ethereum/crypto"
+	eth "github.com/ethereum/go-ethereum/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -98,7 +102,8 @@ func (s SignatureType) IsSystem() bool {
 func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 	switch typ {
 	case SignatureTypeED25519,
-		SignatureTypeLegacyED25519:
+		SignatureTypeLegacyED25519,
+		SignatureTypeRsaSha256:
 		return doSha256(key), nil
 
 	case SignatureTypeRCD1:
@@ -130,16 +135,16 @@ func signatureHash(sig Signature) []byte {
 	return doSha256(data)
 }
 
-func signingHash(sig Signature, sigMdHash, txnHash []byte) []byte {
+func signingHash(sig Signature, hasher hashFunc, sigMdHash, txnHash []byte) []byte {
 	if sigMdHash == nil {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
 	data = append(data, txnHash...)
-	hash := sha256.Sum256(data)
-
-	return hash[:]
+	return hasher(data)
 }
+
+type hashFunc func(data []byte) []byte
 
 func doSha256(data []byte) []byte {
 	hash := sha256.Sum256(data)
@@ -187,14 +192,14 @@ func BTCaddress(pubKey []byte) string {
 
 // ETHhash returns the truncated hash (i.e. binary ethereum address)
 func ETHhash(pubKey []byte) []byte {
-	p, err := crypto.UnmarshalPubkey(pubKey)
+	p, err := eth.UnmarshalPubkey(pubKey)
 	if err != nil {
-		p, err = crypto.DecompressPubkey(pubKey)
+		p, err = eth.DecompressPubkey(pubKey)
 		if err != nil {
 			return nil
 		}
 	}
-	a := crypto.PubkeyToAddress(*p)
+	a := eth.PubkeyToAddress(*p)
 	return a.Bytes()
 }
 
@@ -396,7 +401,7 @@ func (e *LegacyED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
  */
 
 func SignED25519(sig *ED25519Signature, privateKey, sigMdHash, txnHash []byte) {
-	sig.Signature = ed25519.Sign(privateKey, signingHash(sig, sigMdHash, txnHash))
+	sig.Signature = ed25519.Sign(privateKey, signingHash(sig, doSha256, sigMdHash, txnHash))
 }
 
 // GetSigner returns Signer.
@@ -459,7 +464,7 @@ func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
-	return ed25519.Verify(e.PublicKey, signingHash(e, sigMdHash, txnHash), e.Signature)
+	return ed25519.Verify(e.PublicKey, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
 }
 
 /*
@@ -467,7 +472,7 @@ func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
  */
 
 func SignRCD1(sig *RCD1Signature, privateKey, sigMdHash, txnHash []byte) {
-	sig.Signature = ed25519.Sign(privateKey, signingHash(sig, sigMdHash, txnHash))
+	sig.Signature = ed25519.Sign(privateKey, signingHash(sig, doSha256, sigMdHash, txnHash))
 }
 
 // GetSigner returns Signer.
@@ -494,7 +499,7 @@ func (e *RCD1Signature) Verify(sigMdHash, txnHash []byte) bool {
 		return false
 	}
 
-	return ed25519.Verify(e.PublicKey, signingHash(e, sigMdHash, txnHash), e.Signature)
+	return ed25519.Verify(e.PublicKey, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
 }
 
 // GetSignature returns Signature.
@@ -538,7 +543,7 @@ func (s *RCD1Signature) GetVote() VoteType {
  */
 func SignBTC(sig *BTCSignature, privateKey, sigMdHash, txnHash []byte) error {
 	pvkey, _ := btc.PrivKeyFromBytes(btc.S256(), privateKey)
-	sign, err := pvkey.Sign(signingHash(sig, sigMdHash, txnHash))
+	sign, err := pvkey.Sign(signingHash(sig, doSha256, sigMdHash, txnHash))
 	if err != nil {
 		return err
 	}
@@ -611,7 +616,7 @@ func (e *BTCSignature) Verify(sigMdHash, txnHash []byte) bool {
 	if err != nil {
 		return false
 	}
-	return sig.Verify(signingHash(e, sigMdHash, txnHash), pbkey)
+	return sig.Verify(signingHash(e, doSha256, sigMdHash, txnHash), pbkey)
 }
 
 /*
@@ -620,7 +625,7 @@ func (e *BTCSignature) Verify(sigMdHash, txnHash []byte) bool {
 
 func SignBTCLegacy(sig *BTCLegacySignature, privateKey, sigMdHash, txnHash []byte) error {
 	pvkey, _ := btc.PrivKeyFromBytes(btc.S256(), privateKey)
-	sign, err := pvkey.Sign(signingHash(sig, sigMdHash, txnHash))
+	sign, err := pvkey.Sign(signingHash(sig, doSha256, sigMdHash, txnHash))
 	if err != nil {
 		return err
 	}
@@ -693,7 +698,7 @@ func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte) bool {
 	if err != nil {
 		return false
 	}
-	return sig.Verify(signingHash(e, sigMdHash, txnHash), pbkey)
+	return sig.Verify(signingHash(e, doSha256, sigMdHash, txnHash), pbkey)
 }
 
 /*
@@ -709,7 +714,7 @@ func SignEthAsDer(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err
 	if !pub.IsEqual(pk2) {
 		return fmt.Errorf("public key is not what is expected")
 	}
-	sign, err := pvkey.Sign(signingHash(sig, sigMdHash, txnHash))
+	sign, err := pvkey.Sign(signingHash(sig, doSha256, sigMdHash, txnHash))
 	if err != nil {
 		return err
 	}
@@ -722,13 +727,13 @@ func SignEthAsDer(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err
  */
 
 func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err error) {
-	priv, err := crypto.ToECDSA(privateKey)
+	priv, err := eth.ToECDSA(privateKey)
 	if err != nil {
 		return err
 	}
 
-	sig.PublicKey = crypto.FromECDSAPub(&priv.PublicKey)
-	sig.Signature, err = crypto.Sign(signingHash(sig, sigMdHash, txnHash), priv)
+	sig.PublicKey = eth.FromECDSAPub(&priv.PublicKey)
+	sig.Signature, err = eth.Sign(signingHash(sig, doSha256, sigMdHash, txnHash), priv)
 	return err
 }
 
@@ -797,7 +802,7 @@ func (e *ethSignatureV1) Verify(sigMdHash, txnHash []byte) bool {
 	if err != nil {
 		return false
 	}
-	return sig.Verify(signingHash(e, sigMdHash, txnHash), pbkey)
+	return sig.Verify(signingHash(e, doSha256, sigMdHash, txnHash), pbkey)
 }
 
 // Verify returns true if this signature is a valid RSV signature of the hash, with V2 we drop support for DER format
@@ -807,7 +812,7 @@ func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
 		//extract RS of the RSV format
 		sig = sig[:64]
 	}
-	return crypto.VerifySignature(e.PublicKey, signingHash(e, sigMdHash, txnHash), sig)
+	return eth.VerifySignature(e.PublicKey, signingHash(e, doSha256, sigMdHash, txnHash), sig)
 }
 
 /*
@@ -1050,4 +1055,96 @@ func (s *AuthoritySignature) RoutingLocation() *url.URL {
 		return s.Delegator[0]
 	}
 	return s.TxID.Account()
+}
+
+/*
+ * RSA Signature
+ * privateKey must be in PKCS #1, ASN.1 DER format
+ */
+func SignRsaSha256(sig *RsaSha256Signature, privateKeyDer, sigMdHash, txnHash []byte) error {
+	//private key is expected to be in PKCS #1, ASN.1 DER format
+	privateKey, err := x509.ParsePKCS1PrivateKey(privateKeyDer)
+	if err != nil {
+		return err
+	}
+
+	// Sign the signing hash
+	sig.Signature, err = rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, signingHash(sig, doSha256, sigMdHash, txnHash))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetSigner returns Signer.
+func (s *RsaSha256Signature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *RsaSha256Signature) RoutingLocation() *url.URL { return s.Signer }
+
+// GetSignerVersion returns SignerVersion.
+func (s *RsaSha256Signature) GetSignerVersion() uint64 { return s.SignerVersion }
+
+// GetTimestamp returns Timestamp.
+func (s *RsaSha256Signature) GetTimestamp() uint64 { return s.Timestamp }
+
+// GetPublicKeyHash returns the hash of PublicKey.
+func (s *RsaSha256Signature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
+
+// GetPublicKey returns PublicKey.
+func (s *RsaSha256Signature) GetPublicKey() []byte { return s.PublicKey }
+
+// GetSignature returns Signature.
+func (s *RsaSha256Signature) GetSignature() []byte { return s.Signature }
+
+// GetTransactionHash returns TransactionHash.
+func (s *RsaSha256Signature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
+// Hash returns the hash of the signature.
+func (s *RsaSha256Signature) Hash() []byte { return signatureHash(s) }
+
+// Metadata returns the signature's metadata.
+func (s *RsaSha256Signature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // And the transaction hash
+	return r
+}
+
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *RsaSha256Signature) Initiator() (hash.Hasher, error) {
+	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
+		return nil, ErrCannotInitiate
+	}
+
+	hasher := make(hash.Hasher, 0, 4)
+	hasher.AddBytes(s.PublicKey)
+	hasher.AddUrl(s.Signer)
+	hasher.AddUint(s.SignerVersion)
+	hasher.AddUint(s.Timestamp)
+	return hasher, nil
+}
+
+// GetVote returns how the signer votes on a particular transaction
+func (s *RsaSha256Signature) GetVote() VoteType {
+	return s.Vote
+}
+
+// Verify returns true if this signature is a valid RSA signature of the
+// hash. The public key is expected to be in PKCS#1 ASN.1 DER format
+func (e *RsaSha256Signature) Verify(sigMdHash, txnHash []byte) bool {
+	//Convert public DER key into and rsa public key struct
+	pubKey, err := x509.ParsePKCS1PublicKey(e.PublicKey)
+	if err != nil {
+		return false
+	}
+
+	//The length of the signature should be the size of the public key's modulus
+	if pubKey.Size() != len(e.Signature) {
+		return false
+	}
+
+	// Verify signature
+	err = rsa.VerifyPKCS1v15(pubKey, crypto.SHA256, signingHash(e, doSha256, sigMdHash, txnHash), e.Signature)
+	return err == nil
 }
