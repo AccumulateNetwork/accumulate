@@ -100,6 +100,12 @@ func (inst *Instance) Start() (err error) {
 		}
 	}()
 
+	// Start metrics
+	err = inst.config.Instrumentation.start(inst)
+	if err != nil {
+		return err
+	}
+
 	// Ensure the disk does not fill up (and is not currently full; requires
 	// logging)
 	free, err := diskUsage(inst.rootDir)
