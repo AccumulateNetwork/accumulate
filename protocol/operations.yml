@@ -29,3 +29,11 @@ RemoveAccountAuthorityOperation:
     description: is the authority to add
     type: url
     pointer: true
+
+PendingTransactionGCOperation:
+  union: { type: networkMaintenanceOperation, value: pendingTransactionGC }
+  fields:
+  - name: Account
+    description: is the account to collect garbage from
+    type: url
+    pointer: true
