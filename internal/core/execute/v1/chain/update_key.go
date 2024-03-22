@@ -85,7 +85,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		}
 
 		for _, sig := range sigs {
-			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator) {
+			if ok, _ := protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator); ok {
 				goto found_init
 			}
 		}
