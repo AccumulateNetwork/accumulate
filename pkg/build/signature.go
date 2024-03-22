@@ -28,6 +28,10 @@ type SignatureBuilder struct {
 	// Ignore64Byte (when set) stops the signature builder from automatically
 	// correcting a transaction header or body that marshals to 64 bytes.
 	Ignore64Byte bool
+
+	// Use a Merkle hash to initiate the transaction. Only intended for testing
+	// purposes.
+	InitMerkle bool
 }
 
 func (b SignatureBuilder) Type(typ protocol.SignatureType) SignatureBuilder {
@@ -62,6 +66,11 @@ func (b SignatureBuilder) Reject() SignatureBuilder {
 
 func (b SignatureBuilder) Abstain() SignatureBuilder {
 	b.signer.Vote = protocol.VoteTypeAbstain
+	return b
+}
+
+func (b SignatureBuilder) Suggest() SignatureBuilder {
+	b.signer.Vote = protocol.VoteTypeSuggest
 	return b
 }
 
@@ -153,8 +162,11 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 		return b
 	}
 
-	// Always use a simple hash
-	b.signer.InitMode = signing.InitWithSimpleHash
+	if b.InitMerkle {
+		b.signer.InitMode = signing.InitWithMerkleHash
+	} else {
+		b.signer.InitMode = signing.InitWithSimpleHash
+	}
 
 	var signature protocol.Signature
 	var err error
