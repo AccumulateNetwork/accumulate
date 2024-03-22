@@ -137,6 +137,7 @@ func TestFee(t *testing.T) {
 
 				switch i {
 				case TransactionTypeActivateProtocolVersion,
+					TransactionTypeNetworkMaintenance,
 					TransactionTypeAcmeFaucet,
 					TransactionTypeBurnCredits,
 					TransactionTypeAddCredits:
