@@ -76,6 +76,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 
 		// Operator transactions
 		chain.ActivateProtocolVersion{},
+		chain.NetworkMaintenance{},
 	}
 
 	switch opts.Describe.NetworkType {

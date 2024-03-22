@@ -36,6 +36,9 @@ const (
 
 	// MessageTypeExpiredTransaction expires a pending transaction.
 	MessageTypeExpiredTransaction
+
+	// MessageTypeNetworkMaintenanceOp executes a network maintenance operation.
+	MessageTypeNetworkMaintenanceOp
 )
 
 // NetworkUpdate is an update to a network account that has been pushed from the
@@ -66,6 +69,13 @@ type ExpiredTransaction struct {
 	TxID *url.TxID
 }
 
+// NetworkMaintenanceOp expires a network maintenance operation.
+type NetworkMaintenanceOp struct {
+	internalMessage
+	Cause     *url.TxID
+	Operation protocol.NetworkMaintenanceOperation
+}
+
 func (m *NetworkUpdate) Type() messaging.MessageType { return MessageTypeNetworkUpdate }
 func (m *NetworkUpdate) ID() *url.TxID               { return m.Account.WithTxID(m.Cause) }
 func (m *NetworkUpdate) CopyAsInterface() any        { return m }
@@ -83,6 +93,11 @@ func (m *ExpiredTransaction) Type() messaging.MessageType { return MessageTypeEx
 func (m *ExpiredTransaction) ID() *url.TxID               { return m.TxID }
 func (m *ExpiredTransaction) CopyAsInterface() any        { return m }
 func (m *ExpiredTransaction) Hash() [32]byte              { return m.TxID.Hash() }
+
+func (m *NetworkMaintenanceOp) Type() messaging.MessageType { return MessageTypeNetworkMaintenanceOp }
+func (m *NetworkMaintenanceOp) ID() *url.TxID               { return m.Operation.ID() }
+func (m *NetworkMaintenanceOp) CopyAsInterface() any        { return m }
+func (m *NetworkMaintenanceOp) Hash() [32]byte              { return m.ID().Hash() }
 
 // internalMessage can be embedded in another type to implement an internal
 // [messaging.Message]. The message is internal in that it cannot be marshalled,
