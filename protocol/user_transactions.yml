@@ -245,6 +245,14 @@ UpdateKey:
     - name: NewKeyHash
       type: bytes
 
+NetworkMaintenance:
+  union: { type: transaction }
+  fields:
+    - name: Operations
+      type: NetworkMaintenanceOperation
+      marshal-as: union
+      repeatable: true
+
 ActivateProtocolVersion:
   union: { type: transaction }
   fields:
