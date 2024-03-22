@@ -6,6 +6,8 @@ toolchain go1.22.1
 
 replace gitlab.com/accumulatenetwork/accumulate => ../../../
 
+replace github.com/julienschmidt/httprouter v1.3.0 => github.com/firelizzard18/httprouter v0.0.0-20231019203155-74063b4f447c
+
 require (
 	github.com/btcsuite/btcd v0.22.1
 	github.com/fatih/color v1.16.0
