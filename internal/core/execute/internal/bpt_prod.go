@@ -9,9 +9,12 @@
 package internal
 
 import (
+	"crypto/sha256"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -71,11 +74,17 @@ func (a *observedAccount) hashChains() (hash.Hasher, error) {
 			break
 		}
 
-		if chain.CurrentState().Count == 0 {
-			hasher.AddHash(new([32]byte))
-		} else {
-			hasher.AddHash((*[32]byte)(chain.CurrentState().Anchor()))
+		var anchor [32]byte
+		if chain.CurrentState().Count > 0 {
+			anchor = *(*[32]byte)(chain.CurrentState().Anchor())
 		}
+
+		// Double hash if it's a failure chain
+		if chain.Type() == merkle.ChainTypeFailure {
+			anchor = sha256.Sum256(anchor[:])
+		}
+
+		hasher.AddHash(&anchor)
 	}
 	return hasher, err
 }

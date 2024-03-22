@@ -26,6 +26,9 @@ const ChainTypeAnchor ChainType = 2
 // ChainTypeIndex indexes other chains.
 const ChainTypeIndex ChainType = 4
 
+// ChainTypeFailure holds failed messages.
+const ChainTypeFailure ChainType = 5
+
 // GetEnumValue returns the value of the Chain Type
 func (v ChainType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -33,7 +36,7 @@ func (v ChainType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ChainType) SetEnumValue(id uint64) bool {
 	u := ChainType(id)
 	switch u {
-	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeIndex:
+	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeIndex, ChainTypeFailure:
 		*v = u
 		return true
 	}
@@ -51,6 +54,8 @@ func (v ChainType) String() string {
 		return "anchor"
 	case ChainTypeIndex:
 		return "index"
+	case ChainTypeFailure:
+		return "failure"
 	}
 	return fmt.Sprintf("ChainType:%d", v)
 }
@@ -66,6 +71,8 @@ func ChainTypeByName(name string) (ChainType, bool) {
 		return ChainTypeAnchor, true
 	case "index":
 		return ChainTypeIndex, true
+	case "failure":
+		return ChainTypeFailure, true
 	}
 	return 0, false
 }

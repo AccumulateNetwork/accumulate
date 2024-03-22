@@ -7,11 +7,13 @@
 package block
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -110,8 +112,15 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2, blockInde
 		return 0, false, err
 	}
 
+	// Double hash if it's a failure chain
+	anchor := accountChain.Anchor()
+	if chain.Type() == merkle.ChainTypeFailure {
+		h := sha256.Sum256(anchor)
+		anchor = h[:]
+	}
+
 	// Add its anchor to the root chain
-	err = rootChain.AddEntry(accountChain.Anchor(), false)
+	err = rootChain.AddEntry(anchor, false)
 	if err != nil {
 		return 0, false, err
 	}

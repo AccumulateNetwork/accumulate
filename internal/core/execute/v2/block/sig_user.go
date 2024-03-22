@@ -356,6 +356,8 @@ func (UserSignature) process(batch *database.Batch, ctx *userSigContext) error {
 		// credits
 		_ = ctx.signer.DebitCredits(protocol.FeeSignature.AsUInt64())
 
+		// Write to the failure chain
+
 		return errors.InsufficientCredits.WithFormat("%v has insufficient credits: have %s, want %s", ctx.signer.GetUrl(),
 			protocol.FormatAmount(ctx.signer.GetCreditBalance(), protocol.CreditPrecisionPower),
 			protocol.FormatAmount(ctx.fee.AsUInt64(), protocol.CreditPrecisionPower))

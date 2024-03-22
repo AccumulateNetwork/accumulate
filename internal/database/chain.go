@@ -32,6 +32,8 @@ func wrapChain(merkle *MerkleManager) (*Chain, error) {
 	return m, nil
 }
 
+func (c *Chain) Type() merkle.ChainType { return c.merkle.Type() }
+
 // Height returns the height of the chain.
 func (c *Chain) Height() int64 {
 	return c.head.Count

@@ -14,3 +14,6 @@ ChainType:
   Index:
     value: 4
     description: indexes other chains
+  Failure:
+    value: 5
+    description: holds failed messages
