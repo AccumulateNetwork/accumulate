@@ -594,6 +594,12 @@ type NetworkLimits struct {
 	extraData      []byte
 }
 
+type NetworkMaintenance struct {
+	fieldsSet  []bool
+	Operations []NetworkMaintenanceOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+	extraData  []byte
+}
+
 type Object struct {
 	fieldsSet []bool
 	// Type is the object's type.
@@ -662,6 +668,13 @@ type PartitionSyntheticLedger struct {
 	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 	// Pending is the transaction hashes of transactions received out of order.
 	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	extraData []byte
+}
+
+type PendingTransactionGCOperation struct {
+	fieldsSet []bool
+	// Account is the account to collect garbage from.
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	extraData []byte
 }
 
@@ -1174,7 +1187,13 @@ func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount
 
 func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
 
+func (*NetworkMaintenance) Type() TransactionType { return TransactionTypeNetworkMaintenance }
+
 func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
+
+func (*PendingTransactionGCOperation) Type() NetworkMaintenanceOperationType {
+	return NetworkMaintenanceOperationTypePendingTransactionGC
+}
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
@@ -2491,6 +2510,26 @@ func (v *NetworkLimits) Copy() *NetworkLimits {
 
 func (v *NetworkLimits) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *NetworkMaintenance) Copy() *NetworkMaintenance {
+	u := new(NetworkMaintenance)
+
+	u.Operations = make([]NetworkMaintenanceOperation, len(v.Operations))
+	for i, v := range v.Operations {
+		v := v
+		if v != nil {
+			u.Operations[i] = CopyNetworkMaintenanceOperation(v)
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *NetworkMaintenance) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *Object) Copy() *Object {
 	u := new(Object)
 
@@ -2612,6 +2651,22 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 }
 
 func (v *PartitionSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PendingTransactionGCOperation) Copy() *PendingTransactionGCOperation {
+	u := new(PendingTransactionGCOperation)
+
+	if v.Account != nil {
+		u.Account = v.Account
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PendingTransactionGCOperation) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RCD1Signature) Copy() *RCD1Signature {
 	u := new(RCD1Signature)
@@ -4844,6 +4899,19 @@ func (v *NetworkLimits) Equal(u *NetworkLimits) bool {
 	return true
 }
 
+func (v *NetworkMaintenance) Equal(u *NetworkMaintenance) bool {
+	if len(v.Operations) != len(u.Operations) {
+		return false
+	}
+	for i := range v.Operations {
+		if !(EqualNetworkMaintenanceOperation(v.Operations[i], u.Operations[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *Object) Equal(u *Object) bool {
 	if !(v.Type == u.Type) {
 		return false
@@ -4975,6 +5043,19 @@ func (v *PartitionSyntheticLedger) Equal(u *PartitionSyntheticLedger) bool {
 		if !((v.Pending[i]).Equal(u.Pending[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *PendingTransactionGCOperation) Equal(u *PendingTransactionGCOperation) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
 	}
 
 	return true
@@ -9812,6 +9893,56 @@ func (v *NetworkLimits) IsValid() error {
 	}
 }
 
+var fieldNames_NetworkMaintenance = []string{
+	1: "Type",
+	2: "Operations",
+}
+
+func (v *NetworkMaintenance) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Operations) == 0) {
+		for _, v := range v.Operations {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_NetworkMaintenance)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *NetworkMaintenance) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Operations is missing")
+	} else if len(v.Operations) == 0 {
+		errs = append(errs, "field Operations is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_Object = []string{
 	1: "Type",
 	2: "Chains",
@@ -10206,6 +10337,54 @@ func (v *PartitionSyntheticLedger) IsValid() error {
 		errs = append(errs, "field Pending is missing")
 	} else if len(v.Pending) == 0 {
 		errs = append(errs, "field Pending is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PendingTransactionGCOperation = []string{
+	1: "Type",
+	2: "Account",
+}
+
+func (v *PendingTransactionGCOperation) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Account == nil) {
+		writer.WriteUrl(2, v.Account)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PendingTransactionGCOperation)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *PendingTransactionGCOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
 	}
 
 	switch len(errs) {
@@ -15622,6 +15801,50 @@ func (v *NetworkLimits) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *NetworkMaintenance) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NetworkMaintenance) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *NetworkMaintenance) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		ok := reader.ReadValue(2, func(r io.Reader) error {
+			x, err := UnmarshalNetworkMaintenanceOperationFrom(r)
+			if err == nil {
+				v.Operations = append(v.Operations, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_NetworkMaintenance)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Object) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -15817,6 +16040,41 @@ func (v *PartitionSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_PartitionSyntheticLedger)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PendingTransactionGCOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PendingTransactionGCOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType NetworkMaintenanceOperationType
+	if x := new(NetworkMaintenanceOperationType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PendingTransactionGCOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Account = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PendingTransactionGCOperation)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -18941,6 +19199,18 @@ func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *NetworkMaintenance) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       TransactionType                                              `json:"type"`
+		Operations *encoding.JsonUnmarshalListWith[NetworkMaintenanceOperation] `json:"operations,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Operations) == 0) {
+		u.Operations = &encoding.JsonUnmarshalListWith[NetworkMaintenanceOperation]{Value: v.Operations, Func: UnmarshalNetworkMaintenanceOperationJSON}
+	}
+	return json.Marshal(&u)
+}
+
 func (v *Object) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    ObjectType                       `json:"type,omitempty"`
@@ -19035,6 +19305,18 @@ func (v *PartitionSyntheticLedger) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Pending) == 0) {
 		u.Pending = v.Pending
+	}
+	return json.Marshal(&u)
+}
+
+func (v *PendingTransactionGCOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    NetworkMaintenanceOperationType `json:"type"`
+		Account *url.URL                        `json:"account,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.Account == nil) {
+		u.Account = v.Account
 	}
 	return json.Marshal(&u)
 }
@@ -21485,6 +21767,28 @@ func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *NetworkMaintenance) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       TransactionType                                              `json:"type"`
+		Operations *encoding.JsonUnmarshalListWith[NetworkMaintenanceOperation] `json:"operations,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Operations = &encoding.JsonUnmarshalListWith[NetworkMaintenanceOperation]{Value: v.Operations, Func: UnmarshalNetworkMaintenanceOperationJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if u.Operations != nil {
+		v.Operations = make([]NetworkMaintenanceOperation, len(u.Operations.Value))
+		for i, x := range u.Operations.Value {
+			v.Operations[i] = x
+		}
+	}
+	return nil
+}
+
 func (v *Object) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type    ObjectType                       `json:"type,omitempty"`
@@ -21589,6 +21893,23 @@ func (v *PartitionSyntheticLedger) UnmarshalJSON(data []byte) error {
 	v.Received = u.Received
 	v.Delivered = u.Delivered
 	v.Pending = u.Pending
+	return nil
+}
+
+func (v *PendingTransactionGCOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    NetworkMaintenanceOperationType `json:"type"`
+		Account *url.URL                        `json:"account,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Account = u.Account
 	return nil
 }
 
