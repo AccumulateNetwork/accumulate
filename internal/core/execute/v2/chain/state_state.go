@@ -47,6 +47,15 @@ func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protoc
 	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index})
 }
 
+// ProcessNetworkMaintenanceOp queues a [internal.NetworkMaintenanceOp] message for processing
+// after the current bundle.
+func (s *ProcessTransactionState) ProcessNetworkMaintenanceOp(cause *url.TxID, op protocol.NetworkMaintenanceOperation) {
+	s.AdditionalMessages = append(s.AdditionalMessages, &internal.NetworkMaintenanceOp{
+		Cause:     cause,
+		Operation: op,
+	})
+}
+
 // ProcessNetworkUpdate queues a [internal.NetworkUpdate] message for processing
 // after the current bundle.
 func (s *ProcessTransactionState) ProcessNetworkUpdate(cause [32]byte, account *url.URL, body protocol.TransactionBody) {
