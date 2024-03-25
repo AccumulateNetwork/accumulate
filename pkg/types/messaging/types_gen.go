@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -72,6 +73,17 @@ type Envelope struct {
 	Transaction []*protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
 	Messages    []Message               `json:"messages,omitempty" form:"messages" query:"messages"`
 	extraData   []byte
+}
+
+type MakeMajorBlock struct {
+	fieldsSet []bool
+	// MajorBlockIndex is the major block index.
+	MajorBlockIndex uint64 `json:"majorBlockIndex,omitempty" form:"majorBlockIndex" query:"majorBlockIndex" validate:"required"`
+	// MinorBlockIndex is the minor block index.
+	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
+	// MajorBlockTime is the timestamp of the major block.
+	MajorBlockTime time.Time `json:"majorBlockTime,omitempty" form:"majorBlockTime" query:"majorBlockTime" validate:"required"`
+	extraData      []byte
 }
 
 type NetworkUpdate struct {
@@ -149,6 +161,8 @@ func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
 func (*BlockSummary) Type() MessageType { return MessageTypeBlockSummary }
 
 func (*CreditPayment) Type() MessageType { return MessageTypeCreditPayment }
+
+func (*MakeMajorBlock) Type() MessageType { return MessageTypeMakeMajorBlock }
 
 func (*NetworkUpdate) Type() MessageType { return MessageTypeNetworkUpdate }
 
@@ -292,6 +306,22 @@ func (v *Envelope) Copy() *Envelope {
 }
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MakeMajorBlock) Copy() *MakeMajorBlock {
+	u := new(MakeMajorBlock)
+
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.MajorBlockTime = v.MajorBlockTime
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *MakeMajorBlock) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkUpdate) Copy() *NetworkUpdate {
 	u := new(NetworkUpdate)
@@ -592,6 +622,20 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		if !(EqualMessage(v.Messages[i], u.Messages[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *MakeMajorBlock) Equal(u *MakeMajorBlock) bool {
+	if !(v.MajorBlockIndex == u.MajorBlockIndex) {
+		return false
+	}
+	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
+		return false
+	}
+	if !((v.MajorBlockTime).Equal(u.MajorBlockTime)) {
+		return false
 	}
 
 	return true
@@ -1118,6 +1162,72 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_MakeMajorBlock = []string{
+	1: "Type",
+	2: "MajorBlockIndex",
+	3: "MinorBlockIndex",
+	4: "MajorBlockTime",
+}
+
+func (v *MakeMajorBlock) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.MajorBlockIndex == 0) {
+		writer.WriteUint(2, v.MajorBlockIndex)
+	}
+	if !(v.MinorBlockIndex == 0) {
+		writer.WriteUint(3, v.MinorBlockIndex)
+	}
+	if !(v.MajorBlockTime == (time.Time{})) {
+		writer.WriteTime(4, v.MajorBlockTime)
+	}
+
+	_, _, err := writer.Reset(fieldNames_MakeMajorBlock)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *MakeMajorBlock) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field MajorBlockIndex is missing")
+	} else if v.MajorBlockIndex == 0 {
+		errs = append(errs, "field MajorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MinorBlockIndex is missing")
+	} else if v.MinorBlockIndex == 0 {
+		errs = append(errs, "field MinorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MajorBlockTime is missing")
+	} else if v.MajorBlockTime == (time.Time{}) {
+		errs = append(errs, "field MajorBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -1835,6 +1945,47 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *MakeMajorBlock) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *MakeMajorBlock) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *MakeMajorBlock) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.MajorBlockIndex = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.MinorBlockIndex = x
+	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.MajorBlockTime = x
+	}
+
+	seen, err := reader.Reset(fieldNames_MakeMajorBlock)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *NetworkUpdate) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2259,6 +2410,26 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MakeMajorBlock) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            MessageType `json:"type"`
+		MajorBlockIndex uint64      `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64      `json:"minorBlockIndex,omitempty"`
+		MajorBlockTime  time.Time   `json:"majorBlockTime,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.MajorBlockIndex == 0) {
+		u.MajorBlockIndex = v.MajorBlockIndex
+	}
+	if !(v.MinorBlockIndex == 0) {
+		u.MinorBlockIndex = v.MinorBlockIndex
+	}
+	if !(v.MajorBlockTime == (time.Time{})) {
+		u.MajorBlockTime = v.MajorBlockTime
+	}
+	return json.Marshal(&u)
+}
+
 func (v *NetworkUpdate) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type     MessageType                                       `json:"type"`
@@ -2561,6 +2732,29 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 			v.Messages[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *MakeMajorBlock) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            MessageType `json:"type"`
+		MajorBlockIndex uint64      `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64      `json:"minorBlockIndex,omitempty"`
+		MajorBlockTime  time.Time   `json:"majorBlockTime,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.MajorBlockTime = v.MajorBlockTime
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.MajorBlockIndex = u.MajorBlockIndex
+	v.MinorBlockIndex = u.MinorBlockIndex
+	v.MajorBlockTime = u.MajorBlockTime
 	return nil
 }
 
