@@ -48,6 +48,7 @@ type PendingAuthSig struct {
 type BlockAnchorState struct {
 	ShouldOpenMajorBlock bool
 	OpenMajorBlockTime   time.Time
+	WillOpenMajorBlock   uint64
 }
 
 // ProducedMessage is a message produced by another message.

@@ -29,3 +29,6 @@ MessageType:
   NetworkUpdate:
     value: 10
     description: is an update to network parameters
+  MakeMajorBlock:
+    value: 11
+    description: triggers a major block

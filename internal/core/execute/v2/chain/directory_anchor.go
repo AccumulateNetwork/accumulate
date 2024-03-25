@@ -65,7 +65,7 @@ func (x DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Trans
 	}
 
 	// Trigger a major block?
-	if st.NetworkType != protocol.PartitionTypeDirectory {
+	if st.NetworkType != protocol.PartitionTypeDirectory && !st.Globals.ExecutorVersion.V2VandenbergEnabled() {
 		st.State.MakeMajorBlock = body.MakeMajorBlock
 		st.State.MakeMajorBlockTime = body.MakeMajorBlockTime
 	}
