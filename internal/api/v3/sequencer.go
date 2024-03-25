@@ -322,16 +322,18 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 			return nil, errors.UnknownError.Wrap(err)
 		}
 
-		// Get the receipt in between the other two
-		rootReceipt, err := s.getRootReceipt(batch, mainAnchorEntry.Anchor, dirReceipt.Anchor.RootChainIndex)
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
+		if dirReceipt != nil {
+			// Get the receipt in between the other two
+			rootReceipt, err := s.getRootReceipt(batch, mainAnchorEntry.Anchor, dirReceipt.Anchor.RootChainIndex)
+			if err != nil {
+				return nil, errors.UnknownError.Wrap(err)
+			}
 
-		// Build the complete receipt
-		receipt, err = synthReceipt.Combine(rootReceipt, dirReceipt.RootChainReceipt)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
+			// Build the complete receipt
+			receipt, err = synthReceipt.Combine(rootReceipt, dirReceipt.RootChainReceipt)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("combine receipts: %w", err)
+			}
 		}
 	}
 
@@ -370,8 +372,10 @@ func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, 
 		// Add the receipt signature
 		receiptSig := new(protocol.ReceiptSignature)
 		receiptSig.SourceNetwork = protocol.DnUrl()
-		receiptSig.Proof = *receipt
 		receiptSig.TransactionHash = *(*[32]byte)(hash)
+		if receipt != nil {
+			receiptSig.Proof = *receipt
+		}
 		signatures = append(signatures, receiptSig)
 
 		// Add the key signature
@@ -492,5 +496,5 @@ func (s *Sequencer) getDirectoryReceiptForBlock(batch *database.Batch, block uin
 			}
 		}
 	}
-	return nil, errors.UnknownError.WithFormat("unable to locate a DN anchor for %v block %d", s.partition.URL, block)
+	return nil, nil
 }
