@@ -723,9 +723,10 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 
-	if !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
-		anchor.Updates = systemLedger.PendingUpdates
-	}
+	// This is not used once v2-vandenburg is activated. However it needs to
+	// stay enabled for the first block that runs v2-vandenburg, otherwise the
+	// update to v2-vandenburg is not sent out to the BVNs.
+	anchor.Updates = systemLedger.PendingUpdates
 
 	if block.State.Anchor.ShouldOpenMajorBlock {
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
