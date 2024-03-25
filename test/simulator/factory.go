@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/bsn"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -578,11 +577,6 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			f()
 			return nil
 		})
-	}
-
-	// Initialize the major block scheduler
-	if f.networkFactory.typ == protocol.PartitionTypeDirectory {
-		execOpts.MajorBlockScheduler = blockscheduler.Init(f.getEventBus())
 	}
 
 	// Create the conductor. This must happen before creating the executor since

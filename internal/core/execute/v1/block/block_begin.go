@@ -254,7 +254,6 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		if anchor.MakeMajorBlock > 0 {
 			x.logger.Info("Start major block", "major-index", anchor.MakeMajorBlock, "minor-index", ledger.Index)
 			block.State.OpenedMajorBlock = true
-			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
 		}
 
 		// DN -> BVN

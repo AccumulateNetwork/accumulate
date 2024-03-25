@@ -20,7 +20,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-func TestMajorBlock(t *testing.T) {
+func TestMajorBlockV1(t *testing.T) {
 	acctesting.SkipLong(t)
 	acctesting.DisableDebugFeatures()
 	defer acctesting.EnableDebugFeatures()
@@ -35,7 +35,7 @@ func TestMajorBlock(t *testing.T) {
 	sim.InitFromGenesisWith(globals)
 
 	// Get ready to trigger a major block
-	nextMajorBlock := sim.Executors[protocol.Directory].Executor.MajorBlockScheduler.GetNextMajorBlockTime(simulator.GenesisTime)
+	nextMajorBlock := sim.Executors[protocol.Directory].Executor.ActiveGlobals().MajorBlockSchedule().Next(simulator.GenesisTime)
 	count := int(nextMajorBlock.Sub(simulator.GenesisTime) / time.Second)
 	sim.ExecuteBlocks(count - protocol.GenesisBlock - 1)
 	ledger := simulator.GetAccount[*protocol.AnchorLedger](sim, protocol.DnUrl().JoinPath(protocol.AnchorPool))
