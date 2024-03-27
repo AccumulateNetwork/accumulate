@@ -9,7 +9,6 @@ package consensus
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/cometbft/cometbft/abci/types"
@@ -47,7 +46,7 @@ func (a *AbciApp) Check(req *CheckRequest) (*CheckResponse, error) {
 		return nil, err
 	}
 	if res.Code != 0 {
-		return nil, fmt.Errorf("code %d, log %s, info %s", res.Code, res.Log, res.Info)
+		return nil, errors.UnknownError.With(res.Log)
 	}
 
 	rs := new(protocol.TransactionResultSet)

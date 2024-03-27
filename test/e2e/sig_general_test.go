@@ -349,3 +349,31 @@ func TestVoteTypes(t *testing.T) {
 		require.EqualError(t, st[1].Error, "initial signature cannot be a reject vote")
 	})
 }
+
+func TestSignatureErrors(t *testing.T) {
+	// Tests https://gitlab.com/accumulatenetwork/accumulate/-/issues/3578
+
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.Genesis(GenesisTime),
+		simulator.UseABCI,
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+
+	// Submit
+	_, err := sim.SubmitRaw(MustBuild(t,
+		build.Transaction().For(alice, "book", "1").
+			SendTokens(1, 0).To("foo").
+			SignWith(alice, "book", "1").
+			Version(1).Timestamp(1).
+			Memo("foo").
+			Metadata("bar").
+			PrivateKey(aliceKey)))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "insufficient credits: have 0.00, want 0.01")
+}
