@@ -71,6 +71,7 @@ type Accumulator struct {
 }
 
 type AccumulatorOptions struct {
+	ID                   string // For debugging
 	Tracer               trace.Tracer
 	Executor             execute.Executor
 	EventBus             *events.Bus
@@ -538,12 +539,19 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 	// const maxPriority = (1 << 32) - 1
 
 	txns := map[[32]byte]*protocol.Transaction{}
+	user := map[[32]byte]messaging.Message{}
 	seq := map[[32]byte]uint64{}
 	for _, msg := range messages {
 		switch msg := msg.(type) {
 		case *messaging.TransactionMessage:
-			txns[*(*[32]byte)(msg.Transaction.GetHash())] = msg.Transaction
+			if msg.Transaction.Body.Type().IsUser() {
+				user[msg.Hash()] = msg
+			}
+			txns[msg.Hash()] = msg.Transaction
 		case *messaging.SignatureMessage:
+			if !msg.Signature.Type().IsSystem() {
+				user[msg.Hash()] = msg
+			}
 			sig, ok := msg.Signature.(*protocol.PartitionSignature)
 			if !ok {
 				continue
@@ -552,31 +560,29 @@ func (app *Accumulator) CheckTx(_ context.Context, req *abci.RequestCheckTx) (rc
 		}
 	}
 
-	// If a user transaction fails, the batch fails
+	// TODO Prioritization must be done with ABCI++
+
+	// var priority int64
+	// if txn.Body.Type().IsSystem() {
+	// 	priority = maxPriority
+	// } else if txn.Body.Type().IsSynthetic() {
+	// 	// Set the priority based on the sequence number to try to keep them in order
+	// 	seq := seq[result.TxID.Hash()]
+	// 	priority = maxPriority - 1 - int64(seq)
+	// }
+	// if resp.Priority < priority {
+	// 	resp.Priority = priority
+	// }
+
+	// When checking an initial submission (as opposed to a gossiped
+	// envelope), fail if any user message fails
 	for i, result := range results {
-		txn, ok := txns[result.TxID.Hash()]
+		_, ok := user[result.TxID.Hash()]
 		if !ok {
 			continue
 		}
 
-		// TODO Prioritization must be done with ABCI++
-
-		// var priority int64
-		// if txn.Body.Type().IsSystem() {
-		// 	priority = maxPriority
-		// } else if txn.Body.Type().IsSynthetic() {
-		// 	// Set the priority based on the sequence number to try to keep them in order
-		// 	seq := seq[result.TxID.Hash()]
-		// 	priority = maxPriority - 1 - int64(seq)
-		// }
-		// if resp.Priority < priority {
-		// 	resp.Priority = priority
-		// }
-
 		if result.Error == nil {
-			continue
-		}
-		if !result.Code.Success() && !txn.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)

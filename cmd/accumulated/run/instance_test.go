@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -25,7 +26,7 @@ func TestCoreValidatorConfig(t *testing.T) {
 		Network: "MainNet",
 		Configurations: []Configuration{
 			&CoreValidatorConfiguration{
-				Listen:        mustParseMulti("/tcp/16591"),
+				Listen:        multiaddr.StringCast("/tcp/16591"),
 				BVN:           "Apollo",
 				EnableHealing: Ptr(true),
 				StorageType:   Ptr(StorageTypeBadger),
@@ -54,7 +55,7 @@ func TestDevNetConfig(t *testing.T) {
 		},
 		Configurations: []Configuration{
 			&DevnetConfiguration{
-				Listen:     mustParseMulti("/tcp/26656"),
+				Listen:     multiaddr.StringCast("/tcp/26656"),
 				Bvns:       1,
 				Validators: 1,
 			},

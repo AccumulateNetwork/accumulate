@@ -90,22 +90,6 @@ var flagInitDualNode struct {
 	BvnGenesis string
 }
 
-var flagInitDevnet struct {
-	Name          string
-	NumBvns       int
-	NumValidators int
-	NumFollowers  int
-	NumBsnNodes   int
-	BasePort      int
-	IPs           []string
-	Docker        bool
-	DockerImage   string
-	UseVolumes    bool
-	Compose       bool
-	DnsSuffix     string
-	Globals       string
-}
-
 var flagInitNetwork struct {
 	GenesisDoc     string
 	FactomBalances string
@@ -147,26 +131,11 @@ func initInitFlags() {
 
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.DnGenesis, "dn-genesis-doc", "", "Genesis doc for the DN")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.BvnGenesis, "bvn-genesis-doc", "", "Genesis doc for the target BVN")
-
-	cmdInitDevnet.ResetFlags()
-	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per partition to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per partition to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBsnNodes, "bsn", "s", 0, "Number of block summary network nodes")
-	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
-	cmdInitDevnet.Flags().StringSliceVar(&flagInitDevnet.IPs, "ip", []string{"127.0.1.1"}, "IP addresses to use or base IP - must not end with .0")
-	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
-	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DockerImage, "image", "registry.gitlab.com/accumulatenetwork/accumulate", "Docker image name (and tag)")
-	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
-	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
-	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
-	cmdInit.PersistentFlags().StringVar(&flagInitDevnet.Globals, "globals", "", "Override network globals")
 }
 
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdInitDualNode)
+	cmdInit.AddCommand(cmdInitNode, cmdInitNetwork, cmdInitDualNode)
 
 	initInitFlags()
 }
