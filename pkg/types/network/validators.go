@@ -7,16 +7,21 @@
 package network
 
 import (
+	"fmt"
 	"math"
 	"strings"
 
+	"github.com/robfig/cron/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+var CronFormat = cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
 type globalValueMemos struct {
-	bvns      []string
-	threshold map[string]uint64
-	active    map[string]int
+	bvns               []string
+	threshold          map[string]uint64
+	active             map[string]int
+	majorBlockSchedule cron.Schedule
 }
 
 func (g *GlobalValues) memoizeValidators() {
@@ -62,4 +67,16 @@ func (g *GlobalValues) ValidatorThreshold(partition string) uint64 {
 		return math.MaxUint64
 	}
 	return v
+}
+
+func (g *GlobalValues) MajorBlockSchedule() cron.Schedule {
+	if g.memoize.majorBlockSchedule != nil {
+		return g.memoize.majorBlockSchedule
+	}
+	s, err := CronFormat.Parse(g.Globals.MajorBlockSchedule)
+	if err != nil {
+		panic(fmt.Errorf("cannot parse major block schedule: %w", err))
+	}
+	g.memoize.majorBlockSchedule = s
+	return s
 }
