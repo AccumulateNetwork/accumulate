@@ -48,7 +48,7 @@ func TestIsValidAdiUrl(t *testing.T) {
 		})
 	}
 
-	for name, c := range bad {
+	for name, c := range bad { //nolint:govet
 		t.Run(name, func(t *testing.T) {
 			require.EqualError(t, IsValidAdiUrl(&c.URL, false), c.err)
 		})
