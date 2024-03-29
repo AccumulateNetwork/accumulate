@@ -16,7 +16,6 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -62,18 +61,17 @@ func (v *ValidatorUpdate) Equal(u *ValidatorUpdate) bool {
 
 // Options are the options for constructing an [Executor]
 type Options struct {
-	Logger                 log.Logger                         //
-	Database               database.Beginner                  //
-	Key                    ed25519.PrivateKey                 // Private validator key
-	Router                 routing.Router                     //
-	Describe               DescribeShim                       // Network description
-	EventBus               *events.Bus                        //
-	MajorBlockScheduler    blockscheduler.MajorBlockScheduler //
-	BackgroundTaskLauncher func(func())                       // Background task launcher
-	NewDispatcher          func() Dispatcher                  // Synthetic transaction dispatcher factory
-	Sequencer              private.Sequencer                  // Synthetic and anchor sequence API service
-	Querier                api.Querier                        // Query API service
-	EnableHealing          bool                               //
+	Logger                 log.Logger         //
+	Database               database.Beginner  //
+	Key                    ed25519.PrivateKey // Private validator key
+	Router                 routing.Router     //
+	Describe               DescribeShim       // Network description
+	EventBus               *events.Bus        //
+	BackgroundTaskLauncher func(func())       // Background task launcher
+	NewDispatcher          func() Dispatcher  // Synthetic transaction dispatcher factory
+	Sequencer              private.Sequencer  // Synthetic and anchor sequence API service
+	Querier                api.Querier        // Query API service
+	EnableHealing          bool               //
 }
 
 // A Dispatcher dispatches synthetic transactions produced by the executor.
