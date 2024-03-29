@@ -39,7 +39,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	tmapi "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
@@ -473,11 +472,6 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 		}
 		return nil
 	})
-
-	// On DNs initialize the major block scheduler
-	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
-		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
-	}
 
 	// This must happen before creating the executor since it needs to receive
 	// the initial WillChangeGlobals event
