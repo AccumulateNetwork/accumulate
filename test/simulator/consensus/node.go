@@ -154,15 +154,14 @@ func (n *Node) check(ctx context.Context, env *messaging.Envelope) ([]*protocol.
 		kv := []any{"id", id, "last-block", n.lastBlockIndex}
 		var debug bool
 		if msg != nil {
-
 			kv = append(kv, "type", msg.Type())
 		again:
 			switch m := msg.(type) {
 			case *messaging.TransactionMessage:
 				kv = append(kv, "txn-type", m.Transaction.Body.Type())
-				if m.Transaction.Body.Type().IsAnchor() {
-					debug = true
-				}
+				// if m.Transaction.Body.Type().IsAnchor() {
+				debug = true
+				// }
 			case *messaging.SignatureMessage:
 				kv = append(kv, "sig-type", m.Signature.Type())
 				debug = true
@@ -186,7 +185,7 @@ func (n *Node) check(ctx context.Context, env *messaging.Envelope) ([]*protocol.
 		if ok {
 			s = "Message accepted"
 		} else {
-			s = "Message rejected"
+			s, debug = "Message rejected", false
 		}
 		if debug {
 			slog.DebugContext(n.context, s, kv...)
