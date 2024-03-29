@@ -256,7 +256,12 @@ func (x *Executor) recordAnchor(block *Block, ledger *protocol.SystemLedger) err
 		return errors.UnknownError.Wrap(err)
 	}
 
-	if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
+	if x.Describe.NetworkType == protocol.PartitionTypeDirectory && !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		// As far as I know, the only thing this achieves (besides logging) is
+		// ensuring the block is not discarded. The only other reference to
+		// OpenedMajorBlock is (*BlockState).Empty. This is not necessary after
+		// v2-vandenburg since it uses a synthetic message (which prevents the
+		// block from being discarded).
 		anchor := anchor.(*protocol.DirectoryAnchor)
 		if anchor.MakeMajorBlock > 0 {
 			x.logger.Info("Start major block", "major-index", anchor.MakeMajorBlock, "minor-index", ledger.Index)
