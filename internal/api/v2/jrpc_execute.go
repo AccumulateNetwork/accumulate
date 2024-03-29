@@ -285,7 +285,7 @@ func processExecuteRequest(req *TxRequest, payload []byte) (*messaging.Envelope,
 	if req.Signer.UseSimpleHash {
 		sigBuilder.UseSimpleHash()
 	} else {
-		sigBuilder.UseMerkleHash()
+		sigBuilder.UseMerkleHash() //nolint:staticcheck
 	}
 	if req.Signer.Version != 0 {
 		sigBuilder.SetVersion(req.Signer.Version)
