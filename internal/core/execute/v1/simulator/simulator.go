@@ -23,7 +23,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/block"
@@ -595,9 +594,6 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 		NewDispatcher: func() block.Dispatcher { return &dispatcher{sim: sim, envelopes: map[string][]*messaging.Envelope{}} },
 		Sequencer:     sim.Services(),
 		Querier:       sim.Services(),
-	}
-	if execOpts.Describe.NetworkType == protocol.PartitionTypeDirectory {
-		execOpts.MajorBlockScheduler = blockscheduler.Init(eventBus)
 	}
 	var err error
 	x.Executor, err = block.NewNodeExecutor(execOpts)
