@@ -30,15 +30,19 @@ func (ActivateProtocolVersion) check(st *StateManager, tx *Delivery) (*protocol.
 	}
 
 	// Verify the principal
-	if !st.NodeUrl().Equal(st.OriginUrl) {
-		return nil, errors.BadRequest.WithFormat("invalid principal: want %v, got %v", st.NodeUrl(), st.OriginUrl)
+	if st.Globals.ExecutorVersion.V2VandenbergEnabled() {
+		if _, ok := protocol.ParsePartitionUrl(st.OriginUrl); !ok ||
+			!st.OriginUrl.PathEqual("") {
+			return nil, errors.BadRequest.WithFormat("invalid principal: want partition, got %v", st.OriginUrl)
+		}
+	} else {
+		if !st.NodeUrl().Equal(st.OriginUrl) {
+			return nil, errors.BadRequest.WithFormat("invalid principal: want %v, got %v", st.NodeUrl(), st.OriginUrl)
+		}
 	}
 
-	// Verify the version number is a recognized version
-	var x protocol.ExecutorVersion
-	if !x.SetEnumValue(body.Version.GetEnumValue()) {
-		return nil, errors.BadRequest.WithFormat("%d is not a recognized version number", body.Version)
-	}
+	// Don't check the version number now because that could cause issues during
+	// an update
 
 	return body, nil
 }
@@ -47,6 +51,18 @@ func (x ActivateProtocolVersion) Execute(st *StateManager, tx *Delivery) (protoc
 	body, err := x.check(st, tx)
 	if err != nil {
 		return nil, err
+	}
+
+	// Verify we're executing on the right node
+	if !st.NodeUrl().Equal(st.OriginUrl) {
+		return nil, errors.BadRequest.WithFormat("invalid principal: want %v, got %v", st.NodeUrl(), st.OriginUrl)
+	}
+
+	// Verify the version number is a recognized version (vNext is not a real
+	// version)
+	if v := new(protocol.ExecutorVersion); !v.SetEnumValue(body.Version.GetEnumValue()) ||
+		body.Version == protocol.ExecutorVersionVNext && !IsRunningTests() {
+		return nil, errors.BadRequest.WithFormat("%d is not a recognized version number", body.Version)
 	}
 
 	// Load the system ledger

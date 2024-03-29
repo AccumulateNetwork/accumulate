@@ -13,6 +13,16 @@ type ExecutorVersion uint64
 // ExecutorVersionLatest is intended primarily for testing.
 const ExecutorVersionLatest = ExecutorVersionV2Vandenberg
 
+func init() {
+	// Verify that ExecutorVersionLatest has been updated, so that tests can
+	// verify that it has been tested.
+	//
+	// TODO Can this be turned into a compile-time check?
+	if ExecutorVersionLatest+1 != ExecutorVersionVNext {
+		panic("ExecutorVersionLatest is out of date")
+	}
+}
+
 // SignatureAnchoringEnabled checks if the version is at least V1 signature anchoring.
 func (v ExecutorVersion) SignatureAnchoringEnabled() bool {
 	return v >= ExecutorVersionV1SignatureAnchoring
