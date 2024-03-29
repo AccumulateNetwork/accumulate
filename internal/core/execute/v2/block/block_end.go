@@ -40,11 +40,6 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("process event backlog: %w", err)
 	}
 
-	err = block.produceBlockMessages()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("produce block messages: %w", err)
-	}
-
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
@@ -73,6 +68,12 @@ func (block *Block) Close() (execute.BlockState, error) {
 	err = m.shouldPrepareAnchor(block)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Send messages produced by the block. Depends on shouldPrepareAnchor.
+	err = block.produceBlockMessages()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("produce block messages: %w", err)
 	}
 
 	// Do nothing if the block is empty
@@ -569,41 +570,43 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 }
 
 func (x *Executor) shouldPrepareAnchor(block *Block) error {
-	openMajorBlock, openMajorBlockTime, err := x.shouldOpenMajorBlock(block)
+	did, err := x.shouldOpenMajorBlock(block)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	sendAnchor := openMajorBlock || x.shouldSendAnchor(block)
-	if sendAnchor {
-		block.State.Anchor = &BlockAnchorState{
-			ShouldOpenMajorBlock: openMajorBlock,
-			OpenMajorBlockTime:   openMajorBlockTime,
-		}
+	if !did && x.shouldSendAnchor(block) {
+		block.State.Anchor = &BlockAnchorState{}
 	}
+
 	return nil
 }
 
-func (x *Executor) shouldOpenMajorBlock(block *Block) (bool, time.Time, error) {
+func (x *Executor) shouldOpenMajorBlock(block *Block) (bool, error) {
 	// Only the directory network can open a major block
 	if x.Describe.NetworkType != protocol.PartitionTypeDirectory {
-		return false, time.Time{}, nil
+		return false, nil
 	}
 
 	var anchor *protocol.AnchorLedger
 	err := block.Batch.Account(x.Describe.AnchorPool()).Main().GetAs(&anchor)
 	if err != nil {
-		return false, time.Time{}, errors.UnknownError.WithFormat("load anchor ledger: %w", err)
+		return false, errors.UnknownError.WithFormat("load anchor ledger: %w", err)
 	}
 
 	// The addition of a second here is kept for backwards compatibility
 	blockTimeUTC := block.Time.Add(time.Second).UTC()
 	nextBlockTime := x.globals.Active.MajorBlockSchedule().Next(anchor.MajorBlockTime)
 	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
-		return false, time.Time{}, nil
+		return false, nil
 	}
 
-	return true, blockTimeUTC, nil
+	block.State.Anchor = &BlockAnchorState{
+		ShouldOpenMajorBlock: true,
+		WillOpenMajorBlock:   anchor.MajorBlockIndex + 1,
+		OpenMajorBlockTime:   blockTimeUTC,
+	}
+	return true, nil
 }
 
 func (x *Executor) shouldSendAnchor(block *Block) bool {
@@ -695,7 +698,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			})
 		}
 
-		ledger.MajorBlockIndex++
+		ledger.MajorBlockIndex = block.State.Anchor.WillOpenMajorBlock
 		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
 		for i, bvn := range bvns {
@@ -739,6 +742,10 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.Updates = systemLedger.PendingUpdates
 
 	if block.State.Anchor.ShouldOpenMajorBlock {
+		// This should probably be disabled after v2-vandenburg, but there's a
+		// minute possibility the update and a major block will happen
+		// simultaneously. Leaving this logic enabled will prevent that from
+		// being a problem.
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}
@@ -796,6 +803,8 @@ func (b *Block) produceBlockMessages() error {
 		return nil
 	}
 
+	/* ***** ACME burn (for credits) ***** */
+
 	// This is likely unnecessarily cautious, but better safe than sorry. This
 	// will prevent any variation in order from causing a consensus failure.
 	bvns := b.Executor.globals.Active.BvnNames()
@@ -821,13 +830,36 @@ func (b *Block) produceBlockMessages() error {
 		}
 	}
 
-	if len(b.State.NetworkUpdate) > 0 {
+	/* ***** Network account updates ***** */
+
+	if len(b.State.NetworkUpdate) > 0 &&
+		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		for _, bvn := range bvns {
 			b.State.Produced++
 			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
 				Destination: protocol.PartitionUrl(bvn),
 				Message: &messaging.NetworkUpdate{
 					Accounts: b.State.NetworkUpdate,
+				},
+			}}, b.Index)
+			if err != nil {
+				return errors.UnknownError.WithFormat("queue network update: %w", err)
+			}
+		}
+	}
+
+	/* ***** Major block notification ***** */
+
+	if b.State.Anchor != nil && b.State.Anchor.ShouldOpenMajorBlock &&
+		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory {
+		for _, bvn := range bvns {
+			b.State.Produced++
+			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+				Destination: protocol.PartitionUrl(bvn),
+				Message: &messaging.MakeMajorBlock{
+					MajorBlockIndex: b.State.Anchor.WillOpenMajorBlock,
+					MajorBlockTime:  b.State.Anchor.OpenMajorBlockTime,
+					MinorBlockIndex: b.Index,
 				},
 			}}, b.Index)
 			if err != nil {
