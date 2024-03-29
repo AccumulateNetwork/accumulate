@@ -42,31 +42,29 @@ func TestMajorBlock(t *testing.T) {
 	ledger := GetAccount[*AnchorLedger](t, sim.Database(Directory), DnUrl().JoinPath(AnchorPool))
 	require.Empty(t, ledger.PendingMajorBlockAnchors) // Major block is *not* open
 
-	// Open the major block
+	// Execute major block on the DN, send MakeMajorBlock
 	sim.Step()
-	ledger = GetAccount[*AnchorLedger](t, sim.Database(Directory), DnUrl().JoinPath(AnchorPool))
-	require.NotEmpty(t, ledger.PendingMajorBlockAnchors) // Major block is *open*
 
-	// Complete the major block
+	// Execute major block on the BVNs
 	sim.StepN(10)
-	ledger = GetAccount[*AnchorLedger](t, sim.Database(Directory), DnUrl().JoinPath(AnchorPool))
-	require.Empty(t, ledger.PendingMajorBlockAnchors) // Major block is done
 
 	// Verify
-	_ = sim.Database(Directory).View(func(batch *database.Batch) error {
-		chain, err := batch.Account(DnUrl().JoinPath(AnchorPool)).MajorBlockChain().Get()
-		require.NoError(t, err, "Failed to read anchor major index chain")
-		require.Equal(t, int64(1), chain.Height(), "Expected anchor major index chain to have height 1")
+	for _, p := range sim.Partitions() {
+		_ = sim.Database(p.ID).View(func(batch *database.Batch) error {
+			chain, err := batch.Account(PartitionUrl(p.ID).JoinPath(AnchorPool)).MajorBlockChain().Get()
+			require.NoError(t, err, "Failed to read anchor major index chain")
+			require.Equal(t, int64(1), chain.Height(), "Expected anchor major index chain to have height 1")
 
-		entry := new(IndexEntry)
-		require.NoError(t, chain.EntryAs(0, entry), "Failed to read entry 0 of anchor major index chain")
+			entry := new(IndexEntry)
+			require.NoError(t, chain.EntryAs(0, entry), "Failed to read entry 0 of anchor major index chain")
 
-		// require.NotZero(t, entry.Source, "Expected non-zero source")
-		require.NotZero(t, entry.RootIndexIndex, "Expected non-zero root index index")
-		require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1") // DO NOT REMOVE (validates SendTokens)
+			// require.NotZero(t, entry.Source, "Expected non-zero source")
+			require.NotZero(t, entry.RootIndexIndex, "Expected non-zero root index index")
+			require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1") // DO NOT REMOVE (validates SendTokens)
 
-		require.NoError(t, chain.EntryAs(0, entry), "Failed to read entry 0 of anchor major index chain")
-		require.True(t, entry.BlockTime.After(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)))
-		return nil
-	})
+			require.NoError(t, chain.EntryAs(0, entry), "Failed to read entry 0 of anchor major index chain")
+			require.True(t, entry.BlockTime.After(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)))
+			return nil
+		})
+	}
 }

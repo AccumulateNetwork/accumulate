@@ -54,9 +54,9 @@ func (x MakeMajorBlock) Process(batch *database.Batch, ctx *MessageContext) (_ *
 	}
 
 	// Process the message
-	req, err := x.check(ctx)
+	msg, err := x.check(ctx)
 	if err == nil {
-		err = x.process(ctx, req)
+		err = x.process(ctx, msg)
 	}
 
 	// Record the message and its status
