@@ -44,6 +44,9 @@ const MessageTypeSynthetic MessageType = 9
 // MessageTypeNetworkUpdate is an update to network parameters.
 const MessageTypeNetworkUpdate MessageType = 10
 
+// MessageTypeMakeMajorBlock triggers a major block.
+const MessageTypeMakeMajorBlock MessageType = 11
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -51,7 +54,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock:
 		*v = u
 		return true
 	}
@@ -81,6 +84,8 @@ func (v MessageType) String() string {
 		return "synthetic"
 	case MessageTypeNetworkUpdate:
 		return "networkUpdate"
+	case MessageTypeMakeMajorBlock:
+		return "makeMajorBlock"
 	}
 	return fmt.Sprintf("MessageType:%d", v)
 }
@@ -108,6 +113,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeSynthetic, true
 	case "networkupdate":
 		return MessageTypeNetworkUpdate, true
+	case "makemajorblock":
+		return MessageTypeMakeMajorBlock, true
 	}
 	return 0, false
 }
