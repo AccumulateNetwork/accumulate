@@ -22,8 +22,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var messageExecutors []func(ExecutorOptions) (messaging.MessageType, MessageExecutor)
-var signatureExecutors []func(ExecutorOptions) (protocol.SignatureType, SignatureExecutor)
+var messageExecutors []ExecutorFactory1[messaging.MessageType, *MessageContext]
+var signatureExecutors []ExecutorFactory1[protocol.SignatureType, *SignatureContext]
 
 type Executor struct {
 	ExecutorOptions
@@ -31,8 +31,8 @@ type Executor struct {
 
 	globals            *Globals
 	executors          map[protocol.TransactionType]chain.TransactionExecutor
-	messageExecutors   map[messaging.MessageType]MessageExecutor
-	signatureExecutors map[protocol.SignatureType]SignatureExecutor
+	messageExecutors   map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]
+	signatureExecutors map[protocol.SignatureType]ExecutorFactory2[protocol.SignatureType, *SignatureContext]
 	logger             logging.OptionalLogger
 	db                 database.Beginner
 	isValidator        bool
