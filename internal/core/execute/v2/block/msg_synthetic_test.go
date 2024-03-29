@@ -90,8 +90,10 @@ func TestSyntheticAnchor(t *testing.T) {
 	block := &Block{
 		Executor: &Executor{
 			globals: globals,
-			messageExecutors: map[messaging.MessageType]ExecutorFor[messaging.MessageType, *MessageContext]{
-				messaging.MessageTypeSequenced: fakeExecutor{},
+			messageExecutors: map[messaging.MessageType]ExecutorFactory2[messaging.MessageType, *MessageContext]{
+				messaging.MessageTypeSequenced: func(*MessageContext) (ExecutorFor[messaging.MessageType, *MessageContext], bool) {
+					return fakeExecutor{}, true
+				},
 			},
 		},
 	}
