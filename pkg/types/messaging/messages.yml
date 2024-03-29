@@ -163,6 +163,19 @@ NetworkUpdate:
       marshal-as: reference
       repeatable: true
 
+MakeMajorBlock:
+  union: { type: message }
+  fields:
+    - name: MajorBlockIndex
+      description: is the major block index
+      type: uint
+    - name: MinorBlockIndex
+      description: is the minor block index
+      type: uvarint
+    - name: MajorBlockTime
+      description: is the timestamp of the major block
+      type: time
+
 # Components
 
 RecordUpdate:
