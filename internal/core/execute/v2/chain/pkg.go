@@ -7,12 +7,18 @@
 package chain
 
 import (
+	"flag"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func IsRunningTests() bool {
+	return flag.Lookup("test.v") != nil
+}
 
 type SignatureValidationMetadata struct {
 	Location    *url.URL

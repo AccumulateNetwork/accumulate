@@ -26,6 +26,10 @@ ExecutorVersion:
     label: v2-vandenberg
     description: enables the Vandenberg release
 
+  VNext:
+    value: 8
+    description: is a placeholder for testing. DO NOT USE
+
 PartitionType:
   Directory:
     value: 1
