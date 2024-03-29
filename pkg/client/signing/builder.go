@@ -18,7 +18,12 @@ import (
 type InitHashMode int
 
 const (
+	// Initiate with a Merkle hash.
+	//
+	// Deprecated: Use [InitWithSimpleHash].
 	InitWithMerkleHash InitHashMode = iota
+
+	// Initiate with a simple hash.
 	InitWithSimpleHash
 )
 
@@ -103,11 +108,15 @@ func (s *Builder) Copy() *Builder {
 	return &t
 }
 
+// UseSimpleHash initiate with a simple hash.
 func (s *Builder) UseSimpleHash() *Builder {
 	s.InitMode = InitWithSimpleHash
 	return s
 }
 
+// UseMerkleHash initiate with a Merkle hash.
+//
+// Deprecated: Use [Builder.UseSimpleHash].
 func (s *Builder) UseMerkleHash() *Builder {
 	s.InitMode = InitWithMerkleHash
 	return s
