@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"sync/atomic"
 	"unicode/utf8"
 )
 
@@ -29,10 +30,10 @@ type URL struct {
 }
 
 type urlMemoize struct {
-	str        string
-	hash       [32]byte
-	accountID  [32]byte
-	identityID [32]byte
+	str        atomic.Pointer[string]
+	hash       atomic.Pointer[[32]byte]
+	accountID  atomic.Pointer[[32]byte]
+	identityID atomic.Pointer[[32]byte]
 }
 
 type Values = url.Values
@@ -181,7 +182,7 @@ func (u *URL) Compare(v *URL) int {
 
 // copy returns a copy of the url.
 func (u *URL) copy() *URL {
-	v := *u
+	v := *u //nolint:govet
 	v.memoize = urlMemoize{}
 	return &v
 }
@@ -238,12 +239,19 @@ func (u *URL) format(txid []byte, encode bool) string {
 
 // String reassembles the URL into a valid URL string. See net/url.URL.String().
 func (u *URL) String() string {
-	if u.memoize.str != "" {
-		return u.memoize.str
-	}
+	return getOrMakeAtomic(&u.memoize.str, func() string {
+		return u.format(nil, true)
+	})
+}
 
-	u.memoize.str = u.format(nil, true)
-	return u.memoize.str
+func getOrMakeAtomic[V any](v *atomic.Pointer[V], make func() V) V {
+	p := v.Load()
+	if p != nil {
+		return *p
+	}
+	u := make()
+	v.Store(&u)
+	return u
 }
 
 // RawString reassembles the URL into a valid URL string without encoding any
@@ -402,10 +410,9 @@ func (u *URL) IdentityAccountID() []byte {
 
 // IdentityAccountID32 returns IdentityAccountID as a [32]byte.
 func (u *URL) IdentityAccountID32() [32]byte {
-	if u.memoize.identityID == [32]byte{} {
-		u.memoize.identityID = id(u.Hostname())
-	}
-	return u.memoize.identityID
+	return getOrMakeAtomic(&u.memoize.identityID, func() [32]byte {
+		return id(u.Hostname())
+	})
 }
 
 // AccountID constructs an account identifier from the lower case hostname and
@@ -420,10 +427,9 @@ func (u *URL) AccountID() []byte {
 
 // AccountID32 returns AccountID as a [32]byte.
 func (u *URL) AccountID32() [32]byte {
-	if u.memoize.accountID == [32]byte{} {
-		u.memoize.accountID = id(u.Hostname() + normalizePath(u.Path))
-	}
-	return u.memoize.accountID
+	return getOrMakeAtomic(&u.memoize.accountID, func() [32]byte {
+		return id(u.Hostname() + normalizePath(u.Path))
+	})
 }
 
 // Routing returns the first 8 bytes of the identity account ID as an integer.
@@ -445,19 +451,16 @@ func (u *URL) Hash() []byte {
 
 // Hash32 returns Hash as a [32]byte.
 func (u *URL) Hash32() [32]byte {
-	if u.memoize.hash != [32]byte{} {
-		return u.memoize.hash
-	}
-
-	hash := u.AccountID32()
-	if u.Query != "" {
-		hash = concatId(hash, id(u.Query))
-	}
-	if u.Fragment != "" {
-		hash = concatId(hash, id(u.Fragment))
-	}
-	u.memoize.hash = hash
-	return hash
+	return getOrMakeAtomic(&u.memoize.hash, func() [32]byte {
+		hash := u.AccountID32()
+		if u.Query != "" {
+			hash = concatId(hash, id(u.Query))
+		}
+		if u.Fragment != "" {
+			hash = concatId(hash, id(u.Fragment))
+		}
+		return hash
+	})
 }
 
 // Equal reports whether u and v, converted to strings and interpreted as UTF-8,
@@ -510,6 +513,6 @@ func (u *URL) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	*u = *v
+	*u = *v //nolint:govet
 	return nil
 }
