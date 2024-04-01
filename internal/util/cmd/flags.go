@@ -7,9 +7,12 @@
 package cmdutil
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
+	"github.com/ghodss/yaml"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -70,4 +73,28 @@ func (f *UrlFlag) Set(s string) error {
 	}
 	f.V = u
 	return nil
+}
+
+type JsonFlag[V any] struct {
+	V V
+}
+
+func JsonFlagOf[V any](v V) *JsonFlag[V] {
+	return &JsonFlag[V]{v}
+}
+
+func (f *JsonFlag[V]) Type() string {
+	return reflect.TypeFor[V]().Name()
+}
+
+func (f *JsonFlag[V]) String() string {
+	b, err := json.Marshal(f.V)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+func (f *JsonFlag[V]) Set(s string) error {
+	return yaml.Unmarshal([]byte(s), &f.V)
 }

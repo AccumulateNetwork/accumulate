@@ -8,7 +8,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -43,17 +45,23 @@ var cmdMain = &cobra.Command{
 }
 
 var flagMain struct {
-	WorkDir string
-	Debug   bool
-	Reset   bool
-	Pprof   string
+	WorkDir  string
+	Debug    bool
+	Reset    bool
+	InitOnly bool
+	Pprof    string
 }
 
 func init() {
-	cmdMain.Flags().BoolVarP(&flagMain.Debug, "debug", "d", false, "Enable debug logging")
-	cmdMain.Flags().BoolVar(&flagMain.Reset, "reset", false, "Reset state before starting")
-	cmdMain.Flags().StringVar(&flagMain.Pprof, "pprof", "", "Address to run net/http/pprof on")
+	setRunFlags(cmdMain)
 	cmdMain.PersistentFlags().StringVarP(&flagMain.WorkDir, "work-dir", "w", defaultWorkDir, "Working directory for configuration and data")
+}
+
+func setRunFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolVarP(&flagMain.Debug, "debug", "d", false, "Enable debug logging")
+	cmd.Flags().BoolVar(&flagMain.Reset, "reset", false, "Reset state before starting")
+	cmd.Flags().BoolVar(&flagMain.InitOnly, "init-only", false, "Initialize and exit, do not run")
+	cmd.Flags().StringVar(&flagMain.Pprof, "pprof", "", "Address to run net/http/pprof on")
 }
 
 func main() {
@@ -64,6 +72,13 @@ func run2(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
 		printUsageAndExit1(cmd, args)
 	}
+
+	c := new(run.Config)
+	check(c.LoadFrom(mustFindConfigFile(args[0])))
+	runCfg(c, nil)
+}
+
+func runCfg(c *run.Config, predicate func(run.Service) bool) {
 	if flagMain.Debug {
 		logging.EnableDebugFeatures()
 	}
@@ -74,9 +89,6 @@ func run2(cmd *cobra.Command, args []string) {
 		go func() { check(s.ListenAndServe()) }() //nolint:gosec
 	}
 
-	c := new(run.Config)
-	check(c.LoadFrom(findConfigFile(args[0])))
-
 	ctx := cmdutil.ContextForMainProcess(context.Background())
 	i, err := run.New(ctx, c)
 	check(err)
@@ -85,11 +97,14 @@ func run2(cmd *cobra.Command, args []string) {
 		check(i.Reset())
 	}
 
-	check(i.Start())
+	if flagMain.InitOnly {
+		return
+	}
 
-	color.HiBlue("\n--- Running ---\n\n")
-
+	check(i.StartFiltered(predicate))
+	color.HiBlue("\n----- Running -----\n\n")
 	<-ctx.Done()
+	color.HiBlack("\n----- Stopping -----\n\n")
 	i.Stop()
 }
 
@@ -98,11 +113,14 @@ func printUsageAndExit1(cmd *cobra.Command, _ []string) {
 	os.Exit(1)
 }
 
-func findConfigFile(name string) string {
+func findConfigFile(name string) (string, bool) {
 	st, err := os.Stat(name)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", false
+	}
 	check(err)
 	if !st.IsDir() {
-		return name
+		return name, true
 	}
 
 	dir, err := os.ReadDir(name)
@@ -113,8 +131,17 @@ func findConfigFile(name string) string {
 		}
 		base := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
 		if base == "accumulate" {
-			return filepath.Join(name, entry.Name())
+			return filepath.Join(name, entry.Name()), true
 		}
+	}
+
+	return "", false
+}
+
+func mustFindConfigFile(name string) string {
+	f, ok := findConfigFile(name)
+	if ok {
+		return f
 	}
 	fatalf("no configuration file found in %s", name)
 	panic("not reached")

@@ -158,6 +158,11 @@ func (h *Harness) Submit(envelope *messaging.Envelope) []*protocol.TransactionSt
 	return status
 }
 
+func (h *Harness) SubmitRaw(envelope *messaging.Envelope) ([]*api.Submission, error) {
+	h.TB.Helper()
+	return h.services.Submit(context.Background(), envelope, api.SubmitOptions{})
+}
+
 // SubmitSuccessfully submits the envelope and asserts that all transactions and
 // signatures succeeded.
 func (h *Harness) SubmitSuccessfully(envelope *messaging.Envelope) []*protocol.TransactionStatus {

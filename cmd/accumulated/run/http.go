@@ -45,7 +45,7 @@ func (h *HttpService) Requires() []ioc.Requirement {
 func (h *HttpService) Provides() []ioc.Provided { return nil }
 
 func (h *HttpService) start(inst *Instance) error {
-	setDefaultVal(&h.Listen, []multiaddr.Multiaddr{mustParseMulti("/ip4/0.0.0.0/tcp/8080/http")})
+	setDefaultVal(&h.Listen, []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/0.0.0.0/tcp/8080/http")})
 	h.applyHttpDefaults()
 
 	if len(h.Listen) == 0 {
