@@ -494,6 +494,7 @@ func (c *CoreConsensusApp) start(inst *Instance, d *tendermint) (types.Applicati
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
+		ID:        inst.id,
 		Address:   d.privVal.Key.PubKey.Address(),
 		Executor:  exec,
 		Logger:    d.logger.With("module", "abci"),

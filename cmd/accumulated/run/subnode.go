@@ -19,6 +19,7 @@ func (s *SubnodeService) Provides() []ioc.Provided    { return nil }
 func (s *SubnodeService) start(inst *Instance) error {
 	sub := new(Instance)
 	sub.rootDir = inst.path(s.Name)
+	sub.id = s.Name
 	sub.running = new(sync.WaitGroup)
 	sub.context = inst.context
 	sub.shutdown = inst.shutdown
