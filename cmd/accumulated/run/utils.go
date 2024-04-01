@@ -55,14 +55,6 @@ func setDefaultSlice[V any, S ~[]V](ptr *S, def ...V) S {
 	return setDefaultVal(ptr, def)
 }
 
-func mustParseMulti(s string) multiaddr.Multiaddr {
-	addr, err := multiaddr.NewMultiaddr(s)
-	if err != nil {
-		panic(err)
-	}
-	return addr
-}
-
 func getPrivateKey(key PrivateKey, inst *Instance) (ed25519.PrivateKey, error) {
 	addr, err := key.get(inst)
 	if err != nil {

@@ -16,12 +16,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 )
 
 type Instance struct {
 	config  *Config
 	rootDir string
+	id      string
 
 	running  *sync.WaitGroup    // tracks jobs that want a graceful shutdown
 	context  context.Context    // canceled when the instance shuts down
@@ -92,7 +94,11 @@ func (inst *Instance) Reset() error {
 	return nil
 }
 
-func (inst *Instance) Start() (err error) {
+func (inst *Instance) Start() error {
+	return inst.StartFiltered(func(s Service) bool { return true })
+}
+
+func (inst *Instance) StartFiltered(predicate func(Service) bool) (err error) {
 	// Cleanup if boot fails
 	defer func() {
 		if err != nil {
@@ -124,8 +130,14 @@ func (inst *Instance) Start() (err error) {
 		}
 	}
 
+	// Filter
+	allServices := inst.config.Services
+	if predicate != nil {
+		allServices = slices.DeleteFunc(allServices, func(s Service) bool { return !predicate(s) })
+	}
+
 	// Determine initialization order
-	services, err := ioc.Solve(inst.config.Services)
+	services, err := ioc.Solve(allServices)
 	if err != nil {
 		return err
 	}
