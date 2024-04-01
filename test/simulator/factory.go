@@ -27,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -475,23 +476,17 @@ func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreF
 	}
 }
 
-// func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
-// 	a := abci.NewAccumulator(abci.AccumulatorOptions{
-// 		Config: &config.Config{
-// 			Accumulate: config.Accumulate{
-// 				Describe: config.Describe{
-// 					PartitionId: node.networkFactory.id,
-// 				},
-// 			},
-// 		},
-// 		Executor: exec,
-// 		EventBus: node.eventBus,
-// 		Logger:   node.logger,
-// 		Database: node.getDatabase(),
-// 		Address:  node.network.PrivValKey,
-// 	})
-// 	return (*consensus.AbciApp)(a)
-// }
+func withABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
+	a := abci.NewAccumulator(abci.AccumulatorOptions{
+		Partition: node.networkFactory.id,
+		Executor:  exec,
+		EventBus:  node.eventBus,
+		Logger:    node.logger,
+		Database:  node.getDatabase(),
+		Address:   node.network.PrivValKey,
+	})
+	return (*consensus.AbciApp)(a)
+}
 
 type appFunc = func(*nodeFactory) *consensus.Node
 

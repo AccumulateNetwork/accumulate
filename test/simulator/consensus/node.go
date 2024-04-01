@@ -76,13 +76,6 @@ type StatusResponse struct {
 	BlockTime  time.Time
 }
 
-type ExecuteRequest struct {
-	Context context.Context
-}
-
-type ExecuteResponse struct {
-}
-
 func NewNode(ctx context.Context, network string, key ed25519.PrivateKey, app App) *Node {
 	n := new(Node)
 	n.mu = new(sync.Mutex)
@@ -260,55 +253,14 @@ func copyEnv(env []*messaging.Envelope) []*messaging.Envelope {
 	return c
 }
 
-func (n *Node) begin(params execute.BlockParams) (execute.Block, error) {
-	res, err := n.app.Begin(&BeginRequest{Params: params})
-	if err != nil {
-		return nil, errors.FatalError.Wrap(err)
-	}
-	return res.Block, nil
+func (n *Node) execute(params execute.BlockParams, envelopes []*messaging.Envelope) (*ExecuteResponse, error) {
+	return n.app.Execute(&ExecuteRequest{params, envelopes})
 }
 
-func (n *Node) deliver(block execute.Block, envelopes []*messaging.Envelope) ([]*protocol.TransactionStatus, error) {
-	var results []*protocol.TransactionStatus
-	for _, envelope := range envelopes {
-		s, err := block.Process(envelope)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
-		}
-
-		results = append(results, s...)
-	}
-	return results, nil
-}
-
-func (n *Node) endBlock(block execute.Block) (execute.BlockState, error) {
-	state, err := block.Close()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("end block: %w", err)
-	}
-
-	// Apply validator updates
-	valUp, ok := state.DidUpdateValidators()
-	if ok {
-		n.applyValUp(valUp)
-	}
-
-	return state, nil
-}
-
-func (n *Node) commit(state execute.BlockState) ([]byte, error) {
+func (n *Node) commit(block any) ([]byte, error) {
 	// Commit (let the app handle empty blocks and notifications)
-	err := state.Commit()
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("commit: %w", err)
-	}
-
-	// Get the old root
-	res, err := n.app.Info(&InfoRequest{})
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return res.LastHash[:], errors.UnknownError.Wrap(err)
+	res, err := n.app.Commit(&CommitRequest{Block: block})
+	return res.Hash[:], errors.UnknownError.Wrap(err)
 }
 
 func (n *Node) applyValUp(valUp []*execute.ValidatorUpdate) {
