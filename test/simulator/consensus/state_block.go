@@ -212,43 +212,29 @@ func (n *Node) finalizeBlock(p *BlockProposal) (blockState, []Message, error) {
 		}
 	}
 
-	// Begin the block
-	block, err := n.begin(params)
-	if err != nil {
-		return nil, nil, errors.FatalError.WithFormat("begin block: %w", err)
-	}
-
+	// Execute the block
 	slog.DebugContext(n.context, "Block begin", "block", params.Index, "time", params.Time)
-
-	// Deliver the envelopes
-	results, err := n.deliver(block, envelopes)
+	res, err := n.execute(params, envelopes)
 	if err != nil {
-		return nil, nil, errors.FatalError.WithFormat("deliver: %w", err)
+		return nil, nil, errors.FatalError.WithFormat("execute block: %w", err)
 	}
 
-	for _, r := range results {
+	for _, r := range res.Results {
 		slog.DebugContext(n.context, "Delivered", "block", params.Index, "result", r)
 	}
 
-	// End the block
-	state, err := n.endBlock(block)
-	if err != nil {
-		return nil, nil, errors.FatalError.WithFormat("end block: %w", err)
-	}
-
-	valUp, _ := state.DidUpdateValidators()
-	slog.DebugContext(n.context, "End block", "block", params.Index, "validator-updates", valUp)
+	slog.DebugContext(n.context, "End block", "block", params.Index, "validator-updates", len(res.Updates))
 
 	// Send [finalizedBlock] and transition to [didFinalizeBlock].
 	m := new(didFinalizeBlock)
 	m.Node = n
 	m.b.baseNodeMessage = n.newMsg()
 	if !n.IgnoreDeliverResults {
-		m.b.results.MessageResults = results
+		m.b.results.MessageResults = res.Results
 	}
-	m.b.results.ValidatorUpdates = valUp
+	m.b.results.ValidatorUpdates = res.Updates
 	m.votes = n.newVotes()
-	m.blockState = state
+	m.blockState = res.Block
 	return m, []Message{&m.b}, nil
 }
 
@@ -263,7 +249,7 @@ type didFinalizeBlock struct {
 	*Node
 	b          finalizedBlock
 	votes      votes
-	blockState execute.BlockState
+	blockState any
 }
 
 // execute records a vote upon receipt of [finalizedBlock] and waits for the
@@ -292,7 +278,7 @@ func (n *didFinalizeBlock) execute(msg Message) (blockState, []Message, error) {
 	return n.commitBlock(&n.b.results, state)
 }
 
-func (n *Node) commitBlock(results *BlockResults, state execute.BlockState) (blockState, []Message, error) {
+func (n *Node) commitBlock(results *BlockResults, state any) (blockState, []Message, error) {
 	// Apply validator updates
 	n.applyValUp(results.ValidatorUpdates)
 
@@ -302,7 +288,7 @@ func (n *Node) commitBlock(results *BlockResults, state execute.BlockState) (blo
 		return nil, nil, errors.FatalError.WithFormat("commit: %w", err)
 	}
 
-	slog.DebugContext(n.context, "Commit", "block", state.Params().Index, "hash", logging.AsHex(hash))
+	slog.DebugContext(n.context, "Commit", "hash", logging.AsHex(hash))
 
 	m := new(didCommitBlock)
 	m.Node = n
