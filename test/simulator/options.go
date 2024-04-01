@@ -247,7 +247,7 @@ func InitialAcmeSupply(v *big.Int) Option {
 	}
 }
 
-// func UseABCI(opts *simFactory) error {
-// 	opts.abci = withABCI
-// 	return nil
-// }
+func UseABCI(opts *simFactory) error {
+	opts.abci = withABCI
+	return nil
+}

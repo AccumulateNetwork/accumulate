@@ -64,6 +64,10 @@ type Accumulator struct {
 	ready          bool
 
 	onFatal func(error)
+
+	// DisableLateCommit - DO NOT USE IN PRODUCTION - disables the late-commit
+	// logic that prevents consensus failures from being committed.
+	DisableLateCommit bool
 }
 
 type AccumulatorOptions struct {
@@ -401,7 +405,7 @@ func (app *Accumulator) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	}
 
 	// Commit the previous block
-	if app.block != nil {
+	if app.block != nil && !app.DisableLateCommit {
 		err := app.actualCommit()
 		if err != nil {
 			return nil, err
@@ -702,7 +706,14 @@ func (app *Accumulator) Commit(_ context.Context, req *abci.RequestCommit) (*abc
 	//
 	// If the block is non-empty, we simply return the root hash and let
 	// BeginBlock handle the actual commit.
-	return &abci.ResponseCommit{}, nil
+	if !app.DisableLateCommit || app.block == nil {
+		return &abci.ResponseCommit{}, nil
+	}
+
+	// TESTING ONLY - commit during commit, so that tests can observe state
+	// changes at the expected time
+	err := app.actualCommit()
+	return &abci.ResponseCommit{}, err
 }
 
 func (app *Accumulator) cleanupBlock() {

@@ -886,7 +886,6 @@ func TestMessageCompat(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
 		simulator.GenesisWith(GenesisTime, g),
-		// simulator.UseABCI,
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
