@@ -176,6 +176,15 @@ MakeMajorBlock:
       description: is the timestamp of the major block
       type: time
 
+DidUpdateExecutorVersion:
+  union: { type: message }
+  fields:
+    - name: Partition
+      type: string
+    - name: Version
+      type: protocol.ExecutorVersion
+      marshal-as: enum
+
 # Components
 
 RecordUpdate:

@@ -105,6 +105,37 @@ func (v blockTimeOnPart) Format(prefix, suffix string) string {
 	return fmt.Sprintf("%s%s reached block time %v%s", prefix, v.partition, v.time, suffix)
 }
 
+func VersionIs(v protocol.ExecutorVersion) executorVersion {
+	if !v.V2VandenbergEnabled() {
+		panic("this feature is not available for versions prior to v2-vandenberg")
+	}
+	return executorVersion{version: v}
+}
+
+type executorVersion struct {
+	version protocol.ExecutorVersion
+}
+
+func (v executorVersion) Satisfied(h *Harness) bool {
+	ns := h.NetworkStatus(api.NetworkStatusOptions{Partition: protocol.Directory})
+	if len(ns.BvnExecutorVersions) == 0 {
+		return false
+	}
+	if ns.ExecutorVersion < v.version {
+		return false
+	}
+	for _, b := range ns.BvnExecutorVersions {
+		if b.Version < v.version {
+			return false
+		}
+	}
+	return true
+}
+
+func (v executorVersion) Format(prefix, suffix string) string {
+	return fmt.Sprintf("%sexecutor version is %v%s", prefix, v.version, suffix)
+}
+
 // Msg defines a condition on a message.
 func Msg(id *url.TxID) msgCond {
 	return msgCond{id: id, message: []string{"message " + id.ShortString()}}

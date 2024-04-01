@@ -66,6 +66,13 @@ type CreditPayment struct {
 	extraData []byte
 }
 
+type DidUpdateExecutorVersion struct {
+	fieldsSet []bool
+	Partition string                   `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Version   protocol.ExecutorVersion `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	extraData []byte
+}
+
 type Envelope struct {
 	fieldsSet   []bool
 	Signatures  []protocol.Signature    `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
@@ -161,6 +168,8 @@ func (*BlockAnchor) Type() MessageType { return MessageTypeBlockAnchor }
 func (*BlockSummary) Type() MessageType { return MessageTypeBlockSummary }
 
 func (*CreditPayment) Type() MessageType { return MessageTypeCreditPayment }
+
+func (*DidUpdateExecutorVersion) Type() MessageType { return MessageTypeDidUpdateExecutorVersion }
 
 func (*MakeMajorBlock) Type() MessageType { return MessageTypeMakeMajorBlock }
 
@@ -271,6 +280,21 @@ func (v *CreditPayment) Copy() *CreditPayment {
 }
 
 func (v *CreditPayment) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DidUpdateExecutorVersion) Copy() *DidUpdateExecutorVersion {
+	u := new(DidUpdateExecutorVersion)
+
+	u.Partition = v.Partition
+	u.Version = v.Version
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *DidUpdateExecutorVersion) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Envelope) Copy() *Envelope {
 	u := new(Envelope)
@@ -589,6 +613,17 @@ func (v *CreditPayment) Equal(u *CreditPayment) bool {
 	case v.Cause == nil || u.Cause == nil:
 		return false
 	case !((v.Cause).Equal(u.Cause)):
+		return false
+	}
+
+	return true
+}
+
+func (v *DidUpdateExecutorVersion) Equal(u *DidUpdateExecutorVersion) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.Version == u.Version) {
 		return false
 	}
 
@@ -1101,6 +1136,63 @@ func (v *CreditPayment) IsValid() error {
 		errs = append(errs, "field Cause is missing")
 	} else if v.Cause == nil {
 		errs = append(errs, "field Cause is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_DidUpdateExecutorVersion = []string{
+	1: "Type",
+	2: "Partition",
+	3: "Version",
+}
+
+func (v *DidUpdateExecutorVersion) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+	if !(v.Version == 0) {
+		writer.WriteEnum(3, v.Version)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DidUpdateExecutorVersion)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *DidUpdateExecutorVersion) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
 	}
 
 	switch len(errs) {
@@ -1891,6 +1983,44 @@ func (v *CreditPayment) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *DidUpdateExecutorVersion) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DidUpdateExecutorVersion) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType MessageType
+	if x := new(MessageType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *DidUpdateExecutorVersion) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+	if x := new(protocol.ExecutorVersion); reader.ReadEnum(3, x) {
+		v.Version = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_DidUpdateExecutorVersion)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Envelope) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2388,6 +2518,22 @@ func (v *CreditPayment) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DidUpdateExecutorVersion) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      MessageType              `json:"type"`
+		Partition string                   `json:"partition,omitempty"`
+		Version   protocol.ExecutorVersion `json:"version,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Partition) == 0) {
+		u.Partition = v.Partition
+	}
+	if !(v.Version == 0) {
+		u.Version = v.Version
+	}
+	return json.Marshal(&u)
+}
+
 func (v *Envelope) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signatures  *encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
@@ -2697,6 +2843,26 @@ func (v *CreditPayment) UnmarshalJSON(data []byte) error {
 	v.Initiator = u.Initiator
 	v.TxID = u.TxID
 	v.Cause = u.Cause
+	return nil
+}
+
+func (v *DidUpdateExecutorVersion) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      MessageType              `json:"type"`
+		Partition string                   `json:"partition,omitempty"`
+		Version   protocol.ExecutorVersion `json:"version,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.Partition
+	u.Version = v.Version
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Partition = u.Partition
+	v.Version = u.Version
 	return nil
 }
 
