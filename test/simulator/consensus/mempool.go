@@ -9,6 +9,7 @@ package consensus
 import (
 	"crypto/sha256"
 	"sort"
+	"sync"
 
 	"github.com/cometbft/cometbft/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -19,6 +20,7 @@ import (
 // mempool tracks submitted envelopes.
 type mempool struct {
 	count      int
+	mu         sync.Mutex
 	logger     logging.OptionalLogger
 	pool       map[[32]byte]*mpEntry
 	candidates []*mpEntry
@@ -39,6 +41,9 @@ func newMempool(logger log.Logger) *mempool {
 
 // Add adds an envelope to the mempool, tracking its arrival order.
 func (m *mempool) Add(envelope *messaging.Envelope) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	b, err := envelope.MarshalBinary()
 	if err != nil {
 		panic(err)
@@ -51,6 +56,9 @@ func (m *mempool) Add(envelope *messaging.Envelope) {
 
 // Propose proposes a list of envelopes to execute in the next block.
 func (m *mempool) Propose(block uint64) []*messaging.Envelope {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Sort by arrival order
 	sort.Slice(m.candidates, func(i, j int) bool {
 		a, b := m.candidates[i], m.candidates[j]
@@ -66,6 +74,9 @@ func (m *mempool) Propose(block uint64) []*messaging.Envelope {
 
 // CheckPropose checks a block proposal received from another node.
 func (m *mempool) CheckProposed(block uint64, envelope *messaging.Envelope) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	b, err := envelope.MarshalBinary()
 	if err != nil {
 		panic(err)
@@ -82,6 +93,9 @@ func (m *mempool) CheckProposed(block uint64, envelope *messaging.Envelope) erro
 // prepares the node's candidates to propose for the next block (if the node is
 // selected as the leader).
 func (m *mempool) AcceptProposed(block uint64, envelopes []*messaging.Envelope) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Remove proposed envelopes
 	for _, env := range envelopes {
 		b, err := env.MarshalBinary()
