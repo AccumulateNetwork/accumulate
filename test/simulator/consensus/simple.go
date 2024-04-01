@@ -15,6 +15,8 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+const debugSynchronous = false
+
 // SimpleHub is a simple implementation of [Hub].
 type SimpleHub struct {
 	mu      *sync.Mutex
@@ -74,7 +76,11 @@ func (s *SimpleHub) Send(messages ...Message) error {
 		// Send the messages to each module
 		for i := range s.modules {
 			wg.Add(1)
-			go receive(i)
+			if debugSynchronous {
+				receive(i)
+			} else {
+				go receive(i)
+			}
 		}
 		wg.Wait()
 
