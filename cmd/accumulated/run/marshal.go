@@ -20,6 +20,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func (c *Config) FilePath() string     { return c.file }
+func (c *Config) SetFilePath(p string) { c.file = p }
+
 func (c *Config) LoadFrom(file string) error {
 	var format func([]byte, any) error
 	switch s := filepath.Ext(file); s {
