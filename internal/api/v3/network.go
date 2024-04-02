@@ -72,6 +72,7 @@ func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusO
 	res.Oracle = values.Oracle
 	res.Routing = values.Routing
 	res.ExecutorVersion = values.ExecutorVersion
+	res.BvnExecutorVersions = values.BvnExecutorVersions
 
 	// Data from the database
 	err := s.database.View(func(batch *database.Batch) error {
