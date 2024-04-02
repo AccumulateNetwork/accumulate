@@ -30,6 +30,12 @@ SystemLedger:
       type: ExecutorVersion
       marshal-as: enum
       optional: true
+    - name: BvnExecutorVersions
+      description: is the active executor version of each BVN
+      type: PartitionExecutorVersion
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 SyntheticLedger:
   union: { type: account }
@@ -211,3 +217,11 @@ PartitionSyntheticLedger:
     # - name: Acknowledged
     #   description: is the maximum sequence number of acknowledged transactions produced for the partition
     #   type: uint
+
+PartitionExecutorVersion:
+  fields:
+    - name: Partition
+      type: string
+    - name: Version
+      type: ExecutorVersion
+      marshal-as: enum
