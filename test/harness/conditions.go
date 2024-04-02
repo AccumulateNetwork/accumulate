@@ -106,13 +106,19 @@ func (v blockTimeOnPart) Format(prefix, suffix string) string {
 }
 
 // Msg defines a condition on a message.
-func Msg(id *url.TxID) msgCond { return msgCond{id: id, message: []string{"message"}} }
+func Msg(id *url.TxID) msgCond {
+	return msgCond{id: id, message: []string{"message " + id.ShortString()}}
+}
 
 // Txn defines a condition on a transaction.
-func Txn(id *url.TxID) txnCond { return txnCond{msgCond{id: id, message: []string{"transaction"}}} }
+func Txn(id *url.TxID) txnCond {
+	return txnCond{msgCond{id: id, message: []string{"transaction " + id.ShortString()}}}
+}
 
 // Sig defines a condition on a signature.
-func Sig(id *url.TxID) sigCond { return sigCond{msgCond{id: id, message: []string{"signature"}}} }
+func Sig(id *url.TxID) sigCond {
+	return sigCond{msgCond{id: id, message: []string{"signature " + id.ShortString()}}}
+}
 
 // txnCond provides methods to define conditions on a transaction.
 type txnCond struct{ msgCond }
