@@ -35,7 +35,15 @@ func (block *Block) Close() (execute.BlockState, error) {
 	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
 	defer m.BlockTimers.Stop(r)
 
-	err := block.processEventBacklog()
+	// Is it time for a major block?
+	err := block.shouldOpenMajorBlock()
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Process events such as expiring transactions. Depends on
+	// shouldOpenMajorBlock.
+	err = block.processEvents()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("process event backlog: %w", err)
 	}
@@ -64,10 +72,9 @@ func (block *Block) Close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
-	// Determine if an anchor should be sent
-	err = m.shouldPrepareAnchor(block)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	// Should we send an anchor?
+	if block.shouldSendAnchor() {
+		block.State.Anchor = &BlockAnchorState{}
 	}
 
 	// Send messages produced by the block. Depends on shouldPrepareAnchor.
@@ -240,7 +247,7 @@ func (block *Block) Close() (execute.BlockState, error) {
 	}
 
 	// Update major index chains if it's a major block
-	err = m.updateMajorIndexChains(block, rootIndexIndex)
+	err = m.recordMajorBlock(block, rootIndexIndex)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -543,93 +550,27 @@ func (x *Executor) getKeySignature(r *api.MessageRecord[messaging.Message], part
 	return nil, false
 }
 
-// updateMajorIndexChains updates major index chains.
-func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) error {
-	if block.State.MakeMajorBlock == 0 {
-		return nil
-	}
-
-	// Load the chain
-	account := block.Batch.Account(x.Describe.AnchorPool())
-	mainChain, err := account.MainChain().Get()
-	if err != nil {
-		return errors.UnknownError.WithFormat("load anchor ledger main chain: %w", err)
-	}
-
-	_, err = addIndexChainEntry(account.MajorBlockChain(), &protocol.IndexEntry{
-		Source:         uint64(mainChain.Height() - 1),
-		RootIndexIndex: rootIndexIndex,
-		BlockIndex:     block.State.MakeMajorBlock,
-		BlockTime:      &block.State.MakeMajorBlockTime,
-	})
-	if err != nil {
-		return errors.UnknownError.WithFormat("add anchor ledger index chain entry: %w", err)
-	}
-
-	return nil
-}
-
-func (x *Executor) shouldPrepareAnchor(block *Block) error {
-	did, err := x.shouldOpenMajorBlock(block)
-	if err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-
-	if !did && x.shouldSendAnchor(block) {
-		block.State.Anchor = &BlockAnchorState{}
-	}
-
-	return nil
-}
-
-func (x *Executor) shouldOpenMajorBlock(block *Block) (bool, error) {
-	// Only the directory network can open a major block
-	if x.Describe.NetworkType != protocol.PartitionTypeDirectory {
-		return false, nil
-	}
-
-	var anchor *protocol.AnchorLedger
-	err := block.Batch.Account(x.Describe.AnchorPool()).Main().GetAs(&anchor)
-	if err != nil {
-		return false, errors.UnknownError.WithFormat("load anchor ledger: %w", err)
-	}
-
-	// The addition of a second here is kept for backwards compatibility
-	blockTimeUTC := block.Time.Add(time.Second).UTC()
-	nextBlockTime := x.globals.Active.MajorBlockSchedule().Next(anchor.MajorBlockTime)
-	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
-		return false, nil
-	}
-
-	block.State.Anchor = &BlockAnchorState{
-		ShouldOpenMajorBlock: true,
-		WillOpenMajorBlock:   anchor.MajorBlockIndex + 1,
-		OpenMajorBlockTime:   blockTimeUTC,
-	}
-	return true, nil
-}
-
-func (x *Executor) shouldSendAnchor(block *Block) bool {
+func (b *Block) shouldSendAnchor() bool {
 	// Did we make a major block?
-	if block.State.MakeMajorBlock > 0 {
+	if b.State.MakeMajorBlock > 0 || b.State.MajorBlock != nil {
 		return true
 	}
 
 	// Did we produce synthetic transactions?
-	if block.State.Produced > 0 {
+	if b.State.Produced > 0 {
 		return true
 	}
 
 	var didUpdateOther, didAnchorPartition, didAnchorDirectory bool
-	anchor := block.Batch.Account(x.Describe.AnchorPool())
-	for _, c := range block.State.ChainUpdates.Entries {
+	anchor := b.Batch.Account(b.Executor.Describe.AnchorPool())
+	for _, c := range b.State.ChainUpdates.Entries {
 		// The system ledger is always updated
-		if c.Account.Equal(x.Describe.Ledger()) {
+		if c.Account.Equal(b.Executor.Describe.Ledger()) {
 			continue
 		}
 
 		// Was some other account updated?
-		if !c.Account.Equal(x.Describe.AnchorPool()) {
+		if !c.Account.Equal(b.Executor.Describe.AnchorPool()) {
 			didUpdateOther = true
 			continue
 		}
@@ -637,7 +578,7 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 		// Check if a partition anchor was received
 		chain, err := anchor.ChainByName(c.Chain)
 		if err != nil {
-			x.logger.Error("Failed to get chain by name", "error", err, "name", c.Chain)
+			b.Executor.logger.Error("Failed to get chain by name", "error", err, "name", c.Chain)
 			continue
 		}
 
@@ -660,7 +601,7 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 	}
 
 	// Send an anchor if a directory anchor was received and the flag is set
-	return didAnchorDirectory && x.globals.Active.Globals.AnchorEmptyBlocks
+	return didAnchorDirectory && b.Executor.globals.Active.Globals.AnchorEmptyBlocks
 }
 
 func (x *Executor) prepareAnchor(block *Block) error {
@@ -672,7 +613,14 @@ func (x *Executor) prepareAnchor(block *Block) error {
 	// Update the anchor ledger
 	anchorLedger, err := database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
 		ledger.MinorBlockSequenceNumber++
-		if !block.State.Anchor.ShouldOpenMajorBlock {
+		if block.State.MajorBlock == nil {
+			return nil
+		}
+
+		ledger.MajorBlockIndex = block.State.MajorBlock.Index
+		ledger.MajorBlockTime = block.State.MajorBlock.Time
+
+		if x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
 			return nil
 		}
 
@@ -698,8 +646,6 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			})
 		}
 
-		ledger.MajorBlockIndex = block.State.Anchor.WillOpenMajorBlock
-		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
 		for i, bvn := range bvns {
 			ledger.PendingMajorBlockAnchors[i] = protocol.PartitionUrl(bvn)
@@ -741,11 +687,10 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	// update to v2-vandenburg is not sent out to the BVNs.
 	anchor.Updates = systemLedger.PendingUpdates
 
-	if block.State.Anchor.ShouldOpenMajorBlock {
-		// This should probably be disabled after v2-vandenburg, but there's a
-		// minute possibility the update and a major block will happen
-		// simultaneously. Leaving this logic enabled will prevent that from
-		// being a problem.
+	if block.State.MajorBlock != nil && !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		// It's possible this could cause a lost major block if Vandenberg is
+		// activated at exactly the right time. But A) that's highly unlikely
+		// and B) not much of a problem.
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}
@@ -850,15 +795,15 @@ func (b *Block) produceBlockMessages() error {
 
 	/* ***** Major block notification ***** */
 
-	if b.State.Anchor != nil && b.State.Anchor.ShouldOpenMajorBlock &&
+	if b.State.Anchor != nil && b.State.MajorBlock != nil &&
 		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		for _, bvn := range bvns {
 			b.State.Produced++
 			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
 				Destination: protocol.PartitionUrl(bvn),
 				Message: &messaging.MakeMajorBlock{
-					MajorBlockIndex: b.State.Anchor.WillOpenMajorBlock,
-					MajorBlockTime:  b.State.Anchor.OpenMajorBlockTime,
+					MajorBlockIndex: b.State.MajorBlock.Index,
+					MajorBlockTime:  b.State.MajorBlock.Time,
 					MinorBlockIndex: b.Index,
 				},
 			}}, b.Index)
