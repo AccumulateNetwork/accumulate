@@ -47,6 +47,9 @@ const MessageTypeNetworkUpdate MessageType = 10
 // MessageTypeMakeMajorBlock triggers a major block.
 const MessageTypeMakeMajorBlock MessageType = 11
 
+// MessageTypeDidUpdateExecutorVersion notifies the DN that a BVN updated the executor version.
+const MessageTypeDidUpdateExecutorVersion MessageType = 12
+
 // GetEnumValue returns the value of the Message Type
 func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -54,7 +57,7 @@ func (v MessageType) GetEnumValue() uint64 { return uint64(v) }
 func (v *MessageType) SetEnumValue(id uint64) bool {
 	u := MessageType(id)
 	switch u {
-	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock:
+	case MessageTypeTransaction, MessageTypeSignature, MessageTypeBadSynthetic, MessageTypeBlockAnchor, MessageTypeSequenced, MessageTypeSignatureRequest, MessageTypeCreditPayment, MessageTypeBlockSummary, MessageTypeSynthetic, MessageTypeNetworkUpdate, MessageTypeMakeMajorBlock, MessageTypeDidUpdateExecutorVersion:
 		*v = u
 		return true
 	}
@@ -86,6 +89,8 @@ func (v MessageType) String() string {
 		return "networkUpdate"
 	case MessageTypeMakeMajorBlock:
 		return "makeMajorBlock"
+	case MessageTypeDidUpdateExecutorVersion:
+		return "didUpdateExecutorVersion"
 	}
 	return fmt.Sprintf("MessageType:%d", v)
 }
@@ -115,6 +120,8 @@ func MessageTypeByName(name string) (MessageType, bool) {
 		return MessageTypeNetworkUpdate, true
 	case "makemajorblock":
 		return MessageTypeMakeMajorBlock, true
+	case "didupdateexecutorversion":
+		return MessageTypeDidUpdateExecutorVersion, true
 	}
 	return 0, false
 }

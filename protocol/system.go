@@ -13,6 +13,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
+func (l *SystemLedger) SetBvnExecutorVersion(bvn string, ver ExecutorVersion) {
+	for _, b := range l.BvnExecutorVersions {
+		if strings.EqualFold(b.Partition, bvn) {
+			if ver > b.Version {
+				b.Version = ver
+			}
+			return
+		}
+	}
+	l.BvnExecutorVersions = append(l.BvnExecutorVersions, &PartitionExecutorVersion{
+		Partition: bvn,
+		Version:   ver,
+	})
+}
+
 type SequenceLedger interface {
 	Account
 	Partition(url *url.URL) *PartitionSyntheticLedger

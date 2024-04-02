@@ -128,7 +128,8 @@ func (SyntheticMessage) check(batch *database.Batch, ctx *MessageContext) (*mess
 		messaging.MessageTypeSignatureRequest,
 		messaging.MessageTypeCreditPayment,
 		messaging.MessageTypeNetworkUpdate,
-		messaging.MessageTypeMakeMajorBlock:
+		messaging.MessageTypeMakeMajorBlock,
+		messaging.MessageTypeDidUpdateExecutorVersion:
 		// Allowed
 
 	default:

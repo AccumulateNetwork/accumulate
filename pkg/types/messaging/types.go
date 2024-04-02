@@ -104,6 +104,10 @@ func (m *MakeMajorBlock) ID() *url.TxID {
 	return protocol.DnUrl().WithTxID(m.Hash())
 }
 
+func (m *DidUpdateExecutorVersion) ID() *url.TxID {
+	return protocol.PartitionUrl(m.Partition).WithTxID(m.Hash())
+}
+
 func (m *BadSyntheticMessage) Unwrap() Message { return m.Message }
 func (m *SyntheticMessage) Unwrap() Message    { return m.Message }
 func (m *SequencedMessage) Unwrap() Message    { return m.Message }
@@ -183,11 +187,12 @@ func (m *BadSyntheticMessage) Hash() [32]byte {
 	return *(*[32]byte)(h.MerkleHash())
 }
 
-func (m *SequencedMessage) Hash() [32]byte { return encoding.Hash(m) }
-func (m *BlockAnchor) Hash() [32]byte      { return encoding.Hash(m) }
-func (m *SignatureRequest) Hash() [32]byte { return encoding.Hash(m) }
-func (m *CreditPayment) Hash() [32]byte    { return encoding.Hash(m) }
-func (m *BlockSummary) Hash() [32]byte     { return encoding.Hash(m) }
-func (m *SyntheticMessage) Hash() [32]byte { return encoding.Hash(m) }
-func (m *NetworkUpdate) Hash() [32]byte    { return encoding.Hash(m) }
-func (m *MakeMajorBlock) Hash() [32]byte   { return encoding.Hash(m) }
+func (m *SequencedMessage) Hash() [32]byte         { return encoding.Hash(m) }
+func (m *BlockAnchor) Hash() [32]byte              { return encoding.Hash(m) }
+func (m *SignatureRequest) Hash() [32]byte         { return encoding.Hash(m) }
+func (m *CreditPayment) Hash() [32]byte            { return encoding.Hash(m) }
+func (m *BlockSummary) Hash() [32]byte             { return encoding.Hash(m) }
+func (m *SyntheticMessage) Hash() [32]byte         { return encoding.Hash(m) }
+func (m *NetworkUpdate) Hash() [32]byte            { return encoding.Hash(m) }
+func (m *MakeMajorBlock) Hash() [32]byte           { return encoding.Hash(m) }
+func (m *DidUpdateExecutorVersion) Hash() [32]byte { return encoding.Hash(m) }

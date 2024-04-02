@@ -636,6 +636,13 @@ type PartitionAnchorReceipt struct {
 	extraData        []byte
 }
 
+type PartitionExecutorVersion struct {
+	fieldsSet []bool
+	Partition string          `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Version   ExecutorVersion `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	extraData []byte
+}
+
 type PartitionInfo struct {
 	fieldsSet []bool
 	ID        string        `json:"id,omitempty" form:"id" query:"id" validate:"required"`
@@ -896,7 +903,9 @@ type SystemLedger struct {
 	Anchor AnchorBody `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	// ExecutorVersion is the active executor version.
 	ExecutorVersion ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
-	extraData       []byte
+	// BvnExecutorVersions is the active executor version of each BVN.
+	BvnExecutorVersions []*PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" form:"bvnExecutorVersions" query:"bvnExecutorVersions" validate:"required"`
+	extraData           []byte
 }
 
 type SystemWriteData struct {
@@ -2590,6 +2599,21 @@ func (v *PartitionAnchorReceipt) Copy() *PartitionAnchorReceipt {
 
 func (v *PartitionAnchorReceipt) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *PartitionExecutorVersion) Copy() *PartitionExecutorVersion {
+	u := new(PartitionExecutorVersion)
+
+	u.Partition = v.Partition
+	u.Version = v.Version
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *PartitionExecutorVersion) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *PartitionInfo) Copy() *PartitionInfo {
 	u := new(PartitionInfo)
 
@@ -3154,6 +3178,13 @@ func (v *SystemLedger) Copy() *SystemLedger {
 		u.Anchor = CopyAnchorBody(v.Anchor)
 	}
 	u.ExecutorVersion = v.ExecutorVersion
+	u.BvnExecutorVersions = make([]*PartitionExecutorVersion, len(v.BvnExecutorVersions))
+	for i, v := range v.BvnExecutorVersions {
+		v := v
+		if v != nil {
+			u.BvnExecutorVersions[i] = (v).Copy()
+		}
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -4980,6 +5011,17 @@ func (v *PartitionAnchorReceipt) Equal(u *PartitionAnchorReceipt) bool {
 	return true
 }
 
+func (v *PartitionExecutorVersion) Equal(u *PartitionExecutorVersion) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+
+	return true
+}
+
 func (v *PartitionInfo) Equal(u *PartitionInfo) bool {
 	if !(v.ID == u.ID) {
 		return false
@@ -5540,6 +5582,14 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 	}
 	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
+	}
+	if len(v.BvnExecutorVersions) != len(u.BvnExecutorVersions) {
+		return false
+	}
+	for i := range v.BvnExecutorVersions {
+		if !((v.BvnExecutorVersions[i]).Equal(u.BvnExecutorVersions[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -10146,6 +10196,58 @@ func (v *PartitionAnchorReceipt) IsValid() error {
 	}
 }
 
+var fieldNames_PartitionExecutorVersion = []string{
+	1: "Partition",
+	2: "Version",
+}
+
+func (v *PartitionExecutorVersion) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(1, v.Partition)
+	}
+	if !(v.Version == 0) {
+		writer.WriteEnum(2, v.Version)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionExecutorVersion)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *PartitionExecutorVersion) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_PartitionInfo = []string{
 	1: "ID",
 	2: "Type",
@@ -11906,6 +12008,7 @@ var fieldNames_SystemLedger = []string{
 	6: "PendingUpdates",
 	7: "Anchor",
 	8: "ExecutorVersion",
+	9: "BvnExecutorVersions",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -11939,6 +12042,11 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.ExecutorVersion == 0) {
 		writer.WriteEnum(8, v.ExecutorVersion)
+	}
+	if !(len(v.BvnExecutorVersions) == 0) {
+		for _, v := range v.BvnExecutorVersions {
+			writer.WriteValue(9, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemLedger)
@@ -11984,6 +12092,11 @@ func (v *SystemLedger) IsValid() error {
 		errs = append(errs, "field Anchor is missing")
 	} else if EqualAnchorBody(v.Anchor, nil) {
 		errs = append(errs, "field Anchor is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field BvnExecutorVersions is missing")
+	} else if len(v.BvnExecutorVersions) == 0 {
+		errs = append(errs, "field BvnExecutorVersions is not set")
 	}
 
 	switch len(errs) {
@@ -15942,6 +16055,32 @@ func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *PartitionExecutorVersion) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionExecutorVersion) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Partition = x
+	}
+	if x := new(ExecutorVersion); reader.ReadEnum(2, x) {
+		v.Version = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionExecutorVersion)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *PartitionInfo) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -17126,6 +17265,13 @@ func (v *SystemLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	})
 	if x := new(ExecutorVersion); reader.ReadEnum(8, x) {
 		v.ExecutorVersion = *x
+	}
+	for {
+		if x := new(PartitionExecutorVersion); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
+			v.BvnExecutorVersions = append(v.BvnExecutorVersions, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_SystemLedger)
@@ -19837,14 +19983,15 @@ func (v *SystemGenesis) MarshalJSON() ([]byte, error) {
 
 func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            AccountType                             `json:"type"`
-		Url             *url.URL                                `json:"url,omitempty"`
-		Index           uint64                                  `json:"index,omitempty"`
-		Timestamp       time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates  encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
-		Anchor          *encoding.JsonUnmarshalWith[AnchorBody] `json:"anchor,omitempty"`
-		ExecutorVersion ExecutorVersion                         `json:"executorVersion,omitempty"`
+		Type                AccountType                                  `json:"type"`
+		Url                 *url.URL                                     `json:"url,omitempty"`
+		Index               uint64                                       `json:"index,omitempty"`
+		Timestamp           time.Time                                    `json:"timestamp,omitempty"`
+		AcmeBurnt           *string                                      `json:"acmeBurnt,omitempty"`
+		PendingUpdates      encoding.JsonList[NetworkAccountUpdate]      `json:"pendingUpdates,omitempty"`
+		Anchor              *encoding.JsonUnmarshalWith[AnchorBody]      `json:"anchor,omitempty"`
+		ExecutorVersion     ExecutorVersion                              `json:"executorVersion,omitempty"`
+		BvnExecutorVersions encoding.JsonList[*PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Url == nil) {
@@ -19867,6 +20014,9 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.ExecutorVersion == 0) {
 		u.ExecutorVersion = v.ExecutorVersion
+	}
+	if !(len(v.BvnExecutorVersions) == 0) {
+		u.BvnExecutorVersions = v.BvnExecutorVersions
 	}
 	return json.Marshal(&u)
 }
@@ -22527,14 +22677,15 @@ func (v *SystemGenesis) UnmarshalJSON(data []byte) error {
 
 func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            AccountType                             `json:"type"`
-		Url             *url.URL                                `json:"url,omitempty"`
-		Index           uint64                                  `json:"index,omitempty"`
-		Timestamp       time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates  encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
-		Anchor          *encoding.JsonUnmarshalWith[AnchorBody] `json:"anchor,omitempty"`
-		ExecutorVersion ExecutorVersion                         `json:"executorVersion,omitempty"`
+		Type                AccountType                                  `json:"type"`
+		Url                 *url.URL                                     `json:"url,omitempty"`
+		Index               uint64                                       `json:"index,omitempty"`
+		Timestamp           time.Time                                    `json:"timestamp,omitempty"`
+		AcmeBurnt           *string                                      `json:"acmeBurnt,omitempty"`
+		PendingUpdates      encoding.JsonList[NetworkAccountUpdate]      `json:"pendingUpdates,omitempty"`
+		Anchor              *encoding.JsonUnmarshalWith[AnchorBody]      `json:"anchor,omitempty"`
+		ExecutorVersion     ExecutorVersion                              `json:"executorVersion,omitempty"`
+		BvnExecutorVersions encoding.JsonList[*PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -22544,6 +22695,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.PendingUpdates = v.PendingUpdates
 	u.Anchor = &encoding.JsonUnmarshalWith[AnchorBody]{Value: v.Anchor, Func: UnmarshalAnchorBodyJSON}
 	u.ExecutorVersion = v.ExecutorVersion
+	u.BvnExecutorVersions = v.BvnExecutorVersions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -22564,6 +22716,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	}
 
 	v.ExecutorVersion = u.ExecutorVersion
+	v.BvnExecutorVersions = u.BvnExecutorVersions
 	return nil
 }
 
