@@ -32,3 +32,6 @@ MessageType:
   MakeMajorBlock:
     value: 11
     description: triggers a major block
+  DidUpdateExecutorVersion:
+    value: 12
+    description: notifies the DN that a BVN updated the executor version
