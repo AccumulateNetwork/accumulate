@@ -17,7 +17,11 @@ import (
 )
 
 func init() {
-	registerSimpleExec[NetworkUpdate](&messageExecutors, internal.MessageTypeNetworkUpdate, messaging.MessageTypeNetworkUpdate)
+	registerSimpleExec[NetworkUpdate](&messageExecutors,
+		internal.MessageTypeNetworkUpdate)
+	registerConditionalExec[NetworkUpdate](&messageExecutors,
+		func(ctx *MessageContext) bool { return ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() },
+		messaging.MessageTypeNetworkUpdate)
 }
 
 // NetworkUpdate constructs a transaction for the network update and queues it
