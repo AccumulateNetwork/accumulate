@@ -442,7 +442,7 @@ func (x TransactionMessage) processDirAnchor(batch *database.Batch, ctx *Message
 
 	// Process minor block events
 	events := batch.Account(ctx.Executor.Describe.Ledger()).Events()
-	blocks, err := x.getBlocks(events.Minor().Blocks(), anchor.MinorBlockIndex)
+	blocks, err := getBlocksWithEvents(events.Minor().Blocks(), anchor.MinorBlockIndex)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
@@ -454,25 +454,28 @@ func (x TransactionMessage) processDirAnchor(batch *database.Batch, ctx *Message
 	}
 
 	// Process major block events
-	if anchor.MajorBlockIndex == 0 {
+	if anchor.MajorBlockIndex == 0 || ctx.GetActiveGlobals().ExecutorVersion.V2VandenbergEnabled() {
 		blocks = nil
 	} else {
-		blocks, err = x.getBlocks(events.Major().Blocks(), anchor.MajorBlockIndex)
+		blocks, err = getBlocksWithEvents(events.Major().Blocks(), anchor.MajorBlockIndex)
 		if err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	// Expire pending transactions
-	err = x.expirePendingTransactions(batch, ctx, blocks)
+	messages, err := ctx.expirePendingTransactions(batch, blocks)
 	if err != nil {
 		return errors.UnknownError.WithFormat("expire pending transactions: %w", err)
+	}
+	for _, msg := range messages {
+		ctx.queueAdditional(msg)
 	}
 
 	return nil
 }
 
-func (TransactionMessage) getBlocks(record values.Set[uint64], height uint64) ([]uint64, error) {
+func getBlocksWithEvents(record values.Set[uint64], height uint64) ([]uint64, error) {
 	blocks, err := record.Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load on-hold minor block list: %w", err)
@@ -497,32 +500,33 @@ func (TransactionMessage) getBlocks(record values.Set[uint64], height uint64) ([
 	return blocks[:i], nil
 }
 
-func (x TransactionMessage) expirePendingTransactions(batch *database.Batch, ctx *MessageContext, blocks []uint64) error {
-	limit := ctx.Executor.globals.Active.Globals.Limits.EventsPerBlock
+func (b *Block) expirePendingTransactions(batch *database.Batch, blocks []uint64) ([]messaging.Message, error) {
+	limit := b.Executor.globals.Active.Globals.Limits.EventsPerBlock
 	if limit == 0 {
 		limit = 100
 	}
 
 	var backlog []*url.TxID
+	var messages []messaging.Message
 	for _, block := range blocks {
 		// Load the list
-		record := batch.Account(ctx.Executor.Describe.Ledger()).
+		record := batch.Account(b.Executor.Describe.Ledger()).
 			Events().
 			Major().
 			Pending(block)
 		ids, err := record.Get()
 		if err != nil {
-			return errors.UnknownError.WithFormat("load pending transactions: %w", err)
+			return nil, errors.UnknownError.WithFormat("load pending transactions: %w", err)
 		}
 
 		// And erase it
 		err = record.Put(nil)
 		if err != nil {
-			return errors.UnknownError.WithFormat("reset pending transactions: %w", err)
+			return nil, errors.UnknownError.WithFormat("reset pending transactions: %w", err)
 		}
 
 		// Have we or will we exceed the limit?
-		if n := int(limit) - ctx.State.Events; n <= 0 {
+		if n := int(limit) - b.State.Events; n <= 0 {
 			backlog = append(backlog, ids...)
 			continue
 		} else if n < len(ids) {
@@ -530,30 +534,51 @@ func (x TransactionMessage) expirePendingTransactions(batch *database.Batch, ctx
 			ids = ids[:n]
 		}
 
-		ctx.State.Events += len(ids)
+		b.State.Events += len(ids)
 
 		for _, id := range ids {
-			ctx.queueAdditional(&internal.ExpiredTransaction{TxID: id})
+			messages = append(messages, &internal.ExpiredTransaction{TxID: id})
 		}
 	}
 
 	// If we didn't finish everything, add it to the backlog
 	if len(backlog) == 0 {
-		return nil
+		return messages, nil
 	}
 
-	err := batch.Account(ctx.Executor.Describe.Ledger()).
+	err := batch.Account(b.Executor.Describe.Ledger()).
 		Events().
 		Backlog().
 		Expired().
 		Add(backlog...)
 	if err != nil {
-		return errors.UnknownError.WithFormat("store expired transaction backlog: %w", err)
+		return nil, errors.UnknownError.WithFormat("store expired transaction backlog: %w", err)
 	}
-	return nil
+	return messages, nil
 }
 
-func (b *Block) processEventBacklog() error {
+func (b *Block) processEvents() error {
+	if majorBlockIndex, _, ok := b.didOpenMajorBlock(); ok && b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
+		// Process major block events
+		events := b.Batch.Account(b.Executor.Describe.Ledger()).Events()
+		blocks, err := getBlocksWithEvents(events.Major().Blocks(), majorBlockIndex)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		// Expire pending transactions
+		msgs, err := b.expirePendingTransactions(b.Batch, blocks)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+
+		// Claim we're on pass 1 so that internal messages are allowed
+		_, err = b.processMessages(msgs, 1)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
 	n := int(b.Executor.globals.Active.Globals.Limits.EventsPerBlock)
 	if n == 0 {
 		n = 100
