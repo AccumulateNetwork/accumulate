@@ -147,7 +147,6 @@ func (n *Node) check(ctx context.Context, env *messaging.Envelope) ([]*protocol.
 		kv := []any{"id", id, "last-block", n.lastBlockIndex}
 		var debug bool
 		if msg != nil {
-			kv = append(kv, "type", msg.Type())
 		again:
 			switch m := msg.(type) {
 			case *messaging.TransactionMessage:
@@ -158,18 +157,28 @@ func (n *Node) check(ctx context.Context, env *messaging.Envelope) ([]*protocol.
 			case *messaging.SignatureMessage:
 				kv = append(kv, "sig-type", m.Signature.Type())
 				debug = true
-			case *messaging.BlockAnchor:
+			case *messaging.BlockAnchor,
+				*messaging.NetworkUpdate,
+				*messaging.MakeMajorBlock,
+				*messaging.DidUpdateExecutorVersion:
 				debug = true
 			case *messaging.BadSyntheticMessage:
 				msg = m.Message
 				goto again
 			case *messaging.SyntheticMessage:
 				msg = m.Message
+				kv = append(kv, "synthetic", true)
 				goto again
 			case *messaging.SequencedMessage:
 				msg = m.Message
+				kv = append(kv,
+					"from", m.Source,
+					"to", m.Destination,
+					"sequence", m.Number,
+				)
 				goto again
 			}
+			kv = append(kv, "type", msg.Type())
 		}
 		if err != nil {
 			kv = append(kv, "error", err)

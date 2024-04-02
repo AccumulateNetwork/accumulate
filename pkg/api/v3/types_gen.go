@@ -299,6 +299,8 @@ type NetworkStatus struct {
 	Routing   *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
 	// ExecutorVersion is the active executor version.
 	ExecutorVersion protocol.ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
+	// BvnExecutorVersions is the active executor version of each BVN.
+	BvnExecutorVersions []*protocol.PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" form:"bvnExecutorVersions" query:"bvnExecutorVersions" validate:"required"`
 	// DirectoryHeight is the height of the directory network.
 	DirectoryHeight  uint64 `json:"directoryHeight,omitempty" form:"directoryHeight" query:"directoryHeight" validate:"required"`
 	MajorBlockHeight uint64 `json:"majorBlockHeight,omitempty" form:"majorBlockHeight" query:"majorBlockHeight" validate:"required"`
@@ -1184,6 +1186,13 @@ func (v *NetworkStatus) Copy() *NetworkStatus {
 		u.Routing = (v.Routing).Copy()
 	}
 	u.ExecutorVersion = v.ExecutorVersion
+	u.BvnExecutorVersions = make([]*protocol.PartitionExecutorVersion, len(v.BvnExecutorVersions))
+	for i, v := range v.BvnExecutorVersions {
+		v := v
+		if v != nil {
+			u.BvnExecutorVersions[i] = (v).Copy()
+		}
+	}
 	u.DirectoryHeight = v.DirectoryHeight
 	u.MajorBlockHeight = v.MajorBlockHeight
 	if len(v.extraData) > 0 {
@@ -2276,6 +2285,14 @@ func (v *NetworkStatus) Equal(u *NetworkStatus) bool {
 	}
 	if !(v.ExecutorVersion == u.ExecutorVersion) {
 		return false
+	}
+	if len(v.BvnExecutorVersions) != len(u.BvnExecutorVersions) {
+		return false
+	}
+	for i := range v.BvnExecutorVersions {
+		if !((v.BvnExecutorVersions[i]).Equal(u.BvnExecutorVersions[i])) {
+			return false
+		}
 	}
 	if !(v.DirectoryHeight == u.DirectoryHeight) {
 		return false
@@ -4501,8 +4518,9 @@ var fieldNames_NetworkStatus = []string{
 	3: "Network",
 	4: "Routing",
 	5: "ExecutorVersion",
-	6: "DirectoryHeight",
-	7: "MajorBlockHeight",
+	6: "BvnExecutorVersions",
+	7: "DirectoryHeight",
+	8: "MajorBlockHeight",
 }
 
 func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
@@ -4528,11 +4546,16 @@ func (v *NetworkStatus) MarshalBinary() ([]byte, error) {
 	if !(v.ExecutorVersion == 0) {
 		writer.WriteEnum(5, v.ExecutorVersion)
 	}
+	if !(len(v.BvnExecutorVersions) == 0) {
+		for _, v := range v.BvnExecutorVersions {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
 	if !(v.DirectoryHeight == 0) {
-		writer.WriteUint(6, v.DirectoryHeight)
+		writer.WriteUint(7, v.DirectoryHeight)
 	}
 	if !(v.MajorBlockHeight == 0) {
-		writer.WriteUint(7, v.MajorBlockHeight)
+		writer.WriteUint(8, v.MajorBlockHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkStatus)
@@ -4567,11 +4590,16 @@ func (v *NetworkStatus) IsValid() error {
 		errs = append(errs, "field Routing is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field BvnExecutorVersions is missing")
+	} else if len(v.BvnExecutorVersions) == 0 {
+		errs = append(errs, "field BvnExecutorVersions is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field DirectoryHeight is missing")
 	} else if v.DirectoryHeight == 0 {
 		errs = append(errs, "field DirectoryHeight is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field MajorBlockHeight is missing")
 	} else if v.MajorBlockHeight == 0 {
 		errs = append(errs, "field MajorBlockHeight is not set")
@@ -6685,10 +6713,17 @@ func (v *NetworkStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.ExecutorVersion); reader.ReadEnum(5, x) {
 		v.ExecutorVersion = *x
 	}
-	if x, ok := reader.ReadUint(6); ok {
-		v.DirectoryHeight = x
+	for {
+		if x := new(protocol.PartitionExecutorVersion); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+			v.BvnExecutorVersions = append(v.BvnExecutorVersions, x)
+		} else {
+			break
+		}
 	}
 	if x, ok := reader.ReadUint(7); ok {
+		v.DirectoryHeight = x
+	}
+	if x, ok := reader.ReadUint(8); ok {
 		v.MajorBlockHeight = x
 	}
 
@@ -7846,6 +7881,44 @@ func (v *MinorBlockRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *NetworkStatus) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Oracle              *protocol.AcmeOracle                                  `json:"oracle,omitempty"`
+		Globals             *protocol.NetworkGlobals                              `json:"globals,omitempty"`
+		Network             *protocol.NetworkDefinition                           `json:"network,omitempty"`
+		Routing             *protocol.RoutingTable                                `json:"routing,omitempty"`
+		ExecutorVersion     protocol.ExecutorVersion                              `json:"executorVersion,omitempty"`
+		BvnExecutorVersions encoding.JsonList[*protocol.PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		DirectoryHeight     uint64                                                `json:"directoryHeight,omitempty"`
+		MajorBlockHeight    uint64                                                `json:"majorBlockHeight,omitempty"`
+	}{}
+	if !(v.Oracle == nil) {
+		u.Oracle = v.Oracle
+	}
+	if !(v.Globals == nil) {
+		u.Globals = v.Globals
+	}
+	if !(v.Network == nil) {
+		u.Network = v.Network
+	}
+	if !(v.Routing == nil) {
+		u.Routing = v.Routing
+	}
+	if !(v.ExecutorVersion == 0) {
+		u.ExecutorVersion = v.ExecutorVersion
+	}
+	if !(len(v.BvnExecutorVersions) == 0) {
+		u.BvnExecutorVersions = v.BvnExecutorVersions
+	}
+	if !(v.DirectoryHeight == 0) {
+		u.DirectoryHeight = v.DirectoryHeight
+	}
+	if !(v.MajorBlockHeight == 0) {
+		u.MajorBlockHeight = v.MajorBlockHeight
+	}
+	return json.Marshal(&u)
+}
+
 func (v *NodeInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PeerID   *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"peerID,omitempty"`
@@ -8719,6 +8792,39 @@ func (v *MinorBlockRecord) UnmarshalJSON(data []byte) error {
 	v.Entries = u.Entries
 	v.Anchored = u.Anchored
 	v.LastBlockTime = u.LastBlockTime
+	return nil
+}
+
+func (v *NetworkStatus) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Oracle              *protocol.AcmeOracle                                  `json:"oracle,omitempty"`
+		Globals             *protocol.NetworkGlobals                              `json:"globals,omitempty"`
+		Network             *protocol.NetworkDefinition                           `json:"network,omitempty"`
+		Routing             *protocol.RoutingTable                                `json:"routing,omitempty"`
+		ExecutorVersion     protocol.ExecutorVersion                              `json:"executorVersion,omitempty"`
+		BvnExecutorVersions encoding.JsonList[*protocol.PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		DirectoryHeight     uint64                                                `json:"directoryHeight,omitempty"`
+		MajorBlockHeight    uint64                                                `json:"majorBlockHeight,omitempty"`
+	}{}
+	u.Oracle = v.Oracle
+	u.Globals = v.Globals
+	u.Network = v.Network
+	u.Routing = v.Routing
+	u.ExecutorVersion = v.ExecutorVersion
+	u.BvnExecutorVersions = v.BvnExecutorVersions
+	u.DirectoryHeight = v.DirectoryHeight
+	u.MajorBlockHeight = v.MajorBlockHeight
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Oracle = u.Oracle
+	v.Globals = u.Globals
+	v.Network = u.Network
+	v.Routing = u.Routing
+	v.ExecutorVersion = u.ExecutorVersion
+	v.BvnExecutorVersions = u.BvnExecutorVersions
+	v.DirectoryHeight = u.DirectoryHeight
+	v.MajorBlockHeight = u.MajorBlockHeight
 	return nil
 }
 

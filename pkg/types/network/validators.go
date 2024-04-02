@@ -55,6 +55,20 @@ func (g *GlobalValues) memoizeValidators() {
 	g.memoize.threshold = threshold
 }
 
+func (g *GlobalValues) BvnExecutorVersion() protocol.ExecutorVersion {
+	if len(g.BvnExecutorVersions) == 0 {
+		return 0
+	}
+
+	v := g.ExecutorVersion
+	for _, b := range g.BvnExecutorVersions {
+		if b.Version < v {
+			v = b.Version
+		}
+	}
+	return v
+}
+
 func (g *GlobalValues) BvnNames() []string {
 	g.memoizeValidators()
 	return g.memoize.bvns

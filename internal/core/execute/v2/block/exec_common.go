@@ -50,7 +50,7 @@ func registerSimpleExec[X ExecutorFor[T, V], T any, V interface{ Type() T }](lis
 	}
 }
 
-func registerConditionalExec[X ExecutorFor[T, V], T any, V interface{ Type() T }](list *[]ExecutorFactory1[T, V], cond func(V) bool, typ ...T) {
+func registerConditionalExec[X ExecutorFor[T, V], T any, V interface{ Type() T }](list *[]ExecutorFactory1[T, V], cond func(ctx V) bool, typ ...T) {
 	for _, typ := range typ {
 		typ := typ // See docs/developer/rangevarref.md
 		*list = append(*list, func(ExecutorOptions) (T, ExecutorFactory2[T, V]) {
