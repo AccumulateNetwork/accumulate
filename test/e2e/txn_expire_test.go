@@ -8,7 +8,6 @@ package e2e
 
 import (
 	"math/big"
-	"sort"
 	"testing"
 	"time"
 
@@ -33,7 +32,7 @@ func TestPendingExpired(t *testing.T) {
 	key2 := acctesting.GenerateKey(2)
 
 	g := new(network.GlobalValues)
-	g.ExecutorVersion = ExecutorVersionV2
+	g.ExecutorVersion = ExecutorVersionLatest
 	g.Globals = new(NetworkGlobals)
 	g.Globals.MajorBlockSchedule = "* * * * *"
 	g.Globals.Limits = new(NetworkLimits)
@@ -111,6 +110,58 @@ func TestPendingExpired(t *testing.T) {
 			WithMessagef("%v has not been initiated", st.TxID))
 }
 
+func TestPendingExpiredDN(t *testing.T) {
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	key1 := acctesting.GenerateKey(1)
+	key2 := acctesting.GenerateKey(2)
+
+	g := new(network.GlobalValues)
+	g.ExecutorVersion = ExecutorVersionLatest
+	g.Globals = new(NetworkGlobals)
+	g.Globals.MajorBlockSchedule = "* * * * *"
+	g.Globals.Limits = new(NetworkLimits)
+	g.Globals.Limits.PendingMajorBlocks = 1
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.GenesisWith(GenesisTime, g),
+	)
+
+	sim.SetRoute(alice, "Directory")
+	sim.SetRoute(bob, "Directory")
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, key1[32:])
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, key1[32:], key2[32:])
+	UpdateAccount(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), func(p *KeyPage) {
+		p.CreditBalance = FeeCreateToken.AsUInt64()
+		p.AcceptThreshold = 2
+	})
+
+	// Submit a transaction expensive enough to require a refund
+	st := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice).
+			CreateToken(alice, "tokens").
+			SignWith(bob, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(key1))
+
+	sim.StepUntil(
+		Txn(st.TxID).IsPending())
+
+	// Expect the balance to be zero
+	page := GetAccount[*KeyPage](t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"))
+	require.Zero(t, page.CreditBalance)
+
+	// Ensure a major block
+	sim.StepN(int(time.Minute / time.Second))
+
+	// Transaction expires
+	sim.StepUntil(
+		Txn(st.TxID).Fails().
+			WithError(errors.Expired))
+}
+
 func TestPendingExpiredLimit(t *testing.T) {
 	const N = 10
 
@@ -120,7 +171,7 @@ func TestPendingExpiredLimit(t *testing.T) {
 	aliceKey2 := acctesting.GenerateKey(alice, 2)
 
 	g := new(network.GlobalValues)
-	g.ExecutorVersion = ExecutorVersionV2
+	g.ExecutorVersion = ExecutorVersionLatest
 	g.Globals = new(NetworkGlobals)
 	g.Globals.MajorBlockSchedule = "* * * * *"
 	g.Globals.Limits = new(NetworkLimits)
@@ -142,18 +193,31 @@ func TestPendingExpiredLimit(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e15)})
 
 	// Issue transactions
-	ids := make([]*url.TxID, N*3)
-	cond := make([]Condition, len(ids))
-	for i := range ids {
-		ids[i] = sim.BuildAndSubmitTxnSuccessfully(
+	cond := make([]Condition, N*3)
+	for i := range cond {
+		id := sim.BuildAndSubmitTxnSuccessfully(
 			build.Transaction().For(alice, "tokens").
 				BurnTokens(1, AcmePrecisionPower).
 				SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey1)).TxID
 
 		// Verify they are pending
-		cond[i] = Txn(ids[i]).IsPending()
+		cond[i] = Txn(id).IsPending()
 	}
 	sim.StepUntil(cond...)
+
+	// Load all pending events
+	var ids []*url.TxID
+	View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		events := batch.Account(PartitionUrl("BVN0").JoinPath(Ledger)).Events().Major()
+		blocks, err := events.Blocks().Get()
+		require.NoError(t, err)
+		for _, block := range blocks {
+			pending, err := events.Pending(block).Get()
+			require.NoError(t, err)
+			ids = append(ids, pending...)
+		}
+	})
+	require.NotEmpty(t, ids)
 
 	// Wait for the first major block
 	sim.StepUntilN(1000,
@@ -168,11 +232,6 @@ func TestPendingExpiredLimit(t *testing.T) {
 		}
 		return false
 	}))
-
-	sort.Slice(ids, func(i, j int) bool {
-		a, b := ids[i], ids[j]
-		return a.Compare(b) < 0
-	})
 
 	for len(ids) > 0 {
 		// The first N transactions expire
