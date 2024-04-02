@@ -84,7 +84,7 @@ func JsonFlagOf[V any](v V) *JsonFlag[V] {
 }
 
 func (f *JsonFlag[V]) Type() string {
-	return reflect.TypeFor[V]().Name()
+	return reflect.TypeOf(new(V)).Elem().Name()
 }
 
 func (f *JsonFlag[V]) String() string {
