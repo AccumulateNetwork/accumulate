@@ -23,14 +23,25 @@ func init() {
 // when appropriate.
 type BlockAnchor struct{}
 
+// blockAnchorContext collects all the bits of data needed to process a block anchor.
+type blockAnchorContext struct {
+	*TransactionContext
+
+	sequenced *messaging.SequencedMessage
+
+	blockAnchor *messaging.BlockAnchor
+
+	signer protocol.Signer2
+}
+
 func (x BlockAnchor) Validate(batch *database.Batch, ctx *MessageContext) (*protocol.TransactionStatus, error) {
-	msg, _, _, _, err := x.check(ctx, batch)
+	ctx2, err := x.check(ctx, batch)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Validate the transaction
-	_, err = ctx.callMessageValidator(batch, msg.Anchor)
+	_, err = ctx.callMessageValidator(batch, ctx2.blockAnchor.Anchor)
 	return nil, errors.UnknownError.Wrap(err)
 }
 
@@ -48,9 +59,9 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *pro
 	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
 
 	// Process the message
-	msg, txn, seq, signer, err := x.check(ctx, batch)
+	ctx2, err := x.check(ctx, batch)
 	if err == nil {
-		err = x.process(batch, ctx, msg, txn, seq, signer)
+		err = x.process(batch, ctx2)
 	}
 
 	// Record the message and its status
@@ -62,65 +73,65 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *pro
 	return status, nil
 }
 
-func (x BlockAnchor) process(batch *database.Batch, ctx *MessageContext, msg *messaging.BlockAnchor, txn *protocol.Transaction, seq *messaging.SequencedMessage, signer protocol.Signer2) error {
+func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) error {
 	// Record the anchor signature
-	err := batch.Account(txn.Header.Principal).
-		Transaction(txn.ID().Hash()).
+	err := batch.Account(ctx.effectivePrincipal()).
+		Transaction(ctx.transaction.ID().Hash()).
 		ValidatorSignatures().
-		Add(msg.Signature)
+		Add(ctx.blockAnchor.Signature)
 	if err != nil {
 		// A system error occurred
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Add the signature to the signature chain
-	err = batch.Account(txn.Header.Principal).
-		Transaction(txn.ID().Hash()).
+	err = batch.Account(ctx.effectivePrincipal()).
+		Transaction(ctx.transaction.ID().Hash()).
 		RecordHistory(ctx.message)
 	if err != nil {
 		return errors.UnknownError.WithFormat("record history: %w", err)
 	}
 
-	ready, err := x.txnIsReady(batch, ctx, txn, seq)
+	ready, err := x.txnIsReady(batch, ctx)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 	if !ready {
 		// Mark the message as pending
-		_, err = ctx.recordPending(batch, ctx, seq.Message)
+		_, err = ctx.childWith(ctx.sequenced.Message).recordPending(batch)
 		return errors.UnknownError.Wrap(err)
 	}
 
 	// Process the transaction
-	_, err = ctx.callMessageExecutor(batch, seq)
+	_, err = ctx.callMessageExecutor(batch, ctx.sequenced.Message)
 	return errors.UnknownError.Wrap(err)
 }
 
 // check checks if the message is garbage or not.
-func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messaging.BlockAnchor, *protocol.Transaction, *messaging.SequencedMessage, protocol.Signer2, error) {
+func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAnchorContext, error) {
 	anchor, ok := ctx.message.(*messaging.BlockAnchor)
 	if !ok {
-		return nil, nil, nil, nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBlockAnchor, ctx.message.Type())
+		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBlockAnchor, ctx.message.Type())
 	}
 
 	if anchor.Signature == nil {
-		return nil, nil, nil, nil, errors.BadRequest.With("missing signature")
+		return nil, errors.BadRequest.With("missing signature")
 	}
 	if anchor.Anchor == nil {
-		return nil, nil, nil, nil, errors.BadRequest.With("missing anchor")
+		return nil, errors.BadRequest.With("missing anchor")
 	}
 	if anchor.Signature.GetTransactionHash() == ([32]byte{}) {
-		return nil, nil, nil, nil, errors.BadRequest.With("missing transaction hash")
+		return nil, errors.BadRequest.With("missing transaction hash")
 	}
 
 	// Verify the anchor is a sequenced anchor transaction
 	seq, ok := anchor.Anchor.(*messaging.SequencedMessage)
 	if !ok {
-		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeSequenced, anchor.Anchor.Type())
+		return nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeSequenced, anchor.Anchor.Type())
 	}
 	txnMsg, ok := seq.Message.(*messaging.TransactionMessage)
 	if !ok {
-		return nil, nil, nil, nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeTransaction, seq.Message.Type())
+		return nil, errors.BadRequest.WithFormat("invalid anchor: expected %v, got %v", messaging.MessageTypeTransaction, seq.Message.Type())
 	}
 
 	// Resolve placeholders
@@ -130,7 +141,7 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 		var err error
 		txn, err = ctx.getTransaction(batch, txn.ID().Hash())
 		if err != nil {
-			return nil, nil, nil, nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+			return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
 		}
 
 		// Recalculate the hash with the full transaction
@@ -141,22 +152,22 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 
 	// Verify the transaction is an anchor
 	if !txn.Body.Type().IsAnchor() {
-		return nil, nil, nil, nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), anchor.Type())
+		return nil, errors.BadRequest.WithFormat("cannot sign a %v transaction with a %v message", txn.Body.Type(), anchor.Type())
 	}
 
 	if seq.Source == nil {
-		return nil, nil, nil, nil, errors.InternalError.WithFormat("sequence is missing source")
+		return nil, errors.InternalError.WithFormat("sequence is missing source")
 	}
 
 	// Basic validation
 	if !anchor.Signature.Verify(nil, signed[:]) {
-		return nil, nil, nil, nil, errors.Unauthenticated.WithFormat("invalid signature")
+		return nil, errors.Unauthenticated.WithFormat("invalid signature")
 	}
 
 	// Verify the signer is a validator of this partition
 	partition, ok := protocol.ParsePartitionUrl(seq.Source)
 	if !ok {
-		return nil, nil, nil, nil, errors.BadRequest.WithFormat("signature source is not a partition")
+		return nil, errors.BadRequest.WithFormat("signature source is not a partition")
 	}
 
 	// TODO: Consider checking the version. However this can get messy because
@@ -166,15 +177,20 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*messagi
 	signer := core.AnchorSigner(&ctx.Executor.globals.Active, partition)
 	_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
 	if !ok {
-		return nil, nil, nil, nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
+		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
-	return anchor, txn, seq, signer, nil
+	return &blockAnchorContext{
+		TransactionContext: ctx.txnWith(txn),
+		sequenced:          seq,
+		blockAnchor:        anchor,
+		signer:             signer,
+	}, nil
 }
 
-func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *MessageContext, txn *protocol.Transaction, seq *messaging.SequencedMessage) (bool, error) {
-	sigs, err := batch.Account(txn.Header.Principal).
-		Transaction(txn.ID().Hash()).
+func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *blockAnchorContext) (bool, error) {
+	sigs, err := batch.Account(ctx.effectivePrincipal()).
+		Transaction(ctx.transaction.ID().Hash()).
 		ValidatorSignatures().
 		Get()
 	if err != nil {
@@ -182,9 +198,9 @@ func (x BlockAnchor) txnIsReady(batch *database.Batch, ctx *MessageContext, txn 
 	}
 
 	// Have we received enough signatures?
-	partition, ok := protocol.ParsePartitionUrl(seq.Source)
+	partition, ok := protocol.ParsePartitionUrl(ctx.sequenced.Source)
 	if !ok {
-		return false, errors.BadRequest.WithFormat("source %v is not a partition", seq.Source)
+		return false, errors.BadRequest.WithFormat("source %v is not a partition", ctx.sequenced.Source)
 	}
 	if uint64(len(sigs)) < ctx.Executor.globals.Active.ValidatorThreshold(partition) {
 		return false, nil

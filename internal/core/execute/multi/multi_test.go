@@ -200,8 +200,8 @@ func TestVersionSwitch(t *testing.T) {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Capture(&st).Succeeds())
 
-	// Update to v2 vandenburg
-	fmt.Println("Switching to v2 vandenburg")
+	// Update to v2 vandenberg
+	fmt.Println("Switching to v2 vandenberg")
 	st = sim.SubmitTxnSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl()).
 			ActivateProtocolVersion(ExecutorVersionV2Vandenberg).
