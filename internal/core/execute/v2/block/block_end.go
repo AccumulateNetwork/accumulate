@@ -96,23 +96,6 @@ func (block *Block) Close() (execute.BlockState, error) {
 		}
 	}
 
-	// Update active globals - **after** checking if the block is empty, because
-	// we definitely don't want to tell the ABCI that the validator set changed
-	// if the block is getting discarded, though that _should_ be impossible
-	var valUp []*execute.ValidatorUpdate
-	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
-
-		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: &m.globals.Pending,
-			Old: &m.globals.Active,
-		})
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
-		}
-		m.globals.Active = *m.globals.Pending.Copy()
-	}
-
 	m.logger.Debug("Committing",
 		"module", "block",
 		"height", block.Index,
@@ -262,6 +245,22 @@ func (block *Block) Close() (execute.BlockState, error) {
 	err = block.Batch.UpdateBPT()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Update active globals, after everything else is done (don't change logic
+	// in the middle of a block)
+	var valUp []*execute.ValidatorUpdate
+	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
+		valUp = execute.DiffValidators(&m.globals.Active, &m.globals.Pending, m.Describe.PartitionId)
+
+		err = m.EventBus.Publish(events.WillChangeGlobals{
+			New: &m.globals.Pending,
+			Old: &m.globals.Active,
+		})
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("publish globals update: %w", err)
+		}
+		m.globals.Active = *m.globals.Pending.Copy()
 	}
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
@@ -682,15 +681,11 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	anchor.MinorBlockIndex = block.Index
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 
-	// This is not used once v2-vandenburg is activated. However it needs to
-	// stay enabled for the first block that runs v2-vandenburg, otherwise the
-	// update to v2-vandenburg is not sent out to the BVNs.
-	anchor.Updates = systemLedger.PendingUpdates
+	if !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
+		anchor.Updates = systemLedger.PendingUpdates
+	}
 
-	if block.State.MajorBlock != nil && !x.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
-		// It's possible this could cause a lost major block if Vandenberg is
-		// activated at exactly the right time. But A) that's highly unlikely
-		// and B) not much of a problem.
+	if block.State.MajorBlock != nil && !x.globals.Active.BvnExecutorVersion().V2VandenbergEnabled() {
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}
@@ -744,18 +739,16 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 }
 
 func (b *Block) produceBlockMessages() error {
-	if !b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() {
-		return nil
-	}
-
-	/* ***** ACME burn (for credits) ***** */
-
 	// This is likely unnecessarily cautious, but better safe than sorry. This
 	// will prevent any variation in order from causing a consensus failure.
 	bvns := b.Executor.globals.Active.BvnNames()
 	sort.Strings(bvns)
 
-	if b.State.AcmeBurnt.Sign() > 0 {
+	/* ***** ACME burn (for credits) ***** */
+
+	// If the active version is Vandenberg and ACME has been burnt
+	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+		b.State.AcmeBurnt.Sign() > 0 {
 		body := new(protocol.SyntheticBurnTokens)
 		body.Amount = b.State.AcmeBurnt
 		txn := new(protocol.Transaction)
@@ -775,10 +768,13 @@ func (b *Block) produceBlockMessages() error {
 		}
 	}
 
-	/* ***** Network account updates ***** */
+	/* ***** Network account updates (DN) ***** */
 
-	if len(b.State.NetworkUpdate) > 0 &&
-		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory {
+	// If the active version is Vandenberg, we're on the DN, and there's a
+	// network update
+	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
+		len(b.State.NetworkUpdate) > 0 {
 		for _, bvn := range bvns {
 			b.State.Produced++
 			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
@@ -795,8 +791,11 @@ func (b *Block) produceBlockMessages() error {
 
 	/* ***** Major block notification ***** */
 
-	if b.State.Anchor != nil && b.State.MajorBlock != nil &&
-		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory {
+	// If the active version is Vandenberg, we're on the DN, and there's a major
+	// block
+	if b.Executor.globals.Active.ExecutorVersion.V2VandenbergEnabled() &&
+		b.Executor.Describe.NetworkType == protocol.PartitionTypeDirectory &&
+		b.State.MajorBlock != nil {
 		for _, bvn := range bvns {
 			b.State.Produced++
 			err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
@@ -810,6 +809,26 @@ func (b *Block) produceBlockMessages() error {
 			if err != nil {
 				return errors.UnknownError.WithFormat("queue network update: %w", err)
 			}
+		}
+	}
+
+	/* ***** Did update version (BVN) ***** */
+
+	// If the **pending** version is Vandenberg, we're on a BVN, and the version
+	// is changing
+	if b.Executor.globals.Pending.ExecutorVersion.V2VandenbergEnabled() &&
+		b.Executor.Describe.NetworkType != protocol.PartitionTypeDirectory &&
+		b.Executor.globals.Pending.ExecutorVersion != b.Executor.globals.Active.ExecutorVersion {
+		b.State.Produced++
+		err := b.Executor.produceSynthetic(b.Batch, []*ProducedMessage{{
+			Destination: protocol.DnUrl(),
+			Message: &messaging.DidUpdateExecutorVersion{
+				Partition: b.Executor.Describe.PartitionId,
+				Version:   b.Executor.globals.Pending.ExecutorVersion,
+			},
+		}}, b.Index)
+		if err != nil {
+			return errors.UnknownError.WithFormat("queue update notification: %w", err)
 		}
 	}
 

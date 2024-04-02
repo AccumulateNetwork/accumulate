@@ -24,3 +24,9 @@ GlobalValues:
       type: protocol.ExecutorVersion
       marshal-as: enum
       optional: true
+    - name: BvnExecutorVersions
+      description: is the active executor version of each BVN
+      type: protocol.PartitionExecutorVersion
+      marshal-as: reference
+      pointer: true
+      repeatable: true
