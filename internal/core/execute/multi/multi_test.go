@@ -40,10 +40,18 @@ func TestVersionSwitch(t *testing.T) {
 	)
 
 	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	sim.SetRoute(alice, "BVN1")
+	sim.SetRoute(bob, "BVN2")
+
 	aliceKey := acctesting.GenerateKey(alice)
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e15)})
+
+	bobKey := acctesting.GenerateKey(bob)
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	// Version is unset
 	require.Equal(t, ExecutorVersion(0), GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
@@ -200,15 +208,18 @@ func TestVersionSwitch(t *testing.T) {
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
 	sim.StepUntil(
-		Txn(st.TxID).Succeeds())
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionV2Vandenberg))
 
-	// Give it a few blocks for the anchor to propagate
-	sim.StepN(10)
+	// Do something that produces a synthetic transaction
+	st = sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "tokens").
+			AddCredits().WithOracle(InitialAcmeOracle).Spend(10).To(bob, "book", "1").
+			SignWith(alice, "book", "1").Version(1).Timestamp(&timestamp).PrivateKey(aliceKey))
 
-	require.Equal(t, ExecutorVersionV2Vandenberg, GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, ExecutorVersionV2Vandenberg, GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, ExecutorVersionV2Vandenberg, GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, ExecutorVersionV2Vandenberg, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
+	// Verify it completes
+	sim.StepUntil(
+		Txn(st.TxID).Completes())
 
 	if GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion != ExecutorVersionLatest {
 		c := color.New(color.BgRed, color.FgWhite, color.Bold)
@@ -224,13 +235,6 @@ func TestVersionSwitch(t *testing.T) {
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
 
 	sim.StepUntil(
-		Txn(st.TxID).Succeeds())
-
-	// Give it a few blocks for the anchor to propagate
-	sim.StepN(10)
-
-	require.Equal(t, ExecutorVersionVNext, GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, ExecutorVersionVNext, GetAccount[*SystemLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, ExecutorVersionVNext, GetAccount[*SystemLedger](t, sim.Database("BVN1"), PartitionUrl("BVN1").JoinPath(Ledger)).ExecutorVersion)
-	require.Equal(t, ExecutorVersionVNext, GetAccount[*SystemLedger](t, sim.Database("BVN2"), PartitionUrl("BVN2").JoinPath(Ledger)).ExecutorVersion)
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionVNext))
 }
