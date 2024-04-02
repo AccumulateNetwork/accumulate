@@ -32,7 +32,8 @@ type BlockState struct {
 	AcmeBurnt          big.Int
 	NetworkUpdate      []*protocol.NetworkAccountUpdate
 
-	Anchor *BlockAnchorState
+	Anchor     *BlockAnchorState
+	MajorBlock *MajorBlockState
 
 	PendingTxns map[[32]byte]*protocol.Transaction
 	PendingSigs map[[32]byte]*PendingAuthSig
@@ -46,9 +47,11 @@ type PendingAuthSig struct {
 
 // BlockAnchorState is used to construct the anchor for the block.
 type BlockAnchorState struct {
-	ShouldOpenMajorBlock bool
-	OpenMajorBlockTime   time.Time
-	WillOpenMajorBlock   uint64
+}
+
+type MajorBlockState struct {
+	Time  time.Time
+	Index uint64
 }
 
 // ProducedMessage is a message produced by another message.
@@ -67,6 +70,7 @@ type ProducedMessage struct {
 func (s *BlockState) Empty() bool {
 	return !s.OpenedMajorBlock &&
 		s.Anchor == nil &&
+		s.MajorBlock == nil &&
 		s.Delivered == 0 &&
 		s.Signed == 0 &&
 		s.Produced == 0 &&
