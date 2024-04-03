@@ -121,8 +121,18 @@ func (b SignatureBuilder) Metadata(v any) SignatureBuilder {
 	return b
 }
 
-func (b SignatureBuilder) PrivateKey(key []byte) SignatureBuilder {
-	b.signer.Signer = signing.PrivateKey(key)
+func (b SignatureBuilder) PrivateKey(key any) SignatureBuilder {
+	addr := b.parseKey(key, b.signer.Type, true)
+	sk, ok := addr.GetPrivateKey()
+	if !ok {
+		b.errorf(errors.BadRequest, "%v is not a private key", addr)
+		return b
+	}
+
+	b.signer.Signer = signing.PrivateKey(sk)
+	if b.signer.Type == 0 {
+		b.signer.Type = addr.GetType()
+	}
 	return b
 }
 

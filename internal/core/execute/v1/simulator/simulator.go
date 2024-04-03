@@ -50,7 +50,6 @@ type SimulatorOptions struct {
 	LogLevels       string
 	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
 	FactomAddresses func() (io.Reader, error)
-	Snapshots       []func() (ioutil2.SectionReader, error)
 }
 
 type Simulator struct {
@@ -316,7 +315,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	// The simulator only runs one DNN so set the threshold low
 	values.Globals.ValidatorAcceptThreshold.Set(1, 1000)
 
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, s.opts.Snapshots)
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, nil)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
