@@ -1,5 +1,5 @@
 package multipleDB
-
+/*
 import (
 	"bytes"
 	"encoding/binary"
@@ -137,7 +137,7 @@ func (kf *KeySlice) Update(bFile *BFile) (err error) {
 		}
 		for _, dbKey := range keys {
 			if dbKey.Key[0] == byte(slice) {
-				value, err := bFile.Get(dbKey)
+				value, err := bFile.Get(dbKey.Key)
 				if err != nil {
 					return err
 				}
@@ -149,3 +149,4 @@ func (kf *KeySlice) Update(bFile *BFile) (err error) {
 
 	return nil
 }
+*/
